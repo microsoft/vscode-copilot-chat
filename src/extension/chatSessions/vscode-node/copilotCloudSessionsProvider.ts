@@ -15,12 +15,18 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 
-type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata /* | SomeOtherMetadata */ };
+type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata | UncommittedChangesMetadata };
 
 interface CreatePromptMetadata {
 	prompt: string;
 	history?: string;
 	references?: vscode.ChatPromptReference[];
+}
+
+interface UncommittedChangesMetadata {
+	prompt: string;
+	problemContext?: string;
+	customAgentName?: string;
 }
 
 export interface ICommentResult {
@@ -408,6 +414,22 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 							stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
 							vscode.window.showChatSession(CopilotChatSessionsProvider.TYPE, String(number), { viewColumn: vscode.ViewColumn.Active });
 							break;
+						}
+					case 'uncommitted-changes':
+						{
+							if (!data.accepted) {
+								stream.markdown(vscode.l10n.t('Cloud agent request cancelled due to uncommitted changes.'));
+								return {};
+							}
+							const { prompt, problemContext, customAgentName } = data.metadata as UncommittedChangesMetadata;
+							// Continue with the agent invocation, skipping the uncommitted changes
+							const result = await this.invokeRemoteAgentWithoutChangesCheck(prompt, problemContext, undefined, true, stream, customAgentName);
+							if (result.state !== 'success') {
+								stream.warning(result.error);
+								return {};
+							}
+							stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request, ignoring uncommitted changes.'));
+							return {};
 						}
 					default:
 						stream.warning(`Unknown confirmation step: ${data.step}\n\n`);
@@ -858,6 +880,14 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	}
 
 	async invokeRemoteAgent(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string): Promise<RemoteAgentResult> {
+		return this.invokeRemoteAgentInternal(prompt, problemContext, token, autoPushAndCommit, chatStream, customAgentName, true);
+	}
+
+	private async invokeRemoteAgentWithoutChangesCheck(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string): Promise<RemoteAgentResult> {
+		return this.invokeRemoteAgentInternal(prompt, problemContext, token, autoPushAndCommit, chatStream, customAgentName, false);
+	}
+
+	private async invokeRemoteAgentInternal(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string, checkForChanges = true): Promise<RemoteAgentResult> {
 		// TODO: support selecting remote
 		// await this.promptAndUpdatePreferredGitHubRemote(true);
 		const repoId = await getRepoId(this._gitService);
@@ -889,15 +919,33 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		}
 		let head_ref: string | undefined; // This is the ref cloud agent starts work from (omitted unless we push local changes)
 
-		// TODO@osortega @rebornix: support pending changes
+		// Check for uncommitted changes and prompt user if checking is enabled
 		const hasChanges =
 			((currentRepository?.changes?.workingTree && currentRepository.changes.workingTree.length > 0) || (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0));
-		if (hasChanges) {
-			this.logService.warn('Blocking cloud agent invocation due to uncommitted changes in the workspace.');
-			return {
-				error: vscode.l10n.t('Uncommitted changes detected. Please commit, stash, or discard your changes before delegating work to the cloud agent.'),
-				state: 'error'
-			};
+		if (checkForChanges && hasChanges) {
+			this.logService.warn('Uncommitted changes detected, prompting user for confirmation.');
+			if (chatStream) {
+				chatStream.confirmation(
+					vscode.l10n.t('Uncommitted changes detected'),
+					vscode.l10n.t('You have uncommitted changes in your workspace. Consider committing them if you would like to include them in the cloud agent\'s work.'),
+					{
+						step: 'uncommitted-changes',
+						metadata: {
+							prompt,
+							problemContext,
+							customAgentName
+						}
+					},
+					['Proceed', 'Cancel']
+				);
+				return { error: vscode.l10n.t('Awaiting user confirmation'), state: 'error' };
+			} else {
+				// Fallback for cases where chatStream is not available
+				return {
+					error: vscode.l10n.t('Uncommitted changes detected. Please commit, stash, or discard your changes before delegating work to the cloud agent.'),
+					state: 'error'
+				};
+			}
 		}
 
 		const remoteName =
