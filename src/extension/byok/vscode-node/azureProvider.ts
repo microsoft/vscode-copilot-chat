@@ -4,9 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { BYOKModelCapabilities } from '../common/byokProvider';
 import { IBYOKStorageService } from './byokStorageService';
 import { CustomOAIBYOKModelProvider } from './customOAIProvider';
 
@@ -39,17 +41,17 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 
 	constructor(
 		byokStorageService: IBYOKStorageService,
-		@IConfigurationService configurationService: IConfigurationService,
+		@IConfigurationService protected override readonly _configurationService: IConfigurationService,
 		@ILogService logService: ILogService,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IExperimentationService experimentationService: IExperimentationService
+		@IExperimentationService private readonly _expService: IExperimentationService
 	) {
 		super(
 			byokStorageService,
-			configurationService,
+			_configurationService,
 			logService,
 			instantiationService,
-			experimentationService
+			_expService
 		);
 		// Override the instance properties
 		this.providerName = AzureBYOKModelProvider.providerName;
@@ -61,5 +63,18 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 
 	protected override resolveUrl(modelId: string, url: string): string {
 		return resolveAzureUrl(modelId, url);
+	}
+
+	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
+		const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
+		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._expService);
+		if (enableResponsesApi) {
+			modelInfo.supported_endpoints = [
+				ModelSupportedEndpoint.ChatCompletions,
+				ModelSupportedEndpoint.Responses
+			];
+		}
+
+		return modelInfo;
 	}
 }

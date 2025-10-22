@@ -5,12 +5,12 @@
 
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions, QuickPickItem, window } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { EndpointEditToolName, isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
+import { EndpointEditToolName, IChatModelInformation, isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
-import { BYOKAuthType, BYOKKnownModels, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, BYOKModelCapabilities, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
@@ -66,6 +66,10 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 
 	protected resolveUrl(modelId: string, url: string): string {
 		return resolveCustomOAIUrl(modelId, url);
+	}
+
+	protected async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
+		return resolveModelInfo(modelId, this.providerName, undefined, modelCapabilities);
 	}
 
 	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }> {
@@ -167,7 +171,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 				throw new Error(`No API key found for model ${model.id}`);
 			}
 		}
-		const modelInfo = resolveModelInfo(model.id, this.providerName, undefined, {
+		const modelInfo = await this.getModelInfo(model.id, apiKey, {
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,
@@ -193,7 +197,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			}
 		}
 
-		const modelInfo = resolveModelInfo(model.id, this.providerName, undefined, {
+		const modelInfo = await this.getModelInfo(model.id, apiKey, {
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,
