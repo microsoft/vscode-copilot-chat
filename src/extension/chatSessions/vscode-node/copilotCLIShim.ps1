@@ -211,4 +211,11 @@ function Test-AndLaunchCopilot {
 }
 
 # Start the check and launch process
-Test-AndLaunchCopilot $args
+$finalArgs = $args
+# Handle --clear argument
+if ($args.Length -gt 0 -and $args[0] -eq '--clear') {
+    Clear-Host
+    $finalArgs = $args[1..($args.Length - 1)]
+}
+
+Test-AndLaunchCopilot $finalArgs

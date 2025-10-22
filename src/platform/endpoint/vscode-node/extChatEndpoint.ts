@@ -210,7 +210,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					requestId,
 					serverRequestId: requestId,
 					usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } },
-					value: text
+					value: text,
+					resolvedModel: this.languageModel.id
 				};
 				return response;
 			} else {

@@ -77,6 +77,14 @@
 			"{Locked='](command:workbench.action.chat.open?%7B%22query%22%3A%22%40vscode%20%2FstartDebugging%20%22%2C%22isPartialQuery%22%3Atrue%7D)'}"
 		]
 	},
+	"github.copilot.viewsWelcome.codexPlaceholder": {
+		"message": "[Start a coding session](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)\n\nThis will install [the OpenAI Codex extension](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D).",
+		"comment": [
+			"{Locked='['}",
+			"{Locked='](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)'}",
+			"{Locked='](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D)'}"
+		]
+	},
 	"github.copilot.command.logWorkbenchState": "Log Workbench State",
 	"github.copilot.command.showChatLogView": "Show Chat Debug View",
 	"github.copilot.command.showOutputChannel": "Show Output Channel",
