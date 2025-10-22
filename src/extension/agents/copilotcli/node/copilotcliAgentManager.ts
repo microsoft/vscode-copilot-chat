@@ -254,11 +254,11 @@ export class CopilotCLISession extends Disposable {
 	}
 
 	private _toolNames = new Map<string, string>();
-	private async _processEvent(
+	private _processEvent(
 		event: SessionEvent,
 		stream: vscode.ChatResponseStream,
 		toolInvocationToken: vscode.ChatParticipantToolToken
-	): Promise<void> {
+	): void {
 		this.logService.trace(`CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
 
 		switch (event.type) {
