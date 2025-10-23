@@ -79,7 +79,7 @@ function isDeserializedWorkspaceStateBasedScenario(scenario: IScenario): scenari
 
 export function simulateInlineChatWithStrategy(strategy: EditTestStrategy, testingServiceCollection: TestingServiceCollection, scenario: IScenario) {
 
-	if (strategy === EditTestStrategy.InlineChatIntent2) {
+	if (strategy === EditTestStrategy.InlineChatIntent) {
 		return simulateInlineChatIntent(testingServiceCollection, scenario);
 	} else {
 		return simulateInlineChat(testingServiceCollection, scenario);
@@ -845,7 +845,7 @@ export function toRange(range: [number, number] | [number, number, number, numbe
 
 export function forInlineAndInlineChatIntent(callback: (strategy: EditTestStrategy, configurations: NonExtensionConfiguration[] | undefined, suffix: string) => void): void {
 	callback(EditTestStrategy.Inline, undefined, '');
-	callback(EditTestStrategy.InlineChatIntent2, [['inlineChat.enableV2', true], ['chat.agent.autoFix', false]], '-InlineChatIntent');
+	callback(EditTestStrategy.InlineChatIntent, [['inlineChat.enableV2', true], ['chat.agent.autoFix', false]], '-InlineChatIntent');
 }
 
 export function forInline(callback: (strategy: EditTestStrategy, configurations: NonExtensionConfiguration[] | undefined, suffix: string) => void): void {

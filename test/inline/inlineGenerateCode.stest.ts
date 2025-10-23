@@ -24,7 +24,7 @@ function executeEditTestStrategy(
 ): Promise<void> {
 	if (strategy === EditTestStrategy.Inline) {
 		return simulateInlineChat(testingServiceCollection, scenario);
-	} else if (EditTestStrategy.InlineChatIntent2) {
+	} else if (EditTestStrategy.InlineChatIntent) {
 		return simulateInlineChatIntent(testingServiceCollection, scenario);
 	} else {
 		throw new Error('Invalid edit test strategy');
@@ -33,7 +33,7 @@ function executeEditTestStrategy(
 
 function forInlineAndInlineChatIntent(callback: (strategy: EditTestStrategy, variant: '-InlineChatIntent' | '', nonExtensionConfigurations?: NonExtensionConfiguration[]) => void): void {
 	callback(EditTestStrategy.Inline, '', undefined);
-	callback(EditTestStrategy.InlineChatIntent2, '-InlineChatIntent', [['inlineChat.enableV2', true], ['chat.agent.autoFix', false]]);
+	callback(EditTestStrategy.InlineChatIntent, '-InlineChatIntent', [['inlineChat.enableV2', true], ['chat.agent.autoFix', false]]);
 }
 
 forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => {
