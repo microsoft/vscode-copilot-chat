@@ -93,7 +93,7 @@ export function createContext(serviceAccessor: ServicesAccessor, store: Disposab
 	serviceCollection.set(ICompletionsLastGhostText, new LastGhostText());
 	serviceCollection.set(ICompletionsCurrentGhostText, new CurrentGhostText());
 	serviceCollection.set(ICompletionsSpeculativeRequestCache, new SpeculativeRequestCache());
-	serviceCollection.set(ICompletionsNotificationSender, new ExtensionNotificationSender());
+	serviceCollection.set(ICompletionsNotificationSender, new SyncDescriptor(ExtensionNotificationSender));
 	serviceCollection.set(ICompletionsEditorAndPluginInfo, new VSCodeEditorInfo());
 	serviceCollection.set(ICompletionsExtensionStatus, new CopilotExtensionStatus());
 	serviceCollection.set(ICompletionsFeaturesService, new SyncDescriptor(Features));
