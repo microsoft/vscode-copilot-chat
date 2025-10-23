@@ -15,6 +15,7 @@ import { DisposableMap, IDisposable } from '../../../../util/vs/base/common/life
 import { stripReminders } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
+import { coalesce } from '../../../../util/vs/base/common/arrays';
 
 export interface ICopilotCLISession {
 	readonly id: string;
@@ -98,13 +99,14 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 			const sessionMetadataList = await sessionManager.listSessions();
 
 			// Convert SessionMetadata to ICopilotCLISession
-			const diskSessions: ICopilotCLISession[] = await Promise.all(
+			const diskSessions: ICopilotCLISession[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
 					try {
 						// Get the full session to access chat messages
 						const sdkSession = await sessionManager.getSession(metadata.sessionId);
 						if (!sdkSession) {
-							throw new Error(`Session ${metadata.sessionId} not found`);
+							this.logService.warn(`Copilot CLI session not found, ${metadata.sessionId}`);
+							return;
 						}
 						const chatMessages = await sdkSession.getChatMessages();
 						const noUserMessages = !chatMessages.find(message => message.role === 'user');
@@ -130,10 +132,9 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 						};
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
-						throw error;
 					}
 				})
-			);
+			));
 
 			// Merge with cached sessions (new sessions not yet persisted by SDK)
 			const diskSessionIds = new Set(diskSessions.map(s => s.id));

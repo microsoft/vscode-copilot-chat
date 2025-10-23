@@ -110,44 +110,48 @@ export class ChatSessionContentBuilder {
 		pullRequest: PullRequestSearchItem,
 		getLogsForSession: (id: string) => Promise<string>,
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
-		const sortedSessions = sessions
-			.filter((session, index, array) =>
-				array.findIndex(s => s.id === session.id) === index
-			)
-			.slice().sort((a, b) =>
-				new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-			);
 		const history: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
-		// Process all sessions concurrently while maintaining order
-		await Promise.all(
-			sortedSessions.map(async (session, sessionIndex) => {
+		// Process all sessions concurrently and assemble results in order
+		const sessionResults = await Promise.all(
+			sessions.map(async (session, sessionIndex) => {
 				const [logs, problemStatement] = await Promise.all([getLogsForSession(session.id), sessionIndex === 0 ? problemStatementPromise : Promise.resolve(undefined)]);
-				// Create response turn
-				history.push(new ChatRequestTurn2(
-					problemStatement || '',
+
+				const turns: Array<ChatRequestTurn | ChatResponseTurn2> = [];
+
+				// Create request turn
+				turns.push(new ChatRequestTurn2(
+					problemStatement || session.name,
 					undefined, // command
 					[], // references
 					this.type,
 					[], // toolReferences
 					[]
 				));
-				// Create the PR card right after problem statement
+
+				// Create the PR card right after problem statement for first session
 				if (sessionIndex === 0 && pullRequest.author) {
 					const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
 					const plaintextBody = pullRequest.body;
 
 					const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, plaintextBody, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
 					const cardTurn = new vscode.ChatResponseTurn2([card], {}, this.type);
-					history.push(cardTurn);
+					turns.push(cardTurn);
 				}
 
 				const response = await this.createResponseTurn(pullRequest, logs, session);
 				if (response) {
-					history.push(response);
+					turns.push(response);
 				}
+
+				return { sessionIndex, turns };
 			})
 		);
+
+		// Assemble results in correct order
+		sessionResults
+			.sort((a, b) => a.sessionIndex - b.sessionIndex)
+			.forEach(result => history.push(...result.turns));
 
 		return history;
 	}

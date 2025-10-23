@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import './anthropicPrompts';
-import './geminiPrompts';
-import './openAIPrompts';
-import './xAIPrompts';
-
+export enum NextCursorLinePrediction {
+	Jump = 'jump',
+	OnlyWithEdit = 'onlyWithEdit',
+	LabelOnlyWithEdit = 'labelOnlyWithEdit',
+}

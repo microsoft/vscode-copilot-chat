@@ -86,7 +86,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const instructions = this.getInstructions();
+		const instructions = await this.getInstructions();
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
@@ -141,7 +141,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 	}
 
-	private getInstructions() {
+	private async getInstructions() {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
@@ -152,10 +152,10 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			/>;
 		}
 
-		const agentPromptResolver = PromptRegistry.getPrompt(this.props.endpoint.model ?? 'unknown');
+		const agentPromptResolver = await PromptRegistry.getPrompt(this.props.endpoint);
 		if (agentPromptResolver) {
 			const resolver = this.instantiationService.createInstance(agentPromptResolver);
-			const PromptClass = resolver.resolvePrompt();
+			const PromptClass = resolver.resolvePrompt(this.props.endpoint);
 
 			if (PromptClass) {
 				return <PromptClass

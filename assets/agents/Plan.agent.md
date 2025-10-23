@@ -8,7 +8,6 @@ handoffs:
   - label: Open in Editor
     agent: agent
     prompt: Save the plan
-    send: true
 ---
 You are a PLANNING AGENT, NOT an implementation agent.
 

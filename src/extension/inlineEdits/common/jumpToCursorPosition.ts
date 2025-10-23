@@ -3,8 +3,4 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import './anthropicPrompts';
-import './geminiPrompts';
-import './openAIPrompts';
-import './xAIPrompts';
-
+export const jumpToPositionCommandId = 'github.copilot.inlineEdit.jumpToNextEdit';

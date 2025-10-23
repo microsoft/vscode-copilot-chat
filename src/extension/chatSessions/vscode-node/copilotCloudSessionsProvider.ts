@@ -205,6 +205,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 						deletions: pr.deletions
 					},
 					fullDatabaseId: pr.fullDatabaseId.toString(),
+					pullRequestDetails: pr,
 				};
 				this.chatSessions.set(pr.number, pr);
 				return session;
@@ -266,8 +267,15 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			return this.createEmptySession();
 		}
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
+		const sortedSessions = sessions
+			.filter((session, index, array) =>
+				array.findIndex(s => s.id === session.id) === index
+			)
+			.slice().sort((a, b) =>
+				new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+			);
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
-		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sessions), sessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
+		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
 
 		const selectedAgent =
 			// Local cache of session -> custom agent
@@ -400,6 +408,9 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			stream,
 			customAgentName,
 		);
+		if (!result) {
+			return;
+		}
 		if (result.state !== 'success') {
 			this.logService.error(`Failed to provide new chat session item: ${result.error}${result.innerError ? `\nInner Error: ${result.innerError}` : ''}`);
 			stream.warning(result.error);
@@ -432,7 +443,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 						const { prompt, problemContext, customAgentName } = data.metadata as UncommittedChangesMetadata;
 						// Continue with the agent invocation, skipping the uncommitted changes
 						const result = await this.invokeRemoteAgentWithoutChangesCheck(prompt, problemContext, undefined, true, stream, customAgentName);
-						if (result.state !== 'success') {
+						if (result && result.state !== 'success') {
 							stream.warning(result.error);
 							return {};
 						}
@@ -916,15 +927,15 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return undefined;
 	}
 
-	async invokeRemoteAgent(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string): Promise<RemoteAgentResult> {
+	async invokeRemoteAgent(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string): Promise<RemoteAgentResult | undefined> {
 		return this.invokeRemoteAgentInternal(prompt, problemContext, token, autoPushAndCommit, chatStream, customAgentName, true);
 	}
 
-	private async invokeRemoteAgentWithoutChangesCheck(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string): Promise<RemoteAgentResult> {
+	private async invokeRemoteAgentWithoutChangesCheck(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string): Promise<RemoteAgentResult | undefined> {
 		return this.invokeRemoteAgentInternal(prompt, problemContext, token, autoPushAndCommit, chatStream, customAgentName, false);
 	}
 
-	private async invokeRemoteAgentInternal(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string, checkForChanges = true): Promise<RemoteAgentResult> {
+	private async invokeRemoteAgentInternal(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string, checkForChanges = true): Promise<RemoteAgentResult | undefined> {
 		// TODO: support selecting remote
 		// await this.promptAndUpdatePreferredGitHubRemote(true);
 		const repoId = await getRepoId(this._gitService);
@@ -975,7 +986,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 					},
 					['Proceed', 'Cancel']
 				);
-				return { error: vscode.l10n.t('Awaiting user confirmation'), state: 'error' };
+				return;
 			} else {
 				// Fallback for cases where chatStream is not available
 				return {
