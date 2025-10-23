@@ -456,6 +456,7 @@ class OpenAIResponsesProcessor {
 				return {
 					blockFinished: true,
 					choiceIndex: 0,
+					model: chunk.response.model,
 					tokens: [],
 					telemetryData: this.telemetryData,
 					requestId: { headerRequestId: this.requestId, gitHubRequestId: this.ghRequestId, completionId: chunk.response.id, created: chunk.response.created_at, deploymentId: '', serverExperiments: '' },

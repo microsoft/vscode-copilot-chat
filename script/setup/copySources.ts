@@ -188,6 +188,7 @@ async function doIt(filepaths: string[]) {
 			'vs/workbench/api/common/extHostTypes/textEdit.ts',
 			'vs/workbench/api/common/extHostTypes/symbolInformation.ts',
 			'vs/workbench/api/common/extHostDocumentData.ts',
+			'vs/workbench/contrib/chat/common/promptSyntax/promptFileParser.ts',
 
 			'vs/base/common/sseParser.ts',
 			'vs/base/common/errorMessage.ts',

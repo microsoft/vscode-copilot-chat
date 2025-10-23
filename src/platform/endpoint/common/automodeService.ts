@@ -12,6 +12,7 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { AutoChatEndpoint } from './autoChatEndpoint';
 import { ICAPIClientService } from './capiClient';
 
@@ -60,6 +61,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
 		@IChatMLFetcher private readonly _chatMLFetcher: IChatMLFetcher,
+		@IExperimentationService private readonly _expService: IExperimentationService
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -168,9 +170,11 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			headers['Copilot-Session-Token'] = sessionToken;
 		}
 
+		const autoModeHint = this._expService.getTreatmentVariable<string>('copilotchat.autoModelHint') || 'auto';
+
 		const response = await this._capiClientService.makeRequest<Response>({
 			json: {
-				'auto_mode': { 'model_hints': ['auto'] }
+				'auto_mode': { 'model_hints': [autoModeHint] }
 			},
 			headers,
 			method: 'POST'

@@ -14,7 +14,7 @@ import { IAuthenticationService } from '../../platform/authentication/common/aut
 import { ICopilotTokenManager } from '../../platform/authentication/common/copilotTokenManager';
 import { CopilotTokenStore, ICopilotTokenStore } from '../../platform/authentication/common/copilotTokenStore';
 import { StaticGitHubAuthenticationService } from '../../platform/authentication/common/staticGitHubAuthenticationService';
-import { getStaticGitHubToken } from '../../platform/authentication/node/copilotTokenManager';
+import { createStaticGitHubTokenProvider } from '../../platform/authentication/node/copilotTokenManager';
 import { IChatMLFetcher } from '../../platform/chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../platform/chat/common/chatQuotaService';
 import { ChatQuotaService } from '../../platform/chat/common/chatQuotaServiceImpl';
@@ -52,6 +52,7 @@ import { ISimulationTestContext, NulSimulationTestContext } from '../../platform
 import { ISnippyService, NullSnippyService } from '../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
+import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
@@ -60,7 +61,6 @@ import { Disposable } from '../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
-import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 
 /**
  * Log levels (taken from vscode.d.ts)
@@ -286,7 +286,7 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(IEnvService, new SyncDescriptor(NullEnvService));
 	builder.define(IFetcherService, new SyncDescriptor(SingleFetcherService, [fetcher]));
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [telemetrySender]));
-	builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken]));
+	builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
 	builder.define(ICopilotTokenManager, copilotTokenManager);
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IChatQuotaService, new SyncDescriptor(ChatQuotaService));

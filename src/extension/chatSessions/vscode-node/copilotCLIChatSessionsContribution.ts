@@ -6,13 +6,16 @@
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, l10n, Uri } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { buildChatHistoryFromEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
+import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
 
 const MODELS_OPTION_ID = 'model';
 
@@ -57,6 +60,18 @@ namespace SessionIdForCLI {
 }
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
+
+/**
+ * Escape XML special characters
+ */
+function escapeXml(text: string): string {
+	return text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&apos;');
+}
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
@@ -195,10 +210,12 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 
 export class CopilotCLIChatSessionParticipant {
 	constructor(
-		private readonly sessionType: string,
 		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
 		private readonly sessionService: ICopilotCLISessionService,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
+		private readonly cloudSessionProvider: CopilotChatSessionsProvider | undefined,
+		private readonly summarizer: ChatSummarizerProvider,
+		@IGitService private readonly gitService: IGitService
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -223,15 +240,90 @@ export class CopilotCLIChatSessionParticipant {
 
 			const { resource } = chatSessionContext.chatSessionItem;
 			const id = SessionIdForCLI.parse(resource);
+
+			if (request.prompt.startsWith('/delegate')) {
+				if (!this.cloudSessionProvider) {
+					stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
+					return {};
+				}
+
+				// Check for uncommitted changes
+				const currentRepository = this.gitService.activeRepository.get();
+				const hasChanges = (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0);
+
+				if (hasChanges) {
+					stream.warning(localize('copilotcli.uncommittedChanges', "You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them."));
+				}
+
+				const history = await this.summarizer.provideChatSummary(context, token);
+				const prompt = request.prompt.substring('/delegate'.length).trim();
+				const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
+					prompt,
+					history
+				}, stream, token);
+				if (prInfo) {
+					await this.recordPushToSession(id, request.prompt, prInfo, token);
+				}
+				return {};
+
+			}
+
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.InProgress);
 			await this.copilotcliAgentManager.handleRequest(id, request, context, stream, getModelProvider(_sessionModel.get(id)?.id), token);
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.Completed);
 			return {};
 		}
 
-		stream.markdown(localize('copilotcli.viaAtCopilotcli', "Start a new CopilotCLI session"));
-		stream.button({ command: `workbench.action.chat.openNewSessionEditor.${this.sessionType}`, title: localize('copilotcli.startNewSession', "Start Session") });
+		/* Invoked from a 'normal' chat or 'cloud button' without CLI session context */
+		// Handle confirmation data
+		return await this.handlePushConfirmationData(request, context, stream, token);
+	}
+
+	private async handlePushConfirmationData(
+		request: vscode.ChatRequest,
+		context: vscode.ChatContext,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken
+	): Promise<vscode.ChatResult | void> {
+		const prompt = request.prompt;
+		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
+
+		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
+		const sdkSession = await this.sessionService.getOrCreateSDKSession(undefined, requestPrompt);
+
+		vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + sdkSession.sessionId }));
+		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 		return {};
+	}
+
+	private async recordPushToSession(
+		sessionId: string,
+		userPrompt: string,
+		prInfo: { uri: string; title: string; description: string; author: string; linkTag: string },
+		token: vscode.CancellationToken
+	): Promise<void> {
+		const session = await this.sessionService.getSession(sessionId, token);
+		if (!session) {
+			return;
+		}
+
+		// Add user message event
+		session.sdkSession.addEvent({
+			type: 'user.message',
+			data: {
+				content: userPrompt
+			}
+		});
+
+		// Add assistant message event with embedded PR metadata
+		const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
+		session.sdkSession.addEvent({
+			type: 'assistant.message',
+			data: {
+				messageId: `msg_${Date.now()}`,
+				content: assistantMessage
+			}
+		});
 	}
 }
 

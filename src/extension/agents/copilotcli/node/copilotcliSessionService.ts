@@ -13,7 +13,9 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableMap, IDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { stripReminders } from './copilotcliToolInvocationFormatter';
+import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
+import { coalesce } from '../../../../util/vs/base/common/arrays';
 
 export interface ICopilotCLISession {
 	readonly id: string;
@@ -81,17 +83,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 				const { internal } = await import('@github/copilot/sdk');
 				this._sessionManager = new internal.CLISessionManager({
-					logger: {
-						isDebug: () => false,
-						debug: (msg: string) => this.logService.debug(msg),
-						log: (msg: string) => this.logService.trace(msg),
-						info: (msg: string) => this.logService.info(msg),
-						notice: (msg: string | Error) => this.logService.info(typeof msg === 'string' ? msg : msg.message),
-						warning: (msg: string | Error) => this.logService.warn(typeof msg === 'string' ? msg : msg.message),
-						error: (msg: string | Error) => this.logService.error(typeof msg === 'string' ? msg : msg.message),
-						startGroup: () => { },
-						endGroup: () => { }
-					}
+					logger: getCopilotLogger(this.logService)
 				});
 			} catch (error) {
 				this.logService.error(`Failed to initialize SessionManager: ${error}`);
@@ -107,30 +99,42 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 			const sessionMetadataList = await sessionManager.listSessions();
 
 			// Convert SessionMetadata to ICopilotCLISession
-			const diskSessions: ICopilotCLISession[] = await Promise.all(
+			const diskSessions: ICopilotCLISession[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
 					try {
 						// Get the full session to access chat messages
 						const sdkSession = await sessionManager.getSession(metadata.sessionId);
 						if (!sdkSession) {
-							throw new Error(`Session ${metadata.sessionId} not found`);
+							this.logService.warn(`Copilot CLI session not found, ${metadata.sessionId}`);
+							return;
 						}
 						const chatMessages = await sdkSession.getChatMessages();
 						const noUserMessages = !chatMessages.find(message => message.role === 'user');
 						const label = await this._generateSessionLabel(sdkSession.sessionId, chatMessages, undefined);
+
+						// Get timestamp from last SDK event, or fallback to metadata.startTime
+						const sdkEvents = sdkSession.getEvents();
+						const lastEventWithTimestamp = [...sdkEvents].reverse().find(event =>
+							event.type !== 'session.import_legacy'
+							&& event.type !== 'session.start'
+							&& 'timestamp' in event
+						);
+						const timestamp = lastEventWithTimestamp && 'timestamp' in lastEventWithTimestamp
+							? new Date(lastEventWithTimestamp.timestamp)
+							: metadata.startTime;
+
 						return {
 							id: metadata.sessionId,
 							sdkSession,
 							label,
-							timestamp: metadata.startTime,
+							timestamp,
 							isEmpty: noUserMessages
 						};
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
-						throw error;
 					}
 				})
-			);
+			));
 
 			// Merge with cached sessions (new sessions not yet persisted by SDK)
 			const diskSessionIds = new Set(diskSessions.map(s => s.id));
@@ -184,7 +188,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 			id: sdkSession.sessionId,
 			sdkSession,
 			label,
-			timestamp: new Date(),
+			timestamp: sdkSession.startTime,
 			isEmpty: noUserMessages
 		};
 		this._sessions.set(sdkSession.sessionId, newSession);

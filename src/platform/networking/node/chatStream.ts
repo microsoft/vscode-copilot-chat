@@ -510,6 +510,7 @@ export function prepareChatCompletionForReturn(
 		filterReason: c.filterReason,
 		error: c.error,
 		tokens: jsonData.tokens,
+		model: c.solution.model,
 		usage: c.usage,
 		telemetryData: telemetryDataWithUsage,
 	};

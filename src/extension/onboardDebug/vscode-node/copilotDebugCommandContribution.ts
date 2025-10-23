@@ -10,6 +10,7 @@ import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -54,7 +55,8 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		@ITasksService private readonly tasksService: ITasksService,
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
-		@IGitService private readonly _gitService: IGitService
+		@IGitService private readonly _gitService: IGitService,
+		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService
 	) {
 		super();
 
@@ -71,7 +73,12 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		}));
 
 		this.registerSerializer = this.registerEnvironment();
-		this.chatSessionsUriHandler = new ChatSessionsUriHandler(this._octoKitService, this._gitService);
+		// Initialize ChatSessionsUriHandler with extension context for storage
+		this.chatSessionsUriHandler = new ChatSessionsUriHandler(this._octoKitService, this._gitService, this._gitExtensionService, this.context, this.logService);
+		// Check for pending chat sessions when this contribution is initialized
+		(this.chatSessionsUriHandler as ChatSessionsUriHandler).openPendingSession().catch((err: unknown) => {
+			console.error('Failed to check for pending chat sessions from debug command contribution:', err);
+		});
 	}
 
 	private async ensureTask(workspaceFolder: URI | undefined, def: vscode.TaskDefinition, handle: CopilotDebugCommandHandle): Promise<boolean> {

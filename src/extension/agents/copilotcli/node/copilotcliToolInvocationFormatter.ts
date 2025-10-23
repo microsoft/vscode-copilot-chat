@@ -7,7 +7,7 @@ import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent 
 import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
 
 /**
  * CopilotCLI tool names
@@ -38,10 +38,44 @@ interface BashArgs {
 export function stripReminders(text: string): string {
 	// Remove any <reminder> ... </reminder> blocks, including newlines
 	// Also remove <current_datetime> ... </current_datetime> blocks
+	// Also remove <pr_metadata .../> tags
 	return text
 		.replace(/<reminder>[\s\S]*?<\/reminder>\s*/g, '')
 		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
+		.replace(/<pr_metadata[^>]*\/?>\s*/g, '')
 		.trim();
+}
+
+/**
+ * Extract PR metadata from assistant message content
+ */
+function extractPRMetadata(content: string): { cleanedContent: string; prPart?: ChatResponsePullRequestPart } {
+	const prMetadataRegex = /<pr_metadata\s+uri="([^"]+)"\s+title="([^"]+)"\s+description="([^"]+)"\s+author="([^"]+)"\s+linkTag="([^"]+)"\s*\/?>/;
+	const match = content.match(prMetadataRegex);
+
+	if (match) {
+		const [fullMatch, uri, title, description, author, linkTag] = match;
+		// Unescape XML entities
+		const unescapeXml = (text: string) => text
+			.replace(/&apos;/g, "'")
+			.replace(/&quot;/g, '"')
+			.replace(/&gt;/g, '>')
+			.replace(/&lt;/g, '<')
+			.replace(/&amp;/g, '&');
+
+		const prPart = new ChatResponsePullRequestPart(
+			Uri.parse(uri),
+			unescapeXml(title),
+			unescapeXml(description),
+			unescapeXml(author),
+			unescapeXml(linkTag)
+		);
+
+		const cleanedContent = content.replace(fullMatch, '').trim();
+		return { cleanedContent, prPart };
+	}
+
+	return { cleanedContent: content };
 }
 
 /**
@@ -74,9 +108,19 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 			}
 			case 'assistant.message': {
 				if (event.data.content) {
-					currentResponseParts.push(
-						new ChatResponseMarkdownPart(new MarkdownString(event.data.content))
-					);
+					// Extract PR metadata if present
+					const { cleanedContent, prPart } = extractPRMetadata(event.data.content);
+
+					// Add PR part first if it exists
+					if (prPart) {
+						currentResponseParts.push(prPart);
+					}
+
+					if (cleanedContent) {
+						currentResponseParts.push(
+							new ChatResponseMarkdownPart(new MarkdownString(cleanedContent))
+						);
+					}
 				}
 				break;
 			}
