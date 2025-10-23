@@ -47,8 +47,8 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 					const params = new URLSearchParams(uri.query);
 					const type = params.get('type');
 					const prId = params.get('id');
-					const url = params.get('url');
-					const branch = params.get('branch');
+					const url = decodeURIComponent(params.get('url') || '');
+					const branch = decodeURIComponent(params.get('branch') || '');
 					if (type?.startsWith('copilot') && prId) {
 						// For now we hardcode it to this type, eventually the full type should come in the URI
 						return this._openGitHubSession('copilot-cloud-agent', prId, url, branch);
