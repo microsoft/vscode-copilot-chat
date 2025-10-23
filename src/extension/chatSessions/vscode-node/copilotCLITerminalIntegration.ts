@@ -301,7 +301,7 @@ function getCommonTerminalOptions(name: string): TerminalOptions {
 		name,
 		iconPath: new ThemeIcon('terminal'),
 		location: { viewColumn: ViewColumn.Active },
-		hideFromUser: true
+		hideFromUser: false
 	};
 }
 
