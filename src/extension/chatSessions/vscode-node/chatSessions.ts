@@ -18,6 +18,7 @@ import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliA
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
+import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
@@ -56,8 +57,24 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider);
 		const claudeChatSessionParticipant = claudeAgentInstaService.createInstance(ClaudeChatSessionParticipant, this.claudeSessionType, claudeAgentManager, sessionItemProvider);
 		const chatParticipant = vscode.chat.createChatParticipant(this.claudeSessionType, claudeChatSessionParticipant.createHandler());
-		const copilotCLISessionService = claudeAgentInstaService.createInstance(CopilotCLISessionService);
 		this._register(vscode.chat.registerChatSessionContentProvider(this.claudeSessionType, chatSessionContentProvider, chatParticipant));
+
+		// Copilot Cloud Agent - conditionally register based on configuration
+		this.copilotAgentInstaService = instantiationService.createChild(new ServiceCollection(
+			[IOctoKitService, new SyncDescriptor(OctoKitService)],
+			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
+		));
+
+		// Register or unregister based on initial configuration and changes
+		const copilotSessionsProvider = this.updateCopilotCloudRegistration();
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.Internal.CopilotCloudEnabled.fullyQualifiedId)) {
+				this.updateCopilotCloudRegistration();
+			}
+		}));
+
+		// Copilot CLI sessions provider
+		const copilotCLISessionService = claudeAgentInstaService.createInstance(CopilotCLISessionService);
 
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
@@ -70,27 +87,23 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
 		const copilotcliAgentManager = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIAgentManager));
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider);
-		const copilotcliChatSessionParticipant = new CopilotCLIChatSessionParticipant(this.copilotcliSessionType, copilotcliAgentManager, copilotCLISessionService, copilotcliSessionItemProvider);
+		const summarizer = copilotcliAgentInstaService.createInstance(ChatSummarizerProvider);
+
+		const copilotcliChatSessionParticipant = copilotcliAgentInstaService.createInstance(
+			CopilotCLIChatSessionParticipant,
+			this.copilotcliSessionType,
+			copilotcliAgentManager,
+			copilotCLISessionService,
+			copilotcliSessionItemProvider,
+			copilotSessionsProvider,
+			summarizer
+		);
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
 		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService));
-
-		// Copilot Cloud Agent - conditionally register based on configuration
-		this.copilotAgentInstaService = instantiationService.createChild(new ServiceCollection(
-			[IOctoKitService, new SyncDescriptor(OctoKitService)],
-			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
-		));
-
-		// Register or unregister based on initial configuration and changes
-		this.updateCopilotCloudRegistration();
-		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(ConfigKey.Internal.CopilotCloudEnabled.fullyQualifiedId)) {
-				this.updateCopilotCloudRegistration();
-			}
-		}));
 	}
 
-	private updateCopilotCloudRegistration(): void {
+	private updateCopilotCloudRegistration() {
 		if (!this.copilotAgentInstaService) {
 			return;
 		}
@@ -124,6 +137,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				})
 			);
 
+			return copilotSessionsProvider;
 		} else if (!enabled && this.copilotCloudRegistrations) {
 			// Unregister the Copilot Cloud chat participant
 			this.copilotCloudRegistrations.dispose();

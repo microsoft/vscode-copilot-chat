@@ -17,7 +17,7 @@ import { SupportedContextItemWithId } from './contextProviders/contextItemSchema
 
 export type PromptExpectation = 'included' | 'content_excluded';
 
-type PromptMatcher = {
+export type PromptMatcher = {
 	source: SupportedContextItemWithId;
 	expectedTokens: number;
 	actualTokens: number;

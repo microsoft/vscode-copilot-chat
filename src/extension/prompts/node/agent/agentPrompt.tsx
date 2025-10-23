@@ -152,12 +152,10 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			/>;
 		}
 
-		// Try VSCModel prompt for hidden models, otherwise use model-specific prompt
-		const modelKey = await isVSCModel(this.props.endpoint) ? 'vscModel' : this.props.endpoint.model ?? 'unknown';
-		const agentPromptResolver = PromptRegistry.getPrompt(modelKey);
+		const agentPromptResolver = await PromptRegistry.getPrompt(this.props.endpoint);
 		if (agentPromptResolver) {
 			const resolver = this.instantiationService.createInstance(agentPromptResolver);
-			const PromptClass = resolver.resolvePrompt();
+			const PromptClass = resolver.resolvePrompt(this.props.endpoint);
 
 			if (PromptClass) {
 				return <PromptClass
@@ -342,6 +340,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
 		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code');
+
 		return (
 			<>
 				<UserMessage>

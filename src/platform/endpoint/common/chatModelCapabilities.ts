@@ -4,23 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelChat } from 'vscode';
-import { encodeHex, VSBuffer } from '../../../util/vs/base/common/buffer';
+import { getCachedSha256Hash } from '../../../util/common/crypto';
 import type { IChatEndpoint } from '../../networking/common/networking';
-
-const _cachedHashes = new Map<string, string>();
-
-async function getSha256Hash(text: string): Promise<string> {
-	if (_cachedHashes.has(text)) {
-		return _cachedHashes.get(text)!;
-	}
-
-	const encoder = new TextEncoder();
-	const data = encoder.encode(text);
-	const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-	const hash = encodeHex(VSBuffer.wrap(new Uint8Array(hashBuffer)));
-	_cachedHashes.set(text, hash);
-	return hash;
-}
 
 const HIDDEN_MODEL_A_HASHES = [
 	'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3',
@@ -33,7 +18,7 @@ const VSC_MODEL_HASHES = [
 	'878722e35e24b005604c37aa5371ae100e82465fbfbdf6fe3c1fdaf7c92edc96',
 	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
 	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
-	'b576d46942ee2c45ecd979cbbcb62688ae3171a07ac83f53b783787f345e3dd7'
+	'b576d46942ee2c45ecd979cbbcb62688ae3171a07ac83f53b783787f345e3dd7',
 ];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
@@ -41,18 +26,15 @@ function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 }
 
 export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
-	const h = await getSha256Hash(model.family);
+	const h = await getCachedSha256Hash(model.family);
 	return HIDDEN_MODEL_A_HASHES.includes(h);
 }
 
 export async function isVSCModel(model: LanguageModelChat | IChatEndpoint) {
-	const h = await getSha256Hash(getModelId(model));
+	const h = await getCachedSha256Hash(getModelId(model));
 	return VSC_MODEL_HASHES.includes(h);
 }
 
-export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
-	return await getSha256Hash(model.family) === '4243b479ae1f345e3b3beff413f628c1c3edf2b54bc75859e736f0254231aafb';
-}
 
 /**
  * Returns whether the instructions should be given in a user message instead
@@ -95,7 +77,7 @@ export async function modelSupportsReplaceString(model: LanguageModelChat | ICha
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export async function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || await isHiddenModelB(model);
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
 }
 
 /**
@@ -103,14 +85,22 @@ export async function modelSupportsMultiReplaceString(model: LanguageModelChat |
  * without needing insert_edit_into_file.
  */
 export async function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code') || await isHiddenModelB(model);
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code');
+}
+
+/**
+ * We should attempt to automatically heal incorrect edits the model may emit.
+ * @note whether this is respected is currently controlled via EXP
+ */
+export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IChatEndpoint) {
+	return model.family.includes('gemini');
 }
 
 /**
  * The model can accept image urls as the `image_url` parameter in mcp tool results.
  */
 export async function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic') && !await isHiddenModelB(model);
+	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic');
 }
 
 /**

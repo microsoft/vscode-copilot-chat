@@ -22,6 +22,7 @@ import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
 import { PermissionRequest, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
+import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 
 export class CopilotCLIAgentManager extends Disposable {
@@ -225,17 +226,7 @@ export class CopilotCLISession extends Disposable {
 			requestPermission: async (permissionRequest) => {
 				return await this.requestPermission(permissionRequest, toolInvocationToken);
 			},
-			logger: {
-				isDebug: () => false,
-				debug: (msg: string) => this.logService.debug(msg),
-				log: (msg: string) => this.logService.trace(msg),
-				info: (msg: string) => this.logService.info(msg),
-				notice: (msg: string | Error) => this.logService.info(typeof msg === 'string' ? msg : msg.message),
-				warning: (msg: string | Error) => this.logService.warn(typeof msg === 'string' ? msg : msg.message),
-				error: (msg: string | Error) => this.logService.error(typeof msg === 'string' ? msg : msg.message),
-				startGroup: () => { },
-				endGroup: () => { }
-			},
+			logger: getCopilotLogger(this.logService),
 			session: this._sdkSession
 		};
 
@@ -245,7 +236,7 @@ export class CopilotCLISession extends Disposable {
 					break;
 				}
 
-				await this._processEvent(event, stream, toolInvocationToken);
+				this._processEvent(event, stream, toolInvocationToken);
 			}
 		} catch (error) {
 			this.logService.error(`CopilotCLI session error: ${error}`);
@@ -254,11 +245,11 @@ export class CopilotCLISession extends Disposable {
 	}
 
 	private _toolNames = new Map<string, string>();
-	private async _processEvent(
+	private _processEvent(
 		event: SessionEvent,
 		stream: vscode.ChatResponseStream,
 		toolInvocationToken: vscode.ChatParticipantToolToken
-	): Promise<void> {
+	): void {
 		this.logService.trace(`CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
 
 		switch (event.type) {

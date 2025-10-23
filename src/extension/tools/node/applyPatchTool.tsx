@@ -342,17 +342,16 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				} else {
 					this._promptContext.stream.markdown('\n```\n');
 					this._promptContext.stream.codeblockUri(notebookUri || uri, true);
-					// TODO@joyceerhl hack: when an array of text edits for a single URI
-					// are pushed in a single textEdit call, the edits are not applied
-					const edits = Array.isArray(textEdit) ? textEdit : [textEdit];
-					for (const textEdit of edits) {
-						responseStream.textEdit(uri, textEdit);
-					}
+
+					responseStream.textEdit(uri, textEdit);
 					responseStream.textEdit(uri, true);
 					this._promptContext.stream.markdown('\n' + '```\n');
 				}
 
 				files.push({ uri, isNotebook: !!notebookUri, existingDiagnostics, operation: resourceToOperation.get(uri) ?? ActionType.UPDATE });
+			}
+			if (healed && files.length) {
+				files[0].healed = healed;
 			}
 
 			timeout(2000).then(() => {
@@ -401,7 +400,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					await renderPromptElementJSON(
 						this.instantiationService,
 						EditFileResult,
-						{ files, diagnosticsTimeout: 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model, healed },
+						{ files, diagnosticsTimeout: 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model },
 						options.tokenizationOptions ?? {
 							tokenBudget: 1000,
 							countTokens: (t) => Promise.resolve(t.length * 3 / 4)

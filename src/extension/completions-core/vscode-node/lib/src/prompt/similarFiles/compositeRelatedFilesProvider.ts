@@ -3,9 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CancellationToken as ICancellationToken } from '../../../../types/src';
 import { ConfigKey, getConfig } from '../../config';
 import { Context } from '../../context';
 import { Features } from '../../experiments/features';
+import { TelemetryWithExp } from '../../telemetry';
 import { NeighboringFileType } from './neighborFiles';
 import {
 	EmptyRelatedFilesResponse,
@@ -14,8 +16,6 @@ import {
 	RelatedFilesResponse,
 	relatedFilesLogger,
 } from './relatedFiles';
-import { TelemetryWithExp } from '../../telemetry';
-import { CancellationToken as ICancellationToken } from '../../../../types/src';
 
 const cppLanguageIds = ['cpp', 'c', 'cuda-cpp'];
 const typescriptLanguageIds = ['typescript', 'javascript', 'typescriptreact', 'javascriptreact'];
@@ -30,7 +30,7 @@ function getNeighboringFileType(languageId: string): NeighboringFileType {
 	return neighborFileTypeMap.get(languageId) ?? NeighboringFileType.RelatedOther;
 }
 
-type ProviderCallback = (
+export type ProviderCallback = (
 	uri: string,
 	context: { flags: Record<string, unknown> },
 	cancellationToken: ICancellationToken

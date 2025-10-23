@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0",
+		"vscode": "^1.106.0-20251023",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -1696,6 +1696,11 @@
 				"view": "debug",
 				"when": "github.copilot-chat.activated",
 				"contents": "%github.copilot.viewsWelcome.debug%"
+			},
+			{
+				"view": "codex-placeholder",
+				"when": "true",
+				"contents": "%github.copilot.viewsWelcome.codexPlaceholder%"
 			}
 		],
 		"chatViewsWelcome": [
@@ -1751,25 +1756,25 @@
 			},
 			{
 				"command": "github.copilot.cli.sessions.refresh",
-				"title": "Refresh Copilot CLI Agent Sessions",
+				"title": "%github.copilot.command.refreshAgentSessions%",
 				"icon": "$(refresh)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.delete",
-				"title": "Delete Copilot CLI Agent Session",
+				"title": "%github.copilot.command.deleteAgentSession%",
 				"icon": "$(close)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.resumeInTerminal",
-				"title": "Resume Agent Session in Terminal",
+				"title": "%github.copilot.command.cli.sessions.resumeInTerminal%",
 				"icon": "$(terminal)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.newTerminalSession",
-				"title": "New Agent Session in Terminal",
+				"title": "%github.copilot.cli.sessions.newTerminalSession%",
 				"icon": "$(terminal)",
 				"category": "Copilot CLI"
 			},
@@ -2200,7 +2205,7 @@
 			},
 			{
 				"command": "github.copilot.cloud.sessions.refresh",
-				"title": "%github.copilot.command.refreshCopilotAgentSessions%",
+				"title": "%github.copilot.command.refreshAgentSessions%",
 				"icon": "$(refresh)"
 			},
 			{
@@ -3907,6 +3912,14 @@
 					"icon": "$(inspect)",
 					"when": "github.copilot.chat.showContextInspectorView"
 				}
+			],
+			"agentSessions": [
+				{
+					"id": "codex-placeholder",
+					"name": "OpenAI Codex Agent",
+					"when": "github.copilot.chat.codex.notInstalled && config.chat.experimental.codex.enabled",
+					"icon": "$(file)"
+				}
 			]
 		},
 		"viewsContainers": {
@@ -4148,29 +4161,39 @@
 			},
 			{
 				"type": "copilotcli",
-				"name": "copilotcli",
+				"name": "cli",
 				"displayName": "GitHub Copilot CLI Agent",
 				"icon": "$(copilot)",
 				"welcomeTitle": "GitHub Copilot CLI Agent",
 				"welcomeMessage": "Run local background tasks",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
-				"order": 1,
+				"order": 2,
 				"description": "The Copilot CLI Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
-					"supportsProblemAttachments": true
-				}
+					"supportsProblemAttachments": true,
+					"supportsToolAttachments": false
+				},
+				"commands": [
+					{
+						"name": "delegate",
+						"description": "Delegate chat session to cloud agent and create associated PR"
+					}
+				]
 			},
 			{
 				"type": "copilot-cloud-agent",
-				"name": "copilot-cloud-agent",
+				"alternativeIds": [
+					"copilot-swe-agent"
+				],
+				"name": "cloud",
 				"displayName": "GitHub Copilot Cloud Agent",
 				"icon": "$(cloud)",
 				"welcomeTitle": "GitHub Copilot Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
-				"order": 2,
+				"order": 1,
 				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
 				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled",
 				"capabilities": {

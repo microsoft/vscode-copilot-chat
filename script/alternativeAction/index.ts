@@ -7,13 +7,14 @@ import csvParse from 'csv-parse';
 import * as fs from 'fs/promises';
 import minimist from 'minimist';
 import { IAlternativeAction } from '../../src/extension/inlineEdits/node/nextEditProviderTelemetry';
+import { coalesce } from '../../src/util/vs/base/common/arrays';
 import { Processor } from './processor';
 import { IData, Scoring } from './types';
 import { Either, log } from './util';
 
 async function extractFromCsv(csvContents: string): Promise<(Scoring.t | undefined)[]> {
 	const options = {
-		columns: true,          // Use first row as column headers
+		columns: true as const, // Use first row as column headers
 		delimiter: ',',         // Comma delimiter
 		quote: '"',             // Double quotes
 		escape: '"',            // Standard CSV escape character
@@ -22,27 +23,30 @@ async function extractFromCsv(csvContents: string): Promise<(Scoring.t | undefin
 		relax_quotes: true,     // Handle quotes within fields more flexibly
 		bom: true,              // Handle UTF-8 BOM
 		cast: false             // Keep all values as strings initially
-	};
+	} as const;
 
-	const objects: Object[] = await new Promise((resolve, reject) => {
-		csvParse.parse(csvContents, options, (err, result) => {
+	type CsvRecord = { Data: string };
+
+	const objects = (await new Promise<CsvRecord[]>((resolve, reject) =>
+		csvParse.parse<CsvRecord>(csvContents, options, (err, result) => {
 			if (err) {
 				reject(err);
 			} else {
-				resolve(result);
+				if (result.every((item: any) => typeof item === 'object' && 'Data' in item && typeof item['Data'] === 'string')) {
+					resolve(result);
+				} else {
+					reject(new Error('Invalid CSV format'));
+				}
 			}
-		});
-	});
+		})
+	)).map(record => JSON.parse(record.Data) as IData);
 
-	const scoredEdits = objects.map((obj: any) => {
-		if (!('Rec' in obj)) {
-			return undefined;
-		}
-		const altAction: IAlternativeAction = JSON.parse(obj['Rec']);
+	const scoredEdits = objects.map((obj: IData) => {
+		const altAction: IAlternativeAction = obj.altAction;
 		if (!altAction || !altAction.recording) {
 			return undefined;
 		}
-		return Processor.createScoringForAlternativeAction(altAction, [], false);
+		return Processor.createScoringForAlternativeAction(altAction, coalesce([parseSuggestedEdit(obj.postProcessingOutcome.suggestedEdit)]), false);
 	});
 
 	return scoredEdits;
@@ -102,16 +106,12 @@ async function handleAlternativeActionJson(inputFilePath: string) {
 	const edits: [start: number, endEx: number, text: string][] = [];
 	let isAccepted = false;
 	if (obj.isLeft()) {
-		const suggestedEditStr = obj.value.postProcessingOutcome.suggestedEdit; // example: "[978, 1021) -> \"foo\"";
-		const [stringifiedRange, quotedText] = suggestedEditStr.split(' -> ');
-		const match = stringifiedRange.match(/^\[(\d+), (\d+)\)$/);
-		if (match) {
-			const start = parseInt(match[1], 10);
-			const endEx = parseInt(match[2], 10);
-			const text = quotedText.slice(1, -1); // Remove surrounding quotes
-			edits.push([start, endEx, text]);
+		const data = obj.value;
+		const parsedEdit = parseSuggestedEdit(data.postProcessingOutcome.suggestedEdit);
+		if (parsedEdit) {
+			edits.push(parsedEdit);
 		}
-		isAccepted = obj.value.suggestionStatus === 'accepted';
+		isAccepted = data.suggestionStatus === 'accepted';
 	}
 	const scoring = Processor.createScoringForAlternativeAction(altAction, edits, isAccepted);
 	if (!scoring) {
@@ -123,6 +123,17 @@ async function handleAlternativeActionJson(inputFilePath: string) {
 	log('Scoring written to:', outputFilePath);
 }
 
+function parseSuggestedEdit(suggestedEditStr: string): [number, number, string] | null {
+	const [stringifiedRange, quotedText] = suggestedEditStr.split(' -> ');
+	const match = stringifiedRange.match(/^\[(\d+), (\d+)\)$/);
+	if (match) {
+		const start = parseInt(match[1], 10);
+		const endEx = parseInt(match[2], 10);
+		const text = quotedText.slice(1, -1); // Remove surrounding quotes
+		return [start, endEx, text];
+	}
+	return null;
+}
 
 async function main() {
 	const argv = minimist(process.argv.slice(2), {

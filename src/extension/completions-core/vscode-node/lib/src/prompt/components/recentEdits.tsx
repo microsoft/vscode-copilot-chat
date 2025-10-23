@@ -16,7 +16,7 @@ import {
 import { FullRecentEditsProvider, RecentEditsProvider } from '../recentEdits/recentEditsProvider';
 import { RecentEdit } from '../recentEdits/recentEditsReducer';
 
-function editIsTooCloseToCursor(
+export function editIsTooCloseToCursor(
 	edit: RecentEdit,
 	filterByCursorLine: boolean = false,
 	cursorLine: number | undefined = undefined,

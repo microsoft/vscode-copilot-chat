@@ -14,6 +14,7 @@ import { IObservable, observableFromEventOpts } from '../../../util/vs/base/comm
 import * as types from '../../../util/vs/base/common/types';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { isPreRelease, packageJson } from '../../env/common/packagejson';
+import { NextCursorLinePrediction } from '../../inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
 import { LANGUAGE_CONTEXT_ENABLED_LANGUAGES, LanguageContextLanguages } from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ResponseProcessor } from '../../inlineEdits/common/responseProcessor';
@@ -662,7 +663,7 @@ export namespace ConfigKey {
 		export const InlineEditsLogCancelledRequests = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.logCancelledRequests', vBoolean(), false, INTERNAL_RESTRICTED);
 		export const InlineEditsUnification = defineExpSetting<boolean>('chat.advanced.inlineEdits.unification', false, INTERNAL_RESTRICTED);
 		export const InlineEditsTriggerOnEditorChangeAfterSeconds = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.triggerOnEditorChangeAfterSeconds', { defaultValue: undefined, teamDefaultValue: 10 }, INTERNAL);
-		export const InlineEditsNextCursorPredictionEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.nextCursorPrediction.enabled', { defaultValue: false, teamDefaultValue: true }, INTERNAL_RESTRICTED);
+		export const InlineEditsNextCursorPredictionEnabled = defineExpSetting<NextCursorLinePrediction | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.enabled', { defaultValue: undefined, teamDefaultValue: NextCursorLinePrediction.Jump }, INTERNAL_RESTRICTED);
 		export const InlineEditsNextCursorPredictionModelName = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.modelName', { defaultValue: undefined, teamDefaultValue: "xtab-cursor-jump-v2" }, INTERNAL_RESTRICTED);
 		export const InlineEditsNextCursorPredictionUrl = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.url', vString(), undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsNextCursorPredictionApiKey = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.apiKey', vString(), undefined, INTERNAL_RESTRICTED);
@@ -741,7 +742,7 @@ export namespace ConfigKey {
 
 		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false);
 		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false);
-		export const CopilotCLIEnabled = defineSetting<boolean | undefined>('chat.advanced.copilotCLI.enabled', { defaultValue: false, teamDefaultValue: true });
+		export const CopilotCLIEnabled = defineSetting<boolean | undefined>('chat.advanced.copilotCLI.enabled', true);
 		export const CopilotCloudEnabled = defineSetting<boolean | undefined>('chat.advanced.copilotCodingAgent.enabled', false);
 		export const Gpt5AlternativePatch = defineExpSetting<boolean>('chat.advanced.gpt5AlternativePatch', false);
 	}

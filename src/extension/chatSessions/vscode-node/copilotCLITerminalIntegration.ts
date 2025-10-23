@@ -107,6 +107,10 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 	}
 
 	public async openTerminal(name: string, cliArgs: string[] = []) {
+		// Generate another set of shell args, but with --clear to clear the terminal before running the command.
+		// We'd like to hide all of the custom shell commands we send to the terminal from the user.
+		cliArgs.unshift('--clear');
+
 		const [shellPathAndArgs] = await Promise.all([
 			this.getShellInfo(cliArgs),
 			this.updateGHTokenInTerminalEnvVars(),
@@ -123,15 +127,16 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			if (terminal) {
 				this._register(terminal);
 				const command = this.buildCommandForPythonTerminal(shellPathAndArgs?.copilotCommand, cliArgs, shellPathAndArgs);
-				await this.sendCommandToTerminal(terminal, command);
+				await this.sendCommandToTerminal(terminal, command, true);
 				return;
 			}
 		}
 
 		if (!shellPathAndArgs) {
 			const terminal = this._register(this.terminalService.createTerminal(options));
+			cliArgs.shift(); // Remove --clear as we can't run it without a shell integration
 			const command = this.buildCommandForTerminal(terminal, COPILOT_CLI_COMMAND, cliArgs);
-			await this.sendCommandToTerminal(terminal, command);
+			await this.sendCommandToTerminal(terminal, command, false);
 			return;
 		}
 
@@ -153,7 +158,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		return `${quoteArgsForShell(copilotCommand, [])} ${cliArgs.join(' ')}`;
 	}
 
-	private async sendCommandToTerminal(terminal: Terminal, command: string) {
+	private async sendCommandToTerminal(terminal: Terminal, command: string, waitForPythonActivation: boolean) {
 		// Wait for shell integration to be available
 		const shellIntegrationTimeout = 3000;
 		let shellIntegrationAvailable = false;
@@ -173,14 +178,20 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		});
 
 		await integrationPromise;
-		terminal.show();
+
+		if (waitForPythonActivation) {
+			// Wait for python extension to send its initialization commands.
+			// Else if we send too early, the copilot command might not get executed properly.
+			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, 500))); // Wait a bit to ensure the terminal is ready
+		}
 
 		if (shellIntegrationAvailable && terminal.shellIntegration) {
-			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, 500))); // Wait a bit to ensure the terminal is ready
 			terminal.shellIntegration.executeCommand(command);
 		} else {
 			terminal.sendText(command);
 		}
+
+		terminal.show();
 	}
 
 	private async getShellInfo(cliArgs: string[]): Promise<IShellInfo | undefined> {
@@ -212,7 +223,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				shellArgs: [`-ci${shellArgs.includes('-l') ? 'l' : ''}`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
 				iconPath,
 				copilotCommand: this.shellScriptPath,
-				exitCommand: `&& exit`
+				exitCommand: `; exit`
 			};
 		} else if (defaultProfile === 'bash' && this.shellScriptPath) {
 			return {
@@ -221,7 +232,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				shellArgs: [`-${shellArgs.includes('-l') ? 'l' : ''}ic`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
 				iconPath,
 				copilotCommand: this.shellScriptPath,
-				exitCommand: `&& exit`
+				exitCommand: `; exit`
 			};
 		} else if (defaultProfile === 'pwsh' && this.powershellScriptPath && configPlatform !== 'windows') {
 			return {
@@ -248,7 +259,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				shellArgs: ['/c', this.shellScriptPath, ...cliArgs],
 				iconPath,
 				copilotCommand: this.shellScriptPath,
-				exitCommand: undefined
+				exitCommand: '; exit'
 			};
 		}
 	}
@@ -289,7 +300,8 @@ function getCommonTerminalOptions(name: string): TerminalOptions {
 	return {
 		name,
 		iconPath: new ThemeIcon('terminal'),
-		location: { viewColumn: ViewColumn.Active }
+		location: { viewColumn: ViewColumn.Active },
+		hideFromUser: true
 	};
 }
 

@@ -4,13 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 // General utility functions for all kinds of suggestions (Ghost Text, Open Copilot)
 
+import { getBlockCloseToken } from '../../../prompt/src/parse';
 import { Context } from '../context';
 import { Logger } from '../logger';
 import { APIChoice } from '../openai/openai';
-import { isRepetitive } from './anomalyDetection';
 import { TelemetryData, TelemetryStore, telemetry } from '../telemetry';
 import { IPosition, TextDocumentContents } from '../textDocument';
-import { getBlockCloseToken } from '../../../prompt/src/parse';
+import { isRepetitive } from './anomalyDetection';
 
 /**
  * To avoid double-closing blocks (#272), maybe snip a trailing block-close token
@@ -40,12 +40,12 @@ function maybeSnipCompletion(ctx: Context, doc: TextDocumentContents, position: 
 	);
 }
 
-interface ILines {
+export interface ILines {
 	getLineText(lineIdx: number): string;
 	getLineCount(): number;
 }
 
-function maybeSnipCompletionImpl(
+export function maybeSnipCompletionImpl(
 	doc: ILines,
 	position: IPosition,
 	completion: string,

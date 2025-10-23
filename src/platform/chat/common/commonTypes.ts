@@ -179,7 +179,7 @@ export type ChatFetchRetriableError<T> =
 	{ type: ChatFetchResponseType.FilteredRetry; reason: string; category: FilterReason; value: T; requestId: string; serverRequestId: string | undefined }
 
 export type FetchSuccess<T> =
-	{ type: ChatFetchResponseType.Success; value: T; requestId: string; serverRequestId: string | undefined; usage: APIUsage | undefined };
+	{ type: ChatFetchResponseType.Success; value: T; requestId: string; serverRequestId: string | undefined; usage: APIUsage | undefined; resolvedModel: string };
 
 export type FetchResponse<T> = FetchSuccess<T> | ChatFetchError;
 

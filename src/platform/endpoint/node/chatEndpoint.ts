@@ -112,6 +112,7 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 		const completion: ChatCompletion = {
 			blockFinished: false,
 			choiceIndex: i,
+			model: jsonResponse.model,
 			filterReason: undefined,
 			finishReason: choice.finish_reason as FinishedCompletionReason,
 			message: message,
