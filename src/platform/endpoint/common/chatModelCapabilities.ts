@@ -35,16 +35,15 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 }
 
 export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
-	const modelId = getModelId(model);
-	const h = await getCachedSha256Hash(modelId);
+	const h = await getCachedSha256Hash(getModelId(model));
 	return HIDDEN_MODEL_B_HASHES.includes(h);
 }
 
 export async function isVSCModel(model: LanguageModelChat | IChatEndpoint) {
-	const modelId = getModelId(model);
-	const h = await getCachedSha256Hash(modelId);
+	const h = await getCachedSha256Hash(getModelId(model));
 	return VSC_MODEL_HASHES.includes(h);
 }
+
 
 /**
  * Returns whether the instructions should be given in a user message instead

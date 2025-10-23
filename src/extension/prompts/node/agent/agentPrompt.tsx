@@ -367,11 +367,10 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, { isHiddenModelBFlag, hasTodoTool })}
 						{getVSCModelReminder(shouldIncludePreamble)}
-					</Tag >
-					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>
-					}
+					</Tag>
+					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
-				</UserMessage >
+				</UserMessage>
 			</>
 		);
 	}
