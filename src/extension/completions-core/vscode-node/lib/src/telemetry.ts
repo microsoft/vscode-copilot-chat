@@ -378,7 +378,6 @@ function sendTelemetryEvent(
 		properties,
 		data.measurements
 	);
-	service.getSpyReporters(store)?.sendTelemetryEvent(name, properties, data.measurements);
 }
 
 function sendTelemetryErrorEvent(
@@ -394,7 +393,6 @@ function sendTelemetryErrorEvent(
 		properties,
 		data.measurements
 	);
-	service.getSpyReporters(store)?.sendTelemetryErrorEvent(name, properties, data.measurements);
 }
 
 function sendFTTelemetryEvent(

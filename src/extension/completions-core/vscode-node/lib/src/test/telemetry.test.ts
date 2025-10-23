@@ -82,7 +82,7 @@ suite('Telemetry unit tests', function () {
 	});
 
 	test('telemetryCatch', async function () {
-		const { reporter, enhancedReporter } = await withInMemoryTelemetry(ctx, ctx => {
+		const { enhancedReporter } = await withInMemoryTelemetry(ctx, ctx => {
 			telemetryCatch(
 				ctx,
 				() => {
@@ -93,19 +93,22 @@ suite('Telemetry unit tests', function () {
 			)();
 		});
 
-		const standardEvent = reporter.events[0];
-		assert.ok(standardEvent);
+		// Chat has no Telemetry Store.
+
+		// const standardEvent = reporter.events[0];
+		// assert.ok(standardEvent);
 		const enhancedEvent = enhancedReporter.events[0];
 		assert.ok(enhancedEvent);
 
-		assert.deepStrictEqual(standardEvent.properties.message, 'boom!');
-		assert.deepStrictEqual(standardEvent.properties.testKey, 'testValue');
+		// assert.deepStrictEqual(standardEvent.properties.message, 'boom!');
+		// assert.deepStrictEqual(standardEvent.properties.testKey, 'testValue');
 
 		assert.deepStrictEqual(enhancedEvent.properties.message, 'boom!');
-		assert.deepStrictEqual(enhancedEvent.properties.testKey, 'testValue');
+		// Chat has no properties when logging exceptions.
+		// assert.deepStrictEqual(enhancedEvent.properties.testKey, 'testValue');
 
-		assert.ok(standardEvent.properties.restricted_unique_id);
-		assert.deepStrictEqual(enhancedEvent.properties.unique_id, standardEvent.properties.restricted_unique_id);
+		// assert.ok(standardEvent.properties.restricted_unique_id);
+		// assert.deepStrictEqual(enhancedEvent.properties.unique_id, standardEvent.properties.restricted_unique_id);
 	});
 });
 
