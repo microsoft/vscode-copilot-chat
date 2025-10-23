@@ -21,13 +21,17 @@ export interface IAgentPromptCtor {
 
 export type AgentPromptClass = IAgentPromptCtor & (new (...args: any[]) => IAgentPrompt);
 
+type PromptWithMatcher = IAgentPromptCtor & {
+	matchesModel: (endpoint: IChatEndpoint) => Promise<boolean> | boolean;
+};
+
 export const PromptRegistry = new class {
-	private readonly promptsWithMatcher: IAgentPromptCtor[] = [];
+	private readonly promptsWithMatcher: PromptWithMatcher[] = [];
 	private readonly familyPrefixList: { prefix: string; prompt: IAgentPromptCtor }[] = [];
 
 	registerPrompt(prompt: IAgentPromptCtor): void {
 		if (prompt.matchesModel) {
-			this.promptsWithMatcher.push(prompt);
+			this.promptsWithMatcher.push(prompt as PromptWithMatcher);
 		}
 
 		for (const prefix of prompt.familyPrefixes) {
@@ -40,7 +44,7 @@ export const PromptRegistry = new class {
 	): Promise<IAgentPromptCtor | undefined> {
 
 		for (const prompt of this.promptsWithMatcher) {
-			const matches = await prompt.matchesModel!(endpoint);
+			const matches = await prompt.matchesModel(endpoint);
 			if (matches) {
 				return prompt;
 			}
