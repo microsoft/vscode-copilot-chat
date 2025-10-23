@@ -16,7 +16,7 @@ import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
 import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 
-export function resolveCustomOAIUrl(modelId: string, url: string): string {
+export function resolveCustomOAIUrl(modelId: string, url: string, useResponsesApi: boolean = false): string {
 	// The fully resolved url was already passed in
 	if (hasExplicitApiPath(url)) {
 		return url;
@@ -27,14 +27,16 @@ export function resolveCustomOAIUrl(modelId: string, url: string): string {
 		url = url.slice(0, -1);
 	}
 
+	const apiPath = useResponsesApi ? '/responses' : '/chat/completions';
+
 	// Check if URL already contains any version pattern like /v1, /v2, etc
 	const versionPattern = /\/v\d+$/;
 	if (versionPattern.test(url)) {
-		return `${url}/chat/completions`;
+		return `${url}${apiPath}`;
 	}
 
 	// For standard OpenAI-compatible endpoints, just append the standard path
-	return `${url}/v1/chat/completions`;
+	return `${url}/v1${apiPath}`;
 }
 
 export function hasExplicitApiPath(url: string): boolean {
@@ -68,14 +70,13 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return ConfigKey.CustomOAIModels;
 	}
 
-	protected resolveUrl(modelId: string, url: string): string {
-		return resolveCustomOAIUrl(modelId, url);
+	protected resolveUrl(modelId: string, url: string, useResponsesApi?: boolean): string {
+		return resolveCustomOAIUrl(modelId, url, useResponsesApi);
 	}
 
 	protected async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
 		const modelInfo = await resolveModelInfo(modelId, this.providerName, undefined, modelCapabilities);
-		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._experimentationService);
-		if (enableResponsesApi) {
+		if (modelCapabilities?.url?.includes('/responses')) {
 			modelInfo.supported_endpoints = [
 				ModelSupportedEndpoint.ChatCompletions,
 				ModelSupportedEndpoint.Responses
@@ -100,12 +101,9 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._experimentationService);
 
 		for (const [modelId, modelInfo] of Object.entries(modelConfig)) {
-			let resolvedUrl = this.resolveUrl(modelId, modelInfo.url);
-
-			// If user didn't specify explicit endpoint and Responses API is enabled, use Responses API
-			if (!hasExplicitApiPath(modelInfo.url) && enableResponsesApi && resolvedUrl.includes('/chat/completions')) {
-				resolvedUrl = resolvedUrl.replace('/chat/completions', '/responses');
-			}
+			// Only use Responses API if user explicitly specified /responses OR experiment is enabled (for base URLs only)
+			const useResponsesApi = modelInfo.url.includes('/responses') || (!hasExplicitApiPath(modelInfo.url) && enableResponsesApi);
+			const resolvedUrl = this.resolveUrl(modelId, modelInfo.url, useResponsesApi);
 
 			models[modelId] = {
 				name: modelInfo.name,
