@@ -181,6 +181,19 @@ export interface InitOptions {
 	defaultBranch?: string;
 }
 
+export interface CloneOptions {
+	parentPath?: Uri;
+	/**
+	 * ref is only used if the repository cache is missed.
+	 */
+	ref?: string;
+	recursive?: boolean;
+	/**
+	 * If no postCloneAction is provided, then the users setting for git.openAfterClone is used.
+	 */
+	postCloneAction?: 'none';
+}
+
 export interface RefQuery {
 	readonly contains?: string;
 	readonly count?: number;
@@ -349,7 +362,8 @@ export interface API {
 	registerPostCommitCommandsProvider(provider: PostCommitCommandsProvider): Disposable;
 	registerPushErrorHandler(handler: PushErrorHandler): Disposable;
 	registerBranchProtectionProvider(root: Uri, provider: BranchProtectionProvider): Disposable;
-	clone(uri: Uri, options?: CloneOptions): Promise<Repository | null>;
+	clone(uri: Uri, options?: CloneOptions): Promise<Uri | null>;
+	getRepositoryWorkspace(uri: Uri): Promise<Uri[] | null>;
 }
 
 export interface GitExtension {
