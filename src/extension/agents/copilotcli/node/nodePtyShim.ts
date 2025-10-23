@@ -10,12 +10,11 @@ import { ILogService } from '../../../../platform/log/common/logService';
 let shimCreated: Promise<void> | undefined = undefined;
 
 /**
- * Creates a node-pty ESM shim that @github/copilot can import.
+ * Copies the node-pty files from VS Code's installation into a @github/copilot location
  *
  * MUST be called before any `import('@github/copilot/sdk')` or `import('@github/copilot')`.
  *
- * @github/copilot has hardcoded ESM imports: import{spawn}from"node-pty"
- * We create a shim module that uses createRequire to load VS Code's bundled node-pty.
+ * @github/copilot bundles the node-pty code and its no longer possible to shim the package.
  *
  * @param extensionPath The extension's path (where to create the shim)
  * @param vscodeAppRoot VS Code's installation path (where node-pty is located)
@@ -43,7 +42,7 @@ async function _ensureNodePtyShim(extensionPath: string, vscodeAppRoot: string, 
 			}
 		}));
 	} catch (error) {
-		logService.error('Failed to create node-pty shim:', error);
+		logService.error(`Failed to create node-pty shim (vscode dir: ${vscodeNodePtyPath}, extension dir: ${nodePtyDir})`, error);
 		throw error;
 	}
 }

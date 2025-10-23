@@ -41,8 +41,6 @@ const baseNodeBuildOptions = {
 		'sqlite3',
 		'node-pty', // Required by @github/copilot
 		'@github/copilot',
-		'/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk',
-		'/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk/index.js',
 		...(isDev ? [] : ['dotenv', 'source-map-support'])
 	],
 	platform: 'node',

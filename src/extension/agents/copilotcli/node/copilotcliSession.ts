@@ -40,11 +40,10 @@ export class CopilotCLISession extends DisposableStore {
 
 	async getManager(options: SessionOptions) {
 		// Ensure node-pty shim exists before importing SDK
-		// @github/copilot has hardcoded: import{spawn}from"node-pty"
 		await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot, this._logService);
 
 		// Dynamically import the SDK
-		const { internal } = require('/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk/index.js') as typeof import('/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk');
+		const { internal } = await import('@github/copilot/sdk');
 		return new internal.CLISessionManager(options);
 	}
 

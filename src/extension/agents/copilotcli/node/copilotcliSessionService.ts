@@ -19,7 +19,7 @@ import { CopilotCLISession } from './copilotcliSession';
 import { stripReminders } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
-import type { internal, ModelProvider, Session, SessionEvent, SessionManagerOptions } from '/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk';
+import type { internal, ModelProvider, Session, SessionEvent, SessionManagerOptions } from '@github/copilot/sdk';
 
 export interface ICopilotCLISession {
 	readonly id: string;
@@ -81,10 +81,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	public async getSessionManager(options: SessionManagerOptions = {}): Promise<internal.CLISessionManager> {
 		try {
 			// Ensure node-pty shim exists before importing SDK
-			// @github/copilot has hardcoded: import{spawn}from"node-pty"
 			await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService);
 
-			const { internal } = require('/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk/index.js') as typeof import('/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk');
+			const { internal } = await import('@github/copilot/sdk');
 			return new internal.CLISessionManager({
 				...options,
 				logger: getCopilotLogger(this.logService)
