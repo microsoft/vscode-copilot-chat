@@ -314,28 +314,6 @@ export class CopilotCLISession extends Disposable {
 				return { kind: 'approved' };
 			}
 		} catch (error) {
-			if (permissionRequest.kind === 'shell') {
-				try {
-					const tool = ToolName.CoreConfirmationTool;
-					const input = {
-						title: permissionRequest.intention || 'Copilot CLI Permission Request',
-						message: permissionRequest.fullCommandText || `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-						confirmationType: 'terminal',
-						terminalCommand: permissionRequest.fullCommandText as string | undefined
-
-					};
-					const result = await this.toolsService.invokeTool(tool,
-						{ input, toolInvocationToken },
-						CancellationToken.None);
-
-					const firstResultPart = result.content.at(0);
-					if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
-						return { kind: 'approved' };
-					}
-				} catch (error) {
-					this.logService.error(`[CopilotCLISession](2) Permission request error: ${error}`);
-				}
-			}
 			this.logService.error(`[CopilotCLISession] Permission request error: ${error}`);
 		}
 
