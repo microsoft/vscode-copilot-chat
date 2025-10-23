@@ -89,15 +89,21 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 					folderToOpen = cachedWorkspaces[0];
 				} else {
 					// Multiple workspaces, show picker to let user select
-					const items = cachedWorkspaces.map(workspace => ({
-						label: workspace.fsPath,
-						description: workspace.scheme === 'file' ? 'Local workspace' : workspace.scheme,
-						uri: workspace
-					}));
+					const items = cachedWorkspaces.map(workspace => {
+						const label = workspace.scheme === 'file'
+							? workspace.fsPath
+							: workspace.toString();
+						return {
+							label,
+							description: workspace.scheme === 'file' ? 'Local workspace' : workspace.scheme,
+							uri: workspace
+						};
+					});
 
 					const selected = await vscode.window.showQuickPick(items, {
 						placeHolder: 'Select a workspace to open',
-						ignoreFocusOut: true
+						ignoreFocusOut: true,
+						title: 'Multiple workspaces found'
 					});
 
 					if (selected) {
