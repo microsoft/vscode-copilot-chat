@@ -7,11 +7,10 @@ import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
+import { API, Repository } from '../../../platform/git/vscode/git';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
-import { encodeBase64, VSBuffer } from '../../../util/vs/base/common/buffer';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { EXTENSION_ID } from '../../common/constants';
-import { getRepoId } from './copilotCodingAgentUtils';
 
 const GHPR_EXTENSION_ID = 'GitHub.vscode-pull-request-github';
 const PENDING_CHAT_SESSION_STORAGE_KEY = 'github.copilot.pendingChatSession';
@@ -57,7 +56,15 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 	private async _openGitHubSession(type: string, id: string, url: string | null, branch: string | null): Promise<void> {
 		const gitAPI = this._gitExtensionService.getExtensionApi();
 		if (gitAPI && url && branch) {
-			// Save session info to global storage before cloning
+			// Check if we already have this repo open in the workspace
+			const existingRepo = this._getAlreadyOpenWorkspace(gitAPI, url);
+			if (existingRepo) {
+				// Repo is already open, no need to clone
+				await this._fetchCheckoutAndOpenSession(existingRepo, branch, type, id);
+				return;
+			}
+
+			// We're going to need a window reload, save the info to global state
 			const pendingSession = {
 				type,
 				id,
@@ -67,41 +74,25 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 			};
 			await this._extensionContext.globalState.update(PENDING_CHAT_SESSION_STORAGE_KEY, pendingSession);
 
-			await gitAPI.clone(vscode.Uri.parse(url), { openFolder: true, ref: branch });
-			return; // Exit early since we're cloning and will reopen
-		}
+			// Check if we have workspaces associated with this repo
+			const uri = vscode.Uri.parse(url);
+			const cachedWorkspaces: vscode.Uri[] | null = await gitAPI.getRepositoryWorkspace(uri);
 
-		// Check if there's a pending session to open
-		const pendingSession = this._extensionContext.globalState.get<{
-			type: string;
-			id: string;
-			url: string;
-			branch: string;
-			timestamp: number;
-		}>(PENDING_CHAT_SESSION_STORAGE_KEY);
+			// TODO:@osortega, do you want to show a picker here if there are multiple workspaces?
+			let folderToOpen: vscode.Uri | null = ((cachedWorkspaces && cachedWorkspaces.length > 0) ? cachedWorkspaces[0] : null);
 
-		if (pendingSession) {
-			// Clear the pending session from storage
-			await this._extensionContext.globalState.update(PENDING_CHAT_SESSION_STORAGE_KEY, undefined);
+			if (!folderToOpen) {
+				// No cached workspaces, proceed to clone. @osortega, you can show something here if you want, the git extension will show a progress notification
+				folderToOpen = await gitAPI.clone(vscode.Uri.parse(url), { postCloneAction: 'none', ref: branch });
+			}
 
-			// Use the pending session data
-			id = pendingSession.id;
-			type = pendingSession.type;
-		}
-
-		// Ensure the branch is checked out
-		const repoId = await getRepoId(this._gitService);
-		if (!repoId) {
+			// Reuse the window if there are no folders open
+			const forceReuseWindow = ((vscode.workspace.workspaceFile === undefined) && (vscode.workspace.workspaceFolders === undefined));
+			vscode.commands.executeCommand('vscode.openFolder', uri, { forceReuseWindow });
 			return;
 		}
-		const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
-		const pullRequest = pullRequests.find(pr => pr.id === id);
-		if (!pullRequest) {
-			return;
-		}
-		const encodedId = encodeBase64(VSBuffer.wrap(new TextEncoder().encode(pullRequest.number.toString())), false, true);
-		const uri = vscode.Uri.from({ scheme: 'vscode-chat-session', authority: type, path: '/' + encodedId });
-		await vscode.commands.executeCommand('vscode.open', uri);
+
+		this.checkAndOpenPendingSession();
 	}
 
 	public canHandleUri(uri: vscode.Uri): boolean {
@@ -124,13 +115,36 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 		if (pendingSession) {
 			// Check if the pending session is recent (within 10 minutes)
 			const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
-			if (pendingSession.timestamp > tenMinutesAgo) {
-				// Open the session by calling the internal method
-				await this._openGitHubSession(pendingSession.type, pendingSession.id, null, null);
-			} else {
+			if (pendingSession.timestamp < tenMinutesAgo) {
 				// Clear expired pending session
 				await this._extensionContext.globalState.update(PENDING_CHAT_SESSION_STORAGE_KEY, undefined);
 			}
+
+			// Check that the folder we're expecting to be opened is actually open
+			const repository = this._getAlreadyOpenWorkspace(this._gitExtensionService.getExtensionApi()!, pendingSession.url);
+			if (!repository) {
+				// The expected repository is not open.
+				return;
+			}
+
+			return this._fetchCheckoutAndOpenSession(repository, pendingSession.branch, pendingSession.type, pendingSession.id);
 		}
+	}
+
+	private _getAlreadyOpenWorkspace(gitApi: API, cloneUri: string): Repository | undefined {
+		const lowerCloneUri = cloneUri.toLowerCase();
+		const repositories = gitApi.repositories.filter(repo => repo.rootUri.toString().toLowerCase() === lowerCloneUri);
+		return repositories.length > 0 ? repositories[0] : undefined;
+	}
+
+	private async _fetchCheckoutAndOpenSession(repository: Repository, branch: string, sessionType: string, sessionId: string): Promise<void> {
+		await repository.fetch({ ref: branch });
+		// TODO:@osortega, if the workspace is dirty then the checkout won't work
+		try {
+			await repository.checkout(branch);
+		} catch (err) {
+			// maybe repo working tree was dirty
+		}
+		await this._openGitHubSession(sessionType, sessionId, null, null);
 	}
 }
