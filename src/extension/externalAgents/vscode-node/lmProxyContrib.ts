@@ -26,15 +26,14 @@ export class LanguageModelProxyContrib extends Disposable implements IExtensionC
 		const updateRegistration = () => {
 			const token = authenticationService.copilotToken;
 
-			if (!providerDisposable.value && token) {
+			const enableProxy = token && (token.codexAgentEnabled || configurationService.getNonExtensionConfig('chat.experimental.codex.enabled'));
+			if (!providerDisposable.value && enableProxy) {
 				providerDisposable.value = vscode.lm.registerLanguageModelProxyProvider(instantiationService.createInstance(LanguageModelProxyProvider));
-			} else if (providerDisposable.value && !token) {
+			} else if (providerDisposable.value && !enableProxy) {
 				providerDisposable.clear();
 			}
 		};
 
-		if (configurationService.getNonExtensionConfig('chat.experimental.codex.enabled')) {
-			this._register(Event.runAndSubscribe(authenticationService.onDidAuthenticationChange, updateRegistration));
-		}
+		this._register(Event.runAndSubscribe(authenticationService.onDidAuthenticationChange, updateRegistration));
 	}
 }
