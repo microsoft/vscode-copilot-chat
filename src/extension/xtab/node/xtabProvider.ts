@@ -876,16 +876,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					telemetryBuilder.setNextCursorLineError('withinEditWindow');
 				} else {
 					const nextCursorLineOneBased = nextCursorLineZeroBased + 1;
+					const nextCursorLine = promptPieces.activeDoc.documentAfterEditsLines.at(nextCursorLineZeroBased);
+					const nextCursorColumn = (nextCursorLine?.match(/^(\s+)/)?.at(0)?.length ?? 0) + 1;
 					switch (nextCursorLinePrediction) {
 						case NextCursorLinePrediction.Jump: {
-							const nextCursorLine = promptPieces.activeDoc.documentAfterEditsLines.at(nextCursorLineZeroBased);
-							const nextCursorColumn = (nextCursorLine?.match(/^(\s+)/)?.at(0)?.length ?? 0) + 1;
 							const nextCursorPosition = new Position(nextCursorLineOneBased, nextCursorColumn);
 							pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow, nextCursorPosition)));
 							return;
 						}
 						case NextCursorLinePrediction.OnlyWithEdit: {
-							this.doGetNextEditWithSelection(request, new Range(nextCursorLineOneBased, 1, nextCursorLineOneBased, 1), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
+							this.doGetNextEditWithSelection(request, new Range(nextCursorLineOneBased, nextCursorColumn, nextCursorLineOneBased, nextCursorColumn), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
 							return;
 						}
 						default: {
