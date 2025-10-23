@@ -27,6 +27,7 @@ const entryPoints = [
 	'src/platform/tokenizer/node/tikTokenizerWorker.ts',
 	// For tests:
 	'src/platform/authentication/test/node/simulationTestCopilotTokenManager.ts',
+	'src/extension/completions-core/vscode-node/lib/src/test/textDocument.ts',
 ];
 
 interface FileInfo {
