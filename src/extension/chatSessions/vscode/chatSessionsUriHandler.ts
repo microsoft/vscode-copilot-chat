@@ -15,7 +15,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { EXTENSION_ID } from '../../common/constants';
 import { getRepoId } from './copilotCodingAgentUtils';
 
-const GHPR_EXTENSION_ID = 'GitHub.vscode-pull-request-github';
+export const GHPR_EXTENSION_ID = 'GitHub.vscode-pull-request-github';
 const PENDING_CHAT_SESSION_STORAGE_KEY = 'github.copilot.pendingChatSession';
 
 export enum UriHandlerPaths {

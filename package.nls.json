@@ -317,6 +317,7 @@
 	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume Agent Session in Terminal",
 	"github.copilot.cli.sessions.newTerminalSession": "New Agent Session in Terminal",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in browser",
+	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
 	"copilot.tools.runSubagent.name": "Run Subagent",
 	"copilot.tools.runSubagent.description": "Runs a task within an isolated subagent context. Enables efficient organization of tasks and context window management."
 }
