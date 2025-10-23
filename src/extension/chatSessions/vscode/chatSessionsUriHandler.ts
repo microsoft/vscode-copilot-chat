@@ -82,8 +82,36 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 			const uri = vscode.Uri.parse(url);
 			const cachedWorkspaces: vscode.Uri[] | null = await gitAPI.getRepositoryWorkspace(uri);
 
-			// TODO:@osortega show picker to select workspace
-			let folderToOpen: vscode.Uri | null = ((cachedWorkspaces && cachedWorkspaces.length > 0) ? cachedWorkspaces[0] : null);
+			let folderToOpen: vscode.Uri | null = null;
+			if (cachedWorkspaces && cachedWorkspaces.length > 0) {
+				if (cachedWorkspaces.length === 1) {
+					// Only one workspace, use it directly
+					folderToOpen = cachedWorkspaces[0];
+				} else {
+					// Multiple workspaces, show picker to let user select
+					const items = cachedWorkspaces.map(workspace => {
+						const label = workspace.scheme === 'file'
+							? workspace.fsPath
+							: workspace.toString();
+						return {
+							label,
+							description: workspace.scheme === 'file' ? 'Local workspace' : workspace.scheme,
+							uri: workspace
+						};
+					});
+
+					const selected = await vscode.window.showQuickPick(items, {
+						placeHolder: 'Select a workspace to open',
+						ignoreFocusOut: true,
+						title: 'Multiple workspaces found'
+					});
+
+					if (selected) {
+						folderToOpen = selected.uri;
+					}
+					// If user cancels (selected is undefined), folderToOpen remains null and we'll proceed to clone
+				}
+			}
 
 			if (!folderToOpen) {
 				// No cached workspaces, proceed to clone
