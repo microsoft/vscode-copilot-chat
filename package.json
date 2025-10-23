@@ -3465,6 +3465,10 @@
 				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
+					"when": "false"
 				}
 			],
 			"view/title": [
