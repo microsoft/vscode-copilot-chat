@@ -2,6 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 import { CompletionsTelemetryServiceBridge } from '../../bridge/src/completionsTelemetryServiceBridge';
 import {
 	EditorAndPluginInfo,
@@ -22,7 +23,6 @@ import { APIJsonData, RequestId } from './openai/openai';
 import { Prompt } from './prompt/prompt';
 import { TelemetryUserConfig } from './telemetry/userConfig';
 import { PromiseQueue } from './util/promiseQueue';
-import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 
 export enum TelemetryStore {
 	Standard,
@@ -378,7 +378,6 @@ function sendTelemetryEvent(
 		properties,
 		data.measurements
 	);
-	service.getSpyReporters(store)?.sendTelemetryEvent(name, properties, data.measurements);
 }
 
 function sendTelemetryErrorEvent(
@@ -394,7 +393,6 @@ function sendTelemetryErrorEvent(
 		properties,
 		data.measurements
 	);
-	service.getSpyReporters(store)?.sendTelemetryErrorEvent(name, properties, data.measurements);
 }
 
 function sendFTTelemetryEvent(
@@ -531,7 +529,7 @@ export function telemetryCatch<F extends TelemetryCatcher>(
 		try {
 			await fn(...args);
 		} catch (error) {
-			// await _telemetryException(ctx, error, now(), transaction, properties);
+			telemetryException(ctx, error, transaction, properties);
 		}
 	};
 	return (...args) => ctx.get(PromiseQueue).register(wrapped(...args));

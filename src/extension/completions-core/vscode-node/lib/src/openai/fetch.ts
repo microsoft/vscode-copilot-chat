@@ -86,7 +86,7 @@ type CompletionFetchRequestFields = {
 };
 
 /** OAI API completion request, along with additional fields specific to Copilot. */
-type CompletionRequest = BaseFetchRequest &
+export type CompletionRequest = BaseFetchRequest &
 	CompletionFetchRequestFields & {
 		/** Copilot-only: extra arguments for completion processing. */
 		extra: Partial<CompletionRequestExtra>;

@@ -7,7 +7,7 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isHiddenModelB, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelB, isVSCModel, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -323,6 +323,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			this.logService.trace('Re-rendering historical user message');
 		}
 
+		const shouldIncludePreamble = await isVSCModel(this.props.endpoint);
+
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
 		const hasMultiReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.MultiReplaceString);
@@ -339,6 +341,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
 		const isHiddenModelBFlag = await isHiddenModelB(this.props.endpoint);
 		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code') || isHiddenModelBFlag;
+
 		return (
 			<>
 				<UserMessage>
@@ -363,10 +366,12 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, { isHiddenModelBFlag, hasTodoTool })}
-					</Tag>
-					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
+						{getVSCModelReminder(shouldIncludePreamble)}
+					</Tag >
+					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>
+					}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
-				</UserMessage>
+				</UserMessage >
 			</>
 		);
 	}
@@ -766,12 +771,27 @@ function getFileCreationReminder(modelFamily: string | undefined) {
 	return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
 }
 
+function getVSCModelReminder(isHiddenModel: boolean) {
+	if (!isHiddenModel) {
+		return;
+	}
+
+	return <>
+		Follow the guidance in &lt;preamble_instructions&gt; from the system prompt.<br />
+		You MUST preface each tool call batch with a brief status update.<br />
+		Focus on findings and next steps. Vary your openings—avoid repeating "I'll" or "I will" consecutively.<br />
+		When you have a finding, be enthusiastic and specific (2 sentences). Otherwise, state your next action only (1 sentence).<br />
+		Don't over-express your thoughts in preamble, do not use preamble to think or reason. This is a strict and strong requirement.<br />
+	</>;
+}
+
 function getExplanationReminder(
 	modelFamily: string | undefined,
 	options?: {
 		hasTodoTool?: boolean;
 		isHiddenModelBFlag: boolean;
-	}) {
+	}
+) {
 	if (modelFamily === 'gpt-5-codex') {
 		return;
 	}

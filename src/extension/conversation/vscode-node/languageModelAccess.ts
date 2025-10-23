@@ -475,7 +475,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			if (delta.copilotToolCalls) {
 				for (const call of delta.copilotToolCalls) {
 					try {
-						const parameters = JSON.parse(call.arguments);
+						// Anthropic models send "" (empty string) for tools with no parameters.
+						const parameters = JSON.parse(call.arguments || '{}');
 						progress.report(new vscode.LanguageModelToolCallPart(call.id, call.name, parameters));
 					} catch (err) {
 						this._logService.error(err, `Got invalid JSON for tool call: ${call.arguments}`);

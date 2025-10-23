@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { commands, window } from 'vscode';
+import { commands, extensions, window } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ChatDisabledError, ContactSupportError, EnterpriseManagedError, NotSignedUpError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
 import { SESSION_LOGIN_MESSAGE } from '../../../platform/authentication/vscode-node/session';
@@ -14,6 +14,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
+import { GHPR_EXTENSION_ID } from '../../chatSessions/vscode/chatSessionsUriHandler';
 
 const welcomeViewContextKeys = {
 	Activated: 'github.copilot-chat.activated',
@@ -33,6 +34,8 @@ const debugReportFeedbackContextKey = 'github.copilot.debugReportFeedback';
 const previewFeaturesDisabledContextKey = 'github.copilot.previewFeaturesDisabled';
 
 const debugContextKey = 'github.copilot.chat.debug';
+
+export const prExtensionInstalledContextKey = 'github.copilot.prExtensionInstalled';
 
 export class ContextKeysContribution extends Disposable {
 
@@ -63,10 +66,16 @@ export class ContextKeysContribution extends Disposable {
 
 		this._updateShowLogViewContext();
 		this._updateDebugContext();
+		this._updatePrExtensionInstalledContext();
 
 		const debugReportFeedback = this._configService.getConfigObservable(ConfigKey.Internal.DebugReportFeedback);
 		this._register(autorun(reader => {
 			commands.executeCommand('setContext', debugReportFeedbackContextKey, debugReportFeedback.read(reader));
+		}));
+
+		// Listen for extension changes to update PR extension installed context
+		this._register(extensions.onDidChange(() => {
+			this._updatePrExtensionInstalledContext();
 		}));
 	}
 
@@ -182,6 +191,11 @@ export class ContextKeysContribution extends Disposable {
 
 	private _updateDebugContext() {
 		commands.executeCommand('setContext', debugContextKey, !this._envService.isProduction());
+	}
+
+	private _updatePrExtensionInstalledContext() {
+		const isPrExtensionInstalled = !!extensions.getExtension(GHPR_EXTENSION_ID);
+		commands.executeCommand('setContext', prExtensionInstalledContextKey, isPrExtensionInstalled);
 	}
 
 	private async _onAuthenticationChange() {

@@ -43,6 +43,7 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<INotebookSummaryToolParams>, token: vscode.CancellationToken) {
+		this.logger.trace(`Invoking Notebook Summary Tool for file ${options.input.filePath}`);
 		let uri = this.promptPathRepresentationService.resolveFilePath(options.input.filePath);
 		if (!uri) {
 			throw new Error(`Invalid file path`);
@@ -115,21 +116,29 @@ export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
 		props: NotebookStatePromptProps,
 		@IAlternativeNotebookContentService protected readonly alternativeNotebookContent: IAlternativeNotebookContentService,
 		@IPromptPathRepresentationService protected readonly promptPathRepresentationService: IPromptPathRepresentationService,
+		@ILogService private readonly logger: ILogService,
 	) {
 		super(props);
 	}
 
 	override async render(state: void, sizing: PromptSizing) {
-		return (
-			<>
-				{this.getSummary()}
-				<br />
-				<NotebookVariables notebook={this.props.notebook} />
-			</>
-		);
+		try {
+			return (
+				<>
+					{this.getSummary()}
+					<br />
+					<NotebookVariables notebook={this.props.notebook} />
+				</>
+			);
+		}
+		catch (ex) {
+			this.logger.error(`Error rendering NotebookSummary prompt element for notebook ${this.props.notebook.uri.toString()}`, ex);
+			throw ex;
+		}
 	}
 
 	private getSummary() {
+		this.logger.trace(`Generating notebook summary for ${this.props.notebook.uri.toString()}`);
 		const hasAnyCellBeenExecuted = this.props.notebook.getCells().some(cell => cell.executionSummary?.executionOrder !== undefined && cell.executionSummary?.timing);
 		const altDoc = this.props.altDoc;
 		const includeCellLines = this.props.includeCellLines && !!altDoc;
@@ -137,7 +146,7 @@ export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
 			<>
 				Below is a summary of the notebook {this.promptPathRepresentationService.getFilePath(this.props.notebook.uri)}:<br />
 				{hasAnyCellBeenExecuted ? 'The execution count can be used to determine the order in which the cells were executed' : 'None of the cells have been executed'}.<br />
-				{this.props.notebook.cellCount === 0 ? 'This notebook doe not have any cells.' : ''}<br />
+				{this.props.notebook.cellCount === 0 ? 'This notebook does not have any cells.' : ''}<br />
 				{this.props.notebook.getCells().map((cell, i) => {
 					const cellNumber = i + 1;
 					const language = cell.kind === NotebookCellKind.Code ? `, Language = ${cell.document.languageId}` : '';

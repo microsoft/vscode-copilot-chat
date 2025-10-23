@@ -10,7 +10,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IBYOKStorageService } from './byokStorageService';
 import { CustomOAIBYOKModelProvider, hasExplicitApiPath } from './customOAIProvider';
 
-export function resolveAzureUrl(modelId: string, url: string): string {
+export function resolveAzureUrl(modelId: string, url: string, useResponsesApi: boolean = false): string {
 	// The fully resolved url was already passed in
 	if (hasExplicitApiPath(url)) {
 		return url;
@@ -26,9 +26,14 @@ export function resolveAzureUrl(modelId: string, url: string): string {
 	}
 
 	if (url.includes('models.ai.azure.com') || url.includes('inference.ml.azure.com')) {
-		return `${url}/v1/chat/completions`;
+		const apiPath = useResponsesApi ? '/v1/responses' : '/v1/chat/completions';
+		return `${url}${apiPath}`;
 	} else if (url.includes('openai.azure.com')) {
-		return `${url}/openai/deployments/${modelId}/chat/completions?api-version=2025-01-01-preview`;
+		if (useResponsesApi) {
+			return `${url}/openai/v1/responses`;
+		} else {
+			return `${url}/openai/deployments/${modelId}/chat/completions?api-version=2025-01-01-preview`;
+		}
 	} else {
 		throw new Error(`Unrecognized Azure deployment URL: ${url}`);
 	}
@@ -59,7 +64,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 		return ConfigKey.AzureModels;
 	}
 
-	protected override resolveUrl(modelId: string, url: string): string {
-		return resolveAzureUrl(modelId, url);
+	protected override resolveUrl(modelId: string, url: string, useResponsesApi?: boolean): string {
+		return resolveAzureUrl(modelId, url, useResponsesApi);
 	}
 }
