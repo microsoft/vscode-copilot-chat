@@ -7,7 +7,7 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelB, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -337,7 +337,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
-		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code');
+		const isHiddenModelBFlag = await isHiddenModelB(this.props.endpoint);
+		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code') || isHiddenModelBFlag;
 		return (
 			<>
 				<UserMessage>
@@ -361,7 +362,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getFileCreationReminder(this.props.endpoint.family)}
-						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+						{getExplanationReminder(this.props.endpoint.family, { isHiddenModelBFlag, hasTodoTool })}
 					</Tag>
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
@@ -765,13 +766,19 @@ function getFileCreationReminder(modelFamily: string | undefined) {
 	return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
 }
 
-function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
+function getExplanationReminder(
+	modelFamily: string | undefined,
+	options?: {
+		hasTodoTool?: boolean;
+		isHiddenModelBFlag: boolean;
+	}) {
 	if (modelFamily === 'gpt-5-codex') {
 		return;
 	}
 
+	const { isHiddenModelBFlag, hasTodoTool } = options || {};
 	const isGpt5Mini = modelFamily === 'gpt-5-mini';
-	return modelFamily?.startsWith('gpt-5') === true ?
+	return isHiddenModelBFlag || modelFamily?.startsWith('gpt-5') === true ?
 		<>
 			Skip filler acknowledgements like "Sounds good" or "Okay, I will…". Open with a purposeful one-liner about what you're doing next.<br />
 			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />

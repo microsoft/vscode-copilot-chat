@@ -16,9 +16,22 @@ const HIDDEN_MODEL_B_HASHES = [
 	'e0f69b60bf6a6e138121a69884fa51b89aae7315f37d5f41bd0500b2d9346048'
 ];
 
+const sha256Cache = new Map<string, string>();
+
+async function checkSha256Hash(
+	identifier: string,
+	hashes: readonly string[]
+): Promise<boolean> {
+	let h = sha256Cache.get(identifier);
+	if (h === undefined) {
+		h = await getCachedSha256Hash(identifier);
+		sha256Cache.set(identifier, h);
+	}
+	return hashes.includes(h);
+}
+
 export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
-	const h = await getCachedSha256Hash(model.family);
-	return HIDDEN_MODEL_A_HASHES.includes(h);
+	return checkSha256Hash(model.family, HIDDEN_MODEL_A_HASHES);
 }
 
 export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
@@ -33,8 +46,7 @@ export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
 		return false;
 	}
 
-	const h = await getCachedSha256Hash(modelId);
-	return HIDDEN_MODEL_B_HASHES.includes(h);
+	return checkSha256Hash(modelId, HIDDEN_MODEL_B_HASHES);
 }
 
 /**
@@ -71,7 +83,7 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
  * Model supports replace_string_in_file as an edit tool.
  */
 export async function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.includes('gemini') || model.family.includes('grok-code') || await modelSupportsMultiReplaceString(model);
+	return model.family.includes('gemini') || model.family.includes('grok-code') || await isHiddenModelB(model) || await modelSupportsMultiReplaceString(model);
 }
 
 /**
@@ -86,7 +98,7 @@ export async function modelSupportsMultiReplaceString(model: LanguageModelChat |
  * without needing insert_edit_into_file.
  */
 export async function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code');
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code') || await isHiddenModelB(model);
 }
 
 /**
