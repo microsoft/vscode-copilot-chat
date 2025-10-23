@@ -16,7 +16,7 @@ import { WorkingCopyOriginalDocument } from '../../src/extension/prompts/node/in
 import { IToolsService } from '../../src/extension/tools/common/toolsService';
 import { TestEditFileTool } from '../../src/extension/tools/node/test/testTools';
 import { TestToolsService } from '../../src/extension/tools/node/test/testToolsService';
-import { editingSessionAgentEditorName, editorAgentName, getChatParticipantIdFromName } from '../../src/platform/chat/common/chatAgents';
+import { editorAgentName, getChatParticipantIdFromName } from '../../src/platform/chat/common/chatAgents';
 import { IChatMLFetcher } from '../../src/platform/chat/common/chatMLFetcher';
 import { ILanguageDiagnosticsService } from '../../src/platform/languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService } from '../../src/platform/languages/common/languageFeaturesService';
@@ -81,8 +81,6 @@ export function simulateInlineChatWithStrategy(strategy: EditTestStrategy, testi
 
 	if (strategy === EditTestStrategy.InlineChatIntent2) {
 		return simulateInlineChatIntent(testingServiceCollection, scenario);
-	} else if (strategy === EditTestStrategy.Inline2) {
-		return simulateInlineChat3(testingServiceCollection, scenario);
 	} else {
 		return simulateInlineChat(testingServiceCollection, scenario);
 	}
@@ -93,30 +91,6 @@ export async function simulateInlineChat(
 	scenario: IScenario
 ): Promise<void> {
 	const host: EditingSimulationHost = {
-		prepareChatRequestLocation: (accessor: ITestingServicesAccessor, wholeRange?: Range) => {
-			const editor = accessor.get(ITabsAndEditorsService).activeTextEditor;
-			if (!editor) {
-				throw new Error(`No active editor`);
-			}
-			return {
-				location: ChatLocation.Editor,
-				location2: new ChatRequestEditorData(editor.document, editor.selection, wholeRange ?? editor.selection),
-			};
-		}
-	};
-	return simulateEditingScenario(testingServiceCollection, scenario, host);
-}
-
-export async function simulateInlineChat3(
-	testingServiceCollection: TestingServiceCollection,
-	scenario: IScenario
-): Promise<void> {
-	const host: EditingSimulationHost = {
-		agentArgs: {
-			agentId: getChatParticipantIdFromName(editingSessionAgentEditorName),
-			agentName: editingSessionAgentEditorName,
-			intentId: Intent.Edit
-		},
 		prepareChatRequestLocation: (accessor: ITestingServicesAccessor, wholeRange?: Range) => {
 			const editor = accessor.get(ITabsAndEditorsService).activeTextEditor;
 			if (!editor) {
@@ -868,11 +842,6 @@ export function toRange(range: [number, number] | [number, number, number, numbe
 	}
 }
 
-
-export function forInlineAndInline2(callback: (strategy: EditTestStrategy, configurations: NonExtensionConfiguration[] | undefined, suffix: string) => void): void {
-	callback(EditTestStrategy.Inline, undefined, '');
-	callback(EditTestStrategy.Inline2, [['inlineChat.enableV2', true]], '-inline2');
-}
 
 export function forInlineAndInlineChatIntent(callback: (strategy: EditTestStrategy, configurations: NonExtensionConfiguration[] | undefined, suffix: string) => void): void {
 	callback(EditTestStrategy.Inline, undefined, '');

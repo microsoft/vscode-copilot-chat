@@ -125,10 +125,6 @@ export const enum EditTestStrategy {
 	 */
 	Inline,
 	/**
-	 * @deprecated
-	 */
-	Inline2,
-	/**
 	 * We will test an inline chat intent interaction.
 	 */
 	InlineChatIntent2,

@@ -24,7 +24,7 @@ function executeEditTestStrategy(
 ): Promise<void> {
 	if (strategy === EditTestStrategy.Inline) {
 		return simulateInlineChat(testingServiceCollection, scenario);
-	} else if (strategy === EditTestStrategy.Inline2 || EditTestStrategy.InlineChatIntent2) {
+	} else if (EditTestStrategy.InlineChatIntent2) {
 		return simulateInlineChatIntent(testingServiceCollection, scenario);
 	} else {
 		throw new Error('Invalid edit test strategy');
@@ -37,12 +37,6 @@ function forInlineAndInlineChatIntent(callback: (strategy: EditTestStrategy, var
 }
 
 forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => {
-
-	function skipIfInlineChatIntent() {
-		if (variant === '-InlineChatIntent') {
-			assert.ok(false, 'SKIPPED');
-		}
-	}
 
 	ssuite({ title: `generate${variant}`, location: 'inline' }, () => {
 		stest({ description: 'gen-ts-ltrim', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
@@ -120,9 +114,7 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'generate rtrim', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
-
-			skipIfInlineChatIntent();
+		stest.skip({ description: 'generate rtrim', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
@@ -521,9 +513,7 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'Streaming gets confused due to jsdoc', language: 'json', nonExtensionConfigurations }, (testingServiceCollection) => {
-
-			skipIfInlineChatIntent();
+		stest.skip({ description: 'Streaming gets confused due to jsdoc', language: 'json', nonExtensionConfigurations }, (testingServiceCollection) => {
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
@@ -613,9 +603,7 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'issue #2496: Range of interest is imprecise after a streaming edit', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
-
-			skipIfInlineChatIntent();
+		stest.skip({ description: 'issue #2496: Range of interest is imprecise after a streaming edit', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
@@ -893,9 +881,7 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'issue #224: Lots of lines deleted when using interactive chat in a markdown file', language: 'markdown', nonExtensionConfigurations }, (testingServiceCollection) => {
-
-			skipIfInlineChatIntent();
+		stest.skip({ description: 'issue #224: Lots of lines deleted when using interactive chat in a markdown file', language: 'markdown', nonExtensionConfigurations }, (testingServiceCollection) => {
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [

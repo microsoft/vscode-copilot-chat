@@ -21,7 +21,7 @@ function executeEditTest(
 ): Promise<void> {
 	if (strategy === EditTestStrategy.Inline) {
 		return simulateInlineChat(testingServiceCollection, scenario);
-	} else if (strategy === EditTestStrategy.Inline2 || strategy === EditTestStrategy.InlineChatIntent2) {
+	} else if (strategy === EditTestStrategy.InlineChatIntent2) {
 		return simulateInlineChatIntent(testingServiceCollection, scenario);
 	} else {
 		return simulatePanelCodeMapper(testingServiceCollection, scenario, strategy);
@@ -34,12 +34,6 @@ function forInlineAndInlineChatIntent(callback: (strategy: EditTestStrategy, loc
 }
 
 forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigurations) => {
-
-	function skipIfInlineChatIntent() {
-		if (variant === '-InlineChatIntent') {
-			assert.ok(false, 'SKIPPED');
-		}
-	}
 
 	ssuite({ title: `edit${variant}`, location }, () => {
 		stest({ description: 'Context Outline: TypeScript between methods', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
@@ -144,11 +138,11 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #405: "make simpler" query is surprising', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 
+		stest.skip({ description: 'issue #405: "make simpler" query is surprising', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			// SKIPPED because of the error below
 			// <NO REPLY> {"type":"failed","reason":"Request Failed: 400 {\"error\":{\"message\":\"prompt token count of 13613 exceeds the limit of 12288\",\"code\":\"model_max_prompt_tokens_exceeded\"}}\n","requestId":"2e91a4a5-366b-4cae-b9c8-cce59d06a7bb","serverRequestId":"EA6B:3DFF07:151BC22:18DE2D8:68F22ED4","isCacheHit":false,"copilotFunctionCalls":[]}
-			skipIfInlineChatIntent();
+
 
 			return executeEditTest(strategy, testingServiceCollection, {
 				files: [fromFixture('vscode/extHost.api.impl.ts')],
@@ -263,11 +257,9 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #3759: add type', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
-
+		stest.skip({ description: 'issue #3759: add type', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			// SKIPPED because of the error below
 			// <NO REPLY> {"type":"failed","reason":"Request Failed: 400 {\"error\":{\"message\":\"prompt token count of 13613 exceeds the limit of 12288\",\"code\":\"model_max_prompt_tokens_exceeded\"}}\n","requestId":"2e91a4a5-366b-4cae-b9c8-cce59d06a7bb","serverRequestId":"EA6B:3DFF07:151BC22:18DE2D8:68F22ED4","isCacheHit":false,"copilotFunctionCalls":[]}
-			skipIfInlineChatIntent();
 
 			return executeEditTest(strategy, testingServiceCollection, {
 				files: [

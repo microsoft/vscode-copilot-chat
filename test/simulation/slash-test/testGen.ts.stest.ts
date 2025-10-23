@@ -12,13 +12,12 @@ import { deserializeWorkbenchState } from '../../../src/platform/test/node/promp
 import { assertType } from '../../../src/util/vs/base/common/types';
 import { ssuite, stest } from '../../base/stest';
 import { generateScenarioTestRunner } from '../../e2e/scenarioTest';
-import { forInline, forInlineAndInline2, simulateInlineChatWithStrategy } from '../inlineChatSimulator';
+import { forInline, simulateInlineChatWithStrategy } from '../inlineChatSimulator';
 import { assertContainsAllSnippets, assertNoSyntacticDiagnosticsAsync, getFileContent } from '../outcomeValidators';
 import { assertInlineEdit, assertInlineEditShape, assertNoStrings, assertSomeStrings, assertWorkspaceEdit, fromFixture } from '../stestUtil';
-import { EditTestStrategy } from '../types';
 
 
-forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
+forInline((strategy, nonExtensionConfigurations, suffix) => {
 
 	ssuite({ title: `/tests${suffix}`, location: 'inline', language: 'typescript', nonExtensionConfigurations }, () => {
 
@@ -171,10 +170,7 @@ forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
 
 forInline((strategy, nonExtensionConfigurations) => {
 
-	const variant = strategy === EditTestStrategy.Inline2 ? '-inline2' : '';
-
-
-	ssuite({ title: `/tests${variant}`, subtitle: "real world", location: 'inline', language: 'typescript', nonExtensionConfigurations }, () => {
+	ssuite({ title: `/tests`, subtitle: "real world", location: 'inline', language: 'typescript', nonExtensionConfigurations }, () => {
 
 		stest({ description: 'generate a unit test', }, (testingServiceCollection) => {
 			return simulateInlineChatWithStrategy(strategy, testingServiceCollection, {
@@ -273,7 +269,7 @@ forInline((strategy, nonExtensionConfigurations) => {
 			});
 		});
 	});
-	ssuite({ title: `/tests${variant}`, subtitle: 'custom instructions', location: 'inline', language: 'typescript', nonExtensionConfigurations }, function () {
+	ssuite({ title: `/tests`, subtitle: 'custom instructions', location: 'inline', language: 'typescript', nonExtensionConfigurations }, function () {
 		const testGenConfigOnly = [
 			{
 				key: ConfigKey.TestGenerationInstructions,
