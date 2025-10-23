@@ -17,6 +17,7 @@ import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { LanguageContextEntry, LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
+import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
@@ -38,6 +39,7 @@ import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { createTracer, ITracer } from '../../../util/common/tracing';
+import { assertNever } from '../../../util/vs/base/common/assert';
 import { AsyncIterableObject, DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
@@ -851,9 +853,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return;
 		}
 
-		const nextCursorLinePredictionEnabled = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService);
-		if (nextCursorLinePredictionEnabled && retryState === RetryState.NotRetrying) {
+		const nextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService);
+		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying) {
 			const nextCursorLineR = await this.predictNextCursorPosition(promptPieces);
+
 			if (nextCursorLineR.isError()) {
 				this.tracer.trace(`Predicted next cursor line error: ${nextCursorLineR.err.message}`);
 				telemetryBuilder.setNextCursorLineError(nextCursorLineR.err.message);
@@ -872,8 +875,23 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					this.tracer.trace(`Predicted next cursor line error: withinEditWindow`);
 					telemetryBuilder.setNextCursorLineError('withinEditWindow');
 				} else {
-					this.doGetNextEditWithSelection(request, new Range(nextCursorLine + 1, 1, nextCursorLine + 1, 1), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
-					return;
+					const nextCursorLineOneBased = nextCursorLine + 1;
+					switch (nextCursorLinePrediction) {
+						case NextCursorLinePrediction.Jump: {
+							const nextCursorLine = promptPieces.activeDoc.documentAfterEditsLines.at(nextCursorLineOneBased - 1 /* convert to zero-based */);
+							const nextCursorColumn = (nextCursorLine?.match(/^(\s+)/)?.at(0)?.length ?? 0) + 1;
+							const nextCursorPosition = new Position(nextCursorLineOneBased, nextCursorColumn);
+							pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow, nextCursorPosition)));
+							return;
+						}
+						case NextCursorLinePrediction.OnlyWithEdit: {
+							this.doGetNextEditWithSelection(request, new Range(nextCursorLineOneBased, 1, nextCursorLineOneBased, 1), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
+							return;
+						}
+						default: {
+							assertNever(nextCursorLinePrediction);
+						}
+					}
 				}
 			}
 		}
