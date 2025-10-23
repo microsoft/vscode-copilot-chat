@@ -31,6 +31,7 @@ import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
+import { Position } from '../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency } from '../common/editRebase';
@@ -183,6 +184,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		let edit: StringReplacement | undefined;
+		let showLabel: boolean | undefined;
 		let currentDocument: StringText | undefined;
 		let error: NoNextEditReason | undefined;
 		let req: NextEditFetchRequest;
@@ -237,6 +239,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					logContext.setIsSkipped();
 				} else {
 					const suggestedNextEdit = result.val.rebasedEdit || result.val.edit;
+					showLabel = result.val.showLabel;
 					if (!suggestedNextEdit) {
 						tracer.trace('empty edits');
 						telemetryBuilder.setStatus('emptyEdits');
@@ -303,7 +306,29 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		telemetryBuilder.setStatus('notAccepted'); // Acceptance pending.
 		const showRangePreference = this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit;
-		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
+		let nextEditResult: NextEditResult;
+		if (!showLabel || selections.length < 1) {
+			nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
+		} else {
+			const transformer = documentAtInvocationTime.getTransformer();
+			const currentSelection = selections[0];
+			const currentCursorPosition = transformer.getRange(currentSelection);
+			const displayLocation: INextEditDisplayLocation = {
+				label: 'Jump to next edit',
+				range: currentCursorPosition,
+			};
+
+			const editPosition = transformer.getRange(edit.replaceRange);
+
+			const commandJumpToEditRange: vscode.Command = {
+				command: jumpToPositionCommandId,
+				title: "Jump to next edit",
+				arguments: [new Position(editPosition.startLineNumber, editPosition.startColumn)],
+			};
+
+			const noopEdit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
+			nextEditResult = new NextEditResult(logContext.requestId, req, { edit: noopEdit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId, displayLocation, action: commandJumpToEditRange });
+		}
 
 		telemetryBuilder.setHasNextEdit(true);
 
@@ -603,6 +628,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				const targetDocState = statePerDoc.get(result.val.targetDocument ?? curDocId);
 
 				const singleLineEdit = result.val.edit;
+				const showLabel = result.val.showLabel;
 				const lineEdit = new LineEdit([singleLineEdit]);
 				const edit = convertLineEditToEdit(lineEdit, targetDocState.docId);
 				const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
@@ -617,7 +643,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 				targetDocState.editsSoFar = targetDocState.editsSoFar.compose(rebasedEdit);
 
-				let cachedEdit;
+				let cachedEdit: CachedOrRebasedEdit | undefined;
 				if (rebasedEdit.replacements.length === 0) {
 					myTracer.trace(`WARNING: ${ithEdit} has no edits`);
 				} else if (rebasedEdit.replacements.length > 1) {
@@ -631,6 +657,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				}
 
 				if (!firstEdit.isSettled) {
+					if (cachedEdit) {
+						cachedEdit.showLabel = showLabel;
+					}
 					myTracer.trace('resolving firstEdit promise');
 					logContext.setResult(new RootedLineEdit(targetDocState.docContents, lineEdit)); // this's correct without rebasing because this's the first edit
 					firstEdit.complete(cachedEdit ? Result.ok(cachedEdit) : Result.error(new NoNextEditReason.Unexpected(new Error('No cached edit'))));
