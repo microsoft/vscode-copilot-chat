@@ -291,7 +291,7 @@ export class CopilotCLIChatSessionParticipant {
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
 		const sdkSession = await this.sessionService.getOrCreateSDKSession(undefined, requestPrompt);
 
-		vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + sdkSession.sessionId }));
+		vscode.commands.executeCommand('vscode.open', SessionIdForCLI.getResource(sdkSession.sessionId));
 		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 		return {};
 	}
