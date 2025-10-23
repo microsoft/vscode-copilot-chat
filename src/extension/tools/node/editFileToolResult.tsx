@@ -33,7 +33,7 @@ export interface IEditedFile {
 
 export interface IEditFileResultProps extends BasePromptElementProps {
 	files: IEditedFile[];
-	diagnosticsTimeout: number;
+	diagnosticsTimeout?: number;
 	toolName?: ToolName;
 	requestId?: string;
 	model?: vscode.LanguageModelChat;
@@ -76,7 +76,7 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 				healedEdits.push({ file: filePath, healing: file.healed });
 			}
 
-			const diagnostics = this.props.diagnosticsTimeout >= 0
+			const diagnostics = (this.props.diagnosticsTimeout === undefined || this.props.diagnosticsTimeout >= 0)
 				&& !this.testContext.isInSimulationTests
 				&& this.configurationService.getExperimentBasedConfig(ConfigKey.AutoFixDiagnostics, this.experimentationService)
 				&& !file.isNotebook
