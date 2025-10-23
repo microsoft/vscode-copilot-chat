@@ -24,7 +24,9 @@ export class NodeFetcher implements IFetcher {
 
 	fetch(url: string, options: FetchOptions): Promise<Response> {
 		const headers = { ...options.headers };
-		headers['User-Agent'] = `GitHubCopilotChat/${this._envService.getVersion()}`;
+		if (!headers['User-Agent']) {
+			headers['User-Agent'] = `GitHubCopilotChat/${this._envService.getVersion()}`;
+		}
 		headers[userAgentLibraryHeader] = this._userAgentLibraryUpdate ? this._userAgentLibraryUpdate(this.getUserAgentLibrary()) : this.getUserAgentLibrary();
 
 		let body = options.body;

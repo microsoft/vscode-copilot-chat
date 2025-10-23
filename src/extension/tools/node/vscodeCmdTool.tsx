@@ -10,6 +10,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkbenchService } from '../../../platform/workbench/common/workbenchService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { commandUri } from '../../linkify/common/commands';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 
@@ -54,9 +55,12 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 			throw new Error('Command ID undefined');
 		}
 
-		const query = encodeURIComponent(JSON.stringify([[commandId]]));
-		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}](command:workbench.action.quickOpen?{1}) command.`, options.input.name, query));
-		markdownString.isTrusted = { enabledCommands: [commandId] };
+		const quickOpenCommand = 'workbench.action.quickOpen';
+		// Populate the Quick Open box with command ID rather than command name to avoid issues where Copilot didn't use the precise name,
+		// or when the Copilot response language (Spanish, French, etc.) might be different here than the UI one.
+		const commandStr = commandUri(quickOpenCommand, [">" + commandId]);
+		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}]({1}) command.`, options.input.name, commandStr));
+		markdownString.isTrusted = { enabledCommands: [quickOpenCommand] };
 		return {
 			invocationMessage: l10n.t`Running command \`${options.input.name}\``,
 			confirmationMessages: {

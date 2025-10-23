@@ -9,7 +9,7 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { addPullRequestCommentGraphQLRequest, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { addPullRequestCommentGraphQLRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeGitHubAPIRequestWithPagination, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 
 export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
 
@@ -90,20 +90,6 @@ export interface IOctoKitSessionInfo {
 	created_at: string;
 }
 
-export interface IOctoKitPullRequestInfo {
-	number: number;
-	title: string;
-	additions: number;
-	deletions: number;
-	headRepository: {
-		name: string;
-		owner: {
-			login: string;
-		};
-		url: string;
-	};
-}
-
 export interface RemoteAgentJobResponse {
 	job_id: string;
 	session_id: string;
@@ -157,6 +143,16 @@ export interface CustomAgentDetails extends CustomAgentListItem {
 			headers?: { [key: string]: string };
 		};
 	};
+}
+
+export interface PullRequestFile {
+	filename: string;
+	status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
+	additions: number;
+	deletions: number;
+	changes: number;
+	patch?: string;
+	previous_filename?: string;
 }
 
 export interface IOctoKitService {
@@ -220,6 +216,16 @@ export interface IOctoKitService {
 	addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null>;
 
 	/**
+	 * Gets all open Copilot sessions.
+	 */
+	getAllOpenSessions(nwo: string): Promise<SessionInfo[]>;
+
+	/**
+	 * Gets pull request from global id.
+	 */
+	getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null>;
+
+	/**
 	 * Gets the list of custom agents available for a repository.
 	 * This includes both repo-level and org/enterprise-level custom agents.
 	 * @param owner The repository owner
@@ -237,6 +243,15 @@ export interface IOctoKitService {
 	 * @returns The custom agent details or undefined if not found
 	 */
 	getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined>;
+
+	/**
+	 * Gets the list of files changed in a pull request.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param pullNumber The pull request number
+	 * @returns An array of changed files with their metadata
+	 */
+	getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<PullRequestFile[]>;
 }
 
 /**
@@ -298,6 +313,14 @@ export class BaseOctoKitService {
 		return addPullRequestCommentGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, pullRequestId, commentBody);
 	}
 
+	protected async getAllOpenSessionsWithToken(nwo: string, token: string): Promise<SessionInfo[]> {
+		return makeGitHubAPIRequestWithPagination(this._fetcherService, this._logService, `https://api.githubcopilot.com`, 'agents/sessions', nwo, token);
+	}
+
+	protected async getPullRequestFromSessionWithToken(globalId: string, token: string): Promise<PullRequestSearchItem | null> {
+		return getPullRequestFromGlobalId(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, globalId);
+	}
+
 	protected async getCustomAgentsWithToken(owner: string, repo: string, token: string): Promise<GetCustomAgentsResponse> {
 		const queryParams = '?exclude_invalid_config=true';
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
@@ -306,5 +329,10 @@ export class BaseOctoKitService {
 	protected async getCustomAgentDetailsWithToken(owner: string, repo: string, agentName: string, token: string, version?: string): Promise<CustomAgentDetails | undefined> {
 		const queryParams = version ? `?version=${encodeURIComponent(version)}` : '';
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}/${agentName}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
+	}
+
+	protected async getPullRequestFilesWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<PullRequestFile[]> {
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, undefined, '2022-11-28');
+		return result || [];
 	}
 }

@@ -30,7 +30,7 @@ import { IToolsService } from '../../../../tools/common/toolsService';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 
-["default", "gpt-4.1", "gpt-5"].forEach(family => {
+["default", "gpt-4.1", "gpt-5", "claude-sonnet-4.5", "gemini-2.0-flash", "grok-code-fast-1"].forEach(family => {
 	suite(`AgentPrompt - ${family}`, () => {
 		let accessor: ITestingServicesAccessor;
 		let chatResponse: (string | IResponseDelta[])[] = [];

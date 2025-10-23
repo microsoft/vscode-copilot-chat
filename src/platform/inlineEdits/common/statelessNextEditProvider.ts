@@ -275,6 +275,7 @@ export interface IStatelessNextEditTelemetry {
 	readonly prompt: string | undefined;
 	readonly promptLineCount: number | undefined;
 	readonly promptCharCount: number | undefined;
+	readonly mergeConflictExpanded: 'normal' | 'only' | undefined;
 
 	/* fetch request info */
 
@@ -359,6 +360,7 @@ export class StatelessNextEditTelemetryBuilder {
 
 			statelessNextEditProviderDuration: timeSpent,
 			logProbThreshold: this._logProbThreshold,
+			mergeConflictExpanded: this._mergeConflictExpanded,
 			nLinesOfCurrentFileInPrompt: this._nLinesOfCurrentFileInPrompt,
 			modelName: this._modelName,
 			prompt,
@@ -381,6 +383,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _logProbThreshold: number | undefined;
 	public setLogProbThreshold(logProbThreshold: number): this {
 		this._logProbThreshold = logProbThreshold;
+		return this;
+	}
+
+	private _mergeConflictExpanded: 'normal' | 'only' | undefined;
+	public setMergeConflictExpanded(mergeConflictExpanded: 'normal' | 'only'): this {
+		this._mergeConflictExpanded = mergeConflictExpanded;
 		return this;
 	}
 

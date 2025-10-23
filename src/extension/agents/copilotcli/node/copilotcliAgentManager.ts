@@ -22,6 +22,7 @@ import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
 import { PermissionRequest, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
+import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 
 export class CopilotCLIAgentManager extends Disposable {
@@ -87,6 +88,9 @@ export class CopilotCLIAgentManager extends Disposable {
 			if (ref.value instanceof ChatReferenceDiagnostic) {
 				// Handle diagnostic reference
 				for (const [uri, diagnostics] of ref.value.diagnostics) {
+					if (uri.scheme !== 'file') {
+						continue;
+					}
 					for (const diagnostic of diagnostics) {
 						const severityMap: { [key: number]: string } = {
 							0: 'error',
@@ -103,10 +107,12 @@ export class CopilotCLIAgentManager extends Disposable {
 					}
 				}
 			} else {
-				const filePath = URI.isUri(ref.value) ? ref.value.fsPath : isLocation(ref.value) ? ref.value.uri.fsPath : undefined;
-				if (filePath) {
-					files.push({ path: filePath, name: ref.name || path.basename(filePath) });
+				const uri = URI.isUri(ref.value) ? ref.value : isLocation(ref.value) ? ref.value.uri : undefined;
+				if (!uri || uri.scheme !== 'file') {
+					return;
 				}
+				const filePath = uri.fsPath;
+				files.push({ path: filePath, name: ref.name || path.basename(filePath) });
 				const valueText = URI.isUri(ref.value) ?
 					ref.value.fsPath :
 					isLocation(ref.value) ?
@@ -220,17 +226,7 @@ export class CopilotCLISession extends Disposable {
 			requestPermission: async (permissionRequest) => {
 				return await this.requestPermission(permissionRequest, toolInvocationToken);
 			},
-			logger: {
-				isDebug: () => false,
-				debug: (msg: string) => this.logService.debug(msg),
-				log: (msg: string) => this.logService.trace(msg),
-				info: (msg: string) => this.logService.info(msg),
-				notice: (msg: string | Error) => this.logService.info(typeof msg === 'string' ? msg : msg.message),
-				warning: (msg: string | Error) => this.logService.warn(typeof msg === 'string' ? msg : msg.message),
-				error: (msg: string | Error) => this.logService.error(typeof msg === 'string' ? msg : msg.message),
-				startGroup: () => { },
-				endGroup: () => { }
-			},
+			logger: getCopilotLogger(this.logService),
 			session: this._sdkSession
 		};
 
@@ -240,7 +236,7 @@ export class CopilotCLISession extends Disposable {
 					break;
 				}
 
-				await this._processEvent(event, stream, toolInvocationToken);
+				this._processEvent(event, stream, toolInvocationToken);
 			}
 		} catch (error) {
 			this.logService.error(`CopilotCLI session error: ${error}`);
@@ -249,11 +245,11 @@ export class CopilotCLISession extends Disposable {
 	}
 
 	private _toolNames = new Map<string, string>();
-	private async _processEvent(
+	private _processEvent(
 		event: SessionEvent,
 		stream: vscode.ChatResponseStream,
 		toolInvocationToken: vscode.ChatParticipantToolToken
-	): Promise<void> {
+	): void {
 		this.logService.trace(`CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
 
 		switch (event.type) {
@@ -272,11 +268,11 @@ export class CopilotCLISession extends Disposable {
 
 			case 'tool.execution_start': {
 				const responsePart = processToolExecutionStart(event, this._toolNames, this._pendingToolInvocations);
+				const toolName = this._toolNames.get(event.data.toolCallId);
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					stream.push(responsePart);
 				}
-				const toolName = this._toolNames.get(event.data.toolCallId) || '<unknown>';
-				this.logService.trace(`Start Tool ${toolName}`);
+				this.logService.trace(`Start Tool ${toolName || '<unknown>'}`);
 				break;
 			}
 
@@ -308,38 +304,64 @@ export class CopilotCLISession extends Disposable {
 		toolInvocationToken: vscode.ChatParticipantToolToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
 		try {
-			const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationTool, {
-				input: this.getConfirmationToolParams(permissionRequest),
-				toolInvocationToken,
-			}, CancellationToken.None);
+			const { tool, input } = this.getConfirmationToolParams(permissionRequest);
+			const result = await this.toolsService.invokeTool(tool,
+				{ input, toolInvocationToken },
+				CancellationToken.None);
 
 			const firstResultPart = result.content.at(0);
 			if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
 				return { kind: 'approved' };
 			}
 		} catch (error) {
+			if (permissionRequest.kind === 'shell') {
+				try {
+					const tool = ToolName.CoreConfirmationTool;
+					const input = {
+						title: permissionRequest.intention || 'Copilot CLI Permission Request',
+						message: permissionRequest.fullCommandText || `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+						confirmationType: 'terminal',
+						terminalCommand: permissionRequest.fullCommandText as string | undefined
+
+					};
+					const result = await this.toolsService.invokeTool(tool,
+						{ input, toolInvocationToken },
+						CancellationToken.None);
+
+					const firstResultPart = result.content.at(0);
+					if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
+						return { kind: 'approved' };
+					}
+				} catch (error) {
+					this.logService.error(`[CopilotCLISession](2) Permission request error: ${error}`);
+				}
+			}
 			this.logService.error(`[CopilotCLISession] Permission request error: ${error}`);
 		}
 
 		return { kind: 'denied-interactively-by-user' };
 	}
 
-	private getConfirmationToolParams(permissionRequest: Record<string, unknown>) {
+	private getConfirmationToolParams(permissionRequest: Record<string, unknown>): { tool: string; input: unknown } {
 		if (permissionRequest.kind === 'shell') {
 			return {
-				title: permissionRequest.intention || 'Copilot CLI Permission Request',
-				message: permissionRequest.fullCommandText || `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-				confirmationType: 'terminal',
-				terminalCommand: permissionRequest.fullCommandText as string | undefined
-
+				tool: ToolName.CoreTerminalConfirmationTool, input: {
+					message: permissionRequest.intention || permissionRequest.fullCommandText || `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+					command: permissionRequest.fullCommandText as string | undefined,
+					isBackground: false
+				}
 			};
 		}
 
 		if (permissionRequest.kind === 'write') {
 			return {
-				title: permissionRequest.intention || 'Copilot CLI Permission Request',
-				message: permissionRequest.fileName ? `Edit ${permissionRequest.fileName}` : `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-				confirmationType: 'basic'
+				tool: ToolName.CoreConfirmationTool,
+				input: {
+
+					title: permissionRequest.intention || 'Copilot CLI Permission Request',
+					message: permissionRequest.fileName ? `Edit ${permissionRequest.fileName}` : `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+					confirmationType: 'basic'
+				}
 			};
 		}
 
@@ -350,18 +372,25 @@ export class CopilotCLISession extends Disposable {
 			const args = permissionRequest.args;
 
 			return {
-				title: toolTitle || `MCP Tool: ${toolName || 'Unknown'}`,
-				message: serverName
-					? `Server: ${serverName}\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``
-					: `\`\`\`json\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-				confirmationType: 'basic'
+				tool: ToolName.CoreConfirmationTool,
+				input: {
+
+					title: toolTitle || `MCP Tool: ${toolName || 'Unknown'}`,
+					message: serverName
+						? `Server: ${serverName}\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``
+						: `\`\`\`json\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+					confirmationType: 'basic'
+				}
 			};
 		}
 
 		return {
-			title: 'Copilot CLI Permission Request',
-			message: `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-			confirmationType: 'basic'
+			tool: ToolName.CoreConfirmationTool,
+			input: {
+				title: 'Copilot CLI Permission Request',
+				message: `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+				confirmationType: 'basic'
+			}
 		};
 	}
 }

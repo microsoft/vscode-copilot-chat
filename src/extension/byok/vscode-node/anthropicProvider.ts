@@ -224,6 +224,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				serverRequestId: requestId,
 				usage: result.usage,
 				value: ['value'],
+				resolvedModel: model.id
 			}, wrappedProgress.items.map((i): IResponseDelta => {
 				return {
 					text: i instanceof LanguageModelTextPart ? i.value : '',

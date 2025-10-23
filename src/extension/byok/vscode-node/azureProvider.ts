@@ -8,11 +8,11 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IBYOKStorageService } from './byokStorageService';
-import { CustomOAIBYOKModelProvider } from './customOAIProvider';
+import { CustomOAIBYOKModelProvider, hasExplicitApiPath } from './customOAIProvider';
 
 export function resolveAzureUrl(modelId: string, url: string): string {
 	// The fully resolved url was already passed in
-	if (url.includes('/chat/completions')) {
+	if (hasExplicitApiPath(url)) {
 		return url;
 	}
 
