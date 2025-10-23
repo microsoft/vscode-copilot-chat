@@ -41,11 +41,11 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		@IAutomodeService private readonly _autoModeService: IAutomodeService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@ILogService private readonly _logService: ILogService,
+		@ILogService protected readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IEnvService _envService: IEnvService,
-		@IAuthenticationService _authService: IAuthenticationService,
+		@IAuthenticationService protected readonly _authService: IAuthenticationService,
 		@IRequestLogger _requestLogger: IRequestLogger
 	) {
 
