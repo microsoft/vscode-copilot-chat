@@ -6,10 +6,10 @@
 import { Context } from '../context';
 import { Features } from '../experiments/features';
 import { logger } from '../logger';
-import { ActiveExperiments } from './contextProviderRegistry';
 import { TelemetryWithExp } from '../telemetry';
+import { ActiveExperiments } from './contextProviderRegistry';
 
-const TS_CONTEXT_PROVIDER_ID = 'typescript-ai-context-provider';
+export const TS_CONTEXT_PROVIDER_ID = 'typescript-ai-context-provider';
 
 interface ContextProviderParams {
 	[key: string]: string | number | boolean;

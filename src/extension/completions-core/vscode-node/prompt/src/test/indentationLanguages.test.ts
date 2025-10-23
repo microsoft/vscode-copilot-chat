@@ -2,10 +2,10 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { blankNode, isLine, lineNode, parseTree, topNode, virtualNode, visitTree } from '../indentation';
 import * as assert from 'assert';
 import { suite } from 'mocha';
 import dedent from 'ts-dedent';
+import { blankNode, isLine, lineNode, parseTree, topNode, virtualNode, visitTree } from '../indentation';
 import { compareTreeWithSpec } from './testHelpers';
 
 /** Test some language specific parsing techniques */
@@ -57,23 +57,23 @@ suite('Java', function () {
 	test('labelLines java', function () {
 		const tree = parseTree(
 			dedent`
-			package com.example;
-			import java.awt.*;
-			@annotation
-			final public class A {
-				/** A javadoc
-				 *  Second line
-				 */
-				public static void main(String[] args) {
-					// single-line comment
-					/* Multiline
-					 * comment
-					 */
-					System.out.println("Hello, world!");
-				}
-			}
-			public interface I { }
-			`,
+package com.example;
+import java.awt.*;
+@annotation
+final public class A {
+    /** A javadoc
+     *  Second line
+     */
+    public static void main(String[] args) {
+        // single-line comment
+        /* Multiline
+         * comment
+         */
+        System.out.println("Hello, world!");
+    }
+}
+public interface I { }
+`,
 			'java'
 		);
 		compareTreeWithSpec(
@@ -113,14 +113,14 @@ suite('Java', function () {
 		//TODO: Add a field with annotation on separate line
 		const tree = parseTree(
 			dedent`
-			class A {
-				int a;
-				/** Javadoc */
-				int b;
-				// Comment
-				@Native int c;
-			}
-			`,
+class A {
+    int a;
+    /** Javadoc */
+    int b;
+    // Comment
+    @Native int c;
+}
+`,
 			'java'
 		);
 		compareTreeWithSpec(
@@ -147,18 +147,18 @@ suite('Java', function () {
 	test('parse Java inner class', function () {
 		const tree = parseTree(
 			dedent`
-			class A {
-				int a;
+class A {
+    int a;
 
-				class Inner {
-					int b;
-				}
+    class Inner {
+        int b;
+    }
 
-				interface InnerInterface {
-					int myMethod();
-				}
-			}
-			`,
+    interface InnerInterface {
+        int myMethod();
+    }
+}
+`,
 			'java'
 		);
 		compareTreeWithSpec(
@@ -198,25 +198,25 @@ suite('Java', function () {
 suite('Markdown', function () {
 	test('header processing in markdown', function () {
 		const source = dedent`
-		A
+A
 
-		# B
-		C
-		D
+# B
+C
+D
 
-		## E
-		F
-		G
+## E
+F
+G
 
-		# H
-		I
+# H
+I
 
-		### J
-		K
+### J
+K
 
-		L
-		M
-		`;
+L
+M
+`;
 		const mdParsedTree = parseTree(source, 'markdown');
 
 		compareTreeWithSpec(

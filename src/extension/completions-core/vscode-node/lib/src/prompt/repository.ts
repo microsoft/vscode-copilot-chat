@@ -76,7 +76,7 @@ const backgroundRepoInfo = computeInBackgroundAndMemoize<RepoInfo | undefined, [
  * If it does appear to be part of a git repository, but its information is not parsable,
  * it returns a RepoInfo object with hostname, user and repo set to "".
  */
-async function extractRepoInfo(ctx: Context, uri: FileIdentifier): Promise<RepoInfo | undefined> {
+export async function extractRepoInfo(ctx: Context, uri: FileIdentifier): Promise<RepoInfo | undefined> {
 	const fsUri = getFsUri(uri);
 	if (!fsUri) { return undefined; }
 

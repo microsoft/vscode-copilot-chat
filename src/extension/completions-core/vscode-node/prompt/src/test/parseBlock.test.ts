@@ -26,8 +26,8 @@ enum TrimMode {
  * A convenience class for testing BlockParser.isEmptyBlockStart.
  *
  * To use this, pass a string containing a snippet of source code, and use
- * ðŸŸ¢ for cursor positions at which isEmptyBlockStart should return true,
- * and âŒ for cursor positions where it should return false.  Then call
+ * 🟢 for cursor positions at which isEmptyBlockStart should return true,
+ * and ❌ for cursor positions where it should return false.  Then call
  * .test() to run the tests.
  *
  * By default, for each cursor position it trims the line from the cursor
@@ -51,10 +51,10 @@ class IsEmptyBlockStartTestCase {
 		// Must use for...of loop to avoid surrogate pair/UTF-16 weirdness
 		for (const char of testCase) {
 			switch (char) {
-				case 'ðŸŸ¢':
+				case '🟢':
 					expectTrueOffsets.push(i);
 					break;
-				case 'âŒ':
+				case '❌':
 					expectFalseOffsets.push(i);
 					break;
 				default:
@@ -92,13 +92,13 @@ class IsEmptyBlockStartTestCase {
 		const blockParser = getBlockParser(this.languageId);
 		for (const offset of this.expectTrueOffsets) {
 			const text = this.trimText(offset);
-			const msg = `${this.text.slice(0, offset)}â–ˆ${this.text.slice(offset)}`;
+			const msg = `${this.text.slice(0, offset)}█${this.text.slice(offset)}`;
 			// common helper to all breaks
 			assert.strictEqual(await blockParser.isEmptyBlockStart(text, offset), true, msg);
 		}
 		for (const offset of this.expectFalseOffsets) {
 			const text = this.trimText(offset);
-			const msg = `${this.text.slice(0, offset)}â–ˆ${this.text.slice(offset)}`;
+			const msg = `${this.text.slice(0, offset)}█${this.text.slice(offset)}`;
 			assert.strictEqual(await blockParser.isEmptyBlockStart(text, offset), false, msg);
 		}
 	}
@@ -142,7 +142,7 @@ function runTestCase(languageId: string, testCase: TestCase) {
 	// cursor position is after the before text
 	const offset = testCase.before.length;
 	// print the text with a cursor indicator on failure
-	const prettyPrint = ('\n' + testCase.before + 'â–ˆ' + bodyWithAfter).split('\n').join('\n\t| ');
+	const prettyPrint = ('\n' + testCase.before + '█' + bodyWithAfter).split('\n').join('\n\t| ');
 
 	test(`empty block start:${expectedEmpty}`, async function () {
 		const isEmpty = await blockParser.isEmptyBlockStart(text, offset);
@@ -174,15 +174,15 @@ function getNodeStartTestCase(testCase: string): [string, number[], number[], nu
 	for (const char of testCase) {
 		switch (char) {
 			//Test cases that should pass the test
-			case 'ðŸŸ¢':
+			case '🟢':
 				positiveTests.push(i);
 				break;
 			//Test cases that should fail the test
-			case 'âŒ':
+			case '❌':
 				rejectedTests.push(i);
 				break;
 			//Location used for the assertions (begining of the node we want to detect)
-			case 'ðŸ”µ':
+			case '🔵':
 				expectedResult = i;
 				break;
 			default:
@@ -199,9 +199,9 @@ function getNodeStartTestCase(testCase: string): [string, number[], number[], nu
  * Helper function for testing `getNodeStart`
  *
  * To use this, pass a language ID and a string containing a snippet of source code, and use
- * ðŸ”µ for a location that's used for assertion ( begining of the node we want to detect)
- * ðŸŸ¢ for cursor positions at which `getNodeStart` should return the position ðŸ”µ,
- * and âŒ for cursor positions where it shouldn't.
+ * 🔵 for a location that's used for assertion ( begining of the node we want to detect)
+ * 🟢 for cursor positions at which `getNodeStart` should return the position 🔵,
+ * and ❌ for cursor positions where it shouldn't.
  */
 async function testGetNodeStart(languageId: string, testCase: string) {
 	const blockParser = getBlockParser(languageId);
@@ -240,9 +240,9 @@ suite('parseBlock Tests', function () {
 	suite('Python isEmptyBlockStart tests', function () {
 		test('Invalid positions', async function () {
 			const text = dedent`
-				def foo():
-					pass
-			`;
+                def foo():
+                    pass
+            `;
 			const blockParser = getBlockParser('python');
 			await assert.rejects(blockParser.isEmptyBlockStart(text, text.length + 1));
 		});
@@ -250,53 +250,53 @@ suite('parseBlock Tests', function () {
 		test('simple examples', async function () {
 			const testCases: IsEmptyBlockStartTestCase[] = [
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒdâŒeâŒfðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢(ðŸŸ¢)ðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-				`),
+                    ❌d❌e❌f🟢 🟢f🟢o🟢o🟢(🟢)🟢:🟢
+                        🟢p❌a❌s❌s❌
+                `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒiâŒfðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					âŒeâŒlâŒiâŒfðŸŸ¢ ðŸŸ¢bðŸŸ¢aðŸŸ¢rðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					eâŒlâŒsâŒeðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒssâŒ
-				`),
+                    ❌i❌f🟢 🟢f🟢o🟢o🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    ❌e❌l❌i❌f🟢 🟢b🟢a🟢r🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    e❌l❌s❌e🟢:🟢
+                        🟢p❌a❌ss❌
+                `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒiâŒfðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					eâŒlâŒsâŒeðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					`),
+                    ❌i❌f🟢 🟢f🟢o🟢o🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    e❌l❌s❌e🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒtâŒrâŒyðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					âŒeâŒxâŒcâŒeâŒpâŒtðŸŸ¢ ðŸŸ¢EðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					âŒfâŒiâŒnâŒaâŒlâŒlâŒyðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					`),
+                    ❌t❌r❌y🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    ❌e❌x❌c❌e❌p❌t🟢 🟢E🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    ❌f❌i❌n❌a❌l❌l❌y🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒtâŒrâŒyðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					âŒfâŒiâŒnâŒaâŒlâŒlâŒyðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-				`),
+                    ❌t❌r❌y🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    ❌f❌i❌n❌a❌l❌l❌y🟢:🟢
+                        🟢p❌a❌s❌s❌
+                `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒfâŒoâŒrðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢ ðŸŸ¢bðŸŸ¢aðŸŸ¢rðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					`),
+                    ❌f❌o❌r🟢 🟢f🟢o🟢o🟢 🟢i🟢n🟢 🟢b🟢a🟢r🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒwâŒhâŒiâŒlâŒeðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					`),
+                    ❌w❌h❌i❌l❌e🟢 🟢f🟢o🟢o🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒwâŒiâŒtâŒhðŸŸ¢ ðŸŸ¢oðŸŸ¢pðŸŸ¢eðŸŸ¢nðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢aðŸŸ¢sðŸŸ¢ ðŸŸ¢fðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					`),
+                    ❌w❌i❌t❌h🟢 🟢o🟢p🟢e🟢n🟢(🟢)🟢 🟢a🟢s🟢 🟢f🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒcâŒlâŒaâŒsâŒsðŸŸ¢ ðŸŸ¢FðŸŸ¢oðŸŸ¢oðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pâŒaâŒsâŒsâŒ
-					`),
+                    ❌c❌l❌a❌s❌s🟢 🟢F🟢o🟢o🟢:🟢
+                        🟢p❌a❌s❌s❌
+                    `),
 			];
 
 			for (const testCase of testCases) {
@@ -306,12 +306,12 @@ suite('parseBlock Tests', function () {
 
 		test('func_decl', async function () {
 			const testCases = [
-				IsEmptyBlockStartTestCase.python('âŒdâŒeâŒfðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢(ðŸŸ¢)ðŸŸ¢:ðŸŸ¢'),
+				IsEmptyBlockStartTestCase.python('❌d❌e❌f🟢 🟢f🟢o🟢o🟢(🟢)🟢:🟢'),
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒdâŒeâŒfðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢(ðŸŸ¢)ðŸŸ¢:ðŸŸ¢
-					ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢
-					ðŸŸ¢
-					`),
+                    ❌d❌e❌f🟢 🟢f🟢o🟢o🟢(🟢)🟢:🟢
+                    🟢 🟢 🟢 🟢 🟢
+                    🟢
+                    `),
 			];
 
 			for (const testCase of testCases) {
@@ -321,11 +321,11 @@ suite('parseBlock Tests', function () {
 
 		test('multiline_func_decl', async function () {
 			const testCase = IsEmptyBlockStartTestCase.python(dedent`
-					 âŒdâŒeâŒfðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢(ðŸŸ¢aðŸŸ¢,ðŸŸ¢
-							 ðŸŸ¢bðŸŸ¢,ðŸŸ¢
-							 ðŸŸ¢cðŸŸ¢)ðŸŸ¢:ðŸŸ¢
-						 ðŸŸ¢
-					 `);
+                     ❌d❌e❌f🟢 🟢f🟢o🟢o🟢(🟢a🟢,🟢
+                             🟢b🟢,🟢
+                             🟢c🟢)🟢:🟢
+                         🟢
+                     `);
 
 			await testCase.test();
 		});
@@ -334,13 +334,13 @@ suite('parseBlock Tests', function () {
 			// Trailing whitespace is intentional, do not remove!
 			const testCase = IsEmptyBlockStartTestCase.python(
 				dedent`
-					"""This is a module."""
-					import foo
+                    """This is a module."""
+                    import foo
 
-					âŒdâŒeâŒfðŸŸ¢ ðŸŸ¢fðŸŸ¢uðŸŸ¢nðŸŸ¢cðŸŸ¢1ðŸŸ¢(ðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢ ðŸŸ¢
+                    ❌d❌e❌f🟢 🟢f🟢u🟢n🟢c🟢1🟢(🟢)🟢:🟢 🟢 🟢
 
-					print("Running at toplevel")
-				`
+                    print("Running at toplevel")
+                `
 			).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE);
 			// break 1
 			await testCase.test();
@@ -348,7 +348,7 @@ suite('parseBlock Tests', function () {
 
 		test('func_decl_with_type_hints', async function () {
 			const testCase = IsEmptyBlockStartTestCase.python(
-				'âŒdâŒeâŒfðŸŸ¢ ðŸŸ¢sðŸŸ¢uðŸŸ¢mðŸŸ¢(ðŸŸ¢aðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢,ðŸŸ¢ ðŸŸ¢bðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢ ðŸŸ¢-ðŸŸ¢>ðŸŸ¢ ðŸŸ¢IðŸŸ¢nðŸŸ¢tðŸŸ¢:ðŸŸ¢'
+				'❌d❌e❌f🟢 🟢s🟢u🟢m🟢(🟢a🟢:🟢 🟢i🟢n🟢t🟢,🟢 🟢b🟢:🟢 🟢i🟢n🟢t🟢)🟢 🟢-🟢>🟢 🟢I🟢n🟢t🟢:🟢'
 			);
 			await testCase.test();
 		});
@@ -356,11 +356,11 @@ suite('parseBlock Tests', function () {
 		test('block not empty', async function () {
 			const testCase = IsEmptyBlockStartTestCase.python(
 				dedent`
-				def func1():
-					âŒ
-					passâŒ
-					âŒ
-			`
+                def func1():
+                    ❌
+                    pass❌
+                    ❌
+            `
 			).setTrimMode(TrimMode.NO_TRIM);
 			await testCase.test();
 		});
@@ -368,13 +368,13 @@ suite('parseBlock Tests', function () {
 		test('docstring', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.python(dedent`
-					def my_func():
-					ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢"ðŸŸ¢"ðŸŸ¢"ðŸŸ¢TðŸŸ¢hðŸŸ¢iðŸŸ¢sðŸŸ¢ ðŸŸ¢iðŸŸ¢sðŸŸ¢ ðŸŸ¢aðŸŸ¢ ðŸŸ¢dðŸŸ¢oðŸŸ¢cðŸŸ¢sðŸŸ¢tðŸŸ¢rðŸŸ¢iðŸŸ¢nðŸŸ¢gðŸŸ¢.ðŸŸ¢"ðŸŸ¢"ðŸŸ¢"ðŸŸ¢
-				`),
+                    def my_func():
+                    🟢 🟢 🟢 🟢 🟢"🟢"🟢"🟢T🟢h🟢i🟢s🟢 🟢i🟢s🟢 🟢a🟢 🟢d🟢o🟢c🟢s🟢t🟢r🟢i🟢n🟢g🟢.🟢"🟢"🟢"🟢
+                `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					def my_func():
-					ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢'ðŸŸ¢'ðŸŸ¢'ðŸŸ¢TðŸŸ¢hðŸŸ¢iðŸŸ¢sðŸŸ¢ ðŸŸ¢iðŸŸ¢sðŸŸ¢ ðŸŸ¢aðŸŸ¢ ðŸŸ¢dðŸŸ¢oðŸŸ¢cðŸŸ¢sðŸŸ¢tðŸŸ¢rðŸŸ¢iðŸŸ¢nðŸŸ¢gðŸŸ¢.ðŸŸ¢'ðŸŸ¢'ðŸŸ¢'ðŸŸ¢
-				`),
+                    def my_func():
+                    🟢 🟢 🟢 🟢 🟢'🟢'🟢'🟢T🟢h🟢i🟢s🟢 🟢i🟢s🟢 🟢a🟢 🟢d🟢o🟢c🟢s🟢t🟢r🟢i🟢n🟢g🟢.🟢'🟢'🟢'🟢
+                `),
 			];
 			for (const testCase of testCases) {
 				// break 2
@@ -385,17 +385,17 @@ suite('parseBlock Tests', function () {
 		test('multiline docstring', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.python(dedent`
-					def my_func():
-						"""ðŸŸ¢TðŸŸ¢hðŸŸ¢iðŸŸ¢sðŸŸ¢ ðŸŸ¢iðŸŸ¢sðŸŸ¢ ðŸŸ¢aðŸŸ¢ ðŸŸ¢mðŸŸ¢uðŸŸ¢lðŸŸ¢tðŸŸ¢iðŸŸ¢lðŸŸ¢iðŸŸ¢nðŸŸ¢eðŸŸ¢ ðŸŸ¢dðŸŸ¢oðŸŸ¢cðŸŸ¢sðŸŸ¢tðŸŸ¢rðŸŸ¢iðŸŸ¢nðŸŸ¢gðŸŸ¢.ðŸŸ¢
-						ðŸŸ¢
-						ðŸŸ¢HðŸŸ¢eðŸŸ¢rðŸŸ¢eðŸŸ¢'ðŸŸ¢sðŸŸ¢ ðŸŸ¢aðŸŸ¢nðŸŸ¢oðŸŸ¢tðŸŸ¢hðŸŸ¢eðŸŸ¢rðŸŸ¢ ðŸŸ¢lðŸŸ¢iðŸŸ¢nðŸŸ¢eðŸŸ¢.ðŸŸ¢"ðŸŸ¢"ðŸŸ¢"ðŸŸ¢
-				`),
+                    def my_func():
+                        """🟢T🟢h🟢i🟢s🟢 🟢i🟢s🟢 🟢a🟢 🟢m🟢u🟢l🟢t🟢i🟢l🟢i🟢n🟢e🟢 🟢d🟢o🟢c🟢s🟢t🟢r🟢i🟢n🟢g🟢.🟢
+                        🟢
+                        🟢H🟢e🟢r🟢e🟢'🟢s🟢 🟢a🟢n🟢o🟢t🟢h🟢e🟢r🟢 🟢l🟢i🟢n🟢e🟢.🟢"🟢"🟢"🟢
+                `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					def my_func():
-						'''ðŸŸ¢TðŸŸ¢hðŸŸ¢iðŸŸ¢sðŸŸ¢ ðŸŸ¢iðŸŸ¢sðŸŸ¢ ðŸŸ¢aðŸŸ¢ ðŸŸ¢mðŸŸ¢uðŸŸ¢lðŸŸ¢tðŸŸ¢iðŸŸ¢lðŸŸ¢iðŸŸ¢nðŸŸ¢eðŸŸ¢ ðŸŸ¢dðŸŸ¢oðŸŸ¢cðŸŸ¢sðŸŸ¢tðŸŸ¢rðŸŸ¢iðŸŸ¢nðŸŸ¢gðŸŸ¢.ðŸŸ¢
-						ðŸŸ¢
-						ðŸŸ¢HðŸŸ¢eðŸŸ¢rðŸŸ¢eðŸŸ¢'ðŸŸ¢sðŸŸ¢ ðŸŸ¢aðŸŸ¢nðŸŸ¢oðŸŸ¢tðŸŸ¢hðŸŸ¢eðŸŸ¢rðŸŸ¢ ðŸŸ¢lðŸŸ¢iðŸŸ¢nðŸŸ¢eðŸŸ¢.ðŸŸ¢'ðŸŸ¢'ðŸŸ¢'ðŸŸ¢
-				`),
+                    def my_func():
+                        '''🟢T🟢h🟢i🟢s🟢 🟢i🟢s🟢 🟢a🟢 🟢m🟢u🟢l🟢t🟢i🟢l🟢i🟢n🟢e🟢 🟢d🟢o🟢c🟢s🟢t🟢r🟢i🟢n🟢g🟢.🟢
+                        🟢
+                        🟢H🟢e🟢r🟢e🟢'🟢s🟢 🟢a🟢n🟢o🟢t🟢h🟢e🟢r🟢 🟢l🟢i🟢n🟢e🟢.🟢'🟢'🟢'🟢
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -413,19 +413,19 @@ suite('parseBlock Tests', function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.python(
 					dedent`
-					def my_func():âŒ
-						"âŒ"âŒ"âŒTâŒhâŒiâŒsâŒ âŒiâŒsâŒ âŒaâŒ âŒdâŒoâŒcâŒsâŒtâŒrâŒiâŒnâŒgâŒ.âŒ"âŒ"âŒ"âŒ
-						pass
-				`
+                    def my_func():❌
+                        "❌"❌"❌T❌h❌i❌s❌ ❌i❌s❌ ❌a❌ ❌d❌o❌c❌s❌t❌r❌i❌n❌g❌.❌"❌"❌"❌
+                        pass
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.python(
 					dedent`
-					def my_func():âŒ
-						"âŒ"âŒ"âŒTâŒhâŒiâŒsâŒ âŒiâŒsâŒ âŒaâŒ âŒdâŒoâŒcâŒsâŒtâŒrâŒiâŒnâŒgâŒ.âŒ
+                    def my_func():❌
+                        "❌"❌"❌T❌h❌i❌s❌ ❌i❌s❌ ❌a❌ ❌d❌o❌c❌s❌t❌r❌i❌n❌g❌.❌
 
-						âŒHâŒeâŒrâŒeâŒ'âŒsâŒ âŒaâŒnâŒoâŒtâŒhâŒeâŒrâŒ âŒlâŒiâŒnâŒeâŒ.âŒ"âŒ"âŒ"âŒ
-						pass
-				`
+                        ❌H❌e❌r❌e❌'❌s❌ ❌a❌n❌o❌t❌h❌e❌r❌ ❌l❌i❌n❌e❌.❌"❌"❌"❌
+                        pass
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 			];
 
@@ -435,20 +435,20 @@ suite('parseBlock Tests', function () {
 		});
 
 		test('Not EOL', async function () {
-			const testCase = IsEmptyBlockStartTestCase.python('def my_âŒfunc():').setTrimMode(TrimMode.NO_TRIM);
+			const testCase = IsEmptyBlockStartTestCase.python('def my_❌func():').setTrimMode(TrimMode.NO_TRIM);
 			await testCase.test();
 		});
 
 		test('if-elif-else', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.python(dedent`
-					âŒiâŒfðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢passâŒ
-					âŒeâŒlâŒiâŒfðŸŸ¢ ðŸŸ¢bðŸŸ¢aðŸŸ¢rðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢passâŒ
-					âŒeâŒlâŒsâŒeðŸŸ¢:
-						ðŸŸ¢passâŒ
-					`),
+                    ❌i❌f🟢 🟢f🟢o🟢o🟢:🟢
+                        🟢pass❌
+                    ❌e❌l❌i❌f🟢 🟢b🟢a🟢r🟢:🟢
+                        🟢pass❌
+                    ❌e❌l❌s❌e🟢:
+                        🟢pass❌
+                    `),
 			];
 
 			for (const testCase of testCases) {
@@ -460,27 +460,27 @@ suite('parseBlock Tests', function () {
 		test('block in error state', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.python(dedent`
-					def create_tables(conn):ðŸŸ¢
-						"""Create the tables students, courses and enrolledðŸŸ¢"""ðŸŸ¢
-						conn = sqlite3.connect(results_db_path)âŒ
-						c = conn.cursor()âŒ
-						c.execute('''CREATE TABLE students (âŒ
-					âŒ
-				`),
+                    def create_tables(conn):🟢
+                        """Create the tables students, courses and enrolled🟢"""🟢
+                        conn = sqlite3.connect(results_db_path)❌
+                        c = conn.cursor()❌
+                        c.execute('''CREATE TABLE students (❌
+                    ❌
+                `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					if True:ðŸŸ¢
-						conn = sqlite3.connect(results_db_path)âŒ
-						c = conn.cursor()âŒ
-						c.execute('''CREATE TABLE students (âŒ
-					âŒ
-				`),
+                    if True:🟢
+                        conn = sqlite3.connect(results_db_path)❌
+                        c = conn.cursor()❌
+                        c.execute('''CREATE TABLE students (❌
+                    ❌
+                `),
 				IsEmptyBlockStartTestCase.python(dedent`
-					try:ðŸŸ¢
-						conn = sqlite3.connect(results_db_path)âŒ
-						c = conn.cursor()âŒ
-						c.execute('''CREATE TABLE students (âŒ
-					âŒ
-				`),
+                    try:🟢
+                        conn = sqlite3.connect(results_db_path)❌
+                        c = conn.cursor()❌
+                        c.execute('''CREATE TABLE students (❌
+                    ❌
+                `),
 			];
 			for (const testCase of testCases) {
 				await testCase.test();
@@ -492,15 +492,15 @@ suite('parseBlock Tests', function () {
 		test('arrow_function', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒ(âŒaâŒ)âŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌(❌a❌)❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒaâŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				// Note: We don't try to give a multline-suggestion immediately after "async".
 				// "async" is a keyword but not a reserved one, so it may be used as an
 				// identifier.  Therefore when you have a partially written async function declaration,
@@ -508,15 +508,15 @@ suite('parseBlock Tests', function () {
 				// is parsed as a call of a function named "async" with arguments "a"). We'd have to do
 				// very hacky things to support this.
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒ(âŒaâŒ)âŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌(❌a❌)❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒaâŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌a❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -527,28 +527,28 @@ suite('parseBlock Tests', function () {
 		test('try_statement, catch_clause, finally_clause', async function () {
 			const testCases: IsEmptyBlockStartTestCase[] = [
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒtâŒrâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒcâŒaâŒtâŒcâŒhðŸŸ¢ ðŸŸ¢(ðŸŸ¢eðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌t❌r❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌c❌a❌t❌c❌h🟢 🟢(🟢e🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒtâŒrâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒfâŒiâŒnâŒaâŒlâŒlâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌t❌r❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌f❌i❌n❌a❌l❌l❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒtâŒrâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒcâŒaâŒtâŒcâŒhðŸŸ¢ ðŸŸ¢(ðŸŸ¢eðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒfâŒiâŒnâŒaâŒlâŒlâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌t❌r❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌c❌a❌t❌c❌h🟢 🟢(🟢e🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌f❌i❌n❌a❌l❌l❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -558,10 +558,10 @@ suite('parseBlock Tests', function () {
 
 		test('do_statement', async function () {
 			const testCase = IsEmptyBlockStartTestCase.javascript(dedent`
-				âŒdâŒoðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ âŒwâŒhâŒiâŒlâŒeâŒ âŒ(âŒtâŒrâŒuâŒeâŒ)âŒ;âŒ
-			`);
+                ❌d❌o🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌ ❌w❌h❌i❌l❌e❌ ❌(❌t❌r❌u❌e❌)❌;❌
+            `);
 
 			await testCase.test();
 		});
@@ -570,15 +570,15 @@ suite('parseBlock Tests', function () {
 		test('for_in_statement', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒfâŒoâŒrðŸŸ¢ ðŸŸ¢(ðŸŸ¢lðŸŸ¢eðŸŸ¢tðŸŸ¢ ðŸŸ¢vðŸŸ¢aðŸŸ¢rðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢ ðŸŸ¢oðŸŸ¢bðŸŸ¢jðŸŸ¢eðŸŸ¢cðŸŸ¢tðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌o❌r🟢 🟢(🟢l🟢e🟢t🟢 🟢v🟢a🟢r🟢 🟢i🟢n🟢 🟢o🟢b🟢j🟢e🟢c🟢t🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒfâŒoâŒrðŸŸ¢ ðŸŸ¢(ðŸŸ¢lðŸŸ¢eðŸŸ¢tðŸŸ¢ ðŸŸ¢vðŸŸ¢aðŸŸ¢rðŸŸ¢ ðŸŸ¢oðŸŸ¢fðŸŸ¢ ðŸŸ¢oðŸŸ¢bðŸŸ¢jðŸŸ¢eðŸŸ¢cðŸŸ¢tðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌o❌r🟢 🟢(🟢l🟢e🟢t🟢 🟢v🟢a🟢r🟢 🟢o🟢f🟢 🟢o🟢b🟢j🟢e🟢c🟢t🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -588,10 +588,10 @@ suite('parseBlock Tests', function () {
 
 		test('for_statement', async function () {
 			const testCase = IsEmptyBlockStartTestCase.javascript(dedent`
-				âŒfâŒoâŒrðŸŸ¢ ðŸŸ¢(ðŸŸ¢lðŸŸ¢eðŸŸ¢tðŸŸ¢ ðŸŸ¢iðŸŸ¢ ðŸŸ¢=ðŸŸ¢ ðŸŸ¢0ðŸŸ¢;ðŸŸ¢ ðŸŸ¢iðŸŸ¢ ðŸŸ¢<ðŸŸ¢ ðŸŸ¢5ðŸŸ¢;ðŸŸ¢ ðŸŸ¢iðŸŸ¢+ðŸŸ¢+ðŸŸ¢)ðŸŸ¢ {ðŸŸ¢
-					;âŒ
-				âŒ}âŒ
-			`);
+                ❌f❌o❌r🟢 🟢(🟢l🟢e🟢t🟢 🟢i🟢 🟢=🟢 🟢0🟢;🟢 🟢i🟢 🟢<🟢 🟢5🟢;🟢 🟢i🟢+🟢+🟢)🟢 {🟢
+                    ;❌
+                ❌}❌
+            `);
 
 			await testCase.test();
 		});
@@ -599,24 +599,24 @@ suite('parseBlock Tests', function () {
 		test('if_statement', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒiâŒfðŸŸ¢ ðŸŸ¢(ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌i❌f🟢 🟢(🟢f🟢o🟢o🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒiâŒfðŸŸ¢ ðŸŸ¢(ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒeâŒlâŒsâŒeðŸŸ¢ ðŸŸ¢iâŒfðŸŸ¢ ðŸŸ¢(ðŸŸ¢bðŸŸ¢aðŸŸ¢rðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌i❌f🟢 🟢(🟢f🟢o🟢o🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌e❌l❌s❌e🟢 🟢i❌f🟢 🟢(🟢b🟢a🟢r🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒiâŒfðŸŸ¢ ðŸŸ¢(ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒeâŒlâŒsâŒeðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌i❌f🟢 🟢(🟢f🟢o🟢o🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌e❌l❌s❌e🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -626,12 +626,12 @@ suite('parseBlock Tests', function () {
 
 		test('method_definition', async function () {
 			const testCase = IsEmptyBlockStartTestCase.javascript(dedent`
-				class Foo {
-					ðŸŸ¢bâŒaâŒrâŒ(âŒ)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				}
-			`);
+                class Foo {
+                    🟢b❌a❌r❌(❌)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                }
+            `);
 
 			await testCase.test();
 		});
@@ -640,32 +640,32 @@ suite('parseBlock Tests', function () {
 			// We don't give multline suggestions for switch_case and switch_default
 			// because they are almost never blocks.
 			const testCase = IsEmptyBlockStartTestCase.javascript(dedent`
-				switch (foo) {
-					âŒcâŒaâŒsâŒeâŒ âŒbâŒaâŒrâŒ:âŒ
-						âŒbâŒrâŒeâŒaâŒkâŒ;âŒ
-					âŒdâŒeâŒfâŒaâŒuâŒlâŒtâŒ:âŒ
-						âŒbâŒrâŒeâŒaâŒkâŒ;âŒ
-				}
-			`);
+                switch (foo) {
+                    ❌c❌a❌s❌e❌ ❌b❌a❌r❌:❌
+                        ❌b❌r❌e❌a❌k❌;❌
+                    ❌d❌e❌f❌a❌u❌l❌t❌:❌
+                        ❌b❌r❌e❌a❌k❌;❌
+                }
+            `);
 
 			await testCase.test();
 		});
 
 		test('while_statement', async function () {
 			const testCase = IsEmptyBlockStartTestCase.javascript(dedent`
-				âŒwâŒhâŒiâŒlâŒeðŸŸ¢ ðŸŸ¢(ðŸŸ¢tðŸŸ¢rðŸŸ¢uðŸŸ¢eðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+                ❌w❌h❌i❌l❌e🟢 🟢(🟢t🟢r🟢u🟢e🟢)🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 			await testCase.test();
 		});
 
 		test('with_statement', async function () {
 			const testCase = IsEmptyBlockStartTestCase.javascript(dedent`
-				âŒwâŒiâŒtâŒhðŸŸ¢ ðŸŸ¢(ðŸŸ¢oðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+                ❌w❌i❌t❌h🟢 🟢(🟢o🟢)🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 			await testCase.test();
 		});
 
@@ -677,15 +677,15 @@ suite('parseBlock Tests', function () {
 		test('function', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒlâŒeâŒtâŒ âŒfâŒ âŒ=âŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌f❌ ❌=❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒlâŒeâŒtâŒ âŒfâŒ âŒ=âŒ âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌f❌ ❌=❌ ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -696,20 +696,20 @@ suite('parseBlock Tests', function () {
 		test('function_declaration', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢
-					ðŸŸ¢}âŒ
-				`),
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢)🟢 🟢{🟢
+                    🟢 🟢 🟢 🟢 🟢
+                    🟢}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -720,15 +720,15 @@ suite('parseBlock Tests', function () {
 		test('generator_function', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒlâŒeâŒtâŒ âŒgâŒ âŒ=âŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌g❌ ❌=❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒlâŒeâŒtâŒ âŒgâŒ âŒ=âŒ âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌g❌ ❌=❌ ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 			for (const testCase of testCases) {
 				await testCase.test();
@@ -738,15 +738,15 @@ suite('parseBlock Tests', function () {
 		test('generator_function_declaration', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 			for (const testCase of testCases) {
 				await testCase.test();
@@ -755,19 +755,19 @@ suite('parseBlock Tests', function () {
 
 		test('class', async function () {
 			const testCase = IsEmptyBlockStartTestCase.javascript(dedent`
-				âŒlâŒeâŒtâŒ âŒcâŒ âŒ=âŒ âŒcâŒlâŒaâŒsâŒsðŸŸ¢ ðŸŸ¢CðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+                ❌l❌e❌t❌ ❌c❌ ❌=❌ ❌c❌l❌a❌s❌s🟢 🟢C🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 			await testCase.test();
 		});
 
 		test('class_declaration', async function () {
 			const testCase = IsEmptyBlockStartTestCase.javascript(dedent`
-				âŒcâŒlâŒaâŒsâŒsðŸŸ¢ ðŸŸ¢CðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+                ❌c❌l❌a❌s❌s🟢 🟢C🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 			await testCase.test();
 		});
 
@@ -780,31 +780,31 @@ suite('parseBlock Tests', function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.javascript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢
-					function bar() {}
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢o🟢o🟢(🟢)🟢 🟢{🟢
+                        🟢
+                    function bar() {}
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.javascript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnâŒ âŒfâŒoâŒoâŒ(âŒ)âŒ âŒ{âŒ
-						âŒ
-						function bar() {}
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n❌ ❌f❌o❌o❌(❌)❌ ❌{❌
+                        ❌
+                        function bar() {}
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.javascript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢
-					let a = 10;
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢o🟢o🟢(🟢)🟢 🟢{🟢
+                    🟢
+                    let a = 10;
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.javascript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnâŒ âŒfâŒoâŒoâŒ(âŒ)âŒ âŒ{âŒ
-						âŒ
-						let a = 10;
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n❌ ❌f❌o❌o❌(❌)❌ ❌{❌
+                        ❌
+                        let a = 10;
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 			];
 
@@ -817,29 +817,29 @@ suite('parseBlock Tests', function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.javascript(
 					dedent`
-					() => doIt(âŒ
-						âŒfâŒoâŒoâŒ.âŒfâŒoâŒoâŒ,âŒ
-						âŒbâŒaâŒrâŒ.âŒbâŒaâŒzâŒ,âŒ
-						âŒbâŒaâŒzâŒ.âŒbâŒaâŒzâŒ
-					);
-				`
+                    () => doIt(❌
+                        ❌f❌o❌o❌.❌f❌o❌o❌,❌
+                        ❌b❌a❌r❌.❌b❌a❌z❌,❌
+                        ❌b❌a❌z❌.❌b❌a❌z❌
+                    );
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.javascript(
 					dedent`
-					() => doIt(âŒ
-						âŒ'âŒaâŒ'âŒ,âŒ
-						âŒ'âŒaâŒ'âŒ,âŒ
-						âŒ'âŒaâŒ'âŒ
-					);
-				`
+                    () => doIt(❌
+                        ❌'❌a❌'❌,❌
+                        ❌'❌a❌'❌,❌
+                        ❌'❌a❌'❌
+                    );
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.javascript(dedent`
-					() => doIt(âŒ
-						âŒ'âŒaâŒ'âŒ,âŒ
-						âŒ'âŒaâŒ'âŒ,âŒ
-						âŒ'âŒaâŒ'âŒ
-					);
-				`),
+                    () => doIt(❌
+                        ❌'❌a❌'❌,❌
+                        ❌'❌a❌'❌,❌
+                        ❌'❌a❌'❌
+                    );
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -853,10 +853,10 @@ suite('parseBlock Tests', function () {
 		// suggestion until after "global," when it transitions from an identifer to a keyword.
 		test('ambient_declaration', async function () {
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-				âŒdâŒeâŒcâŒlâŒaâŒrâŒeâŒ âŒgâŒlâŒoâŒbâŒaâŒlðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+                ❌d❌e❌c❌l❌a❌r❌e❌ ❌g❌l❌o❌b❌a❌l🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 
 			await testCase.test();
 		});
@@ -865,10 +865,10 @@ suite('parseBlock Tests', function () {
 		// suggestion until the open quote, when it transitions from an identifer to a keyword.
 		test('internal_module', async function () {
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-				âŒnâŒaâŒmâŒeâŒsâŒpâŒaâŒcâŒeâŒ âŒ"ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢"ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+                ❌n❌a❌m❌e❌s❌p❌a❌c❌e❌ ❌"🟢f🟢o🟢o🟢"🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 
 			await testCase.test();
 		});
@@ -877,10 +877,10 @@ suite('parseBlock Tests', function () {
 		// suggestion until the open quote, when it transitions from an identifer to a keyword.
 		test('module', async function () {
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-				âŒmâŒoâŒdâŒuâŒlâŒeâŒ âŒ"ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢"ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					;âŒ
-				âŒ}âŒ
-			`);
+                ❌m❌o❌d❌u❌l❌e❌ ❌"🟢f🟢o🟢o🟢"🟢 🟢{🟢
+                    ;❌
+                ❌}❌
+            `);
 
 			await testCase.test();
 		});
@@ -888,35 +888,35 @@ suite('parseBlock Tests', function () {
 		test('arrow_function', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒ(âŒaâŒ)âŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌(❌a❌)❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒ(âŒaâŒ:âŒ âŒsâŒtâŒrâŒiâŒnâŒgâŒ)âŒ:âŒ âŒvâŒoâŒiâŒdâŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌(❌a❌:❌ ❌s❌t❌r❌i❌n❌g❌)❌:❌ ❌v❌o❌i❌d❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒaâŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒ(âŒaâŒ)âŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌(❌a❌)❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒ(âŒaâŒ:âŒ âŒsâŒtâŒrâŒiâŒnâŒgâŒ)âŒ:âŒ âŒvâŒoâŒiâŒdâŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌(❌a❌:❌ ❌s❌t❌r❌i❌n❌g❌)❌:❌ ❌v❌o❌i❌d❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒaâŒ âŒ=âŒ>ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌a❌ ❌=❌>🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -930,28 +930,28 @@ suite('parseBlock Tests', function () {
 		test('try_statement, catch_clause, finally_clause', async function () {
 			const testCases: IsEmptyBlockStartTestCase[] = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒtâŒrâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒcâŒaâŒtâŒcâŒhðŸŸ¢ ðŸŸ¢(ðŸŸ¢eðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌t❌r❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌c❌a❌t❌c❌h🟢 🟢(🟢e🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒtâŒrâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒfâŒiâŒnâŒaâŒlâŒlâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌t❌r❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌f❌i❌n❌a❌l❌l❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒtâŒrâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒcâŒaâŒtâŒcâŒhðŸŸ¢ ðŸŸ¢(ðŸŸ¢eðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒfâŒiâŒnâŒaâŒlâŒlâŒyðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌t❌r❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌c❌a❌t❌c❌h🟢 🟢(🟢e🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌f❌i❌n❌a❌l❌l❌y🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -961,10 +961,10 @@ suite('parseBlock Tests', function () {
 
 		test('do_statement', async function () {
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-				âŒdâŒoðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ âŒwâŒhâŒiâŒlâŒeâŒ âŒ(âŒtâŒrâŒuâŒeâŒ)âŒ;âŒ
-			`);
+                ❌d❌o🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌ ❌w❌h❌i❌l❌e❌ ❌(❌t❌r❌u❌e❌)❌;❌
+            `);
 
 			await testCase.test();
 		});
@@ -973,15 +973,15 @@ suite('parseBlock Tests', function () {
 		test('for_in_statement', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒoâŒrðŸŸ¢ ðŸŸ¢(ðŸŸ¢lðŸŸ¢eðŸŸ¢tðŸŸ¢ ðŸŸ¢vðŸŸ¢aðŸŸ¢rðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢ ðŸŸ¢oðŸŸ¢bðŸŸ¢jðŸŸ¢eðŸŸ¢cðŸŸ¢tðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌o❌r🟢 🟢(🟢l🟢e🟢t🟢 🟢v🟢a🟢r🟢 🟢i🟢n🟢 🟢o🟢b🟢j🟢e🟢c🟢t🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒoâŒrðŸŸ¢ ðŸŸ¢(ðŸŸ¢lðŸŸ¢eðŸŸ¢tðŸŸ¢ ðŸŸ¢vðŸŸ¢aðŸŸ¢rðŸŸ¢ ðŸŸ¢oðŸŸ¢fðŸŸ¢ ðŸŸ¢oðŸŸ¢bðŸŸ¢jðŸŸ¢eðŸŸ¢cðŸŸ¢tðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌o❌r🟢 🟢(🟢l🟢e🟢t🟢 🟢v🟢a🟢r🟢 🟢o🟢f🟢 🟢o🟢b🟢j🟢e🟢c🟢t🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -992,15 +992,15 @@ suite('parseBlock Tests', function () {
 		test('for_statement', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒoâŒrðŸŸ¢ ðŸŸ¢(ðŸŸ¢lðŸŸ¢eðŸŸ¢tðŸŸ¢ ðŸŸ¢iðŸŸ¢ ðŸŸ¢=ðŸŸ¢ ðŸŸ¢0ðŸŸ¢;ðŸŸ¢ ðŸŸ¢iðŸŸ¢ ðŸŸ¢<ðŸŸ¢ ðŸŸ¢5ðŸŸ¢;ðŸŸ¢ ðŸŸ¢iðŸŸ¢+ðŸŸ¢+ðŸŸ¢)ðŸŸ¢ {ðŸŸ¢
-						;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌o❌r🟢 🟢(🟢l🟢e🟢t🟢 🟢i🟢 🟢=🟢 🟢0🟢;🟢 🟢i🟢 🟢<🟢 🟢5🟢;🟢 🟢i🟢+🟢+🟢)🟢 {🟢
+                        ;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒoâŒrðŸŸ¢ ðŸŸ¢(ðŸŸ¢lðŸŸ¢eðŸŸ¢tðŸŸ¢ ðŸŸ¢iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢ ðŸŸ¢=ðŸŸ¢ ðŸŸ¢0ðŸŸ¢;ðŸŸ¢ ðŸŸ¢iðŸŸ¢ ðŸŸ¢<ðŸŸ¢ ðŸŸ¢5ðŸŸ¢;ðŸŸ¢ ðŸŸ¢iðŸŸ¢+ðŸŸ¢+ðŸŸ¢)ðŸŸ¢ {ðŸŸ¢
-						;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌o❌r🟢 🟢(🟢l🟢e🟢t🟢 🟢i🟢:🟢 🟢i🟢n🟢t🟢 🟢=🟢 🟢0🟢;🟢 🟢i🟢 🟢<🟢 🟢5🟢;🟢 🟢i🟢+🟢+🟢)🟢 {🟢
+                        ;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -1011,24 +1011,24 @@ suite('parseBlock Tests', function () {
 		test('if_statement', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒiâŒfðŸŸ¢ ðŸŸ¢(ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌i❌f🟢 🟢(🟢f🟢o🟢o🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒiâŒfðŸŸ¢ ðŸŸ¢(ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒeâŒlâŒsâŒeðŸŸ¢ ðŸŸ¢iâŒfðŸŸ¢ ðŸŸ¢(ðŸŸ¢bðŸŸ¢aðŸŸ¢rðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌i❌f🟢 🟢(🟢f🟢o🟢o🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌e❌l❌s❌e🟢 🟢i❌f🟢 🟢(🟢b🟢a🟢r🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒiâŒfðŸŸ¢ ðŸŸ¢(ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ âŒeâŒlâŒsâŒeðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌i❌f🟢 🟢(🟢f🟢o🟢o🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌ ❌e❌l❌s❌e🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -1039,27 +1039,27 @@ suite('parseBlock Tests', function () {
 		test('method_definition', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					class Foo {
-						ðŸŸ¢bâŒaâŒrâŒ(âŒ)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-							ðŸŸ¢;âŒ
-						âŒ}âŒ
-					}
-				`),
+                    class Foo {
+                        🟢b❌a❌r❌(❌)🟢 🟢{🟢
+                            🟢;❌
+                        ❌}❌
+                    }
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					class Foo {
-						ðŸŸ¢bâŒaâŒrâŒ(âŒiâŒ:âŒ âŒiâŒnâŒtâŒ)ðŸŸ¢:âŒ âŒvðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-							ðŸŸ¢;âŒ
-						âŒ}âŒ
-					}
-				`),
+                    class Foo {
+                        🟢b❌a❌r❌(❌i❌:❌ ❌i❌n❌t❌)🟢:❌ ❌v🟢o🟢i🟢d🟢 🟢{🟢
+                            🟢;❌
+                        ❌}❌
+                    }
+                `),
 				// TODO(eaftan): fix sibling function issue and enable this test
 				// IsEmptyBlockStartTestCase.typescript(dedent`
 				//     class Foo {
-				//         fâŒoâŒoâŒ(âŒ)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-				//         ðŸŸ¢}âŒ
+				//         f❌o❌o❌(❌)🟢 🟢{🟢
+				//         🟢}❌
 
-				//         âŒbâŒaâŒrâŒ(âŒ)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-				//         ðŸŸ¢}âŒ
+				//         ❌b❌a❌r❌(❌)🟢 🟢{🟢
+				//         🟢}❌
 				//     }
 				// `).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 			];
@@ -1071,15 +1071,15 @@ suite('parseBlock Tests', function () {
 		test('method_signature', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					class Foo {
-						ðŸŸ¢bâŒaâŒrâŒ(âŒ)ðŸŸ¢;âŒ
-					}
-				`),
+                    class Foo {
+                        🟢b❌a❌r❌(❌)🟢;❌
+                    }
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					class Foo {
-						ðŸŸ¢bâŒaâŒrâŒ(âŒiâŒ:âŒ âŒiâŒnâŒtâŒ)ðŸŸ¢:âŒ âŒvðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢;âŒ
-					}
-				`),
+                    class Foo {
+                        🟢b❌a❌r❌(❌i❌:❌ ❌i❌n❌t❌)🟢:❌ ❌v🟢o🟢i🟢d🟢;❌
+                    }
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -1091,23 +1091,23 @@ suite('parseBlock Tests', function () {
 			// We don't give multline suggestions for switch_case and switch_default
 			// because they are almost never blocks.
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-				switch (foo) {
-					âŒcâŒaâŒsâŒeâŒ âŒbâŒaâŒrâŒ:âŒ
-						âŒbâŒrâŒeâŒaâŒkâŒ;âŒ
-					âŒdâŒeâŒfâŒaâŒuâŒlâŒtâŒ:âŒ
-						âŒbâŒrâŒeâŒaâŒkâŒ;âŒ
-				}
-			`);
+                switch (foo) {
+                    ❌c❌a❌s❌e❌ ❌b❌a❌r❌:❌
+                        ❌b❌r❌e❌a❌k❌;❌
+                    ❌d❌e❌f❌a❌u❌l❌t❌:❌
+                        ❌b❌r❌e❌a❌k❌;❌
+                }
+            `);
 
 			await testCase.test();
 		});
 
 		test('while_statement', async function () {
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-				âŒwâŒhâŒiâŒlâŒeðŸŸ¢ ðŸŸ¢(ðŸŸ¢tðŸŸ¢rðŸŸ¢uðŸŸ¢eðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+                ❌w❌h❌i❌l❌e🟢 🟢(🟢t🟢r🟢u🟢e🟢)🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 			await testCase.test();
 		});
 
@@ -1119,25 +1119,25 @@ suite('parseBlock Tests', function () {
 		test('function', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒlâŒeâŒtâŒ âŒfâŒ âŒ=âŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌f❌ ❌=❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒlâŒeâŒtâŒ âŒfâŒ âŒ=âŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢(ðŸŸ¢iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌f❌ ❌=❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢(🟢i🟢:🟢 🟢i🟢n🟢t🟢)🟢:🟢 🟢v🟢o🟢i🟢d🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒlâŒeâŒtâŒ âŒfâŒ âŒ=âŒ âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌f❌ ❌=❌ ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒlâŒeâŒtâŒ âŒfâŒ âŒ=âŒ âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢(iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌f❌ ❌=❌ ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢(i🟢:🟢 🟢i🟢n🟢t🟢)🟢:🟢 🟢v🟢o🟢i🟢d🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -1148,64 +1148,64 @@ suite('parseBlock Tests', function () {
 		test('function_declaration', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(i🟢:🟢 🟢i🟢n🟢t🟢)🟢:🟢 🟢v🟢o🟢i🟢d🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢i🟢:🟢 🟢i🟢n🟢t🟢)🟢:🟢 🟢v🟢o🟢i🟢d🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢
-					ðŸŸ¢}âŒ
-				`),
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢)🟢 🟢{🟢
+                    🟢 🟢 🟢 🟢 🟢
+                    🟢}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢ ðŸŸ¢
-					ðŸŸ¢}âŒ
-				`),
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢i🟢:🟢 🟢i🟢n🟢t🟢)🟢:🟢 🟢v🟢o🟢i🟢d🟢 🟢{🟢
+                    🟢 🟢 🟢 🟢 🟢
+                    🟢}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(âŒxâŒ âŒ:âŒ âŒnâŒuâŒmâŒbâŒeâŒrâŒ,âŒ
-						ðŸŸ¢yðŸŸ¢ ðŸŸ¢:ðŸŸ¢ ðŸŸ¢nðŸŸ¢uðŸŸ¢mðŸŸ¢bðŸŸ¢eðŸŸ¢rðŸŸ¢)ðŸŸ¢ ðŸŸ¢:ðŸŸ¢ ðŸŸ¢nðŸŸ¢uðŸŸ¢mðŸŸ¢bðŸŸ¢eðŸŸ¢rðŸŸ¢;âŒ
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(❌x❌ ❌:❌ ❌n❌u❌m❌b❌e❌r❌,❌
+                        🟢y🟢 🟢:🟢 🟢n🟢u🟢m🟢b🟢e🟢r🟢)🟢 🟢:🟢 🟢n🟢u🟢m🟢b🟢e🟢r🟢;❌
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢
-						ðŸŸ¢
-					let x = 0;
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢
+                        🟢
+                    let x = 0;
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					function f(âŒ
-					/** first parameter */
-					x: number,
-					/** second parameter */
-					y: number);
-				`
+                    function f(❌
+                    /** first parameter */
+                    x: number,
+                    /** second parameter */
+                    y: number);
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					function getPosition() : {âŒ
-						start: number,âŒ
-						end: numberâŒ
-					};
-				`
+                    function getPosition() : {❌
+                        start: number,❌
+                        end: number❌
+                    };
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 			];
 
@@ -1217,25 +1217,25 @@ suite('parseBlock Tests', function () {
 		test('generator_function', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒlâŒeâŒtâŒ âŒgâŒ âŒ=âŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌g❌ ❌=❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒlâŒeâŒtâŒ âŒgâŒ âŒ=âŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌g❌ ❌=❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢i🟢:🟢 🟢i🟢n🟢t🟢)🟢:🟢 🟢v🟢o🟢i🟢d🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒlâŒeâŒtâŒ âŒgâŒ âŒ=âŒ âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌g❌ ❌=❌ ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒlâŒeâŒtâŒ âŒgâŒ âŒ=âŒ âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌l❌e❌t❌ ❌g❌ ❌=❌ ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢i🟢:🟢 🟢i🟢n🟢t🟢)🟢:🟢 🟢v🟢o🟢i🟢d🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 			for (const testCase of testCases) {
 				await testCase.test();
@@ -1245,25 +1245,25 @@ suite('parseBlock Tests', function () {
 		test('generator_function_declaration', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢i🟢:🟢 🟢i🟢n🟢t🟢)🟢:🟢 🟢v🟢o🟢i🟢d🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢)🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					âŒaâŒsâŒyâŒnâŒcâŒ âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢*ðŸŸ¢ ðŸŸ¢gðŸŸ¢eðŸŸ¢nðŸŸ¢eðŸŸ¢rðŸŸ¢aðŸŸ¢tðŸŸ¢oðŸŸ¢rðŸŸ¢(ðŸŸ¢iðŸŸ¢:ðŸŸ¢ ðŸŸ¢iðŸŸ¢nðŸŸ¢tðŸŸ¢)ðŸŸ¢:ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢;âŒ
-					âŒ}âŒ
-				`),
+                    ❌a❌s❌y❌n❌c❌ ❌f❌u❌n❌c❌t❌i❌o❌n🟢*🟢 🟢g🟢e🟢n🟢e🟢r🟢a🟢t🟢o🟢r🟢(🟢i🟢:🟢 🟢i🟢n🟢t🟢)🟢:🟢 🟢v🟢o🟢i🟢d🟢 🟢{🟢
+                        🟢;❌
+                    ❌}❌
+                `),
 			];
 			for (const testCase of testCases) {
 				await testCase.test();
@@ -1272,28 +1272,28 @@ suite('parseBlock Tests', function () {
 
 		test('class', async function () {
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-				âŒlâŒeâŒtâŒ âŒcâŒ âŒ=âŒ âŒcâŒlâŒaâŒsâŒsðŸŸ¢ ðŸŸ¢CðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+                ❌l❌e❌t❌ ❌c❌ ❌=❌ ❌c❌l❌a❌s❌s🟢 🟢C🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 			await testCase.test();
 		});
 
 		test('class_declaration', async function () {
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-				âŒcâŒlâŒaâŒsâŒsðŸŸ¢ ðŸŸ¢CðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+                ❌c❌l❌a❌s❌s🟢 🟢C🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 			await testCase.test();
 		});
 
 		test('abstract_class_declaration', async function () {
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-			âŒaâŒbâŒsâŒtâŒrâŒaâŒcâŒtâŒ âŒcâŒlâŒaâŒsâŒsðŸŸ¢ ðŸŸ¢CðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢;âŒ
-				âŒ}âŒ
-			`);
+            ❌a❌b❌s❌t❌r❌a❌c❌t❌ ❌c❌l❌a❌s❌s🟢 🟢C🟢 🟢{🟢
+                    🟢;❌
+                ❌}❌
+            `);
 			await testCase.test();
 		});
 
@@ -1306,31 +1306,31 @@ suite('parseBlock Tests', function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-						ðŸŸ¢
-					function bar() {}
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢o🟢o🟢(🟢)🟢 🟢{🟢
+                        🟢
+                    function bar() {}
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnâŒ âŒfâŒoâŒoâŒ(âŒ)âŒ âŒ{âŒ
-						âŒ
-						function bar() {}
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n❌ ❌f❌o❌o❌(❌)❌ ❌{❌
+                        ❌
+                        function bar() {}
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢oðŸŸ¢oðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢
-					let a = 10;
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢o🟢o🟢(🟢)🟢 🟢{🟢
+                    🟢
+                    let a = 10;
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnâŒ âŒfâŒoâŒoâŒ(âŒ)âŒ âŒ{âŒ
-						âŒ
-						let a = 10;
-				`
+                    ❌f❌u❌n❌c❌t❌i❌o❌n❌ ❌f❌o❌o❌(❌)❌ ❌{❌
+                        ❌
+                        let a = 10;
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 			];
 
@@ -1343,29 +1343,29 @@ suite('parseBlock Tests', function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					() => doIt(âŒ
-						âŒfâŒoâŒoâŒ.âŒfâŒoâŒoâŒ,âŒ
-						âŒbâŒaâŒrâŒ.âŒbâŒaâŒzâŒ,âŒ
-						âŒbâŒaâŒzâŒ.âŒbâŒaâŒzâŒ
-					);
-				`
+                    () => doIt(❌
+                        ❌f❌o❌o❌.❌f❌o❌o❌,❌
+                        ❌b❌a❌r❌.❌b❌a❌z❌,❌
+                        ❌b❌a❌z❌.❌b❌a❌z❌
+                    );
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.typescript(
 					dedent`
-					() => doIt(âŒ
-						âŒ'âŒaâŒ'âŒ,âŒ
-						âŒ'âŒaâŒ'âŒ,âŒ
-						âŒ'âŒaâŒ'âŒ
-					);
-				`
+                    () => doIt(❌
+                        ❌'❌a❌'❌,❌
+                        ❌'❌a❌'❌,❌
+                        ❌'❌a❌'❌
+                    );
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.typescript(dedent`
-					() => doIt(âŒ
-						âŒ'âŒaâŒ'âŒ,âŒ
-						âŒ'âŒaâŒ'âŒ,âŒ
-						âŒ'âŒaâŒ'âŒ
-					);
-				`),
+                    () => doIt(❌
+                        ❌'❌a❌'❌,❌
+                        ❌'❌a❌'❌,❌
+                        ❌'❌a❌'❌
+                    );
+                `),
 			];
 
 			for (const testCase of testCases) {
@@ -1375,10 +1375,10 @@ suite('parseBlock Tests', function () {
 
 		test('function type', async function () {
 			const testCase = IsEmptyBlockStartTestCase.typescript(dedent`
-				âŒfâŒuâŒnâŒcâŒtâŒiâŒoâŒnðŸŸ¢ ðŸŸ¢fðŸŸ¢(ðŸŸ¢cðŸŸ¢bðŸŸ¢:ðŸŸ¢ ðŸŸ¢(ðŸŸ¢)ðŸŸ¢ ðŸŸ¢=ðŸŸ¢>ðŸŸ¢ ðŸŸ¢vðŸŸ¢oðŸŸ¢iðŸŸ¢dðŸŸ¢)ðŸŸ¢ ðŸŸ¢{ðŸŸ¢
-					ðŸŸ¢câŒbâŒ(âŒ)âŒ;âŒ
-				âŒ}âŒ
-			`);
+                ❌f❌u❌n❌c❌t❌i❌o❌n🟢 🟢f🟢(🟢c🟢b🟢:🟢 🟢(🟢)🟢 🟢=🟢>🟢 🟢v🟢o🟢i🟢d🟢)🟢 🟢{🟢
+                    🟢c❌b❌(❌)❌;❌
+                ❌}❌
+            `);
 
 			await testCase.test();
 		});
@@ -1388,25 +1388,25 @@ suite('parseBlock Tests', function () {
 		test('simple examples', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.ruby(dedent`
-					def ðŸŸ¢greetðŸŸ¢
-						ðŸŸ¢puts "Hello"âŒ
-						âŒputs "Bye"âŒ
-					end
-				`),
+                    def 🟢greet🟢
+                        🟢puts "Hello"❌
+                        ❌puts "Bye"❌
+                    end
+                `),
 				IsEmptyBlockStartTestCase.ruby(
 					dedent`
-					def ðŸŸ¢greetâŒ
-						ðŸŸ¢puts "Hello"âŒ
-					end
-				`
+                    def 🟢greet❌
+                        🟢puts "Hello"❌
+                    end
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.ruby(
 					dedent`
-					def ðŸŸ¢greetâŒ
-						âŒputs "Hello"âŒ
-						âŒputs "Bye"âŒ
-					end
-				`
+                    def 🟢greet❌
+                        ❌puts "Hello"❌
+                        ❌puts "Bye"❌
+                    end
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 			];
 			for (const testCase of testCases) {
@@ -1419,25 +1419,25 @@ suite('parseBlock Tests', function () {
 		test('simple examples', async function () {
 			const testCases = [
 				IsEmptyBlockStartTestCase.go(dedent`
-					func ðŸŸ¢greetðŸŸ¢()ðŸŸ¢ {ðŸŸ¢
-						ðŸŸ¢fmt.Println("Hello")âŒ
-						âŒfmt.Println("Bye")âŒ
-					}
-				`),
+                    func 🟢greet🟢()🟢 {🟢
+                        🟢fmt.Println("Hello")❌
+                        ❌fmt.Println("Bye")❌
+                    }
+                `),
 				IsEmptyBlockStartTestCase.go(
 					dedent`
-					func ðŸŸ¢greetðŸŸ¢()ðŸŸ¢ {âŒ
-						ðŸŸ¢fmt.Println("Hello")âŒ
-					}
-				`
+                    func 🟢greet🟢()🟢 {❌
+                        🟢fmt.Println("Hello")❌
+                    }
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 				IsEmptyBlockStartTestCase.go(
 					dedent`
-					func ðŸŸ¢greetðŸŸ¢()ðŸŸ¢ {âŒ
-						âŒfmt.Println("Hello")âŒ
-						âŒfmt.Println("Bye")âŒ
-					}
-				`
+                    func 🟢greet🟢()🟢 {❌
+                        ❌fmt.Println("Hello")❌
+                        ❌fmt.Println("Bye")❌
+                    }
+                `
 				).setTrimMode(TrimMode.TRIM_TO_END_OF_LINE),
 			];
 			for (const testCase of testCases) {
@@ -1491,165 +1491,165 @@ suite('parseBlock Tests', function () {
 	suite('Python getBlockStart tests', function () {
 		test('class_definition', async function () {
 			const code = dedent`
-				ðŸ”µclass MyClass:ðŸŸ¢
-					ðŸŸ¢"""A simpleðŸŸ¢ example class"""ðŸŸ¢
-					ðŸŸ¢i = 12ðŸŸ¢345ðŸŸ¢
-					ðŸŸ¢
-					âŒdefâŒ f(self):âŒ
-						âŒreturnâŒ 'helloâŒ world'âŒ
+                🔵class MyClass:🟢
+                    🟢"""A simple🟢 example class"""🟢
+                    🟢i = 12🟢345🟢
+                    🟢
+                    ❌def❌ f(self):❌
+                        ❌return❌ 'hello❌ world'❌
 
-				`;
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('elif_clause', async function () {
 			const code = dedent`
-				def âŒsample():âŒ
-					âŒif 1âŒ:
-						âŒpassâŒ
-					ðŸ”µelifðŸŸ¢ 2ðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pðŸŸ¢aðŸŸ¢sðŸŸ¢s
-					âŒelse:âŒ
-						âŒpassâŒ
-				`;
+                def ❌sample():❌
+                    ❌if 1❌:
+                        ❌pass❌
+                    🔵elif🟢 2🟢:🟢
+                        🟢p🟢a🟢s🟢s
+                    ❌else:❌
+                        ❌pass❌
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('else_clause', async function () {
 			const code = dedent`
-				âŒdef âŒsample():âŒ
-					âŒif 1:âŒ
-						âŒpassâŒ
-					âŒelif 2:âŒ
-						âŒpassâŒ
-					ðŸ”µelseðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pðŸŸ¢aðŸŸ¢sðŸŸ¢s
-				`;
+                ❌def ❌sample():❌
+                    ❌if 1:❌
+                        ❌pass❌
+                    ❌elif 2:❌
+                        ❌pass❌
+                    🔵else🟢:🟢
+                        🟢p🟢a🟢s🟢s
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('except_clause', async function () {
 			const code = dedent`
-				âŒdefâŒ âŒsampleâŒ()âŒ:âŒ
-					âŒtry:âŒ
-						âŒpassâŒ
-					ðŸ”µexceptðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pðŸŸ¢aðŸŸ¢sðŸŸ¢s
-				`;
+                ❌def❌ ❌sample❌()❌:❌
+                    ❌try:❌
+                        ❌pass❌
+                    🔵except🟢:🟢
+                        🟢p🟢a🟢s🟢s
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('finally_clause', async function () {
 			const code = dedent`
-				âŒdefâŒ saâŒmpleâŒ()âŒ:âŒ
-					âŒtry:
-						âŒpassâŒ
-					ðŸ”µfinallyðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pðŸŸ¢aðŸŸ¢sðŸŸ¢s
-				`;
+                ❌def❌ sa❌mple❌()❌:❌
+                    ❌try:
+                        ❌pass❌
+                    🔵finally🟢:🟢
+                        🟢p🟢a🟢s🟢s
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('for_statement', async function () {
 			const code = dedent`
-				âŒdefâŒ âŒsample(âŒ):âŒ
-					âŒfruitsâŒ = âŒ["apple", "banana", "cherry"]âŒ
-					ðŸ”µforðŸŸ¢ x inðŸŸ¢ frðŸŸ¢uitsðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pðŸŸ¢aðŸŸ¢sðŸŸ¢s
-				`;
+                ❌def❌ ❌sample(❌):❌
+                    ❌fruits❌ = ❌["apple", "banana", "cherry"]❌
+                    🔵for🟢 x in🟢 fr🟢uits🟢:🟢
+                        🟢p🟢a🟢s🟢s
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('function_definition', async function () {
 			const code = dedent`
-				ðŸ”µdefðŸŸ¢ samðŸŸ¢pleðŸŸ¢(ðŸŸ¢)ðŸŸ¢:
-					ðŸŸ¢"""Sample ðŸŸ¢comment"""ðŸŸ¢
-					ðŸŸ¢fruitsðŸŸ¢ = ðŸŸ¢["apple", ðŸŸ¢"banana",ðŸŸ¢ "cherry"]ðŸŸ¢
-					âŒforâŒ xâŒ inâŒ fruitsâŒ:âŒ
-						âŒpâŒaâŒsâŒsâŒ
-				`;
+                🔵def🟢 sam🟢ple🟢(🟢)🟢:
+                    🟢"""Sample 🟢comment"""🟢
+                    🟢fruits🟢 = 🟢["apple", 🟢"banana",🟢 "cherry"]🟢
+                    ❌for❌ x❌ in❌ fruits❌:❌
+                        ❌p❌a❌s❌s❌
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('if_statement', async function () {
 			const code = dedent`
-				âŒdef âŒsampleâŒ(âŒ)âŒ:âŒ
-					ðŸ”µif ðŸŸ¢1ðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pðŸŸ¢aðŸŸ¢sðŸŸ¢s
-					âŒelifâŒ 2:âŒ
-						âŒpass
-					âŒelse:âŒ
-						âŒpass
-				`;
+                ❌def ❌sample❌(❌)❌:❌
+                    🔵if 🟢1🟢:🟢
+                        🟢p🟢a🟢s🟢s
+                    ❌elif❌ 2:❌
+                        ❌pass
+                    ❌else:❌
+                        ❌pass
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('try_statement', async function () {
 			const code = dedent`
-				âŒdefâŒ âŒsampleâŒ(âŒ)âŒ:âŒ
-					ðŸ”µtryðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pðŸŸ¢aðŸŸ¢sðŸŸ¢s
-					âŒfinâŒallâŒy:âŒ
-						âŒpassâŒ
-				`;
+                ❌def❌ ❌sample❌(❌)❌:❌
+                    🔵try🟢:🟢
+                        🟢p🟢a🟢s🟢s
+                    ❌fin❌all❌y:❌
+                        ❌pass❌
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('while_statement', async function () {
 			const code = dedent`
-				âŒdefâŒ saâŒmple(âŒ)âŒ:âŒ
-					ðŸ”µwhileðŸŸ¢ ðŸŸ¢TrðŸŸ¢ueðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pðŸŸ¢aðŸŸ¢sðŸŸ¢s
-				`;
+                ❌def❌ sa❌mple(❌)❌:❌
+                    🔵while🟢 🟢Tr🟢ue🟢:🟢
+                        🟢p🟢a🟢s🟢s
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 
 		test('with_statement', async function () {
 			const code = dedent`
-				âŒdefâŒ âŒsaâŒmpleâŒ(âŒ)âŒ:âŒ
-					ðŸ”µwithðŸŸ¢ ðŸŸ¢openðŸŸ¢(ðŸŸ¢'filðŸŸ¢e_paðŸŸ¢th'ðŸŸ¢, ðŸŸ¢'w')ðŸŸ¢ ðŸŸ¢asðŸŸ¢ ðŸŸ¢fðŸŸ¢iðŸŸ¢lðŸŸ¢eðŸŸ¢:ðŸŸ¢
-						ðŸŸ¢pðŸŸ¢aðŸŸ¢sðŸŸ¢s
-				`;
+                ❌def❌ ❌sa❌mple❌(❌)❌:❌
+                    🔵with🟢 🟢open🟢(🟢'fil🟢e_pa🟢th'🟢, 🟢'w')🟢 🟢as🟢 🟢f🟢i🟢l🟢e🟢:🟢
+                        🟢p🟢a🟢s🟢s
+                `;
 
 			await testGetNodeStart('python', code);
 		});
 	});
 
-	// tests for JavaScript and TypeScript: `â¦ƒ...â¦„` delineates the body, `ã€š...ã€›` the type annotations,
+	// tests for JavaScript and TypeScript: `⦃...⦄` delineates the body, `〚...〛` the type annotations,
 	// which are stripped off for JavaScript
 
 	const test1 = dedent`
-		function getTextOrNull(documentã€š: doc | nullã€›) {
-			if (document === null)
-			â¦ƒ    return null;
-			return document.getText();
-		}â¦„
+        function getTextOrNull(document〚: doc | null〛) {
+            if (document === null)
+            ⦃    return null;
+            return document.getText();
+        }⦄
 
-		// this is a comment`;
+        // this is a comment`;
 
 	const test2 = dedent`
-		function getB(capitalã€š: booleanã€›) {
-			if (capital) {
-				return "B";
-			} else {â¦ƒ
-				return "b";
-			}â¦„
-		}`;
+        function getB(capital〚: boolean〛) {
+            if (capital) {
+                return "B";
+            } else {⦃
+                return "b";
+            }⦄
+        }`;
 
 	function mkTestCase(src: string, stripTypes: boolean) {
-		if (stripTypes) { src = src.replace(/ã€š.*?ã€›/g, ''); }
-		const bodyStart = src.indexOf('â¦ƒ');
-		const bodyEnd = src.indexOf('â¦„');
+		if (stripTypes) { src = src.replace(/〚.*?〛/g, ''); }
+		const bodyStart = src.indexOf('⦃');
+		const bodyEnd = src.indexOf('⦄');
 		return {
 			before: src.slice(0, bodyStart),
 			body: src.slice(bodyStart + 1, bodyEnd),

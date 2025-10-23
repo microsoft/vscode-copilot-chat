@@ -6,8 +6,8 @@
 import { Context } from '../context';
 import { Features } from '../experiments/features';
 import { logger } from '../logger';
-import { ActiveExperiments } from './contextProviderRegistry';
 import { TelemetryWithExp } from '../telemetry';
+import { ActiveExperiments } from './contextProviderRegistry';
 
 const MULTI_LANGUAGE_CONTEXT_PROVIDER_ID = 'fallbackContextProvider';
 
@@ -36,7 +36,7 @@ interface MultiLanguageContextProviderParams {
 	mlcpEnableImports: boolean;
 }
 
-const multiLanguageContextProviderParamsDefault: MultiLanguageContextProviderParams = {
+export const multiLanguageContextProviderParamsDefault: MultiLanguageContextProviderParams = {
 	mlcpMaxContextItems: 20,
 	mlcpMaxSymbolMatches: 20,
 	mlcpEnableImports: false,
@@ -79,6 +79,26 @@ function getMultiLanguageContextProviderParamsFromExp(
 		} catch (e) {
 			logger.error(ctx, 'Failed to parse multiLanguageContextProviderParams', e);
 		}
+	}
+
+	return params;
+}
+
+export function getMultiLanguageContextProviderParamsFromActiveExperiments(
+	activeExperiments: Map<string, string | number | boolean | string[]>
+): MultiLanguageContextProviderParams {
+	const params = { ...multiLanguageContextProviderParamsDefault };
+
+	if (activeExperiments.has('mlcpMaxContextItems')) {
+		params.mlcpMaxContextItems = Number(activeExperiments.get('mlcpMaxContextItems'));
+	}
+
+	if (activeExperiments.has('mlcpMaxSymbolMatches')) {
+		params.mlcpMaxSymbolMatches = Number(activeExperiments.get('mlcpMaxSymbolMatches'));
+	}
+
+	if (activeExperiments.has('mlcpEnableImports')) {
+		params.mlcpEnableImports = String(activeExperiments.get('mlcpEnableImports')) === 'true';
 	}
 
 	return params;
