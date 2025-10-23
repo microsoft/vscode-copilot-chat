@@ -33,7 +33,7 @@ import { isToolValidationError, isValidatedToolInput, IToolsService } from '../.
 
 const INLINE_CHAT_EXIT_TOOL_NAME = 'inline_chat_exit';
 
-export class InlineChat2Intent implements IIntent {
+export class InlineChatIntent implements IIntent {
 
 	static readonly ID = Intent.InlineChat;
 
@@ -44,7 +44,7 @@ export class InlineChat2Intent implements IIntent {
 		ToolName.MultiReplaceString,
 	]);
 
-	readonly id = InlineChat2Intent.ID;
+	readonly id = InlineChatIntent.ID;
 
 	readonly locations = [ChatLocation.Editor];
 
@@ -106,7 +106,7 @@ export class InlineChat2Intent implements IIntent {
 					for (const toolCall of delta.copilotToolCalls) {
 
 						doneAfterToolCall = doneAfterToolCall
-							|| InlineChat2Intent._EDIT_TOOLS.has(toolCall.name)
+							|| InlineChatIntent._EDIT_TOOLS.has(toolCall.name)
 							|| toolCall.name === INLINE_CHAT_EXIT_TOOL_NAME;
 
 						const validationResult = this._toolsService.validateToolInput(toolCall.name, toolCall.arguments);
@@ -177,18 +177,18 @@ export class InlineChat2Intent implements IIntent {
 
 	}
 
-	invoke(): Promise<never> {
-		throw new Error('Method not implemented.');
-	}
-
 	private async _getAvailableTools(request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> {
 
 		const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
 		assertType(exitTool);
 
 		const agentTools = await getAgentTools(this._instantiationService, request);
-		const inlineChatTools = agentTools.filter(tool => InlineChat2Intent._EDIT_TOOLS.has(tool.name));
+		const inlineChatTools = agentTools.filter(tool => InlineChatIntent._EDIT_TOOLS.has(tool.name));
 
 		return [exitTool, ...inlineChatTools];
+	}
+
+	invoke(): Promise<never> {
+		throw new TypeError();
 	}
 }
