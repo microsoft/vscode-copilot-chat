@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
+import { isVSCModel } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
@@ -145,9 +147,13 @@ class VSCModelPrompt extends PromptElement<DefaultAgentPromptProps> {
 }
 
 class VSCModelPromptResolver implements IAgentPrompt {
-	static readonly models = ['vscModel'];
+	static readonly familyPrefixes = ['vscModel'];
 
-	resolvePrompt(): PromptConstructor | undefined {
+	static matchesModel(endpoint: IChatEndpoint): Promise<boolean> | boolean {
+		return isVSCModel(endpoint);
+	}
+
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
 		return VSCModelPrompt;
 	}
 }

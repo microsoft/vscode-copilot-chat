@@ -7,7 +7,7 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isVSCModel, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -338,6 +338,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
 		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code');
+		const shouldIncludePreamble = await isVSCModel(this.props.endpoint);
+
 		return (
 			<>
 				<UserMessage>
@@ -362,6 +364,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+						{getVSCModelReminder(shouldIncludePreamble)}
 					</Tag>
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
@@ -789,6 +792,20 @@ function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: b
 			</Tag>
 		</>
 		: undefined;
+}
+
+function getVSCModelReminder(isHiddenModel: boolean) {
+	if (!isHiddenModel) {
+		return;
+	}
+
+	return <>
+		Follow the guidance in &lt;preamble_instructions&gt; from the system prompt.<br />Expand commentComment on line R779ResolvedCode has comments. Press enter to view.
+		You MUST preface each tool call batch with a brief status update.<br />
+		Focus on findings and next steps. Vary your openings—avoid repeating "I'll" or "I will" consecutively.<br />
+		When you have a finding, be enthusiastic and specific (2 sentences). Otherwise, state your next action only (1 sentence).<br />
+		Don't over-express your thoughts in preamble, do not use preamble to think or reason. This is a strict and strong requirement.<br />
+	</>;
 }
 
 export interface EditedFileEventsProps extends BasePromptElementProps {
