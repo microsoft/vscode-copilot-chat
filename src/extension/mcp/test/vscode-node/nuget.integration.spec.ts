@@ -38,7 +38,7 @@ describe.runIf(RUN_DOTNET_CLI_TESTS)('get nuget MCP server info using dotnet CLI
 		);
 	});
 
-	it('returns server.json', async () => {
+	it('returns mapped server.json for original schema', async () => {
 		const result = await nuget.getNuGetPackageMetadata('Knapcode.SampleMcpServer');
 		expect(result.state).toBe('ok');
 		if (result.state === 'ok') {
@@ -50,6 +50,26 @@ describe.runIf(RUN_DOTNET_CLI_TESTS)('get nuget MCP server info using dotnet CLI
 				expect(config.command).toBe('dnx');
 				expect(config.env).toEqual({ 'WEATHER_CHOICES': '${input:weather_choices}' });
 				expect(config.args).toEqual(['Knapcode.SampleMcpServer@0.6.0-beta', '--yes', '--', 'mcp', 'start']);
+			} else {
+				expect.fail();
+			}
+		} else {
+			expect.fail();
+		}
+	});
+
+	it('returns mapped server.json for 2025-09-29 schema', async () => {
+		const result = await nuget.getNuGetPackageMetadata('BaseTestPackage.McpServer');
+		expect(result.state).toBe('ok');
+		if (result.state === 'ok') {
+			expect(result.getMcpServer).toBeDefined();
+			if (result.getMcpServer) {
+				const mcpServer = await result.getMcpServer(Promise.resolve());
+				expect(mcpServer).toBeDefined();
+				const config = mcpServer!.config as Omit<IMcpStdioServerConfiguration, 'type'>;
+				expect(config.command).toBe('dnx');
+				expect(config.env).toEqual({ 'WEATHER_CHOICES': '${input:weather_choices}' });
+				expect(config.args).toEqual(['BaseTestPackage.McpServer@0.1.0-beta', '--yes', '--', 'mcp', 'start']);
 			} else {
 				expect.fail();
 			}
