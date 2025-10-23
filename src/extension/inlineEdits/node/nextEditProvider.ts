@@ -313,12 +313,19 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			const transformer = documentAtInvocationTime.getTransformer();
 			const currentSelection = selections[0];
 			const currentCursorPosition = transformer.getRange(currentSelection);
-			const displayLocation: INextEditDisplayLocation = {
-				label: 'Jump to next edit',
-				range: currentCursorPosition,
-			};
 
 			const editPosition = transformer.getRange(edit.replaceRange);
+
+			const lineWithCode = documentAtInvocationTime.getLineAt(editPosition.startLineNumber);
+			const trimmedLineWithCode = lineWithCode.trimStart();
+			const shortenedLineWithCode = trimmedLineWithCode.slice(0, 40);
+			const label = ['.ts', '.tsx', '.js', '.jsx'].includes(docId.extension)
+				? `Jump to ${editPosition.startLineNumber} | ${shortenedLineWithCode.length === trimmedLineWithCode.length ? shortenedLineWithCode : trimmedLineWithCode + '...'}`
+				: 'Jump to next edit';
+			const displayLocation: INextEditDisplayLocation = {
+				label,
+				range: currentCursorPosition,
+			};
 
 			const commandJumpToEditRange: vscode.Command = {
 				command: jumpToPositionCommandId,
