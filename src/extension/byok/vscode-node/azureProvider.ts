@@ -30,7 +30,7 @@ export function resolveAzureUrl(modelId: string, url: string, useResponsesApi: b
 		return `${url}${apiPath}`;
 	} else if (url.includes('openai.azure.com')) {
 		if (useResponsesApi) {
-			return `${url}/openai/v1/responses`;
+			return `${url}/openai/deployments/${modelId}/extensions/responses?api-version=2025-10-01`;
 		} else {
 			return `${url}/openai/deployments/${modelId}/chat/completions?api-version=2025-01-01-preview`;
 		}
