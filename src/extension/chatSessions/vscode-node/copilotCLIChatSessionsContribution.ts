@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler, l10n } from 'vscode';
+import { ChatExtendedRequestHandler, l10n, Uri } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -44,6 +44,18 @@ function getModelProvider(modelId: string | undefined): { type: 'anthropic' | 'o
 	return undefined;
 }
 
+namespace SessionIdForCLI {
+	export function getResource(sessionId: string): vscode.Uri {
+		return vscode.Uri.from({
+			scheme: 'copilotcli', path: `/${sessionId}`,
+		});
+	}
+
+	export function parse(resource: vscode.Uri): string {
+		return resource.path.slice(1);
+	}
+}
+
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
@@ -74,8 +86,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.copilotcliSessionService.getAllSessions(token);
 		const diskSessions = sessions.filter(session => !this.copilotcliSessionService.isPendingRequest(session.id) && !session.isEmpty).map(session => ({
-			id: session.id,
-			resource: undefined,
+			resource: SessionIdForCLI.getResource(session.id),
 			label: session.label,
 			tooltip: `Copilot CLI session: ${session.label}`,
 			timing: {
@@ -94,8 +105,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	public async resumeCopilotCLISessionInTerminal(sessionItem: vscode.ChatSessionItem): Promise<void> {
-		const terminalName = sessionItem.label || sessionItem.id;
-		const cliArgs = ['--resume', sessionItem.id];
+		const id = SessionIdForCLI.parse(sessionItem.resource);
+		const terminalName = sessionItem.label || id;
+		const cliArgs = ['--resume', id];
 		await this.terminalIntegration.openTerminal(terminalName, cliArgs);
 	}
 }
@@ -125,7 +137,8 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 	) { }
 
-	async provideChatSessionContent(copilotcliSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		if (!_sessionModel.get(copilotcliSessionId)) {
 			// Get the user's preferred model from global state, default to claude-sonnet-4.5
 			const preferredModelId = this.extensionContext.globalState.get<string>(COPILOT_CLI_MODEL_MEMENTO_KEY, this.defaultModel.id);
@@ -161,7 +174,8 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	}
 
 	// Handle option changes for a session (store current state in a map)
-	provideHandleOptionsChange(sessionId: string, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
+	provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
+		const sessionId = SessionIdForCLI.parse(resource);
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
 				if (typeof update.value === 'undefined') {
@@ -201,13 +215,14 @@ export class CopilotCLIChatSessionParticipant {
 					return {};
 				}
 				if (copilotcliSessionId) {
-					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, resource: undefined, label: request.prompt ?? 'CopilotCLI' });
+					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(copilotcliSessionId), label: request.prompt ?? 'CopilotCLI' });
 					this.sessionService.clearPendingRequest(copilotcliSessionId);
 				}
 				return {};
 			}
 
-			const { id } = chatSessionContext.chatSessionItem;
+			const { resource } = chatSessionContext.chatSessionItem;
+			const id = SessionIdForCLI.parse(resource);
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.InProgress);
 			await this.copilotcliAgentManager.handleRequest(id, request, context, stream, getModelProvider(_sessionModel.get(id)?.id), token);
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.Completed);
@@ -229,7 +244,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		copilotcliSessionItemProvider.refresh();
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
-		if (sessionItem?.id) {
+		if (sessionItem?.resource) {
 			const deleteLabel = l10n.t('Delete');
 			const result = await vscode.window.showWarningMessage(
 				l10n.t('Are you sure you want to delete the session?'),
@@ -238,13 +253,14 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			);
 
 			if (result === deleteLabel) {
-				await copilotCLISessionService.deleteSession(sessionItem.id);
+				const id = SessionIdForCLI.parse(sessionItem.resource);
+				await copilotCLISessionService.deleteSession(id);
 				copilotcliSessionItemProvider.refresh();
 			}
 		}
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.resumeInTerminal', async (sessionItem?: vscode.ChatSessionItem) => {
-		if (sessionItem?.id) {
+		if (sessionItem?.resource) {
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
 		}
 	}));

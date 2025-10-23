@@ -386,7 +386,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 							const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
 							stream.push(card);
 							stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
-							vscode.window.showChatSession(CopilotChatSessionsProvider.TYPE, String(number), { viewColumn: vscode.ViewColumn.Active });
+							vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + number }));
 							break;
 						}
 					default:
