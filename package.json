@@ -3491,7 +3491,7 @@
 				},
 				{
 					"command": "github.copilot.cloud.sessions.refresh",
-					"when": "view == workbench.view.chat.sessions.copilot-cloud-agent",
+					"when": "view == workbench.view.chat.sessions.copilot-swe-agent",
 					"group": "navigation@1"
 				}
 			],
@@ -3776,7 +3776,7 @@
 				},
 				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
-					"when": "chatSessionType == copilot-cloud-agent",
+					"when": "chatSessionType == copilot-swe-agent",
 					"group": "context"
 				}
 			]
@@ -4163,8 +4163,8 @@
 				}
 			},
 			{
-				"type": "copilot-cloud-agent",
-				"name": "copilot-cloud-agent",
+				"type": "copilot-swe-agent",
+				"name": "copilot-swe-agent",
 				"displayName": "GitHub Copilot Cloud Agent",
 				"icon": "$(cloud)",
 				"welcomeTitle": "GitHub Copilot Cloud Agent",

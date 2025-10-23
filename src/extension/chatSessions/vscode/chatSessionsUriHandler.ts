@@ -37,7 +37,7 @@ export class ChatSessionsUriHandler implements CustomUriHandler {
 					const prId = params.get('id');
 					if (type?.startsWith('copilot') && prId) {
 						// For now we hardcode it to this type, eventually the full type should come in the URI
-						return this._openGitHubSession('copilot-cloud-agent', prId);
+						return this._openGitHubSession('copilot-swe-agent', prId);
 					}
 				}
 		}

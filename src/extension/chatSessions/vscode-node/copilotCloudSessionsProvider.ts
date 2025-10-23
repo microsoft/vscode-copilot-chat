@@ -53,7 +53,7 @@ const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
 
 export class CopilotChatSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
-	public static readonly TYPE = 'copilot-cloud-agent';
+	public static readonly TYPE = 'copilot-swe-agent';
 	private readonly DELEGATE_MODAL_DETAILS = vscode.l10n.t('The agent will work asynchronously to create a pull request with your requested changes.');
 	private readonly COPILOT = 'GitHub Copilot Cloud Agent';
 
