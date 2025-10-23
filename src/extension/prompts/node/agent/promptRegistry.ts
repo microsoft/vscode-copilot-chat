@@ -15,24 +15,41 @@ export interface IAgentPrompt {
 
 export interface IAgentPromptCtor {
 	readonly familyPrefixes: readonly string[];
+	matchesModel?(endpoint: IChatEndpoint): Promise<boolean> | boolean;
 	new(...args: any[]): IAgentPrompt;
 }
 
 export type AgentPromptClass = IAgentPromptCtor & (new (...args: any[]) => IAgentPrompt);
 
+type PromptWithMatcher = IAgentPromptCtor & {
+	matchesModel: (endpoint: IChatEndpoint) => Promise<boolean> | boolean;
+};
+
 export const PromptRegistry = new class {
-	private familyPrefixList: { prefix: string; prompt: IAgentPromptCtor }[] = [];
+	private readonly promptsWithMatcher: PromptWithMatcher[] = [];
+	private readonly familyPrefixList: { prefix: string; prompt: IAgentPromptCtor }[] = [];
 
 	registerPrompt(prompt: IAgentPromptCtor): void {
+		if (prompt.matchesModel) {
+			this.promptsWithMatcher.push(prompt as PromptWithMatcher);
+		}
+
 		for (const prefix of prompt.familyPrefixes) {
 			this.familyPrefixList.push({ prefix, prompt });
 		}
 	}
 
-	getPrompt(
+	async getPrompt(
 		endpoint: IChatEndpoint
-	): IAgentPromptCtor | undefined {
-		// Check family prefix match
+	): Promise<IAgentPromptCtor | undefined> {
+
+		for (const prompt of this.promptsWithMatcher) {
+			const matches = await prompt.matchesModel(endpoint);
+			if (matches) {
+				return prompt;
+			}
+		}
+
 		for (const { prefix, prompt } of this.familyPrefixList) {
 			if (endpoint.family.startsWith(prefix)) {
 				return prompt;
