@@ -29,7 +29,7 @@ export class CopilotCLISession extends DisposableStore {
 	constructor(
 		private readonly _permissionHandler: CopilotCLIPermissionsHandler,
 		private readonly _session: Session,
-		@ILogService private readonly logService: ILogService,
+		@ILogService private readonly _logService: ILogService,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IEnvService private readonly envService: IEnvService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -41,7 +41,7 @@ export class CopilotCLISession extends DisposableStore {
 	async getManager(options: SessionOptions) {
 		// Ensure node-pty shim exists before importing SDK
 		// @github/copilot has hardcoded: import{spawn}from"node-pty"
-		await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
+		await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot, this._logService);
 
 		// Dynamically import the SDK
 		const { internal } = require('/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk/index.js') as typeof import('/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk');
@@ -65,7 +65,7 @@ export class CopilotCLISession extends DisposableStore {
 				return await this.requestPermission(permissionRequest, toolInvocationToken);
 			}));
 
-			this.logService.trace(`[CopilotCLISession] Invoking session ${this._session.sessionId}`);
+			this._logService.trace(`[CopilotCLISession] Invoking session ${this._session.sessionId}`);
 
 			const done = new DeferredPromise();
 			const unsubscribe = this._session.on('*', (event: SessionEvent) => {
@@ -76,7 +76,7 @@ export class CopilotCLISession extends DisposableStore {
 				try {
 					this._processEvent(event, stream);
 				} catch (error) {
-					this.logService.error(`CopilotCLI session error: ${error}`);
+					this._logService.error(`CopilotCLI session error: ${error}`);
 					stream.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 				} finally {
 					if (event.type === 'session.idle') {
@@ -95,7 +95,7 @@ export class CopilotCLISession extends DisposableStore {
 
 	private _toolNames = new Map<string, string>();
 	private _processEvent(event: SessionEvent, stream: vscode.ChatResponseStream): void {
-		this.logService.trace(`CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
+		this._logService.trace(`CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
 
 		switch (event.type) {
 			case 'assistant.turn_start':
@@ -117,7 +117,7 @@ export class CopilotCLISession extends DisposableStore {
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					stream.push(responsePart);
 				}
-				this.logService.trace(`Start Tool ${toolName || '<unknown>'}`);
+				this._logService.trace(`Start Tool ${toolName || '<unknown>'}`);
 				break;
 			}
 
@@ -132,12 +132,12 @@ export class CopilotCLISession extends DisposableStore {
 				const error = event.data.error ? `error: ${event.data.error.code},${event.data.error.message}` : '';
 				const result = event.data.result ? `result: ${event.data.result?.content}` : '';
 				const parts = [success, error, result].filter(part => part.length > 0).join(', ');
-				this.logService.trace(`Complete Tool ${toolName}, ${parts}`);
+				this._logService.trace(`Complete Tool ${toolName}, ${parts}`);
 				break;
 			}
 
 			case 'session.error': {
-				this.logService.error(`CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
+				this._logService.error(`CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
 				stream.markdown(`\n\n❌ Error: ${event.data.message}`);
 				break;
 			}
@@ -178,10 +178,10 @@ export class CopilotCLISession extends DisposableStore {
 						return { kind: 'approved' };
 					}
 				} catch (error) {
-					this.logService.error(`[CopilotCLISession](2) Permission request error: ${error}`);
+					this._logService.error(`[CopilotCLISession](2) Permission request error: ${error}`);
 				}
 			}
-			this.logService.error(`[CopilotCLISession] Permission request error: ${error}`);
+			this._logService.error(`[CopilotCLISession] Permission request error: ${error}`);
 		}
 
 		return { kind: 'denied-interactively-by-user' };

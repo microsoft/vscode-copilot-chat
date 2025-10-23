@@ -82,7 +82,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		try {
 			// Ensure node-pty shim exists before importing SDK
 			// @github/copilot has hardcoded: import{spawn}from"node-pty"
-			await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
+			await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService);
 
 			const { internal } = require('/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk/index.js') as typeof import('/Users/donjayamanne/Development/vsc/sweagentd/runtime/dist-cli/sdk');
 			return new internal.CLISessionManager({
