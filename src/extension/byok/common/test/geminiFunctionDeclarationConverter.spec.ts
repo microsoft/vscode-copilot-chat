@@ -64,6 +64,59 @@ describe('GeminiFunctionDeclarationConverter', () => {
 			expect(result.description).toBe('No description provided.');
 		});
 
+		it('should handle integer type by mapping to INTEGER', () => {
+			const schema: ToolJsonSchema = {
+				type: 'object',
+				properties: {
+					count: {
+						type: 'integer',
+						description: 'An integer count'
+					},
+					groupIndex: {
+						type: 'integer',
+						description: 'Group index'
+					}
+				},
+				required: ['count']
+			};
+
+			const result = toGeminiFunction('integerFunction', 'Function with integer parameters', schema);
+
+			expect(result.parameters).toBeDefined();
+			expect(result.parameters!.type).toBe(Type.OBJECT);
+			expect(result.parameters!.required).toEqual(['count']);
+			expect(result.parameters!.properties).toBeDefined();
+			expect(result.parameters!.properties!['count']).toEqual({
+				type: Type.INTEGER,
+				description: 'An integer count'
+			});
+			expect(result.parameters!.properties!['groupIndex']).toEqual({
+				type: Type.INTEGER,
+				description: 'Group index'
+			});
+		});
+
+		it('should handle null type by mapping to NULL', () => {
+			const schema: ToolJsonSchema = {
+				type: 'object',
+				properties: {
+					nullableField: {
+						type: 'null',
+						description: 'A nullable field'
+					}
+				}
+			};
+
+			const result = toGeminiFunction('nullFunction', 'Function with null parameter', schema);
+
+			expect(result.parameters).toBeDefined();
+			expect(result.parameters!.properties).toBeDefined();
+			expect(result.parameters!.properties!['nullableField']).toEqual({
+				type: Type.NULL,
+				description: 'A nullable field'
+			});
+		});
+
 		it('should handle array schema by using items as parameters', () => {
 			const schema: ToolJsonSchema = {
 				type: 'array',

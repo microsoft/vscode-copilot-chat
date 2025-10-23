@@ -40,11 +40,11 @@ function doParseTest<T>(source: string, expectedTree: IndentationTree<T>) {
 
 const SOURCE = {
 	source: dedent`
-	f1:
-		a1
-	f2:
-		a2
-		a3
+f1:
+    a1
+f2:
+    a2
+    a3
 `,
 	name: '',
 };
@@ -52,79 +52,79 @@ const SOURCE = {
 suite('Test compareTreeWithSpec', function () {
 	const SOURCE_MISSING_CHILD = {
 		source: dedent`
-		f1:
-			a1
-		f2:
-			a2
-	`,
+f1:
+    a1
+f2:
+    a2
+`,
 		name: 'missing child',
 	};
 
 	const SOURCE_EXTRA_CHILD = {
 		source: dedent`
-		f1:
-			a1
-		f2:
-			a2
-			a3
-			a4
-	`,
+f1:
+    a1
+f2:
+    a2
+    a3
+    a4
+`,
 		name: 'extra_child',
 	};
 
 	const SOURCE_MISSING_SIBLING = {
 		source: dedent`
-		f1:
-			a1
-	`,
+f1:
+    a1
+`,
 		name: 'missing sibling',
 	};
 
 	const SOURCE_EXTRA_SIBLING = {
 		source: dedent`
-		f1:
-			a1
-		f2:
-			a2
-			a3
-		f3:
-			a4
-	`,
+f1:
+    a1
+f2:
+    a2
+    a3
+f3:
+    a4
+`,
 		name: 'extra_sibling',
 	};
 
 	const SOURCE_EXTRA_MIDDLE_BLANK_LINE = {
 		source: dedent`
-		f1:
-			a1
+f1:
+    a1
 
-		f2:
-			a2
-			a3
-	`,
+f2:
+    a2
+    a3
+`,
 		name: 'extra middle blank line',
 	};
 
 	const SOURCE_EXTRA_TRAILING_BLANK_LINE = {
 		source: dedent`
-		f1:
-			a1
-		f2:
-			a2
-			a3
+f1:
+    a1
+f2:
+    a2
+    a3
 
-	`,
+`,
 		name: 'extra trailing blank line',
 	};
 
 	const SOURCE_EXTRA_INDENTATION = {
 		source: dedent`
-		f1:
-				a1
-		f2:
-			a2
-				a3
-	`,
+f1:
+        a1
+f2:
+    a2
+        a3
+`,
 		name: 'extra indentation',
 	};
 
@@ -334,15 +334,15 @@ suite('Test core functions: other', function () {
 	});
 	test('deparseAndCutTree cuts at labels', function () {
 		const source = dedent`
-			1
-				2
-				3
-			4
-				5
-				6
-			7
-				8
-				9`;
+1
+    2
+    3
+4
+    5
+    6
+7
+    8
+    9`;
 		const tree = parseRaw(source) as IndentationTree<string>;
 		tree.subs[0].subs[1].label = 'cut';
 		tree.subs[1].subs[0].label = 'cut';
@@ -390,15 +390,15 @@ suite('Test core functions: other', function () {
 	});
 	test('VisitTreeConditionally', function () {
 		const tree = parseRaw(dedent`
-			1
-				2
-				3
-			4
-				5
-				6
-			7
-				8
-				9`);
+1
+    2
+    3
+4
+    5
+    6
+7
+    8
+    9`);
 		const traceTopDownAll: string[] = [];
 		visitTree(
 			tree,

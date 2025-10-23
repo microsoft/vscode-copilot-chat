@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { TelemetryStore } from '../../lib/src/telemetry';
-import type { TelemetrySpy } from '../../lib/src/testing/telemetrySpy';
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../../../platform/telemetry/common/telemetry';
 import { wrapEventNameForPrefixRemoval } from '../../../../../platform/telemetry/node/azureInsightsReporter';
+import { TelemetryStore } from '../../lib/src/telemetry';
+import type { TelemetrySpy } from '../../lib/src/test/telemetrySpy';
 
 export class CompletionsTelemetryServiceBridge {
 

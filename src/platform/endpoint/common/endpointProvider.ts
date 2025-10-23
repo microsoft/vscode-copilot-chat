@@ -81,7 +81,8 @@ export interface IModelAPIResponse {
 	is_chat_default: boolean;
 	is_chat_fallback: boolean;
 	version: string;
-	warning_message?: string;
+	warning_messages?: { code: string; message: string }[];
+	info_messages?: { code: string; message: string }[];
 	billing?: { is_premium: boolean; multiplier: number; restricted_to?: string[] };
 	capabilities: IChatModelCapabilities | ICompletionModelCapabilities | IEmbeddingModelCapabilities;
 	supported_endpoints?: ModelSupportedEndpoint[];

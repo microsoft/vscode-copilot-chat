@@ -12,47 +12,35 @@ import { ICopilotTokenManager } from './copilotTokenManager';
 import { ICopilotTokenStore } from './copilotTokenStore';
 
 export class StaticGitHubAuthenticationService extends BaseAuthenticationService {
-
-	private _githubToken: string | undefined;
-	get githubToken(): string {
-		if (!this._githubToken) {
-			this._githubToken = this.tokenProvider();
-		}
-		return this._githubToken;
-	}
-
-	private readonly tokenProvider: { (): string };
-
 	constructor(
-		tokenProvider: { (): string },
+		private readonly tokenProvider: { (): string } | undefined,
 		@ILogService logService: ILogService,
 		@ICopilotTokenStore tokenStore: ICopilotTokenStore,
 		@ICopilotTokenManager tokenManager: ICopilotTokenManager,
 		@IConfigurationService configurationService: IConfigurationService
 	) {
 		super(logService, tokenStore, tokenManager, configurationService);
-		this.tokenProvider = tokenProvider;
 
 		const that = this;
-		this._anyGitHubSession = {
-			get id() { return that.githubToken; },
-			get accessToken() { return that.githubToken; },
+		this._anyGitHubSession = tokenProvider ? {
+			get id() { return that.tokenProvider!(); },
+			get accessToken() { return that.tokenProvider!(); },
 			scopes: GITHUB_SCOPE_USER_EMAIL,
 			account: {
 				id: 'user',
 				label: 'User'
 			}
-		};
+		} : undefined;
 
-		this._permissiveGitHubSession = {
-			get id() { return that.githubToken; },
-			get accessToken() { return that.githubToken; },
+		this._permissiveGitHubSession = tokenProvider ? {
+			get id() { return that.tokenProvider!(); },
+			get accessToken() { return that.tokenProvider!(); },
 			scopes: GITHUB_SCOPE_ALIGNED,
 			account: {
 				id: 'user',
 				label: 'User'
 			}
-		};
+		} : undefined;
 	}
 
 	getAnyGitHubSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {

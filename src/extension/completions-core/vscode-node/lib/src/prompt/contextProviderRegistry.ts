@@ -22,7 +22,7 @@ import { Features } from '../experiments/features';
 import { LRUCacheMap } from '../helpers/cache';
 import { logger } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
-import { isDebugEnabled, isRunningInSimulation } from '../testing/runtimeMode';
+import { isDebugEnabled, isRunningInSimulation } from '../util/runtimeMode';
 import { isArrayOfT, resolveAll } from './asyncUtils';
 import { fillInCppVSCodeActiveExperiments } from './contextProviderRegistryCpp';
 import { fillInCSharpActiveExperiments } from './contextProviderRegistryCSharp';
@@ -365,8 +365,8 @@ class MutableContextProviderRegistry extends CoreContextProviderRegistry {
 		this._providers.push(provider);
 	}
 
-	override unregisterContextProvider(_providerId: string) {
-		throw new Error(`Should not be call. Use ILanguageContextProviderService`);
+	override unregisterContextProvider(providerId: string) {
+		this._providers = this._providers.filter(p => p.id !== providerId);
 	}
 
 	override get providers() {

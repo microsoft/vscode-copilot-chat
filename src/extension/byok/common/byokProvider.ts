@@ -6,6 +6,7 @@ import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvide
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { EndpointEditToolName, IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { localize } from '../../../util/vs/nls';
 
@@ -178,6 +179,10 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 }
 
 export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {
+	if (isScenarioAutomation) {
+		return true;
+	}
+
 	const isGHE = capiClientService.dotcomAPIURL !== 'https://api.github.com';
 	const byokAllowed = (copilotToken.isInternal || copilotToken.isIndividual) && !isGHE;
 	return byokAllowed;
