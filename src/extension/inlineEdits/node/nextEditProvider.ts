@@ -34,12 +34,13 @@ import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/co
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency } from '../common/editRebase';
+import { jumpToPositionCommandId } from '../common/jumpToCursorPosition';
 import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
-import { INextEditResult, NextEditResult } from './nextEditResult';
+import { INextEditDisplayLocation, INextEditResult, NextEditResult } from './nextEditResult';
 
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
@@ -168,11 +169,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		const documentAtInvocationTime = doc.value.get();
+		const selections = doc.selection.get();
 
 		const nesConfigs = this.determineNesConfigs(telemetryBuilder, logContext);
 
-		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, doc.selection.get(), nesConfigs);
-
+		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, selections, nesConfigs);
 		if (cachedEdit?.rejected) {
 			tracer.trace('cached edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejectedCache');
@@ -183,7 +184,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		let edit: StringReplacement | undefined;
 		let currentDocument: StringText | undefined;
-		let throwingError: Error | undefined;
+		let error: NoNextEditReason | undefined;
 		let req: NextEditFetchRequest;
 		let targetDocumentId = docId;
 
@@ -223,9 +224,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			if (result.isError()) {
 				tracer.trace(`failed to fetch next edit ${result.err.kind}${(result.err as any).message ? ` (${(result.err as any).message})` : ''}`);
 				telemetryBuilder.setStatus(`noEdit:${result.err.kind}`);
-				if (result.err instanceof NoNextEditReason.FetchFailure || result.err instanceof NoNextEditReason.Unexpected) {
-					throwingError = result.err.error;
-				}
+				error = result.err;
 			} else {
 				targetDocumentId = result.val.docId ?? targetDocumentId;
 				const targetDoc = targetDocumentId ? this._workspace.getDocument(targetDocumentId)! : doc;
@@ -250,9 +249,31 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			}
 		}
 
-		if (throwingError) {
-			tracer.throws('has throwing error', throwingError);
-			throw throwingError;
+		if (error instanceof NoNextEditReason.FetchFailure || error instanceof NoNextEditReason.Unexpected) {
+			tracer.throws('has throwing error', error.error);
+			throw error.error;
+		} else if (error instanceof NoNextEditReason.NoSuggestions && error.nextCursorPosition !== undefined) {
+			const transformer = documentAtInvocationTime.getTransformer();
+
+			const currentSelection = selections.at(0);
+
+			if (currentSelection) {
+				const currentCursorPosition = transformer.getRange(currentSelection);
+				const displayLocation: INextEditDisplayLocation = {
+					label: 'Jump to next edit',
+					range: currentCursorPosition,
+				};
+
+				const commandJumpToEditRange: vscode.Command = {
+					command: jumpToPositionCommandId,
+					title: "Jump to next edit",
+					arguments: [error.nextCursorPosition]
+				};
+
+				const edit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
+
+				return new NextEditResult(logContext.requestId, req, { edit, displayLocation, documentBeforeEdits: documentAtInvocationTime, action: commandJumpToEditRange });
+			}
 		}
 
 		const emptyResult = new NextEditResult(logContext.requestId, req, undefined);
