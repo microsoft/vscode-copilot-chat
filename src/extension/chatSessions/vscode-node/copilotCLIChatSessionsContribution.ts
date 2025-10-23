@@ -99,6 +99,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			status: this.copilotcliSessionService.getSessionStatus(session.id) ?? vscode.ChatSessionStatus.Completed,
 		} satisfies vscode.ChatSessionItem));
 
+		const count = diskSessions.length;
+		vscode.commands.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
+
 		return diskSessions;
 	}
 
