@@ -6,15 +6,16 @@
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, l10n } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { isLocation } from '../../../util/common/types';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
-import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
-import { ExtendedChatRequest, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
+import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { buildChatHistoryFromEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
+import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
 
 const MODELS_OPTION_ID = 'model';
 
@@ -47,6 +48,18 @@ function getModelProvider(modelId: string | undefined): { type: 'anthropic' | 'o
 }
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
+
+/**
+ * Escape XML special characters
+ */
+function escapeXml(text: string): string {
+	return text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&apos;');
+}
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
@@ -187,6 +200,9 @@ export class CopilotCLIChatSessionParticipant {
 		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
 		private readonly sessionService: ICopilotCLISessionService,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
+		private readonly cloudSessionProvider: CopilotChatSessionsProvider | undefined,
+		private readonly summarizer: ChatSummarizerProvider,
+		@IGitService private readonly gitService: IGitService
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -194,67 +210,106 @@ export class CopilotCLIChatSessionParticipant {
 	}
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
-		// Resolve the prompt with references before processing
-		const resolvedPrompt = this.resolvePrompt(request);
-		const processedRequest: ExtendedChatRequest = { ...request, prompt: resolvedPrompt };
-
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
 			if (chatSessionContext.isUntitled) {
-				const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, processedRequest, context, stream, undefined, token);
+				const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, request, context, stream, undefined, token);
 				if (!copilotcliSessionId) {
 					stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
 					return {};
 				}
 				if (copilotcliSessionId) {
-					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, resource: undefined, label: processedRequest.prompt ?? 'CopilotCLI' });
+					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, resource: undefined, label: request.prompt ?? 'CopilotCLI' });
 					this.sessionService.clearPendingRequest(copilotcliSessionId);
 				}
 				return {};
 			}
 
 			const { id } = chatSessionContext.chatSessionItem;
+
+			if (request.prompt.startsWith('/delegate')) {
+				if (!this.cloudSessionProvider) {
+					stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
+					return {};
+				}
+
+				// Check for uncommitted changes
+				const currentRepository = this.gitService.activeRepository.get();
+				const hasChanges = (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0);
+
+				if (hasChanges) {
+					stream.warning(localize('copilotcli.uncommittedChanges', "You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them."));
+				}
+
+				const history = await this.summarizer.provideChatSummary(context, token);
+				const prompt = request.prompt.substring('/delegate'.length).trim();
+				const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
+					prompt,
+					history
+				}, stream, token);
+				if (prInfo) {
+					await this.recordPushToSession(id, request.prompt, prInfo, token);
+				}
+				return {};
+
+			}
+
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.InProgress);
-			await this.copilotcliAgentManager.handleRequest(id, processedRequest, context, stream, getModelProvider(_sessionModel.get(id)?.id), token);
+			await this.copilotcliAgentManager.handleRequest(id, request, context, stream, getModelProvider(_sessionModel.get(id)?.id), token);
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.Completed);
 			return {};
 		}
 
-		stream.markdown(localize('copilotcli.viaAtCopilotcli', "Start a new CopilotCLI session"));
-		stream.button({ command: `workbench.action.chat.openNewSessionEditor.${this.sessionType}`, title: localize('copilotcli.startNewSession', "Start Session") });
+		/* Invoked from a 'normal' chat or 'cloud button' without CLI session context */
+		// Handle confirmation data
+		return await this.handlePushConfirmationData(request, context, stream, token);
+	}
+
+	private async handlePushConfirmationData(
+		request: vscode.ChatRequest,
+		context: vscode.ChatContext,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken
+	): Promise<vscode.ChatResult | void> {
+		const prompt = request.prompt;
+		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
+
+		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
+		const sdkSession = await this.sessionService.getOrCreateSDKSession(undefined, requestPrompt);
+
+		await vscode.window.showChatSession(this.sessionType, sdkSession.sessionId, { viewColumn: vscode.ViewColumn.Active });
+		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 		return {};
 	}
 
-	private resolvePrompt(request: vscode.ChatRequest): string {
-		if (request.prompt.startsWith('/')) {
-			return request.prompt; // likely a slash command, don't modify
+	private async recordPushToSession(
+		sessionId: string,
+		userPrompt: string,
+		prInfo: { uri: string; title: string; description: string; author: string; linkTag: string },
+		token: vscode.CancellationToken
+	): Promise<void> {
+		const session = await this.sessionService.getSession(sessionId, token);
+		if (!session) {
+			return;
 		}
 
-		const allRefsTexts: string[] = [];
-		const prompt = request.prompt;
-		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
-		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
-			const valueText = URI.isUri(ref.value) ?
-				ref.value.fsPath :
-				isLocation(ref.value) ?
-					`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
-					undefined;
-			if (valueText) {
-				// Keep the original prompt untouched, just collect resolved paths
-				const variableText = ref.range ? prompt.substring(ref.range[0], ref.range[1]) : undefined;
-				if (variableText) {
-					allRefsTexts.push(`- ${variableText} → ${valueText}`);
-				} else {
-					allRefsTexts.push(`- ${valueText}`);
-				}
+		// Add user message event
+		session.sdkSession.addEvent({
+			type: 'user.message',
+			data: {
+				content: userPrompt
 			}
 		});
 
-		if (allRefsTexts.length > 0) {
-			return `<reminder>\nThe user provided the following references:\n${allRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</reminder>\n\n${prompt}`;
-		}
-
-		return prompt;
+		// Add assistant message event with embedded PR metadata
+		const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
+		session.sdkSession.addEvent({
+			type: 'assistant.message',
+			data: {
+				messageId: `msg_${Date.now()}`,
+				content: assistantMessage
+			}
+		});
 	}
 }
 

@@ -101,7 +101,8 @@ export class NoFetchChatMLFetcher extends ChatMLFetcherImpl {
 			usage: { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } },
 			value: ['--no-fetch option is provided to simulations -- using a fixed ChatML response'],
 			requestId: 'no-fetch-request-id',
-			serverRequestId: undefined
+			serverRequestId: undefined,
+			resolvedModel: ''
 		});
 	}
 }

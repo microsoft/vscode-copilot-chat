@@ -534,6 +534,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		if (successfulCompletions.length >= 1) {
 			return {
 				type: ChatFetchResponseType.Success,
+				resolvedModel: successfulCompletions[0].model,
 				usage: successfulCompletions.length === 1 ? successfulCompletions[0].usage : undefined,
 				value: successfulCompletions.map(c => getTextPart(c.message.content)),
 				requestId,

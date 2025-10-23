@@ -14,6 +14,7 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { getNotebookId } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -38,7 +39,6 @@ import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { toExternalRange } from './utils/translations';
-import { getNotebookId } from '../../../platform/notebook/common/helpers';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -93,11 +93,11 @@ function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo
 	return item.source === 'provider';
 }
 
-const GoToNextEdit = l10n.t('Go To Next Edit');
+const GoToNextEdit = l10n.t('Go To Inline Suggestion');
 
 
 export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
-	public readonly displayName = 'Next Edit Suggestion';
+	public readonly displayName = 'Inline Suggestion';
 
 	private readonly _tracer: ITracer;
 
@@ -375,6 +375,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			insertText: result.edit.newText,
 			showRange,
 			displayLocation,
+			command: result.action,
 		};
 	}
 

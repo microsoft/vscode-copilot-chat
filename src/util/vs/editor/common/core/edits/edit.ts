@@ -9,6 +9,7 @@ import { sumBy } from '../../../../base/common/arrays';
 import { BugIndicatingError } from '../../../../base/common/errors';
 import { OffsetRange } from '../ranges/offsetRange';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export abstract class BaseEdit<T extends BaseReplacement<T> = BaseReplacement<any>, TEdit extends BaseEdit<T, TEdit> = BaseEdit<T, any>> {
 	constructor(
 		public readonly replacements: readonly T[],

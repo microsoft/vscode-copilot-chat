@@ -77,13 +77,18 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		const fileExists = await this.fileExists(uri);
 		const hasSupportedNotebooks = this.notebookService.hasSupportedNotebooks(uri);
 		let doc: undefined | NotebookDocumentSnapshot | TextDocumentSnapshot = undefined;
-		if (fileExists && hasSupportedNotebooks) {
-			doc = await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
-		} else if (fileExists && !hasSupportedNotebooks) {
-			doc = await this.workspaceService.openTextDocumentAndSnapshot(uri);
+		try {
+			if (hasSupportedNotebooks) {
+				doc = await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
+			} else {
+				doc = await this.workspaceService.openTextDocumentAndSnapshot(uri);
+			}
+		} catch (e) {
+			// ignored
 		}
 
-		if (fileExists && doc?.getText() !== '') {
+		// note: fileExists could be `false` but we might still get a `doc` if it's held in memory
+		if (fileExists && !!doc?.getText()) {
 			if (hasSupportedNotebooks) {
 				throw new Error(`File already exists. You must use the ${ToolName.EditNotebook} tool to modify it.`);
 			} else {

@@ -371,9 +371,24 @@ export class RequestLogger extends AbstractRequestLogger {
 			.then(ok => {
 				if (ok) {
 					this._ensureLinkProvider();
-					const extraData =
-						entry.type === LoggedRequestKind.MarkdownContentRequest ? 'markdown' :
-							`${entry.type === LoggedRequestKind.ChatMLCancelation ? 'cancelled' : entry.result.type} | ${entry.chatEndpoint.model} | ${entry.endTime.getTime() - entry.startTime.getTime()}ms | [${entry.debugName}]`;
+
+					let extraData: string;
+					if (entry.type === LoggedRequestKind.MarkdownContentRequest) {
+						extraData = 'markdown';
+					} else {
+						const status = entry.type === LoggedRequestKind.ChatMLCancelation ? 'cancelled' : entry.result.type;
+						let modelInfo = entry.chatEndpoint.model;
+
+						// Add resolved model if it differs from requested model
+						if (entry.type === LoggedRequestKind.ChatMLSuccess &&
+							entry.result.resolvedModel &&
+							entry.result.resolvedModel !== entry.chatEndpoint.model) {
+							modelInfo += ` -> ${entry.result.resolvedModel}`;
+						}
+
+						const duration = `${entry.endTime.getTime() - entry.startTime.getTime()}ms`;
+						extraData = `${status} | ${modelInfo} | ${duration} | [${entry.debugName}]`;
+					}
 
 					this._logService.info(`${ChatRequestScheme.buildUri({ kind: 'request', id: id })} | ${extraData}`);
 				}
@@ -595,6 +610,7 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`requestId        : ${entry.result.requestId}`);
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);
 			result.push(`timeToFirstToken : ${entry.timeToFirstToken}ms`);
+			result.push(`resolved model   : ${entry.result.resolvedModel}`);
 			result.push(`usage            : ${JSON.stringify(entry.usage)}`);
 		} else if (entry.type === LoggedRequestKind.ChatMLFailure) {
 			result.push(`requestId        : ${entry.result.requestId}`);

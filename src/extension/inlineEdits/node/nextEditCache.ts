@@ -39,7 +39,7 @@ export interface CachedEdit {
 	cacheTime: number;
 }
 
-export type CachedOrRebasedEdit = CachedEdit & { rebasedEdit?: StringReplacement; rebasedEditIndex?: number };
+export type CachedOrRebasedEdit = CachedEdit & { rebasedEdit?: StringReplacement; rebasedEditIndex?: number; showLabel?: boolean };
 
 export class NextEditCache extends Disposable {
 	private readonly _documentCaches = new Map<DocumentId, DocumentEditCache>();
@@ -67,7 +67,7 @@ export class NextEditCache extends Disposable {
 				}
 				// if editor-change triggering is allowed,
 				// 	it means an edit in file A can result in a cached edit for file B to be less relevant than with the edits in file A included
-				if (configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChange, expService)) {
+				if (configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChangeAfterSeconds, expService) !== undefined) {
 					for (const [k, v] of this._sharedCache.entries()) {
 						if (v.docId !== doc.id) {
 							this._sharedCache.deleteKey(k);
