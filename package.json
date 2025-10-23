@@ -2214,9 +2214,14 @@
 				"icon": "$(link-external)"
 			},
 			{
-				"command": "github.copilot.cloud.sessions.installPRExtension",
-				"title": "Install GitHub Pull Request Extension",
-				"icon": "$(extensions)"
+				"command": "github.copilot.cloud.sessions.proxy.checkoutFromDescription",
+				"title": "%github.copilot.command.checkoutFromDescription.title%",
+				"icon": "$(git-compare)"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.proxy.applyChangesFromDescription",
+				"title": "%github.copilot.command.applyChangesFromDescription.title%",
+				"icon": "$(git-stash-apply)"
 			}
 		],
 		"configuration": [
@@ -3468,7 +3473,11 @@
 					"when": "false"
 				},
 				{
-					"command": "github.copilot.cloud.sessions.installPRExtension",
+					"command": "github.copilot.cloud.sessions.proxy.checkoutFromDescription",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.proxy.applyChangesFromDescription",
 					"when": "false"
 				}
 			],
@@ -3796,9 +3805,12 @@
 			],
 			"chat/multiDiff/context": [
 				{
-					"command": "github.copilot.cloud.sessions.installPRExtension",
-					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
-					"group": "inline@1"
+					"command": "github.copilot.cloud.sessions.proxy.checkoutFromDescription",
+					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.proxy.applyChangesFromDescription",
+					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled"
 				}
 			]
 		},

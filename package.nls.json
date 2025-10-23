@@ -314,6 +314,8 @@
 	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions.",
 	"github.copilot.command.refreshCopilotAgentSessions": "Refresh Copilot Agent Sessions",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in browser",
+	"github.copilot.command.checkoutFromDescription.title": "!!!! Checkout from Description",
+	"github.copilot.command.applyChangesFromDescription.title": "!!!! Apply Changes from Description",
 	"copilot.tools.runSubagent.name": "Run Subagent",
 	"copilot.tools.runSubagent.description": "Runs a task within an isolated subagent context. Enables efficient organization of tasks and context window management."
 }

@@ -35,7 +35,7 @@ const previewFeaturesDisabledContextKey = 'github.copilot.previewFeaturesDisable
 
 const debugContextKey = 'github.copilot.chat.debug';
 
-const prExtensionInstalledContextKey = 'github.copilot.prExtensionInstalled';
+export const prExtensionInstalledContextKey = 'github.copilot.prExtensionInstalled';
 
 export class ContextKeysContribution extends Disposable {
 

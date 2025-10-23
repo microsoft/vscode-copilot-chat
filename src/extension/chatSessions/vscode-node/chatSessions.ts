@@ -19,6 +19,7 @@ import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliA
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
+import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
@@ -113,6 +114,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCloudEnabled);
 
 		if (enabled && !this.copilotCloudRegistrations) {
+			vscode.commands.executeCommand('setContext', prExtensionInstalledContextKey, this.isPullRequestExtensionInstalled());
+
 			// Register the Copilot Cloud chat participant
 			this.copilotCloudRegistrations = new DisposableStore();
 			const copilotSessionsProvider = this.copilotCloudRegistrations.add(
@@ -140,40 +143,51 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				})
 			);
 			this.copilotCloudRegistrations.add(
-				vscode.commands.registerCommand('github.copilot.cloud.sessions.installPRExtension', async () => {
-					try {
-						const isInsiders = this.envService.getEditorInfo().version.includes('insider');
-						const installOptions = { enable: true, installPreReleaseVersion: isInsiders };
-						await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID, installOptions);
-						const maxWaitTime = 10_000; // 10 seconds
-						const pollInterval = 100; // 100ms
-						let elapsed = 0;
-						let extension: vscode.Extension<any> | undefined;
-						while (elapsed < maxWaitTime) {
-							extension = vscode.extensions.getExtension(GHPR_EXTENSION_ID);
-							if (extension) {
-								break;
-							}
-							await new Promise(resolve => setTimeout(resolve, pollInterval));
-							elapsed += pollInterval;
-						}
-						if (extension) {
-							await vscode.commands.executeCommand('setContext', 'github.copilot.prExtensionInstalled', true);
-							vscode.window.showInformationMessage(vscode.l10n.t('GitHub Pull Request extension installed successfully.'));
-						} else {
-							vscode.window.showWarningMessage(vscode.l10n.t('GitHub Pull Request extension is taking longer than expected to install.'));
-						}
-					} catch (error) {
-						vscode.window.showErrorMessage(vscode.l10n.t('Failed to install GitHub Pull Request extension: {0}', error instanceof Error ? error.message : String(error)));
-					}
+				vscode.commands.registerCommand('github.copilot.cloud.sessions.proxy.checkoutFromDescription', async (path: string | undefined) => {
+					await this.installPullRequestExtension();
+					await vscode.commands.executeCommand('pr.checkoutFromDescription', { path });
+				})
+			);
+			this.copilotCloudRegistrations.add(
+				vscode.commands.registerCommand('github.copilot.cloud.sessions.proxy.applyChangesFromDescription', async (path: string | undefined) => {
+					await this.installPullRequestExtension();
+					await vscode.commands.executeCommand('pr.applyChangesFromDescription', { path });
 				})
 			);
 
 			return copilotSessionsProvider;
 		} else if (!enabled && this.copilotCloudRegistrations) {
-			// Unregister the Copilot Cloud chat participant
 			this.copilotCloudRegistrations.dispose();
 			this.copilotCloudRegistrations = undefined;
 		}
+	}
+
+	private isPullRequestExtensionInstalled(): boolean {
+		const extension = vscode.extensions.getExtension(GHPR_EXTENSION_ID);
+		return extension !== undefined;
+	}
+
+	private async installPullRequestExtension() {
+		if (this.isPullRequestExtensionInstalled()) {
+			return;
+		}
+		const isInsiders = this.envService.getEditorInfo().version.includes('insider');
+		const installOptions = { enable: true, installPreReleaseVersion: isInsiders };
+		await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID, installOptions);
+		const maxWaitTime = 10_000; // 10 seconds
+		const pollInterval = 100; // 100ms
+		let elapsed = 0;
+		while (elapsed < maxWaitTime) {
+			if (this.isPullRequestExtensionInstalled()) {
+				vscode.window.showInformationMessage(vscode.l10n.t('GitHub Pull Request extension installed successfully.'));
+				break;
+			}
+			await new Promise(resolve => setTimeout(resolve, pollInterval));
+			elapsed += pollInterval;
+		}
+		if (!this.isPullRequestExtensionInstalled()) {
+			throw new Error('Extension installation timed out.');
+		}
+		await vscode.commands.executeCommand('setContext', prExtensionInstalledContextKey, true);
 	}
 }
