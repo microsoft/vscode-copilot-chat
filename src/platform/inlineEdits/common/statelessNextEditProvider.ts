@@ -23,6 +23,7 @@ import { DebugRecorderBookmark } from './debugRecorderBookmark';
 import { InlineEditRequestLogContext } from './inlineEditLogContext';
 import { stringifyChatMessages } from './utils/stringifyChatMessages';
 import { IXtabHistoryEntry } from './workspaceEditTracker/nesXtabHistoryTracker';
+import { Position } from '../../../util/vs/editor/common/core/position';
 
 export const enum ShowNextEditPreference {
 	Always = 'always',
@@ -190,7 +191,8 @@ export namespace NoNextEditReason {
 		public readonly kind = 'noSuggestions';
 		constructor(
 			public readonly documentBeforeEdits: StringText,
-			public readonly window: OffsetRange | undefined
+			public readonly window: OffsetRange | undefined,
+			public readonly nextCursorPosition?: Position | undefined,
 		) {
 		}
 	}

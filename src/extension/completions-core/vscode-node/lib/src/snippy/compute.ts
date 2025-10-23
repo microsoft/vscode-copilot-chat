@@ -7,7 +7,7 @@ const SnippyLexemeRegex = new RegExp('[_\\p{L}\\p{Nd}]+|====+|----+|####+|////+|
 // This should be kept in sync with snippy at /pkg/fingerprint/settings.go#L108
 export const MinTokenLength = 65;
 
-function lexemeLength(text: string) {
+export function lexemeLength(text: string) {
 	let i = 0;
 	let m: RegExpExecArray | null;
 	SnippyLexemeRegex.lastIndex = 0;

@@ -375,6 +375,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			insertText: result.edit.newText,
 			showRange,
 			displayLocation,
+			command: result.action,
 		};
 	}
 

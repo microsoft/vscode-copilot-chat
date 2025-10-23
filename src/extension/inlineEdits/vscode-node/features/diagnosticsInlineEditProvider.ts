@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Command } from 'vscode';
 import * as vscode from 'vscode';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
@@ -32,6 +33,7 @@ export class DiagnosticsNextEditResult implements INextEditResult {
 			displayLocation?: INextEditDisplayLocation;
 			item: DiagnosticCompletionItem;
 			showRangePreference?: ShowNextEditPreference;
+			action?: Command;
 		} | undefined,
 	) { }
 }
