@@ -48,6 +48,17 @@ export function formatUriForFileWidget(uriOrLocation: URI | Location): string {
 	// Empty link text -> rendered as file widget
 	return `[](${uri.toString()}${rangePart})`;
 }
+
+/**
+ * Converts a user input glob or file path into a VS Code glob pattern or RelativePattern.
+ *
+ * @param query The user input glob or file path.
+ * @param workspaceService The workspace service used to resolve relative paths.
+ * @param modelFamily The language model family (e.g., 'gpt-4.1'). If set to 'gpt-4.1', a workaround is applied:
+ *   GPT-4.1 struggles to append '/**' to patterns, so this function adds an additional pattern with '/**' appended.
+ *   Other models do not require this workaround.
+ * @returns An array of glob patterns suitable for use in file matching.
+ */
 export function inputGlobToPattern(query: string, workspaceService: IWorkspaceService, modelFamily: string | undefined): vscode.GlobPattern[] {
 	let pattern: vscode.GlobPattern = query;
 	if (isAbsolute(query)) {
