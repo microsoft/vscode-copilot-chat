@@ -861,24 +861,24 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				this.tracer.trace(`Predicted next cursor line error: ${nextCursorLineR.err.message}`);
 				telemetryBuilder.setNextCursorLineError(nextCursorLineR.err.message);
 			} else {
-				const nextCursorLine = nextCursorLineR.val;
+				const nextCursorLineZeroBased = nextCursorLineR.val;
 
-				const lineDistanceFromCursorLine = nextCursorLine - promptPieces.currentDocument.cursorLineOffset;
+				const lineDistanceFromCursorLine = nextCursorLineZeroBased - promptPieces.currentDocument.cursorLineOffset;
 				telemetryBuilder.setNextCursorLineDistance(lineDistanceFromCursorLine);
 
-				this.tracer.trace(`Predicted next cursor line: ${nextCursorLine}`);
+				this.tracer.trace(`Predicted next cursor line: ${nextCursorLineZeroBased}`);
 
-				if (nextCursorLine >= promptPieces.currentDocument.lines.length) { // >= because the line index is zero-based
+				if (nextCursorLineZeroBased >= promptPieces.currentDocument.lines.length) { // >= because the line index is zero-based
 					this.tracer.trace(`Predicted next cursor line error: exceedsDocumentLines`);
 					telemetryBuilder.setNextCursorLineError('exceedsDocumentLines');
-				} else if (promptPieces.editWindowLinesRange.contains(nextCursorLine)) {
+				} else if (promptPieces.editWindowLinesRange.contains(nextCursorLineZeroBased)) {
 					this.tracer.trace(`Predicted next cursor line error: withinEditWindow`);
 					telemetryBuilder.setNextCursorLineError('withinEditWindow');
 				} else {
-					const nextCursorLineOneBased = nextCursorLine + 1;
+					const nextCursorLineOneBased = nextCursorLineZeroBased + 1;
 					switch (nextCursorLinePrediction) {
 						case NextCursorLinePrediction.Jump: {
-							const nextCursorLine = promptPieces.activeDoc.documentAfterEditsLines.at(nextCursorLineOneBased - 1 /* convert to zero-based */);
+							const nextCursorLine = promptPieces.activeDoc.documentAfterEditsLines.at(nextCursorLineZeroBased);
 							const nextCursorColumn = (nextCursorLine?.match(/^(\s+)/)?.at(0)?.length ?? 0) + 1;
 							const nextCursorPosition = new Position(nextCursorLineOneBased, nextCursorColumn);
 							pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow, nextCursorPosition)));
