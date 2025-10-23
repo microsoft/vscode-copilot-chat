@@ -85,10 +85,13 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 				// No cached workspaces, proceed to clone. @osortega, you can show something here if you want, the git extension will show a progress notification
 				folderToOpen = await gitAPI.clone(vscode.Uri.parse(url), { postCloneAction: 'none', ref: branch });
 			}
+			if (!folderToOpen) {
+				return;
+			}
 
 			// Reuse the window if there are no folders open
 			const forceReuseWindow = ((vscode.workspace.workspaceFile === undefined) && (vscode.workspace.workspaceFolders === undefined));
-			vscode.commands.executeCommand('vscode.openFolder', uri, { forceReuseWindow });
+			vscode.commands.executeCommand('vscode.openFolder', folderToOpen, { forceReuseWindow });
 			return;
 		}
 
