@@ -2,11 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ApproximateTokenizer, getTokenizer, TokenizerName } from '../tokenization';
 import * as assert from 'assert';
 import * as fs from 'fs';
 import { suite } from 'mocha';
 import { resolve } from 'path';
+import { ApproximateTokenizer, getTokenizer, TokenizerName } from '../tokenization';
 
 // Read the source files and normalize the line endings
 const source = fs.readFileSync(resolve(__dirname, 'testdata/example.py'), 'utf8').replace(/\r\n?/g, '\n');
@@ -96,7 +96,7 @@ suite('Tokenizer Test Suite - cl100k', function () {
 	});
 
 	test('emojis', function () {
-		const str = 'hello ðŸ‘‹ world ðŸŒ';
+		const str = 'hello 👋 world 🌍';
 		assert.deepStrictEqual(tokenizer.tokenize(str), [15339, 62904, 233, 1917, 11410, 234, 235]);
 		assert.strictEqual(tokenizer.detokenize(tokenizer.tokenize(str)), str);
 	});
@@ -119,9 +119,9 @@ suite('Tokenizer Test Suite - cl100k', function () {
 		}
 
 		// Test special characters
-		assert.deepStrictEqual(tokenizer.tokenize('\n\nðŸ‘‹'), [271, 9468, 239, 233]);
+		assert.deepStrictEqual(tokenizer.tokenize('\n\n👋'), [271, 9468, 239, 233]);
 		assert.deepStrictEqual(tokenizer.tokenize('\n\n '), [271, 220]);
-		assert.deepStrictEqual(tokenizer.tokenize('\n\n ðŸ‘‹'), [271, 62904, 233]);
+		assert.deepStrictEqual(tokenizer.tokenize('\n\n 👋'), [271, 62904, 233]);
 		assert.deepStrictEqual(tokenizer.tokenize('\n\n\t'), [271, 197]);
 		assert.deepStrictEqual(tokenizer.tokenize('\n\n\r'), [271, 201]);
 
@@ -296,7 +296,7 @@ suite('Tokenizer Test Suite - o200k', function () {
 	});
 
 	test('emojis', function () {
-		const str = 'hello ðŸ‘‹ world ðŸŒ';
+		const str = 'hello 👋 world 🌍';
 		assert.deepStrictEqual(tokenizer.tokenize(str), [24912, 61138, 233, 2375, 130321, 235]);
 		assert.strictEqual(tokenizer.detokenize(tokenizer.tokenize(str)), str);
 	});
@@ -319,9 +319,9 @@ suite('Tokenizer Test Suite - o200k', function () {
 		}
 
 		// Test special characters
-		assert.deepStrictEqual(tokenizer.tokenize('\n\nðŸ‘‹'), [279, 28823, 233]);
+		assert.deepStrictEqual(tokenizer.tokenize('\n\n👋'), [279, 28823, 233]);
 		assert.deepStrictEqual(tokenizer.tokenize('\n\n '), [279, 220]);
-		assert.deepStrictEqual(tokenizer.tokenize('\n\n ðŸ‘‹'), [279, 61138, 233]);
+		assert.deepStrictEqual(tokenizer.tokenize('\n\n 👋'), [279, 61138, 233]);
 		assert.deepStrictEqual(tokenizer.tokenize('\n\n\t'), [279, 197]);
 		assert.deepStrictEqual(tokenizer.tokenize('\n\n\r'), [279, 201]);
 

@@ -56,7 +56,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
-		@IAutomodeService private readonly _automodeService: IAutomodeService
+		@IAutomodeService private readonly _automodeService: IAutomodeService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
 	) {
 		super();
 
@@ -104,13 +105,20 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		const models: vscode.LanguageModelChatInformation[] = [];
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
-
-		let defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
 		chatEndpoints.push(autoEndpoint);
-		// No Auth users always get Auto as the default model
+		let defaultChatEndpoint: IChatEndpoint | undefined;
+		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
 		if (this._authenticationService.copilotToken?.isNoAuthUser) {
+			// No Auth users always get Auto as the default model
 			defaultChatEndpoint = autoEndpoint;
+		} else if (defaultExpModel) {
+			// Find exp default
+			defaultChatEndpoint = chatEndpoints.find(e => e.model === defaultExpModel);
+		}
+		if (!defaultChatEndpoint) {
+			// Find a default set by CAPI
+			defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
 		}
 		const seenFamilies = new Set<string>();
 
