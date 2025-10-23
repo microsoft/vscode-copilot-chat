@@ -14,6 +14,7 @@ import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliA
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { buildChatHistoryFromEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
+import { ImageStorage } from './copilotCLIImageSupport';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
 
@@ -195,6 +196,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 }
 
 export class CopilotCLIChatSessionParticipant {
+	private readonly imageStore: ImageStorage;
 	constructor(
 		private readonly sessionType: string,
 		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
@@ -202,18 +204,28 @@ export class CopilotCLIChatSessionParticipant {
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		private readonly cloudSessionProvider: CopilotChatSessionsProvider | undefined,
 		private readonly summarizer: ChatSummarizerProvider,
-		@IGitService private readonly gitService: IGitService
-	) { }
+		@IGitService private readonly gitService: IGitService,
+		@IVSCodeExtensionContext context: IVSCodeExtensionContext,
+	) {
+		this.imageStore = new ImageStorage(context);
+	}
 
 	createHandler(): ChatExtendedRequestHandler {
 		return this.handleRequest.bind(this);
 	}
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
+		const imageAttachmentPaths = await Promise.all(request.references.filter(ref => ref.value instanceof vscode.ChatReferenceBinaryData).map(ref => {
+			const binaryData = ref.value as vscode.ChatReferenceBinaryData;
+			return binaryData.data().then(buffer => {
+				return this.imageStore.storeImage(buffer, binaryData.mimeType).then(uri => uri.fsPath);
+			});
+		}));
+
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
 			if (chatSessionContext.isUntitled) {
-				const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, request, context, stream, undefined, token);
+				const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, request, context, stream, undefined, imageAttachmentPaths, token);
 				if (!copilotcliSessionId) {
 					stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
 					return {};
@@ -255,7 +267,7 @@ export class CopilotCLIChatSessionParticipant {
 			}
 
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.InProgress);
-			await this.copilotcliAgentManager.handleRequest(id, request, context, stream, getModelProvider(_sessionModel.get(id)?.id), token);
+			await this.copilotcliAgentManager.handleRequest(id, request, context, stream, getModelProvider(_sessionModel.get(id)?.id), imageAttachmentPaths, token);
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.Completed);
 			return {};
 		}
