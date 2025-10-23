@@ -148,8 +148,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			_sessionModel.set(copilotcliSessionId, preferredModel);
 		}
 
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, token);
-		const events = await existingSession?.sdkSession.getEvents();
+		const events = await this.sessionService.getEvents(copilotcliSessionId, token);
 		const history = buildChatHistoryFromEvents(events || []);
 
 		return {
@@ -275,9 +274,9 @@ export class CopilotCLIChatSessionParticipant {
 		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
-		const sdkSession = await this.sessionService.getOrCreateSDKSession(undefined, requestPrompt);
+		const session = await this.sessionService.getOrCreateSession(undefined, requestPrompt, undefined);
 
-		await vscode.window.showChatSession(this.sessionType, sdkSession.sessionId, { viewColumn: vscode.ViewColumn.Active });
+		await vscode.window.showChatSession(this.sessionType, session.sessionId, { viewColumn: vscode.ViewColumn.Active });
 		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 		return {};
 	}
@@ -288,28 +287,9 @@ export class CopilotCLIChatSessionParticipant {
 		prInfo: { uri: string; title: string; description: string; author: string; linkTag: string },
 		token: vscode.CancellationToken
 	): Promise<void> {
-		const session = await this.sessionService.getSession(sessionId, token);
-		if (!session) {
-			return;
-		}
-
-		// Add user message event
-		session.sdkSession.addEvent({
-			type: 'user.message',
-			data: {
-				content: userPrompt
-			}
-		});
-
-		// Add assistant message event with embedded PR metadata
 		const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
-		session.sdkSession.addEvent({
-			type: 'assistant.message',
-			data: {
-				messageId: `msg_${Date.now()}`,
-				content: assistantMessage
-			}
-		});
+
+		await this.sessionService.emitUserAndAssistantMessage(sessionId, userPrompt, assistantMessage, token);
 	}
 }
 
