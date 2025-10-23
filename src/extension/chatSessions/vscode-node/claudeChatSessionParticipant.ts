@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
 import { localize } from '../../../util/vs/nls';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
-import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
 export class ClaudeChatSessionParticipant {
 	constructor(
@@ -37,8 +37,7 @@ export class ClaudeChatSessionParticipant {
 				if (claudeSessionId) {
 					// Tell UI to replace with claude-backed session
 					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
-						id: claudeSessionId,
-						resource: undefined,
+						resource: ClaudeSessionUri.forSessionId(claudeSessionId),
 						label: request.prompt ?? 'Claude Code'
 					});
 				}
@@ -46,7 +45,7 @@ export class ClaudeChatSessionParticipant {
 			}
 
 			/* Existing session */
-			const { id } = chatSessionContext.chatSessionItem;
+			const id = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
 			await this.claudeAgentManager.handleRequest(id, request, context, stream, token);
 			return {};
 		}

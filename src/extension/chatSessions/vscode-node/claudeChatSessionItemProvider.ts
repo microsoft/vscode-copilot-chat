@@ -39,8 +39,7 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.claudeCodeSessionService.getAllSessions(token);
 		const diskSessions = sessions.map(session => ({
-			id: session.id,
-			resource: undefined,
+			resource: ClaudeSessionUri.forSessionId(session.id),
 			label: session.label,
 			tooltip: `Claude Code session: ${session.label}`,
 			timing: {
@@ -50,5 +49,19 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 		} satisfies vscode.ChatSessionItem));
 
 		return diskSessions;
+	}
+}
+
+export namespace ClaudeSessionUri {
+	export function forSessionId(sessionId: string): vscode.Uri {
+		return vscode.Uri.from({ scheme: ClaudeChatSessionItemProvider.claudeSessionType, path: '/' + sessionId });
+	}
+
+	export function getId(resource: vscode.Uri): string {
+		if (resource.scheme !== ClaudeChatSessionItemProvider.claudeSessionType) {
+			throw new Error('Invalid resource scheme for Claude Code session');
+		}
+
+		return resource.path.slice(1);
 	}
 }
