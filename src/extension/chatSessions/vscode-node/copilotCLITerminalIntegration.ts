@@ -185,7 +185,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, 500))); // Wait a bit to ensure the terminal is ready
 		}
 
-		if (shellIntegrationAvailable && terminal.shellIntegration) {
+		if (terminal.shellIntegration) {
 			terminal.shellIntegration.executeCommand(command);
 		} else {
 			terminal.sendText(command);
