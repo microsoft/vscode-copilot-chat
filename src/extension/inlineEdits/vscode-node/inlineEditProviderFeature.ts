@@ -25,6 +25,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IExtensionContribution } from '../../common/contributions';
 import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
+import { jumpToPositionCommandId } from '../common/jumpToCursorPosition';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
@@ -35,7 +36,6 @@ import { InlineEditLogger } from './parts/inlineEditLogger';
 import { LastEditTimeTracker } from './parts/lastEditTimeTracker';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 import { makeSettable } from './utils/observablesUtils';
-import { jumpToPositionCommandId } from '../common/jumpToCursorPosition';
 
 const TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE = false; // otherwise, eg, NES would trigger just when going through search results
 const useEnhancedNotebookNESContextKey = 'github.copilot.chat.enableEnhancedNotebookNES';

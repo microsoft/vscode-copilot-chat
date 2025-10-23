@@ -205,6 +205,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			getOrDeduceSelectionFromLastEdit(request.getActiveDocument()),
 			pushEdit,
 			delaySession,
+			{ showLabel: false },
 			logContext,
 			cancellationToken,
 			telemetryBuilder,
@@ -217,6 +218,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		selection: Range | null,
 		pushEdit: PushEdit,
 		delaySession: DelaySession,
+		opts: { showLabel: boolean },
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
@@ -346,6 +348,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptPieces,
 			prediction,
 			{
+				showLabel: opts.showLabel,
 				shouldRemoveCursorTagFromResponse,
 				promptingStrategy: promptOptions.promptingStrategy,
 				retryState,
@@ -548,6 +551,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		promptPieces: PromptPieces,
 		prediction: Prediction | undefined,
 		opts: {
+			showLabel: boolean;
 			promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined;
 			shouldRemoveCursorTagFromResponse: boolean;
 			retryState: RetryState;
@@ -809,7 +813,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 							await this.enforceArtificialDelay(delaySession, telemetryBuilder);
 						}
 
-						pushEdit(Result.ok({ edit: singleLineEdit, window: editWindow }));
+						pushEdit(Result.ok({ edit: singleLineEdit, window: editWindow, showLabel: opts.showLabel }));
 						i++;
 					}
 				}
@@ -884,8 +888,18 @@ export class XtabProvider implements IStatelessNextEditProvider {
 							pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow, nextCursorPosition)));
 							return;
 						}
-						case NextCursorLinePrediction.OnlyWithEdit: {
-							this.doGetNextEditWithSelection(request, new Range(nextCursorLineOneBased, nextCursorColumn, nextCursorLineOneBased, nextCursorColumn), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
+						case NextCursorLinePrediction.OnlyWithEdit:
+						case NextCursorLinePrediction.LabelOnlyWithEdit: {
+							this.doGetNextEditWithSelection(
+								request,
+								new Range(nextCursorLineOneBased, nextCursorColumn, nextCursorLineOneBased, nextCursorColumn),
+								pushEdit,
+								delaySession,
+								{ showLabel: nextCursorLinePrediction === NextCursorLinePrediction.LabelOnlyWithEdit },
+								logContext,
+								cancellationToken,
+								telemetryBuilder, RetryState.Retrying,
+							);
 							return;
 						}
 						default: {
