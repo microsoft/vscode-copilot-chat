@@ -159,14 +159,33 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 	}
 
 	private async sendCommandToTerminal(terminal: Terminal, command: string, waitForPythonActivation: boolean) {
+		// Wait for shell integration to be available
+		const shellIntegrationTimeout = 3000;
+		let shellIntegrationAvailable = terminal.shellIntegration ? true : false;
+		const integrationPromise = shellIntegrationAvailable ? Promise.resolve() : new Promise<void>((resolve) => {
+			const disposable = this._register(this.terminalService.onDidChangeTerminalShellIntegration(e => {
+				if (e.terminal === terminal && e.shellIntegration) {
+					shellIntegrationAvailable = true;
+					disposable.dispose();
+					resolve();
+				}
+			}));
+
+			this._register(disposableTimeout(() => {
+				disposable.dispose();
+				resolve();
+			}, shellIntegrationTimeout));
+		});
+
+		await integrationPromise;
+
 		if (waitForPythonActivation) {
 			// Wait for python extension to send its initialization commands.
 			// Else if we send too early, the copilot command might not get executed properly.
-			// Wait a bit to ensure the terminal is ready to accept new commands (else we could end up with `source .venv/bin/activatecopilot`)
-			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, 500)));
+			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, 500))); // Wait a bit to ensure the terminal is ready
 		}
 
-		if (terminal.shellIntegration) {
+		if (shellIntegrationAvailable && terminal.shellIntegration) {
 			terminal.shellIntegration.executeCommand(command);
 		} else {
 			terminal.sendText(command);
