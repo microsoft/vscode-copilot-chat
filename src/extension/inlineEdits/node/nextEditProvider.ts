@@ -31,7 +31,6 @@ import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
-import { Position } from '../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency } from '../common/editRebase';
@@ -265,18 +264,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					range: currentCursorPosition,
 				};
 
-				const cursorPosition = error.nextCursorPosition;
-
-				// const lineAtCursor = documentAtInvocationTime.getLineAt(cursorPosition.line);
-				// const editRange = transformer.getOffsetRange(new Range(cursorPosition.line, 1, cursorPosition.line, lineAtCursor.length + 1));
-
-				const edit: StringReplacement = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
-
 				const commandJumpToEditRange: vscode.Command = {
 					command: jumpToPositionCommandId,
 					title: "Jump to next edit",
-					arguments: [new Position(cursorPosition.lineNumber - 1, cursorPosition.column - 1)]
+					arguments: [error.nextCursorPosition]
 				};
+
+				const edit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
 
 				return new NextEditResult(logContext.requestId, req, { edit, displayLocation, documentBeforeEdits: documentAtInvocationTime, action: commandJumpToEditRange });
 			}

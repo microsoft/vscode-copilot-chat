@@ -181,8 +181,9 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 				if (!currentEditor) {
 					return;
 				}
-				const range = new vscode.Range(position.lineNumber, position.column, position.lineNumber, position.column);
-				currentEditor.selection = new vscode.Selection(position.lineNumber, position.column, position.lineNumber, position.column);
+				// vscode API uses 0-based line and column numbers
+				const range = new vscode.Range(position.lineNumber - 1, position.column - 1, position.lineNumber - 1, position.column - 1);
+				currentEditor.selection = new vscode.Selection(range.start, range.end);
 				currentEditor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 			}));
 
