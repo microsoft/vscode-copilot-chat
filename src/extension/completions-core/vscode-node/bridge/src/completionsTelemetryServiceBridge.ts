@@ -27,7 +27,7 @@ export class CompletionsTelemetryServiceBridge {
 
 	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void {
 		this.telemetryService.sendGHTelemetryErrorEvent(wrapEventNameForPrefixRemoval(`copilot/${eventName}`), properties, measurements);
-		this.getSpyReporters(store ?? TelemetryStore.Enhanced)?.sendTelemetryEvent(eventName, properties as TelemetryProperties, measurements as TelemetryMeasurements);
+		this.getSpyReporters(store ?? TelemetryStore.Enhanced)?.sendTelemetryErrorEvent(eventName, properties as TelemetryProperties, measurements as TelemetryMeasurements);
 	}
 
 	sendGHTelemetryException(maybeError: unknown, origin: string, store?: TelemetryStore): void {
