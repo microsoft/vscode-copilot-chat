@@ -22,12 +22,9 @@ import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation as VsCodeChatLocation } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
-import { IInstallableMcpServer, RegistryType } from './mapping/mcpManagement';
-import { IMcpServerVariable, IMcpStdioServerConfiguration, McpServerType } from './mapping/mcpPlatformTypes';
 import { McpToolCallingLoop } from './mcpToolCallingLoop';
 import { McpPickRef } from './mcpToolCallingTools';
-import { NuGetMcpSetup } from './nuget';
-import { mapServerJsonToMcpServer } from './util';
+import { IInstallableMcpServer, IMcpServerVariable, IMcpStdioServerConfiguration, NuGetMcpSetup } from './nuget';
 
 export type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
 
@@ -49,7 +46,7 @@ export interface IPendingSetupArgs {
 	name: string;
 	version?: string;
 	readme?: string;
-	getServerManifest?(installConsent: Promise<void>): Promise<any>;
+	getMcpServer?(installConsent: Promise<void>): Promise<Omit<IInstallableMcpServer, 'name'> | undefined>;
 }
 
 export const enum ValidatePackageErrorType {
@@ -106,21 +103,6 @@ interface DockerHubResponse {
 	namespace?: string;
 	description?: string;
 	full_description?: string;
-}
-
-export function getPackageTypeEnum(type: PackageType): RegistryType | undefined {
-	switch (type) {
-		case 'npm':
-			return RegistryType.NODE;
-		case 'pip':
-			return RegistryType.PYTHON;
-		case 'nuget':
-			return RegistryType.NUGET;
-		case 'docker':
-			return RegistryType.DOCKER;
-		default:
-			return undefined;
-	}
 }
 
 export class McpSetupCommands extends Disposable {
@@ -240,29 +222,13 @@ export class McpSetupCommands extends Disposable {
 		const done = (async () => {
 
 			// if the package has a server manifest, we can fetch it and use it instead of a tool loop
-			if (pendingArgs.getServerManifest) {
-				let manifest: unknown;
-				try {
-					manifest = await pendingArgs.getServerManifest(canPrompt.p);
-				} catch (error) {
-					this.logService.warn(`Unable to fetch server manifest for ${validateArgs.type} package ${pendingArgs.name}@${pendingArgs.version}. Configuration will be generated from the package README.
-Error: ${error}`);
-				}
-
+			if (pendingArgs.getMcpServer) {
 				let mcpServer: Omit<IInstallableMcpServer, 'name'> | undefined;
 				try {
-					const registryType = getPackageTypeEnum(validateArgs.type);
-					if (registryType) {
-						mcpServer = mapServerJsonToMcpServer(manifest, registryType);
-					}
+					mcpServer = await pendingArgs.getMcpServer(canPrompt.p);
 				} catch (error) {
-					this.logService.warn(`Unable to map server.json for ${validateArgs.type} package ${pendingArgs.name}@${pendingArgs.version}. Configuration will be generated from the package README.
+					this.logService.warn(`Unable to fetch MCP server configuration for ${validateArgs.type} package ${pendingArgs.name}@${pendingArgs.version}. Configuration will be generated from the package README.
 Error: ${error}`);
-				}
-
-				if (mcpServer?.config.type !== McpServerType.LOCAL) {
-					this.logService.warn(`Mapped MCP server configuration is not of type LOCAL for ${validateArgs.type} package ${pendingArgs.name}@${pendingArgs.version}. Configuration will be generated from the package README.`);
-					mcpServer = undefined;
 				}
 
 				if (mcpServer) {

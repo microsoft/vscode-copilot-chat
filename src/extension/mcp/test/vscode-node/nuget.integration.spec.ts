@@ -9,7 +9,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
 import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../platform/test/node/services';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { NuGetMcpSetup } from '../../vscode-node/nuget';
+import { IMcpStdioServerConfiguration, NuGetMcpSetup } from '../../vscode-node/nuget';
 import { CommandExecutor, ICommandExecutor } from '../../vscode-node/util';
 import { FixtureFetcherService } from './util';
 
@@ -42,13 +42,14 @@ describe.runIf(RUN_DOTNET_CLI_TESTS)('get nuget MCP server info using dotnet CLI
 		const result = await nuget.getNuGetPackageMetadata('Knapcode.SampleMcpServer');
 		expect(result.state).toBe('ok');
 		if (result.state === 'ok') {
-			expect(result.getServerManifest).toBeDefined();
-			if (result.getServerManifest) {
-				const serverManifest = await result.getServerManifest(Promise.resolve());
-				expect(serverManifest).toBeDefined();
-				expect(serverManifest.packages[0].name).toBe('Knapcode.SampleMcpServer');
-				expect(serverManifest.packages[0].version).toBe('0.6.0-beta');
-				expect(serverManifest.packages[0].package_arguments.length).toBe(2);
+			expect(result.getMcpServer).toBeDefined();
+			if (result.getMcpServer) {
+				const mcpServer = await result.getMcpServer(Promise.resolve());
+				expect(mcpServer).toBeDefined();
+				const config = mcpServer!.config as Omit<IMcpStdioServerConfiguration, 'type'>;
+				expect(config.command).toBe('dnx');
+				expect(config.env).toEqual({ 'WEATHER_CHOICES': '${input:weather_choices}' });
+				expect(config.args).toEqual(['Knapcode.SampleMcpServer@0.6.0-beta', '--yes', '--', 'mcp', 'start']);
 			} else {
 				expect.fail();
 			}

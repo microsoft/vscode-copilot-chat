@@ -5,31 +5,6 @@
 
 import * as cp from 'child_process';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { McpServerSchemaVersion_v0, McpServerSchemaVersion_v2025_07_09 } from './mapping/mcpGalleryService';
-import { IInstallableMcpServer, RegistryType } from './mapping/mcpManagement';
-import { McpMappingUtility } from './mapping/mcpManagementService';
-
-export function mapServerJsonToMcpServer(input: unknown, registryType: RegistryType): Omit<IInstallableMcpServer, 'name'> | undefined {
-	let data: any = input;
-
-	if (!data || typeof data !== 'object' || typeof data.$schema !== 'string') {
-		return undefined;
-	}
-
-	// starting from 2025-09-29, the server.json is wrapped in a "server" property
-	if (data.$schema !== McpServerSchemaVersion_v2025_07_09.SCHEMA) {
-		data = { server: data };
-	}
-
-	const raw = McpServerSchemaVersion_v0.SERIALIZER.toRawGalleryMcpServer(data);
-	if (!raw) {
-		return undefined;
-	}
-
-	const utility = new McpMappingUtility();
-	const result = utility.getMcpServerConfigurationFromManifest(raw, registryType);
-	return result.mcpServerConfiguration;
-}
 
 export interface ICommandExecutor {
 	executeWithTimeout(
