@@ -575,4 +575,10 @@ export default tseslint.config(
 			]
 		}
 	},
+	{
+		files: ['./src/lib/node/chatLibMain.ts'],
+		rules: {
+			'import/no-restricted-paths': 'off'
+		}
+	},
 );

@@ -13,16 +13,16 @@
 		],
 		"paths": {
 			"#lib/*": [
-				"./src/_internal/extension/completions-core/lib/src/*"
+				"./src/_internal/extension/completions-core/vscode-node/lib/src/*"
 			],
 			"#prompt/*": [
-				"./src/_internal/extension/completions-core/prompt/src/*"
+				"./src/_internal/extension/completions-core/vscode-node/prompt/src/*"
 			],
 			"#bridge/*": [
-				"./src/_internal/extension/completions-core/bridge/src/*"
+				"./src/_internal/extension/completions-core/vscode-node/bridge/src/*"
 			],
 			"#types": [
-				"./src/_internal/extension/completions-core/types/src"
+				"./src/_internal/extension/completions-core/vscode-node/types/src"
 			]
 		}
 	},
