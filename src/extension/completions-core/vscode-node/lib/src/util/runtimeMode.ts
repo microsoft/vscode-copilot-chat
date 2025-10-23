@@ -32,6 +32,10 @@ export function isDebugEnabled(ctx: Context): boolean {
 	return ctx.get(RuntimeMode).flags.debug;
 }
 
+export function isVerboseLoggingEnabled(ctx: Context): boolean {
+	return ctx.get(RuntimeMode).flags.verboseLogging;
+}
+
 function determineDebugFlag(argv: string[], env: NodeJS.ProcessEnv): boolean {
 	return argv.includes('--debug') || determineEnvFlagEnabled(env, 'DEBUG');
 }
