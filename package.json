@@ -3496,7 +3496,7 @@
 				},
 				{
 					"command": "github.copilot.cloud.sessions.refresh",
-					"when": "view == workbench.view.chat.sessions.copilot-swe-agent",
+					"when": "view == workbench.view.chat.sessions.copilot-cloud-agent",
 					"group": "navigation@1"
 				}
 			],
@@ -3781,7 +3781,7 @@
 				},
 				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
-					"when": "chatSessionType == copilot-swe-agent",
+					"when": "chatSessionType == copilot-cloud-agent",
 					"group": "context"
 				}
 			]
