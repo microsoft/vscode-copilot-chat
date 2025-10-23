@@ -102,9 +102,14 @@ export interface IEndpointBody {
 	store?: boolean;
 }
 
+export interface IEndpointFetchOptions {
+	suppressIntegrationId?: boolean;
+}
+
 export interface IEndpoint {
 	readonly urlOrRequestMetadata: string | RequestMetadata;
 	getExtraHeaders?(): Record<string, string>;
+	getEndpointFetchOptions?(): IEndpointFetchOptions;
 	interceptBody?(body: IEndpointBody | undefined): void;
 	acquireTokenizer(): ITokenizer;
 	readonly modelMaxPromptTokens: number;
@@ -296,12 +301,14 @@ function networkRequest(
 		endpoint.interceptBody(body);
 	}
 
+	const endpointFetchOptions = endpoint.getEndpointFetchOptions?.();
 	const request: FetchOptions = {
 		method: requestType,
 		headers: headers,
 		json: body,
 		timeout: requestTimeoutMs,
 		useFetcher,
+		suppressIntegrationId: endpointFetchOptions?.suppressIntegrationId
 	};
 
 	if (cancelToken) {

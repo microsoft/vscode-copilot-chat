@@ -15,7 +15,7 @@ import { responseApiInputToRawMessagesForLogging } from '../../../platform/endpo
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams, getRequestId } from '../../../platform/networking/common/fetch';
 import { Response } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IEndpointFetchOptions, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason } from '../../../platform/networking/common/openai';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
@@ -258,6 +258,12 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 			headers['User-Agent'] = this.getUserAgent(this.requestHeaders['user-agent']);
 		}
 		return headers;
+	}
+
+	getEndpointFetchOptions(): IEndpointFetchOptions {
+		return {
+			suppressIntegrationId: true
+		};
 	}
 
 	private getUserAgent(incomingUserAgent: string): string {
