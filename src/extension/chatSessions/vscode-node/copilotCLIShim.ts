@@ -133,6 +133,15 @@ async function validateVersion(version: string) {
 		warn(`Try manually reinstalling with: npm install -g ${PACKAGE_NAME} (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)`);
 		process.exit(1);
 	}
-	const { status } = spawnSync('copilot', process.argv.slice(2), { stdio: 'inherit', env });
+	const args = process.argv.slice(2);
+
+	// In vscode we use `--clear` to indicate that the terminal should be cleared before running the command
+	// Used when launching terminal in editor view (for best possible UX, so it doesn't look like a terminal)
+	if (args[0] === '--clear') {
+		console.clear();
+		args.shift();
+	}
+
+	const { status } = spawnSync('copilot', args, { stdio: 'inherit', env });
 	process.exit(status);
 })();

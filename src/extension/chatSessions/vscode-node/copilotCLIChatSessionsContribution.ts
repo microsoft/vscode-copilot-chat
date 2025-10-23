@@ -227,7 +227,7 @@ export class CopilotCLIChatSessionParticipant {
 
 			const { id } = chatSessionContext.chatSessionItem;
 
-			if (request.prompt.startsWith('/push')) {
+			if (request.prompt.startsWith('/delegate')) {
 				if (!this.cloudSessionProvider) {
 					stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
 					return {};
@@ -235,16 +235,14 @@ export class CopilotCLIChatSessionParticipant {
 
 				// Check for uncommitted changes
 				const currentRepository = this.gitService.activeRepository.get();
-				const hasChanges =
-					((currentRepository?.changes?.workingTree && currentRepository.changes.workingTree.length > 0) ||
-						(currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0));
+				const hasChanges = (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0);
 
 				if (hasChanges) {
 					stream.warning(localize('copilotcli.uncommittedChanges', "You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them."));
 				}
 
 				const history = await this.summarizer.provideChatSummary(context, token);
-				const prompt = request.prompt.substring('/push'.length).trim();
+				const prompt = request.prompt.substring('/delegate'.length).trim();
 				const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
 					prompt,
 					history
@@ -262,8 +260,25 @@ export class CopilotCLIChatSessionParticipant {
 			return {};
 		}
 
-		stream.markdown(localize('copilotcli.viaAtCopilotcli', "Start a new CopilotCLI session"));
-		stream.button({ command: `workbench.action.chat.openNewSessionEditor.${this.sessionType}`, title: localize('copilotcli.startNewSession', "Start Session") });
+		/* Invoked from a 'normal' chat or 'cloud button' without CLI session context */
+		// Handle confirmation data
+		return await this.handlePushConfirmationData(request, context, stream, token);
+	}
+
+	private async handlePushConfirmationData(
+		request: vscode.ChatRequest,
+		context: vscode.ChatContext,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken
+	): Promise<vscode.ChatResult | void> {
+		const prompt = request.prompt;
+		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
+
+		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
+		const sdkSession = await this.sessionService.getOrCreateSDKSession(undefined, requestPrompt);
+
+		await vscode.window.showChatSession(this.sessionType, sdkSession.sessionId, { viewColumn: vscode.ViewColumn.Active });
+		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 		return {};
 	}
 

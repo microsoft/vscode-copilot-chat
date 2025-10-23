@@ -5,6 +5,7 @@
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
@@ -13,7 +14,7 @@ import { Tag } from '../base/tag';
 import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
-import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
+import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
 
 class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
@@ -103,7 +104,6 @@ class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptPro
 					`}`
 				].join('\n')}
 			</Tag>}
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
@@ -235,7 +235,6 @@ class GrokCodeFastAgentPromptV2 extends PromptElement<DefaultAgentPromptProps> {
 					NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} instead.<br />
 					For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
 				</Tag>}
-				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 				{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			</Tag>
 			<NotebookInstructions {...this.props} />
@@ -270,15 +269,15 @@ class GrokCodeFastAgentPromptV2 extends PromptElement<DefaultAgentPromptProps> {
 	}
 }
 
-class GrokCodeFastPromptResolver implements IAgentPrompt {
-	static readonly models = ['grok-code'];
-
+class XAIPromptResolver implements IAgentPrompt {
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) { }
 
-	resolvePrompt(): PromptConstructor | undefined {
+	static readonly familyPrefixes = ['grok-code'];
+
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
 		const promptType = this.configurationService.getExperimentBasedConfig(
 			ConfigKey.GrokCodeAlternatePrompt,
 			this.experimentationService
@@ -294,4 +293,4 @@ class GrokCodeFastPromptResolver implements IAgentPrompt {
 }
 
 
-PromptRegistry.registerPrompt(GrokCodeFastPromptResolver);
+PromptRegistry.registerPrompt(XAIPromptResolver);
