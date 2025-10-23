@@ -12,9 +12,29 @@ const HIDDEN_MODEL_A_HASHES = [
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95'
 ];
 
+const HIDDEN_MODEL_B_HASHES = [
+	'e0f69b60bf6a6e138121a69884fa51b89aae7315f37d5f41bd0500b2d9346048'
+];
+
 export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	const h = await getCachedSha256Hash(model.family);
 	return HIDDEN_MODEL_A_HASHES.includes(h);
+}
+
+export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
+	// Get the model identifier: IChatEndpoint.model or LanguageModelChat.id
+	const modelId = 'model' in model && typeof model.model === 'string'
+		? model.model
+		: 'id' in model && typeof model.id === 'string'
+			? model.id
+			: undefined;
+
+	if (!modelId) {
+		return false;
+	}
+
+	const h = await getCachedSha256Hash(modelId);
+	return HIDDEN_MODEL_B_HASHES.includes(h);
 }
 
 /**
@@ -58,7 +78,7 @@ export async function modelSupportsReplaceString(model: LanguageModelChat | ICha
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export async function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || await isHiddenModelB(model);
 }
 
 /**
