@@ -143,15 +143,23 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				})
 			);
 			this.copilotCloudRegistrations.add(
-				vscode.commands.registerCommand('github.copilot.cloud.sessions.proxy.checkoutFromDescription', async (path: string | undefined) => {
+				vscode.commands.registerCommand('github.copilot.cloud.sessions.proxy.checkoutFromDescription', async (ctx: { path: string } | undefined) => {
 					await this.installPullRequestExtension();
-					await vscode.commands.executeCommand('pr.checkoutFromDescription', { path });
+					try {
+						await vscode.commands.executeCommand('pr.checkoutFromDescription', ctx?.path);
+					} catch (e) {
+						vscode.window.showErrorMessage((e as Error).message);
+					}
 				})
 			);
 			this.copilotCloudRegistrations.add(
-				vscode.commands.registerCommand('github.copilot.cloud.sessions.proxy.applyChangesFromDescription', async (path: string | undefined) => {
+				vscode.commands.registerCommand('github.copilot.cloud.sessions.proxy.applyChangesFromDescription', async (ctx: { path: string } | undefined) => {
 					await this.installPullRequestExtension();
-					await vscode.commands.executeCommand('pr.applyChangesFromDescription', { path });
+					try {
+						await vscode.commands.executeCommand('pr.applyChangesFromDescription', ctx?.path);
+					} catch (e) {
+						vscode.window.showErrorMessage((e as Error).message);
+					}
 				})
 			);
 
