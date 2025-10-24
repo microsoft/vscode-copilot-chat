@@ -4222,7 +4222,8 @@
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
-					"supportsToolAttachments": false
+					"supportsToolAttachments": false,
+					"supportsImageAttachments": true
 				},
 				"commands": [
 					{

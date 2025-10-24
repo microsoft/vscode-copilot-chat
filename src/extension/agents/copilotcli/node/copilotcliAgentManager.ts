@@ -47,13 +47,14 @@ export class CopilotCLIAgentManager extends Disposable {
 		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
 		modelId: ModelProvider | undefined,
+		imageAttachmentPaths: string[],
 		token: vscode.CancellationToken
 	): Promise<{ copilotcliSessionId: string | undefined }> {
 		const isNewSession = !copilotcliSessionId;
 		const sessionIdForLog = copilotcliSessionId ?? 'new';
 		this.logService.trace(`[CopilotCLIAgentManager] Handling request for sessionId=${sessionIdForLog}.`);
 
-		const { prompt, attachments } = await this.resolvePrompt(request);
+		const { prompt, attachments } = await this.resolvePrompt(request, imageAttachmentPaths);
 		// Check if we already have a session wrapper
 		let session = copilotcliSessionId ? this.sessionService.findSessionWrapper<CopilotCLISession>(copilotcliSessionId) : undefined;
 
@@ -74,7 +75,7 @@ export class CopilotCLIAgentManager extends Disposable {
 		return { copilotcliSessionId: session.sessionId };
 	}
 
-	private async resolvePrompt(request: vscode.ChatRequest): Promise<{ prompt: string; attachments: Attachment[] }> {
+	private async resolvePrompt(request: vscode.ChatRequest, imageAttachmentPaths: string[]): Promise<{ prompt: string; attachments: Attachment[] }> {
 		if (request.prompt.startsWith('/')) {
 			return { prompt: request.prompt, attachments: [] }; // likely a slash command, don't modify
 		}
@@ -150,6 +151,15 @@ export class CopilotCLIAgentManager extends Disposable {
 		}
 		if (diagnosticTexts.length > 0) {
 			reminderParts.push(`The user provided the following diagnostics:\n${diagnosticTexts.join('\n')}`);
+		}
+		if (imageAttachmentPaths.length > 0) {
+			const imageAttachmentsText = imageAttachmentPaths.map(p => `- ${p}`).join('\n');
+			reminderParts.push(`The user provided the following image attachments:\n${imageAttachmentsText}`);
+			attachments.push(...imageAttachmentPaths.map(p => ({
+				type: 'file',
+				displayName: path.basename(p),
+				path: p
+			})));
 		}
 
 		let prompt = request.prompt;
