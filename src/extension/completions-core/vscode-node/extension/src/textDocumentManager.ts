@@ -3,20 +3,22 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as vscode from 'vscode';
+import { window, workspace } from 'vscode';
 import { Context } from '../../lib/src/context';
 import { detectLanguage } from '../../lib/src/language/languageDetection';
 import { CopilotTextDocument, INotebookCell, INotebookDocument, ITextDocument } from '../../lib/src/textDocument';
 import { TextDocumentManager, WorkspaceFoldersChangeEvent } from '../../lib/src/textDocumentManager';
 import { transformEvent } from '../../lib/src/util/event';
 import { normalizeUri } from '../../lib/src/util/uri';
-import * as vscode from 'vscode';
-import { window, workspace } from 'vscode';
 
 // List of document URI schemes that avoid ghost text suggestions
 const ignoreUriSchemes = new Set([
 	'output', // vscode output pane (important: avoids infinite log loop)
 	'search-editor', // search results virtual document
 	'comment', // very little context available and suggestions are often bad
+	'git', // virtual file tracked by git
+	'chat-editing-snapshot-text-model', // VS Code Chat temporary editing snapshot
 ]);
 
 export function wrapDoc(_ctx: Context, doc: vscode.TextDocument): ITextDocument | undefined {

@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0-20251022",
+		"vscode": "^1.106.0-20251024",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -133,7 +133,7 @@
 		"taskExecutionTerminal",
 		"dataChannels",
 		"languageModelThinkingPart",
-		"chatSessionsProvider@2",
+		"chatSessionsProvider@3",
 		"devDeviceId",
 		"contribEditorContentMenu"
 	],
@@ -1701,6 +1701,36 @@
 				"view": "codex-placeholder",
 				"when": "true",
 				"contents": "%github.copilot.viewsWelcome.codexPlaceholder%"
+			},
+			{
+				"view": "copilot-agents-placeholder",
+				"when": "true",
+				"contents": "%github.copilot.viewsWelcome.agentsPlaceholder%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
+				"when": "workspaceFolderCount == 0",
+				"contents": "%github.copilot.viewsWelcome.noFolder.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
+				"when": "git.state == initialized && gitOpenRepositoryCount == 0 && workspaceFolderCount > 0 && git.parentRepositoryCount == 0",
+				"contents": "%github.copilot.viewsWelcome.noRepo.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
+				"when": "git.state == initialized && workspaceFolderCount > 0 && (git.parentRepositoryCount > 0 || gitOpenRepositoryCount > 0) && !github:hasGitHubRemotes",
+				"contents": "%github.copilot.viewsWelcome.noGitHub.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
+				"when": "github.copilot.chat.cloudSessionsEmpty",
+				"contents": "%github.copilot.viewsWelcome.cloudSessionsEmpty.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilotcli",
+				"when": "github.copilot.chat.cliSessionsEmpty",
+				"contents": "%github.copilot.viewsWelcome.cliSessionsEmpty.contents%"
 			}
 		],
 		"chatViewsWelcome": [
@@ -2212,6 +2242,10 @@
 				"command": "github.copilot.cloud.sessions.openInBrowser",
 				"title": "%github.copilot.command.openCopilotAgentSessionsInBrowser%",
 				"icon": "$(link-external)"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
+				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
 			}
 		],
 		"configuration": [
@@ -3461,6 +3495,10 @@
 				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -3783,6 +3821,11 @@
 					"command": "github.copilot.cloud.sessions.openInBrowser",
 					"when": "chatSessionType == copilot-cloud-agent",
 					"group": "context"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
+					"when": "chatSessionType == copilot-cloud-agent",
+					"group": "context"
 				}
 			]
 		},
@@ -3919,6 +3962,12 @@
 					"name": "OpenAI Codex Agent",
 					"when": "github.copilot.chat.codex.notInstalled && config.chat.experimental.codex.enabled",
 					"icon": "$(file)"
+				},
+				{
+					"id": "copilot-agents-placeholder",
+					"name": "GitHub Copilot Agents",
+					"when": "chatEntitlementSignedOut || !chatIsEnabled",
+					"icon": "$(copilot)"
 				}
 			]
 		},
@@ -4169,7 +4218,7 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
 				"description": "The Copilot CLI Agent works on your local machine",
-				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
+				"when": "!chatEntitlementSignedOut && chatIsEnabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
@@ -4195,7 +4244,7 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 1,
 				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
-				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled",
+				"when": "!chatEntitlementSignedOut && chatIsEnabled",
 				"capabilities": {
 					"supportsFileAttachments": true
 				}
@@ -4390,7 +4439,7 @@
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@vscode/copilot-api": "^0.1.12",
+		"@vscode/copilot-api": "^0.1.13",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

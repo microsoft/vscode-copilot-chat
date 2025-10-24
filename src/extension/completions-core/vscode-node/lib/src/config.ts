@@ -243,9 +243,12 @@ export function getOptionalConfigDefaultForKey<T>(key: string): T | undefined {
  * Defaults for "hidden" config keys.  These are supplemented by the defaults in package.json.
  */
 const configDefaults = new Map<ConfigKeyType, unknown>([
+	[ConfigKey.DebugOverrideCppHeadersEnableSwitch, false],
 	[ConfigKey.RelatedFilesVSCodeCSharp, false],
 	[ConfigKey.RelatedFilesVSCodeTypeScript, false],
 	[ConfigKey.RelatedFilesVSCode, false],
+	[ConfigKey.IncludeNeighboringFiles, false],
+	[ConfigKey.ExcludeRelatedFiles, false],
 	[ConfigKey.ContextProviders, []],
 	[ConfigKey.DebugSnippyOverrideUrl, ''],
 	[ConfigKey.UseSubsetMatching, null],
@@ -258,12 +261,16 @@ const configDefaults = new Map<ConfigKeyType, unknown>([
 	[ConfigKey.AlwaysRequestMultiline, undefined],
 	[ConfigKey.CompletionsDebounce, undefined],
 	[ConfigKey.CompletionsDelay, undefined],
+	[ConfigKey.ModelAlwaysTerminatesSingleline, undefined],
+	[ConfigKey.UseWorkspaceContextCoordinator, undefined],
+
 
 	// These are only used for telemetry from LSP based editors and do not affect any behavior.
 	[ConfigKey.ShowEditorCompletions, undefined],
 	[ConfigKey.EnableAutoCompletions, undefined],
 	[ConfigKey.DelayCompletions, undefined],
 	[ConfigKey.FilterCompletions, undefined],
+	[ConfigKey.UseSplitContextPrompt, true],
 
 	// These are defaults from package.json
 	[ConfigKey.Enable, { "*": true, "plaintext": false, "markdown": false, "scminput": false }],

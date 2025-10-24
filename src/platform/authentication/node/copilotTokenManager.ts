@@ -205,6 +205,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			copilot_plan: userInfo?.copilot_plan ?? tokenInfo.sku ?? '',
 			quota_snapshots: userInfo?.quota_snapshots,
 			quota_reset_date: userInfo?.quota_reset_date,
+			codex_agent_enabled: userInfo?.codex_agent_enabled,
 			username: login,
 			isVscodeTeamMember,
 		};

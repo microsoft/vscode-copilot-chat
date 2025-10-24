@@ -58,6 +58,7 @@ export interface FetchOptions {
 	retryFallbacks?: boolean;
 	expectJSON?: boolean;
 	useFetcher?: FetcherId;
+	suppressIntegrationId?: boolean;
 }
 
 export interface IAbortSignal {

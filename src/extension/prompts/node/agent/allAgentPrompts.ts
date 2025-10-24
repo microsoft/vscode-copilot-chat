@@ -6,5 +6,6 @@
 import './anthropicPrompts';
 import './geminiPrompts';
 import './openAIPrompts';
+import './vscModelPrompts';
 import './xAIPrompts';
 

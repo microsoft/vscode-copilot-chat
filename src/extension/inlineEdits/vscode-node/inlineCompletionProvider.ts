@@ -366,7 +366,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayLocationRange ? {
 			range: displayLocationRange,
 			label: result.displayLocation.label,
-			kind: InlineCompletionDisplayLocationKind.Code
+			kind: InlineCompletionDisplayLocationKind.Code,
+			jumpToEdit: result.displayLocation.jumpToEdit
 		} : undefined;
 
 
@@ -375,6 +376,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			insertText: result.edit.newText,
 			showRange,
 			displayLocation,
+			command: result.action,
 		};
 	}
 

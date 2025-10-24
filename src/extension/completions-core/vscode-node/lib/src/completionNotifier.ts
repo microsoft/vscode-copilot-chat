@@ -2,14 +2,14 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import EventEmitter from 'events';
+import { CancellationToken, Disposable } from '../../types/src';
 import { CompletionState } from './completionState';
 import { Context } from './context';
 import { GetGhostTextOptions } from './ghostText/ghostText';
 import { telemetryCatch, TelemetryWithExp } from './telemetry';
-import { CancellationToken, Disposable } from '../../types/src';
-import EventEmitter from 'events';
 
-type CompletionRequestedEvent = {
+export type CompletionRequestedEvent = {
 	completionId: string;
 	completionState: CompletionState;
 	telemetryData: TelemetryWithExp;
