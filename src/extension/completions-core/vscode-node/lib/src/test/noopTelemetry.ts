@@ -3,9 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import './anthropicPrompts';
-import './geminiPrompts';
-import './openAIPrompts';
-import './vscModelPrompts';
-import './xAIPrompts';
+import { CopilotTelemetryReporter } from '../telemetry';
 
+export class NoopCopilotTelemetryReporter implements CopilotTelemetryReporter {
+	sendTelemetryEvent(): void {
+		// noop
+	}
+	sendTelemetryErrorEvent(): void {
+		// noop
+	}
+	dispose(): Promise<void> {
+		return Promise.resolve();
+	}
+}

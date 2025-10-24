@@ -23,7 +23,6 @@ interface Section {
 	items: SectionItems;
 }
 
-
 export function collectCompletionDiagnostics(ctx: Context, telemetry: TelemetryData | undefined): Report {
 	const telemetryItems: SectionItems = {};
 	if (telemetry !== undefined) {
