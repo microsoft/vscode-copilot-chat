@@ -76,7 +76,10 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 				healedEdits.push({ file: filePath, healing: file.healed });
 			}
 
-			const diagnostics = !this.testContext.isInSimulationTests && this.configurationService.getExperimentBasedConfig(ConfigKey.AutoFixDiagnostics, this.experimentationService) && !(file.isNotebook)
+			const diagnostics = (this.props.diagnosticsTimeout === undefined || this.props.diagnosticsTimeout >= 0)
+				&& !this.testContext.isInSimulationTests
+				&& this.configurationService.getExperimentBasedConfig(ConfigKey.AutoFixDiagnostics, this.experimentationService)
+				&& !file.isNotebook
 				? await this.getNewDiagnostics(file)
 				: [];
 

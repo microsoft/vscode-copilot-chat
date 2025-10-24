@@ -12,7 +12,7 @@ import { URI } from '../../src/util/vs/base/common/uri';
 import { Uri } from '../../src/vscodeTypes';
 import { NonExtensionConfiguration, ssuite, stest } from '../base/stest';
 import { KnownDiagnosticProviders } from '../simulation/diagnosticProviders';
-import { simulateInlineChat, simulateInlineChat2 } from '../simulation/inlineChatSimulator';
+import { simulateInlineChat, simulateInlineChatIntent } from '../simulation/inlineChatSimulator';
 import { assertContainsAllSnippets, assertNoDiagnosticsAsync, assertNoSyntacticDiagnosticsAsync, findTextBetweenMarkersFromBottom } from '../simulation/outcomeValidators';
 import { assertConversationalOutcome, assertInlineEdit, assertInlineEditShape, assertOccursOnce, assertOneOf, assertSomeStrings, fromFixture, toFile } from '../simulation/stestUtil';
 import { EditTestStrategy, IScenario } from '../simulation/types';
@@ -24,25 +24,19 @@ function executeEditTestStrategy(
 ): Promise<void> {
 	if (strategy === EditTestStrategy.Inline) {
 		return simulateInlineChat(testingServiceCollection, scenario);
-	} else if (strategy === EditTestStrategy.Inline2) {
-		return simulateInlineChat2(testingServiceCollection, scenario);
+	} else if (EditTestStrategy.InlineChatIntent) {
+		return simulateInlineChatIntent(testingServiceCollection, scenario);
 	} else {
 		throw new Error('Invalid edit test strategy');
 	}
 }
 
-function forInlineAndInline2(callback: (strategy: EditTestStrategy, variant: '-inline2' | '', nonExtensionConfigurations?: NonExtensionConfiguration[]) => void): void {
+function forInlineAndInlineChatIntent(callback: (strategy: EditTestStrategy, variant: '-InlineChatIntent' | '', nonExtensionConfigurations?: NonExtensionConfiguration[]) => void): void {
 	callback(EditTestStrategy.Inline, '', undefined);
-	callback(EditTestStrategy.Inline2, '-inline2', [['inlineChat.enableV2', true]]);
+	callback(EditTestStrategy.InlineChatIntent, '-InlineChatIntent', [['inlineChat.enableV2', true], ['chat.agent.autoFix', false]]);
 }
 
-forInlineAndInline2((strategy, variant, nonExtensionConfigurations) => {
-
-	function skipIfInline2() {
-		if (variant === '-inline2') {
-			assert.ok(false, 'SKIPPED');
-		}
-	}
+forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => {
 
 	ssuite({ title: `generate${variant}`, location: 'inline' }, () => {
 		stest({ description: 'gen-ts-ltrim', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
@@ -122,7 +116,9 @@ forInlineAndInline2((strategy, variant, nonExtensionConfigurations) => {
 
 		stest({ description: 'generate rtrim', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 
-			skipIfInline2();
+			if (1) {
+				throw new Error('SKIPPED');
+			}
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
@@ -523,7 +519,9 @@ forInlineAndInline2((strategy, variant, nonExtensionConfigurations) => {
 
 		stest({ description: 'Streaming gets confused due to jsdoc', language: 'json', nonExtensionConfigurations }, (testingServiceCollection) => {
 
-			skipIfInline2();
+			if (1) {
+				throw new Error('SKIPPED');
+			}
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
@@ -615,7 +613,9 @@ forInlineAndInline2((strategy, variant, nonExtensionConfigurations) => {
 
 		stest({ description: 'issue #2496: Range of interest is imprecise after a streaming edit', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 
-			skipIfInline2();
+			if (1) {
+				throw new Error('SKIPPED');
+			}
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
@@ -895,7 +895,9 @@ forInlineAndInline2((strategy, variant, nonExtensionConfigurations) => {
 
 		stest({ description: 'issue #224: Lots of lines deleted when using interactive chat in a markdown file', language: 'markdown', nonExtensionConfigurations }, (testingServiceCollection) => {
 
-			skipIfInline2();
+			if (1) {
+				throw new Error('SKIPPED');
+			}
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [

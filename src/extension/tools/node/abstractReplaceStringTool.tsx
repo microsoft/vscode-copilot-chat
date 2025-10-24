@@ -27,7 +27,7 @@ import { Iterable } from '../../../util/vs/base/common/iterator';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseTextEditPart, EndOfLine, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, EndOfLine, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CellOrNotebookEdit, processFullRewriteNotebookEdits } from '../../prompts/node/codeMapper/codeMapper';
@@ -268,12 +268,14 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			this._promptContext.stream.markdown('\n```\n');
 		}
 
+		const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;
+
 		return new LanguageModelToolResult([
 			new LanguageModelPromptTsxPart(
 				await renderPromptElementJSON(
 					this.instantiationService,
 					EditFileResult,
-					{ files: fileResults, diagnosticsTimeout: 2000, toolName: this.toolName(), requestId: options.chatRequestId, model: options.model },
+					{ files: fileResults, diagnosticsTimeout: isInlineChat ? -1 : 2000, toolName: this.toolName(), requestId: options.chatRequestId, model: options.model },
 					// If we are not called with tokenization options, have _some_ fake tokenizer
 					// otherwise we end up returning the entire document
 					options.tokenizationOptions ?? {

@@ -218,11 +218,11 @@ export class DiagnosticRelatedInfo extends PromptElement<DiagnosticRelatedInfoPr
 
 // #region DiagnosticSuggestedFix
 
-interface DiagnosticSuggestedFixProps extends BasePromptElementProps {
+export interface DiagnosticSuggestedFixProps extends BasePromptElementProps {
 	readonly cookbook: Cookbook;
 }
 
-class DiagnosticSuggestedFix extends PromptElement<DiagnosticSuggestedFixProps> {
+export class DiagnosticSuggestedFix extends PromptElement<DiagnosticSuggestedFixProps> {
 
 	render(state: void, sizing: PromptSizing) {
 		const suggestedFixes = this.props.cookbook.fixes;

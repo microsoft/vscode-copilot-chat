@@ -25,6 +25,14 @@ export interface IToolValidationError {
 	error: string;
 }
 
+export function isValidatedToolInput(result: IToolValidationResult): result is IValidatedToolInput {
+	return 'inputObj' in result;
+}
+
+export function isToolValidationError(result: IToolValidationResult): result is IToolValidationError {
+	return 'error' in result;
+}
+
 export class ToolCallCancelledError extends Error {
 	constructor(cause: vscode.CancellationError) {
 		super(cause.message, { cause });

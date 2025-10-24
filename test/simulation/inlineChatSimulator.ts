@@ -16,8 +16,9 @@ import { WorkingCopyOriginalDocument } from '../../src/extension/prompts/node/in
 import { IToolsService } from '../../src/extension/tools/common/toolsService';
 import { TestEditFileTool } from '../../src/extension/tools/node/test/testTools';
 import { TestToolsService } from '../../src/extension/tools/node/test/testToolsService';
-import { editingSessionAgentEditorName, editorAgentName, getChatParticipantIdFromName } from '../../src/platform/chat/common/chatAgents';
+import { editorAgentName, getChatParticipantIdFromName } from '../../src/platform/chat/common/chatAgents';
 import { IChatMLFetcher } from '../../src/platform/chat/common/chatMLFetcher';
+import { ILanguageDiagnosticsService } from '../../src/platform/languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService } from '../../src/platform/languages/common/languageFeaturesService';
 import { ITabsAndEditorsService } from '../../src/platform/tabs/common/tabsAndEditorsService';
 import { isInExtensionHost } from '../../src/platform/test/node/isInExtensionHost';
@@ -37,7 +38,7 @@ import { commonPrefixLength, commonSuffixLength } from '../../src/util/vs/base/c
 import { URI } from '../../src/util/vs/base/common/uri';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
-import { ChatLocation, ChatRequest, ChatRequestEditorData, ChatResponseMarkdownPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, Diagnostic, DiagnosticRelatedInformation, Location, NotebookRange, Range, Selection, TextEdit, Uri, WorkspaceEdit } from '../../src/vscodeTypes';
+import { ChatLocation, ChatReferenceDiagnostic, ChatRequest, ChatRequestEditorData, ChatResponseMarkdownPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, Diagnostic, DiagnosticRelatedInformation, LanguageModelToolResult, Location, NotebookRange, Range, Selection, TextEdit, Uri, WorkspaceEdit } from '../../src/vscodeTypes';
 import { SimulationExtHostToolsService } from '../base/extHostContext/simulationExtHostToolsService';
 import { SimulationWorkspaceExtHost } from '../base/extHostContext/simulationWorkspaceExtHost';
 import { SpyingChatMLFetcher } from '../base/spyingChatMLFetcher';
@@ -78,8 +79,8 @@ function isDeserializedWorkspaceStateBasedScenario(scenario: IScenario): scenari
 
 export function simulateInlineChatWithStrategy(strategy: EditTestStrategy, testingServiceCollection: TestingServiceCollection, scenario: IScenario) {
 
-	if (strategy === EditTestStrategy.Inline2) {
-		return simulateInlineChat3(testingServiceCollection, scenario);
+	if (strategy === EditTestStrategy.InlineChatIntent) {
+		return simulateInlineChatIntent(testingServiceCollection, scenario);
 	} else {
 		return simulateInlineChat(testingServiceCollection, scenario);
 	}
@@ -104,36 +105,19 @@ export async function simulateInlineChat(
 	return simulateEditingScenario(testingServiceCollection, scenario, host);
 }
 
-export async function simulateInlineChat3(
-	testingServiceCollection: TestingServiceCollection,
-	scenario: IScenario
-): Promise<void> {
-	const host: EditingSimulationHost = {
-		agentArgs: {
-			agentId: getChatParticipantIdFromName(editingSessionAgentEditorName),
-			agentName: editingSessionAgentEditorName,
-			intentId: Intent.Edit
-		},
-		prepareChatRequestLocation: (accessor: ITestingServicesAccessor, wholeRange?: Range) => {
-			const editor = accessor.get(ITabsAndEditorsService).activeTextEditor;
-			if (!editor) {
-				throw new Error(`No active editor`);
-			}
-			return {
-				location: ChatLocation.Editor,
-				location2: new ChatRequestEditorData(editor.document, editor.selection, wholeRange ?? editor.selection),
-			};
-		}
-	};
-	return simulateEditingScenario(testingServiceCollection, scenario, host);
+class ChatReferenceDiagnostic2 extends ChatReferenceDiagnostic {
+	constructor(uri: Uri, d: Diagnostic) {
+		super([[uri, [d]]]);
+	}
 }
 
-export async function simulateInlineChat2(
+export async function simulateInlineChatIntent(
 	testingServiceCollection: TestingServiceCollection,
 	scenario: IScenario
 ): Promise<void> {
 
-	const overrideCommand = '/edit';
+	const overrideCommand = `/${Intent.InlineChat}`;
+
 	const ensureSlashEdit = (query: string) => {
 		return query.startsWith(overrideCommand) ? query : `${overrideCommand} ${query}`;
 	};
@@ -158,7 +142,30 @@ export async function simulateInlineChat2(
 				location: ChatLocation.Editor,
 				location2: new ChatRequestEditorData(editor.document, editor.selection, wholeRange ?? editor.selection),
 			};
-		}
+		},
+		contributeAdditionalReferences(accessor, existingReferences) {
+			const diagnosticService = accessor.get(ILanguageDiagnosticsService);
+			const editor = accessor.get(ITabsAndEditorsService).activeTextEditor;
+			if (!editor) {
+				return existingReferences.slice();
+			}
+
+			const result = existingReferences.slice();
+
+			const diagnostics = diagnosticService.getDiagnostics(editor.document.uri);
+
+			for (const d of diagnostics) {
+				if (d.range.intersection(editor.selection)) {
+					result.push({
+						id: `diagnostic/${editor.document.uri}/${JSON.stringify(d)}`,
+						name: d.message,
+						value: new ChatReferenceDiagnostic2(editor.document.uri, d)
+					});
+				}
+			}
+
+			return result;
+		},
 	};
 	return simulateEditingScenario(testingServiceCollection, massagedScenario, host);
 }
@@ -702,6 +709,21 @@ function setupTools(stream: vscode.ChatResponseStream, request: ChatRequest, acc
 	toolsService.addTestToolOverride(
 		editTool.info,
 		editTool);
+
+	toolsService.addTestToolOverride(
+		{
+			name: 'inline_chat_exit',
+			description: 'Moves the inline chat session to the richer panel chat which supports edits across files, creating new files, and multi-turn conversations between the user and the assistant.',
+			inputSchema: {},
+			source: undefined,
+			tags: [],
+		},
+		{
+			invoke() {
+				return new LanguageModelToolResult([]);
+			}
+		}
+	);
 }
 
 function computeMoreMinimalEdit(document: vscode.TextDocument, edit: vscode.TextEdit): vscode.TextEdit {
@@ -821,9 +843,9 @@ export function toRange(range: [number, number] | [number, number, number, numbe
 }
 
 
-export function forInlineAndInline2(callback: (strategy: EditTestStrategy, configurations: NonExtensionConfiguration[] | undefined, suffix: string) => void): void {
+export function forInlineAndInlineChatIntent(callback: (strategy: EditTestStrategy, configurations: NonExtensionConfiguration[] | undefined, suffix: string) => void): void {
 	callback(EditTestStrategy.Inline, undefined, '');
-	callback(EditTestStrategy.Inline2, [['inlineChat.enableV2', true]], '-inline2');
+	callback(EditTestStrategy.InlineChatIntent, [['inlineChat.enableV2', true], ['chat.agent.autoFix', false]], '-InlineChatIntent');
 }
 
 export function forInline(callback: (strategy: EditTestStrategy, configurations: NonExtensionConfiguration[] | undefined, suffix: string) => void): void {

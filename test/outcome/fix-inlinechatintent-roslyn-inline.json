@@ -1,0 +1,58 @@
+[
+	{
+		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-28) field is never used",
+		"requests": [
+			"3d8a6f33494e3c8b5896e67e3c9f71e963d401720c3db60df579ec97ccf9791c",
+			"502568337974cfbdaf0093c9719dd4e0e8c91b802b92e9b6d30d8cbc77945225",
+			"85704a71de0b0825abda5558e26f60c2ad4b36b177f9d57a10c8c399965e2b44",
+			"bf9ba93f64ead61c9d454d3551bc1b4f4fc8339669e10d869efa31d04d7d6324",
+			"ddad924456620e7d57dc3e70693c05bb8b486ecf3a5bd0230b64c5b076529eb8",
+			"e378ebf6ea313ae84c2b2f85f3987706e56c6dd843cfcee0eb751116dc2ba506",
+			"e818aa8ba36dc749e5d3c75b7adbabd107f88e56f6778d6da9818ff78c965598",
+			"ecf314989f33350be7eb5ab37b932fdd3c686a2457d8a6faf108fd27a8b1292c"
+		]
+	},
+	{
+		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-57) call is not awaited, execution continues",
+		"requests": [
+			"7ac2ffaeaab6f438c3b9691f862cb80ab3cbae3012d5d1b7ebd7ed733783947d"
+		]
+	},
+	{
+		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-17-3523) has same name as",
+		"requests": [
+			"90455e05233dfd51457aed7671b1dcba8cf5fa8be0351d0d39c217a6f2803dd0"
+		]
+	},
+	{
+		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - does not contain a definition",
+		"requests": [
+			"3e82c81ca0b9b346972c6b385fdcde3c93747aef220157772fdb9147220e4e58"
+		]
+	},
+	{
+		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - does not exist",
+		"requests": [
+			"496d80d71aac4c33d30f726444befd0d51a330cea26a56da03c365b5ab3a371c"
+		]
+	},
+	{
+		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - missing using directive",
+		"requests": [
+			"3c8a06882cdf12e20af41c89924d54f12a8916d8dc86769501bd7ffd340eda4c",
+			"e008fbfe915b357471c1f1b6dafd247d7eeaab28204ca3f28b50ca0756ce054c"
+		]
+	},
+	{
+		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - no argument given",
+		"requests": [
+			"e8b267eeb4bc3c9fce5c893214e3a21057cf0645b62ab977158075e50b34b2bc"
+		]
+	},
+	{
+		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - semi-colon expected",
+		"requests": [
+			"773b4ea7581970e82e6d0471dbad4a4624c2769dd1638a5321097d722ddbd9bb"
+		]
+	}
+]
