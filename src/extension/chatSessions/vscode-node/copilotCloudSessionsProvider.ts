@@ -982,8 +982,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		let head_ref: string | undefined; // This is the ref cloud agent starts work from (omitted unless we push local changes)
 
 		// Check for uncommitted changes and prompt user if checking is enabled
-		const hasChanges =
-			((currentRepository?.changes?.workingTree && currentRepository.changes.workingTree.length > 0) || (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0));
+		const hasChanges = repo.state.workingTreeChanges.length > 0 || repo.state.indexChanges.length > 0;
 		if (checkForChanges && hasChanges) {
 			this.logService.warn('Uncommitted changes detected, prompting user for confirmation.');
 			if (chatStream) {
