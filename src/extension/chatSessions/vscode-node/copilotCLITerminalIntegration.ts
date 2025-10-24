@@ -147,18 +147,26 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 	}
 
 	private buildCommandForPythonTerminal(copilotCommand: string, cliArgs: string[], shellInfo: IShellInfo) {
-		// Starting with empty space to hide from terminal history (only for bash and zsh which use &&)
-		const hideFromHistory = shellInfo.shell === 'zsh' || shellInfo.shell === 'bash' ? ' ' : '';
+		let commandPrefix = '';
+		if (shellInfo.shell === 'zsh' || shellInfo.shell === 'bash') {
+			// Starting with empty space to hide from terminal history (only for bash and zsh which use &&)
+			commandPrefix = ' ';
+		}
+		if (shellInfo.shell === 'powershell' || shellInfo.shell === 'pwsh') {
+			// Run powershell script
+			commandPrefix = '& ';
+		}
+
 		const exitCommand = shellInfo.exitCommand || '';
 
-		return `${hideFromHistory}${quoteArgsForShell(copilotCommand, [])} ${cliArgs.join(' ')} ${exitCommand}`;
+		return `${commandPrefix}${quoteArgsForShell(copilotCommand, [])} ${cliArgs.join(' ')} ${exitCommand}`;
 	}
 
 	private buildCommandForTerminal(terminal: Terminal, copilotCommand: string, cliArgs: string[]) {
 		return `${quoteArgsForShell(copilotCommand, [])} ${cliArgs.join(' ')}`;
 	}
 
-	private async sendCommandToTerminal(terminal: Terminal, command: string, waitForPythonActivation: boolean) {
+	private async sendCommandToTerminal(terminal: Terminal, command: string, waitForPythonActivation: boolean, shellInfo: IShellInfo | undefined = undefined): Promise<void> {
 		// Wait for shell integration to be available
 		const shellIntegrationTimeout = 3000;
 		let shellIntegrationAvailable = false;
@@ -182,7 +190,9 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		if (waitForPythonActivation) {
 			// Wait for python extension to send its initialization commands.
 			// Else if we send too early, the copilot command might not get executed properly.
-			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, 500))); // Wait a bit to ensure the terminal is ready
+			// Activating powershell scripts can take longer, so wait a bit more.
+			const delay = (shellInfo?.shell === 'powershell' || shellInfo?.shell === 'pwsh') ? 3000 : 1000;
+			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, delay))); // Wait a bit to ensure the terminal is ready
 		}
 
 		if (shellIntegrationAvailable && terminal.shellIntegration) {
@@ -241,7 +251,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
 				iconPath,
 				copilotCommand: this.powershellScriptPath,
-				exitCommand: `; exit`
+				exitCommand: ``//`; exit`
 			};
 		} else if (defaultProfile === 'PowerShell' && this.powershellScriptPath && configPlatform === 'windows' && shellPath) {
 			return {
