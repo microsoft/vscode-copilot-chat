@@ -70,7 +70,7 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 	private async waitAndGetGlobalState(): Promise<PendingChatSession | undefined> {
 		let timeout = 500;
 		let state = undefined;
-		while (!state || !timeout) {
+		while (!state && timeout > 0) {
 			state = this._extensionContext.globalState.get<PendingChatSession>(PENDING_CHAT_SESSION_STORAGE_KEY);
 			await new Promise(resolve => setTimeout(resolve, 100));
 			timeout -= 100;
