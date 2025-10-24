@@ -210,7 +210,15 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				this.chatSessions.set(pr.number, pr);
 				return session;
 			}));
-			const filteredSessions = sessionItems.filter(item => item !== undefined);
+			const filteredSessions = sessionItems
+				// Remove any undefined sessions
+				.filter(item => item !== undefined)
+				// Only keep sessions with attached PRs not CLOSED or MERGED
+				.filter(item => {
+					const pr = item.pullRequestDetails;
+					const state = pr.state.toUpperCase();
+					return state !== 'CLOSED' && state !== 'MERGED';
+				});
 
 			vscode.commands.executeCommand('setContext', 'github.copilot.chat.cloudSessionsEmpty', filteredSessions.length === 0);
 			return filteredSessions;
