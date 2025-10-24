@@ -253,12 +253,12 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				return undefined;
 			}
 			const jobInfo = await this._octoKitService.getJobBySessionId(repoId.org, repoId.repo, sessions[0].id, 'vscode-copilot-chat');
-			let prompt = jobInfo.problem_statement;
-			const titleMatch = jobInfo.problem_statement.match(/TITLE: \s*(.*)/i);
+			let prompt = jobInfo?.problem_statement || 'Initial Implementation';
+			const titleMatch = prompt.match(/TITLE: \s*(.*)/i);
 			if (titleMatch && titleMatch[1]) {
 				prompt = titleMatch[1].trim();
 			} else {
-				const split = jobInfo.problem_statement.split('\n');
+				const split = prompt.split('\n');
 				if (split.length > 0) {
 					prompt = split[0].trim();
 				}
