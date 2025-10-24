@@ -82,12 +82,50 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 			const uri = vscode.Uri.parse(url);
 			const cachedWorkspaces: vscode.Uri[] | null = await gitAPI.getRepositoryWorkspace(uri);
 
-			// TODO:@osortega show picker to select workspace
-			let folderToOpen: vscode.Uri | null = ((cachedWorkspaces && cachedWorkspaces.length > 0) ? cachedWorkspaces[0] : null);
+			let folderToOpen: vscode.Uri | null = null;
+			if (!cachedWorkspaces || (cachedWorkspaces && cachedWorkspaces.length > 1)) {
+				const selectFolderItem: vscode.QuickPickItem & { uri?: vscode.Uri } = {
+					label: 'Select Directory...',
+					description: 'Choose a directory to open',
+					uri: undefined
+				};
+				const cloneRepoItem: vscode.QuickPickItem & { uri?: vscode.Uri } = {
+					label: 'Clone Repository and Open',
+					description: 'Clone the repository to a new local folder and open it',
+					uri: undefined
+				};
 
-			if (!folderToOpen) {
-				// No cached workspaces, proceed to clone
-				folderToOpen = await gitAPI.clone(vscode.Uri.parse(url), { postCloneAction: 'none', ref: branch });
+				const items: (vscode.QuickPickItem & { uri?: vscode.Uri })[] = [selectFolderItem];
+				items.push({
+					label: '',
+					kind: vscode.QuickPickItemKind.Separator
+				});
+				items.push(cloneRepoItem);
+
+				const selected = await vscode.window.showQuickPick(items, {
+					placeHolder: 'Select how to open the repository',
+					ignoreFocusOut: true,
+					title: 'Open Repository'
+				});
+
+				if (selected) {
+					if (selected === selectFolderItem) {
+						const selectedFolder = await vscode.window.showOpenDialog({
+							canSelectFiles: false,
+							canSelectFolders: true,
+							canSelectMany: false,
+							openLabel: 'Select Directory',
+							title: 'Select directory to open'
+						});
+						if (selectedFolder && selectedFolder.length > 0) {
+							folderToOpen = selectedFolder[0];
+						}
+					} else if (selected === cloneRepoItem) {
+						folderToOpen = await gitAPI.clone(vscode.Uri.parse(url), { postCloneAction: 'none', ref: branch });
+					}
+				}
+			} else {
+				folderToOpen = cachedWorkspaces[0];
 			}
 			if (!folderToOpen) {
 				return;
