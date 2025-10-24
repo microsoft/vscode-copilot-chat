@@ -6,10 +6,10 @@
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 
 const ShowCodexPlaceholderKey = 'github.copilot.chat.codex.showPlaceholder';
 
@@ -22,11 +22,16 @@ export class PlaceholderViewContribution extends Disposable {
 	) {
 		super();
 
+		let curShouldShowPlaceholder: boolean | undefined = undefined;
 		const updateContextKey = () => {
 			const token = authenticationService.copilotToken;
 			const enabledForUser = token && (token.codexAgentEnabled || configurationService.getNonExtensionConfig('chat.experimental.codex.enabled'));
 			const codexExtension = vscode.extensions.getExtension('openai.chatgpt');
-			void vscode.commands.executeCommand('setContext', ShowCodexPlaceholderKey, enabledForUser && !codexExtension);
+			const shouldShowPlaceholder = enabledForUser && !codexExtension;
+			if (curShouldShowPlaceholder !== shouldShowPlaceholder) {
+				curShouldShowPlaceholder = shouldShowPlaceholder;
+				void vscode.commands.executeCommand('setContext', ShowCodexPlaceholderKey, shouldShowPlaceholder);
+			}
 		};
 
 		this._register(vscode.extensions.onDidChange(updateContextKey));
