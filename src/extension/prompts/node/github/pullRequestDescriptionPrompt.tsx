@@ -101,14 +101,14 @@ class GitHubPullRequestUserMessage extends PromptElement<GitHubPullRequestUserMe
 				{formattedCommitMessages}<br />
 				Below is a list of git patches that contain the file changes for all the files that will be included in the pull request:<br />
 				{formattedPatches}<br />
-				{this.props.template ? (
+				{this.props.template && (
 					<>
 						The pull request description should match the following template:<br />
 						```<br />
 						{this.props.template}<br />
 						```<br />
 					</>
-				) : ''}
+				)}
 				Based on the git patches and on the git commit messages above, the title and description of the pull request should be:<br />
 			</>
 		);
