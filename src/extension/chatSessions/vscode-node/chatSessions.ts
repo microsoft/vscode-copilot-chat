@@ -55,6 +55,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ILogService private readonly logService: ILogService,
+		@IOctoKitService private readonly octoKitService: IOctoKitService,
 	) {
 		super();
 
@@ -160,10 +161,16 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				vscode.commands.registerCommand(CLOSE_SESSION_PR_CMD, async (ctx: CrossChatSessionWithPR) => {
 					// await this.installPullRequestExtension();
 					try {
-						await vscode.commands.executeCommand('pr.closeChatSessionPullRequest', ctx);
+						const success = await this.octoKitService.closePullRequest(
+							ctx.pullRequestDetails.repository.owner.login,
+							ctx.pullRequestDetails.repository.name,
+							ctx.pullRequestDetails.number);
+						if (!success) {
+							this.logService.error(`${CLOSE_SESSION_PR_CMD}: Failed to close PR #${ctx.pullRequestDetails.number}`);
+						}
 						copilotSessionsProvider.refresh();
 					} catch (e) {
-						this.logService.error(`${CLOSE_SESSION_PR_CMD}: ${e}`);
+						this.logService.error(`${CLOSE_SESSION_PR_CMD}: Exception ${e}`);
 					}
 				})
 			);
