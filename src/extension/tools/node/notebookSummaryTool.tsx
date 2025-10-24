@@ -48,20 +48,11 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 		if (!uri) {
 			throw new Error(`Invalid file path`);
 		}
+
 		// Sometimes we get the notebook cell Uri in the resource.
 		// Resolve this to notebook.
-		let notebook = findNotebook(uri, this.workspaceService.notebookDocuments);
-		if (notebook) {
-			uri = notebook.uri;
-		} else if (!this.notebookService.hasSupportedNotebooks(uri)) {
-			throw new Error(`Use this tool only with Notebook files, the file ${uri.toString()} is not a notebook.`);
-		}
-		try {
-			notebook = notebook || await this.workspaceService.openNotebookDocument(uri);
-		} catch (ex) {
-			this.logger.error(`Failed to open notebook: ${uri.toString()}`, ex);
-			throw new Error(`Failed to open the notebook ${uri.toString()}, ${ex.message || ''}. Verify the file exists.`);
-		}
+		const notebook = await this.ensureNotebook(uri);
+		uri = notebook.uri;
 
 		if (token.isCancellationRequested) {
 			return;
@@ -87,6 +78,22 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 				),
 			)
 		]);
+	}
+
+	private async ensureNotebook(uri: vscode.Uri) {
+		let notebook = findNotebook(uri, this.workspaceService.notebookDocuments);
+		if (notebook) {
+			uri = notebook.uri;
+		} else if (!this.notebookService.hasSupportedNotebooks(uri)) {
+			throw new Error(`Use this tool only with Notebook files, the file ${uri.toString()} is not a notebook.`);
+		}
+		try {
+			notebook = notebook || await this.workspaceService.openNotebookDocument(uri);
+		} catch (ex) {
+			this.logger.error(`Failed to open notebook: ${uri.toString()}`, ex);
+			throw new Error(`Failed to open the notebook ${uri.toString()}, ${ex.message || ''}. Verify the file exists.`);
+		}
+		return notebook;
 	}
 
 	async resolveInput(input: INotebookSummaryToolParams, promptContext: IBuildPromptContext): Promise<INotebookSummaryToolParams> {
