@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert';
 import * as fs from 'fs';
-import { suite } from 'mocha';
 import { resolve } from 'path';
 import { ApproximateTokenizer, getTokenizer, TokenizerName } from '../tokenization';
 

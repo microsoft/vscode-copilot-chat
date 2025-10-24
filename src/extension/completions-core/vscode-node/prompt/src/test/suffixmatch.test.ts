@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import { findEditDistanceScore } from '../suffixMatchCriteria';
 import * as assert from 'assert';
-import { suite } from 'mocha';
 
 suite('EditDistanceScore Test Suite', function () {
 	test('findEditDistanceScore computes correct score of two number[]', function () {
