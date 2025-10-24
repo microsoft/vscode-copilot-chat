@@ -26,7 +26,7 @@ export enum CopilotToolMode {
 	FullContext,
 }
 
-export interface ICopilotTool<T> extends vscode.LanguageModelTool<T> {
+export interface ICopilotToolExtension<T> {
 	/**
 	 * Called when edits are made in a tool call response. The tool can return
 	 * a confirmation that will be shown to the user before edits are applied.
@@ -55,10 +55,16 @@ export interface ICopilotTool<T> extends vscode.LanguageModelTool<T> {
 	 * parameters because the alternative definition will only be applied within
 	 * the Copilot extension, not other extensions' usages via `vscode.lm.tools`.
 	 *
+	 * @param tool The original tool definition.
 	 * @param endpoint Optional information about the currently selected language model endpoint.
 	 *                 If provided, allows customizing the tool definition per endpoint.
+	 *
+	 * @return An overridden tool definition.
 	 */
-	alternativeDefinition?(endpoint?: IChatEndpoint): vscode.LanguageModelToolInformation | undefined;
+	alternativeDefinition?(tool: vscode.LanguageModelToolInformation, endpoint?: IChatEndpoint): vscode.LanguageModelToolInformation;
+}
+
+export interface ICopilotTool<T> extends vscode.LanguageModelTool<T>, ICopilotToolExtension<T> {
 }
 
 
@@ -67,8 +73,14 @@ export interface ICopilotToolCtor {
 	new(...args: any[]): ICopilotTool<any>;
 }
 
+export interface ICopilotToolExtensionCtor {
+	readonly toolName: ToolName;
+	new(...args: any[]): ICopilotToolExtension<any>;
+}
+
 export const ToolRegistry = new class {
 	private _tools: ICopilotToolCtor[] = [];
+	private _toolExtensions: ICopilotToolExtensionCtor[] = [];
 
 	public registerTool(tool: ICopilotToolCtor) {
 		this._tools.push(tool);
@@ -76,5 +88,13 @@ export const ToolRegistry = new class {
 
 	public getTools(): readonly ICopilotToolCtor[] {
 		return this._tools;
+	}
+
+	public registerToolExtension(tool: ICopilotToolExtensionCtor) {
+		this._toolExtensions.push(tool);
+	}
+
+	public getToolExtensions(): readonly ICopilotToolExtensionCtor[] {
+		return this._toolExtensions;
 	}
 }();

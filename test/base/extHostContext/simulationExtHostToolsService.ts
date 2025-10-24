@@ -128,7 +128,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 				// Apply model-specific alternative if available via alternativeDefinition
 				const owned = this.copilotTools.get(getToolName(tool.name) as ToolName);
 				if (owned?.alternativeDefinition) {
-					const alternative = owned.alternativeDefinition(endpoint);
+					const alternative = owned.alternativeDefinition(tool, endpoint);
 					if (alternative) {
 						return alternative;
 					}
