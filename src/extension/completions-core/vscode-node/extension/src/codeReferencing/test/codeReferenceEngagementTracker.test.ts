@@ -31,7 +31,7 @@ suite('CodeReferenceEngagementTracker', function () {
 		engagementTracker.dispose();
 	});
 
-	test('sends a telementry event when the output channel is focused', async function () {
+	test('sends a telemetry event when the output channel is focused', async function () {
 		const telemetry = await withInMemoryTelemetry(ctx, (ctx: Context) => {
 			engagementTracker.onActiveEditorChange({
 				document: { uri: { scheme: 'output', path: citationsChannelName } },
