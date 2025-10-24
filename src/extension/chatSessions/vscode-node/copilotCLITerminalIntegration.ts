@@ -237,7 +237,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				shellArgs: [`-ci${shellArgs.includes('-l') ? 'l' : ''}`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
 				iconPath,
 				copilotCommand: this.shellScriptPath,
-				exitCommand: `; exit`
+				exitCommand: `&& exit`
 			};
 		} else if (defaultProfile === 'bash' && this.shellScriptPath) {
 			return {
@@ -246,7 +246,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				shellArgs: [`-${shellArgs.includes('-l') ? 'l' : ''}ic`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
 				iconPath,
 				copilotCommand: this.shellScriptPath,
-				exitCommand: `; exit`
+				exitCommand: `&& exit`
 			};
 		} else if (defaultProfile === 'pwsh' && this.powershellScriptPath && configPlatform !== 'windows') {
 			return {
@@ -255,7 +255,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
 				iconPath,
 				copilotCommand: this.powershellScriptPath,
-				exitCommand: `; exit`
+				exitCommand: `&& exit`
 			};
 		} else if (defaultProfile === 'PowerShell' && this.powershellScriptPath && configPlatform === 'windows' && shellPath) {
 			return {
@@ -264,7 +264,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
 				iconPath,
 				copilotCommand: this.powershellScriptPath,
-				exitCommand: `; exit`
+				exitCommand: `&& exit`
 			};
 		} else if (defaultProfile === 'Command Prompt' && this.shellScriptPath && configPlatform === 'windows') {
 			return {
@@ -273,7 +273,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				shellArgs: ['/c', this.shellScriptPath, ...cliArgs],
 				iconPath,
 				copilotCommand: this.shellScriptPath,
-				exitCommand: '; exit'
+				exitCommand: '&& exit'
 			};
 		}
 	}
