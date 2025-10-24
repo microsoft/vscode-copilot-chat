@@ -759,7 +759,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 
 		const diffOptions: ResponseProcessor.DiffParams = {
-			emitFastCursorLineChange: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService),
+			emitFastCursorLineChange: opts.showLabel
+				? false
+				: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService),
 			nLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNNonSignificantLinesToConverge, this.expService),
 			nSignificantLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNSignificantLinesToConverge, this.expService),
 		};
