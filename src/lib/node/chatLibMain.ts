@@ -671,7 +671,7 @@ function createContext(options: IInlineCompletionsProviderOptions): Context {
 
 	ctx.set(Fetcher, new class extends Fetcher {
 		override get name(): string {
-			return (fetcher as any).name || fetcher.constructor.name;
+			return fetcher.getUserAgentLibrary();
 		}
 		override fetch(url: string, options: FetchOptions) {
 			return fetcher.fetch(url, options);
