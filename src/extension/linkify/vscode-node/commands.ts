@@ -136,14 +136,14 @@ function toLocationLink(def: vscode.Location | vscode.LocationLink): vscode.Loca
 	}
 }
 
-function findMethodInSymbols(symbols: Array<vscode.SymbolInformation | vscode.DocumentSymbol>, methodName: string): vscode.SymbolInformation | vscode.DocumentSymbol | undefined {
+function findMethodInSymbols(symbols: Array<vscode.SymbolInformation | vscode.DocumentSymbol>, methodName: string, maxDepth: number = 5): vscode.SymbolInformation | vscode.DocumentSymbol | undefined {
 	for (const symbol of symbols) {
 		if (symbol.name === methodName) {
 			return symbol;
 		}
-		// Check children if it's a DocumentSymbol
-		if ('children' in symbol && symbol.children) {
-			const found = findMethodInSymbols(symbol.children, methodName);
+		// Check children if it's a DocumentSymbol and we haven't exceeded max depth
+		if (maxDepth > 0 && 'children' in symbol && symbol.children) {
+			const found = findMethodInSymbols(symbol.children, methodName, maxDepth - 1);
 			if (found) {
 				return found;
 			}
@@ -181,12 +181,19 @@ export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri
 							// Search for the method in the document symbols
 							const methodSymbol = findMethodInSymbols(symbols, methodName);
 							if (methodSymbol) {
-								const methodRange = 'selectionRange' in methodSymbol ? methodSymbol.selectionRange : methodSymbol.location.range;
-								dest = {
-									type: 'definition',
-									loc: { targetUri: defLoc.targetUri, targetRange: methodRange, targetSelectionRange: methodRange },
-								};
-								break;
+								let methodRange: vscode.Range | undefined;
+								if ('selectionRange' in methodSymbol && methodSymbol.selectionRange) {
+									methodRange = methodSymbol.selectionRange;
+								} else if ('location' in methodSymbol && methodSymbol.location && methodSymbol.location.range) {
+									methodRange = methodSymbol.location.range;
+								}
+								if (methodRange) {
+									dest = {
+										type: 'definition',
+										loc: { targetUri: defLoc.targetUri, targetRange: methodRange, targetSelectionRange: methodRange },
+									};
+									break;
+								}
 							}
 						}
 					} catch {

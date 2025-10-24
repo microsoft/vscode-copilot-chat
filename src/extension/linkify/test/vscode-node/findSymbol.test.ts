@@ -184,4 +184,25 @@ suite('Find symbol', () => {
 			'my_method'
 		);
 	});
+
+	test('Should prefer last part over first part in flat symbols due to match priority', () => {
+		// When both class and method exist as flat symbols, prefer method (last part, matchCount=2)
+		// over class (first part, matchCount=1)
+		assert.strictEqual(
+			findBestSymbolByPath([
+				symbolInfo('TextModel'),  // matchCount=1 (first part)
+				symbolInfo('undo')        // matchCount=2 (last part)
+			], 'TextModel.undo()')?.name,
+			'undo'
+		);
+
+		// Reverse order - should still prefer undo due to higher matchCount
+		assert.strictEqual(
+			findBestSymbolByPath([
+				symbolInfo('undo'),       // matchCount=2 (last part)
+				symbolInfo('TextModel')   // matchCount=1 (first part)
+			], 'TextModel.undo()')?.name,
+			'undo'
+		);
+	});
 });
