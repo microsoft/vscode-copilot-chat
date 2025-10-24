@@ -236,7 +236,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			pullRequestNumber = indexedSessionId.prNumber;
 		}
 		if (typeof pullRequestNumber === 'undefined') {
-			pullRequestNumber = parseInt(resource.path.slice(1));
+			pullRequestNumber = SessionIdForPr.parsePullRequestNumber(resource);
 			if (isNaN(pullRequestNumber)) {
 				this.logService.error(`Invalid pull request number: ${resource}`);
 				return this.createEmptySession(resource);
@@ -296,11 +296,14 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 	async openSessionsInBrowser(chatSessionItem: vscode.ChatSessionItem): Promise<void> {
 		const session = SessionIdForPr.parse(chatSessionItem.resource);
-		const prNumber = session?.prNumber;
+		let prNumber = session?.prNumber;
 		if (typeof prNumber === 'undefined' || isNaN(prNumber)) {
-			vscode.window.showErrorMessage(vscode.l10n.t('Invalid pull request number: {0}', chatSessionItem.resource));
-			this.logService.error(`Invalid pull request number: ${chatSessionItem.resource}`);
-			return;
+			prNumber = SessionIdForPr.parsePullRequestNumber(chatSessionItem.resource);
+			if (isNaN(prNumber)) {
+				vscode.window.showErrorMessage(vscode.l10n.t('Invalid pull request number: {0}', chatSessionItem.resource));
+				this.logService.error(`Invalid pull request number: ${chatSessionItem.resource}`);
+				return;
+			}
 		}
 
 		const pr = await this.findPR(prNumber);
@@ -535,10 +538,14 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 				stream.progress(vscode.l10n.t('Preparing'));
 				const session = SessionIdForPr.parse(context.chatSessionContext.chatSessionItem.resource);
-				if (!session?.prNumber) {
-					return {};
+				let prNumber = session?.prNumber;
+				if (!prNumber) {
+					prNumber = SessionIdForPr.parsePullRequestNumber(context.chatSessionContext.chatSessionItem.resource);
+					if (!prNumber) {
+						return {};
+					}
 				}
-				const pullRequest = await this.findPR(session.prNumber);
+				const pullRequest = await this.findPR(prNumber);
 				if (!pullRequest) {
 					stream.warning(vscode.l10n.t('Could not find the associated pull request {0} for this chat session.', context.chatSessionContext.chatSessionItem.resource));
 					return {};

@@ -106,6 +106,10 @@ export namespace SessionIdForPr {
 		}
 		return undefined;
 	}
+
+	export function parsePullRequestNumber(resource: vscode.Uri): number {
+		return parseInt(resource.path.slice(1));
+	}
 }
 
 export async function toOpenPullRequestWebviewUri(params: {
