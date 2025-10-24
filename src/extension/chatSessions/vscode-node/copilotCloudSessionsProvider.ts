@@ -846,7 +846,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		} while (waitForQueuedCount <= waitForQueuedMaxRetries && (!token || !token.isCancellationRequested));
 
 		if (!sessionInfo || sessionInfo.state !== 'queued') {
-			if (sessionInfo.state === 'in_progress') {
+			if (sessionInfo?.state === 'in_progress') {
 				this.logService.trace('Session already in progress');
 				return sessionInfo;
 			}
