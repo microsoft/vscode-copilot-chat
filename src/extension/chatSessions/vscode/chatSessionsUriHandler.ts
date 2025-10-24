@@ -10,7 +10,6 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { API, Repository } from '../../../platform/git/vscode/git';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { encodeBase64, VSBuffer } from '../../../util/vs/base/common/buffer';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { EXTENSION_ID } from '../../common/constants';
 import { getRepoId } from './copilotCodingAgentUtils';
@@ -184,6 +183,11 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 			} else {
 				this._logService.warn('Found pending sessions but they have expired at ' + new Date(pendingSession.timestamp).toISOString());
 			}
+		} else {
+			repository = details.repo;
+			branchName = details.branch;
+			prId = details.id;
+			type = details.type;
 		}
 		// Return if we still don't have the details.
 		if (!repository || !branchName || !prId || !type) {
@@ -200,8 +204,7 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 		if (!pullRequest) {
 			return;
 		}
-		const encodedId = encodeBase64(VSBuffer.wrap(new TextEncoder().encode(pullRequest.number.toString())), false, true);
-		const uri = vscode.Uri.from({ scheme: 'vscode-chat-session', authority: type, path: '/' + encodedId });
+		const uri = vscode.Uri.from({ scheme: 'copilot-cloud-agent', path: '/' + pullRequest.number.toString() });
 		await this._extensionContext.globalState.update(PENDING_CHAT_SESSION_STORAGE_KEY, undefined);
 		await vscode.commands.executeCommand('vscode.open', uri);
 
