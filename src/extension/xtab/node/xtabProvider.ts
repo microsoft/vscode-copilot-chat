@@ -1131,6 +1131,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const systemMessage = 'Your task is to predict the next line number in the current file where the developer is most likely to make their next edit, using the provided context.';
 
+		const maxTokens = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionCurrentFileMaxTokens, this.expService);
+
 		const currentFileContentR = this.constructTaggedFile(
 			promptPieces.currentDocument,
 			promptPieces.editWindowLinesRange,
@@ -1139,6 +1141,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...promptPieces.opts,
 				currentFile: {
 					...promptPieces.opts.currentFile,
+					maxTokens,
 					includeTags: false,
 				}
 			},
