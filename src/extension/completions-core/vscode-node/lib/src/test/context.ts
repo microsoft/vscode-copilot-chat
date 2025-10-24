@@ -65,6 +65,8 @@ import { TestTextDocumentManager } from './textDocument';
 import { NullLanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/nullLanguageContextProviderService';
 import { IInstantiationService, type ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionTestingServices } from '../../../../../test/vscode-node/services';
+import { CompletionsCapiBridge } from '../../../bridge/src/completionsCapiBridge';
+import { FakeCopilotTokenManager } from './copilotTokenManager';
 
 class NullLog extends LogTarget {
 	logIt(..._: unknown[]) { }
@@ -77,6 +79,7 @@ bridges.push(CompletionsAuthenticationServiceBridge);
 bridges.push(CompletionsIgnoreServiceBridge);
 bridges.push(CompletionsExperimentationServiceBridge);
 bridges.push(CompletionsTelemetryServiceBridge);
+bridges.push(CompletionsCapiBridge);
 
 /**
  * Baseline for a context. Tests should prefer the specific variants outlined below.
@@ -96,7 +99,7 @@ export function _createBaselineContext(serviceAccessor: ServicesAccessor, config
 	ctx.set(InMemoryConfigProvider, configProvider);
 	ctx.set(BuildInfo, new BuildInfo());
 	ctx.set(RuntimeMode, new RuntimeMode({ debug: false, verboseLogging: false, testMode: true, simulation: false }));
-	ctx.set(CopilotTokenManager, new CopilotTokenManager(ctx, true));
+	ctx.set(CopilotTokenManager, new FakeCopilotTokenManager(ctx));
 	// Notifications from the monolith when fetching a token can trigger behavior that require these objects.
 	ctx.set(TelemetryReporters, new TelemetryReporters());
 	ctx.set(NotificationSender, new TestNotificationSender());
