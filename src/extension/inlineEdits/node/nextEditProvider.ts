@@ -329,16 +329,24 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			const displayLocation: INextEditDisplayLocation = {
 				label,
 				range: currentCursorPosition,
+				jumpToEdit: true,
 			};
 
-			const commandJumpToEditRange: vscode.Command = {
-				command: jumpToPositionCommandId,
-				title: "Jump to next edit",
-				arguments: [editPosition.getStartPosition()],
-			};
+			// const commandJumpToEditRange: vscode.Command = {
+			// 	command: jumpToPositionCommandId,
+			// 	title: "Jump to next edit",
+			// 	arguments: [editPosition.getStartPosition()],
+			// };
 
-			const noopEdit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
-			nextEditResult = new NextEditResult(logContext.requestId, req, { edit: noopEdit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId, displayLocation, action: commandJumpToEditRange });
+			// const noopEdit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
+			nextEditResult = new NextEditResult(logContext.requestId, req, {
+				edit, //: noopEdit,
+				showRangePreference,
+				documentBeforeEdits: currentDocument,
+				targetDocumentId,
+				displayLocation,
+				// action: commandJumpToEditRange
+			});
 		}
 
 		telemetryBuilder.setHasNextEdit(true);
