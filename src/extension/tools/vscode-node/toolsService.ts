@@ -10,13 +10,17 @@ import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
-import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { ICopilotTool, ICopilotToolExtension, ToolRegistry } from '../common/toolsRegistry';
 import { BaseToolsService } from '../common/toolsService';
 
 export class ToolsService extends BaseToolsService {
 	declare _serviceBrand: undefined;
 
 	private readonly _copilotTools: Lazy<Map<ToolName, ICopilotTool<any>>>;
+
+	// Extensions to override definitions for existing tools.
+	private readonly _toolExtensions: Lazy<Map<ToolName, ICopilotToolExtension<any>>>;
+
 	private readonly _contributedToolCache: {
 		input: readonly vscode.LanguageModelToolInformation[];
 		output: readonly vscode.LanguageModelToolInformation[];
@@ -43,7 +47,7 @@ export class ToolsService extends BaseToolsService {
 			})
 			.map(tool => {
 				const owned = this._copilotTools.value.get(getToolName(tool.name) as ToolName);
-				return owned?.alternativeDefinition?.() ?? tool;
+				return owned?.alternativeDefinition?.(tool) ?? tool;
 			});
 
 		const result: vscode.LanguageModelToolInformation[] = contributedTools.map(tool => {
@@ -71,6 +75,7 @@ export class ToolsService extends BaseToolsService {
 	) {
 		super(logService);
 		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
+		this._toolExtensions = new Lazy(() => new Map(ToolRegistry.getToolExtensions().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
 	}
 
 	invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult | vscode.LanguageModelToolResult2> {
@@ -99,13 +104,17 @@ export class ToolsService extends BaseToolsService {
 			.map(tool => {
 				// Apply model-specific alternative if available via alternativeDefinition
 				const owned = this._copilotTools.value.get(getToolName(tool.name) as ToolName);
+				let resultTool = tool;
 				if (owned?.alternativeDefinition) {
-					const alternative = owned.alternativeDefinition(endpoint);
-					if (alternative) {
-						return alternative;
-					}
+					resultTool = owned.alternativeDefinition(resultTool, endpoint);
 				}
-				return tool;
+
+				const extension = this._toolExtensions.value.get(getToolName(tool.name) as ToolName);
+				if (extension?.alternativeDefinition) {
+					resultTool = extension.alternativeDefinition(resultTool, endpoint);
+				}
+
+				return resultTool;
 			})
 			.filter(tool => {
 				// 0. Check if the tool was disabled via the tool picker. If so, it must be disabled here

@@ -36,7 +36,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 	get tools(): LanguageModelToolInformation[] {
 		return Array.from(this._tools.values()).map(tool => {
 			const owned = this._copilotTools.get(getToolName(tool.name) as ToolName);
-			return owned?.value.alternativeDefinition?.() ?? tool;
+			return owned?.value.alternativeDefinition?.(tool) ?? tool;
 		});
 	}
 
@@ -149,7 +149,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 				// Apply model-specific alternative if available via alternativeDefinition
 				const owned = this._copilotTools.get(getToolName(tool.name) as ToolName);
 				if (owned?.value?.alternativeDefinition) {
-					const alternative = owned.value.alternativeDefinition(endpoint);
+					const alternative = owned.value.alternativeDefinition(tool, endpoint);
 					if (alternative) {
 						return alternative;
 					}
