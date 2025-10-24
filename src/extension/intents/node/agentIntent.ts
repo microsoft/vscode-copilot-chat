@@ -65,8 +65,9 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 
 		const allowTools: Record<string, boolean> = {};
 
+		const isHiddenModelBFlag = await isHiddenModelB(model);
 		const learned = editToolLearningService.getPreferredEndpointEditTool(model);
-		if (learned) { // a learning-enabled (BYOK) model, we should go with what it prefers
+		if (!isHiddenModelBFlag && learned) { // a learning-enabled (BYOK) model, we should go with what it prefers
 			allowTools[ToolName.EditFile] = learned.includes(ToolName.EditFile);
 			allowTools[ToolName.ReplaceString] = learned.includes(ToolName.ReplaceString);
 			allowTools[ToolName.MultiReplaceString] = learned.includes(ToolName.MultiReplaceString);

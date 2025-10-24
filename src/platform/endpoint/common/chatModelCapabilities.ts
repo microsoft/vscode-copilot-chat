@@ -86,7 +86,7 @@ export async function modelSupportsReplaceString(model: LanguageModelChat | ICha
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export async function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || await isHiddenModelB(model);
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
 }
 
 /**

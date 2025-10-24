@@ -365,7 +365,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getFileCreationReminder(this.props.endpoint.family)}
-						{getExplanationReminder(this.props.endpoint.family, { isHiddenModelBFlag, hasTodoTool })}
+						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 						{getVSCModelReminder(shouldIncludePreamble)}
 					</Tag>
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
@@ -784,20 +784,13 @@ function getVSCModelReminder(isHiddenModel: boolean) {
 	</>;
 }
 
-function getExplanationReminder(
-	modelFamily: string | undefined,
-	options?: {
-		hasTodoTool?: boolean;
-		isHiddenModelBFlag: boolean;
-	}
-) {
+function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
 	if (modelFamily === 'gpt-5-codex') {
 		return;
 	}
 
-	const { isHiddenModelBFlag, hasTodoTool } = options || {};
 	const isGpt5Mini = modelFamily === 'gpt-5-mini';
-	return isHiddenModelBFlag || modelFamily?.startsWith('gpt-5') === true ?
+	return modelFamily?.startsWith('gpt-5') === true ?
 		<>
 			Skip filler acknowledgements like "Sounds good" or "Okay, I will…". Open with a purposeful one-liner about what you're doing next.<br />
 			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />
