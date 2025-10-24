@@ -14,6 +14,7 @@ import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart
  */
 export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
+	View = 'view',
 	Bash = 'bash',
 	Think = 'think'
 }
@@ -206,11 +207,20 @@ export function createCopilotCLIToolInvocation(
 		formatStrReplaceEditorInvocation(invocation, args as StrReplaceEditorArgs);
 	} else if (toolName === CopilotCLIToolNames.Bash) {
 		formatBashInvocation(invocation, args as BashArgs);
+	} else if (toolName === CopilotCLIToolNames.View) {
+		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
 	} else {
 		formatGenericInvocation(invocation, toolName, args);
 	}
 
 	return invocation;
+}
+
+function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
+	const path = args.path ?? '';
+	const display = path ? formatUriForMessage(path) : '';
+
+	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 }
 
 function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
