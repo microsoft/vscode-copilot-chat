@@ -857,7 +857,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return;
 		}
 
-		const nextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService);
+		let nextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService);
+		nextCursorLinePrediction = (
+			nextCursorLinePrediction === true ? NextCursorLinePrediction.OnlyWithEdit :
+				(nextCursorLinePrediction === false ? undefined : nextCursorLinePrediction)
+		);
 		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying) {
 			const nextCursorLineR = await this.predictNextCursorPosition(promptPieces);
 
