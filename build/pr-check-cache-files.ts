@@ -31,27 +31,20 @@ type PullRequestCommit = {
 	readonly sha: string;
 }
 
-const collaborators = [
-	"aeschli", "aiday-mar", "alexdima", "alexr00", "amunger", "anthonykim1", "bamurtaugh", "benibenj", "bhavyaus",
-	"binderjoe", "bpasero", "burkeholland", "chrmarti", "connor4312", "cwebster-99", "dbaeumer", "deepak1556",
-	"devinvalenciano", "digitarald", "DonJayamanne", "egamma", "eleanorjboyd", "eli-w-king", "hawkticehurst", "hediet",
-	"isidorn", "jo-oikawa", "joaomoreno", "joshspicer", "jrieken", "justschen", "karthiknadig", "kieferrm", "kkbrooks",
-	"lramos15", "lszomoru", "luabud", "meganrogge", "minsa110", "mjbvz", "mrleemurray", "nguyenchristy", "ntrogh",
-	"olguzzar", "osortega", "pierceboggan", "rebornix", "roblourens", "rzhao271", "sandy081", "sbatten", "TylerLeonhardt",
-	"Tyriar", "ulugbekna", "Yoyokrazy"
-];
+async function getCollaborators(repository: string): Promise<readonly string[]> {
+	const { stdout, stderr } = await execAsync(
+		`gh api -H "Accept: application/vnd.github+json" /repos/${repository}/collaborators --paginate`, { maxBuffer: 25 * 1024 * 1024 });
 
-// TODO@lszomoru - Investigate issues with the `/collaborators` endpoint
-// async function getCollaborators(repository: string): Promise<readonly string[]> {
-// 	const { stdout, stderr } = await execAsync(
-// 		`gh api -H "Accept: application/vnd.github+json" /repos/${repository}/collaborators --paginate`, { maxBuffer: 25 * 1024 * 1024 });
+	if (stderr) {
+		throw new Error(`Error fetching repository collaborators - ${stderr}`);
+	}
 
-// 	if (stderr) {
-// 		throw new Error(`Error fetching repository collaborators - ${stderr}`);
-// 	}
+	const collaborators = JSON.parse(stdout) as ReadonlyArray<{ login: string; permissions: { maintain: boolean } }>;
 
-// 	return JSON.parse(stdout) as ReadonlyArray<string>;
-// }
+	return collaborators
+		.filter(c => c.permissions.maintain)
+		.map(c => c.login);
+}
 
 async function getCommit(repository: string, sha: string): Promise<Commit> {
 	const { stdout, stderr } = await execAsync(
@@ -110,7 +103,7 @@ async function checkDatabaseLayerFiles(repository: string, pullRequestNumber: st
 	}
 
 	// Get collaborators and commits for the pull request
-	// const collaborators = await getCollaborators(repository);
+	const collaborators = await getCollaborators(repository);
 	const pullRequestCommits = await getPullRequestCommits(repository, pullRequestNumber);
 	const commitsWithDetails = await Promise.all(pullRequestCommits.map(sha => getCommit(repository, sha)));
 
