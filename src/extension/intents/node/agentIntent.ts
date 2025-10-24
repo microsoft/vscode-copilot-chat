@@ -94,7 +94,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
 		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
-		if (model.family === 'gpt-5-codex' || await isHiddenModelB(model)) {
+		if (model.family === 'gpt-5-codex' || model.family.includes('grok-code') || await isHiddenModelB(model)) {
 			allowTools[ToolName.CoreManageTodoList] = false;
 		}
 
