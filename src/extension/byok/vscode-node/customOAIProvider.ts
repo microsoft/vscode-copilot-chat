@@ -104,6 +104,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			// Only use Responses API if user explicitly specified /responses OR experiment is enabled (for base URLs only)
 			const useResponsesApi = modelInfo.url.includes('/responses') || (!hasExplicitApiPath(modelInfo.url) && enableResponsesApi);
 			const resolvedUrl = this.resolveUrl(modelId, modelInfo.url, useResponsesApi);
+			this._logService.info(`BYOK: Resolved URL for model ${this.providerName}/${modelId}: ${resolvedUrl}`);
 
 			models[modelId] = {
 				name: modelInfo.name,
