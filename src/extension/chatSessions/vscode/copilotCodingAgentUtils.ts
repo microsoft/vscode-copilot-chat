@@ -96,8 +96,8 @@ export namespace SessionIdForPr {
 		return `${prefix}-${prNumber}-${sessionIndex}`;
 	}
 
-	export function parse(id: string): { prNumber: number; sessionIndex: number } | undefined {
-		const match = id.match(new RegExp(`^${prefix}-(\\d+)-(\\d+)$`));
+	export function parse(resource: vscode.Uri): { prNumber: number; sessionIndex: number } | undefined {
+		const match = resource.path.match(new RegExp(`^/${prefix}-(\\d+)-(\\d+)$`));
 		if (match) {
 			return {
 				prNumber: parseInt(match[1], 10),

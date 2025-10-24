@@ -49,7 +49,6 @@ export interface CrossChatSessionWithPR extends vscode.ChatSessionItem {
 const CLOSE_SESSION_PR_CMD = 'github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest';
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
-	readonly claudeSessionType = 'claude-code';
 	readonly copilotcliSessionType = 'copilotcli';
 
 	private copilotCloudRegistrations: DisposableStore | undefined;
@@ -62,6 +61,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
+
+		// #region Claude Code Chat Sessions
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
@@ -70,16 +71,18 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			));
 
 		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
-		this._register(vscode.chat.registerChatSessionItemProvider(this.claudeSessionType, sessionItemProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(ClaudeChatSessionItemProvider.claudeSessionType, sessionItemProvider));
 		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.refresh', () => {
 			sessionItemProvider.refresh();
 		}));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider);
-		const claudeChatSessionParticipant = claudeAgentInstaService.createInstance(ClaudeChatSessionParticipant, this.claudeSessionType, claudeAgentManager, sessionItemProvider);
-		const chatParticipant = vscode.chat.createChatParticipant(this.claudeSessionType, claudeChatSessionParticipant.createHandler());
-		this._register(vscode.chat.registerChatSessionContentProvider(this.claudeSessionType, chatSessionContentProvider, chatParticipant));
+		const claudeChatSessionParticipant = claudeAgentInstaService.createInstance(ClaudeChatSessionParticipant, ClaudeChatSessionItemProvider.claudeSessionType, claudeAgentManager, sessionItemProvider);
+		const chatParticipant = vscode.chat.createChatParticipant(ClaudeChatSessionItemProvider.claudeSessionType, claudeChatSessionParticipant.createHandler());
+		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeChatSessionItemProvider.claudeSessionType, chatSessionContentProvider, chatParticipant));
+
+		// #endregion
 
 		// Copilot Cloud Agent - conditionally register based on configuration
 		this.copilotAgentInstaService = instantiationService.createChild(new ServiceCollection(
@@ -113,7 +116,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const copilotcliChatSessionParticipant = copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
-			this.copilotcliSessionType,
 			copilotcliAgentManager,
 			copilotCLISessionService,
 			copilotcliSessionItemProvider,

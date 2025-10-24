@@ -133,7 +133,7 @@
 		"taskExecutionTerminal",
 		"dataChannels",
 		"languageModelThinkingPart",
-		"chatSessionsProvider@2",
+		"chatSessionsProvider@3",
 		"devDeviceId",
 		"contribEditorContentMenu"
 	],
@@ -4218,7 +4218,7 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
 				"description": "The Copilot CLI Agent works on your local machine",
-				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled && !chatEntitlementSignedOut && chatIsEnabled",
+				"when": "!chatEntitlementSignedOut && chatIsEnabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
@@ -4244,7 +4244,7 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 1,
 				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
-				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled && !chatEntitlementSignedOut && chatIsEnabled",
+				"when": "!chatEntitlementSignedOut && chatIsEnabled",
 				"capabilities": {
 					"supportsFileAttachments": true
 				}
