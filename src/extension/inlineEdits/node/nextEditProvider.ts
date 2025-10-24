@@ -315,7 +315,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const currentCursorPosition: Range | undefined = currentSelection ? transformer.getRange(currentSelection) : undefined;
 		const editPosition = transformer.getRange(edit.replaceRange);
 
-		if (!showLabel || !currentCursorPosition || /* is close enough to not show label */ currentCursorPosition.startLineNumber - 2 <= editPosition.startLineNumber && editPosition.endLineNumber <= currentCursorPosition.endLineNumber + 5) {
+		if (!showLabel || !currentCursorPosition || /* is close enough to not show label */ currentCursorPosition.startLineNumber - 2 <= editPosition.startLineNumber && editPosition.endLineNumber <= currentCursorPosition.endLineNumber + 5) { // TODO@ulugbekna
 			tracer.trace('providing edit without label');
 			nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
 		} else {
@@ -323,9 +323,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			const lineWithCode = documentAtInvocationTime.getLineAt(editPosition.startLineNumber);
 			const trimmedLineWithCode = lineWithCode.trimStart();
 			const shortenedLineWithCode = trimmedLineWithCode.slice(0, 40);
-			const label = ['.ts', '.tsx', '.js', '.jsx'].includes(docId.extension)
-				? `Jump to ${editPosition.startLineNumber} | ${shortenedLineWithCode.length === trimmedLineWithCode.length ? shortenedLineWithCode : trimmedLineWithCode + '...'}`
-				: 'Jump to next edit';
+			const label = ['.ts', '.tsx', '.js', '.jsx'].includes(docId.extension) && this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionDisplayLine, this._expService)
+				? `Jump to line ${editPosition.startLineNumber} | ${shortenedLineWithCode.length === trimmedLineWithCode.length ? shortenedLineWithCode : trimmedLineWithCode + '...'}`
+				: `Jump to line ${editPosition.startLineNumber}`;
 			const displayLocation: INextEditDisplayLocation = {
 				label,
 				range: currentCursorPosition,
