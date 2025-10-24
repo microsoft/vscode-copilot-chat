@@ -111,7 +111,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		// We'd like to hide all of the custom shell commands we send to the terminal from the user.
 		cliArgs.unshift('--clear');
 
-		const [shellPathAndArgs] = await Promise.all([
+		let [shellPathAndArgs] = await Promise.all([
 			this.getShellInfo(cliArgs),
 			this.updateGHTokenInTerminalEnvVars(),
 			this.initialization
@@ -122,7 +122,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
 		}
 
-		if (shellPathAndArgs) {
+		if (shellPathAndArgs && (shellPathAndArgs.shell !== 'powershell' && shellPathAndArgs.shell !== 'pwsh')) {
 			const terminal = await this.pythonTerminalService.createTerminal(options);
 			if (terminal) {
 				this._register(terminal);
@@ -140,10 +140,14 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			return;
 		}
 
-		options.shellPath = shellPathAndArgs.shellPath;
-		options.shellArgs = shellPathAndArgs.shellArgs;
-		const terminal = this._register(this.terminalService.createTerminal(options));
-		terminal.show();
+		cliArgs.shift(); // Remove --clear as we are creating a new terminal with our own args.
+		shellPathAndArgs = await this.getShellInfo(cliArgs);
+		if (shellPathAndArgs) {
+			options.shellPath = shellPathAndArgs.shellPath;
+			options.shellArgs = shellPathAndArgs.shellArgs;
+			const terminal = this._register(this.terminalService.createTerminal(options));
+			terminal.show();
+		}
 	}
 
 	private buildCommandForPythonTerminal(copilotCommand: string, cliArgs: string[], shellInfo: IShellInfo) {
