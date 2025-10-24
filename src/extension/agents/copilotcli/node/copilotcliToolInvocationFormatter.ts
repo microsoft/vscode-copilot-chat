@@ -5,15 +5,16 @@
 
 import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
-import type { ExtendedChatResponsePart } from 'vscode';
+import type { ChatPromptReference, ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
 
 /**
  * CopilotCLI tool names
  */
 export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
+	View = 'view',
 	Bash = 'bash',
 	Think = 'think'
 }
@@ -38,10 +39,44 @@ interface BashArgs {
 export function stripReminders(text: string): string {
 	// Remove any <reminder> ... </reminder> blocks, including newlines
 	// Also remove <current_datetime> ... </current_datetime> blocks
+	// Also remove <pr_metadata .../> tags
 	return text
 		.replace(/<reminder>[\s\S]*?<\/reminder>\s*/g, '')
 		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
+		.replace(/<pr_metadata[^>]*\/?>\s*/g, '')
 		.trim();
+}
+
+/**
+ * Extract PR metadata from assistant message content
+ */
+function extractPRMetadata(content: string): { cleanedContent: string; prPart?: ChatResponsePullRequestPart } {
+	const prMetadataRegex = /<pr_metadata\s+uri="([^"]+)"\s+title="([^"]+)"\s+description="([^"]+)"\s+author="([^"]+)"\s+linkTag="([^"]+)"\s*\/?>/;
+	const match = content.match(prMetadataRegex);
+
+	if (match) {
+		const [fullMatch, uri, title, description, author, linkTag] = match;
+		// Unescape XML entities
+		const unescapeXml = (text: string) => text
+			.replace(/&apos;/g, "'")
+			.replace(/&quot;/g, '"')
+			.replace(/&gt;/g, '>')
+			.replace(/&lt;/g, '<')
+			.replace(/&amp;/g, '&');
+
+		const prPart = new ChatResponsePullRequestPart(
+			Uri.parse(uri),
+			unescapeXml(title),
+			unescapeXml(description),
+			unescapeXml(author),
+			unescapeXml(linkTag)
+		);
+
+		const cleanedContent = content.replace(fullMatch, '').trim();
+		return { cleanedContent, prPart };
+	}
+
+	return { cleanedContent: content };
 }
 
 /**
@@ -62,14 +97,31 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 					turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
 					currentResponseParts = [];
 				}
-				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, [], '', [], undefined));
+				// TODO @DonJayamanne Temporary work around until we get the zod types.
+				type Attachment = {
+					path: string;
+					type: "file" | "directory";
+					displayName: string;
+				};
+				const references: ChatPromptReference[] = ((event.data.attachments || []) as Attachment[]).map(attachment => ({ id: attachment.path, name: attachment.displayName, value: Uri.file(attachment.path) } as ChatPromptReference));
+				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, references, '', [], undefined));
 				break;
 			}
 			case 'assistant.message': {
 				if (event.data.content) {
-					currentResponseParts.push(
-						new ChatResponseMarkdownPart(new MarkdownString(event.data.content))
-					);
+					// Extract PR metadata if present
+					const { cleanedContent, prPart } = extractPRMetadata(event.data.content);
+
+					// Add PR part first if it exists
+					if (prPart) {
+						currentResponseParts.push(prPart);
+					}
+
+					if (cleanedContent) {
+						currentResponseParts.push(
+							new ChatResponseMarkdownPart(new MarkdownString(cleanedContent))
+						);
+					}
 				}
 				break;
 			}
@@ -155,11 +207,20 @@ export function createCopilotCLIToolInvocation(
 		formatStrReplaceEditorInvocation(invocation, args as StrReplaceEditorArgs);
 	} else if (toolName === CopilotCLIToolNames.Bash) {
 		formatBashInvocation(invocation, args as BashArgs);
+	} else if (toolName === CopilotCLIToolNames.View) {
+		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
 	} else {
 		formatGenericInvocation(invocation, toolName, args);
 	}
 
 	return invocation;
+}
+
+function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
+	const path = args.path ?? '';
+	const display = path ? formatUriForMessage(path) : '';
+
+	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 }
 
 function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {

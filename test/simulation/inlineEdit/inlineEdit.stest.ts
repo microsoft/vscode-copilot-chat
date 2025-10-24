@@ -2,7 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ServerPoweredInlineEditProvider } from '../../../src/extension/inlineEdits/node/serverPoweredInlineEditProvider';
 import { XtabProvider } from '../../../src/extension/xtab/node/xtabProvider';
 import { ConfigKey } from '../../../src/platform/configuration/common/configurationService';
 import { Configuration, ISimulationSuiteDescriptor, ssuite, stest } from '../../base/stest';
@@ -32,31 +31,6 @@ const commonXtabTestConfigurations: Configuration<unknown>[] = [
 	// 	key: ConfigKey.Internal.InlineEditsXtabIncludeViewedFiles,
 	// 	value: true,
 	// },
-	// uncomment to use paged clipping
-	// {
-	// 	key: ConfigKey.Internal.InlineEditsXtabUsePagedClipping,
-	// 	value: true,
-	// },
-	// uncomment to use varying lines above
-	// {
-	// 	key: ConfigKey.Internal.InlineEditsXtabProviderUseVaryingLinesAbove,
-	// 	value: true,
-	// },
-	// uncomment to disable tags in current file
-	// {
-	// 	key: ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile,
-	// 	value: false,
-	// },
-	// uncomment to disable streamed edits
-	// {
-	// 	key: ConfigKey.Internal.InlineEditsStreamEdits,
-	// 	value: false,
-	// }
-	// uncomment to enable diffing only for documents in the prompt
-	// {
-	// 	key: ConfigKey.Internal.InlineEditsXtabDiffOnlyForDocsInPrompt,
-	// 	value: true,
-	// }
 ];
 
 const testConfigs: TestConfiguration[] = [
@@ -69,16 +43,7 @@ const testConfigs: TestConfiguration[] = [
 			},
 			...commonXtabTestConfigurations,
 		],
-	},
-	{
-		providerName: "server",
-		extensionConfiguration: [
-			{
-				key: ConfigKey.Internal.InlineEditsProviderId,
-				value: ServerPoweredInlineEditProvider.ID,
-			}
-		],
-	},
+	}
 ];
 
 for (const testConfig of testConfigs) {

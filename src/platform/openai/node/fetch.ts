@@ -557,7 +557,7 @@ async function fetchWithInstrumentation(
 			const totalTimeMs = Date.now() - requestStart;
 			telemetryData.measurements.totalTimeMs = totalTimeMs;
 
-			logService.debug(`request.response: [${chatEndpoint.urlOrRequestMetadata}] took ${totalTimeMs} ms`);
+			logService.debug(`request.response: [${stringifyUrlOrRequestMetadata(chatEndpoint.urlOrRequestMetadata)}] took ${totalTimeMs} ms`);
 
 			telemetryService.sendGHTelemetryEvent('request.error', telemetryData.properties, telemetryData.measurements);
 

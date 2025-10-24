@@ -38,7 +38,7 @@ export default tseslint.config(
 			'**/*.{js,jsx,mjs,cjs,ts,tsx}',
 		],
 		ignores: [
-			'./src/extension/completions-core/**/*'
+			'./src/extension/completions-core/**/testdata/*',
 		],
 		languageOptions: {
 			parser: tsParser,
@@ -156,6 +156,7 @@ export default tseslint.config(
 		],
 		ignores: [
 			'**/.esbuild.ts',
+			'./src/extension/completions-core/vscode-node/bridge/src/completionsTelemetryServiceBridge.ts',
 		],
 		languageOptions: {
 			parser: tseslint.parser,

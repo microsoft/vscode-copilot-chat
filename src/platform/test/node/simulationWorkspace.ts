@@ -360,6 +360,10 @@ export class SimulationWorkspace extends Disposable {
 		return this._diagnostics.get(uri) ?? [];
 	}
 
+	public getAllDiagnostics(): [vscode.Uri, vscode.Diagnostic[]][] {
+		return Array.from(this._diagnostics.entries());
+	}
+
 	public getDocument(filePathOrUri: string | vscode.Uri): IExtHostDocumentData {
 		const queryUri = typeof filePathOrUri === 'string' ? this.getUriFromFilePath(filePathOrUri) : filePathOrUri;
 		const candidateFile = this._docs.get(queryUri);

@@ -2,7 +2,7 @@
 	"name": "@vscode/copilot-typescript-server-plugin",
 	"private": true,
 	"version": "1.0.0",
-	"description": "TypeScript plugin to provide TS specific code completion context for Copilot",
+	"description": "TypeScript plugin to provide TS specific inline suggestion context for Copilot",
 	"author": "MS",
 	"license": "MIT",
 	"main": "./dist/main.js",

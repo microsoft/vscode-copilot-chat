@@ -129,6 +129,10 @@ export class CopilotToken {
 		return this._info.isVscodeTeamMember;
 	}
 
+	get codexAgentEnabled(): boolean {
+		return this._info.codex_agent_enabled ?? false;
+	}
+
 	get copilotPlan(): 'free' | 'individual' | 'individual_pro' | 'business' | 'enterprise' {
 		if (this.isFreeUser) {
 			return 'free';
@@ -199,6 +203,10 @@ export class CopilotToken {
 	isExpandedClientSideIndexingEnabled(): boolean {
 		return this._info.blackbird_clientside_indexing === true;
 	}
+
+	isFcv1(): boolean {
+		return this.tokenMap.get('fcv1') === '1';
+	}
 }
 
 /**
@@ -261,7 +269,6 @@ export interface TokenInfo {
 /**
  * A server response containing the user info for the copilot user from the /copilot_internal/user endpoint
  */
-
 export interface CopilotUserInfo extends CopilotUserQuotaInfo {
 	access_type_sku: string;
 	analytics_tracking_id: string;
@@ -274,10 +281,11 @@ export interface CopilotUserInfo extends CopilotUserQuotaInfo {
 		login: string;
 		name: string | null;
 	}>;
+	codex_agent_enabled?: boolean;
 }
 
 // The token info extended with additional metadata that is helpful to have
-export type ExtendedTokenInfo = TokenInfo & { username: string; isVscodeTeamMember: boolean; blackbird_clientside_indexing?: boolean } & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date'>;
+export type ExtendedTokenInfo = TokenInfo & { username: string; isVscodeTeamMember: boolean; blackbird_clientside_indexing?: boolean } & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date' | 'codex_agent_enabled'>;
 
 export type TokenEnvelope = Omit<TokenInfo, 'token' | 'organization_list'>;
 

@@ -251,6 +251,7 @@ export interface ChatCompletion {
 	requestId: RequestId;
 	tokens: readonly string[];
 	usage: APIUsage | undefined;
+	model: string;
 	blockFinished: boolean; // Whether the block completion was determined to be finished
 	finishReason: FinishedCompletionReason;
 	filterReason?: FilterReason; // optional filter reason if the completion was filtered

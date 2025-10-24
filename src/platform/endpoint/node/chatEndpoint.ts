@@ -112,6 +112,7 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 		const completion: ChatCompletion = {
 			blockFinished: false,
 			choiceIndex: i,
+			model: jsonResponse.model,
 			filterReason: undefined,
 			finishReason: choice.finish_reason as FinishedCompletionReason,
 			message: message,
@@ -225,7 +226,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public get degradationReason(): string | undefined {
-		return this._modelMetadata.warning_message;
+		return this._modelMetadata.warning_messages?.at(0)?.message ?? this._modelMetadata.info_messages?.at(0)?.message;
 	}
 
 	public get policy(): 'enabled' | { terms: string } {

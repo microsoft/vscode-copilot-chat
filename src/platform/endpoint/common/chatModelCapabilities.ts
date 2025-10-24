@@ -4,37 +4,47 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelChat } from 'vscode';
-import { encodeHex, VSBuffer } from '../../../util/vs/base/common/buffer';
+import { getCachedSha256Hash } from '../../../util/common/crypto';
 import type { IChatEndpoint } from '../../networking/common/networking';
-
-const _cachedHashes = new Map<string, string>();
-
-async function getSha256Hash(text: string): Promise<string> {
-	if (_cachedHashes.has(text)) {
-		return _cachedHashes.get(text)!;
-	}
-
-	const encoder = new TextEncoder();
-	const data = encoder.encode(text);
-	const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-	const hash = encodeHex(VSBuffer.wrap(new Uint8Array(hashBuffer)));
-	_cachedHashes.set(text, hash);
-	return hash;
-}
 
 const HIDDEN_MODEL_A_HASHES = [
 	'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3',
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95'
 ];
 
+const HIDDEN_MODEL_B_HASHES = [
+	'e0f69b60bf6a6e138121a69884fa51b89aae7315f37d5f41bd0500b2d9346048',
+	'19bf22638886749a7a346f454f1c957c07db04b3302c0671f1dafa66d00508c6'
+];
+
+const VSC_MODEL_HASHES = [
+	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
+	'e7cfc1a7adaf9e419044e731b7a9e21940a5280a438b472db0c46752dd70eab3',
+	'878722e35e24b005604c37aa5371ae100e82465fbfbdf6fe3c1fdaf7c92edc96',
+	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
+	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
+	'b576d46942ee2c45ecd979cbbcb62688ae3171a07ac83f53b783787f345e3dd7',
+];
+
+function getModelId(model: LanguageModelChat | IChatEndpoint): string {
+	return 'id' in model ? model.id : model.model;
+}
+
 export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
-	const h = await getSha256Hash(model.family);
+	const h = await getCachedSha256Hash(model.family);
 	return HIDDEN_MODEL_A_HASHES.includes(h);
 }
 
 export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
-	return await getSha256Hash(model.family) === '4243b479ae1f345e3b3beff413f628c1c3edf2b54bc75859e736f0254231aafb';
+	const h = await getCachedSha256Hash(getModelId(model));
+	return HIDDEN_MODEL_B_HASHES.includes(h);
 }
+
+export async function isVSCModel(model: LanguageModelChat | IChatEndpoint) {
+	const h = await getCachedSha256Hash(getModelId(model));
+	return VSC_MODEL_HASHES.includes(h);
+}
+
 
 /**
  * Returns whether the instructions should be given in a user message instead
@@ -70,14 +80,14 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
  * Model supports replace_string_in_file as an edit tool.
  */
 export async function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.includes('gemini') || model.family.includes('grok-code') || await modelSupportsMultiReplaceString(model);
+	return model.family.includes('gemini') || model.family.includes('grok-code') || await isHiddenModelB(model) || await modelSupportsMultiReplaceString(model);
 }
 
 /**
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export async function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || await isHiddenModelB(model);
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
 }
 
 /**
@@ -89,10 +99,18 @@ export async function modelCanUseReplaceStringExclusively(model: LanguageModelCh
 }
 
 /**
+ * We should attempt to automatically heal incorrect edits the model may emit.
+ * @note whether this is respected is currently controlled via EXP
+ */
+export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IChatEndpoint) {
+	return model.family.includes('gemini');
+}
+
+/**
  * The model can accept image urls as the `image_url` parameter in mcp tool results.
  */
 export async function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic') && !await isHiddenModelB(model);
+	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic');
 }
 
 /**

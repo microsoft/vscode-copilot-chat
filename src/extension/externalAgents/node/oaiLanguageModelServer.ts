@@ -15,7 +15,7 @@ import { responseApiInputToRawMessagesForLogging } from '../../../platform/endpo
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams, getRequestId } from '../../../platform/networking/common/fetch';
 import { Response } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IEndpointFetchOptions, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason } from '../../../platform/networking/common/openai';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
@@ -80,7 +80,7 @@ export class OpenAILanguageModelServer extends Disposable {
 						return;
 					}
 
-					await this.handleResponsesAPIRequest(body, res);
+					await this.handleResponsesAPIRequest(body, req.headers, res);
 				} catch (error) {
 					res.writeHead(500, { 'Content-Type': 'application/json' });
 					res.end(JSON.stringify({
@@ -115,7 +115,7 @@ export class OpenAILanguageModelServer extends Disposable {
 		});
 	}
 
-	private async handleResponsesAPIRequest(bodyString: string, res: http.ServerResponse): Promise<void> {
+	private async handleResponsesAPIRequest(bodyString: string, headers: http.IncomingHttpHeaders, res: http.ServerResponse): Promise<void> {
 		// Create cancellation token for the request
 		const tokenSource = new CancellationTokenSource();
 
@@ -161,7 +161,14 @@ export class OpenAILanguageModelServer extends Disposable {
 			});
 
 			const endpointRequestBody = requestBody as IEndpointBody;
-			const streamingEndpoint = this.instantiationService.createInstance(StreamingPassThroughEndpoint, selectedEndpoint, res, endpointRequestBody);
+			const streamingEndpoint = this.instantiationService.createInstance(
+				StreamingPassThroughEndpoint,
+				selectedEndpoint,
+				res,
+				endpointRequestBody,
+				headers,
+				'vscode_codex'
+			);
 
 			await streamingEndpoint.makeChatRequest2({
 				debugName: 'oaiLMServer',
@@ -236,6 +243,8 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		private readonly base: IChatEndpoint,
 		private readonly responseStream: http.ServerResponse,
 		private readonly requestBody: IEndpointBody,
+		private readonly requestHeaders: http.IncomingHttpHeaders,
+		private readonly userAgentPrefix: string,
 		@IChatMLFetcher private readonly chatMLFetcher: IChatMLFetcher
 	) { }
 
@@ -244,7 +253,26 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 	}
 
 	public getExtraHeaders(): Record<string, string> {
-		return this.base.getExtraHeaders?.() ?? {};
+		const headers = this.base.getExtraHeaders?.() ?? {};
+		if (this.requestHeaders['user-agent']) {
+			headers['User-Agent'] = this.getUserAgent(this.requestHeaders['user-agent']);
+		}
+		return headers;
+	}
+
+	getEndpointFetchOptions(): IEndpointFetchOptions {
+		return {
+			suppressIntegrationId: true
+		};
+	}
+
+	private getUserAgent(incomingUserAgent: string): string {
+		const slashIndex = incomingUserAgent.indexOf('/');
+		if (slashIndex === -1) {
+			return `${this.userAgentPrefix}/${incomingUserAgent}`;
+		}
+
+		return `${this.userAgentPrefix}${incomingUserAgent.substring(slashIndex)}`;
 	}
 
 	public interceptBody(body: IEndpointBody | undefined): void {
@@ -381,6 +409,7 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 
 		const completion: ChatCompletion = {
 			message: completionMessage,
+			model: this.model,
 			choiceIndex: 0,
 			requestId,
 			tokens: [],

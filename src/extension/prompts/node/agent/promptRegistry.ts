@@ -4,31 +4,58 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement } from '@vscode/prompt-tsx';
+import type { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { DefaultAgentPromptProps } from './defaultAgentInstructions';
 
 export type PromptConstructor = new (props: DefaultAgentPromptProps, ...args: any[]) => PromptElement<DefaultAgentPromptProps>;
 
 export interface IAgentPrompt {
-	resolvePrompt(): PromptConstructor | undefined;
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined;
 }
 
 export interface IAgentPromptCtor {
-	readonly modelFamilies: readonly string[];
+	readonly familyPrefixes: readonly string[];
+	matchesModel?(endpoint: IChatEndpoint): Promise<boolean> | boolean;
 	new(...args: any[]): IAgentPrompt;
 }
 
+export type AgentPromptClass = IAgentPromptCtor & (new (...args: any[]) => IAgentPrompt);
+
+type PromptWithMatcher = IAgentPromptCtor & {
+	matchesModel: (endpoint: IChatEndpoint) => Promise<boolean> | boolean;
+};
+
 export const PromptRegistry = new class {
-	private promptMap = new Map<string, IAgentPromptCtor>();
+	private readonly promptsWithMatcher: PromptWithMatcher[] = [];
+	private readonly familyPrefixList: { prefix: string; prompt: IAgentPromptCtor }[] = [];
 
 	registerPrompt(prompt: IAgentPromptCtor): void {
-		for (const modelFamily of prompt.modelFamilies) {
-			this.promptMap.set(modelFamily, prompt);
+		if (prompt.matchesModel) {
+			this.promptsWithMatcher.push(prompt as PromptWithMatcher);
+		}
+
+		for (const prefix of prompt.familyPrefixes) {
+			this.familyPrefixList.push({ prefix, prompt });
 		}
 	}
 
-	getPrompt(
-		modelFamily: string
-	): IAgentPromptCtor | undefined {
-		return this.promptMap.get(modelFamily);
+	async getPrompt(
+		endpoint: IChatEndpoint
+	): Promise<IAgentPromptCtor | undefined> {
+
+		for (const prompt of this.promptsWithMatcher) {
+			const matches = await prompt.matchesModel(endpoint);
+			if (matches) {
+				return prompt;
+			}
+		}
+
+		for (const { prefix, prompt } of this.familyPrefixList) {
+			if (endpoint.family.startsWith(prefix)) {
+				return prompt;
+			}
+		}
+
+		return undefined;
 	}
 }();
