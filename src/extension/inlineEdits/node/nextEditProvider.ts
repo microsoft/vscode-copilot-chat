@@ -31,7 +31,7 @@ import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
-import { Position } from '../../../util/vs/editor/common/core/position';
+import { Range } from '../../../util/vs/editor/common/core/range';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency } from '../common/editRebase';
@@ -256,6 +256,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			tracer.throws('has throwing error', error.error);
 			throw error.error;
 		} else if (error instanceof NoNextEditReason.NoSuggestions && error.nextCursorPosition !== undefined) {
+			tracer.trace('no suggestions but has next cursor position');
 			const transformer = documentAtInvocationTime.getTransformer();
 
 			const currentSelection = selections.at(0);
@@ -305,36 +306,47 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		assert(currentDocument !== undefined, 'should be defined if edit is defined');
 
 		telemetryBuilder.setStatus('notAccepted'); // Acceptance pending.
+
 		const showRangePreference = this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit;
+
 		let nextEditResult: NextEditResult;
-		if (!showLabel || selections.length < 1) {
+		const currentSelection = selections.at(0);
+		const transformer = documentAtInvocationTime.getTransformer();
+		const currentCursorPosition: Range | undefined = currentSelection ? transformer.getRange(currentSelection) : undefined;
+		const editPosition = transformer.getRange(edit.replaceRange);
+
+		if (!showLabel || !currentCursorPosition || /* is close enough to not show label */ currentCursorPosition.startLineNumber - 2 <= editPosition.startLineNumber && editPosition.endLineNumber <= currentCursorPosition.endLineNumber + 5) { // TODO@ulugbekna
+			tracer.trace('providing edit without label');
 			nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
 		} else {
-			const transformer = documentAtInvocationTime.getTransformer();
-			const currentSelection = selections[0];
-			const currentCursorPosition = transformer.getRange(currentSelection);
-
-			const editPosition = transformer.getRange(edit.replaceRange);
-
+			tracer.trace('providing edit with label');
 			const lineWithCode = documentAtInvocationTime.getLineAt(editPosition.startLineNumber);
 			const trimmedLineWithCode = lineWithCode.trimStart();
 			const shortenedLineWithCode = trimmedLineWithCode.slice(0, 40);
-			const label = ['.ts', '.tsx', '.js', '.jsx'].includes(docId.extension)
-				? `Jump to ${editPosition.startLineNumber} | ${shortenedLineWithCode.length === trimmedLineWithCode.length ? shortenedLineWithCode : trimmedLineWithCode + '...'}`
-				: 'Jump to next edit';
+			const label = ['.ts', '.tsx', '.js', '.jsx'].includes(docId.extension) && this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionDisplayLine, this._expService)
+				? `Jump to line ${editPosition.startLineNumber} | ${shortenedLineWithCode.length === trimmedLineWithCode.length ? shortenedLineWithCode : trimmedLineWithCode + '...'}`
+				: `Jump to line ${editPosition.startLineNumber}`;
 			const displayLocation: INextEditDisplayLocation = {
 				label,
 				range: currentCursorPosition,
+				jumpToEdit: true,
 			};
 
-			const commandJumpToEditRange: vscode.Command = {
-				command: jumpToPositionCommandId,
-				title: "Jump to next edit",
-				arguments: [new Position(editPosition.startLineNumber, editPosition.startColumn)],
-			};
+			// const commandJumpToEditRange: vscode.Command = {
+			// 	command: jumpToPositionCommandId,
+			// 	title: "Jump to next edit",
+			// 	arguments: [editPosition.getStartPosition()],
+			// };
 
-			const noopEdit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
-			nextEditResult = new NextEditResult(logContext.requestId, req, { edit: noopEdit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId, displayLocation, action: commandJumpToEditRange });
+			// const noopEdit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
+			nextEditResult = new NextEditResult(logContext.requestId, req, {
+				edit, //: noopEdit,
+				showRangePreference,
+				documentBeforeEdits: currentDocument,
+				targetDocumentId,
+				displayLocation,
+				// action: commandJumpToEditRange
+			});
 		}
 
 		telemetryBuilder.setHasNextEdit(true);
