@@ -66,7 +66,7 @@ suite('.match', function () {
 		assert.strictEqual(testNotificationSender.sentMessages.length, 1);
 	});
 
-	test('sends a telemtry event on view reference action', async function () {
+	test('sends a telemetry event on view reference action', async function () {
 		const testNotificationSender = ctx.get(NotificationSender) as TestNotificationSender;
 		testNotificationSender.performAction('View reference');
 
