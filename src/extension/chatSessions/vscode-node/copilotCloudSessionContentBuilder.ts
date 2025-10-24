@@ -159,7 +159,7 @@ export class ChatSessionContentBuilder {
 	private async createResponseTurn(pullRequest: PullRequestSearchItem, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
 		if (logs.trim().length > 0) {
 			return await this.parseSessionLogsIntoResponseTurn(pullRequest, logs, session);
-		} else if (session.state === 'in_progress') {
+		} else if (session.state === 'in_progress' || session.state === 'queued') {
 			// For in-progress sessions without logs, create a placeholder response
 			const placeholderParts = [new ChatResponseProgressPart('Session is initializing...')];
 			const responseResult: ChatResult = {};
