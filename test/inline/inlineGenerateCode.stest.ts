@@ -114,7 +114,11 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest.skip({ description: 'generate rtrim', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'generate rtrim', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
+
+			if (1) {
+				throw new Error('SKIPPED');
+			}
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
@@ -513,7 +517,11 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest.skip({ description: 'Streaming gets confused due to jsdoc', language: 'json', nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'Streaming gets confused due to jsdoc', language: 'json', nonExtensionConfigurations }, (testingServiceCollection) => {
+
+			if (1) {
+				throw new Error('SKIPPED');
+			}
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
@@ -603,7 +611,11 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest.skip({ description: 'issue #2496: Range of interest is imprecise after a streaming edit', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #2496: Range of interest is imprecise after a streaming edit', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
+
+			if (1) {
+				throw new Error('SKIPPED');
+			}
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
@@ -881,7 +893,11 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest.skip({ description: 'issue #224: Lots of lines deleted when using interactive chat in a markdown file', language: 'markdown', nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #224: Lots of lines deleted when using interactive chat in a markdown file', language: 'markdown', nonExtensionConfigurations }, (testingServiceCollection) => {
+
+			if (1) {
+				throw new Error('SKIPPED');
+			}
 
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [

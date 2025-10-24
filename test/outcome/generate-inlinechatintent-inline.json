@@ -77,11 +77,19 @@
 		]
 	},
 	{
+		"name": "generate-InlineChatIntent [inline] [json] - Streaming gets confused due to jsdoc",
+		"requests": []
+	},
+	{
 		"name": "generate-InlineChatIntent [inline] [markdown] - doesn't handle markdown code response",
 		"requests": [
 			"31aaa3b7113a15b7ebe73f1eb381c206d46d234d786f16375122bbf445cd45e5",
 			"c64fd53e59c956df81a4abd8eb5d8710354b38ecb7e5974ec37fb0cd0ce2fe71"
 		]
+	},
+	{
+		"name": "generate-InlineChatIntent [inline] [markdown] - issue #224: Lots of lines deleted when using interactive chat in a markdown file",
+		"requests": []
 	},
 	{
 		"name": "generate-InlineChatIntent [inline] [powershell] - Inline chat response did not use code block #6554",
@@ -162,6 +170,10 @@
 		]
 	},
 	{
+		"name": "generate-InlineChatIntent [inline] [typescript] - generate rtrim",
+		"requests": []
+	},
+	{
 		"name": "generate-InlineChatIntent [inline] [typescript] - issue #2342: Use inline chat to generate a new function/property replaces other code",
 		"requests": [
 			"0f0904b9f5b6fe95b9c32387b0ef5c90d27da1fe2a23056c9e84c0b1417a2636",
@@ -180,6 +192,10 @@
 			"c755254da1948b90264f519cb0e487b8166d7eb7420ac884d9509ef637924b14",
 			"fe05dfab7d24685a527d9e431e23b2803b420e46495fb012f069d2277078ade1"
 		]
+	},
+	{
+		"name": "generate-InlineChatIntent [inline] [typescript] - issue #2496: Range of interest is imprecise after a streaming edit",
+		"requests": []
 	},
 	{
 		"name": "generate-InlineChatIntent [inline] [typescript] - issue #3370: generate code duplicates too much",

@@ -224,10 +224,18 @@
 		]
 	},
 	{
+		"name": "edit-InlineChatIntent [inline] [typescript] - issue #3759: add type",
+		"requests": []
+	},
+	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #404: Add a cat to a comment",
 		"requests": [
 			"115dad4c6f29792da5e82c360db01f67c8b2be6b74014ebea1d69791428d3748"
 		]
+	},
+	{
+		"name": "edit-InlineChatIntent [inline] [typescript] - issue #405: \"make simpler\" query is surprising",
+		"requests": []
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #4149: If ChatGPT makes the request, send only the first 20 episodes",

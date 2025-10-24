@@ -955,9 +955,9 @@
   {
     "name": "edit [inline] [typescript] - issue #3759: add type",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit [inline] [typescript] - issue #404: Add a cat to a comment",
@@ -969,9 +969,9 @@
   {
     "name": "edit [inline] [typescript] - issue #405: \"make simpler\" query is surprising",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit [inline] [typescript] - issue #4149: If ChatGPT makes the request, send only the first 20 episodes",
@@ -1284,11 +1284,25 @@
     "score": 0
   },
   {
+    "name": "edit-InlineChatIntent [inline] [typescript] - issue #3759: add type",
+    "contentFilterCount": 0,
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
+  },
+  {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #404: Add a cat to a comment",
     "contentFilterCount": 0,
     "passCount": 9,
     "failCount": 1,
     "score": 0.9
+  },
+  {
+    "name": "edit-InlineChatIntent [inline] [typescript] - issue #405: \"make simpler\" query is surprising",
+    "contentFilterCount": 0,
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #4149: If ChatGPT makes the request, send only the first 20 episodes",
@@ -3230,9 +3244,9 @@
   {
     "name": "generate [inline] [json] - Streaming gets confused due to jsdoc",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "generate [inline] [markdown] - doesn't handle markdown code response",
@@ -3244,9 +3258,9 @@
   {
     "name": "generate [inline] [markdown] - issue #224: Lots of lines deleted when using interactive chat in a markdown file",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "generate [inline] [powershell] - Inline chat response did not use code block #6554",
@@ -3300,9 +3314,9 @@
   {
     "name": "generate [inline] [typescript] - generate rtrim",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "generate [inline] [typescript] - issue #2342: Use inline chat to generate a new function/property replaces other code",
@@ -3314,9 +3328,9 @@
   {
     "name": "generate [inline] [typescript] - issue #2496: Range of interest is imprecise after a streaming edit",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "generate [inline] [typescript] - issue #3370: generate code duplicates too much",
@@ -3487,11 +3501,25 @@
     "score": 0
   },
   {
+    "name": "generate-InlineChatIntent [inline] [json] - Streaming gets confused due to jsdoc",
+    "contentFilterCount": 0,
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
+  },
+  {
     "name": "generate-InlineChatIntent [inline] [markdown] - doesn't handle markdown code response",
     "contentFilterCount": 0,
     "passCount": 9,
     "failCount": 1,
     "score": 0.9
+  },
+  {
+    "name": "generate-InlineChatIntent [inline] [markdown] - issue #224: Lots of lines deleted when using interactive chat in a markdown file",
+    "contentFilterCount": 0,
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "generate-InlineChatIntent [inline] [powershell] - Inline chat response did not use code block #6554",
@@ -3543,7 +3571,21 @@
     "score": 0.6
   },
   {
+    "name": "generate-InlineChatIntent [inline] [typescript] - generate rtrim",
+    "contentFilterCount": 0,
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
+  },
+  {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #2342: Use inline chat to generate a new function/property replaces other code",
+    "contentFilterCount": 0,
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
+  },
+  {
+    "name": "generate-InlineChatIntent [inline] [typescript] - issue #2496: Range of interest is imprecise after a streaming edit",
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,

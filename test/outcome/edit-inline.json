@@ -206,11 +206,19 @@
 		]
 	},
 	{
+		"name": "edit [inline] [typescript] - issue #3759: add type",
+		"requests": []
+	},
+	{
 		"name": "edit [inline] [typescript] - issue #404: Add a cat to a comment",
 		"requests": [
 			"9db00d61a72b7d0a8bbc4508e3655f443777a5c93b3c038ee9130aab613c75e4",
 			"fa92d98437d7d23ca6e545ccd9799e0a7be286c8672f41e47f1dd263dd00f768"
 		]
+	},
+	{
+		"name": "edit [inline] [typescript] - issue #405: \"make simpler\" query is surprising",
+		"requests": []
 	},
 	{
 		"name": "edit [inline] [typescript] - issue #4149: If ChatGPT makes the request, send only the first 20 episodes",
