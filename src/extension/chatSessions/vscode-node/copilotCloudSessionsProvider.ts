@@ -1127,9 +1127,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 			const webviewUri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: number });
 			const prLlmString = `The remote agent has begun work and has created a pull request. Details about the pull request are being shown to the user. If the user wants to track progress or iterate on the agent's work, they should use the pull request.`;
-
-			chatStream?.progress(vscode.l10n.t('Attaching to session'));
-			await this.waitForQueuedToInProgress(response.session_id, token);
 			return {
 				state: 'success',
 				number,
