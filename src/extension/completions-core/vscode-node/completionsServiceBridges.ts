@@ -143,7 +143,7 @@ export function createContext(serviceAccessor: ServicesAccessor): Context {
 		}
 	});
 
-	ctx.set(NotificationSender, new ExtensionNotificationSender());
+	ctx.set(NotificationSender, instaService.createInstance(ExtensionNotificationSender));
 	ctx.set(EditorAndPluginInfo, new VSCodeEditorInfo());
 	ctx.set(EditorSession, new EditorSession(env.sessionId, env.machineId, env.remoteName, uiKindToString(env.uiKind)));
 	ctx.set(CopilotExtensionStatus, new CopilotExtensionStatus());

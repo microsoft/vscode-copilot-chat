@@ -380,14 +380,14 @@ type NameAndVersion = {
 	version: string;
 };
 
-type EditorInfo = NameAndVersion & {
+export type EditorInfo = NameAndVersion & {
 	// The root directory of the installation, currently only used to simplify stack traces.
 	root?: string;
 	// A programmatic name, used for error reporting.
 	devName?: string;
 };
 
-type EditorPluginInfo = NameAndVersion;
+export type EditorPluginInfo = NameAndVersion;
 
 export type EditorPluginFilter = { filter: Filter; value: string; isVersion?: boolean };
 
