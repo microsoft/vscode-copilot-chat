@@ -127,7 +127,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			if (terminal) {
 				this._register(terminal);
 				const command = this.buildCommandForPythonTerminal(shellPathAndArgs?.copilotCommand, cliArgs, shellPathAndArgs);
-				await this.sendCommandToTerminal(terminal, command, true);
+				await this.sendCommandToTerminal(terminal, command, true, shellPathAndArgs);
 				return;
 			}
 		}
@@ -136,7 +136,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			const terminal = this._register(this.terminalService.createTerminal(options));
 			cliArgs.shift(); // Remove --clear as we can't run it without a shell integration
 			const command = this.buildCommandForTerminal(terminal, COPILOT_CLI_COMMAND, cliArgs);
-			await this.sendCommandToTerminal(terminal, command, false);
+			await this.sendCommandToTerminal(terminal, command, false, shellPathAndArgs);
 			return;
 		}
 
