@@ -82,4 +82,106 @@ suite('Find symbol', () => {
 	test('Should match on symbols with _', () => {
 		assert.strictEqual(findBestSymbolByPath([docSymbol('_a_')], '_a_')?.name, '_a_');
 	});
+
+	test('Should prefer last part for flat symbol information', () => {
+		// When symbols are flat (SymbolInformation), prefer matching the last part
+		// This handles cases like `TextModel.undo()` where we want `undo`, not `TextModel`
+		assert.strictEqual(
+			findBestSymbolByPath([
+				symbolInfo('TextModel'),
+				symbolInfo('undo')
+			], 'TextModel.undo()')?.name,
+			'undo'
+		);
+	});
+
+	test('Should fall back to first part if last part not found in flat symbols', () => {
+		// If the last part isn't found, fall back to the first part
+		assert.strictEqual(
+			findBestSymbolByPath([
+				symbolInfo('TextModel'),
+				symbolInfo('someOtherMethod')
+			], 'TextModel.undo()')?.name,
+			'TextModel'
+		);
+	});
+
+	test('Should prefer hierarchical match over flat last part match', () => {
+		// When both hierarchical and flat symbols exist, prefer the hierarchical match
+		assert.strictEqual(
+			findBestSymbolByPath([
+				docSymbol('TextModel', docSymbol('undo')),
+				symbolInfo('undo')  // This is a different undo from a different class
+			], 'TextModel.undo()')?.name,
+			'undo'
+		);
+	});
+
+	test('Should handle deeply qualified names', () => {
+		// Test multiple levels of qualification
+		assert.strictEqual(
+			findBestSymbolByPath([
+				docSymbol('namespace', docSymbol('TextModel', docSymbol('undo')))
+			], 'namespace.TextModel.undo()')?.name,
+			'undo'
+		);
+
+		// With flat symbols, prefer the last part
+		assert.strictEqual(
+			findBestSymbolByPath([
+				symbolInfo('namespace'),
+				symbolInfo('TextModel'),
+				symbolInfo('undo')
+			], 'namespace.TextModel.undo()')?.name,
+			'undo'
+		);
+	});
+
+	test('Should handle mixed flat and hierarchical symbols', () => {
+		// Some symbols are flat, some are nested
+		assert.strictEqual(
+			findBestSymbolByPath([
+				symbolInfo('Model'),
+				docSymbol('TextModel', docSymbol('undo')),
+				symbolInfo('OtherClass')
+			], 'TextModel.undo()')?.name,
+			'undo'
+		);
+	});
+
+	test('Should handle Python-style naming conventions', () => {
+		// Python uses underscores instead of camelCase
+		assert.strictEqual(
+			findBestSymbolByPath([
+				docSymbol('MyClass', docSymbol('my_method'))
+			], 'MyClass.my_method()')?.name,
+			'my_method'
+		);
+
+		// Python dunder methods
+		assert.strictEqual(
+			findBestSymbolByPath([
+				docSymbol('MyClass', docSymbol('__init__'))
+			], 'MyClass.__init__()')?.name,
+			'__init__'
+		);
+
+		// Python private methods
+		assert.strictEqual(
+			findBestSymbolByPath([
+				docSymbol('MyClass', docSymbol('_private_method'))
+			], 'MyClass._private_method()')?.name,
+			'_private_method'
+		);
+	});
+
+	test('Should handle Python module qualified names', () => {
+		// Python: module.Class.method
+		assert.strictEqual(
+			findBestSymbolByPath([
+				docSymbol('my_module', docSymbol('MyClass', docSymbol('my_method')))
+			], 'my_module.MyClass.my_method()')?.name,
+			'my_method'
+		);
+	});
 });

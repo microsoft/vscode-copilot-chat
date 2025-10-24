@@ -42,8 +42,20 @@ function findBestSymbol(
 				bestMatch = match;
 			}
 		} else { // Is a vscode.SymbolInformation
+			// For flat symbol information, try to match against the last part of the path
+			// This handles cases like `TextModel.undo()` where we want to match `undo`, not `TextModel`
+			const lastPart = symbolParts[symbolParts.length - 1];
+			if (symbol.name === lastPart) {
+				const match = { symbol, matchCount: 1 };
+				if (!bestMatch || match.matchCount > bestMatch.matchCount) {
+					bestMatch = match;
+				}
+			}
+			// Also try matching the first part for backwards compatibility
 			if (symbol.name === symbolParts[0]) {
-				bestMatch ??= { symbol, matchCount: 1 };
+				const match = { symbol, matchCount: 1 };
+				// Only use this match if we haven't found a better one
+				bestMatch ??= match;
 			}
 		}
 	}

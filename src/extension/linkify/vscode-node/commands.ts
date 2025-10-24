@@ -101,7 +101,7 @@ export function registerLinkCommands(
 		// Command used when we have already resolved the link to a location.
 		// This is currently used by the inline code linkifier for links such as `symbolName`
 		vscode.commands.registerCommand(openSymbolFromReferencesCommand, async (...[_word, locations, requestId]: OpenSymbolFromReferencesCommandArgs) => {
-			const dest = await resolveSymbolFromReferences(locations, CancellationToken.None);
+			const dest = await resolveSymbolFromReferences(locations, undefined, CancellationToken.None);
 
 			/* __GDPR__
 				"panel.action.openSymbolFromReferencesLink" : {
@@ -136,11 +136,31 @@ function toLocationLink(def: vscode.Location | vscode.LocationLink): vscode.Loca
 	}
 }
 
-export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri: UriComponents; pos: vscode.Position }>, token: CancellationToken) {
+function findMethodInSymbols(symbols: Array<vscode.SymbolInformation | vscode.DocumentSymbol>, methodName: string): vscode.SymbolInformation | vscode.DocumentSymbol | undefined {
+	for (const symbol of symbols) {
+		if (symbol.name === methodName) {
+			return symbol;
+		}
+		// Check children if it's a DocumentSymbol
+		if ('children' in symbol && symbol.children) {
+			const found = findMethodInSymbols(symbol.children, methodName);
+			if (found) {
+				return found;
+			}
+		}
+	}
+	return undefined;
+}
+
+export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri: UriComponents; pos: vscode.Position }>, symbolText: string | undefined, token: CancellationToken) {
 	let dest: {
 		type: 'definition' | 'firstOccurrence' | 'unresolved';
 		loc: vscode.LocationLink;
 	} | undefined;
+
+	// Extract method name from qualified symbol like "TextModel.undo()"
+	const symbolParts = symbolText ? Array.from(symbolText.matchAll(/[#\w$][\w\d$]*/g), x => x[0]) : [];
+	const methodName = symbolParts.length >= 2 ? symbolParts[symbolParts.length - 1] : undefined;
 
 	// TODO: These locations may no longer be valid if the user has edited the file since the references were found.
 	for (const loc of locations) {
@@ -151,9 +171,32 @@ export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri
 			}
 
 			if (def) {
+				const defLoc = toLocationLink(def);
+
+				// If we have a qualified name like "TextModel.undo()", try to find the method in the class file
+				if (methodName && symbolParts.length >= 2) {
+					try {
+						const symbols = await vscode.commands.executeCommand<Array<vscode.SymbolInformation | vscode.DocumentSymbol> | undefined>('vscode.executeDocumentSymbolProvider', defLoc.targetUri);
+						if (symbols) {
+							// Search for the method in the document symbols
+							const methodSymbol = findMethodInSymbols(symbols, methodName);
+							if (methodSymbol) {
+								const methodRange = 'selectionRange' in methodSymbol ? methodSymbol.selectionRange : methodSymbol.location.range;
+								dest = {
+									type: 'definition',
+									loc: { targetUri: defLoc.targetUri, targetRange: methodRange, targetSelectionRange: methodRange },
+								};
+								break;
+							}
+						}
+					} catch {
+						// Failed to find method, fall through to use class definition
+					}
+				}
+
 				dest = {
 					type: 'definition',
-					loc: toLocationLink(def),
+					loc: defLoc,
 				};
 				break;
 			}
