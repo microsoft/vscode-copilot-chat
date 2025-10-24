@@ -4,26 +4,33 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IEnvService } from '../../../platform/env/common/envService';
+import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 
-const CodexPlaceholderKey = 'github.copilot.chat.codex.notInstalled';
+const ShowCodexPlaceholderKey = 'github.copilot.chat.codex.showPlaceholder';
 
 export class PlaceholderViewContribution extends Disposable {
 	constructor(
 		@IRunCommandExecutionService private readonly _commandService: IRunCommandExecutionService,
 		@IEnvService private readonly envService: IEnvService,
+		@IAuthenticationService authenticationService: IAuthenticationService,
+		@IConfigurationService configurationService: IConfigurationService
 	) {
 		super();
 
 		const updateContextKey = () => {
+			const token = authenticationService.copilotToken;
+			const enabledForUser = token && (token.codexAgentEnabled || configurationService.getNonExtensionConfig('chat.experimental.codex.enabled'));
 			const codexExtension = vscode.extensions.getExtension('openai.chatgpt');
-			void vscode.commands.executeCommand('setContext', CodexPlaceholderKey, !codexExtension);
+			void vscode.commands.executeCommand('setContext', ShowCodexPlaceholderKey, enabledForUser && !codexExtension);
 		};
 
-		updateContextKey();
 		this._register(vscode.extensions.onDidChange(updateContextKey));
+		this._register(Event.runAndSubscribe(authenticationService.onDidAuthenticationChange, updateContextKey));
 
 		this._register(vscode.commands.registerCommand('github.copilot.chat.installAgent', this.installAgentCommand, this));
 	}

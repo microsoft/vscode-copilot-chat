@@ -3960,7 +3960,7 @@
 				{
 					"id": "codex-placeholder",
 					"name": "OpenAI Codex Agent",
-					"when": "github.copilot.chat.codex.notInstalled && config.chat.experimental.codex.enabled",
+					"when": "github.copilot.chat.codex.showPlaceholder && config.chat.experimental.codex.enabled",
 					"icon": "$(file)"
 				},
 				{
