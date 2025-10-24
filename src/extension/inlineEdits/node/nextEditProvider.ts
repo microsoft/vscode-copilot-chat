@@ -305,13 +305,15 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		assert(currentDocument !== undefined, 'should be defined if edit is defined');
 
 		telemetryBuilder.setStatus('notAccepted'); // Acceptance pending.
+
 		const showRangePreference = this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit;
+
 		let nextEditResult: NextEditResult;
-		if (!showLabel || selections.length < 1) {
+		const currentSelection = selections.at(0);
+		if (!showLabel || currentSelection === undefined) {
 			nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
 		} else {
 			const transformer = documentAtInvocationTime.getTransformer();
-			const currentSelection = selections[0];
 			const currentCursorPosition = transformer.getRange(currentSelection);
 
 			const editPosition = transformer.getRange(edit.replaceRange);
