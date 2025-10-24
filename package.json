@@ -1703,6 +1703,10 @@
 				"contents": "%github.copilot.viewsWelcome.codexPlaceholder%"
 			},
 			{
+				"view": "workbench.view.chat.sessions.openai-codex",
+				"contents": "%github.copilot.viewsWelcome.codexWelcomeView%"
+			},
+			{
 				"view": "copilot-agents-placeholder",
 				"when": "true",
 				"contents": "%github.copilot.viewsWelcome.agentsPlaceholder%"

@@ -78,11 +78,18 @@
 		]
 	},
 	"github.copilot.viewsWelcome.codexPlaceholder": {
-		"message": "[Start a coding session](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)\n\nThis will install [the OpenAI Codex extension](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D).",
+		"message": "[Start OpenAI Codex Session](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)\n\nThis will install [the OpenAI Codex extension](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D).",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)'}",
 			"{Locked='](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D)'}"
+		]
+	},
+	"github.copilot.viewsWelcome.codexWelcomeView": {
+		"message": "[Start OpenAI Codex Session](command:chatgpt.newCodexPanel)",
+		"comment": [
+			"{Locked='['}",
+			"{Locked='](command:chatgpt.newCodexPanel)'}"
 		]
 	},
 	"github.copilot.viewsWelcome.agentsPlaceholder": {
