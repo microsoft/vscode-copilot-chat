@@ -139,6 +139,12 @@ jobs:
       - name: Run extension tests using VS Code
         run: xvfb-run -a npm run test:extension
 
+      - name: Run Completions Core prompt tests
+        run: npm run test:prompt
+
+      - name: Run Completions Core lib test using VS Code
+        run: xvfb-run -a npm run test:completions-core
+
       - name: Archive simulation output
         if: always()
         run: |
