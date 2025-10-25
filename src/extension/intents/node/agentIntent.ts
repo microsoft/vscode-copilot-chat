@@ -106,7 +106,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			allowTools[ToolName.MultiReplaceString] = false;
 		}
 
-		const tools = toolsService.getEnabledTools(request, tool => {
+		const tools = toolsService.getEnabledTools(request, model, tool => {
 			if (typeof allowTools[tool.name] === 'boolean') {
 				return allowTools[tool.name];
 			}

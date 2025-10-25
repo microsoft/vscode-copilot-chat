@@ -7,6 +7,7 @@ import type * as vscode from 'vscode';
 import { packageJson } from '../../../../platform/env/common/packagejson';
 import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Iterable } from '../../../../util/vs/base/common/iterator';
@@ -35,7 +36,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 	get tools(): LanguageModelToolInformation[] {
 		return Array.from(this._tools.values()).map(tool => {
 			const owned = this._copilotTools.get(getToolName(tool.name) as ToolName);
-			return owned?.value.alternativeDefinition?.() ?? tool;
+			return owned?.value.alternativeDefinition?.(tool) ?? tool;
 		});
 	}
 
@@ -139,33 +140,45 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 		return undefined;
 	}
 
-	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
+	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
 
 		const packageJsonTools = getPackagejsonToolsForTest();
-		return this.tools.filter(tool => {
-			// 0. Check if the tool was enabled or disabled via the tool picker
-			const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
-			if (typeof toolPickerSelection === 'boolean') {
-				return toolPickerSelection;
-			}
-
-			// 1. Check for what the consumer wants explicitly
-			const explicit = filter?.(tool);
-			if (explicit !== undefined) {
-				return explicit;
-			}
-
-			// 2. Check if the request's tools explicitly asked for this tool to be enabled
-			for (const ref of request.toolReferences) {
-				const usedTool = toolMap.get(ref.name);
-				if (usedTool?.tags.includes(`enable_other_tool_${tool.name}`)) {
-					return true;
+		return this.tools
+			.map(tool => {
+				// Apply model-specific alternative if available via alternativeDefinition
+				const owned = this._copilotTools.get(getToolName(tool.name) as ToolName);
+				if (owned?.value?.alternativeDefinition) {
+					const alternative = owned.value.alternativeDefinition(tool, endpoint);
+					if (alternative) {
+						return alternative;
+					}
 				}
-			}
+				return tool;
+			})
+			.filter(tool => {
+				// 0. Check if the tool was enabled or disabled via the tool picker
+				const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
+				if (typeof toolPickerSelection === 'boolean') {
+					return toolPickerSelection;
+				}
 
-			return packageJsonTools.has(tool.name);
-		});
+				// 1. Check for what the consumer wants explicitly
+				const explicit = filter?.(tool);
+				if (explicit !== undefined) {
+					return explicit;
+				}
+
+				// 2. Check if the request's tools explicitly asked for this tool to be enabled
+				for (const ref of request.toolReferences) {
+					const usedTool = toolMap.get(ref.name);
+					if (usedTool?.tags.includes(`enable_other_tool_${tool.name}`)) {
+						return true;
+					}
+				}
+
+				return packageJsonTools.has(tool.name);
+			});
 
 	}
 
