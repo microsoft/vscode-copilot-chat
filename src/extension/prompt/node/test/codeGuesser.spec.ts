@@ -79,14 +79,19 @@ suite('codeGuesser', () => {
 		assert.strictEqual(looksLikeCode(xmlSnippet), true);
 	});
 
-	test.skip('looksLikeCode - detects YAML as code', () => {
+	test('looksLikeCode - detects YAML as code', () => {
 		const yamlSnippet = 'key: value';
 		assert.strictEqual(looksLikeCode(yamlSnippet), true);
 	});
 
-	test.skip('looksLikeCode - detects Markdown as non-code', () => {
+	test('looksLikeCode - detects Markdown as non-code', () => {
 		const markdownSnippet = '# This is a heading';
 		assert.strictEqual(looksLikeCode(markdownSnippet), false);
+	});
+
+	test('looksLikeCode - detects C++ preprocessor directive as code', () => {
+		const cppPreprocessorSnippet = '# include <iostream>';
+		assert.strictEqual(looksLikeCode(cppPreprocessorSnippet), true);
 	});
 
 	test('looksLikeCode - detects plain text as non-code', () => {
@@ -94,7 +99,7 @@ suite('codeGuesser', () => {
 		assert.strictEqual(looksLikeCode(plainTextSnippet), false);
 	});
 
-	test.skip('looksLikeCode - detects shell script as code', () => {
+	test('looksLikeCode - detects shell script as code', () => {
 		const shellSnippet = 'echo "Hello World"';
 		assert.strictEqual(looksLikeCode(shellSnippet), true);
 	});
