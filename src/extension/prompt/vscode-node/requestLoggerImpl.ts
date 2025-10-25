@@ -13,7 +13,7 @@ import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/com
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
-import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedPendingRequest, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
@@ -26,6 +26,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatRequest } from '../../../vscodeTypes';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from './requestLoggerToolResult';
 import { WorkspaceEditRecorder } from './workspaceEditRecorder';
+import { IEndpointBody } from '../../../platform/networking/common/networking';
 
 // Utility function to process deltas into a message string
 function processDeltasToMessage(deltas: IResponseDelta[]): string {
@@ -114,9 +115,11 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 			prediction = postOptions.prediction.content;
 			postOptions.prediction = undefined;
 		}
-		if (postOptions && 'tools' in postOptions) {
-			tools = postOptions.tools;
-			postOptions.tools = undefined;
+		if ((this.entry.chatParams as ILoggedPendingRequest).tools) {
+			tools = (this.entry.chatParams as ILoggedPendingRequest).tools;
+			if (postOptions && 'tools' in postOptions) {
+				postOptions.tools = undefined;
+			}
 		}
 
 		// Handle stateful marker like _renderRequestToMarkdown does
@@ -531,6 +534,15 @@ export class RequestLogger extends AbstractRequestLogger {
 		return result.join('\n');
 	}
 
+	private _buildPostOptionsForLog(body: IEndpointBody): Record<string, any> {
+		const options: Record<string, any> = {};
+		if (body.temperature !== undefined) {
+			options.temperature = body.temperature;
+		}
+
+		return options;
+	}
+
 	private _renderRequestToMarkdown(id: string, entry: LoggedRequest): string {
 		if (entry.type === LoggedRequestKind.MarkdownContentRequest) {
 			return entry.markdownContent;
@@ -543,14 +555,20 @@ export class RequestLogger extends AbstractRequestLogger {
 
 		let prediction: string | undefined;
 		let tools;
-		const postOptions = entry.chatParams.postOptions && { ...entry.chatParams.postOptions };
+
+		// Simpler fix for release branch
+		const postOptions = 'body' in entry.chatParams && entry.chatParams.body ?
+			this._buildPostOptionsForLog(entry.chatParams.body) :
+			{ ...entry.chatParams.postOptions };
 		if (postOptions && 'prediction' in postOptions && typeof postOptions.prediction?.content === 'string') {
 			prediction = postOptions.prediction.content;
 			postOptions.prediction = undefined;
 		}
-		if (postOptions && 'tools' in postOptions) {
-			tools = postOptions.tools;
-			postOptions.tools = undefined;
+		if ((entry.chatParams as ILoggedPendingRequest).tools) {
+			tools = (entry.chatParams as ILoggedPendingRequest).tools;
+			if (postOptions && 'tools' in postOptions) {
+				postOptions.tools = undefined;
+			}
 		}
 
 		const hasMessages = 'messages' in entry.chatParams;
