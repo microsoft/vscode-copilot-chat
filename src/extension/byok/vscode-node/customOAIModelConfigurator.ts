@@ -8,7 +8,7 @@ import { Config, ConfigKey, IConfigurationService } from '../../../platform/conf
 import { EndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { BYOKModelProvider } from '../common/byokProvider';
-
+import { AzureBYOKModelProvider, resolveAzureUrl } from "./azureProvider";
 interface ModelConfig {
 	name: string;
 	url: string;
@@ -42,7 +42,7 @@ export class CustomOAIModelConfigurator {
 		private readonly _provider: BYOKModelProvider<LanguageModelChatInformation>
 
 	) {
-		if (_vendor === 'azure') {
+		if (_vendor === AzureBYOKModelProvider.providerName.toLowerCase()) {
 			this._forceRequiresAPIKey = true;
 			this._configKey = ConfigKey.AzureModels;
 		}
@@ -238,15 +238,19 @@ export class CustomOAIModelConfigurator {
 			prompt: 'Enter the API endpoint URL',
 			placeHolder: 'e.g., https://api.openai.com or https://my-api.example.com/v1',
 			validateInput: (value) => {
-				if (!value.trim()) {
+				value = value.trim();
+				if (!value) {
 					return 'URL cannot be empty';
 				}
 				try {
-					new URL(value.trim());
-					return null;
-				} catch {
-					return 'Please enter a valid URL';
+					new URL(value);
+					if (this._vendor === AzureBYOKModelProvider.providerName.toLowerCase()) {
+						const url = resolveAzureUrl(this._configKey.id, value);
+					}
+				} catch (e) {
+					return e;
 				}
+				return null;
 			}
 		});
 
