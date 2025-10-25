@@ -53,8 +53,9 @@ export class PlaceholderViewContribution extends Disposable {
 		if (extensionId) {
 			const installArgs = [extensionId, { enable: true, installPreReleaseVersion: insiders }];
 			await this._commandService.executeCommand('workbench.extensions.installExtension', ...installArgs);
-			await this.waitForExtension(extensionId);
-			await this._commandService.executeCommand('chatgpt.newCodexPanel', { source: 'sessionsViewPromotion' });
+			if (await this.waitForExtension(extensionId)) {
+				await this._commandService.executeCommand('chatgpt.newCodexPanel', { source: 'sessionsViewPromotion' });
+			}
 		}
 	}
 
@@ -64,20 +65,14 @@ export class PlaceholderViewContribution extends Disposable {
 		}
 
 		return new Promise<boolean>(resolve => {
-			let listener: vscode.Disposable | undefined;
-
-			const timer = disposableTimeout(() => finish(false), timeout);
-
 			const finish = (result: boolean) => {
 				timer.dispose();
-				if (listener) {
-					listener.dispose();
-					listener = undefined;
-				}
+				listener.dispose();
 				resolve(result);
 			};
 
-			listener = vscode.extensions.onDidChange(() => {
+			const timer = disposableTimeout(() => finish(false), timeout);
+			const listener = vscode.extensions.onDidChange(() => {
 				if (vscode.extensions.getExtension(extensionId)) {
 					finish(true);
 				}
