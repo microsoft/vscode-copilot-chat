@@ -52,7 +52,7 @@ export class PlaceholderViewContribution extends Disposable {
 		if (extensionId) {
 			const installArgs = [extensionId, { enable: true, installPreReleaseVersion: insiders }];
 			await this._commandService.executeCommand('workbench.extensions.installExtension', ...installArgs);
-			await this._commandService.executeCommand('chatgpt.newCodexPanel');
+			await this._commandService.executeCommand('chatgpt.newCodexPanel', { source: 'sessionsViewPromotion' });
 		}
 	}
 }
