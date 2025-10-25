@@ -220,23 +220,42 @@ export class ReferencesSymbolResolver {
 
 		// But then try breaking up inline code into symbol parts
 		if (!wordMatches.length) {
-			// Find the first symbol name before a non-symbol character
-			// This will match `foo` in `this.foo(bar)`;
-			const parts = codeText.split(/([#\w$][\w\d$]*)/g).map(x => x.trim()).filter(x => x.length);
-			let primaryPart: string | undefined = undefined;
-			for (const part of parts) {
-				if (!/[#\w$][\w\d$]*/.test(part)) {
-					break;
-				}
-				primaryPart = part;
-			}
+			// Extract all symbol parts from the code text
+			// For example: `TextModel.undo()` -> ['TextModel', 'undo']
+			const symbolParts = Array.from(codeText.matchAll(/[#\w$][\w\d$]*/g), x => x[0]);
 
-			if (primaryPart && primaryPart !== codeText) {
-				wordMatches = await this.instantiationService.invokeFunction(accessor => findWordInReferences(accessor, references, primaryPart, {
-					// Always use stricter matching here as the parts can otherwise match on a lot of things
+			if (symbolParts.length >= 2) {
+				// For qualified names like `Class.method()`, search for both parts together
+				// This helps disambiguate when there are multiple methods with the same name
+				const firstPart = symbolParts[0];
+				const lastPart = symbolParts[symbolParts.length - 1];
+
+				// First, try to find the class
+				const classMatches = await this.instantiationService.invokeFunction(accessor => findWordInReferences(accessor, references, firstPart, {
 					symbolMatchesOnly: true,
 					maxResultCount: this.findWordOptions.maxResultCount,
 				}, token));
+
+				// If we found the class, we'll rely on the click-time resolution to find the method
+				if (classMatches.length) {
+					wordMatches = classMatches;
+				} else {
+					// If no class found, try just the method name as fallback
+					wordMatches = await this.instantiationService.invokeFunction(accessor => findWordInReferences(accessor, references, lastPart, {
+						symbolMatchesOnly: true,
+						maxResultCount: this.findWordOptions.maxResultCount,
+					}, token));
+				}
+			} else if (symbolParts.length > 0) {
+				// For single names like `undo`, try to find the method directly
+				const lastPart = symbolParts[symbolParts.length - 1];
+
+				if (lastPart && lastPart !== codeText) {
+					wordMatches = await this.instantiationService.invokeFunction(accessor => findWordInReferences(accessor, references, lastPart, {
+						symbolMatchesOnly: true,
+						maxResultCount: this.findWordOptions.maxResultCount,
+					}, token));
+				}
 			}
 		}
 

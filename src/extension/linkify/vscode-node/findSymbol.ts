@@ -42,8 +42,23 @@ function findBestSymbol(
 				bestMatch = match;
 			}
 		} else { // Is a vscode.SymbolInformation
-			if (symbol.name === symbolParts[0]) {
-				bestMatch ??= { symbol, matchCount: 1 };
+			// For flat symbol information, try to match against symbol parts
+			// Prefer last part (method) over first part (class) for qualified names
+			const lastPart = symbolParts[symbolParts.length - 1];
+			const firstPart = symbolParts[0];
+
+			if (symbol.name === lastPart && symbolParts.length > 1) {
+				// Last part match for qualified names like `TextModel.undo()` - prefer the method
+				const match = { symbol, matchCount: 2 }; // Higher priority
+				if (!bestMatch || match.matchCount > bestMatch.matchCount) {
+					bestMatch = match;
+				}
+			} else if (symbol.name === firstPart) {
+				// First part match - use as fallback
+				const match = { symbol, matchCount: 1 }; // Lower priority
+				if (!bestMatch || match.matchCount > bestMatch.matchCount) {
+					bestMatch = match;
+				}
 			}
 		}
 	}

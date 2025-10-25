@@ -60,7 +60,7 @@ export class InlineCodeSymbolLinkifier implements IContributedLinkifier {
 				};
 
 				out.push(new LinkifySymbolAnchor(info, async (token) => {
-					const dest = await resolveSymbolFromReferences(loc.map(loc => ({ uri: loc.uri, pos: loc.range.start })), token);
+					const dest = await resolveSymbolFromReferences(loc.map(loc => ({ uri: loc.uri, pos: loc.range.start })), symbolText, token);
 					if (dest) {
 						const selectionRange = dest.loc.targetSelectionRange ?? dest.loc.targetRange;
 						info.location = new vscode.Location(dest.loc.targetUri, collapseRangeToStart(selectionRange));
