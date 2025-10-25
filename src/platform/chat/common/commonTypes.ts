@@ -41,7 +41,11 @@ export enum ChatLocation {
 	/**
 	 * The chat is an agent mode edit session.
 	 */
-	Agent = 7
+	Agent = 7,
+	/**
+	 * A request coming through the OpenAILanguageModelServer
+	 */
+	ResponsesProxy = 8
 }
 
 export namespace ChatLocation {

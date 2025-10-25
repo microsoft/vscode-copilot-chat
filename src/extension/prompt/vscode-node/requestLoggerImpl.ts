@@ -13,7 +13,7 @@ import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/com
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
-import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedPendingRequest, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
@@ -114,9 +114,11 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 			prediction = postOptions.prediction.content;
 			postOptions.prediction = undefined;
 		}
-		if (postOptions && 'tools' in postOptions) {
-			tools = postOptions.tools;
-			postOptions.tools = undefined;
+		if ((this.entry.chatParams as ILoggedPendingRequest).tools) {
+			tools = (this.entry.chatParams as ILoggedPendingRequest).tools;
+			if (postOptions && 'tools' in postOptions) {
+				postOptions.tools = undefined;
+			}
 		}
 
 		// Handle stateful marker like _renderRequestToMarkdown does
@@ -548,9 +550,11 @@ export class RequestLogger extends AbstractRequestLogger {
 			prediction = postOptions.prediction.content;
 			postOptions.prediction = undefined;
 		}
-		if (postOptions && 'tools' in postOptions) {
-			tools = postOptions.tools;
-			postOptions.tools = undefined;
+		if ((entry.chatParams as ILoggedPendingRequest).tools) {
+			tools = (entry.chatParams as ILoggedPendingRequest).tools;
+			if (postOptions && 'tools' in postOptions) {
+				postOptions.tools = undefined;
+			}
 		}
 
 		const hasMessages = 'messages' in entry.chatParams;
