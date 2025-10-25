@@ -210,7 +210,7 @@ Key behaviors the model should exhibit:
 
 **Fix**:
 ```tsx
-NEVER print out a codeblock with file changes unless the user asked for it.
+NEVER print out a code block with file changes unless the user asked for it.
 Use the appropriate edit tool (replace_string_in_file, apply_patch, or insert_into_file).
 ```
 
