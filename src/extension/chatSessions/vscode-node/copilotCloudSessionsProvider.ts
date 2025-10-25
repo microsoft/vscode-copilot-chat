@@ -465,7 +465,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 							stream.warning(result.error);
 							return {};
 						}
-						stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request, ignoring uncommitted changes.'));
+						stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request.'));
 						return {};
 					}
 				default:
