@@ -370,7 +370,7 @@ interface CapiResponsesTextDeltaEvent extends Omit<OpenAI.Responses.ResponseText
 	logprobs: Array<OpenAI.Responses.ResponseTextDeltaEvent.Logprob> | undefined;
 }
 
-class OpenAIResponsesProcessor {
+export class OpenAIResponsesProcessor {
 	private textAccumulator: string = '';
 	private hasReceivedReasoningSummary = false;
 
