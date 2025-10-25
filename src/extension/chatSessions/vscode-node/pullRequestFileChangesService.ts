@@ -59,15 +59,52 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 
 			for (const file of files) {
 				const fileUri = vscode.Uri.joinPath(workspaceRoot, file.filename);
-				const originalUri = file.previous_filename
-					? vscode.Uri.joinPath(workspaceRoot, file.previous_filename)
-					: fileUri;
+				let originalUri: vscode.Uri | undefined;
+				let modifiedUri: vscode.Uri | undefined;
+				let goToFileUri: vscode.Uri | undefined;
 
-				this.logService.trace(`DiffEntry -> original='${originalUri.fsPath}' modified='${fileUri.fsPath}' (+${file.additions} -${file.deletions})`);
+				// Handle different file status types according to ChatResponseDiffEntry spec
+				switch (file.status) {
+					case 'added':
+						// New files: no originalUri, only modifiedUri
+						originalUri = undefined;
+						modifiedUri = fileUri;
+						goToFileUri = fileUri;
+						break;
+					case 'removed':
+						// Deleted files: only originalUri, no modifiedUri
+						originalUri = fileUri;
+						modifiedUri = undefined;
+						goToFileUri = fileUri;
+						break;
+					case 'renamed':
+						// Renamed files: originalUri is previous_filename, modifiedUri is new filename
+						originalUri = file.previous_filename
+							? vscode.Uri.joinPath(workspaceRoot, file.previous_filename)
+							: fileUri;
+						modifiedUri = fileUri;
+						goToFileUri = fileUri;
+						break;
+					case 'modified':
+					case 'changed':
+					case 'copied':
+					case 'unchanged':
+					default:
+						// Modified files and others: both URIs point to the same file
+						// For 'copied', previous_filename contains the source if available
+						originalUri = file.previous_filename
+							? vscode.Uri.joinPath(workspaceRoot, file.previous_filename)
+							: fileUri;
+						modifiedUri = fileUri;
+						goToFileUri = fileUri;
+						break;
+				}
+
+				this.logService.trace(`DiffEntry [${file.status}] -> original='${originalUri?.fsPath}' modified='${modifiedUri?.fsPath}' (+${file.additions} -${file.deletions})`);
 				diffEntries.push({
 					originalUri,
-					modifiedUri: fileUri,
-					goToFileUri: fileUri,
+					modifiedUri,
+					goToFileUri,
 					added: file.additions,
 					removed: file.deletions,
 				});
