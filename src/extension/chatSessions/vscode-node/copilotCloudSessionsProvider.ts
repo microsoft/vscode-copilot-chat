@@ -330,19 +330,20 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		pr: PullRequestSearchItem
 	): ((stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => Thenable<void>) | undefined {
 		// Only the latest in-progress session gets activeResponseCallback
-		const inProgressSession = sessions
+		const pendingSession = sessions
 			.slice()
 			.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-			.find(session => session.state === 'in_progress');
+			.find(session => session.state === 'in_progress' || session.state === 'queued');
 
-		if (inProgressSession) {
-			return this.createActiveResponseCallback(pr, inProgressSession.id);
+		if (pendingSession) {
+			return this.createActiveResponseCallback(pr, pendingSession.id);
 		}
 		return undefined;
 	}
 
 	private createActiveResponseCallback(pr: PullRequestSearchItem, sessionId: string): (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => Thenable<void> {
 		return async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
+			await this.waitForQueuedToInProgress(sessionId, token);
 			return this.streamSessionLogs(stream, pr, sessionId, token);
 		};
 	}
@@ -841,6 +842,10 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		} while (waitForQueuedCount <= waitForQueuedMaxRetries && (!token || !token.isCancellationRequested));
 
 		if (!sessionInfo || sessionInfo.state !== 'queued') {
+			if (sessionInfo?.state === 'in_progress') {
+				this.logService.trace('Session already in progress');
+				return sessionInfo;
+			}
 			// Failure
 			this.logService.trace('Failed to find queued session');
 			return;
@@ -859,6 +864,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			}
 			await new Promise(resolve => setTimeout(resolve, pollInterval));
 		}
+		this.logService.error(`Timed out waiting for session ${sessionId} to transition from queued to in_progress.`);
 	}
 
 	private async waitForNewSession(
@@ -1117,9 +1123,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 			const webviewUri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: number });
 			const prLlmString = `The remote agent has begun work and has created a pull request. Details about the pull request are being shown to the user. If the user wants to track progress or iterate on the agent's work, they should use the pull request.`;
-
-			chatStream?.progress(vscode.l10n.t('Attaching to session'));
-			await this.waitForQueuedToInProgress(response.session_id, token);
 			return {
 				state: 'success',
 				number,
