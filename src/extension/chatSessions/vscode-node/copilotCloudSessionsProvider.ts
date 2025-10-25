@@ -17,7 +17,7 @@ import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, 
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 
-type ConfirmationResult = { step: string; accepted: boolean; metadata?: ConfirmationMetadata };
+export type ConfirmationResult = { step: string; accepted: boolean; metadata?: ConfirmationMetadata };
 
 interface ConfirmationMetadata {
 	prompt: string;
@@ -499,7 +499,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	 * @returns 'true' if handling was performed.  This will push a chat confirmation and initiate a new chat request (handled in handleConfirmationData())
 	 * otherwise 'false', meaning the caller should continue handling the request
 	 */
-	private async tryHandleUncommittedChanges(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	async tryHandleUncommittedChanges(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		try {
 			const repoId = await getRepoId(this._gitService);
 			if (!repoId) {
