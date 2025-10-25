@@ -233,7 +233,7 @@ Use the appropriate edit tool (replace_string_in_file, apply_patch, or insert_in
 **Fix**:
 ```tsx
 {tools[ToolName.CoreRunInTerminal] && <>
-  NEVER print out a codeblock with a terminal command to run unless the user asked for it.
+  NEVER print out a code block with a terminal command to run unless the user asked for it.
   Use the run_in_terminal tool instead.
 </>}
 ```
