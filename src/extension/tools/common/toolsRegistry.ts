@@ -8,6 +8,11 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from './toolNames';
 
+// Some environments for this repo don't include the default `console` lib in
+// the TypeScript compilation target. Provide a minimal local declaration so
+// we can log during tests and runtime checks without altering tsconfig.
+declare const console: { log: (...args: any[]) => void; warn: (...args: any[]) => void };
+
 export interface IEditFilterData {
 	title: string;
 	message: string;
@@ -66,10 +71,22 @@ export const ToolRegistry = new class {
 	private _tools: ICopilotToolCtor[] = [];
 
 	public registerTool(tool: ICopilotToolCtor) {
+		// Check for duplicate tool names to avoid collisions
+		if (this._tools.some(t => t.toolName === tool.toolName)) {
+			// Duplicate tool name detected - warn to help debugging registration issues
+			console.warn(`[ToolRegistry] Duplicate tool name detected: ${String(tool.toolName)}`);
+		}
 		this._tools.push(tool);
 	}
 
 	public getTools(): readonly ICopilotToolCtor[] {
 		return this._tools;
+	}
+
+	/**
+	 * Dump registered tools to console for debugging
+	 */
+	public dump(): void {
+		console.log('[ToolRegistry] Registered tools:', this._tools.map(t => t.toolName));
 	}
 }();
