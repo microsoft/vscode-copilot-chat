@@ -26,6 +26,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatRequest } from '../../../vscodeTypes';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from './requestLoggerToolResult';
 import { WorkspaceEditRecorder } from './workspaceEditRecorder';
+import { IEndpointBody } from '../../../platform/networking/common/networking';
 
 // Utility function to process deltas into a message string
 function processDeltasToMessage(deltas: IResponseDelta[]): string {
@@ -533,6 +534,15 @@ export class RequestLogger extends AbstractRequestLogger {
 		return result.join('\n');
 	}
 
+	private _buildPostOptionsForLog(body: IEndpointBody): Record<string, any> {
+		const options: Record<string, any> = {};
+		if (body.temperature !== undefined) {
+			options.temperature = body.temperature;
+		}
+
+		return options;
+	}
+
 	private _renderRequestToMarkdown(id: string, entry: LoggedRequest): string {
 		if (entry.type === LoggedRequestKind.MarkdownContentRequest) {
 			return entry.markdownContent;
@@ -545,7 +555,11 @@ export class RequestLogger extends AbstractRequestLogger {
 
 		let prediction: string | undefined;
 		let tools;
-		const postOptions = entry.chatParams.postOptions && { ...entry.chatParams.postOptions };
+
+		// Simpler fix for release branch
+		const postOptions = 'body' in entry.chatParams && entry.chatParams.body ?
+			this._buildPostOptionsForLog(entry.chatParams.body) :
+			{ ...entry.chatParams.postOptions };
 		if (postOptions && 'prediction' in postOptions && typeof postOptions.prediction?.content === 'string') {
 			prediction = postOptions.prediction.content;
 			postOptions.prediction = undefined;
