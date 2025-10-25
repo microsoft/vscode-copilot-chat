@@ -25,6 +25,7 @@ const nullTestHint: Required<TestHint> = {
 };
 
 const testHintsByLanguage: Record<string, TestHint> = {
+	cpp: { suffixes: ['_test', 'Test', '.test'], location: 'testFolder' },
 	csharp: { suffixes: ['Test'], location: 'testFolder' },
 	dart: { suffixes: ['_test'], location: 'testFolder' },
 	go: { suffixes: ['_test'], location: 'sameFolder' },
@@ -43,6 +44,9 @@ const testHintsByLanguage: Record<string, TestHint> = {
 };
 
 export const suffix2Language: Record<string, keyof typeof testHintsByLanguage> = {
+	cpp: 'cpp',
+	cc: 'cpp',
+	cxx: 'cpp',
 	cs: 'csharp',
 	dart: 'dart',
 	go: 'go',
