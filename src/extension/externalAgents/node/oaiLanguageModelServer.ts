@@ -167,7 +167,7 @@ export class OpenAILanguageModelServer extends Disposable {
 				res,
 				endpointRequestBody,
 				headers,
-				'vscode_codex'
+				'codex_vscode'
 			);
 
 			await streamingEndpoint.makeChatRequest2({
