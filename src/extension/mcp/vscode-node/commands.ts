@@ -24,9 +24,9 @@ import { ChatLocation as VsCodeChatLocation } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { McpToolCallingLoop } from './mcpToolCallingLoop';
 import { McpPickRef } from './mcpToolCallingTools';
-import { NuGetMcpSetup } from './nuget';
+import { IInstallableMcpServer, IMcpServerVariable, IMcpStdioServerConfiguration, NuGetMcpSetup } from './nuget';
 
-type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
+export type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
 
 export interface IValidatePackageArgs {
 	type: PackageType;
@@ -46,7 +46,7 @@ export interface IPendingSetupArgs {
 	name: string;
 	version?: string;
 	readme?: string;
-	getServerManifest?(installConsent: Promise<void>): Promise<any>;
+	getMcpServer?(installConsent: Promise<void>): Promise<Omit<IInstallableMcpServer, 'name'> | undefined>;
 }
 
 export const enum ValidatePackageErrorType {
@@ -69,15 +69,16 @@ export type ValidatePackageResult =
 	| { state: 'error'; error: string; helpUri?: string; helpUriLabel?: string; errorType: ValidatePackageErrorType };
 
 type AssistedServerConfiguration = {
-	type: 'vscode';
+	type: 'assisted';
 	name?: string;
 	server: any;
 	inputs: PromptStringInputInfo[];
 	inputValues: Record<string, string> | undefined;
 } | {
-	type: 'server.json';
+	type: 'mapped';
 	name?: string;
-	server: any;
+	server: Omit<IMcpStdioServerConfiguration, 'type'>;
+	inputs?: IMcpServerVariable[];
 };
 
 interface NpmPackageResponse {
@@ -221,20 +222,21 @@ export class McpSetupCommands extends Disposable {
 		const done = (async () => {
 
 			// if the package has a server manifest, we can fetch it and use it instead of a tool loop
-			if (pendingArgs.getServerManifest) {
-				let serverManifest;
+			if (pendingArgs.getMcpServer) {
+				let mcpServer: Omit<IInstallableMcpServer, 'name'> | undefined;
 				try {
-					serverManifest = await pendingArgs.getServerManifest(canPrompt.p);
+					mcpServer = await pendingArgs.getMcpServer(canPrompt.p);
 				} catch (error) {
-					this.logService.warn(`Unable to fetch server manifest for ${validateArgs.type} package ${pendingArgs.name}@${pendingArgs.version}. Configuration will be generated from the package README.
+					this.logService.warn(`Unable to fetch MCP server configuration for ${validateArgs.type} package ${pendingArgs.name}@${pendingArgs.version}. Configuration will be generated from the package README.
 Error: ${error}`);
 				}
 
-				if (serverManifest) {
+				if (mcpServer) {
 					return {
-						type: "server.json" as const,
+						type: "mapped" as const,
 						name: pendingArgs.name,
-						server: serverManifest
+						server: mcpServer.config as Omit<IMcpStdioServerConfiguration, 'type'>,
+						inputs: mcpServer.inputs
 					};
 				}
 			}
@@ -307,7 +309,7 @@ Error: ${error}`);
 				}
 			});
 
-			return { type: "vscode" as const, name, server: extracted, inputs, inputValues };
+			return { type: "assisted" as const, name, server: extracted, inputs, inputValues };
 		})().finally(() => {
 			cts.dispose();
 			pickRef.dispose();
