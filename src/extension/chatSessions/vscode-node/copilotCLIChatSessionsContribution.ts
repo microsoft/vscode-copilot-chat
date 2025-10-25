@@ -15,7 +15,7 @@ import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotc
 import { buildChatHistoryFromEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
-import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
+import { ConfirmationResult, CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
 
 const MODELS_OPTION_ID = 'model';
 
@@ -226,6 +226,10 @@ export class CopilotCLIChatSessionParticipant {
 	}
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
+		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
+			return await this.handleConfirmationData(request, context, stream, token);
+		}
+
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
 			if (chatSessionContext.isUntitled) {
@@ -260,15 +264,21 @@ export class CopilotCLIChatSessionParticipant {
 
 				const history = await this.summarizer.provideChatSummary(context, token);
 				const prompt = request.prompt.substring('/delegate'.length).trim();
-				const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
-					prompt,
-					history
-				}, stream, token);
-				if (prInfo) {
-					await this.recordPushToSession(id, request.prompt, prInfo, token);
+				if (!await this.cloudSessionProvider.tryHandleUncommittedChanges({
+					prompt: prompt,
+					history: history
+				}, stream, token)) {
+					const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
+						prompt,
+						history
+					}, stream, token);
+					if (prInfo) {
+						await this.recordPushToSession(id, request.prompt, prInfo, token);
+					}
+					return {};
+				} else {
+					return {};
 				}
-				return {};
-
 			}
 
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.InProgress);
@@ -280,6 +290,43 @@ export class CopilotCLIChatSessionParticipant {
 		/* Invoked from a 'normal' chat or 'cloud button' without CLI session context */
 		// Handle confirmation data
 		return await this.handlePushConfirmationData(request, context, stream, token);
+	}
+
+	private async handleConfirmationData(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+		const results: ConfirmationResult[] = [];
+		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
+		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
+		const { chatSessionContext } = context;
+		if (!chatSessionContext) {
+			stream.warning(vscode.l10n.t('No chat session context available for confirmation data handling.'));
+			return {};
+		}
+
+		const { resource } = chatSessionContext.chatSessionItem;
+		const id = SessionIdForCLI.parse(resource);
+		for (const data of results) {
+			switch (data.step) {
+				case 'uncommitted-changes':
+					{
+						if (!data.accepted || !data.metadata) {
+							stream.markdown(vscode.l10n.t('Cloud agent delegation request cancelled.'));
+							return {};
+						}
+						const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession({
+							prompt: data.metadata.prompt,
+							history: data.metadata.history
+						}, stream, token);
+						if (prInfo) {
+							await this.recordPushToSession(id, request.prompt, prInfo, token);
+						}
+						return {};
+					}
+				default:
+					stream.warning(`Unknown confirmation step: ${data.step}\n\n`);
+					break;
+			}
+		}
+		return {};
 	}
 
 	private async handlePushConfirmationData(
