@@ -181,19 +181,17 @@ export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri
 							// Search for the method in the document symbols
 							const methodSymbol = findMethodInSymbols(symbols, methodName);
 							if (methodSymbol) {
-								let methodRange: vscode.Range | undefined;
-								if ('selectionRange' in methodSymbol && methodSymbol.selectionRange) {
+								let methodRange: vscode.Range;
+								if ('selectionRange' in methodSymbol) {
 									methodRange = methodSymbol.selectionRange;
-								} else if ('location' in methodSymbol && methodSymbol.location && methodSymbol.location.range) {
+								} else {
 									methodRange = methodSymbol.location.range;
 								}
-								if (methodRange) {
-									dest = {
-										type: 'definition',
-										loc: { targetUri: defLoc.targetUri, targetRange: methodRange, targetSelectionRange: methodRange },
-									};
-									break;
-								}
+								dest = {
+									type: 'definition',
+									loc: { targetUri: defLoc.targetUri, targetRange: methodRange, targetSelectionRange: methodRange },
+								};
+								break;
 							}
 						}
 					} catch {
