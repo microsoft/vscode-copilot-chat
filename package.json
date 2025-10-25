@@ -3963,7 +3963,7 @@
 			"agentSessions": [
 				{
 					"id": "codex-placeholder",
-					"name": "OpenAI Codex Agent",
+					"name": "OpenAI Codex",
 					"when": "github.copilot.chat.codex.showPlaceholder && config.chat.experimental.codex.enabled",
 					"icon": "$(file)"
 				},
