@@ -2254,7 +2254,7 @@
 			{
 				"command": "github.copilot.cloud.sessions.installPullRequestExtension",
 				"title": "Install GitHub Pull Requests Extension",
-				"icon": "$(cloud-download)"
+				"icon": "$(extensions)"
 			}
 		],
 		"configuration": [

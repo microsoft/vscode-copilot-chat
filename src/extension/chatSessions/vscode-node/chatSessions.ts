@@ -165,7 +165,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			);
 			this.copilotCloudRegistrations.add(
 				vscode.commands.registerCommand(CLOSE_SESSION_PR_CMD, async (ctx: CrossChatSessionWithPR) => {
-					await this.ensurePullRequestExtensionInstalled();
 					try {
 						const success = await this.octoKitService.closePullRequest(
 							ctx.pullRequestDetails.repository.owner.login,
