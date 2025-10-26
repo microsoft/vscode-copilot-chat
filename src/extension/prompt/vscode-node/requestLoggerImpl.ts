@@ -577,8 +577,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 		const ignoreStatefulMarker = entry.chatParams.ignoreStatefulMarker;
 		if (!ignoreStatefulMarker) {
-			let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
-			statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
+			const statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
 			if (statefulMarker) {
 				result.push(`lastResponseId   : ${statefulMarker.statefulMarker.marker} using ${statefulMarker.statefulMarker.modelId}`);
 			}
