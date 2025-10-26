@@ -2250,6 +2250,11 @@
 			{
 				"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.installPullRequestExtension",
+				"title": "Install GitHub Pull Requests Extension",
+				"icon": "$(cloud-download)"
 			}
 		],
 		"configuration": [
@@ -3830,6 +3835,13 @@
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 					"when": "chatSessionType == copilot-cloud-agent",
 					"group": "context"
+				}
+			],
+			"chat/multiDiff/context": [
+				{
+					"command": "github.copilot.cloud.sessions.installPullRequestExtension",
+					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
+					"group": "inline"
 				}
 			]
 		},
