@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../platform/env/common/envService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -19,7 +20,9 @@ import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliA
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
+import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
+import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
@@ -54,6 +57,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IEnvService private readonly envService: IEnvService,
 		@ILogService private readonly logService: ILogService,
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
 	) {
@@ -131,6 +135,9 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCloudEnabled);
 
 		if (enabled && !this.copilotCloudRegistrations) {
+			// Update context key for PR extension installed status
+			vscode.commands.executeCommand('setContext', prExtensionInstalledContextKey, this.isPullRequestExtensionInstalled());
+
 			// Register the Copilot Cloud chat participant
 			this.copilotCloudRegistrations = new DisposableStore();
 			const copilotSessionsProvider = this.copilotCloudRegistrations.add(
@@ -157,9 +164,30 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 					copilotSessionsProvider.openSessionsInBrowser(chatSessionItem);
 				})
 			);
+			// Proxy commands that require the PR extension
+			this.copilotCloudRegistrations.add(
+				vscode.commands.registerCommand('github.copilot.cloud.sessions.proxy.checkoutFromDescription', async (ctx: { path: string } | undefined) => {
+					await this.installPullRequestExtension();
+					try {
+						await vscode.commands.executeCommand('pr.checkoutFromDescription', ctx?.path);
+					} catch (e) {
+						this.logService.error(`checkoutFromDescription failed: ${e}`);
+					}
+				})
+			);
+			this.copilotCloudRegistrations.add(
+				vscode.commands.registerCommand('github.copilot.cloud.sessions.proxy.applyChangesFromDescription', async (ctx: { path: string } | undefined) => {
+					await this.installPullRequestExtension();
+					try {
+						await vscode.commands.executeCommand('pr.applyChangesFromDescription', ctx?.path);
+					} catch (e) {
+						this.logService.error(`applyChangesFromDescription failed: ${e}`);
+					}
+				})
+			);
 			this.copilotCloudRegistrations.add(
 				vscode.commands.registerCommand(CLOSE_SESSION_PR_CMD, async (ctx: CrossChatSessionWithPR) => {
-					// await this.installPullRequestExtension();
+					// Close PR using GitHub API directly (no extension required)
 					try {
 						const success = await this.octoKitService.closePullRequest(
 							ctx.pullRequestDetails.repository.owner.login,
@@ -180,5 +208,52 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			this.copilotCloudRegistrations.dispose();
 			this.copilotCloudRegistrations = undefined;
 		}
+	}
+
+	/**
+	 * Check if the GitHub Pull Request extension is installed
+	 */
+	private isPullRequestExtensionInstalled(): boolean {
+		const extension = vscode.extensions.getExtension(GHPR_EXTENSION_ID);
+		return extension !== undefined;
+	}
+
+	/**
+	 * Install the GitHub Pull Request extension if not already installed.
+	 * Waits up to 10 seconds for the extension to be available after installation.
+	 * @throws Error if the extension installation times out
+	 */
+	private async installPullRequestExtension(): Promise<void> {
+		if (this.isPullRequestExtensionInstalled()) {
+			return;
+		}
+
+		// Install pre-release version for insiders builds
+		const isInsiders = this.envService.getEditorInfo().version.includes('insider');
+		const installOptions = { enable: true, installPreReleaseVersion: isInsiders };
+
+		this.logService.info(`Installing GitHub Pull Request extension (prerelease: ${isInsiders})...`);
+		await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID, installOptions);
+
+		// Poll for extension availability
+		const maxWaitTime = 10_000; // 10 seconds
+		const pollInterval = 100; // 100ms
+		let elapsed = 0;
+
+		while (elapsed < maxWaitTime) {
+			if (this.isPullRequestExtensionInstalled()) {
+				vscode.window.showInformationMessage(vscode.l10n.t('GitHub Pull Request extension installed successfully.'));
+				await vscode.commands.executeCommand('setContext', prExtensionInstalledContextKey, true);
+				this.logService.info('GitHub Pull Request extension installed successfully.');
+				return;
+			}
+			await new Promise(resolve => setTimeout(resolve, pollInterval));
+			elapsed += pollInterval;
+		}
+
+		// Installation timed out
+		const error = new Error('GitHub Pull Request extension installation timed out.');
+		this.logService.error(error.message);
+		throw error;
 	}
 }
