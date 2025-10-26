@@ -23,7 +23,7 @@ interface ConfirmationMetadata {
 	prompt: string;
 	history?: string;
 	references?: readonly vscode.ChatPromptReference[];
-	chatContext?: vscode.ChatContext;
+	chatContext: vscode.ChatContext;
 }
 
 export interface PullRequestInfo {
@@ -521,7 +521,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 					vscode.l10n.t('You have uncommitted changes in your workspace. Consider committing them if you would like to include them in the cloud agent\'s work.'),
 					{
 						step: 'uncommitted-changes',
-						metadata, // Forward metadata
+						metadata: metadata satisfies ConfirmationMetadata, // Forward metadata
 					},
 					['Proceed', 'Cancel']
 				);
@@ -661,7 +661,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 						history: context.chatSummary?.history,
 						references: request.references,
 						chatContext: context,
-					}
+					} satisfies ConfirmationMetadata
 				},
 				['Delegate', 'Cancel']
 			);
