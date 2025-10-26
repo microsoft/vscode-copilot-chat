@@ -466,7 +466,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 					thinkingActive = true;
 				}
 			} else if (thinkingActive) {
-				progress.report(new vscode.LanguageModelThinkingPart('', '', { vscode_reasoning_done: true }));
+				progress.report(new vscode.LanguageModelThinkingPart('', '', { metadata: { vscodeReasoningDone: true, stopReason: delta.text ? 'text' : 'other' } }));
 				thinkingActive = false;
 			}
 			if (delta.text) {
