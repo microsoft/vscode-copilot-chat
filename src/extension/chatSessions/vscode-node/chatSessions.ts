@@ -99,6 +99,14 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			}
 		}));
 
+		// Global listener for GitHub Pull Request extension installation
+		// This detects when the user manually installs the extension
+		this._register(vscode.extensions.onDidChange(() => {
+			if (this.isPullRequestExtensionInstalled()) {
+				vscode.commands.executeCommand('setContext', prExtensionInstalledContextKey, true);
+			}
+		}));
+
 		// Copilot CLI sessions provider
 		const copilotCLISessionService = claudeAgentInstaService.createInstance(CopilotCLISessionService);
 
@@ -212,29 +220,40 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID, installOptions);
 
-		const maxWaitTime = 10_000; // 10 seconds
-		const pollInterval = 100; // 100ms
-		let elapsed = 0;
+		// Wait for the extension to be installed using onDidChange event
+		await new Promise<void>((resolve, reject) => {
+			const maxWaitTime = 10_000; // 10 seconds
+			const timeout = setTimeout(() => {
+				listener.dispose();
+				reject(new Error('GitHub Pull Request extension installation timed out.'));
+			}, maxWaitTime);
 
-		while (elapsed < maxWaitTime) {
-			if (this.isPullRequestExtensionInstalled()) {
-				await vscode.commands.executeCommand('setContext', prExtensionInstalledContextKey, true);
+			const checkAndResolve = async () => {
+				if (this.isPullRequestExtensionInstalled()) {
+					clearTimeout(timeout);
+					listener.dispose();
+					await vscode.commands.executeCommand('setContext', prExtensionInstalledContextKey, true);
 
-				const reloadAction = vscode.l10n.t('Reload Window');
-				const result = await vscode.window.showInformationMessage(
-					vscode.l10n.t('GitHub Pull Request extension installed successfully. Reload VS Code to activate it.'),
-					reloadAction
-				);
+					// Show reload notification for explicit install case
+					const reloadAction = vscode.l10n.t('Reload Window');
+					const result = await vscode.window.showInformationMessage(
+						vscode.l10n.t('GitHub Pull Request extension installed successfully. Reload VS Code to activate it.'),
+						reloadAction
+					);
 
-				if (result === reloadAction) {
-					await vscode.commands.executeCommand('workbench.action.reloadWindow');
+					if (result === reloadAction) {
+						await vscode.commands.executeCommand('workbench.action.reloadWindow');
+					}
+					resolve();
 				}
-				return;
-			}
-			await new Promise(resolve => setTimeout(resolve, pollInterval));
-			elapsed += pollInterval;
-		}
+			};
 
-		throw new Error('GitHub Pull Request extension installation timed out.');
+			const listener = vscode.extensions.onDidChange(() => {
+				void checkAndResolve();
+			});
+
+			// Check immediately in case the extension is already installed
+			void checkAndResolve();
+		});
 	}
 }
