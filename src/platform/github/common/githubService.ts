@@ -261,6 +261,16 @@ export interface IOctoKitService {
 	 * @returns A promise that resolves to true if the PR was successfully closed
 	 */
 	closePullRequest(owner: string, repo: string, pullNumber: number): Promise<boolean>;
+
+	/**
+	 * Get file content from a specific commit.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param ref The commit SHA, branch name, or tag
+	 * @param path The file path within the repository
+	 * @returns The file content as a string
+	 */
+	getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string>;
 }
 
 /**
@@ -347,5 +357,28 @@ export class BaseOctoKitService {
 
 	protected async closePullRequestWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<boolean> {
 		return closePullRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, owner, repo, pullNumber);
+	}
+
+	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
+		const response = await makeGitHubAPIRequest(
+			this._fetcherService,
+			this._logService,
+			this._telemetryService,
+			this._capiClientService.dotcomAPIURL,
+			`repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`,
+			'GET',
+			token,
+			undefined,
+			'2022-11-28',
+			'json',
+			'vscode-copilot-chat'
+		);
+
+		// GitHub API returns base64 encoded content
+		if (response?.content && response.encoding === 'base64') {
+			return Buffer.from(response.content, 'base64').toString('utf-8');
+		}
+
+		throw new Error('Invalid file content response from GitHub API');
 	}
 }

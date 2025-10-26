@@ -26,6 +26,7 @@ import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
+import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
 
 
@@ -133,6 +134,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		if (enabled && !this.copilotCloudRegistrations) {
 			// Register the Copilot Cloud chat participant
 			this.copilotCloudRegistrations = new DisposableStore();
+
+			this.copilotCloudRegistrations.add(
+				this.copilotAgentInstaService.createInstance(PRContentProvider)
+			);
+
 			const copilotSessionsProvider = this.copilotCloudRegistrations.add(
 				this.copilotAgentInstaService.createInstance(CopilotChatSessionsProvider)
 			);
