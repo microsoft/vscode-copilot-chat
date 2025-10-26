@@ -114,10 +114,10 @@
 		]
 	},
 	"github.copilot.viewsWelcome.cloudSessionsEmpty.contents": {
-		"message": "[Start Cloud Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcloud-agent)",
+		"message": "[Start Cloud Agent Session](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)",
 		"comment": [
 			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilotcloud-agent)'}"
+			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)'}"
 		]
 	},
 	"github.copilot.viewsWelcome.noGitHub.contents": "Clone or open a GitHub repository to get started",
