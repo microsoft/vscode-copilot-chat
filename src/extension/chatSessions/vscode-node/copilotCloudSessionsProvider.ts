@@ -22,7 +22,8 @@ export type ConfirmationResult = { step: string; accepted: boolean; metadata?: C
 interface ConfirmationMetadata {
 	prompt: string;
 	history?: string;
-	references?: vscode.ChatPromptReference[];
+	references?: readonly vscode.ChatPromptReference[];
+	chatContext?: vscode.ChatContext;
 }
 
 export interface PullRequestInfo {
@@ -31,22 +32,7 @@ export interface PullRequestInfo {
 	description: string;
 	author: string;
 	linkTag: string;
-}
-
-export interface PullRequestInfo {
-	uri: string;
-	title: string;
-	description: string;
-	author: string;
-	linkTag: string;
-}
-
-export interface PullRequestInfo {
-	uri: string;
-	title: string;
-	description: string;
-	author: string;
-	linkTag: string;
+	number: number;
 }
 
 export interface ICommentResult {
@@ -456,7 +442,12 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 							stream.markdown(vscode.l10n.t('Cloud agent request cancelled due to uncommitted changes.'));
 							return {};
 						}
-						await this.createDelegatedChatSession(data.metadata, stream, token);
+
+						if (data.metadata.chatContext?.chatSessionContext?.isUntitled) {
+							await this.doUntitledCreation(data.metadata, stream, token);
+						} else {
+							await this.createDelegatedChatSession(data.metadata, stream, token);
+						}
 						break;
 					}
 				default:
@@ -490,7 +481,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			title: pullRequest.title,
 			description: pullRequest.body,
 			author: getAuthorDisplayName(pullRequest.author),
-			linkTag: `#${pullRequest.number}`
+			linkTag: `#${pullRequest.number}`,
+			number,
 		};
 	}
 
@@ -541,6 +533,34 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return false; // No chat confirmation was pushed, meaning the caller should CONTINUE processing.
 	}
 
+
+	private async doUntitledCreation(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+		if (!metadata.chatContext?.chatSessionContext?.isUntitled) {
+			return {};
+		}
+		const selectedAgent = this.sessionAgentMap.get(metadata.chatContext.chatSessionContext.chatSessionItem.resource);
+		const number = await this.startSession(
+			stream,
+			token,
+			'untitledChatSession',
+			metadata.prompt,
+			metadata.history,
+			metadata.references,
+			selectedAgent,
+		);
+		if (!number) {
+			return {};
+		}
+		// Tell UI to the new chat session
+		this._onDidCommitChatSessionItem.fire({
+			original: metadata.chatContext.chatSessionContext.chatSessionItem,
+			modified: {
+				resource: vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + number }),
+				label: `Pull Request ${number}`
+			}
+		});
+	}
+
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
 			return await this.handleConfirmationData(request, stream, token);
@@ -548,27 +568,26 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 		if (context.chatSessionContext?.isUntitled) {
 			/* Generate new cloud agent session from an 'untitled' session */
-			const selectedAgent = this.sessionAgentMap.get(context.chatSessionContext.chatSessionItem.resource);
-			const number = await this.startSession(
-				stream,
-				token,
-				'untitledChatSession',
-				context.chatSummary?.prompt ?? request.prompt,
-				context.chatSummary?.history,
-				request.references,
-				selectedAgent
-			);
-			if (!number) {
+
+			const handledUncommittedChanges = await this.tryHandleUncommittedChanges({
+				prompt: context.chatSummary?.prompt ?? request.prompt,
+				history: context.chatSummary?.history,
+				chatContext: context
+			}, stream, token);
+
+			// If uncommitted changes were detected and a confirmation was shown,
+			// don't proceed with creation yet - wait for user response
+			if (handledUncommittedChanges) {
 				return {};
 			}
-			// Tell UI to the new chat session
-			this._onDidCommitChatSessionItem.fire({
-				original: context.chatSessionContext.chatSessionItem,
-				modified: {
-					resource: vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + number }),
-					label: `Pull Request ${number}`
-				}
-			});
+
+			await this.doUntitledCreation({
+				prompt: context.chatSummary?.prompt ?? request.prompt,
+				history: context.chatSummary?.history,
+				references: request.references,
+				chatContext: context,
+			}, stream, token);
+
 		} else if (context.chatSessionContext) {
 			/* Follow up to an existing cloud agent session */
 			try {
@@ -641,6 +660,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 						prompt: context.chatSummary?.prompt ?? request.prompt,
 						history: context.chatSummary?.history,
 						references: request.references,
+						chatContext: context,
 					}
 				},
 				['Delegate', 'Cancel']
