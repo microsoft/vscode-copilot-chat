@@ -185,10 +185,10 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 			tools: tools,
 		};
 
-		const requestMessages = this.entry.chatParams ? {
+		const requestMessages = {
 			messages: this.entry.chatParams.messages,
 			prediction: prediction
-		} : undefined;
+		};
 
 		const response = responseData || errorInfo ? {
 			...responseData,
