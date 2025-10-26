@@ -12,7 +12,8 @@ import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointPro
 import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
-import { IResponseDelta } from '../../../platform/networking/common/fetch';
+import { IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { IEndpointBody } from '../../../platform/networking/common/networking';
 import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedPendingRequest, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
@@ -20,13 +21,11 @@ import { assertNever } from '../../../util/vs/base/common/assert';
 import { Codicon } from '../../../util/vs/base/common/codicons';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
-import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from './requestLoggerToolResult';
 import { WorkspaceEditRecorder } from './workspaceEditRecorder';
-import { IEndpointBody } from '../../../platform/networking/common/networking';
 
 // Utility function to process deltas into a message string
 function processDeltasToMessage(deltas: IResponseDelta[]): string {
@@ -111,25 +110,21 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 		let prediction: string | undefined;
 		let tools;
 		const postOptions = this.entry.chatParams.postOptions && { ...this.entry.chatParams.postOptions };
-		if (postOptions && 'prediction' in postOptions && typeof postOptions.prediction?.content === 'string') {
+		if (typeof postOptions?.prediction?.content === 'string') {
 			prediction = postOptions.prediction.content;
 			postOptions.prediction = undefined;
 		}
 		if ((this.entry.chatParams as ILoggedPendingRequest).tools) {
 			tools = (this.entry.chatParams as ILoggedPendingRequest).tools;
-			if (postOptions && 'tools' in postOptions) {
+			if (postOptions) {
 				postOptions.tools = undefined;
 			}
 		}
 
 		// Handle stateful marker like _renderRequestToMarkdown does
-		const ignoreStatefulMarker = 'ignoreStatefulMarker' in this.entry.chatParams && this.entry.chatParams.ignoreStatefulMarker;
 		let lastResponseId: { marker: string; modelId: string } | undefined;
-		if (!ignoreStatefulMarker) {
-			let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
-			if ('messages' in this.entry.chatParams) {
-				statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(this.entry.chatParams.messages));
-			}
+		if (!this.entry.chatParams.ignoreStatefulMarker) {
+			const statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(this.entry.chatParams.messages));
 			if (statefulMarker) {
 				lastResponseId = {
 					marker: statefulMarker.statefulMarker.marker,
@@ -145,11 +140,6 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 		if (this.entry.type === LoggedRequestKind.ChatMLSuccess) {
 			responseData = {
 				type: 'success',
-				message: this.entry.result.value
-			};
-		} else if (this.entry.type === LoggedRequestKind.CompletionSuccess) {
-			responseData = {
-				type: 'completion',
 				message: this.entry.result.value
 			};
 		} else if (this.entry.type === LoggedRequestKind.ChatMLFailure) {
@@ -168,12 +158,6 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 			errorInfo = {
 				type: 'canceled'
 			};
-		} else if (this.entry.type === LoggedRequestKind.CompletionFailure) {
-			const error = this.entry.result.type;
-			errorInfo = {
-				type: 'completion_failure',
-				error: error instanceof Error ? error.stack : safeStringify(error)
-			};
 		}
 
 		const metadata = {
@@ -186,7 +170,7 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 			maxResponseTokens: this.entry.chatParams.postOptions?.max_tokens,
 			location: this.entry.chatParams.location,
 			postOptions: postOptions,
-			reasoning: 'body' in this.entry.chatParams && this.entry.chatParams.body?.reasoning,
+			reasoning: this.entry.chatParams.body?.reasoning,
 			intent: this.entry.chatParams.intent,
 			startTime: this.entry.startTime?.toISOString(),
 			endTime: this.entry.endTime?.toISOString(),
@@ -201,7 +185,7 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 			tools: tools,
 		};
 
-		const requestMessages = 'messages' in this.entry.chatParams ? {
+		const requestMessages = this.entry.chatParams ? {
 			messages: this.entry.chatParams.messages,
 			prediction: prediction
 		} : undefined;
@@ -237,12 +221,12 @@ class LoggedToolCall implements ILoggedToolCall {
 
 	async toJSON(): Promise<object> {
 		const responseData: string[] = [];
-		for (const content of this.response.content as (LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart)[]) {
-			if (content && 'value' in content && typeof content.value === 'string') {
+		for (const content of this.response.content) {
+			if (content instanceof LanguageModelTextPart) {
 				responseData.push(content.value);
-			} else if (content && 'data' in content && 'mimeType' in content) {
+			} else if (content instanceof LanguageModelDataPart) {
 				responseData.push(renderDataPartToString(content));
-			} else if (content) {
+			} else if (content instanceof LanguageModelPromptTsxPart) {
 				responseData.push(await renderToolResultToStringNoBudget(content));
 			}
 		}
@@ -509,13 +493,13 @@ export class RequestLogger extends AbstractRequestLogger {
 
 		result.push(`## Response`);
 
-		for (const content of entry.response.content as (LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart)[]) {
+		for (const content of entry.response.content) {
 			result.push(`~~~`);
-			if (content && 'value' in content && typeof content.value === 'string') {
+			if (content instanceof LanguageModelTextPart) {
 				result.push(content.value);
-			} else if (content && 'data' in content && 'mimeType' in content) {
+			} else if (content instanceof LanguageModelDataPart) {
 				result.push(renderDataPartToString(content));
-			} else if (content) {
+			} else if (content instanceof LanguageModelPromptTsxPart) {
 				result.push(await renderToolResultToStringNoBudget(content));
 			}
 			result.push(`~~~`);
@@ -534,8 +518,8 @@ export class RequestLogger extends AbstractRequestLogger {
 		return result.join('\n');
 	}
 
-	private _buildPostOptionsForLog(body: IEndpointBody): Record<string, any> {
-		const options: Record<string, any> = {};
+	private _buildPostOptionsForLog(body: IEndpointBody): OptionalChatRequestParams {
+		const options: OptionalChatRequestParams = {};
 		if (body.temperature !== undefined) {
 			options.temperature = body.temperature;
 		}
@@ -556,28 +540,25 @@ export class RequestLogger extends AbstractRequestLogger {
 		let prediction: string | undefined;
 		let tools;
 
-		const postOptions = 'body' in entry.chatParams && entry.chatParams.body ?
+		const postOptions = entry.chatParams.body ?
 			this._buildPostOptionsForLog(entry.chatParams.body) :
 			{ ...entry.chatParams.postOptions };
-		if (postOptions && 'prediction' in postOptions && typeof postOptions.prediction?.content === 'string') {
+		if (postOptions && typeof postOptions.prediction?.content === 'string') {
 			prediction = postOptions.prediction.content;
 			postOptions.prediction = undefined;
 		}
 		if ((entry.chatParams as ILoggedPendingRequest).tools) {
 			tools = (entry.chatParams as ILoggedPendingRequest).tools;
-			if (postOptions && 'tools' in postOptions) {
+			if (postOptions) {
 				postOptions.tools = undefined;
 			}
 		}
 
-		const hasMessages = 'messages' in entry.chatParams;
-		const hasPredictionSection = hasMessages && !!prediction;
+		const hasPredictionSection = !!prediction;
 		const tocItems: string[] = [];
-		if (hasMessages) {
-			tocItems.push(`- [Request Messages](#request-messages)`);
-			tocItems.push(`  - [System](#system)`);
-			tocItems.push(`  - [User](#user)`);
-		}
+		tocItems.push(`- [Request Messages](#request-messages)`);
+		tocItems.push(`  - [System](#system)`);
+		tocItems.push(`  - [User](#user)`);
 		if (hasPredictionSection) {
 			tocItems.push(`- [Prediction](#prediction)`);
 		}
@@ -603,7 +584,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`maxResponseTokens: ${entry.chatParams.postOptions?.max_tokens}`);
 		result.push(`location         : ${entry.chatParams.location}`);
 		result.push(`postOptions      : ${JSON.stringify(postOptions)}`);
-		if ('body' in entry.chatParams && entry.chatParams.body?.reasoning) {
+		if (entry.chatParams.body?.reasoning) {
 			result.push(`reasoning        : ${JSON.stringify(entry.chatParams.body.reasoning)}`);
 		}
 		result.push(`intent           : ${entry.chatParams.intent}`);
@@ -612,10 +593,10 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`duration         : ${entry.endTime.getTime() - entry.startTime.getTime()}ms`);
 		result.push(`ourRequestId     : ${entry.chatParams.ourRequestId}`);
 
-		const ignoreStatefulMarker = 'ignoreStatefulMarker' in entry.chatParams && entry.chatParams.ignoreStatefulMarker;
+		const ignoreStatefulMarker = entry.chatParams.ignoreStatefulMarker;
 		if (!ignoreStatefulMarker) {
 			let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
-			if ('messages' in entry.chatParams) {
+			if (entry.chatParams) {
 				statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
 			}
 			if (statefulMarker) {
@@ -638,15 +619,13 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 		result.push(`~~~`);
 
-		if ('messages' in entry.chatParams) {
-			result.push(`## Request Messages`);
-			for (const message of entry.chatParams.messages) {
-				result.push(messageToMarkdown(message, ignoreStatefulMarker));
-			}
-			if (prediction) {
-				result.push(`## Prediction`);
-				result.push(createFencedCodeBlock('markdown', prediction, false));
-			}
+		result.push(`## Request Messages`);
+		for (const message of entry.chatParams.messages) {
+			result.push(messageToMarkdown(message, ignoreStatefulMarker));
+		}
+		if (prediction) {
+			result.push(`## Prediction`);
+			result.push(createFencedCodeBlock('markdown', prediction, false));
 		}
 		result.push(``);
 
@@ -667,10 +646,6 @@ export class RequestLogger extends AbstractRequestLogger {
 				}
 				result.push(this._renderStringMessageToMarkdown('assistant', message));
 			}
-		} else if (entry.type === LoggedRequestKind.CompletionSuccess) {
-			result.push(``);
-			result.push(`## Response`);
-			result.push(this._renderStringMessageToMarkdown('assistant', entry.result.value));
 		} else if (entry.type === LoggedRequestKind.ChatMLFailure) {
 			result.push(``);
 			result.push(`<a id="response"></a>`);
@@ -684,11 +659,6 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(``);
 			result.push(`<a id="response"></a>`);
 			result.push(`## CANCELED`);
-		} else if (entry.type === LoggedRequestKind.CompletionFailure) {
-			result.push(``);
-			result.push(`<a id="response"></a>`);
-			const error = entry.result.type;
-			result.push(`## FAILED: ${error instanceof Error ? error.stack : safeStringify(error)}`);
 		}
 
 		result.push(this._renderMarkdownStyles());
@@ -755,7 +725,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 
 		const req = entry.entry;
-		if (req.type === LoggedRequestKind.MarkdownContentRequest || !('body' in req.chatParams) || !req.chatParams.body) {
+		if (req.type === LoggedRequestKind.MarkdownContentRequest || !req.chatParams.body) {
 			return 'Not available';
 		}
 
