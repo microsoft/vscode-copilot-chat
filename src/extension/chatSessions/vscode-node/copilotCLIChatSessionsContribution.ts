@@ -266,11 +266,13 @@ export class CopilotCLIChatSessionParticipant {
 				const prompt = request.prompt.substring('/delegate'.length).trim();
 				if (!await this.cloudSessionProvider.tryHandleUncommittedChanges({
 					prompt: prompt,
-					history: history
+					history: history,
+					chatContext: context
 				}, stream, token)) {
 					const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
 						prompt,
-						history
+						history,
+						chatContext: context
 					}, stream, token);
 					if (prInfo) {
 						await this.recordPushToSession(id, request.prompt, prInfo, token);
@@ -314,7 +316,8 @@ export class CopilotCLIChatSessionParticipant {
 						}
 						const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession({
 							prompt: data.metadata.prompt,
-							history: data.metadata.history
+							history: data.metadata.history,
+							chatContext: context
 						}, stream, token);
 						if (prInfo) {
 							await this.recordPushToSession(id, request.prompt, prInfo, token);
