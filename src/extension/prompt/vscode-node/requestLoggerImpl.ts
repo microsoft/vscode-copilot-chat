@@ -12,7 +12,7 @@ import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointPro
 import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
-import { IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { IEndpointBody } from '../../../platform/networking/common/networking';
 import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedPendingRequest, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
@@ -518,15 +518,6 @@ export class RequestLogger extends AbstractRequestLogger {
 		return result.join('\n');
 	}
 
-	private _buildPostOptionsForLog(body: IEndpointBody): OptionalChatRequestParams {
-		const options: OptionalChatRequestParams = {};
-		if (body.temperature !== undefined) {
-			options.temperature = body.temperature;
-		}
-
-		return options;
-	}
-
 	private _renderRequestToMarkdown(id: string, entry: LoggedRequest): string {
 		if (entry.type === LoggedRequestKind.MarkdownContentRequest) {
 			return entry.markdownContent;
@@ -537,29 +528,20 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`# ${entry.debugName} - ${id}`);
 		result.push(``);
 
-		let prediction: string | undefined;
-		let tools;
-
-		const postOptions = entry.chatParams.body ?
-			this._buildPostOptionsForLog(entry.chatParams.body) :
-			{ ...entry.chatParams.postOptions };
-		if (postOptions && typeof postOptions.prediction?.content === 'string') {
-			prediction = postOptions.prediction.content;
-			postOptions.prediction = undefined;
-		}
-		if ((entry.chatParams as ILoggedPendingRequest).tools) {
-			tools = (entry.chatParams as ILoggedPendingRequest).tools;
-			if (postOptions) {
-				postOptions.tools = undefined;
+		// Just some other options to track
+		// TODO Probably we should just extract every item on the body and format it as below, instead of doing this one-by-one
+		const otherOptions: Record<string, string | number | boolean> = {};
+		for (const opt of ['temperature', 'stream', 'store'] satisfies (keyof IEndpointBody)[]) {
+			if (entry.chatParams.body?.[opt] !== undefined) {
+				otherOptions[opt] = entry.chatParams.body[opt];
 			}
 		}
 
-		const hasPredictionSection = !!prediction;
 		const tocItems: string[] = [];
 		tocItems.push(`- [Request Messages](#request-messages)`);
 		tocItems.push(`  - [System](#system)`);
 		tocItems.push(`  - [User](#user)`);
-		if (hasPredictionSection) {
+		if (!!entry.chatParams.body?.prediction) {
 			tocItems.push(`- [Prediction](#prediction)`);
 		}
 		tocItems.push(`- [Response](#response)`);
@@ -583,7 +565,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`maxPromptTokens  : ${entry.chatEndpoint.modelMaxPromptTokens}`);
 		result.push(`maxResponseTokens: ${entry.chatParams.postOptions?.max_tokens}`);
 		result.push(`location         : ${entry.chatParams.location}`);
-		result.push(`postOptions      : ${JSON.stringify(postOptions)}`);
+		result.push(`otherOptions     : ${JSON.stringify(otherOptions)}`);
 		if (entry.chatParams.body?.reasoning) {
 			result.push(`reasoning        : ${JSON.stringify(entry.chatParams.body.reasoning)}`);
 		}
@@ -614,8 +596,8 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`requestId        : ${entry.result.requestId}`);
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);
 		}
-		if (tools) {
-			result.push(`tools           : ${JSON.stringify(tools, undefined, 4)}`);
+		if (entry.chatParams.tools) {
+			result.push(`tools            : ${JSON.stringify(entry.chatParams.tools, undefined, 4)}`);
 		}
 		result.push(`~~~`);
 
@@ -623,9 +605,9 @@ export class RequestLogger extends AbstractRequestLogger {
 		for (const message of entry.chatParams.messages) {
 			result.push(messageToMarkdown(message, ignoreStatefulMarker));
 		}
-		if (prediction) {
+		if (typeof entry.chatParams.body?.prediction?.content === 'string') {
 			result.push(`## Prediction`);
-			result.push(createFencedCodeBlock('markdown', prediction, false));
+			result.push(createFencedCodeBlock('markdown', entry.chatParams.body.prediction.content, false));
 		}
 		result.push(``);
 
@@ -684,9 +666,9 @@ export class RequestLogger extends AbstractRequestLogger {
 
 		result.push(`## Metadata`);
 		result.push(`~~~`);
-		result.push(`requestId       : ${requestId}`);
+		result.push(`requestId        : ${requestId}`);
 		result.push(`requestType      : ${requestMetadata?.type || 'unknown'}`);
-		result.push(`isModelLab      : ${(requestMetadata as { type: string; isModelLab?: boolean }) ? 'yes' : 'no'}`);
+		result.push(`isModelLab       : ${(requestMetadata as { type: string; isModelLab?: boolean }) ? 'yes' : 'no'}`);
 		if (requestMetadata.type === RequestType.ListModel) {
 			result.push(`requestedModel   : ${(requestMetadata as { type: string; modelId: string })?.modelId || 'unknown'}`);
 		}
