@@ -4242,7 +4242,10 @@
 				],
 				"name": "cloud",
 				"displayName": "GitHub Copilot Cloud Agent",
-				"icon": "$(cloud)",
+				"icon": {
+					"light": "assets/copilot-cloud.svg",
+					"dark": "assets/copilot-cloud-dark.svg"
+				},
 				"welcomeTitle": "GitHub Copilot Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
