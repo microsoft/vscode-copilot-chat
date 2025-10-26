@@ -22,7 +22,8 @@ type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePr
 interface CreatePromptMetadata {
 	prompt: string;
 	history?: string;
-	references?: vscode.ChatPromptReference[];
+	references?: readonly vscode.ChatPromptReference[];
+	variationsCount?: number;
 }
 
 interface UncommittedChangesMetadata {
@@ -76,6 +77,8 @@ export interface ICommentResult {
 
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
+const VARIATIONS_OPTION_GROUP_ID = 'variations';
+const DEFAULT_VARIATIONS_COUNT = '1';
 
 export class CopilotChatSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
 	public static readonly TYPE = 'copilot-cloud-agent';
@@ -87,6 +90,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	private chatSessions: Map<number, PullRequestSearchItem> = new Map();
 	private chatSessionItemsPromise: Promise<vscode.ChatSessionItem[]> | undefined;
 	private sessionAgentMap: Map<Uri, string> = new Map();
+	private sessionVariationsMap: Map<Uri, string> = new Map();
 	public chatParticipant = vscode.chat.createChatParticipant(CopilotChatSessionsProvider.TYPE, async (request, context, stream, token) =>
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
@@ -121,6 +125,14 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 					name: agent.display_name || agent.name
 				}))
 			];
+
+			const variationItems: vscode.ChatSessionProviderOptionItem[] = [
+				{ id: '1', name: vscode.l10n.t('1 variant') },
+				{ id: '2', name: vscode.l10n.t('2 variants') },
+				{ id: '3', name: vscode.l10n.t('3 variants') },
+				{ id: '4', name: vscode.l10n.t('4 variants') }
+			];
+
 			return {
 				optionGroups: [
 					{
@@ -128,6 +140,12 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 						name: vscode.l10n.t('Custom Agents'),
 						description: vscode.l10n.t('Select which agent to use'),
 						items: agentItems,
+					},
+					{
+						id: VARIATIONS_OPTION_GROUP_ID,
+						name: vscode.l10n.t('PR Variations'),
+						description: vscode.l10n.t('Number of PR variants to generate'),
+						items: variationItems,
 					}
 				]
 			};
@@ -146,6 +164,14 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				} else {
 					this.sessionAgentMap.delete(resource);
 					this.logService.info(`Agent cleared for session ${resource}`);
+				}
+			} else if (update.optionId === VARIATIONS_OPTION_GROUP_ID) {
+				if (update.value) {
+					this.sessionVariationsMap.set(resource, update.value);
+					this.logService.info(`Variations changed for session ${resource}: ${update.value}`);
+				} else {
+					this.sessionVariationsMap.delete(resource);
+					this.logService.info(`Variations cleared for session ${resource}`);
 				}
 			}
 		}
@@ -294,9 +320,14 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			// Query for the sub-agent that the remote reports for this session
 			|| undefined; /* TODO: Needs API to support this. */
 
+		const selectedVariations = this.sessionVariationsMap.get(resource) || DEFAULT_VARIATIONS_COUNT;
+
 		return {
 			history,
-			options: selectedAgent ? { [AGENTS_OPTION_GROUP_ID]: selectedAgent } : undefined,
+			options: {
+				...(selectedAgent ? { [AGENTS_OPTION_GROUP_ID]: selectedAgent } : {}),
+				[VARIATIONS_OPTION_GROUP_ID]: selectedVariations
+			},
 			activeResponseCallback: this.findActiveResponseCallback(sessions, pr),
 			requestHandler: undefined
 		};
@@ -357,7 +388,10 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 					options: {
 						[AGENTS_OPTION_GROUP_ID]:
 							this.sessionAgentMap.get(resource)
-							?? (this.sessionAgentMap.set(resource, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID)
+							?? (this.sessionAgentMap.set(resource, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID),
+						[VARIATIONS_OPTION_GROUP_ID]:
+							this.sessionVariationsMap.get(resource)
+							?? (this.sessionVariationsMap.set(resource, DEFAULT_VARIATIONS_COUNT), DEFAULT_VARIATIONS_COUNT)
 					}
 				}
 				: {}),
@@ -477,30 +511,75 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	}
 
 	async createDelegatedChatSession(metadata: CreatePromptMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<PullRequestInfo | undefined> {
-		const { prompt, history, references } = metadata;
-		const number = await this.startSession(stream, token, 'chat', prompt, history, references);
-		if (!number) {
-			return undefined;
-		}
-		const pullRequest = await this.findPR(number);
-		if (!pullRequest) {
-			stream.warning(vscode.l10n.t('Could not find the associated pull request {0} for this chat session.', number));
-			return undefined;
+		const { prompt, history, references, variationsCount = 1 } = metadata;
+
+		// Notify user about creating multiple variants
+		if (variationsCount > 1) {
+			stream.markdown(vscode.l10n.t('Creating {0} PR variants...', variationsCount));
+			stream.markdown('\n\n');
 		}
 
-		const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
-		const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
-		stream.push(card);
-		stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
-		await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + number }));
-		// Return PR info for embedding in session history
-		return {
-			uri: uri.toString(),
-			title: pullRequest.title,
-			description: pullRequest.body,
-			author: getAuthorDisplayName(pullRequest.author),
-			linkTag: `#${pullRequest.number}`
-		};
+		const prInfos: PullRequestInfo[] = [];
+
+		// Create each variant
+		for (let i = 0; i < variationsCount; i++) {
+			if (token.isCancellationRequested) {
+				stream.warning(vscode.l10n.t('PR creation cancelled.'));
+				break;
+			}
+
+			// Add variant indicator to prompt if creating multiple variants
+			const variantPrompt = variationsCount > 1
+				? `${prompt}\n\n[Variant ${i + 1} of ${variationsCount}]`
+				: prompt;
+
+			stream.progress(vscode.l10n.t('Creating variant {0} of {1}', i + 1, variationsCount));
+
+			const number = await this.startSession(stream, token, 'chat', variantPrompt, history, references);
+			if (!number) {
+				stream.warning(vscode.l10n.t('Failed to create variant {0}', i + 1));
+				continue;
+			}
+
+			const pullRequest = await this.findPR(number);
+			if (!pullRequest) {
+				stream.warning(vscode.l10n.t('Could not find the associated pull request {0} for variant {1}.', number, i + 1));
+				continue;
+			}
+
+			const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
+			const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
+			stream.push(card);
+
+			const prInfo = {
+				uri: uri.toString(),
+				title: pullRequest.title,
+				description: pullRequest.body,
+				author: getAuthorDisplayName(pullRequest.author),
+				linkTag: `#${pullRequest.number}`
+			};
+			prInfos.push(prInfo);
+		}
+
+		// Show summary message
+		if (prInfos.length === variationsCount) {
+			if (variationsCount > 1) {
+				stream.markdown(vscode.l10n.t('Successfully created {0} PR variants. GitHub Copilot cloud agent has begun working on your requests. Follow their progress in the associated chats and pull requests.', variationsCount));
+			} else {
+				stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
+			}
+		} else if (prInfos.length > 0) {
+			stream.warning(vscode.l10n.t('Created {0} of {1} requested variants.', prInfos.length, variationsCount));
+		}
+
+		// Open the first PR if any were created
+		if (prInfos.length > 0) {
+			const firstPrNumber = parseInt(prInfos[0].linkTag.substring(1), 10);
+			await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + firstPrNumber }));
+			return prInfos[0];
+		}
+
+		return undefined;
 	}
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
@@ -511,6 +590,20 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		if (context.chatSessionContext?.isUntitled) {
 			/* Generate new cloud agent session from an 'untitled' session */
 			const selectedAgent = this.sessionAgentMap.get(context.chatSessionContext.chatSessionItem.resource);
+			const variationsCount = parseInt(this.sessionVariationsMap.get(context.chatSessionContext.chatSessionItem.resource) || DEFAULT_VARIATIONS_COUNT, 10);
+
+			// For untitled sessions with multiple variants, delegate to createDelegatedChatSession
+			if (variationsCount > 1) {
+				await this.createDelegatedChatSession({
+					prompt: context.chatSummary?.prompt ?? request.prompt,
+					history: context.chatSummary?.history,
+					references: request.references,
+					variationsCount
+				}, stream, token);
+				return {};
+			}
+
+			// Single variant - use the simple flow
 			const number = await this.startSession(
 				stream,
 				token,
@@ -594,15 +687,26 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			}
 		} else {
 			/* @copilot invoked from a 'normal' chat or 'cloud button' */
+			// Get variations count - default to 1 if not set (for non-untitled sessions)
+			// Since we're in a normal chat without session context, default to 1
+			const variationsCount = 1;
+
+			// Construct confirmation message
+			let confirmationDetails = this.DELEGATE_MODAL_DETAILS;
+			if (variationsCount > 1) {
+				confirmationDetails = vscode.l10n.t('The agent will work asynchronously to create {0} pull request variants with your requested changes. This will use {0} premium requests.', variationsCount);
+			}
+
 			stream.confirmation(
 				vscode.l10n.t('Delegate to cloud agent'),
-				this.DELEGATE_MODAL_DETAILS,
+				confirmationDetails,
 				{
 					step: 'create',
 					metadata: {
 						prompt: context.chatSummary?.prompt ?? request.prompt,
 						history: context.chatSummary?.history,
 						references: request.references,
+						variationsCount,
 					}
 				},
 				['Delegate', 'Cancel']
