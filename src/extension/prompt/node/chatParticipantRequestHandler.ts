@@ -148,6 +148,29 @@ export class ChatParticipantRequestHandler {
 		}
 	}
 
+	/**
+	 * Formats the context window usage indicator.
+	 * Returns a string with a progress indicator showing proximity to summarization.
+	 * Uses different visual styles based on usage percentage:
+	 * - < 80%: Simple percentage (shown on hover by VS Code UI)
+	 * - >= 80%: Circle indicator + percentage (shown prominently by VS Code UI)
+	 * @param usagePercentage The percentage of context window used (0-100)
+	 */
+	private _formatContextWindowIndicator(usagePercentage: number): string {
+		const percentage = Math.round(usagePercentage);
+
+		// For < 80%, return simple format that will be shown on hover
+		// For >= 80%, use a circle indicator for visual prominence
+		if (usagePercentage >= 80) {
+			// Use a filled circle to indicate high context usage
+			// This will be shown prominently by VS Code
+			return `• ⬤ ${percentage}%`;
+		} else {
+			// Simple percentage, shown on hover with model/multiplier
+			return `• ${percentage}%`;
+		}
+	}
+
 	private async sanitizeVariables(): Promise<ChatRequest> {
 		const variablePromises = this.request.references.map(async (ref) => {
 			const uri = isLocation(ref.value) ? ref.value.uri : URI.isUri(ref.value) ? ref.value : undefined;
@@ -254,9 +277,23 @@ export class ChatParticipantRequestHandler {
 
 				result = await chatResult;
 				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
-				result.details = this._authService.copilotToken?.isNoAuthUser ?
+
+				// Calculate context window usage percentage and create details string
+				const metadata = (result as ICopilotChatResultIn).metadata;
+				let detailsString = this._authService.copilotToken?.isNoAuthUser ?
 					`${endpoint.name}` :
 					`${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
+
+				// Add context window usage indicator if we have token usage data
+				if (metadata?.promptTokenCount && metadata?.modelMaxTokens) {
+					const usagePercentage = (metadata.promptTokenCount / metadata.modelMaxTokens) * 100;
+					const contextIndicator = this._formatContextWindowIndicator(usagePercentage);
+					if (contextIndicator) {
+						detailsString += ` ${contextIndicator}`;
+					}
+				}
+
+				result.details = detailsString;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);

@@ -72,6 +72,8 @@ export class DefaultIntentRequestHandler {
 
 	private _editSurvivalTracker: IEditSurvivalTrackingSession = new NullEditSurvivalTrackingSession();
 	private _loop!: DefaultToolCallingLoop;
+	private _promptTokenCount: number | undefined;
+	private _modelMaxTokens: number | undefined;
 
 	constructor(
 		private readonly intent: IIntent,
@@ -307,7 +309,14 @@ export class DefaultIntentRequestHandler {
 			this.chatTelemetryBuilder,
 		));
 
-		store.add(Event.once(loop.onDidBuildPrompt)(this._sendInitialChatReferences, this));
+		// Capture model max tokens from the endpoint
+		this._modelMaxTokens = intentInvocation.endpoint.modelMaxPromptTokens;
+
+		store.add(Event.once(loop.onDidBuildPrompt)((event) => {
+			this._sendInitialChatReferences(event);
+			// Track token usage for context window indicator
+			this._promptTokenCount = event.promptTokenLength;
+		}, this));
 
 		// We need to wait for all response handlers to finish before
 		// we can dispose the store. This is because the telemetry machine
@@ -350,7 +359,8 @@ export class DefaultIntentRequestHandler {
 		const summarizedConversationHistory = this.turn.getMetadata(SummarizedConversationHistoryMetadata);
 		const renderedUserMessageMetadata = this.turn.getMetadata(RenderedUserMessageMetadata);
 		const globalContextMetadata = this.turn.getMetadata(GlobalContextMessageMetadata);
-		return codeBlocks || summarizedConversationHistory || renderedUserMessageMetadata || globalContextMetadata ?
+		const hasTokenUsage = this._promptTokenCount !== undefined || this._modelMaxTokens !== undefined;
+		return codeBlocks || summarizedConversationHistory || renderedUserMessageMetadata || globalContextMetadata || hasTokenUsage ?
 			{
 				...chatResult,
 				metadata: {
@@ -359,6 +369,8 @@ export class DefaultIntentRequestHandler {
 					...summarizedConversationHistory && { summary: summarizedConversationHistory },
 					...renderedUserMessageMetadata,
 					...globalContextMetadata,
+					...(this._promptTokenCount !== undefined && { promptTokenCount: this._promptTokenCount }),
+					...(this._modelMaxTokens !== undefined && { modelMaxTokens: this._modelMaxTokens }),
 				} satisfies Partial<IResultMetadata>,
 			} : chatResult;
 	}

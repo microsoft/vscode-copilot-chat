@@ -346,6 +346,10 @@ export interface IResultMetadata {
 	toolCallResults?: Record<string, LanguageModelToolResult>;
 	maxToolCallsExceeded?: boolean;
 	summary?: { toolCallRoundId: string; text: string };
+	/** Prompt token count for context window usage tracking */
+	promptTokenCount?: number;
+	/** Maximum tokens allowed in the model's context window */
+	modelMaxTokens?: number;
 }
 
 /** There may be no metadata for results coming from old persisted messages, or from messages that are currently in progress (TODO, try to handle this case) */

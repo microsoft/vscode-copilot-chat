@@ -3,6 +3,8 @@
 exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns only has tool results from current turn 1`] = `
 {
   "codeBlocks": [],
+  "modelMaxTokens": 50000,
+  "promptTokenCount": 10,
   "toolCallResults": {
     "tool_call_id_0__vscode-0": LanguageModelToolResult {
       "content": [
@@ -66,6 +68,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
 exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns only has tool results from current turn 2`] = `
 {
   "codeBlocks": [],
+  "modelMaxTokens": 50000,
+  "promptTokenCount": 10,
   "toolCallResults": {
     "tool_call_id_2__vscode-2": LanguageModelToolResult {
       "content": [
@@ -158,6 +162,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
   "metadata": {
     "codeBlocks": [],
     "maxToolCallsExceeded": true,
+    "modelMaxTokens": 50000,
+    "promptTokenCount": 10,
     "toolCallResults": {
       "tool_call_id_0__vscode-0": LanguageModelToolResult {
         "content": [
@@ -259,6 +265,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
   "metadata": {
     "codeBlocks": [],
     "maxToolCallsExceeded": true,
+    "modelMaxTokens": 50000,
+    "promptTokenCount": 10,
     "toolCallResults": {
       "tool_call_id_4__vscode-4": LanguageModelToolResult {
         "content": [
@@ -2438,6 +2446,8 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
 {
   "metadata": {
     "codeBlocks": [],
+    "modelMaxTokens": 50000,
+    "promptTokenCount": 10,
     "toolCallResults": undefined,
     "toolCallRounds": [
       ToolCallRound {
@@ -2753,6 +2763,8 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
 {
   "metadata": {
     "codeBlocks": [],
+    "modelMaxTokens": 50000,
+    "promptTokenCount": 10,
     "toolCallResults": {
       "tool_call_id__vscode-0": LanguageModelToolResult {
         "content": [
