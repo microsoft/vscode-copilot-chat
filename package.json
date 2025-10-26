@@ -2250,6 +2250,16 @@
 			{
 				"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.proxy.checkoutFromDescription",
+				"title": "%github.copilot.command.checkoutFromDescription.title%",
+				"icon": "$(desktop-download)"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.proxy.applyChangesFromDescription",
+				"title": "%github.copilot.command.applyChangesFromDescription.title%",
+				"icon": "$(diff)"
 			}
 		],
 		"configuration": [
@@ -3503,6 +3513,14 @@
 				{
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.proxy.checkoutFromDescription",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.proxy.applyChangesFromDescription",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -3830,6 +3848,16 @@
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 					"when": "chatSessionType == copilot-cloud-agent",
 					"group": "context"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.proxy.checkoutFromDescription",
+					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
+					"group": "prExtension@1"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.proxy.applyChangesFromDescription",
+					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
+					"group": "prExtension@2"
 				}
 			]
 		},
