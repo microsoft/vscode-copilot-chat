@@ -19,7 +19,7 @@ export class FakeCopilotTokenManager extends CopilotTokenManager {
 	}
 
 	get token(): CopilotToken | undefined {
-		return undefined;
+		return this._token;
 	}
 
 	primeToken(): Promise<boolean> {
