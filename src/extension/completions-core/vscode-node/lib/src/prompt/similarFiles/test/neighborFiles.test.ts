@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { accessTimes } from '../../../documentTracker';
 import { ExpTreatmentVariables } from '../../../experiments/expConfig';
 import { TelemetryWithExp } from '../../../telemetry';
@@ -117,7 +117,7 @@ suite('neighbor files tests', function () {
 	const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
 
 
-	const workspaceTextDocumentManager = new TestTextDocumentManager(ctx);
+	const workspaceTextDocumentManager = ctx.instantiationService.createInstance(TestTextDocumentManager);
 	for (const file of WORKSPACE_FILES_FOR_TEST) {
 		workspaceTextDocumentManager.setDiskContents(file.uri, file.text);
 	}
@@ -227,7 +227,7 @@ suite('Neighbor files exclusion tests', function () {
 		accessTimes.set(file.uri, file.timestamp);
 	}
 
-	const workspaceTextDocumentManager = new TestTextDocumentManager(ctx);
+	const workspaceTextDocumentManager = ctx.instantiationService.createInstance(TestTextDocumentManager);
 	for (const file of WORKSPACE_FILES_FOR_TEST) {
 		workspaceTextDocumentManager.setDiskContents(file.uri, file.text);
 	}
@@ -240,7 +240,7 @@ suite('Neighbor files exclusion tests', function () {
 
 	class MockedRelatedFilesProvider extends RelatedFilesProvider {
 		constructor(
-			context: Context,
+			context: ICompletionsContextService,
 			private readonly relatedFiles: RelatedFilesResponseEntry[],
 			private readonly traits: RelatedFileTrait[] = [{ name: 'testTraitName', value: 'testTraitValue' }]
 		) {

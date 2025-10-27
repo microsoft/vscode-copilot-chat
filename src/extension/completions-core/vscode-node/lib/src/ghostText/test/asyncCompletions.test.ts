@@ -6,7 +6,7 @@ import * as assert from 'node:assert';
 import sinon from 'sinon';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { CancellationTokenSource } from '../../../../types/src';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Features } from '../../experiments/features';
 import { fakeAPIChoice } from '../../openai/fetch.fake';
 import { APIChoice } from '../../openai/openai';
@@ -19,13 +19,13 @@ import { AsyncCompletionManager } from './../asyncCompletions';
 import { GhostTextResultWithTelemetry, mkBasicResultTelemetry } from './../telemetry';
 
 suite('AsyncCompletionManager', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let manager: AsyncCompletionManager;
 	let clock: sinon.SinonFakeTimers;
 
 	setup(function () {
 		ctx = createLibTestingContext();
-		manager = new AsyncCompletionManager(ctx);
+		manager = ctx.instantiationService.createInstance(AsyncCompletionManager);
 		clock = sinon.useFakeTimers();
 	});
 

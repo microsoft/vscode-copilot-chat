@@ -6,20 +6,20 @@
 import { CopilotToken, type ExtendedTokenInfo, type TokenInfo } from '../../../../../../platform/authentication/common/copilotToken';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { CopilotTokenManager } from '../auth/copilotTokenManager';
-import type { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 
 // Buffer to allow refresh to happen successfully
 export class FakeCopilotTokenManager extends CopilotTokenManager {
 
 	private _token: CopilotToken;
 
-	constructor(protected ctx: Context) {
+	constructor(@ICompletionsContextService protected ctx: ICompletionsContextService) {
 		super();
 		this._token = FakeCopilotTokenManager.createTestCopilotToken({ token: 'tid=test;rt=1' });
 	}
 
 	get token(): CopilotToken | undefined {
-		return undefined;
+		return this._token;
 	}
 
 	primeToken(): Promise<boolean> {

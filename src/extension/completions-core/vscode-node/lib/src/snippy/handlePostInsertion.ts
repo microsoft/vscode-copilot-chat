@@ -2,21 +2,21 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { Value } from '@sinclair/typebox/value';
 import { CitationManager } from '../citationManager';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
+import { TextDocumentManager } from '../textDocumentManager';
 import * as Snippy from './';
 import * as SnippyCompute from './compute';
 import { codeReferenceLogger } from './logger';
 import { MatchError } from './snippy.proto';
 import { snippyTelemetry } from './telemetryHandlers';
-import { TextDocumentManager } from '../textDocumentManager';
-import { Value } from '@sinclair/typebox/value';
 
 function isError(payload: unknown): payload is MatchError {
 	return Value.Check(MatchError, payload);
 }
 
-async function snippyRequest<T>(ctx: Context, requestFn: () => T): Promise<ReturnType<typeof requestFn> | undefined> {
+async function snippyRequest<T>(ctx: ICompletionsContextService, requestFn: () => T): Promise<ReturnType<typeof requestFn> | undefined> {
 	const res = await requestFn();
 
 	if (isError(res)) {
@@ -37,7 +37,7 @@ function isMatchError<T extends object>(response: T | MatchError): response is M
 	return 'kind' in response && response.kind === 'failure';
 }
 
-export async function fetchCitations(ctx: Context, uri: string, completionText: string, insertionOffset: number) {
+export async function fetchCitations(ctx: ICompletionsContextService, uri: string, completionText: string, insertionOffset: number) {
 	const documentManager = ctx.get(TextDocumentManager);
 	const insertionDoc = await documentManager.getTextDocument({ uri });
 

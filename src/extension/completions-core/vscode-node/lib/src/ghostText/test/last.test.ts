@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { withInMemoryTelemetry } from '../../test/telemetry';
@@ -20,7 +20,7 @@ import {
 } from '../last';
 
 suite('Isolated LastGhostText tests', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let last: LastGhostText;
 	setup(function () {
 		ctx = createLibTestingContext();

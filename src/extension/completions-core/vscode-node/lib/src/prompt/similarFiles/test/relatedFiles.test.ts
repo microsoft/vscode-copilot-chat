@@ -7,7 +7,7 @@ import * as assert from 'assert';
 import Sinon from 'sinon';
 import type { CancellationToken } from 'vscode';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { accessTimes } from '../../../documentTracker';
 import { ExpTreatmentVariables } from '../../../experiments/expConfig';
 import { TelemetryWithExp } from '../../../telemetry';
@@ -150,7 +150,7 @@ suite('relatedFiles tests', function () {
 		const DEFAULT_FILE_LANGUAGE = 'cpp';
 
 		class MockedCppRelatedFilesProvider extends CompositeRelatedFilesProvider {
-			constructor(context: Context) {
+			constructor(context: ICompletionsContextService) {
 				super(context);
 			}
 
@@ -168,8 +168,8 @@ suite('relatedFiles tests', function () {
 		}
 
 		const ctx = createLibTestingContext();
-		ctx.forceSet(RelatedFilesProvider, new MockedCppRelatedFilesProvider(ctx));
-		ctx.forceSet(TextDocumentManager, new TestTextDocumentManager(ctx));
+		ctx.forceSet(RelatedFilesProvider, ctx.instantiationService.createInstance(MockedCppRelatedFilesProvider));
+		ctx.forceSet(TextDocumentManager, ctx.instantiationService.createInstance(TestTextDocumentManager));
 		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
 		NeighborSource.reset();
 
@@ -215,7 +215,7 @@ suite('relatedFiles tests', function () {
 		}
 
 		class MockedCppRelatedFilesProvider extends CompositeRelatedFilesProvider {
-			constructor(context: Context) {
+			constructor(context: ICompletionsContextService) {
 				super(context);
 			}
 
@@ -248,9 +248,9 @@ suite('relatedFiles tests', function () {
 		}
 
 		const ctx = createLibTestingContext();
-		const cppProvider = new MockedCppRelatedFilesProvider(ctx);
+		const cppProvider = ctx.instantiationService.createInstance(MockedCppRelatedFilesProvider);
 		ctx.forceSet(RelatedFilesProvider, cppProvider);
-		ctx.forceSet(TextDocumentManager, new TestTextDocumentManager(ctx));
+		ctx.forceSet(TextDocumentManager, ctx.instantiationService.createInstance(TestTextDocumentManager));
 
 		const telemetry = TelemetryWithExp.createEmptyConfigForTesting();
 		const cppProviderGetMock = Sinon.spy(cppProvider, 'getRelatedFilesResponse');
@@ -342,11 +342,11 @@ suite('relatedFiles tests', function () {
 			cancel = false
 		) {
 			const ctx = createLibTestingContext();
-			const tdm = new TestTextDocumentManager(ctx);
+			const tdm = ctx.instantiationService.createInstance(TestTextDocumentManager);
 			// Mock up the workspace folders.
 			tdm.init([{ uri: WKS_ROOTFOLDER }]);
 			ctx.forceSet(TextDocumentManager, tdm);
-			const composite = new TestCompositeRelatedFilesProvider(ctx);
+			const composite = ctx.instantiationService.createInstance(TestCompositeRelatedFilesProvider);
 			ctx.forceSet(RelatedFilesProvider, composite);
 			for (const { extensionId, languageId, callback } of providers) {
 				composite.registerRelatedFilesProvider(extensionId, languageId, callback);

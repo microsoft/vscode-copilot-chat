@@ -9,7 +9,7 @@ import * as assert from 'assert';
 import { MutableObservableWorkspace, ObservableWorkspace } from '../../../../../../../../platform/inlineEdits/common/observableWorkspace';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { CopilotContentExclusionManager } from '../../../contentExclusion/contentExclusionManager';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { createCompletionRequestData } from '../../../test/completionsPrompt';
 import { createLibTestingContext } from '../../../test/context';
 import { querySnapshot } from '../../../test/snapshot';
@@ -30,13 +30,13 @@ class MockRecentEditsProvider extends FullRecentEditsProvider {
 }
 
 suite('Recent Edits Component', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let mockRecentEditsProvider: MockRecentEditsProvider;
 
 	setup(function () {
 		ctx = createLibTestingContext();
 		ctx.set(ObservableWorkspace, new MutableObservableWorkspace());
-		mockRecentEditsProvider = new MockRecentEditsProvider(ctx);
+		mockRecentEditsProvider = ctx.instantiationService.createInstance(MockRecentEditsProvider, undefined);
 		ctx.forceSet(RecentEditsProvider, mockRecentEditsProvider);
 	});
 
@@ -352,7 +352,7 @@ End of recent edits\n`.replace(/\n {12}/g, '\n')
 
 		ctx.forceSet(
 			CopilotContentExclusionManager,
-			new BlockingContentExclusionManager(ctx, ['file:///root/relative/excluded.ts'])
+			ctx.instantiationService.createInstance(BlockingContentExclusionManager, ['file:///root/relative/excluded.ts'])
 		);
 
 		const fakeEdits: RecentEdit[] = [
@@ -401,7 +401,7 @@ End of recent edits\n`.replace(/\n {12}/g, '\n')
 		assert.ok(!text.includes('File: relative/excluded.ts'));
 	});
 
-	async function createSnapshot(ctx: Context, doc: CompletionRequestDocument, marker: string) {
+	async function createSnapshot(ctx: ICompletionsContextService, doc: CompletionRequestDocument, marker: string) {
 		const position = doc.positionAt(doc.getText().indexOf(marker));
 		const virtualPrompt = new VirtualPrompt(<RecentEdits ctx={ctx} />);
 		const pipe = virtualPrompt.createPipe();

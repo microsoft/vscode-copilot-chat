@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CompletionsTelemetryServiceBridge } from '../../../bridge/src/completionsTelemetryServiceBridge';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { TelemetryReporters } from '../telemetry';
 import { PromiseQueue } from '../util/promiseQueue';
 import { TelemetrySpy } from './telemetrySpy';
@@ -104,8 +104,8 @@ export function allEvents(messages: CapturedTelemetry[]): messages is CapturedTe
 }
 
 export async function withInMemoryTelemetry<T>(
-	ctx: Context,
-	work: (localCtx: Context) => T | Promise<T>
+	ctx: ICompletionsContextService,
+	work: (localCtx: ICompletionsContextService) => T | Promise<T>
 ): Promise<{ reporter: TelemetrySpy; enhancedReporter: TelemetrySpy; result: T }> {
 	const reporter = new TelemetrySpy();
 	const enhancedReporter = new TelemetrySpy();

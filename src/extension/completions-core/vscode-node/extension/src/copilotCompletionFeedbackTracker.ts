@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../lib/src/context';
-import { collectCompletionDiagnostics, formatDiagnosticsAsMarkdown } from '../../lib/src/diagnostics';
-import { telemetry, TelemetryData } from '../../lib/src/telemetry';
 import { Command, commands, InlineCompletionItem, Uri } from 'vscode';
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
+import { ICompletionsContextService } from '../../lib/src/context';
+import { collectCompletionDiagnostics, formatDiagnosticsAsMarkdown } from '../../lib/src/diagnostics';
+import { telemetry, TelemetryData } from '../../lib/src/telemetry';
 import { CMDSendCompletionsFeedback } from './constants';
 
 export const sendCompletionFeedbackCommand: Command = {
@@ -19,7 +19,7 @@ export const sendCompletionFeedbackCommand: Command = {
 export class CopilotCompletionFeedbackTracker extends Disposable {
 	private lastShownCopilotCompletionItem: InlineCompletionItem | undefined;
 
-	constructor(private readonly ctx: Context) {
+	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) {
 		super();
 		this._register(commands.registerCommand(sendCompletionFeedbackCommand.command, async () => {
 			const commandArg: unknown = this.lastShownCopilotCompletionItem?.command?.arguments?.[0];
@@ -41,7 +41,7 @@ export class CopilotCompletionFeedbackTracker extends Disposable {
 }
 
 async function openGitHubIssue(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	item: InlineCompletionItem | undefined,
 	telemetry: TelemetryData | undefined
 ) {
@@ -55,7 +55,7 @@ async function openGitHubIssue(
 }
 
 function generateGitHubIssueBody(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	item: InlineCompletionItem | undefined,
 	telemetry: TelemetryData | undefined
 ) {

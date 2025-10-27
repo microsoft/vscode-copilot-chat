@@ -4,11 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { isBlockBodyFinished, isEmptyBlockStart } from '../../../prompt/src/parseBlock';
-import { Context } from '../context';
 import { IPosition, LocationFactory, TextDocumentContents } from '../textDocument';
 
 export function parsingBlockFinished(
-	ctx: Context,
 	doc: TextDocumentContents,
 	position: IPosition
 ): (completion: string) => Promise<number | undefined> {

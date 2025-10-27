@@ -3,15 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ICompletionModelInformation, IEndpointProvider } from '../../../../../../platform/endpoint/common/endpointProvider';
 import { CompletionsEndpointProviderBridge } from '../../../bridge/src/completionsEndpointProviderBridge';
+import { TokenizerName } from '../../../prompt/src/tokenization';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
 import { ConfigKey, getConfig } from '../config';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
-import { CompletionHeaders } from './fetch';
 import { TelemetryWithExp } from '../telemetry';
-import { TokenizerName } from '../../../prompt/src/tokenization';
-import { ICompletionModelInformation, IEndpointProvider } from '../../../../../../platform/endpoint/common/endpointProvider';
+import { CompletionHeaders } from './fetch';
 
 const FallbackModelId = 'gpt-4o-copilot';
 export class AvailableModelsManager {
@@ -22,8 +22,8 @@ export class AvailableModelsManager {
 	private readonly _endpointProvider: IEndpointProvider;
 
 	constructor(
-		private _ctx: Context,
-		shouldFetch: boolean = true
+		shouldFetch: boolean = true,
+		@ICompletionsContextService private _ctx: ICompletionsContextService,
 	) {
 		this._endpointProvider = this._ctx.get(CompletionsEndpointProviderBridge).endpointProvider;
 		if (shouldFetch) {

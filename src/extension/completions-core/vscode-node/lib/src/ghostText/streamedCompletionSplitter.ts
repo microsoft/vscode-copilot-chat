@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { FinishedCallback, RequestDelta, SolutionDecision } from '../openai/fetch';
 import { APIChoice, convertToAPIChoice } from '../openai/openai';
 import { CopilotNamedAnnotationList } from '../openai/stream';
@@ -69,12 +69,12 @@ export class StreamedCompletionSplitter {
 	private readonly completions = new Map<number, StreamingCompletion>();
 
 	constructor(
-		private readonly ctx: Context,
 		private readonly prefix: string,
 		private readonly languageId: string,
 		private readonly initialSingleLine: boolean,
 		private readonly trimmerLookahead: number,
-		private readonly cacheFunction: (prefixAddition: string, item: APIChoice) => void
+		private readonly cacheFunction: (prefixAddition: string, item: APIChoice) => void,
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
 	) { }
 
 	getFinishedCallback(): FinishedCallback {

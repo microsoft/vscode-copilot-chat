@@ -11,7 +11,7 @@ import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { initializeTokenizers } from '../../../../prompt/src/tokenization';
 import { CompletionState, createCompletionState } from '../../completionState';
 import { ConfigKey, InMemoryConfigProvider } from '../../config';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Fetcher, Response } from '../../networking';
 import { LiveOpenAIFetcher, OpenAIFetcher } from '../../openai/fetch';
 import { fakeAPIChoice, fakeAPIChoiceFromCompletion } from '../../openai/fetch.fake';
@@ -80,7 +80,7 @@ suite('Isolated GhostText tests', function () {
 		};
 	}
 
-	function addToCache(ctx: Context, prefix: string, suffix: string, completion: string | APIChoice) {
+	function addToCache(ctx: ICompletionsContextService, prefix: string, suffix: string, completion: string | APIChoice) {
 		let choice: APIChoice;
 		if (typeof completion === 'string') {
 			choice = fakeAPIChoiceFromCompletion(completion);
@@ -91,7 +91,7 @@ suite('Isolated GhostText tests', function () {
 	}
 
 	async function acceptAndRequestNextCompletion(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		origDoc: ITextDocument,
 		origPosition: Position,
 		completion: GhostCompletion

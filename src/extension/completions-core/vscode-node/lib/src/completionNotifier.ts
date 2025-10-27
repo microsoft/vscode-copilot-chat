@@ -5,7 +5,7 @@
 import EventEmitter from 'events';
 import { CancellationToken, Disposable } from '../../types/src';
 import { CompletionState } from './completionState';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { GetGhostTextOptions } from './ghostText/ghostText';
 import { telemetryCatch, TelemetryWithExp } from './telemetry';
 
@@ -21,7 +21,7 @@ const requestEventName = 'CompletionRequested';
 
 export class CompletionNotifier {
 	#emitter = new EventEmitter();
-	constructor(protected ctx: Context) { }
+	constructor(@ICompletionsContextService protected ctx: ICompletionsContextService) { }
 
 	notifyRequest(
 		completionState: CompletionState,

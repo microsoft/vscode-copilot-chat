@@ -8,7 +8,7 @@ import * as Sinon from 'sinon';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { CancellationTokenSource } from '../../../../types/src';
 import { CopilotTokenManager } from '../../auth/copilotTokenManager';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Fetcher, FetchOptions, Response } from '../../networking';
 import { StatusChangedEvent, StatusReporter } from '../../progress';
 import { TelemetryWithExp } from '../../telemetry';
@@ -26,7 +26,7 @@ import {
 import { ErrorReturningFetcher, SyntheticCompletions } from '../fetch.fake';
 
 suite('"Fetch" unit tests', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let resetSpy: Sinon.SinonSpy<Parameters<CopilotTokenManager['resetToken']>>;
 
 	setup(function () {
@@ -228,7 +228,7 @@ suite('"Fetch" unit tests', function () {
 });
 
 suite('Telemetry sent on fetch', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	setup(function () {
 		ctx = createLibTestingContext();
@@ -347,7 +347,7 @@ async function assertResponseWithStatus(
 	return assertResponseWithContext(ctx, statusCode, headers);
 }
 
-async function assertResponseWithContext(ctx: Context, statusCode: number, headers?: Record<string, string>) {
+async function assertResponseWithContext(ctx: ICompletionsContextService, statusCode: number, headers?: Record<string, string>) {
 	const response = createFakeResponse(statusCode, 'response-text', headers);
 	const fetcher = new ErrorReturningFetcher(response);
 	ctx.forceSet(OpenAIFetcher, fetcher);

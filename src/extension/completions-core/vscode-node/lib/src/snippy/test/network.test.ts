@@ -13,7 +13,7 @@ import {
 	DefaultsOnlyConfigProvider,
 	InMemoryConfigProvider,
 } from '../../config';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Fetcher, Response } from '../../networking';
 import { ConnectionState } from '../../snippy/connectionState';
 import { ErrorMessages, ErrorReasons, FormattedSnippyError } from '../../snippy/errorCreator';
@@ -97,7 +97,7 @@ class SnippyFetcher extends FakeFetcher {
 }
 
 suite('snippy network primitive', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let originalConfigProvider: ConfigProvider;
 	let originalBuildInfo: BuildInfo;
 

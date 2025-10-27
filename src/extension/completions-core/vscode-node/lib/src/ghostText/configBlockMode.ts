@@ -4,21 +4,21 @@
  *--------------------------------------------------------------------------------------------*/
 // The following code was moved from config.ts into here to break the cyclic dependencies
 
-import { ConfigKey, getConfig } from '../config';
-import { Context } from "../context";
-import { Features } from "../experiments/features";
-import { BlockTrimmer } from './blockTrimmer';
-import { TelemetryWithExp } from "../telemetry";
-import { isSupportedLanguageId } from '../../../prompt/src/parse';
 import { BlockMode } from "../../../../../completions/common/config";
+import { isSupportedLanguageId } from '../../../prompt/src/parse';
+import { ConfigKey, getConfig } from '../config';
+import { ICompletionsContextService } from "../context";
+import { Features } from "../experiments/features";
+import { TelemetryWithExp } from "../telemetry";
+import { BlockTrimmer } from './blockTrimmer';
 import { StatementTree } from "./statementTree";
 
 export abstract class BlockModeConfig {
-	abstract forLanguage(ctx: Context, languageId: string, telemetryData: TelemetryWithExp): BlockMode;
+	abstract forLanguage(ctx: ICompletionsContextService, languageId: string, telemetryData: TelemetryWithExp): BlockMode;
 }
 
 export class ConfigBlockModeConfig extends BlockModeConfig {
-	forLanguage(ctx: Context, languageId: string, telemetryData: TelemetryWithExp): BlockMode {
+	forLanguage(ctx: ICompletionsContextService, languageId: string, telemetryData: TelemetryWithExp): BlockMode {
 		const overrideBlockMode = ctx.get(Features).overrideBlockMode(telemetryData);
 		if (overrideBlockMode) {
 			return toApplicableBlockMode(overrideBlockMode, languageId);

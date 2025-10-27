@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { createLibTestingContext } from '../../../test/context';
 import { ResolvedContextItem } from '../../contextProviderRegistry';
 import { ContextProviderStatistics } from '../../contextProviderStatistics';
@@ -13,7 +13,7 @@ import { TraitWithId } from './../contextItemSchemas';
 import { getTraitsFromContextItems } from './../traits';
 
 suite('traitsContextProvider', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	const resolvedContextItems: ResolvedContextItem<TraitWithId>[] = [
 		{
 			providerId: 'testTraitsProvider',

@@ -5,7 +5,7 @@
 
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../prompt/src/prompt';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { logger } from '../logger';
 import { TelemetryWithExp, logEngineCompletion } from '../telemetry';
 import { isRunningInTest } from '../util/runtimeMode';
@@ -56,7 +56,7 @@ export interface APIJsonData {
 }
 
 export function convertToAPIChoice(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionText: string,
 	jsonData: APIJsonData,
 	choiceIndex: number,
@@ -86,7 +86,7 @@ export function convertToAPIChoice(
 }
 
 // Helper functions
-function calculateMeanLogProb(ctx: Context, jsonData: APIJsonData): number | undefined {
+function calculateMeanLogProb(ctx: ICompletionsContextService, jsonData: APIJsonData): number | undefined {
 	if (!jsonData?.logprobs?.token_logprobs) {
 		return undefined;
 	}
@@ -114,7 +114,7 @@ function calculateMeanLogProb(ctx: Context, jsonData: APIJsonData): number | und
 	}
 }
 
-function calculateMeanAlternativeLogProb(ctx: Context, jsonData: APIJsonData): number | undefined {
+function calculateMeanAlternativeLogProb(ctx: ICompletionsContextService, jsonData: APIJsonData): number | undefined {
 	if (!jsonData?.logprobs?.top_logprobs) {
 		return undefined;
 	}
@@ -146,7 +146,7 @@ function calculateMeanAlternativeLogProb(ctx: Context, jsonData: APIJsonData): n
 
 // Returns a temperature in range 0.0-1.0, using either a config setting,
 // or the following ranges: 1=0.0, <10=0.2, <20=0.4, >=20=0.8
-export function getTemperatureForSamples(ctx: Context, numShots: number): number {
+export function getTemperatureForSamples(ctx: ICompletionsContextService, numShots: number): number {
 	if (isRunningInTest(ctx)) {
 		return 0.0;
 	}
@@ -167,14 +167,14 @@ const stopsForLanguage: { [key: string]: string[] } = {
 	python: ['\ndef ', '\nclass ', '\nif ', '\n\n#'],
 };
 
-export function getStops(ctx: Context, languageId?: string) {
+export function getStops(ctx: ICompletionsContextService, languageId?: string) {
 	return stopsForLanguage[languageId ?? ''] ?? ['\n\n\n', '\n```'];
 }
 
-export function getTopP(ctx: Context): number {
+export function getTopP(ctx: ICompletionsContextService): number {
 	return 1;
 }
 
-export function getMaxSolutionTokens(ctx: Context): number {
+export function getMaxSolutionTokens(ctx: ICompletionsContextService): number {
 	return DEFAULT_MAX_COMPLETION_LENGTH;
 }
