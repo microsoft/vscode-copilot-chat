@@ -43,19 +43,12 @@ function findBestSymbol(
 			}
 		} else { // Is a vscode.SymbolInformation
 			// For flat symbol information, try to match against symbol parts
-			// Prefer last part (method) over first part (class) for qualified names
-			const lastPart = symbolParts[symbolParts.length - 1];
-			const firstPart = symbolParts[0];
-
-			if (symbol.name === lastPart && symbolParts.length > 1) {
-				// Last part match for qualified names like `TextModel.undo()` - prefer the method
-				const match = { symbol, matchCount: 2 }; // Higher priority
-				if (!bestMatch || match.matchCount > bestMatch.matchCount) {
-					bestMatch = match;
-				}
-			} else if (symbol.name === firstPart) {
-				// First part match - use as fallback
-				const match = { symbol, matchCount: 1 }; // Lower priority
+			// Prefer symbols that appear more to the right (higher index) in the qualified name
+			// This prioritizes members over classes (e.g., in `TextModel.undo()`, prefer `undo`)
+			const matchIndex = symbolParts.indexOf(symbol.name);
+			if (matchIndex !== -1) {
+				// Higher index = more to the right = higher priority
+				const match = { symbol, matchCount: matchIndex + 1 };
 				if (!bestMatch || match.matchCount > bestMatch.matchCount) {
 					bestMatch = match;
 				}

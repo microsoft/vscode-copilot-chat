@@ -136,14 +136,14 @@ function toLocationLink(def: vscode.Location | vscode.LocationLink): vscode.Loca
 	}
 }
 
-function findMethodInSymbols(symbols: Array<vscode.SymbolInformation | vscode.DocumentSymbol>, methodName: string, maxDepth: number = 5): vscode.SymbolInformation | vscode.DocumentSymbol | undefined {
+function findSymbolByName(symbols: Array<vscode.SymbolInformation | vscode.DocumentSymbol>, symbolName: string, maxDepth: number = 5): vscode.SymbolInformation | vscode.DocumentSymbol | undefined {
 	for (const symbol of symbols) {
-		if (symbol.name === methodName) {
+		if (symbol.name === symbolName) {
 			return symbol;
 		}
 		// Check children if it's a DocumentSymbol and we haven't exceeded max depth
 		if (maxDepth > 0 && 'children' in symbol && symbol.children) {
-			const found = findMethodInSymbols(symbol.children, methodName, maxDepth - 1);
+			const found = findSymbolByName(symbol.children, symbolName, maxDepth - 1);
 			if (found) {
 				return found;
 			}
@@ -158,9 +158,9 @@ export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri
 		loc: vscode.LocationLink;
 	} | undefined;
 
-	// Extract method name from qualified symbol like "TextModel.undo()"
+	// Extract the rightmost part from qualified symbol like "TextModel.undo()"
 	const symbolParts = symbolText ? Array.from(symbolText.matchAll(/[#\w$][\w\d$]*/g), x => x[0]) : [];
-	const methodName = symbolParts.length >= 2 ? symbolParts[symbolParts.length - 1] : undefined;
+	const targetSymbolName = symbolParts.length >= 2 ? symbolParts[symbolParts.length - 1] : undefined;
 
 	// TODO: These locations may no longer be valid if the user has edited the file since the references were found.
 	for (const loc of locations) {
@@ -173,29 +173,29 @@ export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri
 			if (def) {
 				const defLoc = toLocationLink(def);
 
-				// If we have a qualified name like "TextModel.undo()", try to find the method in the class file
-				if (methodName && symbolParts.length >= 2) {
+				// If we have a qualified name like "TextModel.undo()", try to find the specific symbol in the file
+				if (targetSymbolName && symbolParts.length >= 2) {
 					try {
 						const symbols = await vscode.commands.executeCommand<Array<vscode.SymbolInformation | vscode.DocumentSymbol> | undefined>('vscode.executeDocumentSymbolProvider', defLoc.targetUri);
 						if (symbols) {
-							// Search for the method in the document symbols
-							const methodSymbol = findMethodInSymbols(symbols, methodName);
-							if (methodSymbol) {
-								let methodRange: vscode.Range;
-								if ('selectionRange' in methodSymbol) {
-									methodRange = methodSymbol.selectionRange;
+							// Search for the target symbol in the document symbols
+							const targetSymbol = findSymbolByName(symbols, targetSymbolName);
+							if (targetSymbol) {
+								let targetRange: vscode.Range;
+								if ('selectionRange' in targetSymbol) {
+									targetRange = targetSymbol.selectionRange;
 								} else {
-									methodRange = methodSymbol.location.range;
+									targetRange = targetSymbol.location.range;
 								}
 								dest = {
 									type: 'definition',
-									loc: { targetUri: defLoc.targetUri, targetRange: methodRange, targetSelectionRange: methodRange },
+									loc: { targetUri: defLoc.targetUri, targetRange: targetRange, targetSelectionRange: targetRange },
 								};
 								break;
 							}
 						}
 					} catch {
-						// Failed to find method, fall through to use class definition
+						// Failed to find symbol, fall through to use the first definition
 					}
 				}
 

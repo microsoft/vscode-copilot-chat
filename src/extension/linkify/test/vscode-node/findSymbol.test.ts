@@ -83,8 +83,8 @@ suite('Find symbol', () => {
 		assert.strictEqual(findBestSymbolByPath([docSymbol('_a_')], '_a_')?.name, '_a_');
 	});
 
-	test('Should prefer last part for flat symbol information', () => {
-		// When symbols are flat (SymbolInformation), prefer matching the last part
+	test('Should prefer rightmost symbol in flat symbols', () => {
+		// When symbols are flat (SymbolInformation), prefer the rightmost match
 		// This handles cases like `TextModel.undo()` where we want `undo`, not `TextModel`
 		assert.strictEqual(
 			findBestSymbolByPath([
@@ -95,8 +95,8 @@ suite('Find symbol', () => {
 		);
 	});
 
-	test('Should fall back to first part if last part not found in flat symbols', () => {
-		// If the last part isn't found, fall back to the first part
+	test('Should fall back to leftmost symbol if rightmost not found in flat symbols', () => {
+		// If the rightmost part isn't found, fall back to leftmost matches
 		assert.strictEqual(
 			findBestSymbolByPath([
 				symbolInfo('TextModel'),
@@ -126,7 +126,7 @@ suite('Find symbol', () => {
 			'undo'
 		);
 
-		// With flat symbols, prefer the last part
+		// With flat symbols, prefer the rightmost part
 		assert.strictEqual(
 			findBestSymbolByPath([
 				symbolInfo('namespace'),
@@ -134,6 +134,15 @@ suite('Find symbol', () => {
 				symbolInfo('undo')
 			], 'namespace.TextModel.undo()')?.name,
 			'undo'
+		);
+
+		// Middle part should be preferred over leftmost
+		assert.strictEqual(
+			findBestSymbolByPath([
+				symbolInfo('namespace'),
+				symbolInfo('TextModel')
+			], 'namespace.TextModel.undo()')?.name,
+			'TextModel'
 		);
 	});
 
@@ -185,13 +194,12 @@ suite('Find symbol', () => {
 		);
 	});
 
-	test('Should prefer last part over first part in flat symbols due to match priority', () => {
-		// When both class and method exist as flat symbols, prefer method (last part, matchCount=2)
-		// over class (first part, matchCount=1)
+	test('Should prefer rightmost match in flat symbols using position-based priority', () => {
+		// When both class and method exist as flat symbols, prefer rightmost
 		assert.strictEqual(
 			findBestSymbolByPath([
-				symbolInfo('TextModel'),  // matchCount=1 (first part)
-				symbolInfo('undo')        // matchCount=2 (last part)
+				symbolInfo('TextModel'),  // matchCount=1 (index 0)
+				symbolInfo('undo')        // matchCount=2 (index 1)
 			], 'TextModel.undo()')?.name,
 			'undo'
 		);
@@ -199,10 +207,22 @@ suite('Find symbol', () => {
 		// Reverse order - should still prefer undo due to higher matchCount
 		assert.strictEqual(
 			findBestSymbolByPath([
-				symbolInfo('undo'),       // matchCount=2 (last part)
-				symbolInfo('TextModel')   // matchCount=1 (first part)
+				symbolInfo('undo'),       // matchCount=2 (index 1)
+				symbolInfo('TextModel')   // matchCount=1 (index 0)
 			], 'TextModel.undo()')?.name,
 			'undo'
+		);
+
+		// Works for longer qualified names too
+		// For 'a.b.c.d' => ['a', 'b', 'c', 'd']:
+		// 'd' (index 3, matchCount=4) > 'c' (index 2, matchCount=3) > 'b' (index 1, matchCount=2) > 'a' (index 0, matchCount=1)
+		assert.strictEqual(
+			findBestSymbolByPath([
+				symbolInfo('a'),  // matchCount=1
+				symbolInfo('b'),  // matchCount=2
+				symbolInfo('c'),  // matchCount=3
+			], 'a.b.c.d')?.name,
+			'c'  // Highest matchCount among available symbols
 		);
 	});
 });
