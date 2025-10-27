@@ -3,14 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CompletionsTelemetryServiceBridge } from '../../bridge/src/completionsTelemetryServiceBridge';
-import { isPreRelease } from '../../lib/src/config';
-import { CopilotConfigPrefix } from '../../lib/src/constants';
-import { Context } from '../../lib/src/context';
-import { handleException } from '../../lib/src/defaultHandlers';
-import { Logger } from '../../lib/src/logger';
-import { telemetry, TelemetryData } from '../../lib/src/telemetry';
-import { Deferred } from '../../lib/src/util/async';
 import {
 	CancellationToken,
 	InlineCompletionContext,
@@ -25,10 +17,19 @@ import {
 	workspace,
 } from 'vscode';
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
+import { CompletionsTelemetryServiceBridge } from '../../bridge/src/completionsTelemetryServiceBridge';
+import { isPreRelease } from '../../lib/src/config';
+import { CopilotConfigPrefix } from '../../lib/src/constants';
+import { ICompletionsContextService } from '../../lib/src/context';
+import { handleException } from '../../lib/src/defaultHandlers';
+import { Logger } from '../../lib/src/logger';
+import { telemetry, TelemetryData } from '../../lib/src/telemetry';
+import { Deferred } from '../../lib/src/util/async';
 import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
 import { CopilotExtensionStatus } from './extensionStatus';
 import { GhostTextProvider } from './ghostText/ghostText';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 
 const logger = new Logger('inlineCompletionItemProvider');
 
@@ -37,7 +38,7 @@ function quickSuggestionsDisabled() {
 	return qs.get('other') !== 'on' && qs.get('comments') !== 'on' && qs.get('strings') !== 'on';
 }
 
-function exception(ctx: Context, error: unknown, origin: string, logger?: Logger) {
+function exception(ctx: ICompletionsContextService, error: unknown, origin: string, logger?: Logger) {
 	if (error instanceof Error && error.name === 'Canceled') {
 		// these are VS Code cancellations
 		return;
@@ -57,10 +58,13 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 	initFallbackContext?: Promise<void>;
 	pendingRequests: Set<Promise<unknown>> = new Set();
 
-	constructor(private readonly ctx: Context) {
+	constructor(
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) {
 		super();
-		this.copilotCompletionFeedbackTracker = this._register(new CopilotCompletionFeedbackTracker(ctx));
-		this.ghostTextProvider = new GhostTextProvider(ctx);
+		this.copilotCompletionFeedbackTracker = this._register(this.instantiationService.createInstance(CopilotCompletionFeedbackTracker));
+		this.ghostTextProvider = this.instantiationService.createInstance(GhostTextProvider);
 	}
 
 	async waitForPendingRequests(): Promise<void> {
@@ -88,7 +92,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		}));
 
 		try {
-			return this._provideInlineCompletionItems(doc, position, context, token);
+			return await this._provideInlineCompletionItems(doc, position, context, token);
 		} catch (e) {
 			this.ctx.get(CompletionsTelemetryServiceBridge).sendGHTelemetryException(e, 'codeUnification.completions.exception');
 		} finally {

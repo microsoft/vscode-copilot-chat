@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { logger } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
@@ -43,7 +43,7 @@ export const multiLanguageContextProviderParamsDefault: MultiLanguageContextProv
 };
 
 export function fillInMultiLanguageActiveExperiments(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	matchedContextProviders: string[],
 	activeExperiments: ActiveExperiments,
 	telemetryData: TelemetryWithExp
@@ -56,7 +56,7 @@ export function fillInMultiLanguageActiveExperiments(
 	}
 }
 
-function addActiveExperiments(ctx: Context, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
+function addActiveExperiments(ctx: ICompletionsContextService, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
 	try {
 		const params = getMultiLanguageContextProviderParamsFromExp(ctx, telemetryData);
 		for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value as number); }
@@ -66,7 +66,7 @@ function addActiveExperiments(ctx: Context, activeExperiments: ActiveExperiments
 }
 
 function getMultiLanguageContextProviderParamsFromExp(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	telemetryData: TelemetryWithExp
 ): MultiLanguageContextProviderParams {
 	let params = multiLanguageContextProviderParamsDefault;

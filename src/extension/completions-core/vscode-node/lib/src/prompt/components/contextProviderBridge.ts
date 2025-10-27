@@ -5,7 +5,7 @@
 
 import { CancellationToken } from '../../../../types/src';
 import { CompletionState } from '../../completionState';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { LRUCacheMap } from '../../helpers/cache';
 import { TelemetryWithExp } from '../../telemetry';
 import { ContextProviderRegistry, ResolvedContextItem } from '../contextProviderRegistry';
@@ -13,7 +13,7 @@ import { ContextProviderRegistry, ResolvedContextItem } from '../contextProvider
 export class ContextProviderBridge {
 	private scheduledResolutions = new LRUCacheMap<string, Promise<ResolvedContextItem[]>>(25);
 
-	constructor(private readonly ctx: Context) { }
+	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) { }
 
 	schedule(
 		completionState: CompletionState,

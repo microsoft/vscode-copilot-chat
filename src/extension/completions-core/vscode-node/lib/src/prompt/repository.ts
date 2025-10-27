@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { AdoRepoId, getAdoRepoIdFromFetchUrl, getGithubRepoIdFromFetchUrl, GithubRepoId, parseRemoteUrl } from '../../../../../../platform/git/common/gitService';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { FileIdentifier, FileSystem } from '../fileSystem';
 import { LRUCacheMap } from '../helpers/cache';
 import { dirname, getFsUri, joinPath } from '../util/uri';
@@ -55,7 +55,7 @@ export function tryGetGitHubNWO(repoInfo: MaybeRepoInfo): string | undefined {
  *  - If a file from this path has been looked at before, and no repository has been identified, returns undefined.
  *  - If a file from this path has been looked at before, and a repository has been identified, returns the repo info.
  */
-export function extractRepoInfoInBackground(ctx: Context, uri: FileIdentifier): MaybeRepoInfo {
+export function extractRepoInfoInBackground(ctx: ICompletionsContextService, uri: FileIdentifier): MaybeRepoInfo {
 	const baseFolder = dirname(uri);
 	return backgroundRepoInfo(ctx, baseFolder);
 }
@@ -76,7 +76,7 @@ const backgroundRepoInfo = computeInBackgroundAndMemoize<RepoInfo | undefined, [
  * If it does appear to be part of a git repository, but its information is not parsable,
  * it returns a RepoInfo object with hostname, user and repo set to "".
  */
-export async function extractRepoInfo(ctx: Context, uri: FileIdentifier): Promise<RepoInfo | undefined> {
+export async function extractRepoInfo(ctx: ICompletionsContextService, uri: FileIdentifier): Promise<RepoInfo | undefined> {
 	const fsUri = getFsUri(uri);
 	if (!fsUri) { return undefined; }
 
@@ -118,7 +118,7 @@ function parseRepoUrl(
  * Returns the base folder of the git repository containing the file, or undefined if none is found.
  * Will search recursively for a .git folder containing a config file.
  */
-async function getRepoBaseUri(ctx: Context, uri: string): Promise<string | undefined> {
+async function getRepoBaseUri(ctx: ICompletionsContextService, uri: string): Promise<string | undefined> {
 	// to make sure the while loop terminates, we make sure the path variable decreases in length
 	let previousUri = uri + '_add_to_make_longer';
 	const fs = ctx.get(FileSystem);
@@ -245,12 +245,12 @@ class CompletedComputation<T> {
  * @returns The memoized function, which returns ComputationStatus.PENDING until the first computation is complete.
  */
 function computeInBackgroundAndMemoize<S, P extends unknown[]>(
-	fct: (ctx: Context, ...args: P) => Promise<S>,
+	fct: (ctx: ICompletionsContextService, ...args: P) => Promise<S>,
 	cacheSize: number
-): (ctx: Context, ...args: P) => S | ComputationStatus {
+): (ctx: ICompletionsContextService, ...args: P) => S | ComputationStatus {
 	const resultsCache = new LRUCacheMap<string, CompletedComputation<S>>(cacheSize);
 	const inComputation: Set<string> = new Set();
-	return (ctx: Context, ...args: P) => {
+	return (ctx: ICompletionsContextService, ...args: P) => {
 		const key = JSON.stringify(args);
 		const memorizedComputation = resultsCache.get(key);
 		if (memorizedComputation) {

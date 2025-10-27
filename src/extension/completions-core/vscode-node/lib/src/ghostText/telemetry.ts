@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Logger } from '../logger';
 import { PromptResponse } from '../prompt/prompt';
 import { now, telemetry, TelemetryData, telemetryRaw, TelemetryWithExp } from '../telemetry';
@@ -15,7 +15,7 @@ export type PostInsertionCategory = 'ghostText' | 'solution';
 export const logger = new Logger('getCompletions');
 
 /** Send `.shown` event */
-export function telemetryShown(ctx: Context, insertionCategory: PostInsertionCategory, completion: CopilotCompletion) {
+export function telemetryShown(ctx: ICompletionsContextService, insertionCategory: PostInsertionCategory, completion: CopilotCompletion) {
 	void ctx.get(SpeculativeRequestCache).request(completion.clientCompletionId);
 	completion.telemetry.markAsDisplayed(); // TODO: Consider removing displayedTime as unused and generally incorrect.
 	completion.telemetry.properties.reason = resultTypeToString(completion.resultType);
@@ -24,7 +24,7 @@ export function telemetryShown(ctx: Context, insertionCategory: PostInsertionCat
 
 /** Send `.accepted` event */
 export function telemetryAccepted(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	insertionCategory: PostInsertionCategory,
 	telemetryData: TelemetryData
 ) {
@@ -35,7 +35,7 @@ export function telemetryAccepted(
 
 /** Send `.rejected` event */
 export function telemetryRejected(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	insertionCategory: PostInsertionCategory,
 	telemetryData: TelemetryData
 ) {
@@ -133,7 +133,7 @@ export function mkCanceledResultTelemetry(
 
 export function mkBasicResultTelemetry(
 	telemetryBlob: TelemetryWithExp,
-	ctx: Context | undefined
+	ctx: ICompletionsContextService | undefined
 ): BasicResultTelemetry {
 	const result: BasicResultTelemetry = {
 		headerRequestId: telemetryBlob.properties['headerRequestId'],
@@ -165,7 +165,7 @@ export function mkBasicResultTelemetry(
  * @param start Milliseconds (since process start) when the completion request was by the editor.
  */
 export function handleGhostTextResultTelemetry<T>(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	result: GhostTextResultWithTelemetry<T>
 ): T | undefined {
 	// testing/debugging only case, no telemetry

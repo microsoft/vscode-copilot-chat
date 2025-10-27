@@ -43,9 +43,9 @@ export class CompletionsCoreContribution extends Disposable {
 
 	private _getOrCreateProvider() {
 		if (!this._provider) {
-			const ctx = this._instantiationService.invokeFunction(createContext);
-			this._register(setup(ctx));
-			this._provider = this._register(new CopilotInlineCompletionItemProvider(ctx));
+			const instantiationService = this._instantiationService.invokeFunction(createContext);
+			this._register(instantiationService.invokeFunction(setup));
+			this._provider = this._register(instantiationService.createInstance(CopilotInlineCompletionItemProvider));
 		}
 		return this._provider;
 	}

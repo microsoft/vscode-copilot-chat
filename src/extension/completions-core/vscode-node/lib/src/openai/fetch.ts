@@ -7,7 +7,7 @@ import { ClientHttp2Stream } from 'http2';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { asyncIterableFilter, asyncIterableMap } from '../helpers/iterableHelpers';
 import { Logger } from '../logger';
@@ -255,7 +255,7 @@ export abstract class OpenAIFetcher {
 	 * Sends a request to the code completion endpoint.
 	 */
 	abstract fetchAndStreamCompletions(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		params: CompletionParams,
 		baseTelemetryData: TelemetryWithExp,
 		finishedCb: FinishedCallback,
@@ -279,7 +279,7 @@ export type CompletionHeaders = {
 	'X-Copilot-Speculative'?: string;
 };
 
-function getProxyEngineUrl(ctx: Context, token: CopilotToken, modelId: string, endpoint: string): string {
+function getProxyEngineUrl(ctx: ICompletionsContextService, token: CopilotToken, modelId: string, endpoint: string): string {
 	return getEndpointUrl(ctx, token, 'proxy', 'v1/engines', modelId, endpoint);
 }
 
@@ -309,7 +309,7 @@ export function sanitizeRequestOptionTelemetry(
 }
 
 async function fetchWithInstrumentation(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	prompt: Prompt,
 	engineModelId: string,
 	endpoint: string,
@@ -416,7 +416,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	#disabledReason: string | undefined;
 
 	async fetchAndStreamCompletions(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		params: CompletionParams,
 		baseTelemetryData: TelemetryWithExp,
 		finishedCb: FinishedCallback,
@@ -465,7 +465,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		};
 	}
 
-	private createTelemetryData(endpoint: string, ctx: Context, params: CompletionParams | SpeculationFetchParams) {
+	private createTelemetryData(endpoint: string, ctx: ICompletionsContextService, params: CompletionParams | SpeculationFetchParams) {
 		return TelemetryData.createAndMarkAsIssued({
 			endpoint: endpoint,
 			engineName: params.engineModelId,
@@ -475,7 +475,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	}
 
 	async fetchWithParameters(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		endpoint: string,
 		params: CompletionParams,
 		copilotToken: CopilotToken,
@@ -537,7 +537,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	}
 
 	async handleError(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		statusReporter: StatusReporter,
 		telemetryData: TelemetryData,
 		response: Response,

@@ -5,7 +5,7 @@
 
 import { CancellationToken as ICancellationToken } from '../../../../types/src';
 import { CopilotContentExclusionManager } from '../../contentExclusion/contentExclusionManager';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { FileSystem } from '../../fileSystem';
 import { LRUCacheMap } from '../../helpers/cache';
 import { Logger } from '../../logger';
@@ -141,7 +141,7 @@ class RelatedFilesProviderFailure extends Error {
  * Class for getting the related files to the current active file (implemented in the extension or the agent).
  */
 export abstract class RelatedFilesProvider {
-	constructor(protected readonly context: Context) { }
+	constructor(@ICompletionsContextService protected readonly context: ICompletionsContextService) { }
 
 	// Returns the related files for the given document.
 	// An exception or `undefined` may be returned if a return value cannot be provided for some reason (e.g. failures).
@@ -241,7 +241,7 @@ const lruCache: PromiseExpirationCacheMap<RelatedFiles> = new PromiseExpirationC
  * If the result is not already cached, then the lookup is made based purely upon docInfo and then cached.
  * */
 async function getRelatedFiles(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	docInfo: RelatedFilesDocumentInfo,
 	telemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
@@ -285,7 +285,7 @@ async function getRelatedFiles(
 }
 
 let getRelatedFilesWithCacheAndTimeout = function (
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	docInfo: RelatedFilesDocumentInfo,
 	telemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
@@ -323,7 +323,7 @@ getRelatedFilesWithCacheAndTimeout = shortCircuit(
  * @returns Related files and traits.
  */
 export async function getRelatedFilesAndTraits(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	doc: RelatedFilesTextDocument,
 	telemetryData: TelemetryWithExp,
 	cancellationToken?: ICancellationToken,

@@ -2,14 +2,14 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { Context } from '../../../../lib/src/context';
-import { ConnectionState } from '../../../../lib/src/snippy/connectionState';
 import * as assert from 'assert';
 import * as Sinon from 'sinon';
 import { Disposable, ExtensionContext } from 'vscode';
-import { Extension } from '../../extensionContext';
 import { CodeReference } from '..';
 import { CopilotToken } from '../../../../../../../platform/authentication/common/copilotToken';
+import type { ICompletionsContextService } from '../../../../lib/src/context';
+import { ConnectionState } from '../../../../lib/src/snippy/connectionState';
+import { Extension } from '../../extensionContext';
 import { createExtensionTestingContext } from '../../test/context';
 
 function testExtensionContext() {
@@ -20,7 +20,7 @@ function testExtensionContext() {
 
 suite('CodeReference', function () {
 	let extensionContext: ExtensionContext;
-	let context: Context;
+	let context: ICompletionsContextService;
 	let sub: Disposable | undefined;
 
 	setup(function () {
@@ -39,13 +39,13 @@ suite('CodeReference', function () {
 
 	suite('subscriptions', function () {
 		test('should be undefined by default', function () {
-			const result = new CodeReference(context);
+			const result = context.instantiationService.createInstance(CodeReference);
 			sub = result.subscriptions;
 			assert.ok(!sub);
 		});
 
 		test('should be updated correctly when token change events received', function () {
-			const codeQuote = new CodeReference(context);
+			const codeQuote = context.instantiationService.createInstance(CodeReference);
 			const enabledToken = new CopilotToken({ token: this._completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: true });
 			const disabledToken = new CopilotToken({ token: this._completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: false });
 

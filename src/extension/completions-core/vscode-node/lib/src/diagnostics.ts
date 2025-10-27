@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { EditorAndPluginInfo, getVersion } from './config';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { TelemetryData } from './telemetry';
 
 const os = {
@@ -23,7 +23,7 @@ interface Section {
 	items: SectionItems;
 }
 
-export function collectCompletionDiagnostics(ctx: Context, telemetry: TelemetryData | undefined): Report {
+export function collectCompletionDiagnostics(ctx: ICompletionsContextService, telemetry: TelemetryData | undefined): Report {
 	const telemetryItems: SectionItems = {};
 	if (telemetry !== undefined) {
 		if (telemetry.properties.headerRequestId) {
@@ -73,7 +73,7 @@ function formatSectionAsMarkdown(s: Section) {
 	);
 }
 
-function getEditorDisplayVersion(ctx: Context): string {
+function getEditorDisplayVersion(ctx: ICompletionsContextService): string {
 	const info = ctx.get(EditorAndPluginInfo).getEditorInfo();
 	return `${info.name} ${info.version}`;
 }

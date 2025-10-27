@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { WorkspaceFolder } from '../../../types/src';
+import { ICompletionsContextService } from '../context';
 import { CopilotTextDocument, INotebookCell, INotebookDocument, ITextDocument } from '../textDocument';
 import {
 	TextDocumentChangeEvent,
@@ -15,7 +16,6 @@ import {
 } from '../textDocumentManager';
 import { Emitter } from '../util/event';
 import { basename, validateUri } from '../util/uri';
-import { WorkspaceFolder } from '../../../types/src';
 
 export function createTextDocument(
 	uri: string,
@@ -94,7 +94,7 @@ export class SimpleTestTextDocumentManager extends TextDocumentManager {
 	private _notebookDocuments: Map<string, INotebookDocument> = new Map();
 	private _workspaceFolders: WorkspaceFolder[] = [];
 
-	constructor(ctx: Context) {
+	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
 		super(ctx);
 	}
 
@@ -164,7 +164,7 @@ export class SimpleTestTextDocumentManager extends TextDocumentManager {
 export class TestTextDocumentManager extends SimpleTestTextDocumentManager {
 	private contents = new Map<string, string>();
 
-	constructor(ctx: Context) {
+	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
 		super(ctx);
 	}
 

@@ -13,7 +13,7 @@ import {
 	getBuildType,
 	getVersion,
 } from './config';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { ExpConfig } from './experiments/expConfig';
 import { Features } from './experiments/features';
 import { FilterSettings } from './experiments/filters';
@@ -129,13 +129,13 @@ export class TelemetryData {
 	 * in favor of properly plumbing a TelemetryWithExp object through in the cases where the
 	 * assignment list is necessary.
 	 */
-	async extendWithExpTelemetry(ctx: Context): Promise<void> {
+	async extendWithExpTelemetry(ctx: ICompletionsContextService): Promise<void> {
 		const { filters, exp } = await ctx.get(Features).getFallbackExpAndFilters();
 		exp.addToTelemetry(ctx, this);
 		filters.addToTelemetry(this);
 	}
 
-	extendWithEditorAgnosticFields(ctx: Context): void {
+	extendWithEditorAgnosticFields(ctx: ICompletionsContextService): void {
 		this.properties['editor_version'] = formatNameAndVersion(ctx.get(EditorAndPluginInfo).getEditorInfo());
 		this.properties['editor_plugin_version'] = formatNameAndVersion(
 			ctx.get(EditorAndPluginInfo).getEditorPluginInfo()
@@ -163,7 +163,7 @@ export class TelemetryData {
 	 * and value is a json string.
 	 * e.g. { 'copilot.autocompletion.count': 3 }
 	 */
-	extendWithConfigProperties(ctx: Context): void {
+	extendWithConfigProperties(ctx: ICompletionsContextService): void {
 		const configProperties: { [key: string]: string } = dumpForTelemetry(ctx);
 		configProperties['copilot.build'] = getBuild(ctx);
 		configProperties['copilot.buildType'] = getBuildType(ctx);
@@ -287,7 +287,7 @@ export class TelemetryData {
 	// Now is passed as an argument to avoid any measurement discrepancies due to
 	// async operations in the telemetry event.
 	async makeReadyForSending(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		store: TelemetryStore,
 		includeExp: 'IncludeExp' | 'SkipExp',
 		now: number
@@ -350,7 +350,7 @@ export class TelemetryWithExp extends TelemetryData {
 	 * of the telemetry event.
 	 * This method is correct/consistent for TelemetryWithExp, unlike TelemetryData's.
 	 */
-	override extendWithExpTelemetry(ctx: Context): Promise<void> {
+	override extendWithExpTelemetry(ctx: ICompletionsContextService): Promise<void> {
 		this.filtersAndExp.exp.addToTelemetry(ctx, this);
 		this.filtersAndExp.filters.addToTelemetry(this);
 		return Promise.resolve();
@@ -366,7 +366,7 @@ export class TelemetryWithExp extends TelemetryData {
 
 // Helpers
 function sendTelemetryEvent(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	store: TelemetryStore,
 	name: string,
 	data: { properties: TelemetryProperties; measurements: TelemetryMeasurements }
@@ -381,7 +381,7 @@ function sendTelemetryEvent(
 }
 
 function sendTelemetryErrorEvent(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	store: TelemetryStore,
 	name: string,
 	data: { properties: TelemetryProperties; measurements: TelemetryMeasurements }
@@ -396,7 +396,7 @@ function sendTelemetryErrorEvent(
 }
 
 function sendFTTelemetryEvent(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	store: TelemetryStore,
 	name: string,
 	data: { properties: TelemetryProperties; measurements: TelemetryMeasurements }
@@ -435,20 +435,20 @@ function nowSeconds(now: number): number {
 
 type AdditionalTelemetryProperties = { [key: string]: string };
 
-function shouldSendEnhanced(ctx: Context): boolean {
+function shouldSendEnhanced(ctx: ICompletionsContextService): boolean {
 	return ctx.get(TelemetryUserConfig).optedIn;
 }
 
-function shouldSendFinetuningTelemetry(ctx: Context): boolean {
+function shouldSendFinetuningTelemetry(ctx: ICompletionsContextService): boolean {
 	return ctx.get(TelemetryUserConfig).ftFlag !== '';
 }
 
-export function telemetry(ctx: Context, name: string, telemetryData?: TelemetryData, store?: TelemetryStore) {
+export function telemetry(ctx: ICompletionsContextService, name: string, telemetryData?: TelemetryData, store?: TelemetryStore) {
 	return ctx.get(PromiseQueue).register(_telemetry(ctx, name, now(), telemetryData?.extendedBy(), store));
 }
 
 async function _telemetry(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	name: string,
 	now: number,
 	telemetryData?: TelemetryData,
@@ -465,11 +465,11 @@ async function _telemetry(
 	}
 }
 
-export function telemetryExpProblem(ctx: Context, telemetryProperties: { reason: string }) {
+export function telemetryExpProblem(ctx: ICompletionsContextService, telemetryProperties: { reason: string }) {
 	return ctx.get(PromiseQueue).register(_telemetryExpProblem(ctx, telemetryProperties, now()));
 }
 
-async function _telemetryExpProblem(ctx: Context, telemetryProperties: { reason: string }, now: number) {
+async function _telemetryExpProblem(ctx: ICompletionsContextService, telemetryProperties: { reason: string }, now: number) {
 	const name = 'expProblem';
 	const definedTelemetryData = TelemetryData.createAndMarkAsIssued(telemetryProperties, {});
 	await definedTelemetryData.makeReadyForSending(ctx, TelemetryStore.Standard, 'SkipExp', now);
@@ -484,7 +484,7 @@ async function _telemetryExpProblem(ctx: Context, telemetryProperties: { reason:
  * using this method, make sure to add some tests of the fields, e.g. in `extension/src/ghostTest/telemetry.test.ts`.
  */
 export function telemetryRaw(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	name: string,
 	props: TelemetryProperties,
 	measurements: TelemetryMeasurements
@@ -493,7 +493,7 @@ export function telemetryRaw(
 	sendTelemetryEvent(ctx, TelemetryStore.Standard, name, { properties, measurements });
 }
 
-function createRequiredProperties(ctx: Context) {
+function createRequiredProperties(ctx: ICompletionsContextService) {
 	const editorInfo = ctx.get(EditorAndPluginInfo);
 	const properties: TelemetryProperties = {
 		unique_id: generateUuid(), // add a unique id to the telemetry event so copilot-foundations can correlate with duplicate events
@@ -506,7 +506,7 @@ function createRequiredProperties(ctx: Context) {
 }
 
 export function telemetryException(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	maybeError: unknown,
 	transaction: string,
 	properties?: AdditionalTelemetryProperties,
@@ -520,7 +520,7 @@ export function telemetryException(
 type TelemetryCatcher = (...args: never[]) => unknown;
 
 export function telemetryCatch<F extends TelemetryCatcher>(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	fn: F,
 	transaction: string,
 	properties?: AdditionalTelemetryProperties
@@ -535,12 +535,12 @@ export function telemetryCatch<F extends TelemetryCatcher>(
 	return (...args) => ctx.get(PromiseQueue).register(wrapped(...args));
 }
 
-export function telemetryError(ctx: Context, name: string, telemetryData?: TelemetryData, store?: TelemetryStore) {
+export function telemetryError(ctx: ICompletionsContextService, name: string, telemetryData?: TelemetryData, store?: TelemetryStore) {
 	return ctx.get(PromiseQueue).register(_telemetryError(ctx, name, now(), telemetryData?.extendedBy(), store));
 }
 
 async function _telemetryError(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	name: string,
 	now: number,
 	telemetryData?: TelemetryData,
@@ -555,7 +555,7 @@ async function _telemetryError(
 }
 
 export function logEngineCompletion(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionText: string,
 	jsonData: APIJsonData,
 	requestId: RequestId,
@@ -576,7 +576,7 @@ export function logEngineCompletion(
 	return telemetry(ctx, 'engine.completion', telemetryData, TelemetryStore.Enhanced);
 }
 
-export function logEnginePrompt(ctx: Context, prompt: Prompt, telemetryData: TelemetryData) {
+export function logEnginePrompt(ctx: ICompletionsContextService, prompt: Prompt, telemetryData: TelemetryData) {
 	const promptTelemetry: Record<string, string> = {
 		promptJson: JSON.stringify({ prefix: prompt.prefix, context: prompt.context }),
 		promptSuffixJson: JSON.stringify(prompt.suffix),
@@ -625,10 +625,10 @@ export class TelemetryReporters {
 	private reporterEnhanced: CopilotTelemetryReporter | undefined;
 	private reporterFT: CopilotTelemetryReporter | undefined;
 
-	getReporter(ctx: Context, store = TelemetryStore.Standard): CopilotTelemetryReporter | undefined {
+	getReporter(ctx: ICompletionsContextService, store = TelemetryStore.Standard): CopilotTelemetryReporter | undefined {
 		return isEnhanced(store) ? this.getEnhancedReporter(ctx) : this.reporter;
 	}
-	getEnhancedReporter(ctx: Context): CopilotTelemetryReporter | undefined {
+	getEnhancedReporter(ctx: ICompletionsContextService): CopilotTelemetryReporter | undefined {
 		// Callers should do this check themselves as they may need to behave differently
 		// if we are not sending enhanced telemetry. The guard here is a backstop.
 		// Note: if the decision about what telemetry to send when the user is opted-out
@@ -639,7 +639,7 @@ export class TelemetryReporters {
 		return undefined;
 	}
 
-	getFTReporter(ctx: Context): CopilotTelemetryReporter | undefined {
+	getFTReporter(ctx: ICompletionsContextService): CopilotTelemetryReporter | undefined {
 		return undefined;
 	}
 

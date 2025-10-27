@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../../lib/src/context';
+import { commands, env, Uri } from 'vscode';
+import { ICompletionsContextService } from '../../../lib/src/context';
 import { NotificationSender } from '../../../lib/src/notificationSender';
 import { OutputPaneShowCommand } from '../../../lib/src/snippy/constants';
 import { matchNotificationTelemetry, TelemetryActor } from '../../../lib/src/snippy/telemetryHandlers';
-import { commands, env, Uri } from 'vscode';
 import { Extension } from '../extensionContext';
 
 const matchCodeMessage =
@@ -21,7 +21,7 @@ const CodeReferenceKey = 'codeReference.notified';
  * The user will only ever see a single notification of this behavior.
  * Displays the output panel on notification ack.
  */
-export function notify(ctx: Context) {
+export function notify(ctx: ICompletionsContextService) {
 	const extension = ctx.get(Extension);
 	const didNotify = extension.context.globalState.get<boolean>(CodeReferenceKey);
 

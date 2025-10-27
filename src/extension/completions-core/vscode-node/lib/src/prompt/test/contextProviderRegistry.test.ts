@@ -15,7 +15,7 @@ import {
 	Trait,
 } from '../../../../types/src/index';
 import { ConfigKey, InMemoryConfigProvider } from '../../config';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Features } from '../../experiments/features';
 import { LogLevel, LogTarget } from '../../logger';
 import { TelemetryWithExp } from '../../telemetry';
@@ -29,7 +29,7 @@ import { ContextProviderStatistics } from '../contextProviderStatistics';
 import { TestContextProviderStatistics } from '../test/contextProviderStatistics';
 
 suite('ContextProviderRegistry', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let registry: ContextProviderRegistry;
 	let statistics: TestContextProviderStatistics;
 	let testLogTarget: TestLogTarget;

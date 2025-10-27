@@ -8,7 +8,7 @@ import { CopilotToken } from '../../../../../../platform/authentication/common/c
 import { ThrottledDelayer } from '../../../../../../util/vs/base/common/async';
 import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { CompletionsAuthenticationServiceBridge } from '../../../bridge/src/completionsAuthenticationServiceBridge';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 export { CopilotToken } from '../../../../../../platform/authentication/common/copilotToken';
 
 export abstract class CopilotTokenManager extends Disposable {
@@ -30,8 +30,8 @@ export class CopilotTokenManagerImpl extends CopilotTokenManager {
 	}
 
 	constructor(
-		protected ctx: Context,
-		protected primed = false
+		protected primed = false,
+		@ICompletionsContextService protected ctx: ICompletionsContextService,
 	) {
 		super();
 
@@ -75,6 +75,6 @@ export class CopilotTokenManagerImpl extends CopilotTokenManager {
 /**
  * Returns the most recently fetched token.  May be expired, or invalid, or belong to the wrong account.
  */
-export function getLastCopilotToken(ctx: Context): Omit<CopilotToken, "token"> | undefined {
+export function getLastCopilotToken(ctx: ICompletionsContextService): Omit<CopilotToken, "token"> | undefined {
 	return ctx.get(CopilotTokenManager).getLastToken();
 }

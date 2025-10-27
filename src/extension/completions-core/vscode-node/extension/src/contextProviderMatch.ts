@@ -3,14 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../lib/src/context';
-import { isDocumentValid } from '../../lib/src/util/documentEvaluation';
-import { DocumentContext } from '../../types/src';
 import { languages, workspace } from 'vscode';
 import { DocumentSelector } from 'vscode-languageserver-protocol';
+import { ICompletionsContextService } from '../../lib/src/context';
+import { isDocumentValid } from '../../lib/src/util/documentEvaluation';
+import { DocumentContext } from '../../types/src';
 
 export async function contextProviderMatch(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	documentSelector: DocumentSelector,
 	documentContext: DocumentContext
 ): Promise<number> {

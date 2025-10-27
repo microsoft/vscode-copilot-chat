@@ -2,8 +2,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { CancellationToken, Position, Range } from 'vscode-languageserver-protocol';
 import { CompletionState, createCompletionState } from './completionState';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { completionsFromGhostTextResults, CopilotCompletion } from './ghostText/copilotCompletion';
 import { getGhostText, GetGhostTextOptions, ResultType } from './ghostText/ghostText';
 import { setLastShown } from './ghostText/last';
@@ -11,14 +12,13 @@ import { ITextEditorOptions } from './ghostText/normalizeIndent';
 import { SpeculativeRequestCache } from './ghostText/speculativeRequestCache';
 import { GhostTextResultWithTelemetry, handleGhostTextResultTelemetry, logger } from './ghostText/telemetry';
 import { ITextDocument, TextDocumentContents } from './textDocument';
-import { CancellationToken, Position, Range } from 'vscode-languageserver-protocol';
 
 type GetInlineCompletionsOptions = Partial<GetGhostTextOptions> & {
 	formattingOptions?: ITextEditorOptions;
 };
 
 async function getInlineCompletionsResult(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionState: CompletionState,
 	token?: CancellationToken,
 	options: GetInlineCompletionsOptions = {}
@@ -85,7 +85,7 @@ async function getInlineCompletionsResult(
 }
 
 export async function getInlineCompletions(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	textDocument: ITextDocument,
 	position: Position,
 	token?: CancellationToken,
@@ -97,7 +97,7 @@ export async function getInlineCompletions(
 	return handleGhostTextResultTelemetry(ctx, result);
 }
 
-function logCompletionLocation(ctx: Context, textDocument: TextDocumentContents, position: Position) {
+function logCompletionLocation(ctx: ICompletionsContextService, textDocument: TextDocumentContents, position: Position) {
 	const prefix = textDocument.getText({
 		start: { line: Math.max(position.line - 1, 0), character: 0 },
 		end: position,

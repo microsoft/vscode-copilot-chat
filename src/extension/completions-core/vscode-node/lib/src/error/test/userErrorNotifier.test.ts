@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { LogLevel, LogTarget } from '../../logger';
 import { NotificationSender } from '../../notificationSender';
 import { createLibTestingContext } from '../../test/context';
@@ -17,7 +17,7 @@ suite('Translate errors for end-users', function () {
 	const expectedErrorMessage = `Your proxy connection requires a trusted certificate. Please make sure the proxy certificate and any issuers are configured correctly and trusted by your operating system.`;
 
 	let notifier: UserErrorNotifier;
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let testLogTarget: TestLogTarget;
 	let testNotificationSender: TestNotificationSender;
 

@@ -7,13 +7,13 @@ import * as assert from 'assert';
 import Sinon from 'sinon';
 import { CompletionNotifier, CompletionRequestedEvent } from '../completionNotifier';
 import { CompletionState, createCompletionState } from '../completionState';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { TelemetryWithExp } from '../telemetry';
 import { createLibTestingContext } from './context';
 import { createTextDocument } from './textDocument';
 
 suite('Completion Notifier', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let notifier: CompletionNotifier;
 	let completionState: CompletionState;
 	let telemetryData: TelemetryWithExp;
@@ -22,7 +22,7 @@ suite('Completion Notifier', function () {
 
 	setup(function () {
 		ctx = createLibTestingContext();
-		notifier = new CompletionNotifier(ctx);
+		notifier = ctx.instantiationService.createInstance(CompletionNotifier);
 
 		const textDocument = createTextDocument('file:///test.ts', 'typescript', 1, 'const x = ');
 		const position = { line: 0, character: 10 };

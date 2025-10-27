@@ -4,14 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { ExpTreatmentVariables } from '../../experiments/expConfig';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { getEngineRequestInfo } from '../config';
 
 suite('OpenAI Config Tests', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	setup(function () {
 		ctx = createLibTestingContext();

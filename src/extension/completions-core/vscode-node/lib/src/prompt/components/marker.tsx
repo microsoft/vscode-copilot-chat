@@ -8,7 +8,7 @@
 import { ComponentContext, PromptElementProps, Text } from '../../../../prompt/src/components/components';
 import { getLanguageMarker, getPathMarker } from '../../../../prompt/src/languageMarker';
 import { DocumentInfo } from '../../../../prompt/src/prompt';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { TextDocumentManager } from '../../textDocumentManager';
 import {
 	CompletionRequestDocument,
@@ -16,7 +16,7 @@ import {
 } from '../completionsPromptFactory/componentsCompletionsPromptFactory';
 
 type DocumentMarkerProps = {
-	ctx: Context;
+	ctx: ICompletionsContextService;
 } & PromptElementProps;
 
 export const DocumentMarker = (props: DocumentMarkerProps, context: ComponentContext) => {

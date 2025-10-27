@@ -18,7 +18,7 @@ import { getTokenizer, TokenizerName } from '../../../../../prompt/src/tokenizat
 import { CodeSnippet, ContextProvider, SupportedContextItem, Trait } from '../../../../../types/src';
 import { createCompletionState } from '../../../completionState';
 import { ConfigKey, InMemoryConfigProvider } from '../../../config';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { Features } from '../../../experiments/features';
 import { TelemetryWithExp } from '../../../telemetry';
 import { createLibTestingContext } from '../../../test/context';
@@ -46,7 +46,7 @@ import {
 
 suite('Completions Prompt Factory', function () {
 	let telemetryData: TelemetryWithExp;
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let clock: sinon.SinonFakeTimers | undefined;
 	let cts: CancellationTokenSource;
 	const longPrefix = Array.from({ length: 60 }, (_, i) => `const a${i} = ${i};`).join('\n');
@@ -86,7 +86,7 @@ suite('Completions Prompt Factory', function () {
 		ctx = createLibTestingContext();
 		telemetryData = TelemetryWithExp.createEmptyConfigForTesting();
 		cts = new CancellationTokenSource();
-		promptFactory = createCompletionsPromptFactory(ctx);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService);
 	});
 
 	teardown(function () {
@@ -132,7 +132,7 @@ suite('Completions Prompt Factory', function () {
 		ctx.set(ObservableWorkspace, new MutableObservableWorkspace());
 
 		// TODO: figure out how to simulate real document update events
-		const rep = new MockRecentEditsProvider(ctx);
+		const rep = ctx.instantiationService.createInstance(MockRecentEditsProvider, undefined);
 		ctx.forceSet(RecentEditsProvider, rep);
 
 		// Ensure the document is open
@@ -177,7 +177,7 @@ suite('Completions Prompt Factory', function () {
 		ctx.set(ObservableWorkspace, new MutableObservableWorkspace());
 
 		// TODO: figure out how to simulate real document update events
-		const rep = new MockRecentEditsProvider(ctx);
+		const rep = ctx.instantiationService.createInstance(MockRecentEditsProvider, undefined);
 		ctx.forceSet(RecentEditsProvider, rep);
 
 		// Ensure the document is open
@@ -266,7 +266,7 @@ suite('Completions Prompt Factory', function () {
 				</>
 			)
 		);
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt);
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result.type, 'promptTimeout');
@@ -376,7 +376,7 @@ suite('Completions Prompt Factory', function () {
 				</>
 			)
 		);
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt);
 
 		const promises = [];
 		for (let i = 0; i < 2; i++) {
@@ -431,7 +431,7 @@ suite('Completions Prompt Factory', function () {
 	test('errors when hitting fault barrier', async function () {
 		const virtualPrompt = new VirtualPrompt(<></>);
 		virtualPrompt.snapshot = sinon.stub().throws(new Error('Intentional snapshot error'));
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt);
 
 		const result = await invokePromptFactory();
 
@@ -441,7 +441,7 @@ suite('Completions Prompt Factory', function () {
 	test('recovers from error when hitting fault barrier', async function () {
 		const virtualPrompt = new VirtualPrompt(<></>);
 		virtualPrompt.snapshot = sinon.stub().throws(new Error('Intentional snapshot error'));
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt);
 
 		let result = await invokePromptFactory();
 		assert.deepStrictEqual(result, _promptError);
@@ -455,7 +455,7 @@ suite('Completions Prompt Factory', function () {
 		virtualPrompt.snapshot = sinon
 			.stub()
 			.returns({ snapshot: undefined, status: 'error', error: new Error('Intentional snapshot error') });
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt);
 
 		const result = await invokePromptFactory();
 
@@ -467,7 +467,7 @@ suite('Completions Prompt Factory', function () {
 		virtualPrompt.snapshot = sinon
 			.stub()
 			.returns({ snapshot: undefined, status: 'error', error: new Error('Intentional snapshot error') });
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt);
 
 		let result = await invokePromptFactory();
 		assert.deepStrictEqual(result, _promptError);
@@ -498,7 +498,7 @@ suite('Completions Prompt Factory', function () {
 				</>
 			)
 		);
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt);
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result, _promptCancelled);
@@ -516,7 +516,7 @@ suite('Completions Prompt Factory', function () {
 			return <></>;
 		};
 		const virtualPrompt = new VirtualPrompt(<ErrorThrowingComponent />);
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt);
 
 		outerSetShouldThrowError(true);
 		const result = await invokePromptFactory();
@@ -646,7 +646,7 @@ suite('Completions Prompt Factory', function () {
 
 		const virtualPrompt = new VirtualPrompt(splitContextPrompt());
 
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt, PromptOrdering.SplitContext);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt, PromptOrdering.SplitContext);
 		const result = await invokePromptFactory({ separateContext: true });
 
 		assert.deepStrictEqual(result.type, 'prompt');
@@ -670,7 +670,7 @@ suite('Completions Prompt Factory', function () {
 
 		const virtualPrompt = new VirtualPrompt(splitContextPrompt());
 
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt, PromptOrdering.SplitContext);
+		promptFactory = createCompletionsPromptFactory(ctx.instantiationService, virtualPrompt, PromptOrdering.SplitContext);
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result.type, 'prompt');

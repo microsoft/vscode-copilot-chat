@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IDisposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { CompletionsAuthenticationServiceBridge } from '../../../bridge/src/completionsAuthenticationServiceBridge';
 import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
 import { CopilotToken } from '../auth/copilotTokenManager';
@@ -15,12 +16,11 @@ import {
 	getConfig,
 	getVersion
 } from '../config';
-import { Context } from '../context';
-import { Filter, Release } from './filters';
+import { ICompletionsContextService } from '../context';
 import { getEngineRequestInfo } from '../openai/config';
-import { IDisposable } from '../../../../../../util/vs/base/common/lifecycle';
+import { Filter, Release } from './filters';
 
-export function setupCompletionsExperimentationService(ctx: Context): IDisposable {
+export function setupCompletionsExperimentationService(ctx: ICompletionsContextService): IDisposable {
 	const authService = ctx.get(CompletionsAuthenticationServiceBridge).authenticationService;
 
 	const disposable = authService.onDidAccessTokenChange(() => {
@@ -34,14 +34,14 @@ export function setupCompletionsExperimentationService(ctx: Context): IDisposabl
 	return disposable;
 }
 
-function getPluginRelease(ctx: Context): Release {
+function getPluginRelease(ctx: ICompletionsContextService): Release {
 	if (getBuildType(ctx) === BuildType.NIGHTLY) {
 		return Release.Nightly;
 	}
 	return Release.Stable;
 }
 
-function updateCompletionsFilters(ctx: Context, token: Omit<CopilotToken, "token"> | undefined) {
+function updateCompletionsFilters(ctx: ICompletionsContextService, token: Omit<CopilotToken, "token"> | undefined) {
 	const exp = ctx.get(CompletionsExperimentationServiceBridge);
 
 	const filters = createCompletionsFilters(ctx, token);
@@ -49,7 +49,7 @@ function updateCompletionsFilters(ctx: Context, token: Omit<CopilotToken, "token
 	exp.experimentationService.setCompletionsFilters(filters);
 }
 
-export function createCompletionsFilters(ctx: Context, token: Omit<CopilotToken, "token"> | undefined) {
+export function createCompletionsFilters(ctx: ICompletionsContextService, token: Omit<CopilotToken, "token"> | undefined) {
 	const filters = new Map<Filter, string>();
 
 	filters.set(Filter.ExtensionRelease, getPluginRelease(ctx));

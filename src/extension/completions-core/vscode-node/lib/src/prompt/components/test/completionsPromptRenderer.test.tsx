@@ -10,7 +10,7 @@ import { CancellationTokenSource, Position } from 'vscode-languageserver-protoco
 import { Chunk, PromptElementProps, PromptSnapshotNode, Text } from '../../../../../prompt/src/components/components';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { TokenizerName } from '../../../../../prompt/src/tokenization';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { createCompletionRequestData } from '../../../test/completionsPrompt';
 import { createLibTestingContext } from '../../../test/context';
 import { createTextDocument } from '../../../test/textDocument';
@@ -53,7 +53,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 	const textDocument = createTextDocument(fileUri, 'typescript', 0, source);
 	const position: Position = textDocument.positionAt(textDocument.getText().indexOf('|'));
 	suite(`Completions Prompt Renderer (line ending: ${JSON.stringify(lineEnding)})`, function () {
-		let ctx: Context;
+		let ctx: ICompletionsContextService;
 		let renderer: CompletionsPromptRenderer;
 		let snapshot: PromptSnapshotNode | undefined;
 

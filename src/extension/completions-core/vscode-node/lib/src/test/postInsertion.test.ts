@@ -5,7 +5,7 @@
 
 import Sinon from 'sinon';
 import { CitationManager, IPDocumentCitation } from '../citationManager';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { CopilotCompletion } from '../ghostText/copilotCompletion';
 import { ResultType } from '../ghostText/ghostText';
 import { postInsertionTasks } from '../postInsertion';
@@ -18,8 +18,8 @@ import { fakeCodeReference } from './fetcher';
 import { TestTextDocumentManager } from './textDocument';
 
 suite('postInsertionTasks', function () {
-	let ctx: Context;
-	let handleIPCodeCitation: Sinon.SinonSpy<[ctx: Context, citation: IPDocumentCitation], Promise<void>>;
+	let ctx: ICompletionsContextService;
+	let handleIPCodeCitation: Sinon.SinonSpy<[ctx: ICompletionsContextService, citation: IPDocumentCitation], Promise<void>>;
 	let docMgr: TestTextDocumentManager;
 	let doc: ITextDocument;
 	const uri = 'file:///hello.js';
