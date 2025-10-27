@@ -20,6 +20,8 @@ import { Intent } from '../../common/constants';
 import { getAgentTools } from '../../intents/node/agentIntent';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation } from '../../prompt/common/conversation';
+import { IToolCall } from '../../prompt/common/intents';
+import { ToolCallRound } from '../../prompt/common/toolCallRound';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent } from '../../prompt/node/intents';
@@ -29,6 +31,7 @@ import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
+import { InteractionOutcomeComputer } from './promptCraftingTypes';
 
 
 const INLINE_CHAT_EXIT_TOOL_NAME = 'inline_chat_exit';
@@ -59,7 +62,7 @@ export class InlineChatIntent implements IIntent {
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 	) { }
 
-	async handleRequest(_conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 
 		assertType(request.location2 instanceof ChatRequestEditorData);
 
@@ -93,6 +96,12 @@ export class InlineChatIntent implements IIntent {
 
 		const renderResult = await renderer.render(undefined, token, { trace: true });
 
+		const telemetry = chatTelemetry.makeRequest(this, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, [], inlineChatTools.length);
+		const outcomeComputer = new InteractionOutcomeComputer(request.location2.document.uri);
+
+		stream = outcomeComputer.spyOnStream(stream);
+		const toolCalls: IToolCall[] = [];
+
 		const fetchResult = await endpoint.makeChatRequest2({
 			debugName: 'InlineChat2Intent',
 			messages: renderResult.messages,
@@ -100,19 +109,21 @@ export class InlineChatIntent implements IIntent {
 			location: ChatLocation.Editor,
 			finishedCb: async (_text, _index, delta) => {
 
-				let doneAfterToolCall = false;
+				let doneAfterToolCalls = false;
 
 				if (isNonEmptyArray(delta.copilotToolCalls)) {
 					for (const toolCall of delta.copilotToolCalls) {
 
-						doneAfterToolCall = doneAfterToolCall
+						toolCalls.push(toolCall);
+
+						doneAfterToolCalls = doneAfterToolCalls
 							|| InlineChatIntent._EDIT_TOOLS.has(toolCall.name)
 							|| toolCall.name === INLINE_CHAT_EXIT_TOOL_NAME;
 
 						const validationResult = this._toolsService.validateToolInput(toolCall.name, toolCall.arguments);
 
 						if (isToolValidationError(validationResult)) {
-							console.log(validationResult);
+							this._logService.warn(`Tool ${toolCall.name} invocation failed validation: ${validationResult}`);
 							break;
 						}
 
@@ -138,7 +149,7 @@ export class InlineChatIntent implements IIntent {
 					}
 				}
 
-				if (doneAfterToolCall) {
+				if (doneAfterToolCalls) {
 					return 1; // stop generating further
 				}
 
@@ -163,6 +174,24 @@ export class InlineChatIntent implements IIntent {
 			}
 		}, token);
 
+		// telemetry
+		{
+			const responseText = fetchResult.type === ChatFetchResponseType.Success ? fetchResult.value : '';
+			const toolCallRound = ToolCallRound.create({
+				response: responseText,
+				toolCalls: toolCalls,
+				toolInputRetry: 0
+			});
+
+			telemetry.sendToolCallingTelemetry([toolCallRound], inlineChatTools, fetchResult.type);
+
+			telemetry.sendTelemetry(
+				fetchResult.requestId, fetchResult.type, responseText,
+				outcomeComputer.interactionOutcome,
+				toolCalls
+			);
+		}
+
 		if (fetchResult.type !== ChatFetchResponseType.Success) {
 			const details = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan);
 			return {
@@ -183,9 +212,9 @@ export class InlineChatIntent implements IIntent {
 		assertType(exitTool);
 
 		const agentTools = await getAgentTools(this._instantiationService, request);
-		const inlineChatTools = agentTools.filter(tool => InlineChatIntent._EDIT_TOOLS.has(tool.name));
+		const editTools = agentTools.filter(tool => InlineChatIntent._EDIT_TOOLS.has(tool.name));
 
-		return [exitTool, ...inlineChatTools];
+		return [exitTool, ...editTools];
 	}
 
 	invoke(): Promise<never> {
