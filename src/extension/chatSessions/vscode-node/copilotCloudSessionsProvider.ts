@@ -393,11 +393,9 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				? {
 					options: {
 						[AGENTS_OPTION_GROUP_ID]:
-							this.sessionAgentMap.get(resource)
-							?? (this.sessionAgentMap.set(resource, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID),
+							this.sessionAgentMap.get(resource) || DEFAULT_AGENT_ID,
 						[VARIATIONS_OPTION_GROUP_ID]:
-							this.sessionVariationsMap.get(resource)
-							?? (this.sessionVariationsMap.set(resource, DEFAULT_VARIATIONS_COUNT), DEFAULT_VARIATIONS_COUNT)
+							this.sessionVariationsMap.get(resource) || DEFAULT_VARIATIONS_COUNT
 					}
 				}
 				: {}),
