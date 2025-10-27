@@ -30,7 +30,7 @@ export class PlaceholderViewContribution extends Disposable {
 			const token = authenticationService.copilotToken;
 			const hasSetting = !!configurationService.getNonExtensionConfig('chat.experimental.codex.enabled');
 			const hasExp = !!experimentationService.getTreatmentVariable('chat.codex.enabled');
-			const enabledForUser = token?.codexAgentEnabled && (hasSetting || hasExp);
+			const enabledForUser = hasSetting || (token?.codexAgentEnabled && hasExp);
 			const codexExtension = vscode.extensions.getExtension('openai.chatgpt');
 
 			const shouldShowPlaceholder = enabledForUser && !codexExtension;
