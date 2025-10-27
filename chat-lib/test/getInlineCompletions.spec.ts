@@ -12,7 +12,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import * as stream from 'stream';
 import { assert, describe, expect, it } from 'vitest';
-import { AuthenticationGetSessionOptions, AuthenticationSession, LanguageModelChat } from 'vscode';
+import type { AuthenticationGetSessionOptions, AuthenticationSession, LanguageModelChat } from 'vscode';
 import { ResultType } from '../src/_internal/extension/completions-core/vscode-node/lib/src/ghostText/ghostText';
 import { createTextDocument } from '../src/_internal/extension/completions-core/vscode-node/lib/src/test/textDocument';
 import { TextDocumentIdentifier } from '../src/_internal/extension/completions-core/vscode-node/lib/src/textDocument';
