@@ -288,9 +288,9 @@ export type ContextRunnableResult = {
 	speculativeKind: SpeculativeKind;
 
 	/**
-	 * A human readable id to ease debugging.
+	 * A human readable path to the signature to ease debugging.
 	 */
-	debugId?: ContextRunnableResultId | undefined;
+	debugPath?: ContextRunnableResultId | undefined;
 }
 
 export type CachedContextRunnableResult = {

@@ -110,7 +110,7 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
 		const runnableResult = result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
-		runnableResult.debugId = this.getDebugId();
+		runnableResult.debugPath = this.getDebugPath();
 		return runnableResult;
 	}
 
@@ -143,7 +143,7 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 		}
 	}
 
-	private getDebugId(): string | undefined {
+	private getDebugPath(): string | undefined {
 		if (!this.session.host.isDebugging()) {
 			return undefined;
 		}

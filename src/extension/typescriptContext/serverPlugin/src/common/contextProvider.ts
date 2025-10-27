@@ -430,7 +430,7 @@ export class RunnableResult {
 
 	public readonly priority: number;
 	public readonly items: ContextItem[];
-	public debugId: string | undefined;
+	public debugPath: string | undefined;
 
 	constructor(id: ContextRunnableResultId, priority: number, runnableResultContext: RunnableResultContext, primaryBudget: CharacterBudget, secondaryBudget: CharacterBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
 		this.id = id;
@@ -513,7 +513,7 @@ export class RunnableResult {
 			items: this.items,
 			cache: this.cache,
 			speculativeKind: this.speculativeKind,
-			debugId: this.debugId
+			debugPath: this.debugPath
 		};
 	}
 }

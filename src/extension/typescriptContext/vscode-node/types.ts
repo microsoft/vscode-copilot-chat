@@ -14,7 +14,7 @@ export type ResolvedRunnableResult = {
 	priority: number;
 	items: protocol.FullContextItem[];
 	cache?: protocol.CacheInfo;
-	debugId?: protocol.ContextRunnableResultId | undefined;
+	debugPath?: protocol.ContextRunnableResultId | undefined;
 }
 export namespace ResolvedRunnableResult {
 	export function from(result: protocol.ContextRunnableResult, items: protocol.FullContextItem[]): ResolvedRunnableResult {
@@ -23,7 +23,8 @@ export namespace ResolvedRunnableResult {
 			state: result.state,
 			priority: result.priority,
 			items: items,
-			cache: result.cache
+			cache: result.cache,
+			debugPath: result.debugPath
 		};
 	}
 }
