@@ -605,6 +605,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	}
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+		this.logService.info(`[VARIANTS DEBUG] chatParticipantImpl called - hasSessionContext: ${!!context.chatSessionContext}, isUntitled: ${context.chatSessionContext?.isUntitled}, hasConfirmation: ${!!(request.acceptedConfirmationData || request.rejectedConfirmationData)}`);
+		
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
 			return await this.handleConfirmationData(request, stream, token);
 		}
