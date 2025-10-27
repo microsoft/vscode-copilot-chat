@@ -87,8 +87,8 @@ export class PerCompletionContextProviderStatistics {
 		return this._statistics.get(providerId);
 	}
 
-	getAllUsageStatistics(): IterableIterator<ContextUsageStatistics> {
-		return this._statistics.values();
+	getAllUsageStatistics(): IterableIterator<[string, ContextUsageStatistics]> {
+		return this._statistics.entries();
 	}
 
 	computeMatch(promptMatchers: PromptMatcher[]) {

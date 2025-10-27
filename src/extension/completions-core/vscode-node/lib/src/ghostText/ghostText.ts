@@ -1098,9 +1098,34 @@ export async function getGhostText(
 		ctx.get(CompletionNotifier).notifyRequest(completionState, id, telemetryData, token, options);
 		const result = await getGhostTextWithoutAbortHandling(ctx, completionState, id, telemetryData, token, options);
 		const statistics = ctx.get(ContextProviderStatistics).getStatisticsForCompletion(id);
+		const opportunityId = options?.opportunityId ?? 'unknown';
 		const telemetryService = ctx.get(CompletionsTelemetryServiceBridge).getTelemetryService();
-		for (const statistic of statistics.getAllUsageStatistics()) {
-			console.log(statistic);
+		for (const [providerId, statistic] of statistics.getAllUsageStatistics()) {
+			/* __GDPR__
+				"context-plugin.completion-context-stats" : {
+					"owner": "dirkb",
+					"comment": "Telemetry for copilot inline completion context",
+					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+					"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
+					"providerId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The context provider id" },
+					"resolution": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The resolution of the context" },
+					"usage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How the context was used" },
+					"usageDetails": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Additional details about the usage as a JSON string" }
+				}
+			*/
+			telemetryService.sendMSFTTelemetryEvent(
+				'context-plugin.completion-context-stats',
+				{
+					requestId: id,
+					opportunityId,
+					providerId,
+					resolution: statistic.resolution,
+					usage: statistic.usage,
+					usageDetails: JSON.stringify(statistic.usageDetails),
+				},
+				{
+				}
+			);
 		}
 		return result;
 	} catch (e) {
