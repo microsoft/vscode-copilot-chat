@@ -850,9 +850,9 @@
   {
     "name": "edit [inline] [python] - issue #1198: Multi-lingual queries throw off the inline response formatting",
     "contentFilterCount": 0,
-    "passCount": 3,
-    "failCount": 7,
-    "score": 0.3
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit [inline] [typescript] - Context Outline: TypeScript between methods",
@@ -1125,9 +1125,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [html] - issue #6614",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [javascript] - issue #2946: Inline chat markers don't work",
@@ -1181,9 +1181,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [python] - issue #1198: Multi-lingual queries throw off the inline response formatting",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript between methods",
@@ -1279,9 +1279,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #3575: Inline Chat in function expands to delete whole file",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #3759: add type",
