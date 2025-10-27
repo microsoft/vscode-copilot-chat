@@ -589,14 +589,15 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			stream.warning(vscode.l10n.t('Created {0} of {1} requested variants.', prInfos.length, variationsCount));
 		}
 
-		// Open the first PR if any were created
-		if (prInfos.length > 0) {
+		// Open the first PR - but only for single variant or after all variants created
+		// For multiple variants, don't auto-open to avoid interrupting the user experience
+		if (prInfos.length > 0 && variationsCount === 1) {
 			const firstPrNumber = parseInt(prInfos[0].linkTag.substring(1), 10);
 			await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + firstPrNumber }));
 			return prInfos[0];
 		}
 
-		return undefined;
+		return prInfos.length > 0 ? prInfos[0] : undefined;
 	}
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
