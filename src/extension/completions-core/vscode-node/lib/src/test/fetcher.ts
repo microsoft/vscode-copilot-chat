@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { FetchOptions, Fetcher, IAbortController, IHeaders, Response } from '../networking';
+import { Fetcher, IAbortController, IHeaders } from '../networking';
+import { FetchOptions, Response } from '../../../../../../platform/networking/common/fetcherService';
 import { CopilotNamedAnnotationList } from '../openai/stream';
 import { Readable } from 'stream';
 

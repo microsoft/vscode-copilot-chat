@@ -6,7 +6,8 @@ import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
 import { editorVersionHeaders } from '../config';
 import type { Context } from '../context';
 import { getEndpointUrl } from '../networkConfiguration';
-import { Fetcher, type IAbortSignal, type Response } from '../networking';
+import { Fetcher, type IAbortSignal } from '../networking';
+import { type Response } from '../../../../../../platform/networking/common/fetcherService';
 import { ConnectionState } from './connectionState';
 import {
 	createErrorResponse,

@@ -14,7 +14,8 @@ import {
 	InMemoryConfigProvider,
 } from '../../config';
 import { Context } from '../../context';
-import { Fetcher, Response } from '../../networking';
+import { Fetcher } from '../../networking';
+import { Response } from '../../../../../../../platform/networking/common/fetcherService';
 import { ConnectionState } from '../../snippy/connectionState';
 import { ErrorMessages, ErrorReasons, FormattedSnippyError } from '../../snippy/errorCreator';
 import * as Network from '../../snippy/network';

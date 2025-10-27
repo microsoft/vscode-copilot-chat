@@ -5,10 +5,10 @@
 
 import { SyncDescriptor } from '../vs/platform/instantiation/common/descriptors';
 import * as insta from '../vs/platform/instantiation/common/instantiation';
-import { ServiceIdentifier, createDecorator } from '../vs/platform/instantiation/common/instantiation';
+import { createDecorator } from '../vs/platform/instantiation/common/instantiation';
 import { InstantiationService } from '../vs/platform/instantiation/common/instantiationService';
 import { ServiceCollection } from '../vs/platform/instantiation/common/serviceCollection';
-export { ServiceIdentifier, createDecorator as createServiceIdentifier };
+export { createDecorator as createServiceIdentifier };
 
 export interface IInstantiationServiceBuilder {
 

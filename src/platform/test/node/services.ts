@@ -5,10 +5,10 @@
 
 
 import type { CancellationToken, OpenDialogOptions, QuickPickItem, QuickPickOptions, Selection, TextEditor, Uri } from 'vscode';
-import { IInstantiationServiceBuilder, ServiceIdentifier } from '../../../util/common/services';
+import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServiceIdentifier } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { InstantiationService } from '../../../util/vs/platform/instantiation/common/instantiationService';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
 import { IAuthenticationService } from '../../authentication/common/authentication';

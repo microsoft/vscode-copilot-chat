@@ -8,7 +8,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { FetchOptions, IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -52,7 +52,7 @@ import { SpeculativeRequestCache } from './lib/src/ghostText/speculativeRequestC
 import { LogLevel, LogTarget, TelemetryLogSender } from './lib/src/logger';
 import { TelemetryLogSenderImpl } from './lib/src/logging/telemetryLogSender';
 import { formatLogMessage } from './lib/src/logging/util';
-import { Fetcher, FetchOptions, Response } from './lib/src/networking';
+import { Fetcher } from './lib/src/networking';
 import { ExtensionNotificationSender, NotificationSender } from './lib/src/notificationSender';
 import { LiveOpenAIFetcher, OpenAIFetcher } from './lib/src/openai/fetch';
 import { AvailableModelsManager } from './lib/src/openai/model';

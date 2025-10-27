@@ -11,8 +11,6 @@ import { TelemetryWithExp, logEngineCompletion } from '../telemetry';
 import { isRunningInTest } from '../util/runtimeMode';
 import { CopilotNamedAnnotationList } from './stream';
 
-export { FinishedCallback, getRequestId } from './fetch';
-
 export interface RequestId {
 	headerRequestId: string;
 	serverExperiments: string;

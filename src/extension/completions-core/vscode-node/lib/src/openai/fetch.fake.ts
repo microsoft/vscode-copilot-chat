@@ -5,7 +5,7 @@
 
 import { CopilotTokenManager } from '../auth/copilotTokenManager';
 import { Context } from '../context';
-import { Response } from '../networking';
+import { Response } from '../../../../../../platform/networking/common/fetcherService';
 import {
 	CompletionError,
 	CompletionParams,

@@ -2,3 +2,5 @@
 /src/
 /dist/
 /*.tgz
+dist-old/
+src-old/

@@ -38,7 +38,8 @@ import { telemetry, TelemetryData } from './telemetry';
 export * from './networkingTypes';
 
 // Import what we need locally for this module's implementation
-import { FetchOptions, ReqHeaders, Response } from './networkingTypes';
+import { ReqHeaders } from './networkingTypes';
+import { FetchOptions, Response } from '../../../../../platform/networking/common/fetcherService';
 
 /**
  * Encapsulates all the functionality related to making GET/POST/DELETE requests using

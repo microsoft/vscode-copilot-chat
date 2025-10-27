@@ -7,18 +7,16 @@ import { ClientHttp2Stream } from 'http2';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { Context } from '../context';
 import { Logger } from '../logger';
-import { Response } from '../networking';
+import { Response } from '../../../../../../platform/networking/common/fetcherService';
 import { TelemetryWithExp, telemetry } from '../telemetry';
 import { getEngineRequestInfo } from './config';
-import { CopilotConfirmation, CopilotError, CopilotReference, SolutionDecision } from './fetch';
+import { CopilotConfirmation, CopilotError, CopilotReference, SolutionDecision, getRequestId, FinishedCallback } from './fetch';
 import {
 	APIChoice,
 	APIJsonData,
 	APILogprobs,
-	FinishedCallback,
 	RequestId,
 	convertToAPIChoice,
-	getRequestId,
 } from './openai';
 
 const streamChoicesLogger = new Logger('streamChoices');
