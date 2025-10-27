@@ -764,10 +764,9 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 }
 
 function getFileCreationReminder(modelFamily: string | undefined) {
-	if (modelFamily !== 'claude-sonnet-4.5') {
-		return;
+	if (modelFamily === 'claude-sonnet-4.5' || modelFamily === 'claude-haiku-4.5') {
+		return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
 	}
-	return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
 }
 
 function getVSCModelReminder(isHiddenModel: boolean) {

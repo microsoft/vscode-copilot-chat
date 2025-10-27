@@ -14,7 +14,6 @@ import {
 import { DocumentInfoWithOffset } from '../prompt';
 import * as assert from 'assert';
 import * as fs from 'fs';
-import { suite } from 'mocha';
 import { resolve } from 'path';
 
 suite('LanguageMarker Test Suite', function () {

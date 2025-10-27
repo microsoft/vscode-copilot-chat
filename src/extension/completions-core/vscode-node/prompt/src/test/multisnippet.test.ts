@@ -10,7 +10,6 @@ import {
 	nullSimilarFilesOptions,
 } from '../snippetInclusion/similarFiles';
 import * as assert from 'assert';
-import { suite } from 'mocha';
 import dedent from 'ts-dedent';
 
 suite('Test Multiple Snippet Selection', function () {

@@ -8,7 +8,7 @@ import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHand
 import { Disposable, TextEditor, window } from 'vscode';
 import { citationsChannelName } from './outputChannel';
 
-class CodeRefEngagementTracker {
+export class CodeRefEngagementTracker {
 	private activeLog = false;
 	private subscriptions: Disposable[] = [];
 

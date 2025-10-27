@@ -41,10 +41,6 @@ export enum Filter {
 	/** The Copilot Client Version */
 	CopilotClientVersion = 'X-Copilot-ClientVersion',
 
-	// Copilot-specific filters for related plugins
-	// Any additions to this list also need to be:
-	// 1. Added to the ExP backend by submitting a DRI ticket to ExP.
-	// 2. Enabled in the Control Tower UI by any experimentation admin.
 	CopilotRelatedPluginVersionCppTools = CopilotRelatedPluginVersionPrefix + 'msvscodecpptools',
 	CopilotRelatedPluginVersionCMakeTools = CopilotRelatedPluginVersionPrefix + 'msvscodecmaketools',
 	CopilotRelatedPluginVersionMakefileTools = CopilotRelatedPluginVersionPrefix + 'msvscodemakefiletools',
@@ -52,6 +48,7 @@ export enum Filter {
 	CopilotRelatedPluginVersionPython = CopilotRelatedPluginVersionPrefix + 'mspythonpython',
 	CopilotRelatedPluginVersionPylance = CopilotRelatedPluginVersionPrefix + 'mspythonvscodepylance',
 	CopilotRelatedPluginVersionJavaPack = CopilotRelatedPluginVersionPrefix + 'vscjavavscodejavapack',
+	CopilotRelatedPluginVersionJavaManager = CopilotRelatedPluginVersionPrefix + 'vscjavavscodejavadependency',
 	CopilotRelatedPluginVersionTypescript = CopilotRelatedPluginVersionPrefix + 'vscodetypescriptlanguagefeatures',
 	CopilotRelatedPluginVersionTypescriptNext = CopilotRelatedPluginVersionPrefix + 'msvscodevscodetypescriptnext',
 	CopilotRelatedPluginVersionCSharp = CopilotRelatedPluginVersionPrefix + 'msdotnettoolscsharp',

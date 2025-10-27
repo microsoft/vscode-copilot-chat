@@ -759,7 +759,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 
 		const diffOptions: ResponseProcessor.DiffParams = {
-			emitFastCursorLineChange: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService),
+			emitFastCursorLineChange: opts.showLabel
+				? false
+				: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService),
 			nLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNNonSignificantLinesToConverge, this.expService),
 			nSignificantLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNSignificantLinesToConverge, this.expService),
 		};
@@ -864,6 +866,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		);
 		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying) {
 			const nextCursorLineR = await this.predictNextCursorPosition(promptPieces);
+			if (cancellationToken.isCancellationRequested) {
+				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
+				return;
+			}
 
 			if (nextCursorLineR.isError()) {
 				this.tracer.trace(`Predicted next cursor line error: ${nextCursorLineR.err.message}`);
@@ -1125,6 +1131,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const systemMessage = 'Your task is to predict the next line number in the current file where the developer is most likely to make their next edit, using the provided context.';
 
+		const maxTokens = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionCurrentFileMaxTokens, this.expService);
+
 		const currentFileContentR = this.constructTaggedFile(
 			promptPieces.currentDocument,
 			promptPieces.editWindowLinesRange,
@@ -1133,6 +1141,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...promptPieces.opts,
 				currentFile: {
 					...promptPieces.opts.currentFile,
+					maxTokens,
 					includeTags: false,
 				}
 			},

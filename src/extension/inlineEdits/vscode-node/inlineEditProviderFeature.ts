@@ -185,6 +185,8 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 				const range = new vscode.Range(position.lineNumber - 1, position.column - 1, position.lineNumber - 1, position.column - 1);
 				currentEditor.selection = new vscode.Selection(range.start, range.end);
 				currentEditor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+
+				model.onChange.trigger(undefined);
 			}));
 
 			reader.store.add(commands.registerCommand(clearCacheCommandId, () => {
