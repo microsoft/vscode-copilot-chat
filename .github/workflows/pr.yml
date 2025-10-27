@@ -142,7 +142,7 @@ jobs:
       - name: Run Completions Core prompt tests
         run: npm run test:prompt
 
-      - name: Run Completions Core lib test using VS Code
+      - name: Run Completions Core lib tests using VS Code
         run: xvfb-run -a npm run test:completions-core
 
       - name: Archive simulation output
