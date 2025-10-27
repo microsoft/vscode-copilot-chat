@@ -105,6 +105,7 @@ export class VSCodeEditorInfo extends EditorAndPluginInfo {
 			'ms-python.python',
 			'ms-python.vscode-pylance',
 			'vscjava.vscode-java-pack',
+			'vscjava.vscode-java-dependency',
 			'vscode.typescript-language-features',
 			'ms-vscode.vscode-typescript-next',
 			'ms-dotnettools.csharp',
