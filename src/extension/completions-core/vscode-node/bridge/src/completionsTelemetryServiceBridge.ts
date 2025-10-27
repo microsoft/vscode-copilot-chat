@@ -20,6 +20,10 @@ export class CompletionsTelemetryServiceBridge {
 		this.enhancedReporter = undefined;
 	}
 
+	public getTelemetryService(): ITelemetryService {
+		return this.telemetryService;
+	}
+
 	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void {
 		this.telemetryService.sendGHTelemetryEvent(wrapEventNameForPrefixRemoval(`copilot/${eventName}`), properties, measurements);
 		this.getSpyReporters(store ?? TelemetryStore.Standard)?.sendTelemetryEvent(eventName, properties as TelemetryProperties, measurements as TelemetryMeasurements);
