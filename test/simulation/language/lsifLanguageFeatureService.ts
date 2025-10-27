@@ -216,6 +216,18 @@ export class LSIFLanguageFeaturesService implements ILanguageFeaturesService {
 		return []; // not part of LSIF
 	}
 
+	prepareTypeHierarchy(_uri: vscode.Uri, _position: vscode.Position): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
+
+	getTypeHierarchySupertypes(_item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
+
+	getTypeHierarchySubtypes(_item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
+
 	async getWorkspaceSymbols(query: string): Promise<vscode.SymbolInformation[]> {
 		throw new Error('Unimplemented: excercise for the reader');
 		// would have to iterate through all documents, get all symbols that match

@@ -90,7 +90,6 @@ class GetTypeHierarchyTool implements ICopilotTool<ITypeHierarchyToolParams> {
 		toolResult.toolResultDetails = allLocations;
 
 		// Create summary message
-		const totalItems = hierarchyItems.length + allSupertypes.length + allSubtypes.length;
 		const parts: string[] = [];
 		if (hierarchyItems.length > 0) {
 			parts.push(`${hierarchyItems.length} type${hierarchyItems.length === 1 ? '' : 's'}`);

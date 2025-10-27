@@ -48,6 +48,33 @@
 			}
 		},
 		{
+			"type": "extensionHost",
+			"request": "launch",
+			"name": "Launch Type Hierarchy Tool - Isolated Testing",
+			"runtimeExecutable": "${execPath}",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--disable-extension=github.copilot-chat",
+				"--disable-extension=github.copilot",
+				"--new-window"
+			],
+			"smartStep": true,
+			"sourceMaps": true,
+			"preLaunchTask": "watch",
+			"env": {
+				"COPILOT_LOG_TELEMETRY": "true",
+				"VSCODE_DEV_DEBUG": "1",
+				"COPILOT_EXTENSION_DEV_MODE": "true"
+			},
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js",
+				"!**/node_modules/**"
+			],
+			"presentation": {
+				"group": "0_launch"
+			}
+		},
+		{
 			"type": "node",
 			"request": "launch",
 			"name": "Launch Copilot Extension - Watch Mode - Code OSS",
@@ -55,7 +82,6 @@
 			"windows": {
 				"runtimeExecutable": "${workspaceFolder}/../vscode/scripts/code.bat",
 			},
-
 			"attachSimplePort": 5870,
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
@@ -146,7 +172,6 @@
 				"--scenario-test=toolcall.stest",
 				"--external-scenarios=${workspaceFolder}/test/toolcalls",
 				"--output=${workspaceFolder}/test/out/"
-
 			],
 			"request": "launch",
 			"type": "node",

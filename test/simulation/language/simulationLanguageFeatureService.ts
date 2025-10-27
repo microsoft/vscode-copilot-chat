@@ -56,6 +56,15 @@ export class SimulationLanguageFeaturesService implements ILanguageFeaturesServi
 	getDiagnostics(uri: vscode.Uri): vscode.Diagnostic[] {
 		return this.getLanguageFeatures(uri).getDiagnostics(uri);
 	}
+	prepareTypeHierarchy(uri: vscode.Uri, position: vscode.Position): Promise<vscode.TypeHierarchyItem[]> {
+		return this.getLanguageFeatures(uri).prepareTypeHierarchy(uri, position);
+	}
+	getTypeHierarchySupertypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return this.getLanguageFeatures(item.uri).getTypeHierarchySupertypes(item);
+	}
+	getTypeHierarchySubtypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return this.getLanguageFeatures(item.uri).getTypeHierarchySubtypes(item);
+	}
 	getWorkspaceSymbols(query: string): Promise<vscode.SymbolInformation[]> {
 		return Promise.resolve([]);
 	}
@@ -160,5 +169,14 @@ class TSServerLanguageFeaturesService implements ILanguageFeaturesService {
 	}
 	getDiagnostics(uri: vscode.Uri): vscode.Diagnostic[] {
 		return [];
+	}
+	prepareTypeHierarchy(uri: vscode.Uri, position: vscode.Position): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
+	getTypeHierarchySupertypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
+	getTypeHierarchySubtypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
 	}
 }

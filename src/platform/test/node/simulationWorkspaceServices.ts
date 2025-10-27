@@ -1009,4 +1009,13 @@ export class TestingLanguageService implements ILanguageFeaturesService {
 	getDiagnostics(uri: vscode.Uri): vscode.Diagnostic[] {
 		return [];
 	}
+	prepareTypeHierarchy(uri: vscode.Uri, position: vscode.Position): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
+	getTypeHierarchySupertypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
+	getTypeHierarchySubtypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
 }
