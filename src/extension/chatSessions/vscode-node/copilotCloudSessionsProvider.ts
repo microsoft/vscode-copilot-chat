@@ -116,6 +116,17 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			return { optionGroups: [] };
 		}
 
+		// Always provide variations option group if we have a valid repo
+		const variationItems: vscode.ChatSessionProviderOptionItem[] = [
+			{ id: '1', name: vscode.l10n.t('1 variant') },
+			{ id: '2', name: vscode.l10n.t('2 variants') },
+			{ id: '3', name: vscode.l10n.t('3 variants') },
+			{ id: '4', name: vscode.l10n.t('4 variants') }
+		];
+
+		const optionGroups: vscode.ChatSessionProviderOptionGroup[] = [];
+
+		// Try to fetch custom agents, but don't fail if this errors
 		try {
 			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo);
 			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
@@ -126,33 +137,26 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				}))
 			];
 
-			const variationItems: vscode.ChatSessionProviderOptionItem[] = [
-				{ id: '1', name: vscode.l10n.t('1 variant') },
-				{ id: '2', name: vscode.l10n.t('2 variants') },
-				{ id: '3', name: vscode.l10n.t('3 variants') },
-				{ id: '4', name: vscode.l10n.t('4 variants') }
-			];
-
-			return {
-				optionGroups: [
-					{
-						id: AGENTS_OPTION_GROUP_ID,
-						name: vscode.l10n.t('Custom Agents'),
-						description: vscode.l10n.t('Select which agent to use'),
-						items: agentItems,
-					},
-					{
-						id: VARIATIONS_OPTION_GROUP_ID,
-						name: vscode.l10n.t('PR Variations'),
-						description: vscode.l10n.t('Number of PR variants to generate'),
-						items: variationItems,
-					}
-				]
-			};
+			optionGroups.push({
+				id: AGENTS_OPTION_GROUP_ID,
+				name: vscode.l10n.t('Custom Agents'),
+				description: vscode.l10n.t('Select which agent to use'),
+				items: agentItems,
+			});
 		} catch (error) {
 			this.logService.error(`Error fetching custom agents: ${error}`);
-			return { optionGroups: [] };
+			// Continue without custom agents option group
 		}
+
+		// Always add variations option group
+		optionGroups.push({
+			id: VARIATIONS_OPTION_GROUP_ID,
+			name: vscode.l10n.t('PR Variations'),
+			description: vscode.l10n.t('Number of PR variants to generate'),
+			items: variationItems,
+		});
+
+		return { optionGroups };
 	}
 
 	provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
@@ -592,14 +596,25 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			const selectedAgent = this.sessionAgentMap.get(context.chatSessionContext.chatSessionItem.resource);
 			const variationsCount = parseInt(this.sessionVariationsMap.get(context.chatSessionContext.chatSessionItem.resource) || DEFAULT_VARIATIONS_COUNT, 10);
 
-			// For untitled sessions with multiple variants, delegate to createDelegatedChatSession
+			// For untitled sessions with multiple variants, show confirmation first
 			if (variationsCount > 1) {
-				await this.createDelegatedChatSession({
-					prompt: context.chatSummary?.prompt ?? request.prompt,
-					history: context.chatSummary?.history,
-					references: request.references,
-					variationsCount
-				}, stream, token);
+				// Show confirmation modal with premium request cost warning
+				const confirmationDetails = vscode.l10n.t('The agent will work asynchronously to create {0} pull request variants with your requested changes. This will use {0} premium requests.', variationsCount);
+
+				stream.confirmation(
+					vscode.l10n.t('Delegate to cloud agent'),
+					confirmationDetails,
+					{
+						step: 'create',
+						metadata: {
+							prompt: context.chatSummary?.prompt ?? request.prompt,
+							history: context.chatSummary?.history,
+							references: request.references,
+							variationsCount
+						}
+					},
+					['Delegate', 'Cancel']
+				);
 				return {};
 			}
 
