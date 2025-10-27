@@ -387,6 +387,9 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 	private createEmptySession(resource: Uri): vscode.ChatSession {
 		const sessionId = resource ? resource.path.slice(1) : undefined;
+		const variationsValue = this.sessionVariationsMap.get(resource);
+		this.logService.info(`[VARIANTS DEBUG] createEmptySession called - Resource: ${resource}, sessionId: ${sessionId}, variationsValue: ${variationsValue}`);
+		
 		return {
 			history: [],
 			...(sessionId && sessionId.startsWith('untitled-')
@@ -395,7 +398,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 						[AGENTS_OPTION_GROUP_ID]:
 							this.sessionAgentMap.get(resource) || DEFAULT_AGENT_ID,
 						[VARIATIONS_OPTION_GROUP_ID]:
-							this.sessionVariationsMap.get(resource) || DEFAULT_VARIATIONS_COUNT
+							variationsValue || DEFAULT_VARIATIONS_COUNT
 					}
 				}
 				: {}),
@@ -616,6 +619,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 			// Debug logging
 			this.logService.info(`[VARIANTS DEBUG] Untitled session - Resource: ${context.chatSessionContext.chatSessionItem.resource}, Variations from map: ${this.sessionVariationsMap.get(context.chatSessionContext.chatSessionItem.resource)}, Parsed count: ${variationsCount}`);
+			this.logService.info(`[VARIANTS DEBUG] Map contents: ${JSON.stringify(Array.from(this.sessionVariationsMap.entries()).map(([k, v]) => ({ key: k.toString(), value: v })))}`);
+			this.logService.info(`[VARIANTS DEBUG] Resource toString: ${context.chatSessionContext.chatSessionItem.resource.toString()}, path: ${context.chatSessionContext.chatSessionItem.resource.path}`);
 
 			// For untitled sessions with multiple variants, show confirmation first
 			if (variationsCount > 1) {
