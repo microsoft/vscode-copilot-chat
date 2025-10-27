@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import { getIndentationWindowsDelineations } from '../snippetInclusion/windowDelineations';
 import * as assert from 'assert';
-import { suite } from 'mocha';
 import dedent from 'ts-dedent';
 
 const SOURCE = {

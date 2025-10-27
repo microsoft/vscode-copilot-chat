@@ -14,6 +14,7 @@ import { NextEditFetchRequest } from './nextEditProvider';
 export interface INextEditDisplayLocation {
 	range: Range;
 	label: string;
+	jumpToEdit?: boolean;
 }
 
 export interface INextEditResult {

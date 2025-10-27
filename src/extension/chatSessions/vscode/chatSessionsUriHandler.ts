@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { API, Repository } from '../../../platform/git/vscode/git';
@@ -26,6 +27,15 @@ export const UriHandlers = {
 	[UriHandlerPaths.OpenSession]: EXTENSION_ID,
 	[UriHandlerPaths.External_OpenPullRequestWebview]: GHPR_EXTENSION_ID
 };
+
+interface PendingChatSession {
+	type: string;
+	id: string;
+	url: string;
+	branch: string;
+	timestamp: number;
+}
+
 export type CustomUriHandler = vscode.UriHandler & { canHandleUri(uri: vscode.Uri): boolean };
 
 export class ChatSessionsUriHandler extends Disposable implements CustomUriHandler {
@@ -35,6 +45,7 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly _logService: ILogService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		super();
 	}
@@ -54,6 +65,17 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 					}
 				}
 		}
+	}
+
+	private async waitAndGetGlobalState(): Promise<PendingChatSession | undefined> {
+		let timeout = 500;
+		let state = undefined;
+		while (!state && timeout > 0) {
+			state = this._extensionContext.globalState.get<PendingChatSession>(PENDING_CHAT_SESSION_STORAGE_KEY);
+			await new Promise(resolve => setTimeout(resolve, 100));
+			timeout -= 100;
+		}
+		return state;
 	}
 
 	private async _openGitHubSession(type: string, id: string, url: string | null, branch: string | null): Promise<void> {
@@ -76,6 +98,11 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 				timestamp: Date.now()
 			};
 			await this._extensionContext.globalState.update(PENDING_CHAT_SESSION_STORAGE_KEY, pendingSession);
+			const pendingSessionUri = vscode.Uri.joinPath(this._extensionContext.globalStorageUri, '.pendingSession');
+			try {
+				this.fileSystemService.writeFile(pendingSessionUri, Buffer.from(`${id}\n${Date.now()}`, 'utf-8'));
+			} catch {
+			}
 
 			// Check if we have workspaces associated with this repo
 			const uri = vscode.Uri.parse(url);
@@ -158,13 +185,7 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 		let prId: string = '';
 		let type: string = '';
 		if (!details) {
-			const pendingSession = this._extensionContext.globalState.get<{
-				type: string;
-				id: string;
-				url: string;
-				branch: string;
-				timestamp: number;
-			}>(PENDING_CHAT_SESSION_STORAGE_KEY);
+			const pendingSession = await this.waitAndGetGlobalState();
 			if (!pendingSession) {
 				return;
 			}

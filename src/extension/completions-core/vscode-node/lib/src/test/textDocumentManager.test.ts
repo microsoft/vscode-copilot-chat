@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { suite, test } from 'mocha';
 import { Context } from '../context';
 import { makeFsUri } from '../util/uri';
 import { createLibTestingContext } from './context';

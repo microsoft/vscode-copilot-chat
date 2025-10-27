@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import { SnippetProviderType, SnippetSemantics, announceSnippet } from '../snippetInclusion/snippets';
 import * as assert from 'assert';
-import { suite } from 'mocha';
 import dedent from 'ts-dedent';
 
 suite('Unit tests for snippet.ts', () => {

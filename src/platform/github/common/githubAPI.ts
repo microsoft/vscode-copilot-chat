@@ -312,6 +312,39 @@ export async function addPullRequestCommentGraphQLRequest(
 	return result?.data?.addComment?.commentEdge?.node || null;
 }
 
+export async function closePullRequest(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	token: string | undefined,
+	owner: string,
+	repo: string,
+	pullNumber: number,
+): Promise<boolean> {
+	logService.debug(`[GitHubAPI] Closing pull request ${owner}/${repo}#${pullNumber}`);
+
+	const result = await makeGitHubAPIRequest(
+		fetcherService,
+		logService,
+		telemetry,
+		host,
+		`repos/${owner}/${repo}/pulls/${pullNumber}`,
+		'POST',
+		token,
+		{ state: 'closed' },
+		'2022-11-28'
+	);
+
+	const success = result?.state === 'closed';
+	if (success) {
+		logService.debug(`[GitHubAPI] Successfully closed pull request ${owner}/${repo}#${pullNumber}`);
+	} else {
+		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${result?.state}`);
+	}
+	return success;
+}
+
 export async function makeGitHubAPIRequestWithPagination(
 	fetcherService: IFetcherService,
 	logService: ILogService,
