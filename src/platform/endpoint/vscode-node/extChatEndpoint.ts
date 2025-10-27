@@ -171,7 +171,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			}))
 		};
 
-		// Create a stream recorder to capture deltas
 		const streamRecorder = new FetchStreamRecorder(finishedCb);
 
 		const pendingLoggedChatRequest = isExternalModel ? this._requestLogger.logChatRequest(debugName + '-external', this, {
