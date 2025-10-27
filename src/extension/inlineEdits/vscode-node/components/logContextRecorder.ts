@@ -50,10 +50,12 @@ export class LogContextRecorder extends Disposable {
 
 	public static async cleanupOldRecordings(recordingDirPath: string) {
 		const dirContents = await fs.readdir(recordingDirPath).catch(() => []);
-		return dirContents.filter(file => file.endsWith(LogContextRecorder.fileSuffix)).map(file => {
-			const filePath = path.join(recordingDirPath, file);
-			return fs.unlink(filePath).catch(() => { });
-		});
+		return Promise.all(
+			dirContents.filter(file => file.endsWith(LogContextRecorder.fileSuffix)).map(file => {
+				const filePath = path.join(recordingDirPath, file);
+				return fs.unlink(filePath).catch(() => { });
+			})
+		);
 	}
 
 	public handleShown(nextEditResult: INextEditResult) {
