@@ -5,7 +5,6 @@
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isHiddenModelB } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -277,10 +276,6 @@ class XAIPromptResolver implements IAgentPrompt {
 	) { }
 
 	static readonly familyPrefixes = ['grok-code'];
-
-	static matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isHiddenModelB(endpoint);
-	}
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
 		const promptType = this.configurationService.getExperimentBasedConfig(
