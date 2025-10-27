@@ -11,6 +11,7 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 
 const ShowCodexPlaceholderKey = 'github.copilot.chat.codex.showPlaceholder';
 
@@ -19,15 +20,19 @@ export class PlaceholderViewContribution extends Disposable {
 		@IRunCommandExecutionService private readonly _commandService: IRunCommandExecutionService,
 		@IEnvService private readonly envService: IEnvService,
 		@IAuthenticationService authenticationService: IAuthenticationService,
-		@IConfigurationService configurationService: IConfigurationService
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService
 	) {
 		super();
 
 		let curShouldShowPlaceholder: boolean | undefined = undefined;
 		const updateContextKey = () => {
 			const token = authenticationService.copilotToken;
-			const enabledForUser = token && (token.codexAgentEnabled || configurationService.getNonExtensionConfig('chat.experimental.codex.enabled'));
+			const hasSetting = !!configurationService.getNonExtensionConfig('chat.experimental.codex.enabled');
+			const hasExp = !!experimentationService.getTreatmentVariable('chat.codex.enabled');
+			const enabledForUser = token?.codexAgentEnabled && (hasSetting || hasExp);
 			const codexExtension = vscode.extensions.getExtension('openai.chatgpt');
+
 			const shouldShowPlaceholder = enabledForUser && !codexExtension;
 			if (curShouldShowPlaceholder !== shouldShowPlaceholder) {
 				curShouldShowPlaceholder = shouldShowPlaceholder;
@@ -36,6 +41,7 @@ export class PlaceholderViewContribution extends Disposable {
 		};
 
 		this._register(vscode.extensions.onDidChange(updateContextKey));
+		this._register(experimentationService.onDidTreatmentsChange(updateContextKey));
 		this._register(Event.runAndSubscribe(authenticationService.onDidAuthenticationChange, updateContextKey));
 
 		this._register(vscode.commands.registerCommand('github.copilot.chat.installAgent', this.installAgentCommand, this));
