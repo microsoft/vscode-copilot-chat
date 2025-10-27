@@ -30,7 +30,7 @@ import { extensionFileSystem } from './extension/src/fileSystem';
 import { registerGhostTextDependencies } from './extension/src/ghostText/ghostText';
 import { CopilotStatusBar } from './extension/src/statusBar';
 import { ExtensionTextDocumentManager } from './extension/src/textDocumentManager';
-import { CopilotTokenManager } from './lib/src/auth/copilotTokenManager';
+import { CopilotTokenManager, CopilotTokenManagerImpl } from './lib/src/auth/copilotTokenManager';
 import { CitationManager } from './lib/src/citationManager';
 import { CompletionNotifier } from './lib/src/completionNotifier';
 import { BuildInfo, ConfigProvider, EditorAndPluginInfo, EditorSession } from './lib/src/config';
@@ -147,7 +147,7 @@ export function createContext(serviceAccessor: ServicesAccessor): Context {
 	ctx.set(EditorAndPluginInfo, new VSCodeEditorInfo());
 	ctx.set(EditorSession, new EditorSession(env.sessionId, env.machineId, env.remoteName, uiKindToString(env.uiKind)));
 	ctx.set(CopilotExtensionStatus, new CopilotExtensionStatus());
-	ctx.set(CopilotTokenManager, new CopilotTokenManager(ctx));
+	ctx.set(CopilotTokenManager, new CopilotTokenManagerImpl(ctx));
 	ctx.set(StatusReporter, new CopilotStatusBar(ctx));
 	ctx.set(TextDocumentManager, new ExtensionTextDocumentManager(ctx));
 	ctx.set(ObservableWorkspace, instaService.createInstance(VSCodeWorkspace));

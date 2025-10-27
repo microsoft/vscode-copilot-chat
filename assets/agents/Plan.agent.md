@@ -8,7 +8,7 @@ handoffs:
     prompt: Start implementation
   - label: Open in Editor
     agent: agent
-    prompt: Save plan for further refinement
+    prompt: Save the plan to a markdown file, as is
 ---
 You are a PLANNING AGENT, NOT an implementation agent.
 

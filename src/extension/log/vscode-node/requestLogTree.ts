@@ -729,7 +729,7 @@ class ChatRequestItem extends vscode.TreeItem {
 			const tokensStrPart = tokensStr ? `[${tokensStr}] ` : '';
 			this.description = `${tokensStrPart}[${timeStr}] [${startTimeStr}]`;
 
-			this.iconPath = info.entry.type === LoggedRequestKind.ChatMLSuccess || info.entry.type === LoggedRequestKind.CompletionSuccess ? undefined : new vscode.ThemeIcon('error');
+			this.iconPath = info.entry.type === LoggedRequestKind.ChatMLSuccess ? undefined : new vscode.ThemeIcon('error');
 			this.tooltip = `${info.entry.type === LoggedRequestKind.ChatMLCancelation ? 'cancelled' : info.entry.result.type}
 	${info.entry.chatEndpoint.model}
 	${timeStr}

@@ -3,15 +3,23 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CompletionsAuthenticationServiceBridge } from '../../../bridge/src/completionsAuthenticationServiceBridge';
-import { Context } from '../context';
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../../../../platform/authentication/common/copilotToken';
 import { ThrottledDelayer } from '../../../../../../util/vs/base/common/async';
 import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
+import { CompletionsAuthenticationServiceBridge } from '../../../bridge/src/completionsAuthenticationServiceBridge';
+import { Context } from '../context';
 export { CopilotToken } from '../../../../../../platform/authentication/common/copilotToken';
 
-export class CopilotTokenManager extends Disposable {
+export abstract class CopilotTokenManager extends Disposable {
+	public abstract get token(): CopilotToken | undefined;
+	public abstract primeToken(): Promise<boolean>;
+	public abstract getToken(): Promise<CopilotToken>;
+	public abstract resetToken(httpError?: number): void;
+	public abstract getLastToken(): Omit<CopilotToken, "token"> | undefined;
+}
+
+export class CopilotTokenManagerImpl extends CopilotTokenManager {
 
 	private readonly authenticationService: IAuthenticationService;
 	private tokenRefetcher = new ThrottledDelayer(5_000);
