@@ -12,18 +12,18 @@ import * as path from 'path';
 import * as stream from 'stream';
 import { outdent } from 'outdent';
 import { assert, describe, expect, it } from 'vitest';
-import { DocumentId } from '../src/_internal/platform/inlineEdits/common/dataTypes/documentId';
-import { MutableObservableWorkspace } from '../src/_internal/platform/inlineEdits/common/observableWorkspace';
-import { FetchOptions, IAbortController, IHeaders, Response } from '../src/_internal/platform/networking/common/fetcherService';
-import { IFetcher } from '../src/_internal/platform/networking/common/networking';
-import { CancellationToken } from '../src/_internal/util/vs/base/common/cancellation';
-import { URI } from '../src/_internal/util/vs/base/common/uri';
-import { StringEdit, StringReplacement } from '../src/_internal/util/vs/editor/common/core/edits/stringEdit';
-import { OffsetRange } from '../src/_internal/util/vs/editor/common/core/ranges/offsetRange';
-import { createNESProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
-import { ICopilotTokenManager } from '../src/_internal/platform/authentication/common/copilotTokenManager';
-import { Emitter } from '../src/_internal/util/vs/base/common/event';
-import { CopilotToken } from '../src/_internal/platform/authentication/common/copilotToken';
+import { DocumentId } from '../dist/src/_internal/platform/inlineEdits/common/dataTypes/documentId';
+import { MutableObservableWorkspace } from '../dist/src/_internal/platform/inlineEdits/common/observableWorkspace';
+import { FetchOptions, IAbortController, IHeaders, Response } from '../dist/src/_internal/platform/networking/common/fetcherService';
+import { IFetcher } from '../dist/src/_internal/platform/networking/common/networking';
+import { CancellationToken } from '../dist/src/_internal/util/vs/base/common/cancellation';
+import { URI } from '../dist/src/_internal/util/vs/base/common/uri';
+import { StringEdit, StringReplacement } from '../dist/src/_internal/util/vs/editor/common/core/edits/stringEdit';
+import { OffsetRange } from '../dist/src/_internal/util/vs/editor/common/core/ranges/offsetRange';
+import { createNESProvider, ILogTarget, ITelemetrySender, LogLevel } from '../dist/src/main';
+import { ICopilotTokenManager } from '../dist/src/_internal/platform/authentication/common/copilotTokenManager';
+import { Emitter } from '../dist/src/_internal/util/vs/base/common/event';
+import { CopilotToken } from '../dist/src/_internal/platform/authentication/common/copilotToken';
 
 
 class TestFetcher implements IFetcher {

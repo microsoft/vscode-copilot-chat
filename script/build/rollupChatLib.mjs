@@ -9,26 +9,30 @@ import { join, dirname } from 'path';
 import { defineConfig } from 'rollup';
 import { fileURLToPath } from 'url';
 import { existsSync, readdirSync, mkdirSync, copyFileSync } from 'fs';
-import esbuild from 'rollup-plugin-esbuild';
+import typescript from '@rollup/plugin-typescript';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
 const CHAT_LIB_DIR = join(REPO_ROOT, 'chat-lib');
 const OUTPUT_DIR = join(CHAT_LIB_DIR, 'dist', 'src');
 
-// Entry points from extractChatLib.ts
+// Entry points from extractChatLib.ts (only .ts files, .d.ts files will be copied)
 const entryPoints = {
 	'main': join(REPO_ROOT, 'src/lib/node/chatLibMain.ts'),
-	'_internal/util/vs/base-common': join(REPO_ROOT, 'src/util/vs/base-common.d.ts'),
-	'_internal/util/vs/vscode-globals-nls': join(REPO_ROOT, 'src/util/vs/vscode-globals-nls.d.ts'),
-	'_internal/util/vs/vscode-globals-product': join(REPO_ROOT, 'src/util/vs/vscode-globals-product.d.ts'),
-	'_internal/util/common/globals': join(REPO_ROOT, 'src/util/common/globals.d.ts'),
 	'_internal/util/common/test/shims/vscodeTypesShim': join(REPO_ROOT, 'src/util/common/test/shims/vscodeTypesShim.ts'),
 	'_internal/platform/diff/common/diffWorker': join(REPO_ROOT, 'src/platform/diff/common/diffWorker.ts'),
 	'_internal/platform/tokenizer/node/tikTokenizerWorker': join(REPO_ROOT, 'src/platform/tokenizer/node/tikTokenizerWorker.ts'),
 	'_internal/platform/authentication/test/node/simulationTestCopilotTokenManager': join(REPO_ROOT, 'src/platform/authentication/test/node/simulationTestCopilotTokenManager.ts'),
 	'_internal/extension/completions-core/vscode-node/lib/src/test/textDocument': join(REPO_ROOT, 'src/extension/completions-core/vscode-node/lib/src/test/textDocument.ts'),
 };
+
+// .d.ts files that should be copied directly
+const dtsFilesToCopy = [
+	{ src: 'src/util/vs/base-common.d.ts', dest: '_internal/util/vs/base-common.d.ts' },
+	{ src: 'src/util/vs/vscode-globals-nls.d.ts', dest: '_internal/util/vs/vscode-globals-nls.d.ts' },
+	{ src: 'src/util/vs/vscode-globals-product.d.ts', dest: '_internal/util/vs/vscode-globals-product.d.ts' },
+	{ src: 'src/util/common/globals.d.ts', dest: '_internal/util/common/globals.d.ts' },
+];
 
 /**
  * @param {string} filePath
@@ -91,6 +95,14 @@ export default defineConfig({
 		{
 			name: 'copy-files',
 			buildEnd() {
+				// Copy .d.ts entry point files
+				for (const { src, dest } of dtsFilesToCopy) {
+					const srcPath = join(REPO_ROOT, src);
+					const destPath = join(OUTPUT_DIR, dest);
+					mkdirSync(dirname(destPath), { recursive: true });
+					copyFileSync(srcPath, destPath);
+				}
+
 				// Copy .tiktoken files
 				const tokenizerDir = join(REPO_ROOT, 'src', 'platform', 'tokenizer', 'node');
 				if (existsSync(tokenizerDir)) {
@@ -126,8 +138,23 @@ export default defineConfig({
 			}
 		},
 
-		esbuild({
+		typescript({
 			tsconfig: join(REPO_ROOT, 'tsconfig.json'),
+			declaration: true,
+			declarationMap: true,
+			outDir: OUTPUT_DIR,
+			rootDir: join(REPO_ROOT, 'src'),
+			sourceMap: true,
+			// TypeScript must output ESNext for rollup to work
+			// Rollup will convert to CommonJS in the output stage
+			module: 'ESNext',
+			target: 'ES2020',
+			noEmitOnError: false,
+			compilerOptions: {
+				module: 'ESNext',
+				target: 'ES2020',
+				skipLibCheck: true,
+			}
 		}),
 	],
 
@@ -140,6 +167,10 @@ export default defineConfig({
 			return;
 		}
 		if (warning.code === 'UNRESOLVED_IMPORT') {
+			return;
+		}
+		// Suppress TypeScript TS4094 errors about private/protected in exported classes
+		if (warning.message && warning.message.includes('TS4094')) {
 			return;
 		}
 		defaultHandler(warning);
