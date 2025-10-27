@@ -7,12 +7,15 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '../.env' });
 
+import { ResultType } from '#lib/ghostText/ghostText';
 import { createTextDocument } from '#lib/test/textDocument';
 import { TextDocumentIdentifier } from '#lib/textDocument';
 import { TextDocumentChangeEvent, TextDocumentCloseEvent, TextDocumentFocusedEvent, TextDocumentOpenEvent, WorkspaceFoldersChangeEvent } from '#lib/textDocumentManager';
 import { CAPIClient } from '@vscode/copilot-api';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 import * as stream from 'stream';
-import { assert, describe, it } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 import { AuthenticationGetSessionOptions, AuthenticationSession, LanguageModelChat } from 'vscode';
 import { CopilotToken, TokenEnvelope } from '../src/_internal/platform/authentication/common/copilotToken';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily } from '../src/_internal/platform/endpoint/common/endpointProvider';
@@ -23,7 +26,7 @@ import { Emitter, Event } from '../src/_internal/util/vs/base/common/event';
 import { Disposable } from '../src/_internal/util/vs/base/common/lifecycle';
 import { URI } from '../src/_internal/util/vs/base/common/uri';
 import { ChatRequest } from '../src/_internal/vscodeTypes';
-import { createInlineCompletionsProvider, IAuthenticationService, ICAPIClientService, ICompletionsStatusChangedEvent, ICompletionsTextDocumentManager, IEndpointProvider, ITelemetrySender } from '../src/main';
+import { createInlineCompletionsProvider, IActionItem, IAuthenticationService, ICAPIClientService, ICompletionsStatusChangedEvent, ICompletionsTextDocumentManager, IEndpointProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
 
 class TestFetcher implements IFetcher {
 	constructor(private readonly responses: Record<string, string>) { }
@@ -35,7 +38,6 @@ class TestFetcher implements IFetcher {
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
 		const uri = URI.parse(url);
 		const responseText = this.responses[uri.path];
-		console.error(`${options.method ?? 'GET'} ${url}`);
 
 		const headers = new class implements IHeaders {
 			get(name: string): string | null {
@@ -195,18 +197,25 @@ class TestDocumentManager extends Disposable implements ICompletionsTextDocument
 	}
 }
 
+class NullLogTarget implements ILogTarget {
+	logIt(level: LogLevel, metadataStr: string, ...extra: any[]): void { }
+}
+
 describe('getInlineCompletions', () => {
 	it('should return completions for a document and position', async () => {
 		const provider = createInlineCompletionsProvider({
-			fetcher: new TestFetcher({}),
+			fetcher: new TestFetcher({ '/v1/engines/gpt-4o-copilot/completions': await readFile(join(__dirname, 'getInlineCompletions.reply.txt'), 'utf8') }),
 			authService: new TestAuthService(),
 			telemetrySender: new TestTelemetrySender(),
+			logTarget: new NullLogTarget(),
 			isRunningInTest: true,
 			contextProviderMatch: async () => 0,
 			statusHandler: new class { didChange(_: ICompletionsStatusChangedEvent) { } },
 			documentManager: new TestDocumentManager(),
 			workspace: new MutableObservableWorkspace(),
-			urlOpener: undefined as any,
+			urlOpener: new class {
+				async open(_url: string) { }
+			},
 			editorInfo: { name: 'test-editor', version: '1.0.0' },
 			editorPluginInfo: { name: 'test-plugin', version: '1.0.0' },
 			relatedPluginInfo: [],
@@ -214,14 +223,19 @@ describe('getInlineCompletions', () => {
 				sessionId: 'test-session-id',
 				machineId: 'test-machine-id',
 			},
-			notificationSender: undefined as any,
+			notificationSender: new class {
+				async showWarningMessage(_message: string, ..._items: IActionItem[]) { return undefined; }
+			},
 			endpointProvider: new TestEndpointProvider(),
 			capiClientService: new TestCAPIClientService(),
 		});
-		const doc = createTextDocument('file:///test.txt', 'javascript', 1, 'function main() {\n\n\n}\n');
+		const doc = createTextDocument('file:///test.txt', 'javascript', 1, 'function main() {\n\n}\n');
 
 		const result = await provider.getInlineCompletions(doc, { line: 1, character: 0 });
 
 		assert(result);
+		expect(result.length).toBe(1);
+		expect(result[0].resultType).toBe(ResultType.Async);
+		expect(result[0].displayText).toBe('  console.log("Hello, World!");');
 	});
 });
