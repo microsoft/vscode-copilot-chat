@@ -3106,14 +3106,6 @@
 						],
 						"description": "%github.copilot.config.grokCodeAlternatePrompt%"
 					},
-					"github.copilot.chat.claudeSonnet45AlternatePrompt": {
-						"type": "string",
-						"default": "default",
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.claudeSonnet45AlternatePrompt%"
-					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
 						"default": true,
