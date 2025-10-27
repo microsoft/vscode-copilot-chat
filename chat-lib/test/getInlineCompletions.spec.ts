@@ -7,16 +7,16 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '../.env' });
 
-import { ResultType } from '#lib/ghostText/ghostText';
-import { createTextDocument } from '#lib/test/textDocument';
-import { TextDocumentIdentifier } from '#lib/textDocument';
-import { TextDocumentChangeEvent, TextDocumentCloseEvent, TextDocumentFocusedEvent, TextDocumentOpenEvent, WorkspaceFoldersChangeEvent } from '#lib/textDocumentManager';
 import { CAPIClient } from '@vscode/copilot-api';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import * as stream from 'stream';
 import { assert, describe, expect, it } from 'vitest';
 import { AuthenticationGetSessionOptions, AuthenticationSession, LanguageModelChat } from 'vscode';
+import { ResultType } from '../src/_internal/extension/completions-core/vscode-node/lib/src/ghostText/ghostText';
+import { createTextDocument } from '../src/_internal/extension/completions-core/vscode-node/lib/src/test/textDocument';
+import { TextDocumentIdentifier } from '../src/_internal/extension/completions-core/vscode-node/lib/src/textDocument';
+import { TextDocumentChangeEvent, TextDocumentCloseEvent, TextDocumentFocusedEvent, TextDocumentOpenEvent, WorkspaceFoldersChangeEvent } from '../src/_internal/extension/completions-core/vscode-node/lib/src/textDocumentManager';
 import { CopilotToken, TokenEnvelope } from '../src/_internal/platform/authentication/common/copilotToken';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily } from '../src/_internal/platform/endpoint/common/endpointProvider';
 import { MutableObservableWorkspace } from '../src/_internal/platform/inlineEdits/common/observableWorkspace';

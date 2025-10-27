@@ -4,13 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { loadEnv } from 'vite';
-import tsconfigPaths from 'vite-tsconfig-paths';
 import { defineConfig } from 'vitest/config';
 
-const plugin = tsconfigPaths();
-
 export default defineConfig(({ mode }) => ({
-	plugins: [plugin],
 	test: {
 		include: ['**/*.spec.ts', '**/*.spec.tsx'],
 		exclude: [
