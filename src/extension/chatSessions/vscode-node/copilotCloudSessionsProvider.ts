@@ -24,6 +24,7 @@ interface CreatePromptMetadata {
 	history?: string;
 	references?: readonly vscode.ChatPromptReference[];
 	variationsCount?: number;
+	originalSessionItem?: vscode.ChatSessionItem;
 }
 
 interface UncommittedChangesMetadata {
@@ -515,7 +516,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	}
 
 	async createDelegatedChatSession(metadata: CreatePromptMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<PullRequestInfo | undefined> {
-		const { prompt, history, references, variationsCount = 1 } = metadata;
+		const { prompt, history, references, variationsCount = 1, originalSessionItem } = metadata;
 
 		// Notify user about creating multiple variants
 		if (variationsCount > 1) {
@@ -563,6 +564,17 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				linkTag: `#${pullRequest.number}`
 			};
 			prInfos.push(prInfo);
+
+			// For the first PR in a multi-variant untitled session, fire the commit event to switch the session
+			if (i === 0 && variationsCount > 1 && originalSessionItem) {
+				this._onDidCommitChatSessionItem.fire({
+					original: originalSessionItem,
+					modified: {
+						resource: vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + number }),
+						label: `Pull Request ${number}`
+					}
+				});
+			}
 		}
 
 		// Show summary message
@@ -610,7 +622,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 							prompt: context.chatSummary?.prompt ?? request.prompt,
 							history: context.chatSummary?.history,
 							references: request.references,
-							variationsCount
+							variationsCount,
+							originalSessionItem: context.chatSessionContext.chatSessionItem
 						}
 					},
 					['Delegate', 'Cancel']
