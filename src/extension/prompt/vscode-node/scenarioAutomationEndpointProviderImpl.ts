@@ -15,11 +15,20 @@ export class ScenarioAutomationEndpointProviderImpl extends ProductionEndpointPr
 			// When using no auth in scenario automation, we want to force using a custom model / non-copilot for all requests
 			const getFirstNonCopilotModel = async () => {
 				const allModels = await lm.selectChatModels();
+
+				// Debug logging: log all available models
+				this._logService.info(`[DEBUG] All available models (${allModels.length}):`);
+				allModels.forEach((model, index) => {
+					this._logService.info(`[DEBUG] Model ${index + 1}: id="${model.id}", vendor="${model.vendor}", name="${model.name}", family="${model.family}"`);
+				});
+
 				const firstNonCopilotModel = allModels.find(m => m.vendor !== 'copilot');
 				if (firstNonCopilotModel) {
+					this._logService.info(`[DEBUG] Selected non-copilot model: id="${firstNonCopilotModel.id}", vendor="${firstNonCopilotModel.vendor}"`);
 					this._logService.trace(`Using custom contributed chat model`);
 					return this._instantiationService.createInstance(ExtensionContributedChatEndpoint, firstNonCopilotModel);
 				} else {
+					this._logService.error('[DEBUG] No custom contributed chat models found - all models are copilot vendor');
 					throw new Error('No custom contributed chat models found.');
 				}
 			};
