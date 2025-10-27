@@ -564,17 +564,18 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				linkTag: `#${pullRequest.number}`
 			};
 			prInfos.push(prInfo);
+		}
 
-			// For the first PR in a multi-variant untitled session, fire the commit event to switch the session
-			if (i === 0 && variationsCount > 1 && originalSessionItem) {
-				this._onDidCommitChatSessionItem.fire({
-					original: originalSessionItem,
-					modified: {
-						resource: vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + number }),
-						label: `Pull Request ${number}`
-					}
-				});
-			}
+		// After creating all PRs, fire the commit event to switch from untitled to first PR session
+		if (variationsCount > 1 && originalSessionItem && prInfos.length > 0) {
+			const firstPrNumber = parseInt(prInfos[0].linkTag.substring(1), 10);
+			this._onDidCommitChatSessionItem.fire({
+				original: originalSessionItem,
+				modified: {
+					resource: vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + firstPrNumber }),
+					label: `Pull Request ${firstPrNumber}`
+				}
+			});
 		}
 
 		// Show summary message
@@ -663,6 +664,30 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				const userPrompt = request.prompt;
 				if (!userPrompt || userPrompt.trim().length === 0) {
 					stream.markdown(vscode.l10n.t('Please provide a message for the cloud agent.'));
+					return {};
+				}
+
+				// Check if user wants to create multiple variants from this session
+				const variationsCount = parseInt(this.sessionVariationsMap.get(context.chatSessionContext.chatSessionItem.resource) || DEFAULT_VARIATIONS_COUNT, 10);
+
+				if (variationsCount > 1) {
+					// Show confirmation for creating multiple variants from existing session
+					const confirmationDetails = vscode.l10n.t('The agent will work asynchronously to create {0} pull request variants with your requested changes. This will use {0} premium requests.', variationsCount);
+
+					stream.confirmation(
+						vscode.l10n.t('Create PR variants'),
+						confirmationDetails,
+						{
+							step: 'create',
+							metadata: {
+								prompt: context.chatSummary?.prompt ?? request.prompt,
+								history: context.chatSummary?.history,
+								references: request.references,
+								variationsCount,
+							}
+						},
+						['Create', 'Cancel']
+					);
 					return {};
 				}
 
