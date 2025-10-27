@@ -232,4 +232,4 @@ jobs:
         run: npm run test:prompt
 
       - name: Run Completions Core lib tests using VS Code
-        run: xvfb-run -a npm run test:completions-core
+        run: npm run test:completions-core
