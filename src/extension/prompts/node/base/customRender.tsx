@@ -20,7 +20,10 @@ export class CustomRender<
 
 	render() {
 		if (this.props.overrides && Object.hasOwn(this.props.overrides, this.props.id)) {
-			return this.props.overrides[this.props.id](this.props.args);
+			const override = this.props.overrides[this.props.id];
+			if (typeof override === 'function') {
+				return override(this.props.args);
+			}
 		}
 		return <>{this.props.children}</>;
 	}

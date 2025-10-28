@@ -275,7 +275,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 				// We have a summary for a tool call round that was part of this turn
 				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} />);
 			} else {
-				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint)} />);
+				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint, this.props.modelOptions)} />);
 			}
 
 			// Reverse the tool call rounds so they are in chronological order

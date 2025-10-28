@@ -271,7 +271,7 @@ export interface AgentUserMessageProps extends BasePromptElementProps {
 	readonly modelOptions?: ModelOptions;
 }
 
-export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, modelOptions?: ModelOptions): AgentUserMessageProps {
+export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, modelOptions: ModelOptions | undefined): AgentUserMessageProps {
 	return {
 		isHistorical: true,
 		request: turn.request.message,
@@ -298,8 +298,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps):
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
-		modelOptions: agentProps.modelOptions
-
+		modelOptions: agentProps.modelOptions,
 	};
 }
 
