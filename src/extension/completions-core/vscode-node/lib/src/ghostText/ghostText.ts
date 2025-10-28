@@ -1101,7 +1101,7 @@ export async function getGhostText(
 		const telemetryService = ctx.get(CompletionsTelemetryServiceBridge).getTelemetryService();
 		for (const [providerId, statistic] of statistics.getAllUsageStatistics()) {
 			/* __GDPR__
-				"context-plugin.completion-context-stats" : {
+				"context-provider.completion-stats" : {
 					"owner": "dirkb",
 					"comment": "Telemetry for copilot inline completion context",
 					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
@@ -1113,7 +1113,7 @@ export async function getGhostText(
 				}
 			*/
 			telemetryService.sendMSFTTelemetryEvent(
-				'context-plugin.completion-context-stats',
+				'context-provider.completion-stats',
 				{
 					requestId: id,
 					opportunityId,
