@@ -7,7 +7,7 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isHiddenModelB, isVSCModel, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isVSCModel, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -48,7 +48,7 @@ import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructu
 import { AgentConversationHistory } from './agentConversationHistory';
 import './allAgentPrompts';
 import { AlternateGPTPrompt, DefaultAgentPrompt } from './defaultAgentInstructions';
-import { ModelOptions, PromptConstructor, PromptRegistry } from './promptRegistry';
+import { ModelOptions, PromptRegistry } from './promptRegistry';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -66,6 +66,11 @@ export interface AgentPromptProps extends GenericBasePromptElementProps {
 	 * Codesearch mode, aka agentic Ask mode
 	 */
 	readonly codesearchMode?: boolean;
+
+	/**
+	 * Model-specific options
+	 */
+	readonly modelOptions?: ModelOptions;
 }
 
 /** Proportion of the prompt token budget any singular textual tool result is allowed to use. */
@@ -87,16 +92,13 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const { PromptClass, modelOptions } = await this.resolveModelPrompts();
-		const { overrides } = modelOptions || {};
-
-		const instructions = await this.getInstructions(PromptClass);
+		const instructions = await this.getInstructions();
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				<CustomRender id='SystemMessageContent' overrides={overrides}>
+				<CustomRender id='SystemMessageContent' overrides={this.props.modelOptions?.overrides}>
 					<CopilotIdentityRules />
 					<SafetyRules />
 				</CustomRender>
@@ -138,18 +140,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 	}
 
-	private async resolveModelPrompts(): Promise<{ PromptClass: PromptConstructor | undefined; modelOptions: ModelOptions | undefined }> {
-		const agentPromptResolver = await PromptRegistry.getPrompt(this.props.endpoint);
-		if (agentPromptResolver) {
-			const resolver = this.instantiationService.createInstance(agentPromptResolver);
-			const PromptClass = resolver.resolvePrompt(this.props.endpoint);
-			const modelOptions = agentPromptResolver && this.instantiationService.createInstance(agentPromptResolver).resolveModelOptions?.(this.props.endpoint);
-			return { PromptClass, modelOptions };
-		}
-		return { PromptClass: undefined, modelOptions: undefined };
-	}
-
-	private async getInstructions(PromptClass: PromptConstructor | undefined): Promise<PromptPieceChild> {
+	private async getInstructions(): Promise<PromptPieceChild> {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
@@ -160,12 +151,18 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			/>;
 		}
 
-		if (PromptClass) {
-			return <PromptClass
-				availableTools={this.props.promptContext.tools?.availableTools}
-				modelFamily={modelFamily}
-				codesearchMode={this.props.codesearchMode}
-			/>;
+		const agentPromptResolver = await PromptRegistry.getPrompt(this.props.endpoint);
+		if (agentPromptResolver) {
+			const resolver = this.instantiationService.createInstance(agentPromptResolver);
+			const PromptClass = resolver.resolvePrompt(this.props.endpoint);
+
+			if (PromptClass) {
+				return <PromptClass
+					availableTools={this.props.promptContext.tools?.availableTools}
+					modelFamily={modelFamily}
+					codesearchMode={this.props.codesearchMode}
+				/>;
+			}
 		}
 
 		return <DefaultAgentPrompt
@@ -270,9 +267,10 @@ export interface AgentUserMessageProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
 	readonly sessionId?: string;
+	readonly modelOptions?: ModelOptions;
 }
 
-export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint): AgentUserMessageProps {
+export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, modelOptions?: ModelOptions): AgentUserMessageProps {
 	return {
 		isHistorical: true,
 		request: turn.request.message,
@@ -281,7 +279,8 @@ export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint)
 		toolReferences: turn.toolReferences,
 		chatVariables: turn.promptVariables ?? new ChatVariablesCollection(),
 		editedFileEvents: turn.editedFileEvents,
-		enableCacheBreakpoints: false // Should only be added to the current turn - some user messages may get them in Agent post-processing
+		enableCacheBreakpoints: false, // Should only be added to the current turn - some user messages may get them in Agent post-processing
+		modelOptions
 	};
 }
 
@@ -298,6 +297,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps):
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
+		modelOptions: agentProps.modelOptions
 
 	};
 }
@@ -335,14 +335,9 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const isGpt5 = this.props.endpoint.family.startsWith('gpt-5') && this.props.endpoint.family !== 'gpt-5-codex';
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || isGpt5) && this.props.chatVariables.hasVariables() ?
-			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
-			: '';
+		const hasVariables = this.props.chatVariables.hasVariables();
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
-		const isHiddenModelBFlag = await isHiddenModelB(this.props.endpoint);
-		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code') || isHiddenModelBFlag;
 
 		return (
 			<>
@@ -370,7 +365,11 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 						{getVSCModelReminder(shouldIncludePreamble)}
 					</Tag>
-					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
+					{query && <Tag name={this.props.modelOptions?.shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>
+						<CustomRender id='UserMessageContent' overrides={this.props.modelOptions?.overrides} args={{ query, hasVariables }}>
+							{query}
+						</CustomRender>
+					</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
 			</>

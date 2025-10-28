@@ -724,17 +724,20 @@ class OpenAIPromptResolver implements IAgentPrompt {
 	}
 
 	resolveModelOptions(endpoint: IChatEndpoint): ModelOptions | undefined {
-		if (endpoint.model?.startsWith('gpt-5')) {
-			return {
-				overrides: {
-					SystemMessageContent: () => <>
-						<GPT5CopilotIdentityRule />
-						<Gpt5SafetyRule />
-					</>
-				}
-			};
-		}
-		return undefined;
+		return {
+			overrides: {
+				SystemMessageContent: endpoint.model?.startsWith('gpt-5') ? () => <>
+					<GPT5CopilotIdentityRule />
+					<Gpt5SafetyRule />
+				</> : undefined,
+				UserMessageContent: (endpoint.family.startsWith('gpt-5') && endpoint.family !== 'gpt-5-codex') || (endpoint.family === 'gpt-4.1') ? ({ query, hasVariables }) => {
+					if (hasVariables) {
+						return <>{query + ' (See <attachments> above for file contents. You may not need to search or read the file again.)'}</>;
+					}
+					return <>{query}</>;
+				} : undefined
+			}
+		};
 	}
 }
 

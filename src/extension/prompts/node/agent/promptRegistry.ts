@@ -8,8 +8,10 @@ import type { IChatEndpoint } from '../../../../platform/networking/common/netwo
 import { DefaultAgentPromptProps } from './defaultAgentInstructions';
 
 export interface ModelOptions {
+	readonly shouldUseUserQuery?: boolean;
 	readonly overrides?: {
 		readonly SystemMessageContent?: () => PromptElement | PromptPiece;
+		readonly UserMessageContent?: (props: { query: string; hasVariables: boolean }) => PromptElement | PromptPiece;
 	};
 }
 

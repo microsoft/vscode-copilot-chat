@@ -36,6 +36,7 @@ import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { AgentPrompt, AgentPromptProps, AgentUserMessage, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn, KeepGoingReminder } from './agentPrompt';
+import { ModelOptions } from './promptRegistry';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -322,6 +323,7 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps {
 	readonly maxToolResultLength: number;
 	/** Optional hard cap on summary tokens; effective budget = min(prompt sizing tokenBudget, this value) */
 	readonly maxSummaryTokens?: number;
+	readonly modelOptions?: ModelOptions;
 }
 
 /**
