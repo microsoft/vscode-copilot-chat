@@ -256,6 +256,13 @@ declare module 'vscode' {
 		 * Whether sessions can be interrupted and resumed without side-effects.
 		 */
 		supportsInterruptions?: boolean;
+
+		/**
+		 * Whether the Enter key should submit the input in the chat session.
+		 * When set to `false`, only the send button will submit the input.
+		 * Defaults to `true` if not specified.
+		 */
+		acceptsInputOnEnter?: boolean;
 	}
 
 	/**
