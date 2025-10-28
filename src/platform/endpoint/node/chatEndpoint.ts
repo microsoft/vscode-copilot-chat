@@ -208,10 +208,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		return this.useResponsesApi ? 'responses' : 'chatCompletions';
 	}
 
-	public get supportsThinkingContentInHistory(): boolean {
-		return this.family === 'oswe';
-	}
-
 	interceptBody(body: IEndpointBody | undefined): void {
 		// Remove tool calls from requests that don't support them
 		// We really shouldn't make requests to models that don't support tool calls with tools though
