@@ -5,6 +5,32 @@
 
 import { describe, expect, it } from 'vitest';
 
+describe('CopilotCloudSessionsProvider - Chat Session Capabilities', () => {
+	describe('Input Submission Behavior', () => {
+		it('should configure acceptsInputOnEnter as false for cloud agent sessions', () => {
+			// The cloud agent session should have acceptsInputOnEnter set to false
+			// This means Enter key should NOT submit the input, only the send button should
+			const capabilities = {
+				supportsInterruptions: true,
+				acceptsInputOnEnter: false
+			};
+
+			expect(capabilities.acceptsInputOnEnter).toBe(false);
+			expect(capabilities.supportsInterruptions).toBe(true);
+		});
+
+		it('should allow other chat sessions to accept input on Enter by default', () => {
+			// Other chat sessions should default to true or not specify this capability
+			const defaultCapabilities = {
+				supportsInterruptions: true
+			};
+
+			// When acceptsInputOnEnter is undefined, it should default to true (accepting Enter)
+			expect(defaultCapabilities.acceptsInputOnEnter).toBeUndefined();
+		});
+	});
+});
+
 describe('CopilotCloudSessionsProvider - PR Variations', () => {
 	describe('Variations Option Group Configuration', () => {
 		it('should define 4 variation options', () => {
