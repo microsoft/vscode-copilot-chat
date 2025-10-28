@@ -5,7 +5,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../../prompt/jsx-runtime/ */
 
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { CompletionRequestData } from '../../completionsPromptFactory/componentsCompletionsPromptFactory';
 import { CodeSnippetWithId } from '../../contextProviders/contextItemSchemas';
 import { CodeSnippets } from '../codeSnippets';
@@ -23,7 +23,7 @@ import { createTextDocument, TestTextDocumentManager } from '../../../test/textD
 import { TextDocumentManager } from '../../../textDocumentManager';
 
 suite('Code Snippets Component', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	setup(function () {
 		ctx = createLibTestingContext();
@@ -264,7 +264,7 @@ suite('Code Snippets Component', function () {
 	});
 });
 
-async function renderCodeSnippets(ctx: Context, codeSnippets?: CodeSnippetWithId[]) {
+async function renderCodeSnippets(ctx: ICompletionsContextService, codeSnippets?: CodeSnippetWithId[]) {
 	const document = createTextDocument(
 		'file:///path/foo.ts',
 		'typescript',

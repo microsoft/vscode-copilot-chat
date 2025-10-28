@@ -1679,6 +1679,7 @@
 			},
 			{
 				"vendor": "customoai",
+				"when": "productQualityType != 'stable'",
 				"displayName": "OpenAI Compatible",
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
@@ -1701,6 +1702,10 @@
 				"view": "codex-placeholder",
 				"when": "true",
 				"contents": "%github.copilot.viewsWelcome.codexPlaceholder%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.openai-codex",
+				"contents": "%github.copilot.viewsWelcome.codexWelcomeView%"
 			},
 			{
 				"view": "copilot-agents-placeholder",
@@ -3093,22 +3098,6 @@
 						],
 						"description": "%github.copilot.config.gpt5AlternatePrompt%"
 					},
-					"github.copilot.chat.grokCodeAlternatePrompt": {
-						"type": "string",
-						"default": "default",
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.grokCodeAlternatePrompt%"
-					},
-					"github.copilot.chat.claudeSonnet45AlternatePrompt": {
-						"type": "string",
-						"default": "default",
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.claudeSonnet45AlternatePrompt%"
-					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
 						"default": true,
@@ -3959,8 +3948,8 @@
 			"agentSessions": [
 				{
 					"id": "codex-placeholder",
-					"name": "OpenAI Codex Agent",
-					"when": "github.copilot.chat.codex.notInstalled && config.chat.experimental.codex.enabled",
+					"name": "OpenAI Codex",
+					"when": "github.copilot.chat.codex.showPlaceholder && config.chat.experimental.codex.enabled",
 					"icon": "$(file)"
 				},
 				{
@@ -4217,7 +4206,7 @@
 				"welcomeMessage": "Run local background tasks",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
-				"description": "The Copilot CLI Agent works on your local machine",
+				"description": "The GitHub Copilot CLI Agent works on your local machine",
 				"when": "!chatEntitlementSignedOut && chatIsEnabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
@@ -4238,7 +4227,10 @@
 				],
 				"name": "cloud",
 				"displayName": "GitHub Copilot Cloud Agent",
-				"icon": "$(cloud)",
+				"icon": {
+					"light": "assets/copilot-cloud.svg",
+					"dark": "assets/copilot-cloud-dark.svg"
+				},
 				"welcomeTitle": "GitHub Copilot Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
@@ -4408,7 +4400,7 @@
 		"openai": "^5.11.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
-		"playwright": "^1.54.0",
+		"playwright": "^1.56.1",
 		"prettier": "^3.6.2",
 		"react": "^17.0.2",
 		"react-dom": "17.0.2",

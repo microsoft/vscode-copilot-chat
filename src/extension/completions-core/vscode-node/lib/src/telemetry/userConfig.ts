@@ -5,7 +5,7 @@
 
 import { CopilotToken } from '../../../../../../platform/authentication/common/copilotToken';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 
 interface UserConfigProperties {
 	copilot_trackingId: string;
@@ -35,7 +35,7 @@ export class TelemetryUserConfig {
 	optedIn = false;
 	ftFlag = '';
 
-	constructor(ctx: Context) {
+	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
 		onCopilotToken(ctx, copilotToken => this.updateFromToken(copilotToken));
 	}
 

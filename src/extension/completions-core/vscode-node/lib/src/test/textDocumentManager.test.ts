@@ -4,18 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { makeFsUri } from '../util/uri';
 import { createLibTestingContext } from './context';
 import { SimpleTestTextDocumentManager, createTextDocument } from './textDocument';
 
 suite('TextDocumentManager base class', () => {
 	let textDocumentManager: SimpleTestTextDocumentManager;
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	setup(function () {
 		ctx = createLibTestingContext();
-		textDocumentManager = new SimpleTestTextDocumentManager(ctx);
+		textDocumentManager = ctx.instantiationService.createInstance(SimpleTestTextDocumentManager);
 	});
 
 	test('should return the relative path of the document without workspaces', () => {

@@ -4,14 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { ActiveExperiments } from '../contextProviderRegistry';
 import { fillInTsActiveExperiments, TS_CONTEXT_PROVIDER_ID } from '../contextProviderRegistryTs';
 
 suite('contextProviderRegistryTs', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let activeExperiments: ActiveExperiments;
 	let telemetryData: TelemetryWithExp;
 

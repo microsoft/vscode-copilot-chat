@@ -3,9 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
-import { LogLevel, LogTarget } from '../logger';
 import * as util from 'node:util';
+import { LogLevel, LogTarget } from '../logger';
 
 export type TestLogMessage = {
 	level: LogLevel;
@@ -16,7 +15,7 @@ export type TestLogMessage = {
 export class TestLogTarget extends LogTarget {
 	private readonly _messages: TestLogMessage[] = [];
 
-	logIt(ctx: Context, level: LogLevel, category: string, ...extra: unknown[]): void {
+	logIt(level: LogLevel, category: string, ...extra: unknown[]): void {
 		this._messages.push({ level, category: category, extra });
 	}
 

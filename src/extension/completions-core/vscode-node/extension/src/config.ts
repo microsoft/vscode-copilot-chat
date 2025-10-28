@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { WorkspaceConfiguration } from 'vscode';
+import * as vscode from 'vscode';
 import {
 	ConfigKey,
 	ConfigKeyType,
@@ -13,11 +15,9 @@ import {
 	packageJson
 } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
-import { Context } from '../../lib/src/context';
+import { ICompletionsContextService } from '../../lib/src/context';
 import { Logger } from '../../lib/src/logger';
 import { transformEvent } from '../../lib/src/util/event';
-import type { WorkspaceConfiguration } from 'vscode';
-import * as vscode from 'vscode';
 
 const logger = new Logger('extensionConfig');
 
@@ -105,6 +105,7 @@ export class VSCodeEditorInfo extends EditorAndPluginInfo {
 			'ms-python.python',
 			'ms-python.vscode-pylance',
 			'vscjava.vscode-java-pack',
+			'vscjava.vscode-java-dependency',
 			'vscode.typescript-language-features',
 			'ms-vscode.vscode-typescript-next',
 			'ms-dotnettools.csharp',
@@ -122,11 +123,11 @@ export class VSCodeEditorInfo extends EditorAndPluginInfo {
 
 type EnabledConfigKeyType = { [key: string]: boolean };
 
-function getEnabledConfigObject(ctx: Context): EnabledConfigKeyType {
+function getEnabledConfigObject(ctx: ICompletionsContextService): EnabledConfigKeyType {
 	return { '*': true, ...(ctx.get(ConfigProvider).getConfig<EnabledConfigKeyType>(ConfigKey.Enable) ?? {}) };
 }
 
-function getEnabledConfig(ctx: Context, languageId: string): boolean {
+function getEnabledConfig(ctx: ICompletionsContextService, languageId: string): boolean {
 	const obj = getEnabledConfigObject(ctx);
 	return obj[languageId] ?? obj['*'] ?? true;
 }
@@ -136,7 +137,7 @@ function getEnabledConfig(ctx: Context, languageId: string): boolean {
  * Excludes the `editor.inlineSuggest.enabled` setting.
  * Return undefined if there is no current document.
  */
-export function isCompletionEnabled(ctx: Context): boolean | undefined {
+export function isCompletionEnabled(ctx: ICompletionsContextService): boolean | undefined {
 	const editor = vscode.window.activeTextEditor;
 	if (!editor) {
 		return undefined;
@@ -144,7 +145,7 @@ export function isCompletionEnabled(ctx: Context): boolean | undefined {
 	return isCompletionEnabledForDocument(ctx, editor.document);
 }
 
-export function isCompletionEnabledForDocument(ctx: Context, document: vscode.TextDocument): boolean {
+export function isCompletionEnabledForDocument(ctx: ICompletionsContextService, document: vscode.TextDocument): boolean {
 	return getEnabledConfig(ctx, document.languageId);
 }
 
@@ -176,7 +177,7 @@ function getConfigurationTargetForEnabledConfig(): vscode.ConfigurationTarget {
 /**
  * Enable completions by every means possible.
  */
-async function enableCompletions(ctx: Context) {
+async function enableCompletions(ctx: ICompletionsContextService) {
 	const scope = vscode.window.activeTextEditor?.document;
 	// Make sure both of these settings are enabled, because that's a precondition for the user seeing inline completions.
 	for (const [section, option] of [['', 'editor.inlineSuggest.enabled']]) {
@@ -216,7 +217,7 @@ async function enableCompletions(ctx: Context) {
 /**
  * Disable completions using the github.copilot.enable setting.
  */
-async function disableCompletions(ctx: Context) {
+async function disableCompletions(ctx: ICompletionsContextService) {
 	const languageId = vscode.window.activeTextEditor?.document.languageId;
 	if (!languageId) { return; }
 	const config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
@@ -235,7 +236,7 @@ async function disableCompletions(ctx: Context) {
 }
 
 /** @public KEEPING AS USEFUL */
-export async function toggleCompletions(ctx: Context) {
+export async function toggleCompletions(ctx: ICompletionsContextService) {
 	if (isCompletionEnabled(ctx) && isInlineSuggestEnabled()) {
 		await disableCompletions(ctx);
 	} else {

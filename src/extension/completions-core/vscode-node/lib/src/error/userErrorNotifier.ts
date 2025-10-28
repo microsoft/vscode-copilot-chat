@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Logger } from '../logger';
 import { NotificationSender } from '../notificationSender';
 import { UrlOpener } from '../util/opener';
@@ -16,7 +16,7 @@ const learnMoreLink = 'https://gh.io/copilot-network-errors';
 export class UserErrorNotifier {
 	private readonly notifiedErrorCodes: string[] = [];
 
-	notifyUser(ctx: Context, e: unknown) {
+	notifyUser(ctx: ICompletionsContextService, e: unknown) {
 		if (!(e instanceof Error)) { return; }
 		const error: NodeJS.ErrnoException = e;
 		if (error.code && CERTIFICATE_ERRORS.includes(error.code) && !this.didNotifyBefore(error.code)) {
@@ -25,7 +25,7 @@ export class UserErrorNotifier {
 		}
 	}
 
-	private async displayCertificateErrorNotification(ctx: Context, err: NodeJS.ErrnoException) {
+	private async displayCertificateErrorNotification(ctx: ICompletionsContextService, err: NodeJS.ErrnoException) {
 		new Logger('certificates').error(
 			ctx,
 			`${errorMsg} Please visit ${learnMoreLink} to learn more. Original cause:`,

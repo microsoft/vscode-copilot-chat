@@ -423,6 +423,18 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			case InlineCompletionEndOfLifeReasonKind.Ignored: {
 				const supersededBy = reason.supersededBy ? (reason.supersededBy as NesCompletionItem) : undefined;
 				tracer.trace(`Superseded by: ${supersededBy?.info.requestUuid || 'none'}, was shown: ${item.wasShown}`);
+				if (supersededBy) {
+					softAssert(item.info.requestUuid !== supersededBy.info.requestUuid, 'An inline edit cannot supersede itself.');
+					/* __GDPR__
+						"supersededInlineEdit" : {
+							"owner": "ulugbekna",
+							"comment": "Tracks when an inline edit was superseded by another edit.",
+							"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity ID of the original inline edit." },
+							"supersededByOpportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity ID of the inline edit that superseded the original edit." }
+						}
+					*/
+					this._telemetryService.sendMSFTTelemetryEvent('supersededInlineEdit', { opportunityId: item.info.requestUuid, supersededByOpportunityId: supersededBy.info.requestUuid });
+				}
 				this._handleDidIgnoreCompletionItem(item, supersededBy);
 				break;
 			}

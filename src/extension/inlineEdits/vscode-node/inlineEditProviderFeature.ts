@@ -66,7 +66,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		return !!this._copilotToken.read(reader)?.isInternal && !this._hideInternalInterface.read(reader);
 	});
 
-	public readonly inlineEditsLogFileEnabled = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
+	public readonly isInlineEditsLogFileEnabledObservable = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
 
 	private readonly _workspace = derivedDisposable(this, _reader => {
 		return this._instantiationService.createInstance(VSCodeWorkspace);
@@ -134,7 +134,15 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider, completionsProvider));
 
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
-			const logContextRecorder = this.inlineEditsLogFileEnabled ? reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger)) : undefined;
+
+			const isInlineEditLogFileEnabled = this.isInlineEditsLogFileEnabledObservable.read(reader);
+
+			let logContextRecorder: LogContextRecorder | undefined;
+			if (isInlineEditLogFileEnabled) {
+				logContextRecorder = reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger));
+			} else {
+				void LogContextRecorder.cleanupOldRecordings(recordingDirPath);
+			}
 
 			const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
 

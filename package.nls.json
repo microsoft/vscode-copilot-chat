@@ -78,11 +78,18 @@
 		]
 	},
 	"github.copilot.viewsWelcome.codexPlaceholder": {
-		"message": "[Start a coding session](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)\n\nThis will install [the OpenAI Codex extension](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D).",
+		"message": "[Start OpenAI Codex Session](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)\n\nThis will install [the OpenAI Codex extension](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D).",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)'}",
 			"{Locked='](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D)'}"
+		]
+	},
+	"github.copilot.viewsWelcome.codexWelcomeView": {
+		"message": "[Start OpenAI Codex Session](command:chatgpt.newCodexPanel)",
+		"comment": [
+			"{Locked='['}",
+			"{Locked='](command:chatgpt.newCodexPanel)'}"
 		]
 	},
 	"github.copilot.viewsWelcome.agentsPlaceholder": {
@@ -107,10 +114,10 @@
 		]
 	},
 	"github.copilot.viewsWelcome.cloudSessionsEmpty.contents": {
-		"message": "[Start Cloud Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcloud-agent)",
+		"message": "[Start Cloud Agent Session](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)",
 		"comment": [
 			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilotcloud-agent)'}"
+			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)'}"
 		]
 	},
 	"github.copilot.viewsWelcome.noGitHub.contents": "Clone or open a GitHub repository to get started",
@@ -176,8 +183,6 @@
 	"github.copilot.config.alternateGptPrompt.enabled": "Enables an experimental alternate prompt for GPT models instead of the default prompt.",
 	"github.copilot.config.gpt5AlternatePrompt": "Specifies an experimental alternate prompt to use for GPT-5 models.",
 	"github.copilot.config.gpt5CodexAlternatePrompt": "Specifies an experimental alternate prompt to use for the GPT-5-Codex model.",
-	"github.copilot.config.grokCodeAlternatePrompt": "Specifies an experimental alternate prompt to use for Grok Code models.",
-	"github.copilot.config.claudeSonnet45AlternatePrompt": "Specifies an experimental alternate prompt to use for Claude Sonnet 4.5.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
 	"copilot.description": "Ask or edit in context",
 	"copilot.edits.description": "Edit files in your workspace",

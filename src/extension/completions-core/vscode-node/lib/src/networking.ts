@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken } from '../../types/src';
 import { apiVersion, EditorSession, editorVersionHeaders } from './config';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { telemetry, TelemetryData } from './telemetry';
 
 /**
@@ -59,7 +59,7 @@ export abstract class Fetcher {
 }
 
 export function postRequest(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	url: string,
 	secretKey: string,
 	intent: string | undefined, // Must be passed in, even if explicitly `undefined`

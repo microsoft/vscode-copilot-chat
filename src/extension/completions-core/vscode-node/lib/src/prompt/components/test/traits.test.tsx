@@ -11,7 +11,7 @@ import { CancellationTokenSource } from 'vscode-languageserver-protocol';
 import { PromptSnapshotNode } from '../../../../../prompt/src/components/components';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { extractNodesWitPath } from '../../../../../prompt/src/test/components/testHelpers';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { CompletionRequestData } from '../../../prompt/completionsPromptFactory/componentsCompletionsPromptFactory';
 import { Traits } from '../../../prompt/components/traits';
 import { TraitWithId } from '../../../prompt/contextProviders/contextItemSchemas';
@@ -21,7 +21,7 @@ import { querySnapshot } from '../../../test/snapshot';
 import { createTextDocument } from '../../../test/textDocument';
 
 suite('Traits component', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	const trait1: TraitWithId = {
 		name: 'foo',
@@ -94,7 +94,7 @@ suite('Traits component', function () {
 	});
 });
 
-async function renderTrait(ctx: Context, traits?: TraitWithId[]) {
+async function renderTrait(ctx: ICompletionsContextService, traits?: TraitWithId[]) {
 	const document = createTextDocument(
 		'file:///foo.ts',
 		'typescript',

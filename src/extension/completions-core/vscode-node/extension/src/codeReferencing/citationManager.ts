@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
-import { CitationManager, IPDocumentCitation } from '../../../lib/src/citationManager';
-import { Context } from '../../../lib/src/context';
-import { OutputPaneShowCommand } from '../../../lib/src/snippy/constants';
-import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { commands } from 'vscode';
 import { CodeReference } from '.';
+import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
+import { CitationManager, IPDocumentCitation } from '../../../lib/src/citationManager';
+import { ICompletionsContextService } from '../../../lib/src/context';
+import { OutputPaneShowCommand } from '../../../lib/src/snippy/constants';
+import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { notify } from './matchNotifier';
 import { GitHubCopilotLogger } from './outputChannel';
 
@@ -26,7 +26,7 @@ export class LoggingCitationManager extends CitationManager {
 			if (this.logger) {
 				return;
 			}
-			this.logger = GitHubCopilotLogger.create(codeReference.ctx);
+			this.logger = codeReference.ctx.instantiationService.createInstance(GitHubCopilotLogger);
 			const initialNotificationCommand = commands.registerCommand(OutputPaneShowCommand, () =>
 				this.logger?.forceShow()
 			);
@@ -35,7 +35,7 @@ export class LoggingCitationManager extends CitationManager {
 		this.codeReference.addDisposable(disposable);
 	}
 
-	async handleIPCodeCitation(ctx: Context, citation: IPDocumentCitation): Promise<void> {
+	async handleIPCodeCitation(ctx: ICompletionsContextService, citation: IPDocumentCitation): Promise<void> {
 		if (!this.codeReference.enabled || !this.logger || citation.details.length === 0) {
 			return;
 		}

@@ -6,7 +6,7 @@ import { CompletionsCapiBridge } from '../../bridge/src/completionsCapiBridge';
 import { CopilotToken } from './auth/copilotTokenManager';
 import { getLastCopilotToken } from './auth/copilotTokenNotifier';
 import { ConfigKey, ConfigKeyType, getConfig, isProduction } from './config';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { isRunningInTest } from './util/runtimeMode';
 import { joinPath } from './util/uri';
 
@@ -15,7 +15,7 @@ type ServiceEndpoints = {
 	'origin-tracker': string;
 };
 
-function getDefaultEndpoints(ctx: Context): ServiceEndpoints {
+function getDefaultEndpoints(ctx: ICompletionsContextService): ServiceEndpoints {
 	const capi = ctx.get(CompletionsCapiBridge);
 	return {
 		proxy: capi.capiClientService.proxyBaseURL,
@@ -29,7 +29,7 @@ function getDefaultEndpoints(ctx: Context): ServiceEndpoints {
  * `testOverrideKeys` is used instead of `overrideKeys`.
  */
 function urlConfigOverride(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	overrideKeys: ConfigKeyType[],
 	testOverrideKeys?: ConfigKeyType[]
 ): string | undefined {
@@ -48,7 +48,7 @@ function urlConfigOverride(
 	return undefined;
 }
 
-function getEndpointOverrideUrl(ctx: Context, endpoint: keyof ServiceEndpoints): string | undefined {
+function getEndpointOverrideUrl(ctx: ICompletionsContextService, endpoint: keyof ServiceEndpoints): string | undefined {
 	switch (endpoint) {
 		case 'proxy':
 			return urlConfigOverride(
@@ -64,7 +64,7 @@ function getEndpointOverrideUrl(ctx: Context, endpoint: keyof ServiceEndpoints):
 }
 
 export function getEndpointUrl(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	token: CopilotToken,
 	endpoint: keyof ServiceEndpoints,
 	...paths: string[]
@@ -77,7 +77,7 @@ export function getEndpointUrl(
  * Return the endpoints from the most recent token, or fall back to the defaults if we don't have one.
  * Generally you should be using token.endpoints or getEndpointUrl() instead.
  */
-export function getLastKnownEndpoints(ctx: Context) {
+export function getLastKnownEndpoints(ctx: ICompletionsContextService) {
 	return getLastCopilotToken(ctx)?.endpoints ?? getDefaultEndpoints(ctx);
 }
 

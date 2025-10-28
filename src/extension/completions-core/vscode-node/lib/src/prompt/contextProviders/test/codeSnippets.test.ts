@@ -6,7 +6,7 @@
 import assert from 'assert';
 import os from 'os';
 import { CopilotContentExclusionManager } from '../../../contentExclusion/contentExclusionManager';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { FileSystem } from '../../../fileSystem';
 import { createLibTestingContext } from '../../../test/context';
 import { FakeFileSystem } from '../../../test/filesystem';
@@ -21,7 +21,7 @@ import { getCodeSnippetsFromContextItems } from '../codeSnippets';
 import { CodeSnippetWithId } from '../contextItemSchemas';
 
 suite('codeSnippetsContextProvider', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let tdm: TestTextDocumentManager;
 	const resolvedContextItems: ResolvedContextItem<CodeSnippetWithId>[] = [
 		{
@@ -137,7 +137,7 @@ suite('codeSnippetsContextProvider', function () {
 		assert.ok(codeSnippets.map(t => t.uri).includes('file:///maybe.js'));
 
 		// If it's content excluded, it's not returned
-		ctx.forceSet(CopilotContentExclusionManager, new BlockingContentExclusionManager(ctx, ['file:///maybe.js']));
+		ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(BlockingContentExclusionManager, ['file:///maybe.js']));
 		const codeSnippetsAfterExclusion = await getCodeSnippetsFromContextItems(
 			ctx,
 			'COMPLETION_ID',
@@ -162,7 +162,7 @@ suite('codeSnippetsContextProvider', function () {
 		);
 
 		// Use a SimpleTestTextDocumentManager to read from the FakeFileSystem
-		const tdm = new SimpleTestTextDocumentManager(ctx);
+		const tdm = ctx.instantiationService.createInstance(SimpleTestTextDocumentManager);
 		ctx.forceSet(TextDocumentManager, tdm);
 
 		const additionalUri = `${uriPrefix}/fake2.js`;
@@ -200,7 +200,7 @@ suite('codeSnippetsContextProvider', function () {
 	});
 
 	test('content exclusion does not check multiple times', async function () {
-		const tdm = new FakeTextDocumentManager(ctx);
+		const tdm = ctx.instantiationService.createInstance(FakeTextDocumentManager);
 		ctx.forceSet(TextDocumentManager, tdm);
 
 		await getCodeSnippetsFromContextItems(ctx, 'COMPLETION_ID', resolvedContextItems, 'javascript');
@@ -211,7 +211,7 @@ suite('codeSnippetsContextProvider', function () {
 	});
 
 	test('files are not returned if any of their additionalUris are excluded', async function () {
-		ctx.forceSet(CopilotContentExclusionManager, new BlockingContentExclusionManager(ctx, ['file:///foo2.js']));
+		ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(BlockingContentExclusionManager, ['file:///foo2.js']));
 		const codeSnippets = await getCodeSnippetsFromContextItems(
 			ctx,
 			'COMPLETION_ID',

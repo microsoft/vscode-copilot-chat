@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { CHAT_MODEL, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -332,7 +332,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 						newString,
 					},
 					eol,
-					await this.endpointProvider.getChatEndpoint(CHAT_MODEL.GPT4OMINI),
+					await this.endpointProvider.getChatEndpoint('copilot-fast'),
 					token
 				);
 				if (healed.params.oldString === healed.params.newString) {

@@ -3,15 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ComponentStatistics, PromptMetadata } from '../../../../prompt/src/components/components';
+import { commentBlockAsSingles } from '../../../../prompt/src/languageMarker';
+import { PromptComponentAllocation, PromptComponentId } from '../../../../prompt/src/prompt';
+import { TokenizerName } from '../../../../prompt/src/tokenization';
+import { CancellationToken } from '../../../../types/src';
 import { CompletionState } from '../../completionState';
 import { CopilotContentExclusionManager, StatusBarEvent } from '../../contentExclusion/contentExclusionManager';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Features } from '../../experiments/features';
 import { logger } from '../../logger';
-import {
-	CompletionsPromptFactory,
-	CompletionsPromptOptions,
-} from './completionsPromptFactory';
+import { telemetryException, TelemetryWithExp } from '../../telemetry';
+import { TextDocumentContents } from '../../textDocument';
 import { ContextProviderBridge } from '../components/contextProviderBridge';
 import {
 	renderWithMetadata,
@@ -40,13 +43,10 @@ import {
 	PromptResponse,
 	trimLastLine,
 } from '../prompt';
-import { telemetryException, TelemetryWithExp } from '../../telemetry';
-import { TextDocumentContents } from '../../textDocument';
-import { ComponentStatistics, PromptMetadata } from '../../../../prompt/src/components/components';
-import { commentBlockAsSingles } from '../../../../prompt/src/languageMarker';
-import { PromptComponentAllocation, PromptComponentId } from '../../../../prompt/src/prompt';
-import { TokenizerName } from '../../../../prompt/src/tokenization';
-import { CancellationToken } from '../../../../types/src';
+import {
+	CompletionsPromptFactory,
+	CompletionsPromptOptions,
+} from './completionsPromptFactory';
 
 // If the space allocated to the suffix is at least this fraction of the estimated suffix cost,
 // we will render the suffix before the prefix and use any surplus suffix budget to fill the prefix.
@@ -57,8 +57,8 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 	private renderId = 0;
 
 	constructor(
-		protected readonly ctx: Context,
-		protected components: Record<PromptComponentId, VirtualPromptComponent>
+		protected components: Record<PromptComponentId, VirtualPromptComponent>,
+		@ICompletionsContextService protected readonly ctx: ICompletionsContextService,
 	) { }
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {

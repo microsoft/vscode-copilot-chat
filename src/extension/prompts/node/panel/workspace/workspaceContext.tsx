@@ -271,7 +271,7 @@ export class WorkspaceContext extends PromptElement<WorkspaceContextProps, Works
 			return;
 		}
 
-		const contextEndpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const contextEndpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		if (token.isCancellationRequested) {
 			throw new CancellationError();
 		}

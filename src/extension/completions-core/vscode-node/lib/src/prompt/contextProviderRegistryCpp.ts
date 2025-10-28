@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { logger } from '../logger';
-import { ActiveExperiments } from './contextProviderRegistry';
 import { TelemetryWithExp } from '../telemetry';
+import { ActiveExperiments } from './contextProviderRegistry';
 
 interface CppContextProviderParams {
 	[key: string]: string | number | boolean;
@@ -24,7 +24,7 @@ const cppContextProviderParamsDefault: CppContextProviderParams = {
 const VSCodeCppContextProviderId = 'ms-vscode.cpptools';
 
 export function fillInCppVSCodeActiveExperiments(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	matchedContextProviders: string[],
 	activeExperiments: ActiveExperiments,
 	telemetryData: TelemetryWithExp
@@ -37,7 +37,7 @@ export function fillInCppVSCodeActiveExperiments(
 	}
 }
 
-function addActiveExperiments(ctx: Context, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
+function addActiveExperiments(ctx: ICompletionsContextService, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
 	try {
 		let params = cppContextProviderParamsDefault;
 		const cppContextProviderParams = ctx.get(Features).cppContextProviderParams(telemetryData);

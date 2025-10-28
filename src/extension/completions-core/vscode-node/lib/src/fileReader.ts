@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { FileSystem } from './fileSystem';
 import { CopilotTextDocument, ITextDocument, TextDocumentIdentifier, TextDocumentResult } from './textDocument';
 import { TextDocumentManager } from './textDocumentManager';
@@ -10,7 +10,7 @@ import { isDocumentValid } from './util/documentEvaluation';
 import { basename } from './util/uri';
 
 export class FileReader {
-	constructor(private readonly ctx: Context) { }
+	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) { }
 
 	getRelativePath(doc: TextDocumentIdentifier) {
 		const documentManager = this.ctx.get(TextDocumentManager);

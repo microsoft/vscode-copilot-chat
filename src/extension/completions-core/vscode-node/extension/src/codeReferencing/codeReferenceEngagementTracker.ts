@@ -3,16 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../../lib/src/context';
-import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { Disposable, TextEditor, window } from 'vscode';
+import { ICompletionsContextService } from '../../../lib/src/context';
+import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { citationsChannelName } from './outputChannel';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 export class CodeRefEngagementTracker {
 	private activeLog = false;
 	private subscriptions: Disposable[] = [];
 
-	constructor(private ctx: Context) { }
+	constructor(@ICompletionsContextService private ctx: ICompletionsContextService) { }
 
 	register() {
 		const activeEditorChangeSub = window.onDidChangeActiveTextEditor(this.onActiveEditorChange);
@@ -59,8 +60,8 @@ export class CodeRefEngagementTracker {
 	};
 }
 
-export function registerCodeRefEngagementTracker(ctx: Context) {
-	const engagementTracker = new CodeRefEngagementTracker(ctx);
+export function registerCodeRefEngagementTracker(instantiationService: IInstantiationService) {
+	const engagementTracker = instantiationService.createInstance(CodeRefEngagementTracker);
 	engagementTracker.register();
 
 	return engagementTracker;

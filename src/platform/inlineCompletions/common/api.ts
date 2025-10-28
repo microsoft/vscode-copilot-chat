@@ -177,6 +177,12 @@ export namespace Copilot {
 		 * Default value is 0.
 		 */
 		importance?: number;
+
+		/**
+		* A unique ID for the context item, used to provide detailed statistics about
+		* the item's usage. If an ID is not provided, it will be generated randomly.
+		*/
+		id?: string;
 	}
 
 	// A key-value pair used for short string snippets.

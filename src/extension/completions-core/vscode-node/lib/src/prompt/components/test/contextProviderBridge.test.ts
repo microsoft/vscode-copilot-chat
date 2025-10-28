@@ -6,7 +6,7 @@
 import * as assert from 'assert';
 import { CodeSnippet, ContextProvider, ContextResolver, SupportedContextItem, Trait } from '../../../../../types/src';
 import { createCompletionState } from '../../../completionState';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { Features } from '../../../experiments/features';
 import { TelemetryWithExp } from '../../../telemetry';
 import { createLibTestingContext } from '../../../test/context';
@@ -16,14 +16,14 @@ import { ContextProviderRegistry } from '../../contextProviderRegistry';
 import { ContextProviderBridge } from './../contextProviderBridge';
 
 suite('Context Provider Bridge', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let bridge: ContextProviderBridge;
 
 	setup(function () {
 		ctx = createLibTestingContext();
 		ctx.get(ContextProviderRegistry).registerContextProvider(new TestContextProvider());
 		ctx.get(Features).contextProviders = () => ['testContextProvider'];
-		bridge = new ContextProviderBridge(ctx);
+		bridge = ctx.instantiationService.createInstance(ContextProviderBridge);
 	});
 
 	test('await context resolution by id', async function () {
@@ -63,7 +63,7 @@ suite('Context Provider Bridge', function () {
 			new TestContextProvider({ shouldThrow: true, id: 'errorProvider' })
 		);
 		ctx.get(Features).contextProviders = () => ['errorProvider'];
-		const errorBridge = new ContextProviderBridge(ctx);
+		const errorBridge = ctx.instantiationService.createInstance(ContextProviderBridge);
 		const state = testCompletionState();
 
 		errorBridge.schedule(state, 'err-id', 'opId', TelemetryWithExp.createEmptyConfigForTesting());

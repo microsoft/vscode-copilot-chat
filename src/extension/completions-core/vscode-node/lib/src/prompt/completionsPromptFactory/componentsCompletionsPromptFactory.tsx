@@ -6,7 +6,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
 import { CopilotContentExclusionManager, StatusBarEvent } from '../../contentExclusion/contentExclusionManager';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { logger } from '../../logger';
 
 import { DataPipe, VirtualPrompt } from '../../../../prompt/src/components/virtualPrompt';
@@ -120,7 +120,7 @@ const availableDeclarativePrompts: AvailableDeclarativePrompts = {
 };
 
 // The weights mimic the PromptPriorityList from prompt/src/wishlist.ts
-function defaultCompletionsPrompt(ctx: Context) {
+function defaultCompletionsPrompt(ctx: ICompletionsContextService) {
 	return (
 		<>
 			<CompletionsContext>
@@ -143,9 +143,9 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 	private promptOrdering: PromptOrdering;
 
 	constructor(
-		private readonly ctx: Context,
-		virtualPrompt?: VirtualPrompt,
-		ordering?: PromptOrdering
+		virtualPrompt: VirtualPrompt | undefined = undefined,
+		ordering: PromptOrdering | undefined = undefined,
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
 	) {
 		this.promptOrdering = ordering ?? PromptOrdering.Default;
 		this.virtualPrompt = virtualPrompt ?? new VirtualPrompt(this.completionsPrompt());
@@ -182,6 +182,7 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 		}
 
 		// TODO: Prompt ordering changes are triggered by ExP changes.
+		// TODO@benibenj remove this as its always true (except in tests)
 		const promptOrdering = promptOpts?.separateContext ? PromptOrdering.SplitContext : PromptOrdering.Default;
 		this.setPromptOrdering(promptOrdering);
 
@@ -455,7 +456,7 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 // - it's explicitly enabled via EXP flag or config.
 // - no code snippets are provided (which includes the case when all providers error).
 function similarFilesEnabled(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	detectedLanguageId: string,
 	matchedContextItems: ResolvedContextItem<SupportedContextItemWithId>[],
 	telemetryData: TelemetryWithExp

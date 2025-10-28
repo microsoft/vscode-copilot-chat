@@ -8,7 +8,7 @@
 import * as assert from 'assert';
 import dedent from 'ts-dedent';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { CurrentFile } from '../../../prompt/components/currentFile';
 import { createCompletionRequestData } from '../../../test/completionsPrompt';
 import { createLibTestingContext } from '../../../test/context';
@@ -16,7 +16,7 @@ import { querySnapshot } from '../../../test/snapshot';
 import { createTextDocument } from '../../../test/textDocument';
 
 suite('Completions Prompt Renderer', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	setup(function () {
 		ctx = createLibTestingContext();

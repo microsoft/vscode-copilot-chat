@@ -5,14 +5,14 @@
 import * as assert from 'assert';
 import sinon from 'sinon';
 import { ExtensionContext, ExtensionMode, commands, env } from 'vscode';
-import { Context } from '../../../../lib/src/context';
+import { ICompletionsContextService } from '../../../../lib/src/context';
 import { NotificationSender } from '../../../../lib/src/notificationSender';
 import { OutputPaneShowCommand } from '../../../../lib/src/snippy/constants';
+import { withInMemoryTelemetry } from '../../../../lib/src/test/telemetry';
+import { TestNotificationSender } from '../../../../lib/src/test/testHelpers';
 import { Extension } from '../../extensionContext';
 import { createExtensionTestingContext } from '../../test/context';
 import { notify } from '../matchNotifier';
-import { TestNotificationSender } from '../../../../lib/src/test/testHelpers';
-import { withInMemoryTelemetry } from '../../../../lib/src/test/telemetry';
 
 /**
  * Minimal fake implementation of the VS Code globalState object.
@@ -33,7 +33,7 @@ class FakeGlobalState {
 }
 
 suite('.match', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	setup(function () {
 		ctx = createExtensionTestingContext();

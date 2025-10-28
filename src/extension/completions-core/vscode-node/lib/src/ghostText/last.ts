@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Logger } from '../logger';
 import { postInsertionTasks, postRejectionTasks } from '../postInsertion';
 import { countLines, PartialAcceptTriggerKind, SuggestionStatus } from '../suggestions/partialSuggestions';
@@ -89,7 +89,7 @@ function computeRejectedCompletions<
 	return rejectedCompletions;
 }
 
-export function rejectLastShown(ctx: Context, offset?: number) {
+export function rejectLastShown(ctx: ICompletionsContextService, offset?: number) {
 	const last = ctx.get(LastGhostText);
 	if (!last.position || !last.uri) { return; }
 	//The position has changed and we're not in typing-as-suggested flow
@@ -103,7 +103,7 @@ export function rejectLastShown(ctx: Context, offset?: number) {
 }
 
 export function setLastShown(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	document: TextDocumentContents,
 	position: IPosition,
 	resultType: ResultType
@@ -125,7 +125,7 @@ export function setLastShown(
 	return last.index;
 }
 
-export function handleGhostTextShown(ctx: Context, cmp: CopilotCompletion) {
+export function handleGhostTextShown(ctx: ICompletionsContextService, cmp: CopilotCompletion) {
 	const last = ctx.get(LastGhostText);
 	last.index = cmp.index;
 	if (!last.shownCompletions.find(c => c.index === cmp.index)) {
@@ -154,7 +154,7 @@ export function handleGhostTextShown(ctx: Context, cmp: CopilotCompletion) {
  * Handles partial acceptance for VS Code clients using line-based strategy.
  * VS Code tracks acceptance by lines and resets the accepted length per line.
  */
-function handleLineAcceptance(ctx: Context, cmp: CopilotCompletion, acceptedLength: number) {
+function handleLineAcceptance(ctx: ICompletionsContextService, cmp: CopilotCompletion, acceptedLength: number) {
 	const last = ctx.get(LastGhostText);
 
 	// If this is the first acceptance, we need to initialize the linesLeft
@@ -181,7 +181,7 @@ function handleLineAcceptance(ctx: Context, cmp: CopilotCompletion, acceptedLeng
  * This method is primarily used by VS Code for explicit full acceptances.
  */
 export function handleGhostTextPostInsert(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	cmp: CopilotCompletion,
 	triggerCategory: PostInsertionCategory = 'ghostText'
 ) {
@@ -220,7 +220,7 @@ export function handleGhostTextPostInsert(
 }
 
 export function handlePartialGhostTextPostInsert(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	cmp: CopilotCompletion,
 	acceptedLength: number,
 	triggerKind: PartialAcceptTriggerKind = PartialAcceptTriggerKind.Unknown,

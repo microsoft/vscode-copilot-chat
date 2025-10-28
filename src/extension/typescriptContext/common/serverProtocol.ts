@@ -286,6 +286,11 @@ export type ContextRunnableResult = {
 	 * document and position.
 	 */
 	speculativeKind: SpeculativeKind;
+
+	/**
+	 * A human readable path to ease debugging.
+	 */
+	debugPath?: ContextRunnableResultId | undefined;
 }
 
 export type CachedContextRunnableResult = {

@@ -31,7 +31,7 @@ import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringE
 import { Position } from '../../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
-import { getInformationDelta, InformationDelta } from '../../common/ghNearbyNesProvider';
+import { getInformationDelta, InformationDelta } from '../../common/informationDelta';
 import { RejectionCollector } from '../../common/rejectionCollector';
 import { IVSCodeObservableDocument, VSCodeWorkspace } from '../parts/vscodeWorkspace';
 import { AnyDiagnosticCompletionItem, AnyDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/anyDiagnosticsCompletionProvider';

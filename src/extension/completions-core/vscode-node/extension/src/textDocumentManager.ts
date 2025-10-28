@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { window, workspace } from 'vscode';
-import { Context } from '../../lib/src/context';
+import { ICompletionsContextService } from '../../lib/src/context';
 import { detectLanguage } from '../../lib/src/language/languageDetection';
 import { CopilotTextDocument, INotebookCell, INotebookDocument, ITextDocument } from '../../lib/src/textDocument';
 import { TextDocumentManager, WorkspaceFoldersChangeEvent } from '../../lib/src/textDocumentManager';
@@ -21,7 +21,7 @@ const ignoreUriSchemes = new Set([
 	'chat-editing-snapshot-text-model', // VS Code Chat temporary editing snapshot
 ]);
 
-export function wrapDoc(_ctx: Context, doc: vscode.TextDocument): ITextDocument | undefined {
+export function wrapDoc(_ctx: ICompletionsContextService, doc: vscode.TextDocument): ITextDocument | undefined {
 	if (ignoreUriSchemes.has(doc.uri.scheme)) {
 		return;
 	}
@@ -40,7 +40,7 @@ export function wrapDoc(_ctx: Context, doc: vscode.TextDocument): ITextDocument 
 }
 
 export class ExtensionTextDocumentManager extends TextDocumentManager {
-	constructor(ctx: Context) {
+	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
 		super(ctx);
 	}
 

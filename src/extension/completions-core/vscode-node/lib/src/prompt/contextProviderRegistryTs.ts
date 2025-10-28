@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { logger } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
@@ -16,7 +16,7 @@ interface ContextProviderParams {
 }
 
 export function fillInTsActiveExperiments(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	matchedContextProviders: string[],
 	activeExperiments: ActiveExperiments,
 	telemetryData: TelemetryWithExp

@@ -4,26 +4,26 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
-import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
-import { BlockMode } from '../config';
-import { Context } from '../context';
-import { ExpConfig, ExpTreatmentVariables, ExpTreatmentVariableValue } from './expConfig';
-import { Filter, FilterSettings } from './filters';
-import { TelemetryData, TelemetryWithExp } from '../telemetry';
 import {
 	DEFAULT_MAX_COMPLETION_LENGTH,
 	DEFAULT_MAX_PROMPT_LENGTH,
 	DEFAULT_PROMPT_ALLOCATION_PERCENT,
 	DEFAULT_SUFFIX_MATCH_THRESHOLD
 } from '../../../prompt/src/prompt';
+import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
+import { BlockMode } from '../config';
+import { ICompletionsContextService } from '../context';
+import { TelemetryData, TelemetryWithExp } from '../telemetry';
 import { createCompletionsFilters } from './defaultExpFilters';
+import { ExpConfig, ExpTreatmentVariables, ExpTreatmentVariableValue } from './expConfig';
+import { Filter, FilterSettings } from './filters';
 
 type CompletionsFiltersInfo = { uri: string; languageId: string };
 
 /** General-purpose API for accessing ExP variable values. */
 export class Features {
 
-	constructor(private readonly ctx: Context) { }
+	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) { }
 
 	/**
 	 * Central logic for obtaining the assignments of treatment groups
@@ -289,11 +289,7 @@ export class Features {
 	}
 
 	enablePromptContextProxyField(telemetryWithExp: TelemetryWithExp): boolean {
-		return (
-			(telemetryWithExp.filtersAndExp.exp.variables[
-				ExpTreatmentVariables.EnablePromptContextProxyField
-			] as boolean) ?? true // Exp is set to true to 100%
-		);
+		return true;
 	}
 
 	enableProgressiveReveal(telemetryWithExp: TelemetryWithExp): boolean {
