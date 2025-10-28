@@ -125,7 +125,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			const model = 'model' in requestOrFamilyOrModel ? requestOrFamilyOrModel.model : requestOrFamilyOrModel;
 			if (experimentModelConfig && model && model.id === experimentModelConfig.id) {
 				endpoint = (await this.getAllChatEndpoints()).find(e => e.model === experimentModelConfig.selected) || await this.getChatEndpoint('gpt-4.1');
-			} else if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.psuedoModelId) {
+			} else if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.pseudoModelId) {
 				return this._autoModeService.resolveAutoModeEndpoint(requestOrFamilyOrModel as ChatRequest, Array.from(this._chatEndpoints.values()));
 			} else if (model && model.vendor === 'copilot') {
 				let modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
