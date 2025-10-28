@@ -234,6 +234,10 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 			const pendingContextItem = provider.resolver.resolve(request, providerCancellationTokenSource.token);
 			resolutionMap.set(provider.id, pendingContextItem);
 		}
+
+		const statistics = this.ctx.get(ContextProviderStatistics).getStatisticsForCompletion(completionId);
+		statistics.setOpportunityId(opportunityId);
+
 		const results = await resolveAll(resolutionMap, providerCancellationTokenSource.token);
 
 		// Once done, clear the timeout so that we don't cancel the request once it has finished.
@@ -303,10 +307,7 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 
 					resolvedContextItems.push(resolvedContextItem);
 				}
-				this.ctx
-					.get(ContextProviderStatistics)
-					.getStatisticsForCompletion(completionId)
-					.setLastResolution(provider.id, result.status);
+				statistics.setLastResolution(provider.id, result.status);
 			} else {
 				// This can't happen
 				logger.error(this.ctx, `Context provider ${provider.id} not found in results`);
