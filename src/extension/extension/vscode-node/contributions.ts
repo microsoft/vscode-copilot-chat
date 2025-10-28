@@ -28,6 +28,7 @@ import { InlineChatHintFeature } from '../../inlineChat/vscode-node/inlineChatHi
 import { InlineEditProviderFeature } from '../../inlineEdits/vscode-node/inlineEditProviderFeature';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
 import { TestGenLensContribution } from '../../intents/vscode-node/testGenLens';
+import { TypeHierarchyContribution } from '../../languages/vscode-node/typeHierarchy.contribution';
 import { LoggingActionsContrib } from '../../log/vscode-node/loggingActions';
 import { RequestLogTree } from '../../log/vscode-node/requestLogTree';
 import { McpSetupCommands } from '../../mcp/vscode-node/commands';
@@ -81,6 +82,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ChatQuotaContribution),
 	asContributionFactory(NotebookFollowCommands),
 	asContributionFactory(PromptFileContextContribution),
+	asContributionFactory(TypeHierarchyContribution),
 	asContributionFactory(ChatReplayContribution),
 	asContributionFactory(CompletionsCoreContribution),
 	asContributionFactory(CompletionsUnificationContribution),

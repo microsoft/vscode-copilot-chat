@@ -208,6 +208,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.SearchViewResults]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalSelection]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalLastCommand]: ToolCategory.VSCodeInteraction,
+	[ToolName.TypeHierarchy]: ToolCategory.VSCodeInteraction,
 
 	// Testing
 	[ToolName.RunTests]: ToolCategory.Testing,
