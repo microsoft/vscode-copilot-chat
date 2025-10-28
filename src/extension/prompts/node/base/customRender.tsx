@@ -6,7 +6,7 @@ import { BasePromptElementProps, PromptElement, PromptPiece } from '@vscode/prom
 
 interface CustomRenderProps<T> extends BasePromptElementProps {
 	id: keyof T;
-	overrides?: T;
+	overrides?: T extends { [key: string]: () => PromptElement | PromptPiece } ? T : never;
 }
 
 export class CustomRender<
@@ -18,7 +18,7 @@ export class CustomRender<
 
 	render() {
 		if (this.props.overrides && Object.hasOwn(this.props.overrides, this.props.id)) {
-			return this.props.overrides[this.props.id];
+			return this.props.overrides[this.props.id]();
 		}
 		return <>{this.props.children}</>;
 	}

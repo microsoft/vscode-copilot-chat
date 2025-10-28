@@ -727,7 +727,7 @@ class OpenAIPromptResolver implements IAgentPrompt {
 		if (endpoint.model?.startsWith('gpt-5')) {
 			return {
 				overrides: {
-					SystemMessageContent: <>
+					SystemMessageContent: () => <>
 						<GPT5CopilotIdentityRule />
 						<Gpt5SafetyRule />
 					</>

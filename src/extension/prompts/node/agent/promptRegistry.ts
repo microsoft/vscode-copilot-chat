@@ -9,7 +9,7 @@ import { DefaultAgentPromptProps } from './defaultAgentInstructions';
 
 export interface ModelOptions {
 	readonly overrides?: {
-		readonly SystemMessageContent?: PromptElement | PromptPiece;
+		readonly SystemMessageContent?: () => PromptElement | PromptPiece;
 	};
 }
 
