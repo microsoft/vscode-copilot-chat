@@ -20,6 +20,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location } from '../../../vscodeTypes';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
+import { ISystemContextService } from '../../context/node/systemContextService';
 
 export function checkCancellation(token: CancellationToken): void {
 	if (token.isCancellationRequested) {
@@ -114,10 +115,13 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
+	const systemContextService = accessor.get(ISystemContextService);
 
 	await assertFileNotContentExcluded(accessor, uri);
 
-	if (!workspaceService.getWorkspaceFolder(normalizePath(uri)) && !customInstructionsService.isExternalInstructionsFile(uri) && uri.scheme !== Schemas.untitled) {
+	const isSystemPath = systemContextService.isSystemPath(uri);
+
+	if (!isSystemPath && !workspaceService.getWorkspaceFolder(normalizePath(uri)) && !customInstructionsService.isExternalInstructionsFile(uri) && uri.scheme !== Schemas.untitled) {
 		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
 		if (!fileOpenInSomeTab) {
 			throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is outside of the workspace, and not open in an editor, and can't be read`);

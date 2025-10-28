@@ -1814,6 +1814,12 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.chat.addSystemContext",
+				"title": "%github.copilot.command.addSystemContext%",
+				"category": "Chat",
+				"icon": "$(folder-library)"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
@@ -3521,6 +3527,7 @@
 					"when": "view == workbench.panel.chat.view.copilot",
 					"group": "3_show"
 				},
+
 				{
 					"command": "github.copilot.cloud.sessions.refresh",
 					"when": "view == workbench.view.chat.sessions.copilot-cloud-agent",
