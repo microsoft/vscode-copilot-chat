@@ -24,7 +24,7 @@ import { CustomModel } from './endpointProvider';
  * It just effectively wraps a different endpoint and adds the auto stuff on top
  */
 export class AutoChatEndpoint implements IChatEndpoint {
-	public static readonly psuedoModelId = 'auto';
+	public static readonly pseudoModelId = 'auto';
 	maxOutputTokens: number = this._wrappedEndpoint.maxOutputTokens;
 	model: string = this._wrappedEndpoint.model;
 	supportsToolCalls: boolean = this._wrappedEndpoint.supportsToolCalls;
