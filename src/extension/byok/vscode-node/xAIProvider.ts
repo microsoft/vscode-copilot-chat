@@ -32,4 +32,32 @@ export class XAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 			_instantiationService,
 		);
 	}
+
+	protected override async getAllModels(): Promise<BYOKKnownModels> {
+		try {
+			const response = await this._fetcherService.fetch(`${this._baseUrl}/language-models`, {
+				method: 'GET',
+				headers: {
+					'Authorization': `Bearer ${this._apiKey}`,
+					'Content-Type': 'application/json'
+				}
+			});
+
+			const data = await response.json();
+			if (!data.models || !Array.isArray(data.models)) {
+				throw new Error('Invalid response format from xAI API');
+			}
+			this._logService.trace(`Fetched ${data.models.length} language models from xAI`);
+			const modelList: BYOKKnownModels = {};
+			for (const model of data.models) {
+				if (this._knownModels && this._knownModels[model.id]) {
+					modelList[model.id] = this._knownModels[model.id];
+				}
+			}
+			this._logService.trace(`Filtered to ${Object.keys(modelList).length} known models for xAI`);
+			return modelList;
+		} catch (error) {
+			throw new Error(error.message ? error.message : error);
+		}
+	}
 }
