@@ -147,9 +147,7 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 		if (!this.session.host.isDebugging()) {
 			return undefined;
 		}
-		const startPos = this.declaration.parameters.pos;
-		const endPos = this.declaration.type?.end ?? this.declaration.parameters.end;
-		const sourceFile = this.declaration.getSourceFile();
+		const { sourceFile, startPos, endPos } = SignatureRunnable.getSourceFileAndPositions(this.declaration);
 		const start = ts.getLineAndCharacterOfPosition(sourceFile, startPos);
 		const end = ts.getLineAndCharacterOfPosition(sourceFile, endPos);
 		return `SignatureRunnable:${sourceFile.fileName}:[${start.line},${start.character},${end.line},${end.character}]`;
@@ -157,13 +155,18 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 	}
 
 	private static computeId(session: ComputeContextSession, declaration: tt.FunctionLikeDeclarationBase): string {
-		const startPos = declaration.parameters.pos;
-		const endPos = declaration.type?.end ?? declaration.parameters.end;
+		const { sourceFile, startPos, endPos } = SignatureRunnable.getSourceFileAndPositions(declaration);
 		const hash = session.host.createHash('md5'); // CodeQL [SM04514] The 'md5' algorithm is used to compute a shorter string to represent a symbol in a map. It has no security implications.
-		const sourceFile = declaration.getSourceFile();
 		hash.update(sourceFile.fileName);
 		hash.update(`[${startPos},${endPos}]`);
 		return `SignatureRunnable:${hash.digest('base64')}`;
+	}
+
+	private static getSourceFileAndPositions(declaration: tt.FunctionLikeDeclarationBase): { sourceFile: tt.SourceFile; startPos: number; endPos: number } {
+		const startPos = declaration.parameters.pos;
+		const endPos = declaration.type?.end ?? declaration.parameters.end;
+		const sourceFile = declaration.getSourceFile();
+		return { sourceFile, startPos, endPos };
 	}
 }
 
