@@ -66,3 +66,9 @@ export enum FileType {
 	Directory = 2,
 	SymbolicLink = 64
 }
+
+export enum SettingsSearchResultKind {
+	EMBEDDED = 1,
+	LLM_RANKED = 2,
+	CANCELED = 3
+}
