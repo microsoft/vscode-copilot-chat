@@ -149,7 +149,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			}
 
 			let modelCategory: { label: string; order: number } | undefined;
-			if (endpoint.model === AutoChatEndpoint.id) {
+			if (endpoint instanceof AutoChatEndpoint) {
 				modelCategory = { label: '', order: Number.MIN_SAFE_INTEGER };
 			} else if (endpoint.isPremium === undefined || this._authenticationService.copilotToken?.isFreeUser) {
 				modelCategory = { label: localize('languageModelHeader.copilot', "Copilot Models"), order: 0 };
@@ -181,8 +181,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			const session = this._authenticationService.anyGitHubSession;
 
 			const model: vscode.LanguageModelChatInformation = {
-				id: endpoint.model,
-				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
+				id: endpoint instanceof AutoChatEndpoint ? 'auto' : endpoint.model,
+				name: endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,
