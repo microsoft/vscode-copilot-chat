@@ -128,6 +128,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 					endpoint={this.props.endpoint}
 					tools={this.props.promptContext.tools?.availableTools}
 					enableCacheBreakpoints={this.props.enableCacheBreakpoints}
+					modelOptions={this.props.modelOptions}
 				/>
 			</>;
 		} else {
