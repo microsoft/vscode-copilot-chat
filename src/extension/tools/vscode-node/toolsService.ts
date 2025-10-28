@@ -8,12 +8,18 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
+// import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
+import { getContributedToolName, getToolName, getToolsForCategory, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolCategory, ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { BaseToolsService } from '../common/toolsService';
 
 export class ToolsService extends BaseToolsService {
 	declare _serviceBrand: undefined;
+
+	// private static readonly DisabledTools = [
+	// 	ToolName.Codebase, // semantic_search
+	// ];
+	private static readonly DisabledTools = getToolsForCategory(ToolCategory.Core) as ToolName[];
 
 	private readonly _copilotTools: Lazy<Map<ToolName, ICopilotTool<any>>>;
 	private readonly _contributedToolCache: {
@@ -69,7 +75,11 @@ export class ToolsService extends BaseToolsService {
 		@ILogService logService: ILogService
 	) {
 		super(logService);
-		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
+		this._copilotTools = new Lazy(() => {
+			const filteredTools = ToolRegistry.getTools()
+				.filter(t => !ToolsService.DisabledTools.includes(t.toolName));
+			return new Map(filteredTools.map(t => [t.toolName, instantiationService.createInstance(t)] as const));
+		});
 	}
 
 	invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult | vscode.LanguageModelToolResult2> {
