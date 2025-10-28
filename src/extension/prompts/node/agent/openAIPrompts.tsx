@@ -8,14 +8,16 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
+import { GPT5CopilotIdentityRule } from '../base/copilotIdentity';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
+import { Gpt5SafetyRule } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
 import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
-import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
+import { IAgentPrompt, ModelOptions, PromptConstructor, PromptRegistry } from './promptRegistry';
 
 export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -719,6 +721,20 @@ class OpenAIPromptResolver implements IAgentPrompt {
 		}
 
 		return DefaultOpenAIAgentPrompt;
+	}
+
+	resolveModelOptions(endpoint: IChatEndpoint): ModelOptions | undefined {
+		if (endpoint.model?.startsWith('gpt-5')) {
+			return {
+				overrides: {
+					SystemMessageContent: <>
+						<GPT5CopilotIdentityRule />
+						<Gpt5SafetyRule />
+					</>
+				}
+			};
+		}
+		return undefined;
 	}
 }
 

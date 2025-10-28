@@ -31,9 +31,10 @@ import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt';
-import { CopilotIdentityRules, GPT5CopilotIdentityRule } from '../base/copilotIdentity';
+import { CopilotIdentityRules } from '../base/copilotIdentity';
+import { CustomRender } from '../base/customRender';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
-import { Gpt5SafetyRule, SafetyRules } from '../base/safetyRules';
+import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { TerminalStatePromptElement } from '../base/terminalState';
 import { ChatVariables } from '../panel/chatVariables';
@@ -47,7 +48,7 @@ import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructu
 import { AgentConversationHistory } from './agentConversationHistory';
 import './allAgentPrompts';
 import { AlternateGPTPrompt, DefaultAgentPrompt } from './defaultAgentInstructions';
-import { PromptRegistry } from './promptRegistry';
+import { ModelOptions, PromptConstructor, PromptRegistry } from './promptRegistry';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -86,23 +87,19 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const instructions = await this.getInstructions();
+		const { PromptClass, modelOptions } = await this.resolveModelPrompts();
+		const { overrides } = modelOptions || {};
+
+		const instructions = await this.getInstructions(PromptClass);
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{this.props.endpoint.family.startsWith('gpt-5') ? (
-					<>
-						<GPT5CopilotIdentityRule />
-						<Gpt5SafetyRule />
-					</>
-				) : (
-					<>
-						<CopilotIdentityRules />
-						<SafetyRules />
-					</>
-				)}
+				<CustomRender id='SystemMessageContent' overrides={overrides}>
+					<CopilotIdentityRules />
+					<SafetyRules />
+				</CustomRender>
 			</SystemMessage>
 			{instructions}
 		</>;
@@ -141,7 +138,18 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 	}
 
-	private async getInstructions() {
+	private async resolveModelPrompts(): Promise<{ PromptClass: PromptConstructor | undefined; modelOptions: ModelOptions | undefined }> {
+		const agentPromptResolver = await PromptRegistry.getPrompt(this.props.endpoint);
+		if (agentPromptResolver) {
+			const resolver = this.instantiationService.createInstance(agentPromptResolver);
+			const PromptClass = resolver.resolvePrompt(this.props.endpoint);
+			const modelOptions = agentPromptResolver && this.instantiationService.createInstance(agentPromptResolver).resolveModelOptions?.(this.props.endpoint);
+			return { PromptClass, modelOptions };
+		}
+		return { PromptClass: undefined, modelOptions: undefined };
+	}
+
+	private async getInstructions(PromptClass: PromptConstructor | undefined): Promise<PromptPieceChild> {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
@@ -152,18 +160,12 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			/>;
 		}
 
-		const agentPromptResolver = await PromptRegistry.getPrompt(this.props.endpoint);
-		if (agentPromptResolver) {
-			const resolver = this.instantiationService.createInstance(agentPromptResolver);
-			const PromptClass = resolver.resolvePrompt(this.props.endpoint);
-
-			if (PromptClass) {
-				return <PromptClass
-					availableTools={this.props.promptContext.tools?.availableTools}
-					modelFamily={modelFamily}
-					codesearchMode={this.props.codesearchMode}
-				/>;
-			}
+		if (PromptClass) {
+			return <PromptClass
+				availableTools={this.props.promptContext.tools?.availableTools}
+				modelFamily={modelFamily}
+				codesearchMode={this.props.codesearchMode}
+			/>;
 		}
 
 		return <DefaultAgentPrompt
