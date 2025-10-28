@@ -144,7 +144,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 					CopilotChatSessionsProvider.TYPE,
 					copilotSessionsProvider,
 					copilotSessionsProvider.chatParticipant,
-					{ supportsInterruptions: true }
+					{ supportsInterruptions: true, acceptsInputOnEnter: false }
 				)
 			);
 			this.copilotCloudRegistrations.add(
