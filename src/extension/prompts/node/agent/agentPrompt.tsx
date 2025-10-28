@@ -339,8 +339,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
-		const isHiddenModelBFlag = await isHiddenModelB(this.props.endpoint);
-		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code') || isHiddenModelBFlag;
+		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code');
 
 		return (
 			<>
