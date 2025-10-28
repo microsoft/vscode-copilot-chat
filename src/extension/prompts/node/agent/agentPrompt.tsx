@@ -281,7 +281,7 @@ export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint,
 		chatVariables: turn.promptVariables ?? new ChatVariablesCollection(),
 		editedFileEvents: turn.editedFileEvents,
 		enableCacheBreakpoints: false, // Should only be added to the current turn - some user messages may get them in Agent post-processing
-		modelOptions
+		modelOptions,
 	};
 }
 
