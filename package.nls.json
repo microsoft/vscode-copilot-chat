@@ -183,7 +183,6 @@
 	"github.copilot.config.alternateGptPrompt.enabled": "Enables an experimental alternate prompt for GPT models instead of the default prompt.",
 	"github.copilot.config.gpt5AlternatePrompt": "Specifies an experimental alternate prompt to use for GPT-5 models.",
 	"github.copilot.config.gpt5CodexAlternatePrompt": "Specifies an experimental alternate prompt to use for the GPT-5-Codex model.",
-	"github.copilot.config.grokCodeAlternatePrompt": "Specifies an experimental alternate prompt to use for Grok Code models.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
 	"copilot.description": "Ask or edit in context",
 	"copilot.edits.description": "Edit files in your workspace",
