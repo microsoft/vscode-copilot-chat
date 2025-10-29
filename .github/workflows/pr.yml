@@ -16,7 +16,7 @@ permissions:
 jobs:
   check-test-cache:
     name: Check test cache
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,6 +26,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.14.x'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Restore build cache
         uses: actions/cache/restore@v4
@@ -55,7 +57,7 @@ jobs:
 
   check-telemetry:
     name: Check telemetry events
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -65,13 +67,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.14.x'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Validate telemetry events
         run: npx --package=@vscode/telemetry-extractor --yes vscode-telemetry-extractor -s . > /dev/null
 
   linux-tests:
     name: Test (Linux)
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -82,6 +86,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22.14.x'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -161,7 +167,7 @@ jobs:
 
   windows-tests:
     name: Test (Windows)
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-windows-2022-x64 ]
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -172,6 +178,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22.14.x'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@v5

@@ -11,7 +11,7 @@ permissions:
 jobs:
   linux:
     name: Linux
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,6 +22,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22.14.x'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Restore build cache
         uses: actions/cache@v4
@@ -45,7 +47,7 @@ jobs:
 
   windows:
     name: Windows
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-windows-2022-x64 ]
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -56,6 +58,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22.14.x'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@v5

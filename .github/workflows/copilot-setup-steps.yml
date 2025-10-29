@@ -14,7 +14,7 @@ on:
 jobs:
   copilot-setup-steps:
     name: Setup Development Environment
-    runs-on: vscode-large-runners
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,6 +25,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22.14.x'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@v5
