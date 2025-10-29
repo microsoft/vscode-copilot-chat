@@ -309,7 +309,7 @@ stderr: ${installResult.stderr}`);
 			manifest["$schema"] = McpServerSchemaVersion_v2025_07_09.SCHEMA;
 		}
 
-		// add missing properties to enable mapping
+		// add missing properties to improve mapping
 		if (!manifest.name) { manifest.name = id; }
 		if (!manifest.description) { manifest.description = id; }
 		if (!manifest.version) { manifest.version = version; }
@@ -365,7 +365,7 @@ export function mapServerJsonToMcpServer(input: unknown, registryType: RegistryT
 	return result.mcpServerConfiguration;
 }
 
-// Copied from https://github.com/microsoft/vscode/blob/d49049e5263a64cba8c9ca33f89bb0ad198f3391/src/vs/platform/mcp/common/mcpGalleryService.ts
+// Copied from https://github.com/microsoft/vscode/blob/f8e2f71c2f78ac1ce63389e761e2aefc724646fc/src/vs/platform/mcp/common/mcpGalleryService.ts
 
 interface IGalleryMcpServerDataSerializer {
 	toRawGalleryMcpServer(input: unknown): IRawGalleryMcpServer | undefined;
@@ -832,7 +832,7 @@ export interface McpServerConfigurationParseResult {
 }
 
 
-// Copied from https://github.com/microsoft/vscode/blob/d49049e5263a64cba8c9ca33f89bb0ad198f3391/src/vs/platform/mcp/common/mcpManagementService.ts
+// Copied from https://github.com/microsoft/vscode/blob/f8e2f71c2f78ac1ce63389e761e2aefc724646fc/src/vs/platform/mcp/common/mcpManagementService.ts
 
 export class McpMappingUtility {
 	getMcpServerConfigurationFromManifest(manifest: IGalleryMcpServerConfiguration, packageType: RegistryType): McpServerConfigurationParseResult {
@@ -1054,7 +1054,7 @@ export class McpMappingUtility {
 }
 
 
-// Copied from https://github.com/microsoft/vscode/blob/d49049e5263a64cba8c9ca33f89bb0ad198f3391/src/vs/platform/mcp/common/mcpPlatformTypes.ts
+// Copied from https://github.com/microsoft/vscode/blob/f8e2f71c2f78ac1ce63389e761e2aefc724646fc/src/vs/platform/mcp/common/mcpPlatformTypes.ts
 
 export interface IMcpDevModeConfig {
 	/** Pattern or list of glob patterns to watch relative to the workspace folder. */
