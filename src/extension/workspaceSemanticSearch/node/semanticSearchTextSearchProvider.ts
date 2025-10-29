@@ -305,8 +305,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 
 						this.reportTelemetry();
 					});
-
-					// Check positions of LLM-selected chunks in the reranked results
 				} catch (ex) {
 					// ignore rerank errors
 				}
