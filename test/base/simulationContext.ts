@@ -40,7 +40,7 @@ import { SimulationReviewService } from '../../src/platform/test/node/simulation
 import { NullTestProvider } from '../../src/platform/testing/common/nullTestProvider';
 import { ITestProvider } from '../../src/platform/testing/common/testProvider';
 import { ITokenizerProvider, TokenizerProvider } from '../../src/platform/tokenizer/node/tokenizer';
-import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../src/platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { IGithubAvailableEmbeddingTypesService, MockGithubAvailableEmbeddingTypesService } from '../../src/platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../src/platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../src/platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { createServiceIdentifier } from '../../src/util/common/services';
@@ -293,7 +293,7 @@ export async function createSimulationAccessor(
 	testingServiceCollection.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IReleaseNotesService, new SyncDescriptor(ReleaseNotesService));
 	testingServiceCollection.define(IWorkspaceFileIndex, new SyncDescriptor(WorkspaceFileIndex));
-	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
+	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(MockGithubAvailableEmbeddingTypesService));
 
 	if (opts.useExperimentalCodeSearchService) {
 		testingServiceCollection.define(IWorkspaceChunkSearchService, new SyncDescriptor(SimulationCodeSearchChunkSearchService, []));

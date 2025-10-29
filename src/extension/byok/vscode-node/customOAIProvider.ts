@@ -16,7 +16,7 @@ import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
 import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 
-export function resolveCustomOAIUrl(modelId: string, url: string, useResponsesApi: boolean = false): string {
+export function resolveCustomOAIUrl(modelId: string, url: string): string {
 	// The fully resolved url was already passed in
 	if (hasExplicitApiPath(url)) {
 		return url;
@@ -27,16 +27,17 @@ export function resolveCustomOAIUrl(modelId: string, url: string, useResponsesAp
 		url = url.slice(0, -1);
 	}
 
-	const apiPath = useResponsesApi ? '/responses' : '/chat/completions';
+	// Default to chat completions for base URLs
+	const defaultApiPath = '/chat/completions';
 
 	// Check if URL already contains any version pattern like /v1, /v2, etc
 	const versionPattern = /\/v\d+$/;
 	if (versionPattern.test(url)) {
-		return `${url}${apiPath}`;
+		return `${url}${defaultApiPath}`;
 	}
 
 	// For standard OpenAI-compatible endpoints, just append the standard path
-	return `${url}/v1${apiPath}`;
+	return `${url}/v1${defaultApiPath}`;
 }
 
 export function hasExplicitApiPath(url: string): boolean {
@@ -70,8 +71,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return ConfigKey.CustomOAIModels;
 	}
 
-	protected resolveUrl(modelId: string, url: string, useResponsesApi?: boolean): string {
-		return resolveCustomOAIUrl(modelId, url, useResponsesApi);
+	protected resolveUrl(modelId: string, url: string): string {
+		return resolveCustomOAIUrl(modelId, url);
 	}
 
 	protected async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
@@ -98,12 +99,9 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 	private async getAllModels(): Promise<BYOKKnownModels> {
 		const modelConfig = this.getUserModelConfig();
 		const models: BYOKKnownModels = {};
-		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._experimentationService);
 
 		for (const [modelId, modelInfo] of Object.entries(modelConfig)) {
-			// Only use Responses API if user explicitly specified /responses OR experiment is enabled (for base URLs only)
-			const useResponsesApi = modelInfo.url.includes('/responses') || (!hasExplicitApiPath(modelInfo.url) && enableResponsesApi);
-			const resolvedUrl = this.resolveUrl(modelId, modelInfo.url, useResponsesApi);
+			const resolvedUrl = this.resolveUrl(modelId, modelInfo.url);
 			this._logService.info(`BYOK: Resolved URL for model ${this.providerName}/${modelId}: ${resolvedUrl}`);
 
 			models[modelId] = {

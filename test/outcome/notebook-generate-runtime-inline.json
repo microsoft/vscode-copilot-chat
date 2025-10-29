@@ -2,8 +2,8 @@
 	{
 		"name": "notebook (generate runtime) [inline] [python] - generate code uses obselete variable",
 		"requests": [
-			"3c5b71a5c811bc484d0daf9de5a1a3981881ed95ce25551ecc0b0c9bf049680b",
-			"8d7b30d17a1e5ea169165f8b725f53508760c051f9832f3d8766eb28702e80df"
+			"8d7b30d17a1e5ea169165f8b725f53508760c051f9832f3d8766eb28702e80df",
+			"ea824e71efe50b1c36b0abf0feec8918824c8658391a6a7dd7a4b8301371ee79"
 		]
 	}
 ]
