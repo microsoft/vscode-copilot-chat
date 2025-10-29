@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-code';
+import { HookInput, HookJSONOutput, Options, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -22,7 +22,7 @@ import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
-import { ClaudeToolNames, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
+import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 
@@ -153,6 +153,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _currentRequest: CurrentRequest | undefined;
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
+	private _ongoingEdits = new Map<string | undefined, { complete: () => void; onDidComplete: Thenable<void> }>();
 
 	constructor(
 		private readonly serverConfig: ILanguageModelServerConfig,
@@ -163,7 +164,8 @@ export class ClaudeCodeSession extends Disposable {
 		@IEnvService private readonly envService: IEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IToolsService private readonly toolsService: IToolsService,
-		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService
+		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
+		@ILogService private readonly _log: ILogService,
 	) {
 		super();
 	}
@@ -195,7 +197,7 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		if (!this._queryGenerator) {
-			await this._startSession();
+			await this._startSession(token);
 		}
 
 		// Add this request to the queue and wait for completion
@@ -232,7 +234,7 @@ export class ClaudeCodeSession extends Disposable {
 	/**
 	 * Starts a new Claude Code session with the configured options
 	 */
-	private async _startSession(): Promise<void> {
+	private async _startSession(token: vscode.CancellationToken): Promise<void> {
 		// Build options for the Claude Code SDK
 		// process.env.DEBUG = '1'; // debug messages from sdk.mjs
 		const isDebugEnabled = this.configService.getConfig(ConfigKey.Internal.ClaudeCodeDebugEnabled);
@@ -252,6 +254,20 @@ export class ClaudeCodeSession extends Disposable {
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
 			resume: this.sessionId,
+			hooks: {
+				PreToolUse: [
+					{
+						matcher: claudeEditTools.join('|'),
+						hooks: [(input, toolID) => this._onWillEditTool(input, toolID, token)]
+					}
+				],
+				PostToolUse: [
+					{
+						matcher: claudeEditTools.join('|'),
+						hooks: [(input, toolID) => this._onDidEditTool(input, toolID)]
+					}
+				],
+			},
 			canUseTool: async (name, input) => {
 				return this._currentRequest ?
 					this.canUseTool(name, input, this._currentRequest.toolInvocationToken) :
@@ -268,6 +284,47 @@ export class ClaudeCodeSession extends Disposable {
 
 		// Start the message processing loop
 		this._processMessages();
+	}
+
+	private async _onWillEditTool(input: HookInput, toolUseID: string | undefined, token: CancellationToken): Promise<HookJSONOutput> {
+		let uris: URI[] = [];
+		try {
+			uris = getAffectedUrisForEditTool(input as PreToolUseHookInput);
+		} catch (error) {
+			this._log.error('Error getting affected URIs for edit tool', error);
+		}
+		if (!uris.length || !this._currentRequest || token.isCancellationRequested) {
+			return {};
+		}
+
+		if (!this._currentRequest!.stream.externalEdit) {
+			return {}; // back-compat during 1.106 insiders
+		}
+
+		return new Promise(proceedWithEdit => {
+			const deferred = new DeferredPromise<void>();
+			const cancelListen = token.onCancellationRequested(() => {
+				this._ongoingEdits.delete(toolUseID);
+				deferred.complete();
+			});
+			const onDidComplete = this._currentRequest!.stream.externalEdit(uris, async () => {
+				proceedWithEdit({});
+				await deferred.p;
+				cancelListen.dispose();
+			});
+
+			this._ongoingEdits.set(toolUseID, { onDidComplete, complete: () => deferred.complete() });
+		});
+	}
+
+	private async _onDidEditTool(input: HookInput, toolUseID: string | undefined) {
+		const ongoingEdit = this._ongoingEdits.get(toolUseID);
+		if (ongoingEdit) {
+			this._ongoingEdits.delete(toolUseID);
+			ongoingEdit.complete();
+			await ongoingEdit.onDidComplete;
+		}
+		return {};
 	}
 
 	private async *_createPromptIterable(): AsyncIterable<SDKUserMessage> {
