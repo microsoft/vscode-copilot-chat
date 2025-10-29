@@ -571,6 +571,8 @@ export class ChatSessionContentBuilder {
 			}
 			case 'str_replace':
 				return buildStrReplaceDetails(args.path);
+			case 'edit':
+				return buildEditDetails(args.path, 'edit', undefined, { defaultName: 'Edit' });
 			case 'create':
 				return buildCreateDetails(args.path);
 			case 'view':
@@ -590,6 +592,9 @@ export class ChatSessionContentBuilder {
 				return { toolName: 'read_bash', invocationMessage: 'Read logs from Bash session' };
 			case 'stop_bash':
 				return { toolName: 'stop_bash', invocationMessage: 'Stop Bash session' };
+			case 'run_custom_setup_step':
+			case 'run_setup':
+				return { toolName: 'run_custom_setup_step', invocationMessage: content || 'Run custom setup step' };
 			default:
 				return { toolName: name || 'unknown', invocationMessage: content || name || 'unknown' };
 		}
