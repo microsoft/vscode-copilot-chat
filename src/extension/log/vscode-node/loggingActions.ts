@@ -6,6 +6,8 @@
 import * as dns from 'dns';
 import * as http from 'http';
 import * as https from 'https';
+import * as os from 'os';
+import * as path from 'path';
 import * as tls from 'tls';
 import * as util from 'util';
 import * as vscode from 'vscode';
@@ -35,12 +37,21 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
 import { EXTENSION_ID } from '../../common/constants';
 
-export interface ProxyAgentLog {
+interface ProxyAgentLog {
 	trace(message: string, ...args: any[]): void;
 	debug(message: string, ...args: any[]): void;
 	info(message: string, ...args: any[]): void;
 	warn(message: string, ...args: any[]): void;
 	error(message: string | Error, ...args: any[]): void;
+}
+
+interface ProxyAgentParams {
+	log: ProxyAgentLog;
+}
+
+interface ProxyAgent {
+	loadSystemCertificates?(params: ProxyAgentParams): Promise<string[]>;
+	resolveProxyURL?(url: string): Promise<string | undefined>;
 }
 
 export class LoggingActionsContrib {
@@ -60,12 +71,16 @@ export class LoggingActionsContrib {
 			const electronConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.Internal.DebugExpUseElectronFetcher);
 			const nodeConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.Internal.DebugExpUseNodeFetcher);
 			const nodeFetchConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.Internal.DebugExpUseNodeFetchFetcher);
+			const ext = vscode.extensions.getExtension(EXTENSION_ID);
+			const product = require(path.join(vscode.env.appRoot, 'product.json'));
 			await appendText(editor, `## GitHub Copilot Chat
 
-- Extension Version: ${this.envService.getVersion()} (${this.envService.getBuildType()})
-- VS Code: ${this.envService.getEditorInfo().format()}
-- OS: ${this.envService.OS}${vscode.env.remoteName ? `
-- Remote Name: ${vscode.env.remoteName}` : ''}
+- Extension: ${this.envService.getVersion()} (${this.envService.getBuildType()})
+- VS Code: ${vscode.version} (${product.commit || 'out-of-source'})
+- OS: ${os.platform()} ${os.release()} ${os.arch()}${vscode.env.remoteName ? `
+- Remote Name: ${vscode.env.remoteName}` : ''}${vscode.env.remoteName && ext ? `
+- Extension Kind: ${vscode.ExtensionKind[ext.extensionKind]}` : ''}
+- GitHub Account: ${this.authService.anyGitHubSession?.account.label || 'Signed Out'}
 
 ## Network
 
@@ -76,9 +91,12 @@ User Settings:
   "github.copilot.advanced.debug.useNodeFetchFetcher": ${nodeFetchConfig}
 \`\`\`${getProxyEnvVariables()}
 `);
+			const proxyAgent = loadVSCodeModule<ProxyAgent>('@vscode/proxy-agent');
+			const osCertificates = proxyAgent?.loadSystemCertificates ? await loadSystemCertificates(proxyAgent.loadSystemCertificates, this.logService) : undefined;
 			const urls = [
 				this.capiClientService.dotcomAPIURL,
 				this.capiClientService.capiPingURL,
+				this.capiClientService.proxyBaseURL + '/_ping',
 			];
 			const isGHEnterprise = this.capiClientService.dotcomAPIURL !== 'https://api.github.com';
 			const timeoutSeconds = 10;
@@ -88,13 +106,14 @@ User Settings:
 			const nodeFetchCurrent = !electronCurrent && !nodeCurrent && nodeFetchConfig;
 			const nodeCurrentFallback = !electronCurrent && !nodeFetchCurrent;
 			const activeFetcher = this.fetcherService.getUserAgentLibrary();
+			const nodeFetcher = new NodeFetcher(this.envService);
 			const fetchers = {
 				['Electron fetch']: {
 					fetcher: electronFetcher,
 					current: electronCurrent,
 				},
 				['Node.js https']: {
-					fetcher: new NodeFetcher(this.envService),
+					fetcher: nodeFetcher,
 					current: nodeCurrent || nodeCurrentFallback,
 				},
 				['Node.js fetch']: {
@@ -104,21 +123,7 @@ User Settings:
 			};
 			const dnsLookup = util.promisify(dns.lookup);
 			for (const url of urls) {
-				const authHeaders: Record<string, string> = {};
-				if (isGHEnterprise) {
-					let token = '';
-					if (url === this.capiClientService.dotcomAPIURL) {
-						token = this.authService.anyGitHubSession?.accessToken || '';
-					} else {
-						try {
-							token = (await this.authService.getCopilotToken()).token;
-						} catch (_err) {
-							// Ignore error
-							token = '';
-						}
-					}
-					authHeaders['Authorization'] = `Bearer ${token}`;
-				}
+				const authHeaders = await this.getAuthHeaders(isGHEnterprise, url);
 				const host = new URL(url).hostname;
 				await appendText(editor, `\nConnecting to ${url}:\n`);
 				for (const family of [4, 6]) {
@@ -136,7 +141,6 @@ User Settings:
 					}
 				}
 				let probeProxyURL: string | undefined;
-				const proxyAgent = loadVSCodeModule<any>('@vscode/proxy-agent');
 				if (proxyAgent?.resolveProxyURL) {
 					await appendText(editor, `- Proxy URL: `);
 					const start = Date.now();
@@ -156,7 +160,6 @@ User Settings:
 					const tlsOrig: typeof tls | undefined = (tls as any).__vscodeOriginal;
 					if (tlsOrig) {
 						await appendText(editor, `- Proxy TLS: `);
-						const osCertificates = await loadSystemCertificates(proxyAgent, this.logService);
 						if (!osCertificates) {
 							await appendText(editor, `(failed to load system certificates) `);
 						}
@@ -211,11 +214,53 @@ User Settings:
 					}
 				}
 			}
+
+			// Using NodeFetcher since this is what telemetry currently uses.
+			const secondaryUrls = [
+				'https://github.com',
+				vscode.Uri.parse(this.capiClientService.copilotTelemetryURL).with({ path: '/_ping' }).toString(),
+			];
+			await appendText(editor, `\n`);
+			for (const url of secondaryUrls) {
+				const authHeaders = await this.getAuthHeaders(isGHEnterprise, url);
+				await appendText(editor, `Connecting to ${url}: `);
+				const start = Date.now();
+				try {
+					const response = await Promise.race([nodeFetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
+					if (response) {
+						await appendText(editor, `HTTP ${response.status} (${Date.now() - start} ms)\n`);
+					} else {
+						await appendText(editor, `timed out after ${timeoutSeconds} seconds\n`);
+					}
+				} catch (err) {
+					await appendText(editor, `Error (${Date.now() - start} ms): ${collectErrorMessages(err)}\n`);
+				}
+			}
+			await appendText(editor, `\nNumber of system certificates: ${osCertificates?.length ?? 'failed to load'}\n`);
 			await appendText(editor, `
 ## Documentation
 
 In corporate networks: [Troubleshooting firewall settings for GitHub Copilot](https://docs.github.com/en/copilot/troubleshooting-github-copilot/troubleshooting-firewall-settings-for-github-copilot).`);
 		}));
+	}
+
+	private async getAuthHeaders(isGHEnterprise: boolean, url: string) {
+		const authHeaders: Record<string, string> = {};
+		if (isGHEnterprise) {
+			let token = '';
+			if (url === this.capiClientService.dotcomAPIURL) {
+				token = this.authService.anyGitHubSession?.accessToken || '';
+			} else {
+				try {
+					token = (await this.authService.getCopilotToken()).token;
+				} catch (_err) {
+					// Ignore error
+					token = '';
+				}
+			}
+			authHeaders['Authorization'] = `Bearer ${token}`;
+		}
+		return authHeaders;
 	}
 }
 
@@ -244,9 +289,9 @@ function loadVSCodeModule<T>(moduleName: string): T | undefined {
 	return undefined;
 }
 
-async function loadSystemCertificates(proxyAgent: any, logService: ILogService): Promise<(string | Buffer)[] | undefined> {
+async function loadSystemCertificates(load: NonNullable<ProxyAgent['loadSystemCertificates']>, logService: ILogService): Promise<(string | Buffer)[] | undefined> {
 	try {
-		const certificates = await proxyAgent.loadSystemCertificates({
+		const certificates = await load({
 			log: {
 				trace(message: string, ..._args: any[]) {
 					logService.trace(message);
@@ -456,7 +501,7 @@ async function findProxyInfo(capiClientService: ICAPIClientService) {
 	const timeoutSeconds = 5;
 	let proxy: { status: string;[key: string]: any };
 	try {
-		const proxyAgent = loadVSCodeModule<any>('@vscode/proxy-agent');
+		const proxyAgent = loadVSCodeModule<ProxyAgent>('@vscode/proxy-agent');
 		if (proxyAgent?.resolveProxyURL) {
 			const url = capiClientService.capiPingURL; // Assuming this gets the same proxy as for the models request.
 			const proxyURL = await Promise.race([proxyAgent.resolveProxyURL(url), timeoutAfter(timeoutSeconds * 1000)]);
