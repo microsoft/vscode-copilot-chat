@@ -67,7 +67,13 @@ export class ExternalContextService extends Disposable implements IExternalConte
 	replaceExternalPaths(paths: readonly URI[]): void {
 		this._paths.clear();
 		for (const path of paths) {
-			this._paths.set(path.toString(), path);
+			if (this._paths.size >= MAX_EXTERNAL_PATHS) {
+				break;
+			}
+			const key = path.toString();
+			if (!this._paths.has(key)) {
+				this._paths.set(key, path);
+			}
 		}
 		this._onDidChangeExternalContext.fire();
 	}
@@ -112,10 +118,6 @@ export class ExternalContextService extends Disposable implements IExternalConte
 	}
 
 	private isSubPath(child: string, potentialParent: string): boolean {
-		if (potentialParent === child) {
-			return true;
-		}
-
 		const parentWithSep = potentialParent.endsWith(npath.sep) ? potentialParent : potentialParent + npath.sep;
 		return child.startsWith(parentWithSep);
 	}

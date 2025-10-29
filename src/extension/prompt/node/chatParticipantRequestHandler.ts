@@ -225,7 +225,6 @@ export class ChatParticipantRequestHandler {
 			this.request = await this.sanitizeVariables();
 			this.turn.request.message = this.request.prompt;
 
-
 			this.appendExternalContextReferences();
 
 			const command = this.chatAgentArgs.intentId ?
@@ -301,7 +300,7 @@ export class ChatParticipantRequestHandler {
 		const newRefs: ChatPromptReference[] = [];
 		let counter = 0;
 		for (const uri of externalUris) {
-			const alreadyPresent = existingRefs.some(ref => this.matchesReference(ref, uri)) || newRefs.some(ref => this.matchesReference(ref, uri));
+			const alreadyPresent = existingRefs.some(ref => this.matchesReference(ref, uri));
 			if (!alreadyPresent) {
 				const id = `${EXTERNAL_CONTEXT_REFERENCE_PREFIX}.${counter++}`;
 				newRefs.push({
