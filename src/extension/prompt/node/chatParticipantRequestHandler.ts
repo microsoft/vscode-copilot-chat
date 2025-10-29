@@ -31,7 +31,7 @@ import { ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatRe
 import { ICommandService } from '../../commands/node/commandService';
 import { getAgentForIntent, Intent } from '../../common/constants';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
-import { ISystemContextService } from '../../context/node/systemContextService';
+import { IExternalContextService } from '../../context/node/externalContextService';
 import { IIntentService } from '../../intents/node/intentService';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ContributedToolName } from '../../tools/common/toolNames';
@@ -45,7 +45,7 @@ import { IntentDetector } from './intentDetector';
 import { CommandDetails } from './intentRegistry';
 import { IIntent } from './intents';
 
-const SYSTEM_REFERENCE_PREFIX = 'vscode.prompt.file.system';
+const EXTERNAL_CONTEXT_REFERENCE_PREFIX = 'vscode.prompt.file.external';
 
 export interface IChatAgentArgs {
 	agentName: string;
@@ -83,7 +83,7 @@ export class ChatParticipantRequestHandler {
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@IIntentService private readonly _intentService: IIntentService,
 		@IConversationStore private readonly _conversationStore: IConversationStore,
-		@ISystemContextService private readonly _systemContextService: ISystemContextService,
+		@IExternalContextService private readonly _externalContextService: IExternalContextService,
 		@ITabsAndEditorsService tabsAndEditorsService: ITabsAndEditorsService,
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
@@ -226,7 +226,7 @@ export class ChatParticipantRequestHandler {
 			this.turn.request.message = this.request.prompt;
 
 
-			this.appendSystemContextReferences();
+			this.appendExternalContextReferences();
 
 			const command = this.chatAgentArgs.intentId ?
 				this._commandService.getCommand(this.chatAgentArgs.intentId, this.location) :
@@ -290,9 +290,9 @@ export class ChatParticipantRequestHandler {
 		}
 	}
 
-	private appendSystemContextReferences(): void {
-		const systemUris = this._systemContextService.getSystemPaths();
-		if (!systemUris.length) {
+	private appendExternalContextReferences(): void {
+		const externalUris = this._externalContextService.getExternalPaths();
+		if (!externalUris.length) {
 			return;
 		}
 
@@ -300,15 +300,15 @@ export class ChatParticipantRequestHandler {
 
 		const newRefs: ChatPromptReference[] = [];
 		let counter = 0;
-		for (const uri of systemUris) {
+		for (const uri of externalUris) {
 			const alreadyPresent = existingRefs.some(ref => this.matchesReference(ref, uri)) || newRefs.some(ref => this.matchesReference(ref, uri));
 			if (!alreadyPresent) {
-				const id = `${SYSTEM_REFERENCE_PREFIX}.${counter++}`;
+				const id = `${EXTERNAL_CONTEXT_REFERENCE_PREFIX}.${counter++}`;
 				newRefs.push({
 					id,
 					name: uri.fsPath,
 					value: uri,
-					modelDescription: `System context path ${uri.fsPath}`,
+					modelDescription: `External context path ${uri.fsPath}`,
 				});
 			}
 		}

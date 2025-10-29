@@ -29,7 +29,8 @@
 	"github.copilot.command.generateTests": "Generate Tests",
 	"github.copilot.command.openUserPreferences": "Open User Preferences",
 	"github.copilot.command.sendChatFeedback": "Send Chat Feedback",
-	"github.copilot.command.addSystemContext": "Add System Context",
+	"github.copilot.command.addExternalContext": "Add External Folder",
+	"github.copilot.command.manageExternalContexts": "Manage External Folders",
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
 	"github.copilot.viewsWelcome.signIn": {

@@ -19,7 +19,7 @@ import { ConversationFeature } from '../../conversation/vscode-node/conversation
 import { FeedbackCommandContribution } from '../../conversation/vscode-node/feedbackContribution';
 import { LanguageModelAccess } from '../../conversation/vscode-node/languageModelAccess';
 import { LogWorkspaceStateContribution } from '../../conversation/vscode-node/logWorkspaceState';
-import { SystemContextContribution } from '../../context/vscode-node/systemContextContribution';
+import { ExternalContextContribution } from '../../context/vscode-node/externalContextContribution';
 import { RemoteAgentContribution } from '../../conversation/vscode-node/remoteAgents';
 import { LanguageModelProxyContrib } from '../../externalAgents/vscode-node/lmProxyContrib';
 import { WalkthroughCommandContribution } from '../../getting-started/vscode-node/commands';
@@ -71,7 +71,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(CopilotDebugCommandContribution),
 	asContributionFactory(DebugCommandsContribution),
 	asContributionFactory(LanguageModelAccess),
-	asContributionFactory(SystemContextContribution),
+	asContributionFactory(ExternalContextContribution),
 	asContributionFactory(WalkthroughCommandContribution),
 	asContributionFactory(InlineEditProviderFeature),
 	asContributionFactory(SettingsSchemaFeature),

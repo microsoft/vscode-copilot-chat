@@ -71,7 +71,7 @@ import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/d
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { ApiEmbeddingsIndex, IApiEmbeddingsIndex } from '../../context/node/resolvers/extensionApi';
 import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/node/resolvers/promptWorkspaceLabels';
-import { ISystemContextService, SystemContextService } from '../../context/node/systemContextService';
+import { IExternalContextService, ExternalContextService } from '../../context/node/externalContextService';
 import { ChatAgentService } from '../../conversation/vscode-node/chatParticipants';
 import { FeedbackReporter } from '../../conversation/vscode-node/feedbackReporter';
 import { IUserFeedbackService, UserFeedbackService } from '../../conversation/vscode-node/userActions';
@@ -174,7 +174,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IScopeSelector, new SyncDescriptor(ScopeSelectorImpl));
 	builder.define(IGitDiffService, new SyncDescriptor(GitDiffService));
 	builder.define(IGitCommitMessageService, new SyncDescriptor(GitCommitMessageServiceImpl));
-	builder.define(ISystemContextService, new SyncDescriptor(SystemContextService));
+	builder.define(IExternalContextService, new SyncDescriptor(ExternalContextService));
 	builder.define(IGithubRepositoryService, new SyncDescriptor(GithubRepositoryService));
 	builder.define(IDevContainerConfigurationService, new SyncDescriptor(DevContainerConfigurationServiceImpl));
 	builder.define(IChatAgentService, new SyncDescriptor(ChatAgentService));

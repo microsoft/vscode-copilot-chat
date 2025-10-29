@@ -11,58 +11,72 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../util/vs/base/common/platform';
 
-export const ISystemContextService = createServiceIdentifier<ISystemContextService>('ISystemContextService');
+const MAX_EXTERNAL_PATHS = 3;
 
-export interface ISystemContextService {
+export const IExternalContextService = createServiceIdentifier<IExternalContextService>('IExternalContextService');
+
+export interface IExternalContextService {
 	readonly _serviceBrand: undefined;
-	readonly onDidChangeSystemContext: Event<void>;
-	getSystemPaths(): readonly URI[];
-	addSystemPaths(paths: readonly URI[]): void;
-	replaceSystemPaths(paths: readonly URI[]): void;
-	removeSystemPath(path: URI): void;
+	readonly onDidChangeExternalContext: Event<void>;
+	readonly maxExternalPaths: number;
+	getExternalPaths(): readonly URI[];
+	addExternalPaths(paths: readonly URI[]): readonly URI[];
+	replaceExternalPaths(paths: readonly URI[]): void;
+	removeExternalPath(path: URI): void;
 	clear(): void;
-	isSystemPath(uri: URI): boolean;
+	isExternalPath(uri: URI): boolean;
 }
 
-export class SystemContextService extends Disposable implements ISystemContextService {
+export class ExternalContextService extends Disposable implements IExternalContextService {
 	declare readonly _serviceBrand: undefined;
 
-	private readonly _onDidChangeSystemContext = this._register(new Emitter<void>());
-	readonly onDidChangeSystemContext = this._onDidChangeSystemContext.event;
+	private readonly _onDidChangeExternalContext = this._register(new Emitter<void>());
+	readonly onDidChangeExternalContext: Event<void> = this._onDidChangeExternalContext.event;
+
+	readonly maxExternalPaths = MAX_EXTERNAL_PATHS;
 
 	private readonly _paths = new Map<string, URI>();
 
-	getSystemPaths(): readonly URI[] {
-		return Array.from(this._paths.values());
+	getExternalPaths(): readonly URI[] {
+		return [...this._paths.values()];
 	}
 
-	addSystemPaths(paths: readonly URI[]): void {
-		let didChange = false;
+	addExternalPaths(paths: readonly URI[]): readonly URI[] {
+		const added: URI[] = [];
+		if (!paths.length) {
+			return added;
+		}
+
 		for (const path of paths) {
+			if (this._paths.size >= MAX_EXTERNAL_PATHS) {
+				break;
+			}
 			const key = path.toString();
 			if (!this._paths.has(key)) {
 				this._paths.set(key, path);
-				didChange = true;
+				added.push(path);
 			}
 		}
-		if (didChange) {
-			this._onDidChangeSystemContext.fire();
+		if (added.length) {
+			this._onDidChangeExternalContext.fire();
 		}
+
+		return added;
 	}
 
-	replaceSystemPaths(paths: readonly URI[]): void {
+	replaceExternalPaths(paths: readonly URI[]): void {
 		this._paths.clear();
 		for (const path of paths) {
 			this._paths.set(path.toString(), path);
 		}
-		this._onDidChangeSystemContext.fire();
+		this._onDidChangeExternalContext.fire();
 	}
 
-	removeSystemPath(path: URI): void {
+	removeExternalPath(path: URI): void {
 		for (const [key, storedPath] of this._paths) {
 			if (isEqual(storedPath, path)) {
 				this._paths.delete(key);
-				this._onDidChangeSystemContext.fire();
+				this._onDidChangeExternalContext.fire();
 				return;
 			}
 		}
@@ -73,10 +87,10 @@ export class SystemContextService extends Disposable implements ISystemContextSe
 			return;
 		}
 		this._paths.clear();
-		this._onDidChangeSystemContext.fire();
+		this._onDidChangeExternalContext.fire();
 	}
 
-	isSystemPath(uri: URI): boolean {
+	isExternalPath(uri: URI): boolean {
 		const candidateComparable = this.toComparablePath(uri);
 		for (const stored of this._paths.values()) {
 			const storedComparable = this.toComparablePath(stored);
