@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
-import { ICompletionsContextService } from '../context';
 import { CopilotNamedAnnotationList } from '../openai/stream';
 import { TelemetryWithExp } from '../telemetry';
 import { IPosition, IRange, LocationFactory, TextDocumentContents } from '../textDocument';
@@ -26,7 +25,6 @@ export interface CopilotCompletion {
 }
 
 export function completionsFromGhostTextResults(
-	ctx: ICompletionsContextService,
 	completionResults: CompletionResult[],
 	resultType: ResultType,
 	document: TextDocumentContents,

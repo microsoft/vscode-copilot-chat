@@ -2,9 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
 import { editorVersionHeaders } from '../config';
-import type { ICompletionsContextService } from '../context';
+import { ICompletionsContextService } from '../context';
+import { LogTarget } from '../logger';
 import { getEndpointUrl } from '../networkConfiguration';
 import { Fetcher, type IAbortSignal, type Response } from '../networking';
 import { ConnectionState } from './connectionState';
@@ -22,12 +24,14 @@ type Config<Req> = { method: 'GET' } | { method: 'POST'; body: Req };
 type SnippyResponse<Res> = ({ kind: 'success' } & Res) | FormattedSnippyError;
 
 export async function call<Res, Req = unknown>(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	endpoint: string,
 	config: Config<Req>,
 	signal?: IAbortSignal
 ): Promise<SnippyResponse<Res>> {
 	let token: CopilotToken;
+	const ctx = accessor.get(ICompletionsContextService);
+	const instantiationService = accessor.get(IInstantiationService);
 	try {
 		const tokenManager = ctx.get(CopilotTokenManager);
 		token = tokenManager.token ?? await tokenManager.getToken();
@@ -36,7 +40,7 @@ export async function call<Res, Req = unknown>(
 		return createErrorResponse(401, ErrorMessages[ErrorReasons.Unauthorized]);
 	}
 
-	codeReferenceLogger.info(ctx, `Calling ${endpoint}`);
+	codeReferenceLogger.info(ctx.get(LogTarget), `Calling ${endpoint}`);
 
 	if (ConnectionState.isRetrying()) {
 		return createErrorResponse(600, 'Attempting to reconnect to the public code matching service.');
@@ -48,18 +52,18 @@ export async function call<Res, Req = unknown>(
 
 	let res: InstanceType<typeof Response>;
 	try {
-		res = await ctx.get(Fetcher).fetch(getEndpointUrl(ctx, token, 'origin-tracker', endpoint), {
+		res = await instantiationService.invokeFunction(acc => ctx.get(Fetcher).fetch(getEndpointUrl(acc, token, 'origin-tracker', endpoint), {
 			method: config.method,
 			body: config.method === 'POST' ? JSON.stringify(config.body) : undefined,
 			headers: {
 				'content-type': 'application/json',
 				authorization: `Bearer ${token.token}`,
-				...editorVersionHeaders(ctx),
+				...editorVersionHeaders(acc),
 			},
 			signal,
-		});
+		}));
 	} catch (e) {
-		ConnectionState.enableRetry(ctx);
+		instantiationService.invokeFunction(ConnectionState.enableRetry);
 		return createErrorResponse(602, 'Network error detected. Check your internet connection.');
 	}
 
@@ -69,7 +73,7 @@ export async function call<Res, Req = unknown>(
 	} catch (e) {
 		const message = (e as Error).message;
 		snippyTelemetry.handleUnexpectedError({
-			context: ctx,
+			instantiationService,
 			origin: 'snippyNetwork',
 			reason: message,
 		});
@@ -106,11 +110,11 @@ export async function call<Res, Req = unknown>(
 			return createErrorResponse(code, fallbackMsg, meta);
 		}
 		case ErrorReasons.RateLimit: {
-			ConnectionState.enableRetry(ctx, 60 * 1000);
+			instantiationService.invokeFunction(acc => ConnectionState.enableRetry(acc, 60 * 1000));
 			return createErrorResponse(code, ErrorMessages.RateLimitError, meta);
 		}
 		case ErrorReasons.InternalError: {
-			ConnectionState.enableRetry(ctx);
+			instantiationService.invokeFunction(acc => ConnectionState.enableRetry(acc));
 			return createErrorResponse(code, ErrorMessages[ErrorReasons.InternalError], meta);
 		}
 		default: {

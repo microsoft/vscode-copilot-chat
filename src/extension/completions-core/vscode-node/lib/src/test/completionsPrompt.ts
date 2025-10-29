@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
-import { ICompletionsContextService } from '../context';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	CompletionRequestData,
 	CompletionRequestDocument,
@@ -13,7 +13,7 @@ import { CodeSnippetWithId, TraitWithId } from '../prompt/contextProviders/conte
 import { TelemetryWithExp } from '../telemetry';
 
 export function createCompletionRequestData(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	doc: CompletionRequestDocument,
 	position: Position,
 	codeSnippets?: CodeSnippetWithId[],

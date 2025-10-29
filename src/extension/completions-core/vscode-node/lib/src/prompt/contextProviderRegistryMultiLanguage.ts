@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
-import { logger } from '../logger';
+import { logger, LogTarget } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
 import { ActiveExperiments } from './contextProviderRegistry';
 
@@ -43,7 +44,7 @@ export const multiLanguageContextProviderParamsDefault: MultiLanguageContextProv
 };
 
 export function fillInMultiLanguageActiveExperiments(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	matchedContextProviders: string[],
 	activeExperiments: ActiveExperiments,
 	telemetryData: TelemetryWithExp
@@ -52,32 +53,33 @@ export function fillInMultiLanguageActiveExperiments(
 		(matchedContextProviders.length === 1 && matchedContextProviders[0] === '*') ||
 		matchedContextProviders.includes(MULTI_LANGUAGE_CONTEXT_PROVIDER_ID)
 	) {
-		addActiveExperiments(ctx, activeExperiments, telemetryData);
+		addActiveExperiments(accessor, activeExperiments, telemetryData);
 	}
 }
 
-function addActiveExperiments(ctx: ICompletionsContextService, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
+function addActiveExperiments(accessor: ServicesAccessor, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
 	try {
-		const params = getMultiLanguageContextProviderParamsFromExp(ctx, telemetryData);
+		const params = getMultiLanguageContextProviderParamsFromExp(accessor, telemetryData);
 		for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value as number); }
 	} catch (e) {
-		logger.exception(ctx, e, 'fillInMultiLanguageActiveExperiments');
+		logger.exception(accessor, e, 'fillInMultiLanguageActiveExperiments');
 	}
 }
 
 function getMultiLanguageContextProviderParamsFromExp(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	telemetryData: TelemetryWithExp
 ): MultiLanguageContextProviderParams {
 	let params = multiLanguageContextProviderParamsDefault;
 
+	const ctx = accessor.get(ICompletionsContextService);
 	const multiLanguageContextProviderParams = ctx.get(Features).multiLanguageContextProviderParams(telemetryData);
 
 	if (multiLanguageContextProviderParams) {
 		try {
 			params = JSON.parse(multiLanguageContextProviderParams) as MultiLanguageContextProviderParams;
 		} catch (e) {
-			logger.error(ctx, 'Failed to parse multiLanguageContextProviderParams', e);
+			logger.error(ctx.get(LogTarget), 'Failed to parse multiLanguageContextProviderParams', e);
 		}
 	}
 

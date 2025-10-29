@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable, window, type OutputChannel } from 'vscode';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotToken } from '../../../lib/src/auth/copilotTokenManager';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
-import { ICompletionsContextService } from '../../../lib/src/context';
 
 interface GitHubLogger extends Disposable {
 	info(...messages: string[]): void;
@@ -47,8 +47,8 @@ export class GitHubCopilotLogger implements GitHubLogger {
 	private output: CodeReferenceOutputChannel;
 	#event: Disposable;
 
-	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
-		this.#event = onCopilotToken(ctx, t => this.checkCopilotToken(t));
+	constructor(@IInstantiationService instantiationService: IInstantiationService) {
+		this.#event = instantiationService.invokeFunction(onCopilotToken, t => this.checkCopilotToken(t));
 
 		this.output = this.createChannel();
 	}

@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
-import { logger } from '../logger';
+import { logger, LogTarget } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
 import { ActiveExperiments } from './contextProviderRegistry';
 
@@ -14,10 +15,11 @@ interface ContextProviderParams {
 }
 
 export function fillInCSharpActiveExperiments(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	activeExperiments: ActiveExperiments,
 	telemetryData: TelemetryWithExp
 ): boolean {
+	const ctx = accessor.get(ICompletionsContextService);
 	try {
 		const csharpContextProviderParams = ctx.get(Features).csharpContextProviderParams(telemetryData);
 		if (csharpContextProviderParams) {
@@ -25,7 +27,7 @@ export function fillInCSharpActiveExperiments(
 			for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
 		}
 	} catch (e) {
-		logger.debug(ctx, `Failed to get the active C# experiments for the Context Provider API`, e);
+		logger.debug(ctx.get(LogTarget), `Failed to get the active C# experiments for the Context Provider API`, e);
 		return false;
 	}
 	return true;

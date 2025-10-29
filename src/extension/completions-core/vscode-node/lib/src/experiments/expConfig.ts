@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ICompletionsContextService } from '../context';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { TelemetryData, telemetryExpProblem } from '../telemetry';
 import { ExpServiceTelemetryNames } from './telemetryNames';
 
@@ -136,8 +136,8 @@ export class ExpConfig {
 		this.features = features;
 	}
 
-	static createFallbackConfig(ctx: ICompletionsContextService, reason: string): ExpConfig {
-		telemetryExpProblem(ctx, { reason });
+	static createFallbackConfig(accessor: ServicesAccessor, reason: string): ExpConfig {
+		telemetryExpProblem(accessor, { reason });
 		return this.createEmptyConfig();
 	}
 
@@ -149,7 +149,7 @@ export class ExpConfig {
 	 * Adds (or overwrites) the given experiment config to the telemetry data.
 	 * @param telemetryData telemetryData object. If previous ExpConfigs are already present, they will be overwritten.
 	 */
-	addToTelemetry(ctx: ICompletionsContextService, telemetryData: TelemetryData): void {
+	addToTelemetry(telemetryData: TelemetryData): void {
 		telemetryData.properties[ExpServiceTelemetryNames.featuresTelemetryPropertyName] = this.features;
 	}
 }

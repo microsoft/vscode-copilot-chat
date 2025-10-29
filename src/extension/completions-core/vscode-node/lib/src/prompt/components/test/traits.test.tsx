@@ -8,6 +8,7 @@
 import * as assert from 'assert';
 import dedent from 'ts-dedent';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { PromptSnapshotNode } from '../../../../../prompt/src/components/components';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { extractNodesWitPath } from '../../../../../prompt/src/test/components/testHelpers';
@@ -21,7 +22,7 @@ import { querySnapshot } from '../../../test/snapshot';
 import { createTextDocument } from '../../../test/textDocument';
 
 suite('Traits component', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 
 	const trait1: TraitWithId = {
 		name: 'foo',
@@ -39,12 +40,12 @@ suite('Traits component', function () {
 	};
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
 	});
 
 	test('Renders nothing if there are no traits', async function () {
 		try {
-			await renderTrait(ctx);
+			await renderTrait(accessor);
 		} catch (e) {
 			assert.ok((e as Error).message.startsWith('No children found at path segment '));
 		}
@@ -52,14 +53,14 @@ suite('Traits component', function () {
 
 	test('Renders nothing if the traits array is empty', async function () {
 		try {
-			await renderTrait(ctx, []);
+			await renderTrait(accessor, []);
 		} catch (e) {
 			assert.ok((e as Error).message.startsWith('No children found at path segment '));
 		}
 	});
 
 	test('Renders a single trait', async function () {
-		const snapshot = await renderTrait(ctx, [trait1]);
+		const snapshot = await renderTrait(accessor, [trait1]);
 		const traits = querySnapshot(snapshot.snapshot!, 'Traits') as PromptSnapshotNode[];
 		assert.deepStrictEqual(traits.length, 2);
 		assert.deepStrictEqual(traits[0].children?.[0].value, 'Consider this related information:\n');
@@ -68,7 +69,7 @@ suite('Traits component', function () {
 	});
 
 	test('Renders multiple traits', async function () {
-		const snapshot = await renderTrait(ctx, [trait1, trait2]);
+		const snapshot = await renderTrait(accessor, [trait1, trait2]);
 		const result = querySnapshot(snapshot.snapshot!, 'Traits') as PromptSnapshotNode[];
 
 		// Assert that keys are in the path
@@ -94,7 +95,7 @@ suite('Traits component', function () {
 	});
 });
 
-async function renderTrait(ctx: ICompletionsContextService, traits?: TraitWithId[]) {
+async function renderTrait(accessor: ServicesAccessor, traits?: TraitWithId[]) {
 	const document = createTextDocument(
 		'file:///foo.ts',
 		'typescript',
@@ -107,6 +108,7 @@ async function renderTrait(ctx: ICompletionsContextService, traits?: TraitWithId
 	);
 	const position = document.positionAt(document.getText().indexOf('|'));
 
+	const ctx = accessor.get(ICompletionsContextService);
 	const virtualPrompt = new VirtualPrompt(<Traits ctx={ctx} />);
 	const pipe = virtualPrompt.createPipe();
 
