@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
 import { editorVersionHeaders } from '../config';
-import type { Context } from '../context';
+import type { ICompletionsContextService } from '../context';
 import { getEndpointUrl } from '../networkConfiguration';
 import { Fetcher, type IAbortSignal, type Response } from '../networking';
 import { ConnectionState } from './connectionState';
@@ -22,7 +22,7 @@ type Config<Req> = { method: 'GET' } | { method: 'POST'; body: Req };
 type SnippyResponse<Res> = ({ kind: 'success' } & Res) | FormattedSnippyError;
 
 export async function call<Res, Req = unknown>(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	endpoint: string,
 	config: Config<Req>,
 	signal?: IAbortSignal

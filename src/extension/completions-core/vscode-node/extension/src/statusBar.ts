@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { commands, Disposable, LanguageStatusItem, LanguageStatusSeverity } from 'vscode';
-import { Context } from '../../lib/src/context';
+import { ICompletionsContextService } from '../../lib/src/context';
 import { CMDQuotaExceeded } from '../../lib/src/openai/fetch';
 import { StatusChangedEvent, StatusReporter } from '../../lib/src/progress';
 import { isCompletionEnabled, isInlineSuggestEnabled } from './config';
@@ -19,8 +19,8 @@ export class CopilotStatusBar extends StatusReporter { // TODO: proper disposal
 	private disposables: Disposable[] = [];
 
 	constructor(
-		private readonly ctx: Context,
-		id = 'github.copilot.languageStatus'
+		id: string,
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
 	) {
 		super();
 

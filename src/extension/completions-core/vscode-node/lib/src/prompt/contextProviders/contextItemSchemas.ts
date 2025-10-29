@@ -3,18 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../context';
-import { logger } from '../../logger';
-import { ResolvedContextItem } from '../contextProviderRegistry';
+import { Type } from '@sinclair/typebox';
+import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler';
+import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import {
 	CodeSnippet,
 	SupportedContextItem,
 	SupportedContextItemType,
 	Trait,
 } from '../../../../types/src';
-import { Type } from '@sinclair/typebox';
-import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler';
-import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { ICompletionsContextService } from '../../context';
+import { logger } from '../../logger';
+import { ResolvedContextItem } from '../contextProviderRegistry';
 
 /**
  * Redefine all the types from contextProviderV1 as typebox schema and verify equality.
@@ -124,7 +124,7 @@ function validateContextItemId(id: string): boolean {
  * and worsen the user experience.
  */
 export function addOrValidateContextItemsIDs(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	contextItems: SupportedContextItemWithType[]
 ): SupportedContextItemWithId[] {
 	const seenIds = new Set<string>();

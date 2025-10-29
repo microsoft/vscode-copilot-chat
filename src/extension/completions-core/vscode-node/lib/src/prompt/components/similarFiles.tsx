@@ -9,7 +9,7 @@ import { Chunk, ComponentContext, PromptElementProps, Text } from '../../../../p
 import { DocumentInfoWithOffset, PromptOptions } from '../../../../prompt/src/prompt';
 import { getSimilarSnippets } from '../../../../prompt/src/snippetInclusion/similarFiles';
 import { announceSnippet } from '../../../../prompt/src/snippetInclusion/snippets';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { getSimilarFilesOptions } from '../../experiments/similarFileOptionsProvider';
 import { TelemetryWithExp } from '../../telemetry';
 import { TextDocumentContents } from '../../textDocument';
@@ -23,7 +23,7 @@ import { getPromptOptions } from '../prompt';
 import { NeighborsCollection, NeighborSource } from '../similarFiles/neighborFiles';
 
 type SimilarFilesProps = {
-	ctx: Context;
+	ctx: ICompletionsContextService;
 } & PromptElementProps;
 
 type SimilarFileSnippet = {

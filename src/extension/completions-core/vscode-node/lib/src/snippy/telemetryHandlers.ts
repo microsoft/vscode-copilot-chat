@@ -2,14 +2,14 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Context } from '../context';
-import { codeReferenceLogger } from './logger';
+import { ICompletionsContextService } from '../context';
 import { telemetry, TelemetryData, telemetryError } from '../telemetry';
+import { codeReferenceLogger } from './logger';
 
 export type TelemetryActor = 'user' | 'system';
 
 type Base = {
-	context: Context;
+	context: ICompletionsContextService;
 };
 type MatchUIDetails = Base & { actor: TelemetryActor };
 

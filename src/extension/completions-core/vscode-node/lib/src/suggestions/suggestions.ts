@@ -5,7 +5,7 @@
 // General utility functions for all kinds of suggestions (Ghost Text, Open Copilot)
 
 import { getBlockCloseToken } from '../../../prompt/src/parse';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Logger } from '../logger';
 import { APIChoice } from '../openai/openai';
 import { TelemetryData, TelemetryStore, telemetry } from '../telemetry';
@@ -20,7 +20,7 @@ import { isRepetitive } from './anomalyDetection';
  * after the cursor starts with that same token at the same indentation. If so,
  * we snip.
  */
-function maybeSnipCompletion(ctx: Context, doc: TextDocumentContents, position: IPosition, completion: string): string {
+function maybeSnipCompletion(ctx: ICompletionsContextService, doc: TextDocumentContents, position: IPosition, completion: string): string {
 	// Default to `}` for block closing token
 	let blockCloseToken = '}';
 
@@ -161,7 +161,7 @@ function matchesNextLine(
  * Post-processed a completion choice in the context of the document where the choice is offered.
  */
 export function postProcessChoiceInContext(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	document: TextDocumentContents,
 	position: IPosition,
 	choice: APIChoice,

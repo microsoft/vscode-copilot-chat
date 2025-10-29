@@ -16,7 +16,7 @@ import {
 } from '../../../../prompt/src/prompt';
 import { defaultSimilarFilesOptions } from '../../../../prompt/src/snippetInclusion/similarFiles';
 import { CopilotContentExclusionManager } from '../../contentExclusion/contentExclusionManager';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { ExpTreatmentVariables } from '../../experiments/expConfig';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
@@ -28,7 +28,7 @@ import { _copilotContentExclusion, _promptError, getPromptOptions } from '../pro
 import { extractPromptInternal } from './prompt';
 
 suite('Prompt unit tests', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let sandbox: sinon.SinonSandbox;
 
 	setup(function () {
@@ -182,7 +182,7 @@ def product(c, d):`
 				return Promise.reject(new Error('test error'));
 			}
 		}
-		const tdm = new TestExceptionTextDocumentManager(ctx);
+		const tdm = ctx.instantiationService.createInstance(TestExceptionTextDocumentManager);
 		tdm.setTextDocument('file:///a/1.py', 'python', 'import torch');
 		ctx.forceSet(TextDocumentManager, tdm);
 		NeighborSource.reset();
@@ -215,7 +215,7 @@ def product(c, d):`
 	});
 });
 
-async function assertPromptForCell(ctx: Context, sourceCell: INotebookCell, expectedPrefix: string, expectedContext?: string[]) {
+async function assertPromptForCell(ctx: ICompletionsContextService, sourceCell: INotebookCell, expectedPrefix: string, expectedContext?: string[]) {
 	const notebook = new InMemoryNotebookDocument(cells);
 	const sourceDoc = sourceCell.document;
 

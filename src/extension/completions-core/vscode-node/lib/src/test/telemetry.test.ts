@@ -49,7 +49,7 @@ suite('Telemetry unit tests', function () {
 
 	test('Telemetry user config has undefined tracking id', function () {
 		const ctx = createLibTestingContext();
-		const config = new TelemetryUserConfig(ctx);
+		const config = ctx.instantiationService.createInstance(TelemetryUserConfig);
 
 		assert.strictEqual(config.trackingId, undefined);
 	});

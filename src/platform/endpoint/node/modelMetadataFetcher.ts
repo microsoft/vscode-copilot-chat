@@ -161,7 +161,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		let resolvedModel: IModelAPIResponse | undefined;
 		if (family === 'gpt-4.1') {
 			resolvedModel = this._familyMap.get('gpt-4.1')?.[0] ?? this._familyMap.get('gpt-4o')?.[0];
-		} else if (family === 'gpt-4o-mini') {
+		} else if (family === 'copilot-fast') {
 			resolvedModel = this._familyMap.get('gpt-4o-mini')?.[0];
 		} else if (family === 'copilot-base') {
 			resolvedModel = this._copilotBaseModel;

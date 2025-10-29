@@ -3,17 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CancellationToken } from 'vscode-languageserver-protocol';
 import { createCompletionState } from '../../completionState';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { getGhostText } from '../../ghostText/ghostText';
-import { ContextProviderBridge } from '../components/contextProviderBridge';
-import { extractPrompt, ExtractPromptOptions } from '../prompt';
 import { TelemetryWithExp } from '../../telemetry';
 import { IPosition, ITextDocument } from '../../textDocument';
-import { CancellationToken } from 'vscode-languageserver-protocol';
+import { ContextProviderBridge } from '../components/contextProviderBridge';
+import { extractPrompt, ExtractPromptOptions } from '../prompt';
 
 export async function extractPromptInternal(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionId: string,
 	textDocument: ITextDocument,
 	position: IPosition,
@@ -26,7 +26,7 @@ export async function extractPromptInternal(
 }
 
 export async function getGhostTextInternal(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	textDocument: ITextDocument,
 	position: IPosition,
 	token?: CancellationToken

@@ -5,7 +5,7 @@
 
 import { CancellationToken as ICancellationToken } from '../../../../types/src';
 import { ConfigKey, getConfig } from '../../config';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Features } from '../../experiments/features';
 import { TelemetryWithExp } from '../../telemetry';
 import { NeighboringFileType } from './neighborFiles';
@@ -46,7 +46,7 @@ export class CompositeRelatedFilesProvider extends RelatedFilesProvider {
 	protected providers: Map<string, Map<string, Provider>> = new Map();
 	protected telemetrySent = false;
 	private reportedUnknownProviders = new Set<string>();
-	constructor(context: Context) {
+	constructor(@ICompletionsContextService context: ICompletionsContextService) {
 		super(context);
 	}
 	override async getRelatedFilesResponse(

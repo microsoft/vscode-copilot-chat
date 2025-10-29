@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 
 type RuntimeFlag = 'debug' | 'verboseLogging' | 'testMode' | 'simulation';
 
@@ -20,19 +20,19 @@ export class RuntimeMode {
 	}
 }
 
-export function isRunningInTest(ctx: Context): boolean {
+export function isRunningInTest(ctx: ICompletionsContextService): boolean {
 	return ctx.get(RuntimeMode).flags.testMode;
 }
 
-export function shouldFailForDebugPurposes(ctx: Context): boolean {
+export function shouldFailForDebugPurposes(ctx: ICompletionsContextService): boolean {
 	return isRunningInTest(ctx);
 }
 
-export function isDebugEnabled(ctx: Context): boolean {
+export function isDebugEnabled(ctx: ICompletionsContextService): boolean {
 	return ctx.get(RuntimeMode).flags.debug;
 }
 
-export function isVerboseLoggingEnabled(ctx: Context): boolean {
+export function isVerboseLoggingEnabled(ctx: ICompletionsContextService): boolean {
 	return ctx.get(RuntimeMode).flags.verboseLogging;
 }
 
@@ -44,7 +44,7 @@ function determineSimulationFlag(env: NodeJS.ProcessEnv): boolean {
 	return determineEnvFlagEnabled(env, 'SIMULATION');
 }
 
-export function isRunningInSimulation(ctx: Context): boolean {
+export function isRunningInSimulation(ctx: ICompletionsContextService): boolean {
 	return ctx.get(RuntimeMode).flags.simulation;
 }
 

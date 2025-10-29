@@ -6,7 +6,6 @@
 import { BasePromptElementProps, PromptElement, PromptPiece, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { CHAT_MODEL } from '../../../platform/configuration/common/configurationService';
 import { StringTextDocumentWithLanguageId } from '../../../platform/editing/common/abstractText';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -427,7 +426,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	 * and do another turn.
 	 */
 	private async healCommit(patch: string, docs: DocText, explanation: string, token: CancellationToken) {
-		const endpoint = await this.endpointProvider.getChatEndpoint(CHAT_MODEL.GPT4OMINI);
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		const prompt = await PromptRenderer.create(
 			this.instantiationService,
 			endpoint,

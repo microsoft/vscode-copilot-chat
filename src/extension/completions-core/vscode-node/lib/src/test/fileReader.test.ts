@@ -6,7 +6,7 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import { CopilotContentExclusionManager } from '../contentExclusion/contentExclusionManager';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { FileReader } from '../fileReader';
 import { FileSystem } from '../fileSystem';
 import { TextDocumentManager } from '../textDocumentManager';
@@ -17,7 +17,7 @@ import { TestTextDocumentManager } from './textDocument';
 
 suite('File Reader', function () {
 	let sandbox: sinon.SinonSandbox;
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	setup(function () {
 		sandbox = sinon.createSandbox();
@@ -39,7 +39,7 @@ suite('File Reader', function () {
 	test('reads file from text document manager', async function () {
 		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
 		tdm.setTextDocument('file:///test.js', 'javascript', 'const abc =');
-		const reader = new FileReader(ctx);
+		const reader = ctx.instantiationService.createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///test.js' });
 
@@ -49,7 +49,7 @@ suite('File Reader', function () {
 	});
 
 	test('reads file from file system', async function () {
-		const reader = new FileReader(ctx);
+		const reader = ctx.instantiationService.createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///test.ts' });
 
@@ -59,7 +59,7 @@ suite('File Reader', function () {
 	});
 
 	test('reads notfound from non existing file', async function () {
-		const reader = new FileReader(ctx);
+		const reader = ctx.instantiationService.createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///UNKNOWN.ts' });
 
@@ -68,7 +68,7 @@ suite('File Reader', function () {
 	});
 
 	test('reads notfound for file too large', async function () {
-		const reader = new FileReader(ctx);
+		const reader = ctx.instantiationService.createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///large.ts' });
 
@@ -77,8 +77,8 @@ suite('File Reader', function () {
 	});
 
 	test('reads invalid from blocked file', async function () {
-		ctx.forceSet(CopilotContentExclusionManager, new AlwaysBlockingCopilotContentRestrictions(ctx));
-		const reader = new FileReader(ctx);
+		ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(AlwaysBlockingCopilotContentRestrictions));
+		const reader = ctx.instantiationService.createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///test.ts' });
 
@@ -87,7 +87,7 @@ suite('File Reader', function () {
 	});
 
 	test('reads empty files', async function () {
-		const reader = new FileReader(ctx);
+		const reader = ctx.instantiationService.createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///empty.ts' });
 
@@ -96,8 +96,8 @@ suite('File Reader', function () {
 	});
 
 	test('empty files can be blocked', async function () {
-		ctx.forceSet(CopilotContentExclusionManager, new AlwaysBlockingCopilotContentRestrictions(ctx));
-		const reader = new FileReader(ctx);
+		ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(AlwaysBlockingCopilotContentRestrictions));
+		const reader = ctx.instantiationService.createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///empty.ts' });
 

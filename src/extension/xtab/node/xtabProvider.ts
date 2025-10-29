@@ -23,7 +23,7 @@ import { LanguageContextLanguages, LanguageContextOptions } from '../../../platf
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
 import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
+import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ContextKind, SnippetContext } from '../../../platform/languageServer/common/languageContextService';
@@ -52,7 +52,6 @@ import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRa
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Position as VscodePosition } from '../../../vscodeTypes';
 import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
-import { editWouldDeleteWhatWasJustInserted } from '../../inlineEdits/common/ghNearbyNesProvider';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
@@ -155,8 +154,20 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			filters.push((edits) => IgnoreWhitespaceOnlyChanges.filterEdit(activeDoc, edits));
 		}
 
-		if (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUndoInsertionFilteringEnabled, this.expService)) {
-			filters.push((edits) => editWouldDeleteWhatWasJustInserted(activeDoc, new LineEdit(edits)) ? [] : edits);
+		const undoInsertionFiltering = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUndoInsertionFiltering, this.expService);
+		if (undoInsertionFiltering !== undefined) {
+			let filter;
+			switch (undoInsertionFiltering) {
+				case 'v1':
+					filter = editWouldDeleteWhatWasJustInserted;
+					break;
+				case 'v2':
+					filter = editWouldDeleteWhatWasJustInserted2;
+					break;
+				default:
+					assertNever(undoInsertionFiltering);
+			}
+			filters.push((edits) => filter(activeDoc, new LineEdit(edits)) ? [] : edits);
 		}
 
 		return filters.reduce((acc, filter) => filter(acc), edits);

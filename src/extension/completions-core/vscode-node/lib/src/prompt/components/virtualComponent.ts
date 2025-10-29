@@ -4,13 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ComponentStatistics, PromptMetadata } from '../../../../prompt/src/components/components';
-import { findEditDistanceScore } from '../../../../prompt/src/suffixMatchCriteria';
-import { ApproximateTokenizer, getTokenizer, Tokenizer, TokenizerName } from '../../../../prompt/src/tokenization';
-import { DocumentUri } from '../../../../types/src';
-import { Context } from '../../context';
-import { Features } from '../../experiments/features';
+import { getTokenizer, Tokenizer, TokenizerName } from '../../../../prompt/src/tokenization';
 import { LRUCacheMap } from '../../helpers/cache';
-import { TextDocumentManager } from '../../textDocumentManager';
 import { setDefault } from '../../util/map';
 import { CompletionsPromptOptions } from '../completionsPromptFactory/completionsPromptFactory';
 import { CodeSnippetWithId, TraitWithId } from '../contextProviders/contextItemSchemas';
@@ -25,7 +20,6 @@ import {
 	snapshot,
 } from '../render/renderNode';
 import { getAvailableNodeId, NodeCostFunction } from '../render/utils';
-import { MAX_EDIT_DISTANCE_LENGTH } from './currentFile';
 
 /* How many lines of prefix/suffix should have cached token costs */
 const NUM_CACHED_LINE_COSTS = 20_000;
@@ -166,81 +160,6 @@ export class BasicPrefixComponent implements VirtualPromptComponent {
 	}
 }
 
-type CachedSuffix = {
-	root: RenderNode;
-	text: string;
-	cost: number;
-};
-const NULL_SUFFIX: CachedSuffix = {
-	root: EMPTY_NODE,
-	text: '',
-	cost: 0,
-};
-
-export class CachedSuffixComponent implements VirtualPromptComponent {
-	readonly name = 'cachedSuffix';
-
-	private cache = new LRUCacheMap<DocumentUri, CachedSuffix>(5);
-	private costCache = new LRUCacheMap<string, number>(NUM_CACHED_LINE_COSTS);
-	constructor(private readonly ctx: Context) { }
-
-	snapshot(options: CompletionsPromptOptions): ComponentSnapshot {
-		const cachedSuffix = this.getCachedSuffix(options);
-		return { root: cachedSuffix.root };
-	}
-
-	estimatedCost(options: CompletionsPromptOptions, context?: ValidatedContextItems): number {
-		const cachedSuffix = this.getCachedSuffix(options);
-		return cachedSuffix.cost;
-	}
-
-	private getCachedSuffix(options: CompletionsPromptOptions): CachedSuffix {
-		const { completionState, telemetryData, promptOpts } = options;
-		const rawSuffix = completionState.textDocument.getText({
-			start: completionState.position,
-			end: { line: Number.MAX_VALUE, character: Number.MAX_VALUE },
-		});
-		// Start the suffix at the beginning of the next line. This allows for consistent reconciliation of trailing punctuation.
-		const trimmedSuffix = rawSuffix.replace(/^.*/, '').trimStart();
-		if (trimmedSuffix === '') {
-			return NULL_SUFFIX;
-		}
-
-		const cachedSuffix = this.cache.get(completionState.textDocument.uri) || NULL_SUFFIX;
-		// Cache hit
-		if (cachedSuffix.text === trimmedSuffix) {
-			return cachedSuffix;
-		}
-
-		const matchThreshold = this.ctx.get(Features).suffixMatchThreshold(telemetryData);
-		if (cachedSuffix.text !== '') {
-			const tokenizer = new ApproximateTokenizer();
-			const firstSuffixTokens = tokenizer.takeFirstTokens(trimmedSuffix, MAX_EDIT_DISTANCE_LENGTH);
-			// Check if the suffix is similar to the cached suffix.
-			// See docs/suffix_caching.md for some background about why we do this.
-			if (firstSuffixTokens.tokens.length > 0) {
-				// Calculate the distance between the computed and cached suffixed using Levenshtein distance.
-				// Only compare the first MAX_EDIT_DISTANCE_LENGTH tokens to speed up.
-				const dist = findEditDistanceScore(
-					firstSuffixTokens.tokens,
-					tokenizer.takeFirstTokens(cachedSuffix.text, MAX_EDIT_DISTANCE_LENGTH).tokens
-				)?.score;
-				if (100 * dist < matchThreshold * firstSuffixTokens.tokens.length) {
-					return cachedSuffix;
-				}
-			}
-		}
-
-		// Otherwise, use the new suffix
-
-		const tokenizer = getTokenizer(promptOpts?.tokenizer);
-		const costFunction = cachedLineCostFunction(tokenizer, this.costCache);
-		const root = getLinewiseNode(trimmedSuffix, costFunction, true);
-		const cost = root.children.reduce((sum, child) => sum + child.cost + 1, 0);
-		return { root, cost, text: trimmedSuffix };
-	}
-}
-
 export class TraitComponent implements VirtualPromptComponent {
 	readonly name = 'traitProvider';
 
@@ -289,84 +208,6 @@ export class TraitComponent implements VirtualPromptComponent {
 			canMerge: true,
 			requireRenderedChild: true,
 		};
-		rectifyWeights(root, node => (weights.get(node.id) ?? 0) / totalWeight);
-		return { root, statistics };
-	}
-}
-
-export class CodeSnippetComponent implements VirtualPromptComponent {
-	readonly name = 'contextProvider';
-	constructor(private readonly ctx: Context) { }
-
-	snapshot(options: CompletionsPromptOptions, context?: ValidatedContextItems): ComponentSnapshot {
-		const { promptOpts } = options;
-		const tokenizer = getTokenizer(promptOpts?.tokenizer);
-		if (!context || context.codeSnippets.length === 0) {
-			return { root: EMPTY_NODE };
-		}
-
-		// Snippets with the same URI should appear together as a single snippet.
-		const snippetsByUri = new Map<string, CodeSnippetWithId[]>();
-		for (const snippet of context.codeSnippets) {
-			const uri = snippet.uri;
-			setDefault(snippetsByUri, uri, () => []).push(snippet);
-		}
-		const statistics: Map<NodeId, ComponentStatistics> = new Map();
-
-		const uriNodes: RenderNode[] = [];
-		const weights: Map<number, number> = new Map();
-		let totalWeight = 0;
-		const tdm = this.ctx.get(TextDocumentManager);
-		for (const [uri, snippets] of snippetsByUri.entries()) {
-			const relativeUri = tdm.getRelativePath({ uri }) ?? uri;
-			const header = `Compare ${snippets.length > 1 ? 'these snippets' : 'this snippet'} from ${relativeUri}:\n`;
-			const text: string[] = [header, ...new Array<string>(snippets.length).fill('\n')];
-			const children: RenderNode[] = [];
-			for (const snippet of snippets) {
-				const id = getAvailableNodeId();
-				weights.set(id, snippet.importance ?? 0);
-				const child: RenderNode = {
-					id,
-					text: [snippet.value],
-					children: [],
-					cost: tokenizer.tokenLength(snippet.value),
-					weight: snippet.importance ?? 0,
-					elisionMarker: '',
-					canMerge: true,
-					requireRenderedChild: false,
-				};
-				children.push(child);
-				totalWeight += snippet.importance ?? 0;
-				statistics.set(id, {
-					componentPath: snippet.id,
-					source: snippet,
-					expectedTokens: child.cost,
-				});
-			}
-			uriNodes.push({
-				id: getAvailableNodeId(),
-				text,
-				children,
-				cost: tokenizer.tokenLength(text.join('')),
-				weight: 0,
-				elisionMarker: '',
-				canMerge: true,
-				requireRenderedChild: true,
-			});
-		}
-		totalWeight = Math.max(totalWeight, 1);
-		const text = new Array(uriNodes.length + 1).fill('');
-		const root: RenderNode = {
-			id: getAvailableNodeId(),
-			text,
-			children: uriNodes,
-			cost: 0,
-			weight: 0,
-			elisionMarker: '',
-			canMerge: true,
-			requireRenderedChild: true,
-		};
-		// We set the weights here so they can be normalized
 		rectifyWeights(root, node => (weights.get(node.id) ?? 0) / totalWeight);
 		return { root, statistics };
 	}

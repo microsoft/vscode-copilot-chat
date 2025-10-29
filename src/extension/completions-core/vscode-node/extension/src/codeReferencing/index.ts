@@ -6,17 +6,21 @@
 import { Disposable } from 'vscode';
 import { CopilotToken } from '../../../lib/src/auth/copilotTokenManager';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
-import type { Context } from '../../../lib/src/context';
+import { ICompletionsContextService } from '../../../lib/src/context';
 import { codeReferenceLogger } from '../../../lib/src/snippy/logger';
 import { isRunningInTest } from '../../../lib/src/util/runtimeMode';
 import { registerCodeRefEngagementTracker } from './codeReferenceEngagementTracker';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 export class CodeReference {
 	subscriptions: Disposable | undefined;
 	event?: Disposable;
 	enabled: boolean = false;
 
-	constructor(readonly ctx: Context) { }
+	constructor(
+		@ICompletionsContextService readonly ctx: ICompletionsContextService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService
+	) { }
 
 	dispose() {
 		this.subscriptions?.dispose();
@@ -49,6 +53,6 @@ export class CodeReference {
 
 		codeReferenceLogger.info(this.ctx, 'Public code references are enabled.');
 
-		this.addDisposable(registerCodeRefEngagementTracker(this.ctx));
+		this.addDisposable(registerCodeRefEngagementTracker(this._instantiationService));
 	};
 }

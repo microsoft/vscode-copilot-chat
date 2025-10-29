@@ -28,10 +28,10 @@ export function createExtensionTestingContext() {
 	const ctx = _createBaselineContext(accessor, new ExtensionTestConfigProvider());
 	ctx.set(Fetcher, new StaticFetcher());
 	ctx.set(EditorAndPluginInfo, new VSCodeEditorInfo());
-	ctx.set(TextDocumentManager, new ExtensionTextDocumentManager(ctx));
+	ctx.set(TextDocumentManager, ctx.instantiationService.createInstance(ExtensionTextDocumentManager));
 	ctx.set(FileSystem, extensionFileSystem);
 	ctx.forceSet(PromiseQueue, new TestPromiseQueue());
-	ctx.forceSet(CopilotContentExclusionManager, new CopilotContentExclusionManager(ctx));
+	ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(CopilotContentExclusionManager));
 	ctx.set(CopilotExtensionStatus, new CopilotExtensionStatus());
 	return ctx;
 }

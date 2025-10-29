@@ -3,18 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { logger } from '../logger';
-import { ActiveExperiments } from './contextProviderRegistry';
 import { TelemetryWithExp } from '../telemetry';
+import { ActiveExperiments } from './contextProviderRegistry';
 
 interface ContextProviderParams {
 	[key: string]: string | number | boolean;
 }
 
 export function fillInCSharpActiveExperiments(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	activeExperiments: ActiveExperiments,
 	telemetryData: TelemetryWithExp
 ): boolean {

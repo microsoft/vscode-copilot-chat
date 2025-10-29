@@ -35,7 +35,7 @@ suite('StreamedCompletionSplitter', function () {
 			extra: {},
 		};
 		const cacheFunction = Sinon.stub<[string, APIChoice], void>();
-		const splitter = new StreamedCompletionSplitter(ctx, docPrefix, languageId, true, 7, cacheFunction);
+		const splitter = ctx.instantiationService.createInstance(StreamedCompletionSplitter, docPrefix, languageId, true, 7, cacheFunction);
 		const fetchAndStreamCompletions = async function () {
 			return await ctx
 				.get(OpenAIFetcher)

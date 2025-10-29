@@ -3,9 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { CancellationToken } from 'vscode';
+import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { getTokenizer } from '../../../prompt/src/tokenization';
 import { CopilotTokenManager } from '../auth/copilotTokenManager';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Response } from '../networking';
+import { TelemetryData, TelemetryWithExp } from '../telemetry';
 import {
 	CompletionError,
 	CompletionParams,
@@ -19,10 +23,6 @@ import {
 	SpeculationFetchParams
 } from './fetch';
 import { APIChoice } from './openai';
-import { TelemetryData, TelemetryWithExp } from '../telemetry';
-import { getTokenizer } from '../../../prompt/src/tokenization';
-import type { CancellationToken } from 'vscode';
-import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 
 /**
  * This module supports fake implementations of the completions returned by OpenAI, as well
@@ -125,7 +125,7 @@ export class SyntheticCompletions extends OpenAIFetcher {
 	}
 
 	async fetchAndStreamCompletions(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		params: CompletionParams,
 		baseTelemetryData: TelemetryWithExp,
 		finishedCb: FinishedCallback,
@@ -160,7 +160,7 @@ export class ErrorReturningFetcher extends LiveOpenAIFetcher {
 	}
 
 	override fetchWithParameters(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		endpoint: string,
 		params: CompletionParams,
 		_copilotToken: unknown,

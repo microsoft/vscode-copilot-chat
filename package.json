@@ -1635,6 +1635,7 @@
 			},
 			{
 				"vendor": "customoai",
+				"when": "productQualityType != 'stable'",
 				"displayName": "OpenAI Compatible",
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
@@ -3053,22 +3054,6 @@
 						],
 						"description": "%github.copilot.config.gpt5AlternatePrompt%"
 					},
-					"github.copilot.chat.grokCodeAlternatePrompt": {
-						"type": "string",
-						"default": "default",
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.grokCodeAlternatePrompt%"
-					},
-					"github.copilot.chat.claudeSonnet45AlternatePrompt": {
-						"type": "string",
-						"default": "default",
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.claudeSonnet45AlternatePrompt%"
-					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
 						"default": true,
@@ -4371,7 +4356,7 @@
 		"openai": "^5.11.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
-		"playwright": "^1.54.0",
+		"playwright": "^1.56.1",
 		"prettier": "^3.6.2",
 		"react": "^17.0.2",
 		"react-dom": "17.0.2",

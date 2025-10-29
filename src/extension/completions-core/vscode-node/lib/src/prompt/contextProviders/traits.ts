@@ -3,15 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../context';
-import { ResolvedContextItem } from '../contextProviderRegistry';
-import { filterContextItemsByType, TraitWithId } from './contextItemSchemas';
-import { ContextProviderStatistics } from '../contextProviderStatistics';
-import { telemetry, TelemetryProperties, TelemetryWithExp } from '../../telemetry';
 import { Trait } from '../../../../types/src';
+import { ICompletionsContextService } from '../../context';
+import { telemetry, TelemetryProperties, TelemetryWithExp } from '../../telemetry';
+import { ResolvedContextItem } from '../contextProviderRegistry';
+import { ContextProviderStatistics } from '../contextProviderStatistics';
+import { filterContextItemsByType, TraitWithId } from './contextItemSchemas';
 
 export function getTraitsFromContextItems(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionId: string,
 	resolvedContextItems: ResolvedContextItem[]
 ): TraitWithId[] {
@@ -28,7 +28,7 @@ export function getTraitsFromContextItems(
 	return traits.sort((a, b) => (a.importance ?? 0) - (b.importance ?? 0));
 }
 
-function setupExpectationsForTraits(ctx: Context, completionId: string, traits: TraitWithId[], providerId: string) {
+function setupExpectationsForTraits(ctx: ICompletionsContextService, completionId: string, traits: TraitWithId[], providerId: string) {
 	const statistics = ctx.get(ContextProviderStatistics).getStatisticsForCompletion(completionId);
 
 	traits.forEach(t => {
@@ -45,7 +45,7 @@ const traitNamesForTelemetry: Map<string, string> = new Map([
 
 export function ReportTraitsTelemetry(
 	eventName: string,
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	traits: Trait[],
 	detectedLanguageId: string,
 	clientLanguageId: string,

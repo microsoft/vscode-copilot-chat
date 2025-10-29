@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { Logger, logger } from './logger';
 import { isAbortError } from './networking';
 import { StatusReporter } from './progress';
@@ -17,7 +17,7 @@ function isOomError(error: NodeJS.ErrnoException) {
 	);
 }
 
-export function handleException(ctx: Context, err: unknown, origin: string, _logger: Logger = logger): void {
+export function handleException(ctx: ICompletionsContextService, err: unknown, origin: string, _logger: Logger = logger): void {
 	if (isAbortError(err)) {
 		// ignore cancelled fetch requests
 		return;

@@ -8,7 +8,7 @@
 import * as assert from 'assert';
 import dedent from 'ts-dedent';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { DocumentMarker } from '../../../prompt/components/marker';
 import { createCompletionRequestData } from '../../../test/completionsPrompt';
 import { createLibTestingContext } from '../../../test/context';
@@ -17,7 +17,7 @@ import { createTextDocument, InMemoryNotebookDocument, TestTextDocumentManager }
 import { TextDocumentManager } from '../../../textDocumentManager';
 
 suite('Document Marker', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	setup(function () {
 		ctx = createLibTestingContext();
@@ -46,7 +46,7 @@ suite('Document Marker', function () {
 		assert.deepStrictEqual(marker, 'Language: typescript');
 	});
 
-	async function renderMarker(ctx: Context, uri: string) {
+	async function renderMarker(ctx: ICompletionsContextService, uri: string) {
 		const textDocument = createTextDocument(
 			uri,
 			'typescript',

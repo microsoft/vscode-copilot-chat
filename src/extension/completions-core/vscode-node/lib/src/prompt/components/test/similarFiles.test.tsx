@@ -10,7 +10,7 @@ import dedent from 'ts-dedent';
 import { PromptSnapshotNode } from '../../../../../prompt/src/components/components';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { initializeTokenizers } from '../../../../../prompt/src/tokenization';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { CompletionRequestDocument } from '../../../prompt/completionsPromptFactory/componentsCompletionsPromptFactory';
 import { SimilarFiles } from '../../../prompt/components/similarFiles';
 import { CodeSnippetWithId, TraitWithId } from '../../../prompt/contextProviders/contextItemSchemas';
@@ -24,7 +24,7 @@ import { createTextDocument, TestTextDocumentManager } from '../../../test/textD
 import { TextDocumentManager } from '../../../textDocumentManager';
 
 suite('Similar Files', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	setup(async function () {
 		ctx = createLibTestingContext();
@@ -111,7 +111,7 @@ suite('Similar Files', function () {
 	});
 
 	async function createSnapshot(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		doc: CompletionRequestDocument,
 		neighbors: CompletionRequestDocument[],
 		codeSnippets?: CodeSnippetWithId[],
@@ -129,7 +129,7 @@ suite('Similar Files', function () {
 			// - initialize workspace folders
 			tdm.init([{ uri: 'file:///workspace' }]);
 			tdm.setTextDocument(doc.uri, doc.detectedLanguageId, doc.getText());
-			ctx.forceSet(RelatedFilesProvider, new MockTraitsProvider(ctx, legacyTraits));
+			ctx.forceSet(RelatedFilesProvider, ctx.instantiationService.createInstance(MockTraitsProvider, legacyTraits));
 		}
 
 		const virtualPrompt = new VirtualPrompt(<SimilarFiles ctx={ctx} />);

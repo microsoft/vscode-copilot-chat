@@ -5,7 +5,7 @@
 
 import * as assert from 'assert';
 
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import {
 	Fetcher,
 	postRequest,
@@ -14,7 +14,7 @@ import { createLibTestingContext } from './context';
 import { StaticFetcher, createFakeJsonResponse } from './fetcher';
 
 suite('Networking test Suite', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 	let fetcher: StaticFetcher;
 
 	setup(function () {

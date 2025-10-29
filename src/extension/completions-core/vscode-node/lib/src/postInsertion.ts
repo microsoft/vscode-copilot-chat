@@ -6,7 +6,7 @@ import { getLastCopilotToken } from './auth/copilotTokenManager';
 import { ChangeTracker } from './changeTracker';
 import { CitationManager, IPCitationDetail } from './citationManager';
 import { createCompletionState } from './completionState';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { FileReader } from './fileReader';
 import { PostInsertionCategory, telemetryAccepted, telemetryRejected } from './ghostText/telemetry';
 import { Logger } from './logger';
@@ -62,7 +62,7 @@ const postInsertConfiguration: {
 };
 
 async function captureCode(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	uri: string,
 	completionTelemetry: TelemetryWithExp,
 	offset: number,
@@ -131,7 +131,7 @@ async function captureCode(
 }
 
 export function postRejectionTasks(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	insertionCategory: PostInsertionCategory,
 	insertionOffset: number,
 	uri: string,
@@ -146,8 +146,8 @@ export function postRejectionTasks(
 		telemetryRejected(ctx, insertionCategory, completionTelemetryData);
 	});
 
-	const positionTracker = new ChangeTracker(ctx, uri, insertionOffset - 1);
-	const suffixTracker = new ChangeTracker(ctx, uri, insertionOffset);
+	const positionTracker = ctx.instantiationService.createInstance(ChangeTracker, uri, insertionOffset - 1);
+	const suffixTracker = ctx.instantiationService.createInstance(ChangeTracker, uri, insertionOffset);
 
 	const checkInCode = async (t: Timeout) => {
 		postInsertionLogger.debug(
@@ -201,7 +201,7 @@ export function postRejectionTasks(
 }
 
 export function postInsertionTasks(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	insertionCategory: PostInsertionCategory,
 	completionText: string,
 	insertionOffset: number,
@@ -229,8 +229,8 @@ export function postInsertionTasks(
 	const fullCompletionText = completionText;
 	completionText = computeCompletionText(completionText, suggestionStatus);
 	const trimmedCompletion = completionText.trim();
-	const tracker = new ChangeTracker(ctx, uri, insertionOffset);
-	const suffixTracker = new ChangeTracker(ctx, uri, insertionOffset + completionText.length);
+	const tracker = ctx.instantiationService.createInstance(ChangeTracker, uri, insertionOffset);
+	const suffixTracker = ctx.instantiationService.createInstance(ChangeTracker, uri, insertionOffset + completionText.length);
 
 	const stillInCodeCheck = async (timeout: Timeout) => {
 		const check = checkStillInCode(
@@ -275,7 +275,7 @@ export function postInsertionTasks(
 }
 
 async function citationCheck(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	uri: string,
 	fullCompletionText: string,
 	insertedText: string,
@@ -376,7 +376,7 @@ function find(documentText: string, completion: string, margin: number, offset: 
 }
 
 async function checkStillInCode(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	insertionCategory: string,
 	completion: string,
 	insertionOffset: number, // offset where the completion was inserted to

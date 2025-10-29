@@ -2,13 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Context } from '../context';
-import { CompletionResult, ResultType } from './ghostText';
-import { ITextEditorOptions, normalizeIndentCharacter } from './normalizeIndent';
+import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { ICompletionsContextService } from '../context';
 import { CopilotNamedAnnotationList } from '../openai/stream';
 import { TelemetryWithExp } from '../telemetry';
 import { IPosition, IRange, LocationFactory, TextDocumentContents } from '../textDocument';
-import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { CompletionResult, ResultType } from './ghostText';
+import { ITextEditorOptions, normalizeIndentCharacter } from './normalizeIndent';
 
 export interface CopilotCompletion {
 	uuid: string;
@@ -26,7 +26,7 @@ export interface CopilotCompletion {
 }
 
 export function completionsFromGhostTextResults(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionResults: CompletionResult[],
 	resultType: ResultType,
 	document: TextDocumentContents,

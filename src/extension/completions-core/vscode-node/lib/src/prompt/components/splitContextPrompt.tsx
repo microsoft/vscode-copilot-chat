@@ -5,8 +5,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
 
-import { Context } from '../../context';
-import { Features } from '../../experiments/features';
+import { ICompletionsContextService } from '../../context';
 import { CodeSnippets } from './codeSnippets';
 import { AdditionalCompletionsContext, StableCompletionsContext } from './completionsContext';
 import { DocumentPrefix, DocumentSuffix } from './currentFile';
@@ -14,19 +13,12 @@ import { DocumentMarker } from './marker';
 import { RecentEdits } from './recentEdits';
 import { SimilarFiles } from './similarFiles';
 import { Traits } from './traits';
-import { TelemetryWithExp } from '../../telemetry';
-
-export function shouldUseSplitContextPrompt(ctx: Context, telemetry: TelemetryWithExp): boolean {
-	return (
-		ctx.get(Features).enablePromptContextProxyField(telemetry)
-	);
-}
 
 /**
  * Function that returns the prompt structure for a code completion request following the split context prompt design
  * that optimizes for cache hits.
  */
-export function splitContextCompletionsPrompt(ctx: Context) {
+export function splitContextCompletionsPrompt(ctx: ICompletionsContextService) {
 	return (
 		<>
 			<StableCompletionsContext>

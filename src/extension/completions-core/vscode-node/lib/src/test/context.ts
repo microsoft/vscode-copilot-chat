@@ -20,7 +20,7 @@ import {
 	InMemoryConfigProvider,
 } from '../config';
 import { CopilotContentExclusionManager } from '../contentExclusion/contentExclusionManager';
-import { Context } from '../context';
+import { Context, ICompletionsContextService } from '../context';
 import { UserErrorNotifier } from '../error/userErrorNotifier';
 import { Features } from '../experiments/features';
 import { FileReader } from '../fileReader';
@@ -62,21 +62,25 @@ import { NoFetchFetcher } from './fetcher';
 import { TestNotificationSender, TestUrlOpener } from './testHelpers';
 import { TestTextDocumentManager } from './textDocument';
 
+import { ILanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
 import { NullLanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/nullLanguageContextProviderService';
 import { IInstantiationService, type ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ServiceCollection } from '../../../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { createExtensionTestingServices } from '../../../../../test/vscode-node/services';
+import { CompletionsCapiBridge } from '../../../bridge/src/completionsCapiBridge';
+import { FakeCopilotTokenManager } from './copilotTokenManager';
 
 class NullLog extends LogTarget {
 	logIt(..._: unknown[]) { }
 }
 
-const nullLanguageContextProviderService: NullLanguageContextProviderService = new NullLanguageContextProviderService();
 const bridges: any[] = [];
 bridges.push(CompletionsEndpointProviderBridge);
 bridges.push(CompletionsAuthenticationServiceBridge);
 bridges.push(CompletionsIgnoreServiceBridge);
 bridges.push(CompletionsExperimentationServiceBridge);
 bridges.push(CompletionsTelemetryServiceBridge);
+bridges.push(CompletionsCapiBridge);
 
 /**
  * Baseline for a context. Tests should prefer the specific variants outlined below.
@@ -85,63 +89,66 @@ bridges.push(CompletionsTelemetryServiceBridge);
  * @see createExtensionTestingContext
  * @see createAgentTestingContext
  */
-export function _createBaselineContext(serviceAccessor: ServicesAccessor, configProvider: InMemoryConfigProvider): Context {
-	const instaService = serviceAccessor.get(IInstantiationService);
+export function _createBaselineContext(serviceAccessor: ServicesAccessor, configProvider: InMemoryConfigProvider): ICompletionsContextService {
 	const ctx = new Context();
+
+	const serviceCollection = new ServiceCollection();
+	serviceCollection.set(ILanguageContextProviderService, new NullLanguageContextProviderService());
+	serviceCollection.set(ICompletionsContextService, ctx);
+	const instantiationService = serviceAccessor.get(IInstantiationService).createChild(serviceCollection);
+
+	ctx.setInstantiationService(instantiationService);
+
 	for (const bridge of bridges) {
-		ctx.set(bridge, instaService.createInstance(bridge));
+		ctx.set(bridge, instantiationService.createInstance(bridge));
 	}
 
 	ctx.set(ConfigProvider, configProvider);
 	ctx.set(InMemoryConfigProvider, configProvider);
 	ctx.set(BuildInfo, new BuildInfo());
 	ctx.set(RuntimeMode, new RuntimeMode({ debug: false, verboseLogging: false, testMode: true, simulation: false }));
-	ctx.set(CopilotTokenManager, new CopilotTokenManager(ctx, true));
+	ctx.set(CopilotTokenManager, instantiationService.createInstance(FakeCopilotTokenManager));
 	// Notifications from the monolith when fetching a token can trigger behavior that require these objects.
 	ctx.set(TelemetryReporters, new TelemetryReporters());
 	ctx.set(NotificationSender, new TestNotificationSender());
 	ctx.set(UrlOpener, new TestUrlOpener());
 	ctx.set(TelemetryLogSender, new TelemetryLogSenderImpl());
-	ctx.set(TelemetryUserConfig, new TelemetryUserConfig(ctx));
+	ctx.set(TelemetryUserConfig, instantiationService.createInstance(TelemetryUserConfig));
 	ctx.set(LogTarget, new NullLog());
 	ctx.set(UserErrorNotifier, new UserErrorNotifier());
 	ctx.set(EditorSession, new EditorSession('test-session', 'test-machine'));
-	ctx.set(Features, new Features(ctx));
+	ctx.set(Features, instantiationService.createInstance(Features));
 	ctx.set(CompletionsCache, new CompletionsCache());
 	ctx.set(BlockModeConfig, new ConfigBlockModeConfig());
 	ctx.set(StatusReporter, new NoOpStatusReporter());
 	ctx.set(PromiseQueue, new PromiseQueue());
-	ctx.set(CompletionNotifier, new CompletionNotifier(ctx));
+	ctx.set(CompletionNotifier, instantiationService.createInstance(CompletionNotifier));
 	//ctx.set(FileSearch, new TestingFileSearch());
-	ctx.set(CompletionsPromptFactory, createCompletionsPromptFactory(ctx));
+	ctx.set(CompletionsPromptFactory, createCompletionsPromptFactory(instantiationService));
 	ctx.set(LastGhostText, new LastGhostText());
 	ctx.set(CurrentGhostText, new CurrentGhostText());
 	ctx.set(ForceMultiLine, ForceMultiLine.default);
-	ctx.set(AvailableModelsManager, new AvailableModelsManager(ctx, false));
-	ctx.set(FileReader, new FileReader(ctx));
+	ctx.set(AvailableModelsManager, instantiationService.createInstance(AvailableModelsManager, false));
+	ctx.set(FileReader, instantiationService.createInstance(FileReader));
 	ctx.set(CitationManager, new NoOpCitationManager());
 	ctx.set(ContextProviderStatistics, new ContextProviderStatistics());
 	ctx.set(
 		ContextProviderRegistry,
-		getContextProviderRegistry(ctx, (_, documentSelector, documentContext) => {
+		getContextProviderRegistry(instantiationService, (_, documentSelector, documentContext) => {
 			if (documentSelector.find(ds => ds === '*')) {
 				return 1;
 			}
 			return documentSelector.find(ds => typeof ds !== 'string' && ds.language === documentContext.languageId)
 				? 10
 				: 0;
-		}, nullLanguageContextProviderService, true)
+		}, true)
 	);
-	ctx.set(ContextProviderBridge, new ContextProviderBridge(ctx));
-	registerConversation(ctx);
-	ctx.set(AsyncCompletionManager, new AsyncCompletionManager(ctx));
+	ctx.set(ContextProviderBridge, instantiationService.createInstance(ContextProviderBridge));
+	ctx.set(AsyncCompletionManager, instantiationService.createInstance(AsyncCompletionManager));
 	ctx.set(RecentEditsProvider, new EmptyRecentEditsProvider());
 	ctx.set(SpeculativeRequestCache, new SpeculativeRequestCache());
 
 	return ctx;
-}
-
-function registerConversation(ctx: Context) {
 }
 
 /**
@@ -154,9 +161,9 @@ export function createLibTestingContext() {
 
 	ctx.set(Fetcher, new NoFetchFetcher());
 	ctx.set(EditorAndPluginInfo, new LibTestsEditorInfo());
-	ctx.set(TextDocumentManager, new TestTextDocumentManager(ctx));
+	ctx.set(TextDocumentManager, ctx.instantiationService.createInstance(TestTextDocumentManager));
 	ctx.set(FileSystem, new LocalFileSystem());
-	ctx.set(CopilotContentExclusionManager, new CopilotContentExclusionManager(ctx));
+	ctx.set(CopilotContentExclusionManager, ctx.instantiationService.createInstance(CopilotContentExclusionManager));
 	ctx.set(DefaultContextProviders, new DefaultContextProvidersContainer());
 
 	return ctx;

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CancellationTokenSource } from '../../../types/src';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { LRUCacheMap } from '../helpers/cache';
 import { Logger } from '../logger';
@@ -54,7 +54,7 @@ export class AsyncCompletionManager {
 	 * the most recent request prefix. */
 	private mostRecentRequestId = '';
 
-	constructor(private readonly ctx: Context) { }
+	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) { }
 
 	clear() {
 		this.requests.clear();

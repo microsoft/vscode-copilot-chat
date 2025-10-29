@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { extractRepoInfoInBackground } from '../../prompt/repository';
 import { TelemetryData } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
@@ -12,7 +12,7 @@ import { makeFsUri } from '../../util/uri';
 import { Features } from './../features';
 
 suite('updateExPValuesAndAssignments', function () {
-	let ctx: Context;
+	let ctx: ICompletionsContextService;
 
 	const filenameUri = makeFsUri(__filename);
 

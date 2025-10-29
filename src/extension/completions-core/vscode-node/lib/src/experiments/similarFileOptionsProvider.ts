@@ -3,22 +3,22 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ConfigKey, getConfig } from '../config';
-import { Context } from '../context';
-import { ExpTreatmentVariables } from './expConfig';
-import { getCppNumberOfSnippets, getCppSimilarFilesOptions } from './similarFileOptionsProviderCpp';
-import { TelemetryWithExp } from '../telemetry';
 import { DEFAULT_NUM_SNIPPETS } from '../../../prompt/src/prompt';
 import { defaultSimilarFilesOptions, SimilarFilesOptions } from '../../../prompt/src/snippetInclusion/similarFiles';
+import { ConfigKey, getConfig } from '../config';
+import { ICompletionsContextService } from '../context';
+import { TelemetryWithExp } from '../telemetry';
+import { ExpTreatmentVariables } from './expConfig';
+import { getCppNumberOfSnippets, getCppSimilarFilesOptions } from './similarFileOptionsProviderCpp';
 
-type SimilarFilesOptionsProvider = (ctx: Context, exp: TelemetryWithExp) => SimilarFilesOptions;
+type SimilarFilesOptionsProvider = (ctx: ICompletionsContextService, exp: TelemetryWithExp) => SimilarFilesOptions;
 // Add here for more options for other language ids.
 const languageSimilarFilesOptions: ReadonlyMap<string, SimilarFilesOptionsProvider> = new Map<
 	string,
 	SimilarFilesOptionsProvider
 >([['cpp', getCppSimilarFilesOptions]]);
 
-export function getSimilarFilesOptions(ctx: Context, exp: TelemetryWithExp, langId: string): SimilarFilesOptions {
+export function getSimilarFilesOptions(ctx: ICompletionsContextService, exp: TelemetryWithExp, langId: string): SimilarFilesOptions {
 	const optionsProvider: SimilarFilesOptionsProvider | undefined = languageSimilarFilesOptions.get(langId);
 	if (optionsProvider) {
 		return optionsProvider(ctx, exp);
@@ -41,7 +41,7 @@ export function getNumberOfSnippets(exp: TelemetryWithExp, langId: string): numb
 	return provider ? provider(exp) : DEFAULT_NUM_SNIPPETS;
 }
 
-export function useSubsetMatching(ctx: Context, telemetryWithExp: TelemetryWithExp): boolean {
+export function useSubsetMatching(ctx: ICompletionsContextService, telemetryWithExp: TelemetryWithExp): boolean {
 	return (
 		((telemetryWithExp.filtersAndExp.exp.variables[ExpTreatmentVariables.UseSubsetMatching] as boolean) ||
 			getConfig(ctx, ConfigKey.UseSubsetMatching)) ??

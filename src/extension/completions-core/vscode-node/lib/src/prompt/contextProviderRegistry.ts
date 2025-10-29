@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, CancellationTokenSource, DocumentSelector } from 'vscode-languageserver-protocol';
-import type { ILanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
 import { isCancellationError } from '../../../../../../util/vs/base/common/errors';
 import {
 	ContextItemUsageDetails,
@@ -17,7 +17,7 @@ import {
 	UsageStatus,
 } from '../../../types/src';
 import { ConfigKey, getConfig } from '../config';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { LRUCacheMap } from '../helpers/cache';
 import { logger } from '../logger';
@@ -34,6 +34,7 @@ import {
 	SupportedContextItemWithId,
 } from './contextProviders/contextItemSchemas';
 import { ContextProviderStatistics } from './contextProviderStatistics';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 export interface ResolvedContextItem<T extends SupportedContextItemWithId = SupportedContextItemWithId> {
 	providerId: string;
@@ -95,13 +96,13 @@ export class DefaultContextProvidersContainer extends DefaultContextProviders {
 
 class CoreContextProviderRegistry extends ContextProviderRegistry {
 	constructor(
-		protected ctx: Context,
 		private match: (
-			ctx: Context,
+			ctx: ICompletionsContextService,
 			documentSelector: DocumentSelector,
 			documentContext: DocumentContext
 		) => Promise<number> | number,
-		private registryService: ILanguageContextProviderService
+		@ILanguageContextProviderService private registryService: ILanguageContextProviderService,
+		@ICompletionsContextService protected ctx: ICompletionsContextService,
 	) {
 		super();
 	}
@@ -233,6 +234,10 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 			const pendingContextItem = provider.resolver.resolve(request, providerCancellationTokenSource.token);
 			resolutionMap.set(provider.id, pendingContextItem);
 		}
+
+		const statistics = this.ctx.get(ContextProviderStatistics).getStatisticsForCompletion(completionId);
+		statistics.setOpportunityId(opportunityId);
+
 		const results = await resolveAll(resolutionMap, providerCancellationTokenSource.token);
 
 		// Once done, clear the timeout so that we don't cancel the request once it has finished.
@@ -302,10 +307,7 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 
 					resolvedContextItems.push(resolvedContextItem);
 				}
-				this.ctx
-					.get(ContextProviderStatistics)
-					.getStatisticsForCompletion(completionId)
-					.setLastResolution(provider.id, result.status);
+				statistics.setLastResolution(provider.id, result.status);
 			} else {
 				// This can't happen
 				logger.error(this.ctx, `Context provider ${provider.id} not found in results`);
@@ -342,15 +344,15 @@ class MutableContextProviderRegistry extends CoreContextProviderRegistry {
 	private _providers: ContextProvider<SupportedContextItem>[] = [];
 
 	constructor(
-		ctx: Context,
 		match: (
-			ctx: Context,
+			ctx: ICompletionsContextService,
 			documentSelector: DocumentSelector,
 			documentContext: DocumentContext
 		) => Promise<number> | number,
-		registryService: ILanguageContextProviderService
+		@ILanguageContextProviderService registryService: ILanguageContextProviderService,
+		@ICompletionsContextService ctx: ICompletionsContextService,
 	) {
-		super(ctx, match, registryService);
+		super(match, registryService, ctx);
 	}
 
 	override registerContextProvider<T extends SupportedContextItem>(provider: ContextProvider<T>) {
@@ -427,24 +429,23 @@ class CachedContextProviderRegistry extends ContextProviderRegistry {
 }
 
 export function getContextProviderRegistry(
-	ctx: Context,
+	instantiationService: IInstantiationService,
 	match: (
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		documentSelector: DocumentSelector,
 		documentContext: DocumentContext
 	) => Promise<number> | number,
-	registryService: ILanguageContextProviderService,
 	mutable: boolean = false
 ) {
 	return new CachedContextProviderRegistry(
 		mutable
-			? new MutableContextProviderRegistry(ctx, match, registryService)
-			: new CoreContextProviderRegistry(ctx, match, registryService)
+			? instantiationService.createInstance(MutableContextProviderRegistry, match)
+			: instantiationService.createInstance(CoreContextProviderRegistry, match)
 	);
 }
 
 export function telemetrizeContextItems(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionId: string,
 	resolvedContextItems: ResolvedContextItem[]
 ) {
@@ -503,7 +504,7 @@ export function matchContextItems(resolvedContextItem: ResolvedContextItem): boo
 	return resolvedContextItem.matchScore > 0 && resolvedContextItem.resolution !== 'error';
 }
 
-function getActiveContextProviders(ctx: Context, telemetryData: TelemetryWithExp): string[] {
+function getActiveContextProviders(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp): string[] {
 	const expContextProviders = getExpContextProviders(ctx, telemetryData);
 	const configContextProviders: string[] = getConfig(ctx, ConfigKey.ContextProviders) ?? [];
 
@@ -523,7 +524,7 @@ function getActiveContextProviders(ctx: Context, telemetryData: TelemetryWithExp
  * This only returns the context providers that are enabled by EXP.
  * Use `getActiveContextProviders` to get the context providers that are enabled by both EXP and config.
  */
-function getExpContextProviders(ctx: Context, telemetryData: TelemetryWithExp) {
+function getExpContextProviders(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp) {
 	if (isDebugEnabled(ctx)) {
 		return ['*'];
 	}
@@ -531,11 +532,11 @@ function getExpContextProviders(ctx: Context, telemetryData: TelemetryWithExp) {
 	return ctx.get(Features).contextProviders(telemetryData);
 }
 
-export function useContextProviderAPI(ctx: Context, telemetryData: TelemetryWithExp) {
+export function useContextProviderAPI(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp) {
 	return getActiveContextProviders(ctx, telemetryData).length > 0;
 }
 
-function getContextProviderTimeBudget(ctx: Context, telemetryData: TelemetryWithExp): number {
+function getContextProviderTimeBudget(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp): number {
 	const configTimeout = getConfig<number | undefined>(ctx, ConfigKey.ContextProviderTimeBudget);
 	if (configTimeout !== undefined && typeof configTimeout === 'number') {
 		return configTimeout;

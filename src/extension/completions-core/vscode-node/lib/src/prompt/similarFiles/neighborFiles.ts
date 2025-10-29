@@ -5,7 +5,7 @@
 
 import { normalizeLanguageId, SimilarFileInfo } from '../../../../prompt/src/prompt';
 import { CancellationToken as ICancellationToken } from '../../../../types/src';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Features } from '../../experiments/features';
 import { TelemetryWithExp } from '../../telemetry';
 import { TextDocumentManager } from '../../textDocumentManager';
@@ -78,7 +78,7 @@ export class NeighborSource {
 	}
 
 	static async getNeighborFilesAndTraits(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		uri: string,
 		fileType: string,
 		telemetryData: TelemetryWithExp,
@@ -186,10 +186,10 @@ export class NeighborSource {
 	}
 }
 
-function isExcludeRelatedFilesActive(ctx: Context, telemetryData: TelemetryWithExp): boolean {
+function isExcludeRelatedFilesActive(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp): boolean {
 	return ctx.get(Features).excludeRelatedFiles(telemetryData);
 }
 
-export function isIncludeNeighborFilesActive(ctx: Context, telemetryData: TelemetryWithExp): boolean {
+export function isIncludeNeighborFilesActive(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp): boolean {
 	return ctx.get(Features).includeNeighboringFiles(telemetryData);
 }

@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { CompletionsTelemetryServiceBridge } from '../../../bridge/src/completionsTelemetryServiceBridge';
 import { isSupportedLanguageId } from '../../../prompt/src/parse';
 import { initializeTokenizers } from '../../../prompt/src/tokenization';
 import { CancellationTokenSource, CancellationToken as ICancellationToken } from '../../../types/src';
 import { CompletionNotifier } from '../completionNotifier';
 import { CompletionState } from '../completionState';
 import { BlockMode, ConfigKey, getConfig, shouldDoServerTrimming } from '../config';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { UserErrorNotifier } from '../error/userErrorNotifier';
 import { Features } from '../experiments/features';
 import { Logger } from '../logger';
@@ -28,6 +29,7 @@ import { APIChoice, getTemperatureForSamples } from '../openai/openai';
 import { CopilotNamedAnnotationList } from '../openai/stream';
 import { StatusReporter } from '../progress';
 import { ContextProviderBridge } from '../prompt/components/contextProviderBridge';
+import { ContextProviderStatistics } from '../prompt/contextProviderStatistics';
 import {
 	ContextIndentation,
 	contextIndentation,
@@ -95,7 +97,7 @@ export enum ResultType {
 const maxSinglelineTokens = 20;
 
 async function genericGetCompletionsFromNetwork<T>(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	requestContext: RequestContext,
 	baseTelemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
@@ -242,7 +244,7 @@ export type GetNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice,
  *  Copies from the base telemetry data are used as the basis for each choice's telemetry.
  */
 async function getCompletionsFromNetwork(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	requestContext: RequestContext,
 	baseTelemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
@@ -346,7 +348,7 @@ type GetAllNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice[], P
  *  Copies from the base telemetry data are used as the basis for each choice's telemetry.
  */
 async function getAllCompletionsFromNetwork(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	requestContext: RequestContext,
 	baseTelemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
@@ -428,7 +430,7 @@ function takeNLines(n: number): FinishedCallback {
 }
 
 async function getGhostTextStrategy(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionState: CompletionState,
 	prefix: string,
 	prompt: PromptResponsePresent,
@@ -551,7 +553,7 @@ async function getGhostTextStrategy(
 }
 
 function buildFinishedCallback(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	blockMode: BlockMode,
 	document: TextDocumentContents,
 	position: IPosition,
@@ -567,8 +569,7 @@ function buildFinishedCallback(
 				? ctx.get(Features).longLookaheadSize(telemetryData)
 				: ctx.get(Features).shortLookaheadSize(telemetryData);
 
-		const finishedCb = new StreamedCompletionSplitter(
-			ctx,
+		const finishedCb = ctx.instantiationService.createInstance(StreamedCompletionSplitter,
 			prefix,
 			document.detectedLanguageId,
 			false,
@@ -588,7 +589,7 @@ function buildFinishedCallback(
 		};
 	}
 
-	return { finishedCb: multiline ? parsingBlockFinished(ctx, document, position) : _ => undefined };
+	return { finishedCb: multiline ? parsingBlockFinished(document, position) : _ => undefined };
 }
 
 export type GetGhostTextOptions = ExtractPromptOptions & {
@@ -619,7 +620,7 @@ const defaultOptions: GetGhostTextOptions = {
 	isSpeculative: false,
 };
 
-function getRemainingDebounceMs(ctx: Context, opts: GetGhostTextOptions, telemetry: TelemetryWithExp): number {
+function getRemainingDebounceMs(ctx: ICompletionsContextService, opts: GetGhostTextOptions, telemetry: TelemetryWithExp): number {
 	const debounce =
 		getConfig<number | undefined>(ctx, ConfigKey.CompletionsDebounce) ??
 		ctx.get(Features).completionsDebounce(telemetry) ??
@@ -630,7 +631,7 @@ function getRemainingDebounceMs(ctx: Context, opts: GetGhostTextOptions, telemet
 }
 
 function inlineCompletionRequestCancelled(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	requestId: string,
 	cancellationToken?: ICancellationToken
 ): boolean {
@@ -638,7 +639,7 @@ function inlineCompletionRequestCancelled(
 }
 
 async function getGhostTextWithoutAbortHandling(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionState: CompletionState,
 	ourRequestId: string,
 	preIssuedTelemetryDataWithExp: TelemetryWithExp,
@@ -1071,7 +1072,7 @@ async function getGhostTextWithoutAbortHandling(
 }
 
 export async function getGhostText(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	completionState: CompletionState,
 	token?: ICancellationToken,
 	options?: Partial<GetGhostTextOptions>
@@ -1094,7 +1095,38 @@ export async function getGhostText(
 			options
 		);
 		ctx.get(CompletionNotifier).notifyRequest(completionState, id, telemetryData, token, options);
-		return await getGhostTextWithoutAbortHandling(ctx, completionState, id, telemetryData, token, options);
+		const result = await getGhostTextWithoutAbortHandling(ctx, completionState, id, telemetryData, token, options);
+		const statistics = ctx.get(ContextProviderStatistics).getStatisticsForCompletion(id);
+		const opportunityId = options?.opportunityId ?? 'unknown';
+		const telemetryService = ctx.get(CompletionsTelemetryServiceBridge).getTelemetryService();
+		for (const [providerId, statistic] of statistics.getAllUsageStatistics()) {
+			/* __GDPR__
+				"context-provider.completion-stats" : {
+					"owner": "dirkb",
+					"comment": "Telemetry for copilot inline completion context",
+					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+					"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
+					"providerId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The context provider id" },
+					"resolution": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The resolution of the context" },
+					"usage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How the context was used" },
+					"usageDetails": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Additional details about the usage as a JSON string" }
+				}
+			*/
+			telemetryService.sendMSFTTelemetryEvent(
+				'context-provider.completion-stats',
+				{
+					requestId: id,
+					opportunityId,
+					providerId,
+					resolution: statistic.resolution,
+					usage: statistic.usage,
+					usageDetails: JSON.stringify(statistic.usageDetails),
+				},
+				{
+				}
+			);
+		}
+		return result;
 	} catch (e) {
 		// The cancellation token may be called after the request is done but while we still process data.
 		// The underlying implementation catches abort errors for specific scenarios but we still have uncovered paths.
@@ -1118,7 +1150,7 @@ export async function getGhostText(
  *  2. If we have a previously cached inline suggestion for this prompt and requestMultiline.
  */
 function getLocalInlineSuggestion(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	prefix: string,
 	prompt: Prompt,
 	requestMultiline: boolean
@@ -1238,7 +1270,7 @@ type MultilineDetermination = {
 };
 
 async function shouldRequestMultiline(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	blockMode: BlockMode,
 	document: TextDocumentContents,
 	position: IPosition,
@@ -1304,7 +1336,7 @@ async function shouldRequestMultiline(
 }
 
 /** Appends completions to existing entry in cache or creates new entry. */
-function appendToCache(ctx: Context, requestContext: CacheContext, choice: APIChoice) {
+function appendToCache(ctx: ICompletionsContextService, requestContext: CacheContext, choice: APIChoice) {
 	ctx.get(CompletionsCache).append(requestContext.prefix, requestContext.prompt.suffix, choice);
 }
 
@@ -1353,7 +1385,7 @@ function adjustLeadingWhitespace(index: number, text: string, ws: string): Ghost
  * remaining current prefix.
  */
 function getCompletionsFromCache(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	prefix: string,
 	suffix: string,
 	multiline: boolean
@@ -1369,7 +1401,7 @@ function getCompletionsFromCache(
 
 /** Create a TelemetryWithExp instance for a ghost text request. */
 async function createTelemetryWithExp(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	document: TextDocumentContents,
 	headerRequestId: string,
 	options?: Partial<GetGhostTextOptions>
@@ -1389,7 +1421,7 @@ async function createTelemetryWithExp(
 
 /** Return a copy of the choice's telemetry data with extra information added */
 function telemetryWithAddData(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	document: TextDocumentContents,
 	requestContext: RequestContext,
 	choice: APIChoice,
@@ -1426,7 +1458,7 @@ function telemetryWithAddData(
 
 /** Create new telemetry data based on baseTelemetryData and send `ghostText.issued` event  */
 function telemetryIssued(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	document: TextDocumentContents,
 	requestContext: RequestContext,
 	position: IPosition,
@@ -1512,7 +1544,7 @@ function addDocumentTelemetry(telemetry: TelemetryWithExp, document: TextDocumen
 }
 
 function telemetryPerformance(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	performanceKind: string,
 	choice: APIChoice,
 	requestStart: number,

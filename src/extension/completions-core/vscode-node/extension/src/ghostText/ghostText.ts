@@ -3,11 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../../lib/src/context';
-import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
-import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
-import { getInlineCompletions } from '../../../lib/src/inlineCompletion';
-import { telemetry } from '../../../lib/src/telemetry';
 import {
 	CancellationToken,
 	commands,
@@ -24,12 +19,17 @@ import {
 	TextDocument,
 	window,
 } from 'vscode';
+import { ICompletionsContextService } from '../../../lib/src/context';
+import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
+import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
+import { getInlineCompletions } from '../../../lib/src/inlineCompletion';
+import { telemetry } from '../../../lib/src/telemetry';
 import { wrapDoc } from '../textDocumentManager';
 
 const postInsertCmdName = '_github.copilot.ghostTextPostInsert2';
 
 export class GhostTextProvider implements InlineCompletionItemProvider {
-	constructor(private readonly ctx: Context) { }
+	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) { }
 
 	async provideInlineCompletionItems(
 		vscodeDoc: TextDocument,
@@ -101,7 +101,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 }
 
 /** Registers the commands necessary to use GhostTextProvider (but not GhostTextProvider itself) */
-export function registerGhostTextDependencies(ctx: Context) {
+export function registerGhostTextDependencies(ctx: ICompletionsContextService) {
 	const postCmdHandler = commands.registerCommand(postInsertCmdName, async (e: CopilotCompletion) => {
 		handleGhostTextPostInsert(ctx, e);
 		try {

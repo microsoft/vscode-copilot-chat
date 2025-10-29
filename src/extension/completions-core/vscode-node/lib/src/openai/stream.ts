@@ -5,7 +5,7 @@
 
 import { ClientHttp2Stream } from 'http2';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Logger } from '../logger';
 import { Response } from '../networking';
 import { TelemetryWithExp, telemetry } from '../telemetry';
@@ -269,13 +269,13 @@ export class SSEProcessor {
 	private readonly solutions: Record<number, APIJsonDataStreaming | null> = {};
 
 	private constructor(
-		private readonly ctx: Context,
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
 		private readonly body: NodeJS.ReadableStream,
 		private readonly telemetryData: TelemetryWithExp,
 		private readonly dropCompletionReasons: string[],
-		private readonly cancellationToken?: ICancellationToken
+		private readonly cancellationToken: ICancellationToken | undefined = undefined,
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
 	) { }
 
 	/**
@@ -285,7 +285,7 @@ export class SSEProcessor {
 	 * Historically, this was used to drop RAI ('content_filter') completions, instead of showing partially finished completions to the user. We've gone back and forth on this.
 	 */
 	static async create(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		expectedNumChoices: number,
 		response: Response,
 		telemetryData: TelemetryWithExp,
@@ -315,13 +315,13 @@ export class SSEProcessor {
 		// I made this function async and commented out the web ReadableStream approach
 
 		return new SSEProcessor(
-			ctx,
 			expectedNumChoices,
 			response,
 			body,
 			telemetryData,
 			dropCompletionReasons ?? [],
-			cancellationToken
+			cancellationToken,
+			ctx
 		);
 	}
 
@@ -702,7 +702,7 @@ export class SSEProcessor {
 }
 
 export function prepareSolutionForReturn(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	c: FinishedCompletion,
 	telemetryData: TelemetryWithExp
 ): APIChoice {

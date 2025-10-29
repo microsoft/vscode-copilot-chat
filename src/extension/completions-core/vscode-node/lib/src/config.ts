@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { packageJson } from '../../../../../platform/env/common/packagejson';
 import { CopilotConfigPrefix } from './constants';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { Filter } from './experiments/filters';
 import { Emitter, Event } from './util/event';
 
@@ -285,11 +285,11 @@ const configDefaults = new Map<ConfigKeyType, unknown>([
 	[ConfigKey.DebugFilterLogCategories, []],
 ]);
 
-export function getConfig<T>(ctx: Context, key: ConfigKeyType): T {
+export function getConfig<T>(ctx: ICompletionsContextService, key: ConfigKeyType): T {
 	return ctx.get(ConfigProvider).getConfig(key);
 }
 
-export function dumpForTelemetry(ctx: Context) {
+export function dumpForTelemetry(ctx: ICompletionsContextService) {
 	try {
 		return ctx.get(ConfigProvider).dumpForTelemetry();
 	} catch (e) {
@@ -346,23 +346,23 @@ export class BuildInfo {
 	}
 }
 
-export function isPreRelease(ctx: Context): boolean {
+export function isPreRelease(ctx: ICompletionsContextService): boolean {
 	return ctx.get(BuildInfo).isPreRelease();
 }
 
-export function isProduction(ctx: Context): boolean {
+export function isProduction(ctx: ICompletionsContextService): boolean {
 	return ctx.get(BuildInfo).isProduction();
 }
 
-export function getBuildType(ctx: Context): BuildType {
+export function getBuildType(ctx: ICompletionsContextService): BuildType {
 	return ctx.get(BuildInfo).getBuildType();
 }
 
-export function getBuild(ctx: Context): string {
+export function getBuild(ctx: ICompletionsContextService): string {
 	return ctx.get(BuildInfo).getBuild();
 }
 
-export function getVersion(ctx: Context): string {
+export function getVersion(ctx: ICompletionsContextService): string {
 	return ctx.get(BuildInfo).getVersion();
 }
 
@@ -414,7 +414,7 @@ export abstract class EditorAndPluginInfo {
  */
 export const apiVersion = '2025-05-01';
 
-export function editorVersionHeaders(ctx: Context): { [key: string]: string } {
+export function editorVersionHeaders(ctx: ICompletionsContextService): { [key: string]: string } {
 	const info = ctx.get(EditorAndPluginInfo);
 	return {
 		'Editor-Version': formatNameAndVersion(info.getEditorInfo()),

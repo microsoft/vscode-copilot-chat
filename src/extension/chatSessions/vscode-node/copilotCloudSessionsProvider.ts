@@ -973,7 +973,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				return;
 			}
 			// Add a comment tagging @copilot with the user's prompt
-			const commentBody = `@copilot ${userPrompt} \n\n --- \n\n ${summary ?? ''}`;
+			const commentBody = `@copilot ${userPrompt} ${summary ? '\n\n' + summary : ''}`;
 
 			const commentResult = await this._octoKitService.addPullRequestComment(pr.id, commentBody);
 			if (!commentResult) {
