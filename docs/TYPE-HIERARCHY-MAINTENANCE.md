@@ -76,43 +76,34 @@ git am --3way .git/patches/type-hierarchy/*.patch
 This makes it obvious which patch fails and keeps history linear.
 
 ## Automated Update Script
-Drop the following helper at `script/update-type-hierarchy.sh` in your fork to codify the flow:
+The helper lives in [../script/update-type-hierarchy.sh#L1-L91](../script/update-type-hierarchy.sh#L1-L91). It accepts a few environment toggles so CI, Copilot, and maintainers can share the same entry point:
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-repo_root="$(git rev-parse --show-toplevel)"
-cd "$repo_root"
+skip_sync="${SKIP_FORK_SYNC:-0}"
+auto_strategy="${AUTO_RESOLVE_STRATEGY:-}"
+simulate_conflict="${SIMULATE_CONFLICT:-0}"
 
-origin_branch="origin/main"
-stack_branch="personal/main"
-feature_branch="feature/type-hierarchy-tool"
+if [[ "$skip_sync" != "1" ]]; then
+	printf '==> Syncing fork %s\n' "$fork_repo"
+	gh repo sync "$fork_repo" --branch main
+else
+	printf '==> Skipping fork sync (SKIP_FORK_SYNC=%s)\n' "$skip_sync"
+fi
+```
+- `SKIP_FORK_SYNC=1` keeps the rebase flow local when you have already synchronized the fork.
+- `AUTO_RESOLVE_STRATEGY=theirs` (or another `--strategy-option`) retries the rebase with a conflict bias; see [../script/update-type-hierarchy.sh#L65-L83](../script/update-type-hierarchy.sh#L65-L83).
+- `SIMULATE_CONFLICT=1` stops early with a conflict-style failure so the remediation tooling can be rehearsed without touching upstream history; see [../script/update-type-hierarchy.sh#L39-L44](../script/update-type-hierarchy.sh#L39-L44).
 
-gh repo sync yulongbai-nov/vscode-copilot-chat --branch main
-
-git fetch origin
-
-git switch "$stack_branch"
-git rebase "$origin_branch"
-
-git switch "$feature_branch"
-git rebase "$stack_branch"
-
+Every run ends with a typecheck to catch API drift (see [../script/update-type-hierarchy.sh#L88-L89](../script/update-type-hierarchy.sh#L88-L89)):
+```bash
+printf '==> Running typecheck\n'
 npm run typecheck
-
-echo "✅ type hierarchy stack rebased and validated"```
-Mark it executable (`chmod +x script/update-type-hierarchy.sh`) and run whenever upstream advances.
+```
 
 ## GitHub Actions Integration
-- The maintenance workflow runs nightly at 02:15 UTC and remains available on demand; see [../.github/workflows/type-hierarchy-maintenance.yml#L1-L33](../.github/workflows/type-hierarchy-maintenance.yml#L1-L33):
-  ```yaml
-  jobs:
-    maintenance:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-  ```
-- Trigger fork CI runs after each sync:
+- The maintenance workflow runs nightly at 02:15 UTC and supports manual dispatch with the `simulate_conflict` toggle; see [../.github/workflows/type-hierarchy-maintenance.yml#L1-L39](../.github/workflows/type-hierarchy-maintenance.yml#L1-L39).
+- Merge-conflict remediation is handled by the agent workflow at [../.github/workflows/type-hierarchy-maintenance-agent.yml#L16-L200](../.github/workflows/type-hierarchy-maintenance-agent.yml#L16-L200), which reruns the updater with `AUTO_RESOLVE_STRATEGY=theirs`, writes a report under `docs/reports/`, and opens a follow-up PR.
+- When human help is required, trigger the delegate workflow at [../.github/workflows/copilot-maintenance-delegate.yml#L1-L58](../.github/workflows/copilot-maintenance-delegate.yml#L1-L58) to leave an `@copilot` comment (optionally including extra instructions) on the blocking pull request.
+- Trigger fork CI runs after each sync if additional validation is needed:
   ```bash
   gh workflow run typecheck.yml --repo yulongbai-nov/vscode-copilot-chat
   ```

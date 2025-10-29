@@ -38,6 +38,7 @@ npm run typecheck
 ### CI Orchestration
 - Scheduled and on-demand runs live in [../.github/workflows/type-hierarchy-maintenance.yml#L1-L39](../.github/workflows/type-hierarchy-maintenance.yml#L1-L39). Manual dispatch supports a `simulate_conflict` flag that forwards `SIMULATE_CONFLICT=1` to the script.
 - Failure handling is delegated to the agent workflow in [../.github/workflows/type-hierarchy-maintenance-agent.yml#L16-L200](../.github/workflows/type-hierarchy-maintenance-agent.yml#L16-L200). It watches for merge-related failures, reruns the updater with `AUTO_RESOLVE_STRATEGY=theirs`, and writes an incident report to `docs/reports/` before opening a follow-up PR.
+- When a human escalation is needed, run the delegate workflow at [../.github/workflows/copilot-maintenance-delegate.yml#L1-L58](../.github/workflows/copilot-maintenance-delegate.yml#L1-L58) to post an `@copilot` comment on the failing pull request, optionally appending custom instructions.
 
 ## Plan
 
@@ -49,6 +50,7 @@ npm run typecheck
 ### Recommended Tasks
 - Update branch variables in the script (or wrap it) if the feature uses different naming conventions.
 - Register a maintenance workflow for the feature (copying `type-hierarchy-maintenance.yml` and renaming it) while preserving the `simulate_conflict` dispatch input.
+- Wire the delegate workflow so a maintainer can invoke Copilot if a manual review or resolution is required.
 - Test the full loop by dispatching the workflow with `simulate_conflict=true` and reviewing the agent-generated report for clarity.
 - Capture recurring manual merge decisions in rerere (`git config rerere.enabled true`) so the automation absorbs them on the next run.
 
@@ -56,6 +58,7 @@ npm run typecheck
 - [ ] Maintenance workflow exists for the feature and references `./script/update-type-hierarchy.sh`.
 - [ ] `AUTO_RESOLVE_STRATEGY` and `SKIP_FORK_SYNC` defaults cover the feature’s needs (update repository secrets or workflow env if different values are required).
 - [ ] Agent workflow produces a Markdown report and PR when conflicts occur (verified via simulated run).
+- [ ] Copilot delegate workflow posts an `@copilot` comment to the target pull request when triggered.
 - [ ] Documentation links back to this guide plus any feature-specific notes so future maintainers can recover quickly.
 - [ ] `npm run typecheck` succeeds after each automated rebase.
 

@@ -1,0 +1,58 @@
+name: Copilot Maintenance Delegate
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to delegate to @copilot"
+        required: true
+      instructions:
+        description: "Additional guidance for the Copilot agent"
+        required: false
+        default: "Please investigate the maintenance failure and propose a fix."
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  delegate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate pull request and post @copilot comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumberRaw = core.getInput('pr_number');
+            const prNumber = Number(prNumberRaw);
+            if (!prNumberRaw || Number.isNaN(prNumber) || prNumber < 1) {
+              core.setFailed(`Invalid pull request number: ${prNumberRaw}`);
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+
+            try {
+              await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: prNumber,
+              });
+            } catch (error) {
+              core.setFailed(`Unable to load pull request #${prNumber}: ${error.message}`);
+              return;
+            }
+
+            const extra = core.getInput('instructions')?.trim();
+            const body = extra && extra.length > 0
+              ? `@copilot ${extra}`
+              : '@copilot please resolve the maintenance conflicts and update this pull request.';
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body,
+            });
+
+            core.info(`Posted @copilot comment to pull request #${prNumber}.`);
