@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// Copied from https://github.com/microsoft/vscode/blob/1e756bc17d2b848060522228b98bb3815e2bdb6d/src/vs/platform/mcp/test/common/mcpManagementService.test.ts
+// Copied from https://github.com/microsoft/vscode/blob/d49049e5263a64cba8c9ca33f89bb0ad198f3391/src/vs/platform/mcp/test/common/mcpManagementService.test.ts
 // Refactored to use vitest
 
 import { beforeEach, describe, expect, it } from 'vitest';

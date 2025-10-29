@@ -10,7 +10,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IStringDictionary } from '../../../util/vs/base/common/collections';
 import { randomPath } from '../../../util/vs/base/common/extpath';
-import { isObject, isString } from '../../../util/vs/base/common/types';
+import { isObject } from '../../../util/vs/base/common/types';
 import { localize } from '../../../util/vs/nls';
 import { ValidatePackageErrorType, ValidatePackageResult } from './commands';
 import { CommandExecutor, ICommandExecutor } from './util';
@@ -365,17 +365,7 @@ export function mapServerJsonToMcpServer(input: unknown, registryType: RegistryT
 	return result.mcpServerConfiguration;
 }
 
-// Copied from https://github.com/microsoft/vscode/blob/1e756bc17d2b848060522228b98bb3815e2bdb6d/src/vs/platform/mcp/common/mcpGalleryService.ts
-interface IRawGalleryMcpServersMetadata {
-	readonly count: number;
-	readonly total?: number;
-	readonly next_cursor?: string;
-}
-
-interface IRawGalleryMcpServersResult {
-	readonly metadata?: IRawGalleryMcpServersMetadata;
-	readonly servers: readonly IRawGalleryMcpServer[];
-}
+// Copied from https://github.com/microsoft/vscode/blob/d49049e5263a64cba8c9ca33f89bb0ad198f3391/src/vs/platform/mcp/common/mcpGalleryService.ts
 
 interface IGalleryMcpServerDataSerializer {
 	toRawGalleryMcpServer(input: unknown): IRawGalleryMcpServer | undefined;
@@ -468,65 +458,11 @@ export namespace McpServerSchemaVersion_v2025_07_09 {
 
 	interface RawGalleryMcpServer {
 		readonly $schema: string;
-		readonly name: string;
-		readonly description: string;
-		readonly status?: 'active' | 'deprecated';
-		readonly repository?: {
-			readonly source: string;
-			readonly url: string;
-			readonly id?: string;
-			readonly readme?: string;
-		};
-		readonly version: string;
-		readonly website_url?: string;
-		readonly created_at: string;
-		readonly updated_at: string;
 		readonly packages?: readonly RawGalleryMcpServerPackage[];
 		readonly remotes?: RawGalleryMcpServerRemotes;
-		readonly _meta: {
-			readonly 'io.modelcontextprotocol.registry/official': {
-				readonly id: string;
-				readonly is_latest: boolean;
-				readonly published_at: string;
-				readonly updated_at: string;
-				readonly release_date?: string;
-			};
-			readonly 'io.modelcontextprotocol.registry/publisher-provided'?: Record<string, unknown>;
-		};
-	}
-
-	interface RawGalleryMcpServersResult {
-		readonly metadata?: {
-			readonly count: number;
-			readonly total?: number;
-			readonly next_cursor?: string;
-		};
-		readonly servers: readonly RawGalleryMcpServer[];
 	}
 
 	class Serializer implements IGalleryMcpServerDataSerializer {
-
-		public toRawGalleryMcpServerResult(input: unknown): IRawGalleryMcpServersResult | undefined {
-			if (!input || typeof input !== 'object' || !Array.isArray((input as RawGalleryMcpServersResult).servers)) {
-				return undefined;
-			}
-
-			const from = <RawGalleryMcpServersResult>input;
-
-			const servers: IRawGalleryMcpServer[] = [];
-			for (const server of from.servers) {
-				const rawServer = this.toRawGalleryMcpServer(server);
-				if (!rawServer) {
-					return undefined;
-				}
-				servers.push(rawServer);
-			}
-
-			return {
-				metadata: from.metadata,
-				servers
-			};
-		}
 
 		public toRawGalleryMcpServer(input: unknown): IRawGalleryMcpServer | undefined {
 			if (!input || typeof input !== 'object') {
@@ -534,14 +470,6 @@ export namespace McpServerSchemaVersion_v2025_07_09 {
 			}
 
 			const from = <RawGalleryMcpServer>input;
-
-			if (
-				(!from.name || !isString(from.name))
-				|| (!from.description || !isString(from.description))
-				|| (!from.version || !isString(from.version))
-			) {
-				return undefined;
-			}
 
 			if (from.$schema && from.$schema !== McpServerSchemaVersion_v2025_07_09.SCHEMA) {
 				return undefined;
@@ -592,7 +520,7 @@ export namespace McpServerSchemaVersion_v2025_07_09 {
 				};
 			}
 
-			function convertTransport(input: RawGalleryTransport): Transport | undefined {
+			function convertTransport(input: RawGalleryTransport): Transport {
 				switch (input.type) {
 					case 'stdio':
 						return {
@@ -611,7 +539,9 @@ export namespace McpServerSchemaVersion_v2025_07_09 {
 							headers: input.headers?.map(convertKeyValueInput),
 						};
 					default:
-						return undefined;
+						return {
+							type: TransportType.STDIO,
+						};
 				}
 			}
 
@@ -641,7 +571,7 @@ export namespace McpServerSchemaVersion_v2025_07_09 {
 					version: p.version,
 					fileSha256: p.file_sha256,
 					registryBaseUrl: p.registry_base_url,
-					transport: p.transport ? convertTransport(p.transport) : undefined,
+					transport: p.transport ? convertTransport(p.transport) : { type: TransportType.STDIO },
 					packageArguments: p.package_arguments?.map(convertServerArgument),
 					runtimeHint: p.runtime_hint,
 					runtimeArguments: p.runtime_arguments?.map(convertServerArgument),
@@ -668,14 +598,14 @@ namespace McpServerSchemaVersion_v0_1 {
 	export const SCHEMA = `https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json`;
 
 	interface RawGalleryMcpServerInput {
-		readonly description?: string;
-		readonly isRequired?: boolean;
-		readonly format?: 'string' | 'number' | 'boolean' | 'filepath';
-		readonly value?: string;
-		readonly isSecret?: boolean;
-		readonly default?: string;
-		readonly placeholder?: string;
 		readonly choices?: readonly string[];
+		readonly default?: string;
+		readonly description?: string;
+		readonly format?: 'string' | 'number' | 'boolean' | 'filepath';
+		readonly isRequired?: boolean;
+		readonly isSecret?: boolean;
+		readonly placeholder?: string;
+		readonly value?: string;
 	}
 
 	interface RawGalleryMcpServerVariableInput extends RawGalleryMcpServerInput {
@@ -696,7 +626,6 @@ namespace McpServerSchemaVersion_v0_1 {
 
 	interface RawGalleryMcpServerKeyValueInput extends RawGalleryMcpServerVariableInput {
 		readonly name: string;
-		readonly value?: string;
 	}
 
 	type RawGalleryMcpServerArgument = RawGalleryMcpServerPositionalArgument | RawGalleryMcpServerNamedArgument;
@@ -735,69 +664,16 @@ namespace McpServerSchemaVersion_v0_1 {
 	}
 
 	interface RawGalleryMcpServer {
-		readonly name: string;
-		readonly description: string;
-		readonly version: string;
-		readonly $schema?: string;
-		readonly title?: string;
-		readonly repository?: {
-			readonly source: string;
-			readonly url: string;
-			readonly id?: string;
-			readonly readme?: string;
-		};
-		readonly websiteUrl?: string;
+		readonly $schema: string;
 		readonly packages?: readonly RawGalleryMcpServerPackage[];
 		readonly remotes?: RawGalleryMcpServerRemotes;
-		readonly _meta?: {
-			readonly 'io.modelcontextprotocol.registry/publisher-provided'?: Record<string, unknown>;
-		};
 	}
 
 	interface RawGalleryMcpServerInfo {
 		readonly server: RawGalleryMcpServer;
-		readonly _meta?: {
-			readonly 'io.modelcontextprotocol.registry/official'?: {
-				readonly status: GalleryMcpServerStatus;
-				readonly isLatest: boolean;
-				readonly publishedAt: string;
-				readonly updatedAt: string;
-			};
-		};
-	}
-
-	interface RawGalleryMcpServersResult {
-		readonly metadata?: {
-			readonly count: number;
-			readonly total?: number;
-			readonly next_cursor?: string;
-		};
-		readonly servers: readonly RawGalleryMcpServerInfo[];
 	}
 
 	class Serializer implements IGalleryMcpServerDataSerializer {
-
-		public toRawGalleryMcpServerResult(input: unknown): IRawGalleryMcpServersResult | undefined {
-			if (!input || typeof input !== 'object' || !Array.isArray((input as RawGalleryMcpServersResult).servers)) {
-				return undefined;
-			}
-
-			const from = <RawGalleryMcpServersResult>input;
-
-			const servers: IRawGalleryMcpServer[] = [];
-			for (const server of from.servers) {
-				const rawServer = this.toRawGalleryMcpServer(server);
-				if (!rawServer) {
-					return undefined;
-				}
-				servers.push(rawServer);
-			}
-
-			return {
-				metadata: from.metadata,
-				servers
-			};
-		}
 
 		public toRawGalleryMcpServer(input: unknown): IRawGalleryMcpServer | undefined {
 			if (!input || typeof input !== 'object') {
@@ -808,9 +684,6 @@ namespace McpServerSchemaVersion_v0_1 {
 
 			if (
 				(!from.server || !isObject(from.server))
-				|| (!from.server.name || !isString(from.server.name))
-				|| (!from.server.description || !isString(from.server.description))
-				|| (!from.server.version || !isString(from.server.version))
 			) {
 				return undefined;
 			}
@@ -959,7 +832,7 @@ export interface McpServerConfigurationParseResult {
 }
 
 
-// Copied from https://github.com/microsoft/vscode/blob/1e756bc17d2b848060522228b98bb3815e2bdb6d/src/vs/platform/mcp/common/mcpManagementService.ts
+// Copied from https://github.com/microsoft/vscode/blob/d49049e5263a64cba8c9ca33f89bb0ad198f3391/src/vs/platform/mcp/common/mcpManagementService.ts
 
 export class McpMappingUtility {
 	getMcpServerConfigurationFromManifest(manifest: IGalleryMcpServerConfiguration, packageType: RegistryType): McpServerConfigurationParseResult {
@@ -1181,7 +1054,7 @@ export class McpMappingUtility {
 }
 
 
-// Copied from https://github.com/microsoft/vscode/blob/1e756bc17d2b848060522228b98bb3815e2bdb6d/src/vs/platform/mcp/common/mcpPlatformTypes.ts
+// Copied from https://github.com/microsoft/vscode/blob/d49049e5263a64cba8c9ca33f89bb0ad198f3391/src/vs/platform/mcp/common/mcpPlatformTypes.ts
 
 export interface IMcpDevModeConfig {
 	/** Pattern or list of glob patterns to watch relative to the workspace folder. */
