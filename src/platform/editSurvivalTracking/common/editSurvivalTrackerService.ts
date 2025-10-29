@@ -63,7 +63,7 @@ export class EditSurvivalTrackerService implements IEditSurvivalTrackerService {
 					try {
 						const [aiEdits, userEditsResult] = await Promise.all([editCollector.getEdits(), userEditComputer.compute()]);
 						const userEdits = userEditsResult.getEditsSinceInitial();
-						reporter = this._instantiationService.createInstance(EditSurvivalReporter, document, editCollector.initialText, aiEdits, userEdits, {}, sendTelemetryEvent);
+						reporter = this._instantiationService.createInstance(EditSurvivalReporter, document, editCollector.initialText, aiEdits, userEdits, { includeArc: true }, sendTelemetryEvent);
 					} finally {
 						userEditComputer.dispose();
 					}

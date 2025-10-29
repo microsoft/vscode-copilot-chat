@@ -590,7 +590,8 @@ function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: Tel
 			"selectionProblemsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many problems are in the current selected code." },
 			"diagnosticsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many diagnostic codes are in the current code." },
 			"selectionDiagnosticsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many diagnostic codes are in the current selected code." },
-			"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook" }
+			"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook" },
+			"survivedCharacters": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of characters from the AI edit that survived (accepted and retained)." }
 		}
 	*/
 	res.telemetryService.sendMSFTTelemetryEvent('inline.trackEditSurvival', sharedProps, {
@@ -599,6 +600,7 @@ function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: Tel
 		survivalRateNoRevert: res.noRevert,
 		timeDelayMs: res.timeDelayMs,
 		didBranchChange: res.didBranchChange ? 1 : 0,
+		survivedCharacters: res.survivedCharacters ?? 0,
 	});
 }
 

@@ -27,6 +27,12 @@ export interface EditSurvivalResult {
 	 * See ArcTracker.
 	*/
 	readonly arc?: number;
+
+	/**
+	 * The number of characters from the AI edit that survived (accepted and retained).
+	 * This is the same as arc when available.
+	*/
+	readonly survivedCharacters?: number;
 }
 
 export class EditSurvivalReporter {
@@ -113,6 +119,7 @@ export class EditSurvivalReporter {
 			didBranchChange,
 			currentFileContent: this._document.getText(),
 			arc: this._arcTracker?.getAcceptedRestrainedCharactersCount(),
+			survivedCharacters: this._arcTracker?.getAcceptedRestrainedCharactersCount(),
 		});
 	}
 
