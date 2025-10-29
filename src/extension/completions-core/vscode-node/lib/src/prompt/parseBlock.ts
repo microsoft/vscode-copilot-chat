@@ -20,6 +20,7 @@ export function parsingBlockFinished(
 export function isEmptyBlockStartUtil(doc: TextDocumentContents, position: IPosition): Promise<boolean> {
 	return isEmptyBlockStart(doc.detectedLanguageId, doc.getText(), doc.offsetAt(position));
 }
+
 export async function getNodeStartUtil(
 	doc: TextDocumentContents,
 	position: IPosition,

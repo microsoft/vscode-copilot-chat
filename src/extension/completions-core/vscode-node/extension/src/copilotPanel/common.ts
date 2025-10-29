@@ -3,12 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Range, commands, window } from 'vscode';
-import { type ICompletionsContextService } from '../../../lib/src/context';
+import { Range, commands, window, type Disposable } from 'vscode';
+import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../../../lib/src/context';
 import { CopilotNamedAnnotationList } from '../../../lib/src/openai/stream';
 import * as constants from '../constants';
 import { CopilotPanelVisible } from '../constants';
-import { registerCommandWrapper } from '../telemetry';
+import { registerCommand } from '../telemetry';
 import { wrapDoc } from '../textDocumentManager';
 import { CopilotSuggestionsPanelManager } from './copilotSuggestionsPanelManager';
 
@@ -28,16 +29,18 @@ export interface PanelCompletion {
 	postInsertionCallback: () => PromiseLike<void> | void;
 }
 
-export function registerPanelSupport(ctx: ICompletionsContextService) {
+export function registerPanelSupport(serviceAccessor: ServicesAccessor): Disposable {
+	const ctx = serviceAccessor.get<ICompletionsContextService>(ICompletionsContextService);
 	const suggestionsPanelManager = new CopilotSuggestionsPanelManager(ctx);
 
-	registerCommandWrapper(ctx, constants.CMDOpenPanel, async () => {
+	const result = registerCommand(ctx, constants.CMDOpenPanel, async () => {
 		// hide ghost text while opening the generation ui
 		await commands.executeCommand('editor.action.inlineSuggest.hide');
 		await commandOpenPanel(ctx, suggestionsPanelManager);
 	});
 
 	suggestionsPanelManager.registerCommands();
+	return result;
 }
 
 function commandOpenPanel(ctx: ICompletionsContextService, suggestionsPanelManager: CopilotSuggestionsPanelManager) {

@@ -2251,6 +2251,10 @@
 			{
 				"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
+			},
+			{
+				"command": "github.copilot.client.generate",
+				"title": "xxx - Regenerate Response"
 			}
 		],
 		"configuration": [
