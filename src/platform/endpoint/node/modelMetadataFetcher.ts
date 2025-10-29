@@ -22,6 +22,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
+import { ModelAliasRegistry } from '../common/modelAliasRegistry';
 import { getMaxPromptTokens } from './chatEndpoint';
 
 export interface IModelMetadataFetcher {
@@ -159,10 +160,10 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	public async getChatModelFromFamily(family: ChatEndpointFamily): Promise<IChatModelInformation> {
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
 		let resolvedModel: IModelAPIResponse | undefined;
+		family = ModelAliasRegistry.resolveAlias(family) as ChatEndpointFamily;
+
 		if (family === 'gpt-4.1') {
 			resolvedModel = this._familyMap.get('gpt-4.1')?.[0] ?? this._familyMap.get('gpt-4o')?.[0];
-		} else if (family === 'copilot-fast') {
-			resolvedModel = this._familyMap.get('gpt-4o-mini')?.[0];
 		} else if (family === 'copilot-base') {
 			resolvedModel = this._copilotBaseModel;
 		} else {
