@@ -40,7 +40,7 @@ Upstream repo (origin/main) --> main-upstream (local tracking)
 3. **Automation Script**
    - Provide a reusable script (`script/update-type-hierarchy.sh`) that runs the sync → rebase → validate pipeline end-to-end.
 4. **GitHub Action Orchestration**
-    - Expose the maintenance flow through [../.github/workflows/type-hierarchy-maintenance.yml#L1-L29](../.github/workflows/type-hierarchy-maintenance.yml#L1-L29) so the update can run in CI.
+    - Expose the maintenance flow through [../.github/workflows/type-hierarchy-maintenance.yml#L1-L32](../.github/workflows/type-hierarchy-maintenance.yml#L1-L32) so the update can run in CI each night and on-demand.
     ```yaml
     jobs:
        maintenance:
@@ -54,7 +54,7 @@ Upstream repo (origin/main) --> main-upstream (local tracking)
 - Maintenance playbook published at [../docs/TYPE-HIERARCHY-MAINTENANCE.md](../docs/TYPE-HIERARCHY-MAINTENANCE.md).
 - Spec (this document) and execution plan finalized.
 - Automation script committed and executable (`chmod +x script/update-type-hierarchy.sh`).
-- GitHub Action defined at [../.github/workflows/type-hierarchy-maintenance.yml#L1-L29](../.github/workflows/type-hierarchy-maintenance.yml#L1-L29) invoking the maintenance script.
+- GitHub Action defined at [../.github/workflows/type-hierarchy-maintenance.yml#L1-L32](../.github/workflows/type-hierarchy-maintenance.yml#L1-L32) invoking the maintenance script on both schedule and manual dispatch.
 - Example run documented in plan notes showing successful typecheck.
 
 ## Validation Plan

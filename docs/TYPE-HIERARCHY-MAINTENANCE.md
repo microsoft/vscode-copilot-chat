@@ -101,7 +101,7 @@ echo "✅ type hierarchy stack rebased and validated"```
 Mark it executable (`chmod +x script/update-type-hierarchy.sh`) and run whenever upstream advances.
 
 ## GitHub Actions Integration
-- Run the dedicated maintenance workflow [../.github/workflows/type-hierarchy-maintenance.yml#L1-L29](../.github/workflows/type-hierarchy-maintenance.yml#L1-L29) when you want CI to execute the update script:
+- The maintenance workflow runs nightly at 02:15 UTC and remains available on demand; see [../.github/workflows/type-hierarchy-maintenance.yml#L1-L32](../.github/workflows/type-hierarchy-maintenance.yml#L1-L32):
   ```yaml
   jobs:
     maintenance:

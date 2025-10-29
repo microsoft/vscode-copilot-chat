@@ -10,7 +10,7 @@
 - **M3 – Validation & CI Hooks**
   - Capture a sample run, including `npm run typecheck` output.
   - Document GH CLI workflow triggers for optional CI executions.
-  - Publish automation workflow at [../.github/workflows/type-hierarchy-maintenance.yml#L1-L29](../.github/workflows/type-hierarchy-maintenance.yml#L1-L29).
+  - Publish automation workflow at [../.github/workflows/type-hierarchy-maintenance.yml#L1-L32](../.github/workflows/type-hierarchy-maintenance.yml#L1-L32).
     ```yaml
     - name: Rebase and validate type hierarchy stack
       env:
@@ -35,4 +35,4 @@
 - [ ] Script logs success message after `npm run typecheck`.
 - [ ] Dry-run rebase completes without conflicts (or rerere auto-resolves them).
 - [ ] Docs reference live code locations: [../src/platform/languages/vscode/languageFeaturesServicesImpl.ts#L78-L137](../src/platform/languages/vscode/languageFeaturesServicesImpl.ts#L78-L137), [../src/platform/languages/typescript/vscode/typescriptTypeHierarchyProvider.ts#L32-L190](../src/platform/languages/typescript/vscode/typescriptTypeHierarchyProvider.ts#L32-L190).
-- [ ] CI workflow exists at [../.github/workflows/type-hierarchy-maintenance.yml#L1-L29](../.github/workflows/type-hierarchy-maintenance.yml#L1-L29).
+- [ ] CI workflow exists at [../.github/workflows/type-hierarchy-maintenance.yml#L1-L32](../.github/workflows/type-hierarchy-maintenance.yml#L1-L32).
