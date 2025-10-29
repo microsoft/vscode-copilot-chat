@@ -51,6 +51,7 @@ import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
+import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 
 export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
@@ -198,7 +199,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 	public override readonly codeblocksRepresentEdits = false;
 
-	protected prompt: typeof AgentPrompt | typeof EditCodePrompt2 = AgentPrompt;
+	protected prompt: typeof AgentPrompt | typeof EditCodePrompt2 | typeof NotebookInlinePrompt = AgentPrompt;
 
 	protected extraPromptProps: Partial<AgentPromptProps> | undefined;
 
