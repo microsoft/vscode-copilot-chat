@@ -44,6 +44,8 @@ export interface ISearchFeedbackTelemetry {
 	rawLlmRankingResultsCount?: number;
 	parseResult?: string;
 	strategy?: string;
+	llmBestInRerank?: number;
+	llmWorstInRerank?: number;
 }
 
 export const enum SearchFeedbackKind {
@@ -264,6 +266,45 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 			const combinedChunks = combinedRank.map(chunk => chunk.chunk);
 			await this.reportSearchResults(rankingResults, combinedChunks, progress, token);
 
+			// call workspace chunk search service with options to do reranking
+			try {
+				const rerankResult = await this.workspaceChunkSearch.searchFileChunks(
+					{
+						endpoint: await this.getEndpoint(),
+						tokenBudget: MAX_CHUNK_TOKEN_COUNT,
+						fullWorkspaceTokenBudget: MAX_CHUNK_TOKEN_COUNT,
+						maxResults: MAX_CHUNKS_RESULTS,
+					},
+					{
+						rawQuery: query,
+						resolveQueryAndKeywords: async (): Promise<ResolvedWorkspaceChunkQuery> => ({
+							rephrasedQuery: query,
+							keywords: this.getKeywordsForContent(query),
+						}),
+						resolveQuery: async () => query,
+					},
+					{
+						globPatterns: {
+							include: includes.size > 0 ? Array.from(includes) : undefined,
+							exclude: excludes.size > 0 ? Array.from(excludes) : undefined,
+						},
+						enableRerank: true
+					},
+					new TelemetryCorrelationId('copilotSearchPanel'),
+					chatProgress,
+					token,
+				);
+
+				// Check positions of LLM-selected chunks in the reranked results
+				if (rerankResult && rankingResults.length > 0) {
+					const rerankInsights = combineRankingInsights([...rerankResult.chunks], rankingResults);
+					SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank = rerankInsights.llmBestRank;
+					SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank = rerankInsights.llmWorstRank;
+				}
+			} catch (ex) {
+				// ignore rerank errors
+			}
+
 			/* __GDPR__
 			"copilot.search.request" : {
 				"owner": "osortega",
@@ -279,7 +320,9 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				"llmSelectedCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of chunks selected by LLM from the initial retrieval." },
 				"rawLlmRankingResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of raw results returned by the LLM." },
 				"parseResult": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the result of parsing the LLM response." },
-				"strategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the strategy used for the search." }
+				"strategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the strategy used for the search." },
+				"llmBestInRerank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Best rank (lowest index) among LLM-selected chunks in the reranked results." },
+				"llmWorstInRerank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Worst rank (highest index) among LLM-selected chunks in the reranked results." }
 				}
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('copilot.search.request', {
@@ -296,6 +339,8 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				llmWorstRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank,
 				llmSelectedCount: SemanticSearchTextSearchProvider.feedBackTelemetry.llmSelectedCount,
 				rawLlmRankingResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rawLlmRankingResultsCount,
+				llmBestInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank ?? -1,
+				llmWorstInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank ?? -1,
 			});
 
 			if (SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestRank !== undefined
@@ -329,6 +374,18 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 						"purpose": "FeatureInsight",
 						"isMeasurement": true,
 						"comment": "Number of raw results returned by the LLM."
+					},
+					"llmBestInRerank": {
+						"classification": "SystemMetaData",
+						"purpose": "FeatureInsight",
+						"isMeasurement": true,
+						"comment": "Best rank (lowest index) among LLM-selected chunks in the reranked results."
+					},
+					"llmWorstInRerank": {
+						"classification": "SystemMetaData",
+						"purpose": "FeatureInsight",
+						"isMeasurement": true,
+						"comment": "Worst rank (highest index) among LLM-selected chunks in the reranked results."
 					}
 				}
 				*/
@@ -337,6 +394,8 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					llmWorstRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank,
 					llmSelectedCount: SemanticSearchTextSearchProvider.feedBackTelemetry.llmSelectedCount,
 					rawLlmRankingResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rawLlmRankingResultsCount,
+					llmBestInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank,
+					llmWorstInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank,
 				});
 			}
 
