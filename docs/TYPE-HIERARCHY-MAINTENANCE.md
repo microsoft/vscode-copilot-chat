@@ -2,6 +2,8 @@
 
 This note documents how to keep the customized type hierarchy tooling in sync with upstream without hand-merging every upgrade. It assumes the TypeScript-first flow implemented in [../src/platform/languages/vscode/languageFeaturesServicesImpl.ts#L78-L137](../src/platform/languages/vscode/languageFeaturesServicesImpl.ts#L78-L137) and [../src/platform/languages/typescript/vscode/typescriptTypeHierarchyProvider.ts#L32-L140](../src/platform/languages/typescript/vscode/typescriptTypeHierarchyProvider.ts#L32-L140).
 
+For a feature-agnostic overview of the maintenance system, see [./FEATURE-MAINTENANCE-GUIDE.md](./FEATURE-MAINTENANCE-GUIDE.md).
+
 ```typescript
 async prepareTypeHierarchy(uri: vscode.Uri, position: vscode.Position): Promise<vscode.TypeHierarchyItem[]> {
 	const document = await this.tryGetDocument(uri);

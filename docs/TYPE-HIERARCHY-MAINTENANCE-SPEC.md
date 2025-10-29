@@ -52,6 +52,7 @@ Upstream repo (origin/main) --> main-upstream (local tracking)
 
 ## Acceptance Criteria
 - Maintenance playbook published at [../docs/TYPE-HIERARCHY-MAINTENANCE.md](../docs/TYPE-HIERARCHY-MAINTENANCE.md).
+- Generalized maintenance guidance published at [../docs/FEATURE-MAINTENANCE-GUIDE.md](../docs/FEATURE-MAINTENANCE-GUIDE.md) so future features can reuse the automation strategy.
 - Spec (this document) and execution plan finalized.
 - Automation script committed and executable (`chmod +x script/update-type-hierarchy.sh`).
 - GitHub Action defined at [../.github/workflows/type-hierarchy-maintenance.yml#L1-L33](../.github/workflows/type-hierarchy-maintenance.yml#L1-L33) invoking the maintenance script on both schedule and manual dispatch.

@@ -4,6 +4,7 @@
 - **M1 – Documentation Baseline**
   - Finalize the spec ([./TYPE-HIERARCHY-MAINTENANCE-SPEC.md](./TYPE-HIERARCHY-MAINTENANCE-SPEC.md)).
   - Publish the operational playbook ([./TYPE-HIERARCHY-MAINTENANCE.md](./TYPE-HIERARCHY-MAINTENANCE.md)).
+  - Provide a reusable feature-wide maintenance reference ([./FEATURE-MAINTENANCE-GUIDE.md](./FEATURE-MAINTENANCE-GUIDE.md)).
 - **M2 – Automation Script**
   - Implement `script/update-type-hierarchy.sh` to orchestrate sync + rebase + validation.
   - Ensure the script surfaces failures (non-zero exit) if any command fails.
