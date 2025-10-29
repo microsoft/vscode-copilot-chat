@@ -416,7 +416,8 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				...searchResult.val,
 				result: {
 					alerts: searchResult.val.result.alerts,
-					chunks: filteredChunks
+					chunks: filteredChunks,
+					isFullWorkspace: searchResult.val.strategy === WorkspaceChunkSearchStrategyId.FullWorkspace
 				}
 			};
 
