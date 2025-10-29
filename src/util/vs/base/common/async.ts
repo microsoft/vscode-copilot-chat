@@ -193,6 +193,10 @@ export interface ITask<T> {
 	(): T;
 }
 
+export interface ICancellableTask<T> {
+	(token: CancellationToken): T;
+}
+
 /**
  * A helper to prevent accumulation of sequential async tasks.
  *
@@ -223,18 +227,19 @@ export class Throttler implements IDisposable {
 
 	private activePromise: Promise<any> | null;
 	private queuedPromise: Promise<any> | null;
-	private queuedPromiseFactory: ITask<Promise<any>> | null;
-
-	private isDisposed = false;
+	private queuedPromiseFactory: ICancellableTask<Promise<any>> | null;
+	private cancellationTokenSource: CancellationTokenSource;
 
 	constructor() {
 		this.activePromise = null;
 		this.queuedPromise = null;
 		this.queuedPromiseFactory = null;
+
+		this.cancellationTokenSource = new CancellationTokenSource();
 	}
 
-	queue<T>(promiseFactory: ITask<Promise<T>>): Promise<T> {
-		if (this.isDisposed) {
+	queue<T>(promiseFactory: ICancellableTask<Promise<T>>): Promise<T> {
+		if (this.cancellationTokenSource.token.isCancellationRequested) {
 			return Promise.reject(new Error('Throttler is disposed'));
 		}
 
@@ -245,7 +250,7 @@ export class Throttler implements IDisposable {
 				const onComplete = () => {
 					this.queuedPromise = null;
 
-					if (this.isDisposed) {
+					if (this.cancellationTokenSource.token.isCancellationRequested) {
 						return;
 					}
 
@@ -265,7 +270,7 @@ export class Throttler implements IDisposable {
 			});
 		}
 
-		this.activePromise = promiseFactory();
+		this.activePromise = promiseFactory(this.cancellationTokenSource.token);
 
 		return new Promise((resolve, reject) => {
 			this.activePromise!.then((result: T) => {
@@ -279,7 +284,7 @@ export class Throttler implements IDisposable {
 	}
 
 	dispose(): void {
-		this.isDisposed = true;
+		this.cancellationTokenSource.cancel();
 	}
 }
 
@@ -460,7 +465,7 @@ export class ThrottledDelayer<T> {
 		this.throttler = new Throttler();
 	}
 
-	trigger(promiseFactory: ITask<Promise<T>>, delay?: number): Promise<T> {
+	trigger(promiseFactory: ICancellableTask<Promise<T>>, delay?: number): Promise<T> {
 		return this.delayer.trigger(() => this.throttler.queue(promiseFactory), delay) as unknown as Promise<T>;
 	}
 
@@ -1717,6 +1722,12 @@ const enum DeferredOutcome {
  */
 export class DeferredPromise<T> {
 
+	public static fromPromise<T>(promise: Promise<T>): DeferredPromise<T> {
+		const deferred = new DeferredPromise<T>();
+		deferred.settleWith(promise);
+		return deferred;
+	}
+
 	private completeCallback!: ValueCallback<T>;
 	private errorCallback!: (err: unknown) => void;
 	private outcome?: { outcome: DeferredOutcome.Rejected; value: unknown } | { outcome: DeferredOutcome.Resolved; value: T };
@@ -1747,6 +1758,10 @@ export class DeferredPromise<T> {
 	}
 
 	public complete(value: T) {
+		if (this.isSettled) {
+			return Promise.resolve();
+		}
+
 		return new Promise<void>(resolve => {
 			this.completeCallback(value);
 			this.outcome = { outcome: DeferredOutcome.Resolved, value };
@@ -1755,6 +1770,10 @@ export class DeferredPromise<T> {
 	}
 
 	public error(err: unknown) {
+		if (this.isSettled) {
+			return Promise.resolve();
+		}
+
 		return new Promise<void>(resolve => {
 			this.errorCallback(err);
 			this.outcome = { outcome: DeferredOutcome.Rejected, value: err };

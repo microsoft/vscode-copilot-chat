@@ -8,11 +8,11 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IBYOKStorageService } from './byokStorageService';
-import { CustomOAIBYOKModelProvider } from './customOAIProvider';
+import { CustomOAIBYOKModelProvider, hasExplicitApiPath } from './customOAIProvider';
 
 export function resolveAzureUrl(modelId: string, url: string): string {
 	// The fully resolved url was already passed in
-	if (url.includes('/chat/completions')) {
+	if (hasExplicitApiPath(url)) {
 		return url;
 	}
 
@@ -25,10 +25,13 @@ export function resolveAzureUrl(modelId: string, url: string): string {
 		url = url.slice(0, -3);
 	}
 
+	// Default to chat completions for base URLs
+	const defaultApiPath = '/chat/completions';
+
 	if (url.includes('models.ai.azure.com') || url.includes('inference.ml.azure.com')) {
-		return `${url}/v1/chat/completions`;
+		return `${url}/v1${defaultApiPath}`;
 	} else if (url.includes('openai.azure.com')) {
-		return `${url}/openai/deployments/${modelId}/chat/completions?api-version=2025-01-01-preview`;
+		return `${url}/openai/deployments/${modelId}${defaultApiPath}?api-version=2025-01-01-preview`;
 	} else {
 		throw new Error(`Unrecognized Azure deployment URL: ${url}`);
 	}

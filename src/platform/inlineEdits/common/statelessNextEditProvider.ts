@@ -23,13 +23,14 @@ import { DebugRecorderBookmark } from './debugRecorderBookmark';
 import { InlineEditRequestLogContext } from './inlineEditLogContext';
 import { stringifyChatMessages } from './utils/stringifyChatMessages';
 import { IXtabHistoryEntry } from './workspaceEditTracker/nesXtabHistoryTracker';
+import { Position } from '../../../util/vs/editor/common/core/position';
 
 export const enum ShowNextEditPreference {
 	Always = 'always',
 	AroundEdit = 'aroundEdit',
 }
 
-export type PushEdit = (edit: Result<{ edit: LineReplacement; window?: OffsetRange; targetDocument?: DocumentId }, NoNextEditReason>) => void;
+export type PushEdit = (edit: Result<{ edit: LineReplacement; window?: OffsetRange; targetDocument?: DocumentId; showLabel?: boolean }, NoNextEditReason>) => void;
 
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
@@ -190,7 +191,8 @@ export namespace NoNextEditReason {
 		public readonly kind = 'noSuggestions';
 		constructor(
 			public readonly documentBeforeEdits: StringText,
-			public readonly window: OffsetRange | undefined
+			public readonly window: OffsetRange | undefined,
+			public readonly nextCursorPosition?: Position | undefined,
 		) {
 		}
 	}
@@ -275,6 +277,7 @@ export interface IStatelessNextEditTelemetry {
 	readonly prompt: string | undefined;
 	readonly promptLineCount: number | undefined;
 	readonly promptCharCount: number | undefined;
+	readonly mergeConflictExpanded: 'normal' | 'only' | undefined;
 
 	/* fetch request info */
 
@@ -359,6 +362,7 @@ export class StatelessNextEditTelemetryBuilder {
 
 			statelessNextEditProviderDuration: timeSpent,
 			logProbThreshold: this._logProbThreshold,
+			mergeConflictExpanded: this._mergeConflictExpanded,
 			nLinesOfCurrentFileInPrompt: this._nLinesOfCurrentFileInPrompt,
 			modelName: this._modelName,
 			prompt,
@@ -381,6 +385,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _logProbThreshold: number | undefined;
 	public setLogProbThreshold(logProbThreshold: number): this {
 		this._logProbThreshold = logProbThreshold;
+		return this;
+	}
+
+	private _mergeConflictExpanded: 'normal' | 'only' | undefined;
+	public setMergeConflictExpanded(mergeConflictExpanded: 'normal' | 'only'): this {
+		this._mergeConflictExpanded = mergeConflictExpanded;
 		return this;
 	}
 

@@ -10,7 +10,7 @@ import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/d
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
-import { IEnvService } from '../../env/common/envService';
+import { IEnvService, isScenarioAutomation } from '../../env/common/envService';
 import { BaseOctoKitService, VSCodeTeamId } from '../../github/common/githubService';
 import { NullBaseOctoKitService } from '../../github/common/nullOctokitServiceImpl';
 import { ILogService } from '../../log/common/logService';
@@ -20,19 +20,31 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { CopilotToken, CopilotUserInfo, ExtendedTokenInfo, TokenInfo, TokenInfoOrError, containsInternalOrg } from '../common/copilotToken';
 import { CheckCopilotToken, ICopilotTokenManager, NotGitHubLoginFailed, nowSeconds } from '../common/copilotTokenManager';
 
-export const tokenErrorString = `Tests: either GITHUB_PAT, GITHUB_OAUTH_TOKEN, or GITHUB_OAUTH_TOKEN+VSCODE_COPILOT_CHAT_TOKEN must be set. Run "npm run get_token" to get credentials.`;
+export const tokenErrorString = `Tests: either GITHUB_PAT, GITHUB_OAUTH_TOKEN, or GITHUB_OAUTH_TOKEN+VSCODE_COPILOT_CHAT_TOKEN must be set unless running from an IS_SCENARIO_AUTOMATION environment. Run "npm run get_token" to get credentials.`;
 
-export function getStaticGitHubToken() {
-	if (process.env.GITHUB_PAT) {
-		return process.env.GITHUB_PAT;
+export function createStaticGitHubTokenProvider(): (() => string) | undefined {
+	const pat = process.env.GITHUB_PAT;
+	const oauthToken = process.env.GITHUB_OAUTH_TOKEN;
+
+	// In automation scenarios, NoAuth/BYOK-only scenarios are expected to not have any tokens set.
+	if (isScenarioAutomation && !pat && !oauthToken) {
+		return undefined;
 	}
-	if (process.env.GITHUB_OAUTH_TOKEN) {
-		return process.env.GITHUB_OAUTH_TOKEN;
-	}
-	throw new Error(tokenErrorString);
+
+	return () => {
+		if (pat) {
+			return pat;
+		}
+
+		if (oauthToken) {
+			return oauthToken;
+		}
+
+		throw new Error(tokenErrorString);
+	};
 }
 
-export function getOrCreateTestingCopilotTokenManager(): SyncDescriptor<ICopilotTokenManager & CheckCopilotToken> {
+export function getOrCreateTestingCopilotTokenManager(deviceId: string): SyncDescriptor<ICopilotTokenManager & CheckCopilotToken> {
 	if (process.env.VSCODE_COPILOT_CHAT_TOKEN) {
 		return new SyncDescriptor(StaticExtendedTokenInfoCopilotTokenManager, [process.env.VSCODE_COPILOT_CHAT_TOKEN]);
 	}
@@ -43,6 +55,11 @@ export function getOrCreateTestingCopilotTokenManager(): SyncDescriptor<ICopilot
 
 	if (process.env.GITHUB_PAT) {
 		return new SyncDescriptor(FixedCopilotTokenManager, [process.env.GITHUB_PAT]);
+	}
+
+	// In automation scenarios, NoAuth/BYOK-only scenarios are expected to not have any tokens set.
+	if (isScenarioAutomation) {
+		return new SyncDescriptor(CopilotTokenManagerFromDeviceId, [deviceId]);
 	}
 
 	throw new Error(tokenErrorString);
@@ -188,6 +205,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			copilot_plan: userInfo?.copilot_plan ?? tokenInfo.sku ?? '',
 			quota_snapshots: userInfo?.quota_snapshots,
 			quota_reset_date: userInfo?.quota_reset_date,
+			codex_agent_enabled: userInfo?.codex_agent_enabled,
 			username: login,
 			isVscodeTeamMember,
 		};
@@ -327,6 +345,69 @@ export class StaticExtendedTokenInfoCopilotTokenManager extends BaseCopilotToken
 }
 //#endregion
 
+//#region RefreshableCopilotTokenManager
+
+/**
+ * Generic token manager that handles token caching and refresh logic.
+ * Takes an authentication function to fetch new tokens.
+ */
+export abstract class RefreshableCopilotTokenManager extends BaseCopilotTokenManager implements CheckCopilotToken {
+	protected abstract authenticateAndGetToken(): Promise<TokenInfoOrError & NotGitHubLoginFailed>;
+
+	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
+		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() - (60 * 5 /* 5min */) || force) {
+			const tokenResult = await this.authenticateAndGetToken();
+			if (tokenResult.kind === 'failure') {
+				throw Error(
+					`Failed to get copilot token: ${tokenResult.reason.toString()} ${tokenResult.message ?? ''}`
+				);
+			}
+			this.copilotToken = { ...tokenResult };
+		}
+		return new CopilotToken(this.copilotToken);
+	}
+
+	async checkCopilotToken() {
+		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds()) {
+			const tokenResult = await this.authenticateAndGetToken();
+			if (tokenResult.kind === 'failure') {
+				return tokenResult;
+			}
+			this.copilotToken = { ...tokenResult };
+		}
+		const result: { status: 'OK' } = {
+			status: 'OK',
+		};
+		return result;
+	}
+}
+
+//#endregion
+
+//#region CopilotTokenManagerFromDeviceId
+
+export class CopilotTokenManagerFromDeviceId extends RefreshableCopilotTokenManager {
+
+	constructor(
+		private readonly deviceId: string,
+		@ILogService logService: ILogService,
+		@ITelemetryService telemetryService: ITelemetryService,
+		@IDomainService domainService: IDomainService,
+		@ICAPIClientService capiClientService: ICAPIClientService,
+		@IFetcherService fetcherService: IFetcherService,
+		@IEnvService envService: IEnvService,
+		@IConfigurationService protected readonly configurationService: IConfigurationService
+	) {
+		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+	}
+
+	protected async authenticateAndGetToken(): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
+		return this.authFromDevDeviceId(this.deviceId);
+	}
+}
+
+//#endregion
+
 //#region CopilotTokenManagerFromGitHubToken
 
 /**
@@ -334,7 +415,7 @@ export class StaticExtendedTokenInfoCopilotTokenManager extends BaseCopilotToken
  * The caller that initializes the object is responsible for checking telemetry consent before
  * using the object.
  */
-export class CopilotTokenManagerFromGitHubToken extends BaseCopilotTokenManager implements CheckCopilotToken {
+export class CopilotTokenManagerFromGitHubToken extends RefreshableCopilotTokenManager {
 
 	constructor(
 		private readonly githubToken: string,
@@ -350,30 +431,7 @@ export class CopilotTokenManagerFromGitHubToken extends BaseCopilotTokenManager 
 		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 	}
 
-	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
-		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() - (60 * 5 /* 5min */) || force) {
-			const tokenResult = await this.authFromGitHubToken(this.githubToken, this.githubUsername);
-			if (tokenResult.kind === 'failure') {
-				throw Error(
-					`Failed to get copilot token: ${tokenResult.reason.toString()} ${tokenResult.message ?? ''}`
-				);
-			}
-			this.copilotToken = { ...tokenResult };
-		}
-		return new CopilotToken(this.copilotToken);
-	}
-
-	async checkCopilotToken() {
-		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds()) {
-			const tokenResult = await this.authFromGitHubToken(this.githubToken, this.githubUsername);
-			if (tokenResult.kind === 'failure') {
-				return tokenResult;
-			}
-			this.copilotToken = { ...tokenResult };
-		}
-		const result: { status: 'OK' } = {
-			status: 'OK',
-		};
-		return result;
+	protected async authenticateAndGetToken(): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
+		return this.authFromGitHubToken(this.githubToken, this.githubUsername);
 	}
 }

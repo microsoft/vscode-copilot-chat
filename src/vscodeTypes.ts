@@ -61,6 +61,7 @@ export import SymbolInformation = vscode.SymbolInformation;
 export import LanguageModelPromptTsxPart = vscode.LanguageModelPromptTsxPart;
 export import LanguageModelTextPart = vscode.LanguageModelTextPart;
 export import LanguageModelTextPart2 = vscode.LanguageModelTextPart2;
+export import LanguageModelThinkingPart = vscode.LanguageModelThinkingPart;
 export import LanguageModelDataPart = vscode.LanguageModelDataPart;
 export import LanguageModelDataPart2 = vscode.LanguageModelDataPart2;
 export import LanguageModelPartAudience = vscode.LanguageModelPartAudience;
@@ -95,6 +96,7 @@ export import SymbolKind = vscode.SymbolKind;
 export import SnippetString = vscode.SnippetString;
 export import SnippetTextEdit = vscode.SnippetTextEdit;
 export import FileType = vscode.FileType;
+export import ChatSessionStatus = vscode.ChatSessionStatus;
 
 export const l10n = {
 	/**

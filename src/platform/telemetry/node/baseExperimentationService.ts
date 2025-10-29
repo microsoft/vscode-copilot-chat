@@ -17,13 +17,14 @@ import { IExperimentationService, TreatmentsChangeEvent } from '../common/nullEx
 export class UserInfoStore extends Disposable {
 	private _internalOrg: string | undefined;
 	private _sku: string | undefined;
+	private _isFcv1: boolean | undefined;
 
 	private _onDidChangeUserInfo = this._register(new Emitter<void>());
 	readonly onDidChangeUserInfo = this._onDidChangeUserInfo.event;
 
 	static INTERNAL_ORG_STORAGE_KEY = 'exp.github.copilot.internalOrg';
 	static SKU_STORAGE_KEY = 'exp.github.copilot.sku';
-
+	static IS_FCV1_STORAGE_KEY = 'exp.github.copilot.isFcv1';
 	constructor(private readonly context: IVSCodeExtensionContext, copilotTokenStore: ICopilotTokenStore) {
 		super();
 
@@ -38,15 +39,16 @@ export class UserInfoStore extends Disposable {
 			};
 
 			copilotTokenStore.onDidStoreUpdate(() => {
-				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken?.sku);
+				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken?.sku, copilotTokenStore.copilotToken?.isFcv1());
 			});
 
 			if (copilotTokenStore.copilotToken) {
-				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken.sku);
+				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken.sku, copilotTokenStore.copilotToken.isFcv1());
 			} else {
 				const cachedInternalValue = this.context.globalState.get<string>(UserInfoStore.INTERNAL_ORG_STORAGE_KEY);
 				const cachedSkuValue = this.context.globalState.get<string>(UserInfoStore.SKU_STORAGE_KEY);
-				this.updateUserInfo(cachedInternalValue, cachedSkuValue);
+				const cachedIsFcv1Value = this.context.globalState.get<boolean>(UserInfoStore.IS_FCV1_STORAGE_KEY);
+				this.updateUserInfo(cachedInternalValue, cachedSkuValue, cachedIsFcv1Value);
 			}
 		}
 	}
@@ -59,17 +61,22 @@ export class UserInfoStore extends Disposable {
 		return this._sku;
 	}
 
-	private updateUserInfo(internalOrg?: string, sku?: string): void {
-		if (this._internalOrg === internalOrg && this._sku === sku) {
+	get isFcv1(): boolean | undefined {
+		return this._isFcv1;
+	}
+
+	private updateUserInfo(internalOrg?: string, sku?: string, isFcv1?: boolean): void {
+		if (this._internalOrg === internalOrg && this._sku === sku && this._isFcv1 === isFcv1) {
 			// no change
 			return;
 		}
 
 		this._internalOrg = internalOrg;
 		this._sku = sku;
-
+		this._isFcv1 = isFcv1;
 		this.context.globalState.update(UserInfoStore.INTERNAL_ORG_STORAGE_KEY, this._internalOrg);
 		this.context.globalState.update(UserInfoStore.SKU_STORAGE_KEY, this._sku);
+		this.context.globalState.update(UserInfoStore.IS_FCV1_STORAGE_KEY, this._isFcv1);
 
 		this._onDidChangeUserInfo.fire();
 	}

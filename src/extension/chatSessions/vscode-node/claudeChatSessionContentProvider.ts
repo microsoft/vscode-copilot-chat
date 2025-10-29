@@ -23,8 +23,8 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
 	) { }
 
-	async provideChatSessionContent(claudeSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const existingSession = claudeSessionId && await this.sessionService.getSession(claudeSessionId, token);
+	async provideChatSessionContent(sessionResource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+		const existingSession = await this.sessionService.getSession(sessionResource, token);
 		const toolContext = this._createToolContext();
 		const history = existingSession ?
 			this._buildChatHistory(existingSession, toolContext) :

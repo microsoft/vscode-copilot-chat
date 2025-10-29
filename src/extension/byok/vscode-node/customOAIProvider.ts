@@ -5,12 +5,12 @@
 
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions, QuickPickItem, window } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { EndpointEditToolName, isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
+import { EndpointEditToolName, IChatModelInformation, isEndpointEditToolName, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
-import { BYOKAuthType, BYOKKnownModels, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, BYOKModelCapabilities, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
@@ -18,7 +18,7 @@ import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 
 export function resolveCustomOAIUrl(modelId: string, url: string): string {
 	// The fully resolved url was already passed in
-	if (url.includes('/chat/completions')) {
+	if (hasExplicitApiPath(url)) {
 		return url;
 	}
 
@@ -27,14 +27,21 @@ export function resolveCustomOAIUrl(modelId: string, url: string): string {
 		url = url.slice(0, -1);
 	}
 
+	// Default to chat completions for base URLs
+	const defaultApiPath = '/chat/completions';
+
 	// Check if URL already contains any version pattern like /v1, /v2, etc
 	const versionPattern = /\/v\d+$/;
 	if (versionPattern.test(url)) {
-		return `${url}/chat/completions`;
+		return `${url}${defaultApiPath}`;
 	}
 
 	// For standard OpenAI-compatible endpoints, just append the standard path
-	return `${url}/v1/chat/completions`;
+	return `${url}/v1${defaultApiPath}`;
+}
+
+export function hasExplicitApiPath(url: string): boolean {
+	return url.includes('/responses') || url.includes('/chat/completions');
 }
 
 interface CustomOAIModelInfo extends LanguageModelChatInformation {
@@ -68,6 +75,17 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return resolveCustomOAIUrl(modelId, url);
 	}
 
+	protected async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
+		const modelInfo = await resolveModelInfo(modelId, this.providerName, undefined, modelCapabilities);
+		if (modelCapabilities?.url?.includes('/responses')) {
+			modelInfo.supported_endpoints = [
+				ModelSupportedEndpoint.ChatCompletions,
+				ModelSupportedEndpoint.Responses
+			];
+		}
+		return modelInfo;
+	}
+
 	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }> {
 		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }>;
 		return modelConfig;
@@ -81,10 +99,14 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 	private async getAllModels(): Promise<BYOKKnownModels> {
 		const modelConfig = this.getUserModelConfig();
 		const models: BYOKKnownModels = {};
+
 		for (const [modelId, modelInfo] of Object.entries(modelConfig)) {
+			const resolvedUrl = this.resolveUrl(modelId, modelInfo.url);
+			this._logService.info(`BYOK: Resolved URL for model ${this.providerName}/${modelId}: ${resolvedUrl}`);
+
 			models[modelId] = {
 				name: modelInfo.name,
-				url: this.resolveUrl(modelId, modelInfo.url),
+				url: resolvedUrl,
 				toolCalling: modelInfo.toolCalling,
 				vision: modelInfo.vision,
 				maxInputTokens: modelInfo.maxInputTokens,
@@ -167,7 +189,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 				throw new Error(`No API key found for model ${model.id}`);
 			}
 		}
-		const modelInfo = resolveModelInfo(model.id, this.providerName, undefined, {
+		const modelInfo = await this.getModelInfo(model.id, apiKey, {
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,
@@ -193,7 +215,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			}
 		}
 
-		const modelInfo = resolveModelInfo(model.id, this.providerName, undefined, {
+		const modelInfo = await this.getModelInfo(model.id, apiKey, {
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,

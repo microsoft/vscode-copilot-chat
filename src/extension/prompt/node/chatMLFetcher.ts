@@ -200,6 +200,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 								// Retry with augmented messages
 								const retryResult = await this.fetchMany({
+									...opts,
 									debugName: 'retry-' + debugName,
 									messages: augmentedMessages,
 									finishedCb,
@@ -249,7 +250,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						timeToFirstTokenEmitted: (baseTelemetry && streamRecorder.firstTokenEmittedTime) ? streamRecorder.firstTokenEmittedTime - baseTelemetry.issuedTime : -1,
 						timeToCancelled: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
 						isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
-						isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
+						isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : (chatEndpoint.customModel ? 2 : -1)
 					});
 					pendingLoggedChatRequest?.resolveWithCancelation();
 					return this.processCanceledResponse(response, ourRequestId);
@@ -271,6 +272,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 					// Retry with other fetchers
 					const retryResult = await this.fetchMany({
+						...opts,
 						debugName: 'retry-error-' + debugName,
 						messages,
 						finishedCb,
@@ -303,7 +305,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					timeToFirstToken: undefined,
 					timeToCancelled: timeToError,
 					isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
-					isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
+					isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : (chatEndpoint.customModel ? 2 : -1)
 				});
 			} else {
 				this._sendResponseErrorTelemetry(processed, telemetryProperties, ourRequestId, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
@@ -439,7 +441,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			tokenCountMax: maxResponseTokens,
 			timeToFirstToken,
 			isVisionRequest: isVisionRequest ? 1 : -1,
-			isBYOK: chatEndpointInfo instanceof OpenAIEndpoint ? 1 : -1
+			isBYOK: chatEndpointInfo instanceof OpenAIEndpoint ? 1 : (chatEndpointInfo.customModel ? 2 : -1)
 		});
 	}
 
@@ -521,7 +523,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				timeToFirstTokenEmitted: (baseTelemetry && streamRecorder.firstTokenEmittedTime) ? streamRecorder.firstTokenEmittedTime - baseTelemetry.issuedTime : -1,
 				timeToComplete: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
 				isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
-				isBYOK: chatEndpointInfo instanceof OpenAIEndpoint ? 1 : -1
+				isBYOK: chatEndpointInfo instanceof OpenAIEndpoint ? 1 : (chatEndpointInfo?.customModel ? 2 : -1)
 			});
 			if (!this.isRepetitive(chatCompletion, baseTelemetry?.properties)) {
 				completions.push(chatCompletion);
@@ -532,6 +534,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		if (successfulCompletions.length >= 1) {
 			return {
 				type: ChatFetchResponseType.Success,
+				resolvedModel: successfulCompletions[0].model,
 				usage: successfulCompletions.length === 1 ? successfulCompletions[0].usage : undefined,
 				value: successfulCompletions.map(c => getTextPart(c.message.content)),
 				requestId,

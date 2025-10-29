@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing, TextChunk, UserMessage } from '@vscode/prompt-tsx';
-import type { Diagnostic, DiagnosticSeverity, LanguageModelToolInformation } from 'vscode';
+import type { Diagnostic, LanguageModelToolInformation } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -16,13 +16,16 @@ import { IAlternativeNotebookContentService } from '../../../../platform/noteboo
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { getLanguage, getLanguageForResource } from '../../../../util/common/languages';
 import { createFencedCodeBlock } from '../../../../util/common/markdown';
 import { getNotebookAndCellFromUri } from '../../../../util/common/notebooks';
 import { isLocation } from '../../../../util/common/types';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Schemas } from '../../../../util/vs/base/common/network';
+import { isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { DiagnosticSeverity } from '../../../../util/vs/workbench/api/common/extHostTypes/diagnostic';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, LanguageModelToolResult2, Range, Uri } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { ChatVariablesCollection, isPromptFile, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
@@ -33,6 +36,8 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { EmbeddedInsideUserMessage, embeddedInsideUserMessageDefault } from '../base/promptElement';
 import { IPromptEndpoint, PromptRenderer } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
+import { DiagnosticSuggestedFix } from '../inline/diagnosticsContext';
+import { Cookbook, IFixCookbookService } from '../inline/fixCookbookService';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
 import { FilePathMode, FileVariable } from './fileVariable';
 import { Image } from './image';
@@ -47,6 +52,7 @@ export interface ChatVariablesProps extends BasePromptElementProps, EmbeddedInsi
 	readonly includeFilepath?: boolean;
 	readonly omitReferences?: boolean;
 	readonly isAgent?: boolean;
+	readonly useFixCookbook?: boolean;
 }
 
 export class ChatVariables extends PromptElement<ChatVariablesProps, void> {
@@ -58,7 +64,7 @@ export class ChatVariables extends PromptElement<ChatVariablesProps, void> {
 	}
 
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
-		const elements = await renderChatVariables(this.props.chatVariables, this.fileSystemService, this.props.includeFilepath, this.props.omitReferences, this.props.isAgent);
+		const elements = await renderChatVariables(this.props.chatVariables, this.fileSystemService, this.props.includeFilepath, this.props.omitReferences, this.props.isAgent, this.props.useFixCookbook);
 		if (elements.length === 0) {
 			return undefined;
 		}
@@ -141,7 +147,7 @@ function asUserMessage(element: PromptElement, priority: number | undefined): Us
 }
 
 
-export async function renderChatVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, includeFilepathInCodeBlocks = true, omitReferences?: boolean, isAgent?: boolean): Promise<PromptElement[]> {
+export async function renderChatVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, includeFilepathInCodeBlocks = true, omitReferences?: boolean, isAgent?: boolean, useFixCookbook?: boolean): Promise<PromptElement[]> {
 	const elements = [];
 	const filePathMode = (isAgent && includeFilepathInCodeBlocks)
 		? FilePathMode.AsAttribute
@@ -203,7 +209,7 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 		} else if (variableValue instanceof ChatReferenceBinaryData) {
 			elements.push(<Image variableName={variableName} variableValue={await variableValue.data()} reference={variableValue.reference} omitReferences={omitReferences}></Image>);
 		} else if (typeof ChatReferenceDiagnostic !== 'undefined' && variableValue instanceof ChatReferenceDiagnostic) { // check undefined to avoid breaking old Insiders versions
-			elements.push(<DiagnosticVariable diagnostics={variableValue.diagnostics} />);
+			elements.push(<DiagnosticVariable diagnostics={variableValue.diagnostics} useCookbook={useFixCookbook ?? false} />);
 		}
 	}
 	return elements;
@@ -211,13 +217,15 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 
 interface IDiagnosticVariableProps extends BasePromptElementProps {
 	diagnostics: [uri: Uri, diagnostics: Diagnostic[]][];
+	useCookbook?: boolean;
+	// useRelatedInfo?: boolean;
 }
 
-const diangosticSeverityMap: { [K in DiagnosticSeverity]: string } = {
-	[0]: 'error',
-	[1]: 'warning',
-	[2]: 'info',
-	[3]: 'hint'
+const diagnosticSeverityMap: { [K in DiagnosticSeverity]: string } = {
+	[DiagnosticSeverity.Error]: 'error',
+	[DiagnosticSeverity.Warning]: 'warning',
+	[DiagnosticSeverity.Information]: 'info',
+	[DiagnosticSeverity.Hint]: 'hint'
 };
 
 class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
@@ -225,6 +233,7 @@ class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
 		props: PromptElementProps<IDiagnosticVariableProps>,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IFixCookbookService private readonly fixCookbookService: IFixCookbookService,
 		@IAlternativeNotebookContentService private readonly alternativeNotebookContent: IAlternativeNotebookContentService,
 		@IPromptEndpoint private readonly endpoint: IPromptEndpoint,
 	) {
@@ -237,9 +246,20 @@ class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
 				diagnostics.map(d => {
 					let range = d.range;
 					([uri, range] = this.translateNotebookUri(uri, range));
-					return <Tag name="error" attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diangosticSeverityMap[d.severity] }}>
-						{d.message}
-					</Tag>;
+
+					let cookbook: Cookbook | undefined;
+					if (this.props.useCookbook) {
+						const doc = this.workspaceService.textDocuments.find(doc => isEqual(doc.uri, uri));
+						const lang = doc ? getLanguage(doc) : getLanguageForResource(uri);
+						cookbook = this.fixCookbookService.getCookbook(lang.languageId, d);
+					}
+
+					return <>
+						<Tag name="error" attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diagnosticSeverityMap[d.severity] }}>
+							{d.message}
+						</Tag>
+						{cookbook && <DiagnosticSuggestedFix cookbook={cookbook} />}
+					</>;
 				}
 				)
 			)}
@@ -353,7 +373,7 @@ export class ChatToolReferences extends PromptElement<ChatToolCallProps, void> {
 				continue;
 			}
 
-			const toolArgsEndpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+			const toolArgsEndpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 			const internalToolArgs = toolReference.input ?? {};
 			const toolArgs = await this.fetchToolArgs(tool, toolArgsEndpoint);
 

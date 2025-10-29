@@ -81,7 +81,8 @@ export interface IModelAPIResponse {
 	is_chat_default: boolean;
 	is_chat_fallback: boolean;
 	version: string;
-	warning_message?: string;
+	warning_messages?: { code: string; message: string }[];
+	info_messages?: { code: string; message: string }[];
 	billing?: { is_premium: boolean; multiplier: number; restricted_to?: string[] };
 	capabilities: IChatModelCapabilities | ICompletionModelCapabilities | IEmbeddingModelCapabilities;
 	supported_endpoints?: ModelSupportedEndpoint[];
@@ -112,7 +113,7 @@ export function isCompletionModelInformation(model: IModelAPIResponse): model is
 	return model.capabilities.type === 'completion';
 }
 
-export type ChatEndpointFamily = 'gpt-4.1' | 'gpt-4o-mini' | 'gpt-5-mini' | 'copilot-base';
+export type ChatEndpointFamily = 'gpt-4.1' | 'gpt-5-mini' | 'copilot-base' | 'copilot-fast';
 export type EmbeddingsEndpointFamily = 'text3small' | 'metis';
 
 export interface IEndpointProvider {

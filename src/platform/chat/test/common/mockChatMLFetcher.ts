@@ -12,10 +12,10 @@ export class MockChatMLFetcher implements IChatMLFetcher {
 	onDidMakeChatMLRequest = Event.None;
 
 	async fetchOne(): Promise<ChatResponse> {
-		return { type: ChatFetchResponseType.Success, requestId: '', serverRequestId: '', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } }, value: '' } satisfies ChatResponse;
+		return { type: ChatFetchResponseType.Success, requestId: '', serverRequestId: '', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } }, value: '', resolvedModel: '' } satisfies ChatResponse;
 	}
 
 	async fetchMany(): Promise<ChatResponses> {
-		return { type: ChatFetchResponseType.Success, requestId: '', serverRequestId: '', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } }, value: [''] } satisfies ChatResponses;
+		return { type: ChatFetchResponseType.Success, requestId: '', serverRequestId: '', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } }, value: [''], resolvedModel: '' } satisfies ChatResponses;
 	}
 }

@@ -12,6 +12,7 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { AutoChatEndpoint } from './autoChatEndpoint';
 import { ICAPIClientService } from './capiClient';
 
@@ -21,6 +22,23 @@ interface AutoModeAPIResponse {
 	expires_at: number;
 	discounted_costs?: { [key: string]: number };
 	session_token: string;
+}
+
+/**
+ * Represents a cached auto mode token and the endpoint it maps to.
+ */
+interface CachedAutoToken {
+	readonly endpoint: IChatEndpoint;
+	readonly expiration: number;
+	readonly sessionToken: string;
+}
+
+/**
+ * Holds the active and standby tokens for a conversation.
+ */
+interface ConversationCacheEntry {
+	active?: CachedAutoToken;
+	standby?: CachedAutoToken;
 }
 
 export const IAutomodeService = createServiceIdentifier<IAutomodeService>('IAutomodeService');
@@ -33,8 +51,9 @@ export interface IAutomodeService {
 
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
-	private readonly _autoModelCache: Map<string, { endpoint: IChatEndpoint; expiration: number; autoModeToken: string; lastRequestId?: string }> = new Map();
-	private readonly _taskSingler = new TaskSingler<IChatEndpoint>();
+	private readonly _autoModelCache: Map<string, ConversationCacheEntry> = new Map();
+	private _reserveToken: CachedAutoToken | undefined;
+	private readonly _taskSingler = new TaskSingler<CachedAutoToken>();
 
 
 	constructor(
@@ -42,59 +61,182 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
 		@IChatMLFetcher private readonly _chatMLFetcher: IChatMLFetcher,
+		@IExperimentationService private readonly _expService: IExperimentationService
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
 			this._autoModelCache.clear();
+			this._reserveToken = undefined;
 		}));
 		this._serviceBrand = undefined;
 	}
 
-	private async _updateAutoEndpointCache(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
-		const startTime = Date.now();
+	/**
+	 * Resolve an auto mode endpoint using a double-buffer strategy and a global reserve token.
+	 */
+	async resolveAutoModeEndpoint(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
+		if (!knownEndpoints.length) {
+			throw new Error('No auto mode endpoints provided.');
+		}
+
 		const conversationId = getConversationId(chatRequest);
-		const cacheEntry = this._autoModelCache.get(conversationId);
-		const existingToken = cacheEntry?.autoModeToken;
-		const isExpired = cacheEntry && (cacheEntry.expiration <= Date.now());
+		const entry = this._autoModelCache.get(conversationId) ?? {};
+		if (!this._autoModelCache.has(conversationId)) {
+			this._autoModelCache.set(conversationId, entry);
+		}
+
+		this._pruneExpiredTokens(entry);
+		if (!entry.active && entry.standby) {
+			entry.active = entry.standby;
+			entry.standby = undefined;
+		}
+
+		if (!entry.active) {
+			entry.active = await this._acquireActiveToken(conversationId, entry, knownEndpoints);
+		}
+
+		if (!entry.standby || !this._isTokenValid(entry.standby) || this._isExpiringSoon(entry.standby) || this._isExpiringSoon(entry.active)) {
+			this._refreshStandbyInBackground(conversationId, entry, knownEndpoints);
+		}
+
+		this._ensureReserveRefill(knownEndpoints);
+		return entry.active.endpoint;
+	}
+
+	/**
+	 * Acquire or refresh the reserve token so that a future conversation can respond instantly.
+	 */
+	private _ensureReserveRefill(knownEndpoints: IChatEndpoint[]): void {
+		if (this._isTokenValid(this._reserveToken)) {
+			return;
+		}
+
+		void this._taskSingler.getOrCreate('reserve', () => this._fetchToken('reserve', undefined, knownEndpoints))
+			.then(token => {
+				this._reserveToken = token;
+			})
+			.catch(err => {
+				this._logService.error(`Failed to refresh reserve auto mode token: ${err instanceof Error ? err.message : String(err)}`);
+			});
+	}
+
+	/**
+	 * Acquire the active token for a conversation, promoting the reserve if available.
+	 */
+	private async _acquireActiveToken(conversationId: string, entry: ConversationCacheEntry, knownEndpoints: IChatEndpoint[]): Promise<CachedAutoToken> {
+		if (this._isTokenValid(this._reserveToken)) {
+			const token = this._reserveToken;
+			this._reserveToken = undefined;
+			return token;
+		}
+
+		const sessionHint = entry.standby?.sessionToken ?? entry.active?.sessionToken;
+		return this._taskSingler.getOrCreate(`active:${conversationId}`, () => this._fetchToken('active', sessionHint, knownEndpoints));
+	}
+
+	/**
+	 * Start a background refresh to populate or update the standby token.
+	 */
+	private _refreshStandbyInBackground(conversationId: string, entrySnapshot: ConversationCacheEntry, knownEndpoints: IChatEndpoint[]): void {
+		const sessionHint = entrySnapshot.standby?.sessionToken ?? entrySnapshot.active?.sessionToken;
+		void this._taskSingler.getOrCreate(`standby:${conversationId}`, () => this._fetchToken('standby', sessionHint, knownEndpoints))
+			.then(token => {
+				const entry = this._autoModelCache.get(conversationId);
+				if (!entry) {
+					return;
+				}
+				if (entry.active && entry.active.sessionToken === token.sessionToken) {
+					return;
+				}
+				entry.standby = token;
+			})
+			.catch(err => {
+				this._logService.error(`Failed to refresh standby auto mode token for ${conversationId}: ${err instanceof Error ? err.message : String(err)}`);
+			});
+	}
+
+	/**
+	 * Fetch a new token from the auto mode service.
+	 */
+	private async _fetchToken(debugName: string, sessionToken: string | undefined, knownEndpoints: IChatEndpoint[]): Promise<CachedAutoToken> {
+		const startTime = Date.now();
+
 		const authToken = (await this._authService.getCopilotToken()).token;
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
 			'Authorization': `Bearer ${authToken}`
 		};
-		if (existingToken && !isExpired) {
-			headers['Copilot-Session-Token'] = existingToken;
+		if (sessionToken) {
+			headers['Copilot-Session-Token'] = sessionToken;
 		}
+
+		const autoModeHint = this._expService.getTreatmentVariable<string>('copilotchat.autoModelHint') || 'auto';
+
 		const response = await this._capiClientService.makeRequest<Response>({
 			json: {
-				"auto_mode": { "model_hints": ["auto"] },
+				'auto_mode': { 'model_hints': [autoModeHint] }
 			},
 			headers,
 			method: 'POST'
 		}, { type: RequestType.AutoModels });
 		const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
 		const selectedModel = knownEndpoints.find(e => e.model === data.selected_model) || knownEndpoints[0];
-		const autoEndpoint = new AutoChatEndpoint(selectedModel, this._chatMLFetcher, data.session_token, data.discounted_costs?.[selectedModel.model] || 0);
-		this._autoModelCache.set(conversationId, {
+		const autoEndpoint = new AutoChatEndpoint(selectedModel, this._chatMLFetcher, data.session_token, data.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(data.discounted_costs));
+		this._logService.trace(`Fetched auto model for ${debugName} in ${Date.now() - startTime}ms.`);
+		return {
 			endpoint: autoEndpoint,
 			expiration: data.expires_at * 1000,
-			autoModeToken: data.session_token,
-			lastRequestId: chatRequest?.id
-		});
-		this._logService.info(`Fetched auto model in ${Date.now() - startTime}ms.`);
-		return autoEndpoint;
+			sessionToken: data.session_token
+		};
 	}
 
-	async resolveAutoModeEndpoint(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
-		const cacheEntry = this._autoModelCache.get(getConversationId(chatRequest));
-		const expiringSoon = cacheEntry && (cacheEntry.expiration - Date.now() < 5 * 60 * 1000);
-		const isExpired = cacheEntry && (cacheEntry.expiration < Date.now());
-		if (cacheEntry && !expiringSoon) { // Not expiring soon -> Return cached
-			return cacheEntry.endpoint;
-		} else if (cacheEntry && expiringSoon && !isExpired && chatRequest?.id === cacheEntry.lastRequestId) { // Expiring soon but the request is the same, so keep model sticky
-			return cacheEntry.endpoint;
-		} else { // Either no cache, it's expiring soon and a new request, or it has expired
-			return this._taskSingler.getOrCreate(getConversationId(chatRequest), () => this._updateAutoEndpointCache(chatRequest, knownEndpoints));
+	private _calculateDiscountRange(discounts: Record<string, number> | undefined): { low: number; high: number } {
+		if (!discounts) {
+			return { low: 0, high: 0 };
 		}
+		let low = Infinity;
+		let high = -Infinity;
+		let hasValues = false;
+
+		for (const value of Object.values(discounts)) {
+			hasValues = true;
+			if (value < low) {
+				low = value;
+			}
+			if (value > high) {
+				high = value;
+			}
+		}
+		return hasValues ? { low, high } : { low: 0, high: 0 };
+	}
+
+	/**
+	 * Remove expired tokens so they are not considered during promotion.
+	 */
+	private _pruneExpiredTokens(entry: ConversationCacheEntry): void {
+		if (entry.active && !this._isTokenValid(entry.active)) {
+			entry.active = undefined;
+		}
+		if (entry.standby && !this._isTokenValid(entry.standby)) {
+			entry.standby = undefined;
+		}
+	}
+
+	/**
+	 * Determine whether a token is still valid.
+	 */
+	private _isTokenValid(token: CachedAutoToken | undefined): token is CachedAutoToken {
+		return !!token && token.expiration > Date.now();
+	}
+
+	/**
+	 * Determine whether a token should be refreshed soon.
+	 */
+	private _isExpiringSoon(token: CachedAutoToken | undefined): boolean {
+		if (!token) {
+			return false;
+		}
+		return token.expiration - Date.now() <= 5 * 60 * 1000;
 	}
 }
 

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { GenerateContentParameters, GoogleGenAI, Tool, Type } from '@google/genai';
-import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelToolCallPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
+import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
@@ -154,6 +154,9 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 				systemInstruction: systemInstruction,
 				tools: tools.length > 0 ? tools : undefined,
 				maxOutputTokens: model.maxOutputTokens,
+				thinkingConfig: {
+					includeThoughts: true,
+				},
 				abortSignal: abortController.signal
 			}
 		};
@@ -170,6 +173,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 				requestId,
 				serverRequestId: requestId,
 				usage: result.usage,
+				resolvedModel: model.id,
 				value: ['value'],
 			}, wrappedProgress.items.map((i): IResponseDelta => {
 				return {
@@ -221,7 +225,6 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 			const stream = await this._genAIClient.models.generateContentStream(params);
 
 			let usage: APIUsage | undefined;
-			let hasText = false;
 
 			for await (const chunk of stream) {
 				if (token.isCancellationRequested) {
@@ -241,9 +244,11 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 
 					if (candidate.content && candidate.content.parts) {
 						for (const part of candidate.content.parts) {
-							if (part.text) {
+							if ('thought' in part && part.thought === true && part.text) {
+								// Handle thinking/reasoning content from Gemini API
+								progress.report(new LanguageModelThinkingPart(part.text));
+							} else if (part.text) {
 								progress.report(new LanguageModelTextPart(part.text));
-								hasText ||= part.text.length > 0;
 							} else if (part.functionCall && part.functionCall.name) {
 								// Generate a synthetic call id
 								const callId = `${part.functionCall.name}_${Date.now()}`;

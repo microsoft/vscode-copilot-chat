@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
-import { CHAT_MODEL } from '../../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEmbeddingsComputer } from '../../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -15,6 +16,7 @@ import { groupBy } from '../../../../util/vs/base/common/collections';
 import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolExtensionSource, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
+import { BuiltInToolGroupHandler } from './builtInToolGroupHandler';
 import { EMBEDDING_TYPE_FOR_TOOL_GROUPING } from './preComputedToolEmbeddingsCache';
 import { IToolEmbeddingsComputer } from './toolEmbeddingsComputer';
 import { EMBEDDINGS_GROUP_NAME, VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
@@ -23,25 +25,44 @@ import { TOOLS_AND_GROUPS_LIMIT } from './virtualToolsConstants';
 import { describeBulkToolGroups } from './virtualToolSummarizer';
 import { ISummarizedToolCategory, ISummarizedToolCategoryUpdatable, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
 
-const BUILT_IN_GROUP = 'builtin';
-const CATEGORIZATION_ENDPOINT = CHAT_MODEL.GPT4OMINI;
+const CATEGORIZATION_ENDPOINT = 'copilot-fast';
 const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of tools. The category of tools is described as follows:\n\n';
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
 export class VirtualToolGrouper implements IToolCategorization {
+	private builtInToolGroupHandler: BuiltInToolGroupHandler;
+
 	constructor(
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IToolGroupingCache private readonly _cache: IToolGroupingCache,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
 		@IEmbeddingsComputer private readonly embeddingsComputer: IEmbeddingsComputer,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IToolEmbeddingsComputer private readonly _toolEmbeddingsComputer: IToolEmbeddingsComputer,
 		@IInstantiationService _instantiationService: IInstantiationService,
-	) { }
+	) {
+		this.builtInToolGroupHandler = new BuiltInToolGroupHandler();
+	}
+
+	/**
+	 * Determines if built-in tool grouping should be triggered based on configuration and tool count
+	 */
+	private shouldTriggerBuiltInGrouping(tools: LanguageModelToolInformation[]): boolean {
+		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
+
+		return tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
+	}
 
 	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void> {
 		// If there's no need to group tools, just add them all directly;
-		if (tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
+
+		// if there are more than START_BUILTIN_GROUPING_AFTER_TOOL_COUNT tools, we should group built-in tools
+		// otherwise, follow the existing logic of grouping all tools together
+		const shouldGroup = this.shouldTriggerBuiltInGrouping(tools);
+
+		if (!shouldGroup && tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
 			root.contents = tools;
 			return;
 		}
@@ -52,7 +73,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 			} else if (t.source instanceof LanguageModelToolMCPSource) {
 				return 'mcp_' + t.source.label;
 			} else {
-				return BUILT_IN_GROUP;
+				return BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY;
 			}
 		});
 
@@ -67,18 +88,26 @@ export class VirtualToolGrouper implements IToolCategorization {
 		const predictedToolsPromise = this._getPredictedTools(query, tools, token).then(tools => ({ tools, durationMs: predictedToolsSw.elapsed() }));
 
 		// Separate builtin tools from extension/MCP tools
-		const builtinTools = byToolset[BUILT_IN_GROUP] || [];
-		const toolsetEntries = Object.entries(byToolset).filter(([key]) => key !== BUILT_IN_GROUP);
+		const builtinTools = byToolset[BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY] || [];
+		const toolsetEntries = Object.entries(byToolset).filter(([key]) => key !== BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY);
 
 		const groupedResults: (VirtualTool | LanguageModelToolInformation)[] = [];
 
-		// Add builtin tools directly
-		groupedResults.push(...builtinTools);
+		// Handle built-in tools - apply grouping logic if needed
+		const shouldGroupBuiltin = this.shouldTriggerBuiltInGrouping(builtinTools);
+		if (shouldGroupBuiltin) {
+			const builtinGroups = this.builtInToolGroupHandler.createBuiltInToolGroups(builtinTools);
+			groupedResults.push(...builtinGroups);
+		} else {
+			// Add builtin tools directly without grouping
+			groupedResults.push(...builtinTools);
+		}
 
 		// Process extension/MCP tools per-toolset with proportional slot allocation
 		if (toolsetEntries.length > 0) {
-			// Calculate available slots after accounting for builtin tools
-			const availableSlots = TOOLS_AND_GROUPS_LIMIT - builtinTools.length;
+			// Calculate available slots after accounting for builtin tools/groups
+			const builtinSlotCount = groupedResults.length;
+			const availableSlots = TOOLS_AND_GROUPS_LIMIT - builtinSlotCount;
 			const slotAllocation = this._allocateSlots(toolsetEntries, availableSlots);
 
 			// Process each toolset individually
@@ -299,6 +328,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		// Otherwise, use embedding-based grouping with the allocated slot limit
 		return await this._generateEmbeddingBasedGroups(tools, allocatedSlots, token);
 	}
+
 
 	private async _getPredictedTools(query: string, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<LanguageModelToolInformation[]> {
 		if (!query) {

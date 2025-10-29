@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { CHAT_MODEL, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { modelShouldUseReplaceStringHealing } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -26,7 +27,7 @@ import { Iterable } from '../../../util/vs/base/common/iterator';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseTextEditPart, EndOfLine, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, EndOfLine, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CellOrNotebookEdit, processFullRewriteNotebookEdits } from '../../prompts/node/codeMapper/codeMapper';
@@ -176,7 +177,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		const fileResults: IEditedFile[] = [];
 		const existingDiagnosticMap = new ResourceMap<vscode.Diagnostic[]>();
 
-		for (const { document, uri, generatedEdit } of edits) {
+		for (const { document, uri, generatedEdit, healed } of edits) {
 			if (document && !existingDiagnosticMap.has(document.uri)) {
 				existingDiagnosticMap.set(document.uri, this.languageDiagnosticsService.getDiagnostics(document.uri));
 			}
@@ -255,18 +256,26 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 					});
 				});
 
-				fileResults.push({ operation: ActionType.UPDATE, uri, isNotebook, existingDiagnostics });
+				fileResults.push({
+					operation: ActionType.UPDATE,
+					uri,
+					isNotebook,
+					existingDiagnostics,
+					healed: healed ? JSON.stringify({ oldString: healed.oldString, newString: healed.newString }, null, 2) : undefined
+				});
 			}
 
 			this._promptContext.stream.markdown('\n```\n');
 		}
+
+		const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;
 
 		return new LanguageModelToolResult([
 			new LanguageModelPromptTsxPart(
 				await renderPromptElementJSON(
 					this.instantiationService,
 					EditFileResult,
-					{ files: fileResults, diagnosticsTimeout: 2000, toolName: this.toolName(), requestId: options.chatRequestId, model: options.model },
+					{ files: fileResults, diagnosticsTimeout: isInlineChat ? -1 : 2000, toolName: this.toolName(), requestId: options.chatRequestId, model: options.model },
 					// If we are not called with tokenization options, have _some_ fake tokenizer
 					// otherwise we end up returning the entire document
 					options.tokenizationOptions ?? {
@@ -307,10 +316,11 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			}
 			this.recordEditSuccess(options, false);
 
-			if (this.experimentationService.getTreatmentVariable<boolean>('copilotchat.disableReplaceStringHealing') === true) {
-				throw e; // failsafe for next release.
+			const shouldSkipHealingForNotExplicitlyEnabled = this.experimentationService.getTreatmentVariable<boolean>('copilotchat.disableReplaceStringHealing') === true;
+			const canHeal = shouldSkipHealingForNotExplicitlyEnabled ? options.model && modelShouldUseReplaceStringHealing(options.model) : true;
+			if (!canHeal) {
+				throw e;
 			}
-
 
 			let healed: CorrectedEditResult;
 			try {
@@ -324,7 +334,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 						newString,
 					},
 					eol,
-					await this.endpointProvider.getChatEndpoint(CHAT_MODEL.GPT4OMINI),
+					await this.endpointProvider.getChatEndpoint('copilot-fast'),
 					token
 				);
 				if (healed.params.oldString === healed.params.newString) {
