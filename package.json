@@ -3489,7 +3489,6 @@
 					"when": "view == workbench.panel.chat.view.copilot",
 					"group": "3_show"
 				},
-
 				{
 					"command": "github.copilot.cloud.sessions.refresh",
 					"when": "view == workbench.view.chat.sessions.copilot-cloud-agent",
