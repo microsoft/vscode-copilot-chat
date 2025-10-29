@@ -31,8 +31,11 @@ export class ModelAliasRegistry {
 	}
 
 	static deregisterAlias(alias: string): void {
+		const modelId = this._instance._aliasToModelId.get(alias);
 		this._instance._aliasToModelId.delete(alias);
-		this._updateAliasesForModelId(alias);
+		if (modelId) {
+			this._updateAliasesForModelId(modelId);
+		}
 	}
 
 	static resolveAlias(alias: string): string {
