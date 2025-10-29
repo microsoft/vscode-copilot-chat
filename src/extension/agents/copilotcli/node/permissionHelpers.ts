@@ -14,7 +14,7 @@ export interface PermissionToolParams {
  * Pure function mapping a Copilot CLI permission request -> tool invocation params.
  * Keeps logic out of session class for easier unit testing.
  */
-export function getConfirmationToolParams(permissionRequest: Record<string, unknown>): PermissionToolParams {
+export function getConfirmationToolParams(permissionRequest: PermissionRequest): PermissionToolParams {
 	if (permissionRequest.kind === 'shell') {
 		return {
 			tool: ToolName.CoreTerminalConfirmationTool,
@@ -171,5 +171,5 @@ declare type MCPPermissionRequest = {
 /**
  * A permission request which will be used to check tool or path usage against config and/or request user approval.
  */
-export declare type PermissionRequest = ShellPermissionRequest | WritePermissionRequest | MCPPermissionRequest;
+export declare type PermissionRequest = ShellPermissionRequest | WritePermissionRequest | MCPPermissionRequest | { kind: 'read'; intention: string };
 

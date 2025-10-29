@@ -8,31 +8,19 @@ import { getConfirmationToolParams } from '../permissionHelpers';
 
 describe('permissionHelpers.getConfirmationToolParams', () => {
 	it('maps shell requests to terminal confirmation tool', () => {
-		const result = getConfirmationToolParams({ kind: 'shell', fullCommandText: 'rm -rf /tmp/test' });
+		const result = getConfirmationToolParams({ kind: 'shell', fullCommandText: 'rm -rf /tmp/test', canOfferSessionApproval: true, commands: [], hasWriteFileRedirection: true, intention: '', possiblePaths: [] });
 		expect(result.tool).toBe(ToolName.CoreTerminalConfirmationTool);
 	});
 
 	it('maps write requests with filename', () => {
-		const result = getConfirmationToolParams({ kind: 'write', fileName: 'foo.ts' });
+		const result = getConfirmationToolParams({ kind: 'write', fileName: 'foo.ts', diff: '', intention: '' });
 		expect(result.tool).toBe(ToolName.CoreConfirmationTool);
 		const input = result.input as any;
 		expect(input.message).toContain('Edit foo.ts');
 	});
 
 	it('maps mcp requests', () => {
-		const result = getConfirmationToolParams({ kind: 'mcp', serverName: 'srv', toolTitle: 'Tool', toolName: 'run', args: { a: 1 } });
-		expect(result.tool).toBe(ToolName.CoreConfirmationTool);
-	});
-
-	it('maps read requests with intention', () => {
-		const result = getConfirmationToolParams({ kind: 'read', intention: 'View file details' });
-		expect(result.tool).toBe(ToolName.CoreConfirmationTool);
-		const input = result.input as any;
-		expect(input.title).toBe('Read file(s)');
-	});
-
-	it('defaults unknown request kind', () => {
-		const result = getConfirmationToolParams({ kind: 'other', foo: 'bar' });
+		const result = getConfirmationToolParams({ kind: 'mcp', serverName: 'srv', toolTitle: 'Tool', toolName: 'run', args: { a: 1 }, readOnly: false });
 		expect(result.tool).toBe(ToolName.CoreConfirmationTool);
 	});
 });

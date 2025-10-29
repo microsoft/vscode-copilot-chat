@@ -14,14 +14,13 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
-import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { CopilotCLIPromptResolver } from './copilotcliPromptResolver';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
 import { processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
-import { PermissionRequest } from './permissionHelpers';
+import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
 export class CopilotCLIAgentManager extends Disposable {
 	constructor(
@@ -217,7 +216,7 @@ export class CopilotCLISession extends Disposable {
 		toolInvocationToken: vscode.ChatParticipantToolToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
 		try {
-			const { tool, input } = this.getConfirmationToolParams(permissionRequest);
+			const { tool, input } = getConfirmationToolParams(permissionRequest);
 			const result = await this.toolsService.invokeTool(tool,
 				{ input, toolInvocationToken },
 				CancellationToken.None);
@@ -227,83 +226,9 @@ export class CopilotCLISession extends Disposable {
 				return { kind: 'approved' };
 			}
 		} catch (error) {
-			if (permissionRequest.kind === 'shell') {
-				try {
-					const tool = ToolName.CoreConfirmationTool;
-					const input = {
-						title: permissionRequest.intention || 'Copilot CLI Permission Request',
-						message: permissionRequest.fullCommandText || `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-						confirmationType: 'terminal',
-						terminalCommand: permissionRequest.fullCommandText as string | undefined
-
-					};
-					const result = await this.toolsService.invokeTool(tool,
-						{ input, toolInvocationToken },
-						CancellationToken.None);
-
-					const firstResultPart = result.content.at(0);
-					if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
-						return { kind: 'approved' };
-					}
-				} catch (error) {
-					this.logService.error(`[CopilotCLISession](2) Permission request error: ${error}`);
-				}
-			}
 			this.logService.error(`[CopilotCLISession] Permission request error: ${error}`);
 		}
 
 		return { kind: 'denied-interactively-by-user' };
-	}
-
-	private getConfirmationToolParams(permissionRequest: PermissionRequest): { tool: string; input: unknown } {
-		if (permissionRequest.kind === 'shell') {
-			return {
-				tool: ToolName.CoreTerminalConfirmationTool, input: {
-					message: permissionRequest.intention || permissionRequest.fullCommandText || `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-					command: permissionRequest.fullCommandText as string | undefined,
-					isBackground: false
-				}
-			};
-		}
-
-		if (permissionRequest.kind === 'write') {
-			return {
-				tool: ToolName.CoreConfirmationTool,
-				input: {
-
-					title: permissionRequest.intention || 'Copilot CLI Permission Request',
-					message: permissionRequest.fileName ? `Edit ${permissionRequest.fileName}` : `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-					confirmationType: 'basic'
-				}
-			};
-		}
-
-		if (permissionRequest.kind === 'mcp') {
-			const serverName = permissionRequest.serverName as string | undefined;
-			const toolTitle = permissionRequest.toolTitle as string | undefined;
-			const toolName = permissionRequest.toolName as string | undefined;
-			const args = permissionRequest.args;
-
-			return {
-				tool: ToolName.CoreConfirmationTool,
-				input: {
-
-					title: toolTitle || `MCP Tool: ${toolName || 'Unknown'}`,
-					message: serverName
-						? `Server: ${serverName}\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``
-						: `\`\`\`json\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-					confirmationType: 'basic'
-				}
-			};
-		}
-
-		return {
-			tool: ToolName.CoreConfirmationTool,
-			input: {
-				title: 'Copilot CLI Permission Request',
-				message: `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-				confirmationType: 'basic'
-			}
-		};
 	}
 }
