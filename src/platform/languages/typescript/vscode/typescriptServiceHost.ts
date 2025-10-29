@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as path from 'node:path';
 import * as ts from 'typescript';
 import type * as vscode from 'vscode';
+import * as path from '../../../../util/vs/base/common/path';
 
 export interface ITypeScriptProgramContext {
 	readonly program: ts.Program;

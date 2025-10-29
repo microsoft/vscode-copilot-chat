@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as os from 'node:os';
+// Tests run under Node; keep the built-in path module here to preserve native semantics.
 import * as path from 'node:path';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
