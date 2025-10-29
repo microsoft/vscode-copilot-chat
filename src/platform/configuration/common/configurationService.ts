@@ -706,7 +706,7 @@ export namespace ConfigKey {
 		export const InlineEditsXtabCodexV21NesUnified = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.codexv21nesUnified', false, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabMaxMergeConflictLines = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.maxMergeConflictLines', undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabOnlyMergeConflictLines = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.onlyMergeConflictLines', false, INTERNAL_RESTRICTED);
-		export const InlineEditsUndoInsertionFilteringEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.undoInsertionFilteringEnabled', true, INTERNAL_RESTRICTED);
+		export const InlineEditsUndoInsertionFiltering = defineExpSetting<'v1' | 'v2' | undefined>('chat.advanced.inlineEdits.undoInsertionFiltering', 'v1', INTERNAL_RESTRICTED);
 		export const InlineEditsDiagnosticsExplorationEnabled = defineSetting<boolean | undefined>('chat.advanced.inlineEdits.inlineEditsDiagnosticsExplorationEnabled', false, INTERNAL_RESTRICTED);
 		export const EditSourceTrackingShowDecorations = defineSetting('chat.advanced.editSourceTracking.showDecorations', false, INTERNAL);
 		export const EditSourceTrackingShowStatusBar = defineSetting('chat.advanced.editSourceTracking.showStatusBar', false, INTERNAL);
@@ -814,7 +814,6 @@ export namespace ConfigKey {
 
 	export const EnableAlternateGptPrompt = defineExpSetting<boolean>('chat.alternateGptPrompt.enabled', false);
 	export const Gpt5AlternatePrompt = defineExpSetting<string>('chat.gpt5AlternatePrompt', 'default');
-	export const GrokCodeAlternatePrompt = defineExpSetting<string>('chat.grokCodeAlternatePrompt', 'default');
 
 	export const CompletionsFetcher = defineExpSetting<FetcherId | undefined>('chat.completionsFetcher', undefined);
 	export const NextEditSuggestionsFetcher = defineExpSetting<FetcherId | undefined>('chat.nesFetcher', undefined);

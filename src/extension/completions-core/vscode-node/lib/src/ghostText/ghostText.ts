@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { CompletionsTelemetryServiceBridge } from '../../../bridge/src/completionsTelemetryServiceBridge';
 import { isSupportedLanguageId } from '../../../prompt/src/parse';
 import { initializeTokenizers } from '../../../prompt/src/tokenization';
 import { CancellationTokenSource, CancellationToken as ICancellationToken } from '../../../types/src';
@@ -28,6 +29,7 @@ import { APIChoice, getTemperatureForSamples } from '../openai/openai';
 import { CopilotNamedAnnotationList } from '../openai/stream';
 import { StatusReporter } from '../progress';
 import { ContextProviderBridge } from '../prompt/components/contextProviderBridge';
+import { ContextProviderStatistics } from '../prompt/contextProviderStatistics';
 import {
 	ContextIndentation,
 	contextIndentation,
@@ -1093,7 +1095,38 @@ export async function getGhostText(
 			options
 		);
 		ctx.get(CompletionNotifier).notifyRequest(completionState, id, telemetryData, token, options);
-		return await getGhostTextWithoutAbortHandling(ctx, completionState, id, telemetryData, token, options);
+		const result = await getGhostTextWithoutAbortHandling(ctx, completionState, id, telemetryData, token, options);
+		const statistics = ctx.get(ContextProviderStatistics).getStatisticsForCompletion(id);
+		const opportunityId = options?.opportunityId ?? 'unknown';
+		const telemetryService = ctx.get(CompletionsTelemetryServiceBridge).getTelemetryService();
+		for (const [providerId, statistic] of statistics.getAllUsageStatistics()) {
+			/* __GDPR__
+				"context-provider.completion-stats" : {
+					"owner": "dirkb",
+					"comment": "Telemetry for copilot inline completion context",
+					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+					"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
+					"providerId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The context provider id" },
+					"resolution": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The resolution of the context" },
+					"usage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How the context was used" },
+					"usageDetails": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Additional details about the usage as a JSON string" }
+				}
+			*/
+			telemetryService.sendMSFTTelemetryEvent(
+				'context-provider.completion-stats',
+				{
+					requestId: id,
+					opportunityId,
+					providerId,
+					resolution: statistic.resolution,
+					usage: statistic.usage,
+					usageDetails: JSON.stringify(statistic.usageDetails),
+				},
+				{
+				}
+			);
+		}
+		return result;
 	} catch (e) {
 		// The cancellation token may be called after the request is done but while we still process data.
 		// The underlying implementation catches abort errors for specific scenarios but we still have uncovered paths.

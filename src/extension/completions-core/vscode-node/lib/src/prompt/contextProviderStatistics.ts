@@ -54,10 +54,17 @@ export class ContextProviderStatistics {
 }
 
 export class PerCompletionContextProviderStatistics {
+
+	public opportunityId: string | undefined;
+
 	// Keyed by the providerId, contains an array of tuples [context item, expectation]
 	protected _expectations = new Map<string, [SupportedContextItemWithId, PromptExpectation][]>();
 	protected _lastResolution = new Map<string, ResolutionStatus>();
 	protected _statistics = new Map<string, ContextUsageStatistics>();
+
+	constructor() {
+		this.opportunityId = undefined;
+	}
 
 	addExpectations(providerId: string, expectations: [SupportedContextItemWithId, PromptExpectation][]) {
 		const providerExpectations = this._expectations.get(providerId) ?? [];
@@ -72,8 +79,16 @@ export class PerCompletionContextProviderStatistics {
 		this._lastResolution.set(providerId, resolution);
 	}
 
+	setOpportunityId(opportunityId: string) {
+		this.opportunityId = opportunityId;
+	}
+
 	get(providerId: string): ContextUsageStatistics | undefined {
 		return this._statistics.get(providerId);
+	}
+
+	getAllUsageStatistics(): IterableIterator<[string, ContextUsageStatistics]> {
+		return this._statistics.entries();
 	}
 
 	computeMatch(promptMatchers: PromptMatcher[]) {

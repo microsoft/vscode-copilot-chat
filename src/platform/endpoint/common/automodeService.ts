@@ -181,13 +181,33 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		}, { type: RequestType.AutoModels });
 		const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
 		const selectedModel = knownEndpoints.find(e => e.model === data.selected_model) || knownEndpoints[0];
-		const autoEndpoint = new AutoChatEndpoint(selectedModel, this._chatMLFetcher, data.session_token, data.discounted_costs?.[selectedModel.model] || 0);
+		const autoEndpoint = new AutoChatEndpoint(selectedModel, this._chatMLFetcher, data.session_token, data.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(data.discounted_costs));
 		this._logService.trace(`Fetched auto model for ${debugName} in ${Date.now() - startTime}ms.`);
 		return {
 			endpoint: autoEndpoint,
 			expiration: data.expires_at * 1000,
 			sessionToken: data.session_token
 		};
+	}
+
+	private _calculateDiscountRange(discounts: Record<string, number> | undefined): { low: number; high: number } {
+		if (!discounts) {
+			return { low: 0, high: 0 };
+		}
+		let low = Infinity;
+		let high = -Infinity;
+		let hasValues = false;
+
+		for (const value of Object.values(discounts)) {
+			hasValues = true;
+			if (value < low) {
+				low = value;
+			}
+			if (value > high) {
+				high = value;
+			}
+		}
+		return hasValues ? { low, high } : { low: 0, high: 0 };
 	}
 
 	/**

@@ -218,6 +218,9 @@ class TreeRunnableResult {
 			result.push(new TreeCacheInfo(this.from.cache));
 		}
 		result.push(new TreePropertyItem(this, 'priority', this.from.priority.toString()));
+		if (this.from.debugPath !== undefined) {
+			result.push(new TreePropertyItem(this, 'debugPath', this.from.debugPath));
+		}
 
 		return result;
 	}

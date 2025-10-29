@@ -132,11 +132,13 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			let modelDescription: string | undefined;
 			if (endpoint.degradationReason) {
 				modelDescription = endpoint.degradationReason;
-			} else if (endpoint.model === AutoChatEndpoint.id) {
-				if (this._authenticationService.copilotToken?.isNoAuthUser) {
+			} else if (endpoint instanceof AutoChatEndpoint) {
+				if (this._authenticationService.copilotToken?.isNoAuthUser || (endpoint.discountRange.low === 0 && endpoint.discountRange.high === 0)) {
 					modelDescription = localize('languageModel.autoTooltipNoAuth', 'Auto selects the best model for your request based on capacity and performance.');
+				} else if (endpoint.discountRange.low === endpoint.discountRange.high) {
+					modelDescription = localize('languageModel.autoTooltipSameDiscount', 'Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% discount.', endpoint.discountRange.low * 100);
 				} else {
-					modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-0.9x the request rate, depending on the model.');
+					modelDescription = localize('languageModel.autoTooltipDiffDiscount', 'Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% to {1}% discount.', endpoint.discountRange.low * 100, endpoint.discountRange.high * 100);
 				}
 			} else if (endpoint.multiplier) {
 				modelDescription = localize('languageModel.costTooltip', '{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
@@ -162,8 +164,12 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			const baseCount = await this._promptBaseCountCache.getBaseCount(endpoint);
 			let modelDetail = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
 
-			if (endpoint.model === AutoChatEndpoint.id) {
-				modelDetail = 'Variable';
+			if (endpoint instanceof AutoChatEndpoint) {
+				if (endpoint.discountRange.high === endpoint.discountRange.low && endpoint.discountRange.low !== 0) {
+					modelDetail = `${endpoint.discountRange.low * 100}% discount`;
+				} else if (endpoint.discountRange.high !== endpoint.discountRange.low) {
+					modelDetail = `${endpoint.discountRange.low * 100}% to ${endpoint.discountRange.high * 100}% discount`;
+				}
 			}
 			if (endpoint.customModel) {
 				const customModel = endpoint.customModel;

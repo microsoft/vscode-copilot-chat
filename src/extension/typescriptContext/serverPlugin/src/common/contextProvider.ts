@@ -430,6 +430,7 @@ export class RunnableResult {
 
 	public readonly priority: number;
 	public readonly items: ContextItem[];
+	public debugPath: string | undefined;
 
 	constructor(id: ContextRunnableResultId, priority: number, runnableResultContext: RunnableResultContext, primaryBudget: CharacterBudget, secondaryBudget: CharacterBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
 		this.id = id;
@@ -511,7 +512,8 @@ export class RunnableResult {
 			priority: this.priority,
 			items: this.items,
 			cache: this.cache,
-			speculativeKind: this.speculativeKind
+			speculativeKind: this.speculativeKind,
+			debugPath: this.debugPath
 		};
 	}
 }
@@ -833,7 +835,6 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		this.priority = priority;
 		this.cost = cost;
 	}
-
 
 	public initialize(result: ContextResult): void {
 		if (this.result !== undefined) {
