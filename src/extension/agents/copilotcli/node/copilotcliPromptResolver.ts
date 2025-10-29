@@ -4,18 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Attachment } from '@github/copilot/sdk';
-import * as fs from 'fs/promises';
 import type * as vscode from 'vscode';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { isLocation } from '../../../../util/common/types';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatReferenceDiagnostic } from '../../../../vscodeTypes';
+import { ChatReferenceDiagnostic, FileType } from '../../../../vscodeTypes';
 
 export class CopilotCLIPromptResolver {
 	constructor(
 		@ILogService private readonly logService: ILogService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) { }
 
 	public async resolvePrompt(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
@@ -72,8 +73,8 @@ export class CopilotCLIPromptResolver {
 
 		await Promise.all(files.map(async (file) => {
 			try {
-				const stat = await raceCancellationError(fs.stat(file.path), token);
-				const type = stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : undefined;
+				const stat = await raceCancellationError(this.fileSystemService.stat(URI.file(file.path)), token);
+				const type = stat.type === FileType.Directory ? 'directory' : stat.type === FileType.File ? 'file' : undefined;
 				if (!type) {
 					this.logService.error(`[CopilotCLIAgentManager] Ignoring attachment as its not a file/directory (${file.path})`);
 					return;
