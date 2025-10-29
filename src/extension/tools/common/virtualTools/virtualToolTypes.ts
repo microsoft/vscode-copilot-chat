@@ -16,11 +16,6 @@ export interface IToolGrouping {
 	tools: readonly LanguageModelToolInformation[];
 
 	/**
-	 * Whether tool grouping logic is enabled at the current tool threshold.
-	 */
-	isEnabled: boolean;
-
-	/**
 	 * Should be called for each model tool call. Returns a tool result if the
 	 * call was a virtual tool call that was expanded.
 	 */

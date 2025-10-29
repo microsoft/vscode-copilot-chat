@@ -56,7 +56,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
-		@IAutomodeService private readonly _automodeService: IAutomodeService
+		@IAutomodeService private readonly _automodeService: IAutomodeService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
 	) {
 		super();
 
@@ -104,13 +105,20 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		const models: vscode.LanguageModelChatInformation[] = [];
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
-
-		let defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
 		chatEndpoints.push(autoEndpoint);
-		// No Auth users always get Auto as the default model
+		let defaultChatEndpoint: IChatEndpoint | undefined;
+		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
 		if (this._authenticationService.copilotToken?.isNoAuthUser) {
+			// No Auth users always get Auto as the default model
 			defaultChatEndpoint = autoEndpoint;
+		} else if (defaultExpModel) {
+			// Find exp default
+			defaultChatEndpoint = chatEndpoints.find(e => e.model === defaultExpModel);
+		}
+		if (!defaultChatEndpoint) {
+			// Find a default set by CAPI
+			defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
 		}
 		const seenFamilies = new Set<string>();
 
@@ -124,11 +132,13 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			let modelDescription: string | undefined;
 			if (endpoint.degradationReason) {
 				modelDescription = endpoint.degradationReason;
-			} else if (endpoint.model === AutoChatEndpoint.id) {
-				if (this._authenticationService.copilotToken?.isNoAuthUser) {
+			} else if (endpoint instanceof AutoChatEndpoint) {
+				if (this._authenticationService.copilotToken?.isNoAuthUser || (endpoint.discountRange.low === 0 && endpoint.discountRange.high === 0)) {
 					modelDescription = localize('languageModel.autoTooltipNoAuth', 'Auto selects the best model for your request based on capacity and performance.');
+				} else if (endpoint.discountRange.low === endpoint.discountRange.high) {
+					modelDescription = localize('languageModel.autoTooltipSameDiscount', 'Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% discount.', endpoint.discountRange.low * 100);
 				} else {
-					modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-0.9x the request rate, depending on the model.');
+					modelDescription = localize('languageModel.autoTooltipDiffDiscount', 'Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% to {1}% discount.', endpoint.discountRange.low * 100, endpoint.discountRange.high * 100);
 				}
 			} else if (endpoint.multiplier) {
 				modelDescription = localize('languageModel.costTooltip', '{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
@@ -139,7 +149,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			}
 
 			let modelCategory: { label: string; order: number } | undefined;
-			if (endpoint.model === AutoChatEndpoint.id) {
+			if (endpoint instanceof AutoChatEndpoint) {
 				modelCategory = { label: '', order: Number.MIN_SAFE_INTEGER };
 			} else if (endpoint.isPremium === undefined || this._authenticationService.copilotToken?.isFreeUser) {
 				modelCategory = { label: localize('languageModelHeader.copilot', "Copilot Models"), order: 0 };
@@ -154,8 +164,12 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			const baseCount = await this._promptBaseCountCache.getBaseCount(endpoint);
 			let modelDetail = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
 
-			if (endpoint.model === AutoChatEndpoint.id) {
-				modelDetail = 'Variable';
+			if (endpoint instanceof AutoChatEndpoint) {
+				if (endpoint.discountRange.high === endpoint.discountRange.low && endpoint.discountRange.low !== 0) {
+					modelDetail = `${endpoint.discountRange.low * 100}% discount`;
+				} else if (endpoint.discountRange.high !== endpoint.discountRange.low) {
+					modelDetail = `${endpoint.discountRange.low * 100}% to ${endpoint.discountRange.high * 100}% discount`;
+				}
 			}
 			if (endpoint.customModel) {
 				const customModel = endpoint.customModel;
@@ -167,8 +181,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			const session = this._authenticationService.anyGitHubSession;
 
 			const model: vscode.LanguageModelChatInformation = {
-				id: endpoint.model,
-				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
+				id: endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model,
+				name: endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,
@@ -448,26 +462,32 @@ export class CopilotLanguageModelWrapper extends Disposable {
 	}
 
 	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.ProvideLanguageModelChatResponseOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
+		let thinkingActive = false;
 		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
+			if (delta.thinking) {
+				// Show thinking progress for unencrypted thinking deltas
+				if (!isEncryptedThinkingDelta(delta.thinking)) {
+					const text = delta.thinking.text ?? '';
+					progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
+					thinkingActive = true;
+				}
+			} else if (thinkingActive) {
+				progress.report(new vscode.LanguageModelThinkingPart('', '', { vscode_reasoning_done: true }));
+				thinkingActive = false;
+			}
 			if (delta.text) {
 				progress.report(new vscode.LanguageModelTextPart(delta.text));
 			}
 			if (delta.copilotToolCalls) {
 				for (const call of delta.copilotToolCalls) {
 					try {
-						const parameters = JSON.parse(call.arguments);
+						// Anthropic models send "" (empty string) for tools with no parameters.
+						const parameters = JSON.parse(call.arguments || '{}');
 						progress.report(new vscode.LanguageModelToolCallPart(call.id, call.name, parameters));
 					} catch (err) {
 						this._logService.error(err, `Got invalid JSON for tool call: ${call.arguments}`);
 						throw new Error('Invalid JSON for tool call');
 					}
-				}
-			}
-			if (delta.thinking) {
-				// Show thinking progress for unencrypted thinking deltas
-				if (!isEncryptedThinkingDelta(delta.thinking)) {
-					const text = delta.thinking.text ?? '';
-					progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
 				}
 			}
 

@@ -29,7 +29,7 @@ import * as path from '../../../util/vs/base/common/path';
  * NOTE: This file intentionally keeps logic self‑contained (no external deps) so it can be dropped into PATH directly.
  */
 
-const REQUIRED_VERSION = '0.0.339';
+const REQUIRED_VERSION = '0.0.342';
 const PACKAGE_NAME = '@github/copilot';
 const env = { ...process.env, PATH: (process.env.PATH || '').replaceAll(`${__dirname}${path.delimiter}`, '').replaceAll(`${path.delimiter}${__dirname}`, '') };
 
@@ -100,7 +100,7 @@ async function ensureInstalled() {
 			if (runNpm(['install', '-g', PACKAGE_NAME], 'Installing')) {
 				return ensureInstalled();
 			}
-			process.exit(1);
+			await pressKeyToExit();
 		} else {
 			process.exit(0);
 		}
@@ -116,11 +116,21 @@ async function validateVersion(version: string) {
 			if (runNpm(['update', '-g', PACKAGE_NAME], 'Update')) {
 				return true;
 			}
-			process.exit(1);
+			await pressKeyToExit();
 		} else {
 			process.exit(0);
 		}
 	}
+}
+
+async function pressKeyToExit(message: string = 'Press Enter to exit...'): Promise<void> {
+	await new Promise<void>((resolve) => {
+		rl.question(`${message}`, () => {
+			resolve();
+		});
+	});
+	process.exit(0);
+
 }
 
 (async function main() {
@@ -130,9 +140,17 @@ async function validateVersion(version: string) {
 	}
 	if (!info) {
 		warn('Error: Could not locate Copilot CLI after update.');
-		warn(`Try manually reinstalling with: npm install -g ${PACKAGE_NAME} (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)`);
-		process.exit(1);
+		await pressKeyToExit(`Try manually reinstalling with: npm install -g ${PACKAGE_NAME} (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)`);
 	}
-	const { status } = spawnSync('copilot', process.argv.slice(2), { stdio: 'inherit', env });
-	process.exit(status);
+	const args = process.argv.slice(2);
+
+	// In vscode we use `--clear` to indicate that the terminal should be cleared before running the command
+	// Used when launching terminal in editor view (for best possible UX, so it doesn't look like a terminal)
+	if (args[0] === '--clear') {
+		console.clear();
+		args.shift();
+	}
+
+	spawnSync('copilot', args, { stdio: 'inherit', env });
+	process.exit(0);
 })();

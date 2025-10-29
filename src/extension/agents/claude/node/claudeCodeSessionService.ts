@@ -49,7 +49,7 @@ export const IClaudeCodeSessionService = createServiceIdentifier<IClaudeCodeSess
 export interface IClaudeCodeSessionService {
 	readonly _serviceBrand: undefined;
 	getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSession[]>;
-	getSession(sessionId: string, token: CancellationToken): Promise<IClaudeCodeSession | undefined>;
+	getSession(resource: URI, token: CancellationToken): Promise<IClaudeCodeSession | undefined>;
 }
 
 export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
@@ -102,9 +102,10 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		return items;
 	}
 
-	async getSession(claudeCodeSessionId: string, token: CancellationToken): Promise<IClaudeCodeSession | undefined> {
+	async getSession(resource: URI, token: CancellationToken): Promise<IClaudeCodeSession | undefined> {
 		const all = await this.getAllSessions(token);
-		return all.find(session => session.id === claudeCodeSessionId);
+		const targetId = resource.path.slice(1); // Remove leading '/' from path
+		return all.find(session => session.id === targetId);
 	}
 
 	/**
@@ -173,7 +174,9 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		try {
 			entries = await this._fileSystem.readDirectory(projectDirUri);
 		} catch (e) {
-			this._logService.error(e, `[ClaudeChatSessionItemProvider] Failed to read directory: ${projectDirUri}`);
+			if (e.code !== 'FileNotFound') {
+				this._logService.error(e, `[ClaudeChatSessionItemProvider] ${e.code} Failed to read directory: ${projectDirUri}`);
+			}
 			return [];
 		}
 

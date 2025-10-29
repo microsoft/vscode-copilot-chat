@@ -536,12 +536,6 @@ async function fetchWithInstrumentation(
 
 		logService.debug(`request.response: [${stringifyUrlOrRequestMetadata(chatEndpoint.urlOrRequestMetadata)}], took ${totalTimeMs} ms`);
 
-		if (request.messages) {
-			logService.debug(`messages: ${JSON.stringify(request.messages)}`);
-		} else if (request.input) {
-			logService.debug(`input: ${JSON.stringify(request.input)}`);
-		}
-
 		telemetryService.sendGHTelemetryEvent('request.response', telemetryData.properties, telemetryData.measurements);
 
 		return response;
@@ -563,7 +557,7 @@ async function fetchWithInstrumentation(
 			const totalTimeMs = Date.now() - requestStart;
 			telemetryData.measurements.totalTimeMs = totalTimeMs;
 
-			logService.debug(`request.response: [${chatEndpoint.urlOrRequestMetadata}] took ${totalTimeMs} ms`);
+			logService.debug(`request.response: [${stringifyUrlOrRequestMetadata(chatEndpoint.urlOrRequestMetadata)}] took ${totalTimeMs} ms`);
 
 			telemetryService.sendGHTelemetryEvent('request.error', telemetryData.properties, telemetryData.measurements);
 
@@ -595,5 +589,7 @@ function locationToIntent(location: ChatLocation): string {
 			return 'conversation-other';
 		case ChatLocation.Agent:
 			return 'conversation-agent';
+		case ChatLocation.ResponsesProxy:
+			return 'responses-proxy';
 	}
 }

@@ -7,6 +7,11 @@ import { HARD_TOOL_LIMIT } from '../../../../platform/configuration/common/confi
 
 /** Point after which we'll start grouping tools */
 export const START_GROUPING_AFTER_TOOL_COUNT = HARD_TOOL_LIMIT / 2; // 64, currently
+
+export const START_BUILTIN_GROUPING_AFTER_TOOL_COUNT = 20; // Lower bound above which we trigger built-in tool grouping
+
+/** Re-expand groups until we have at least this many tools. */
+export const EXPAND_UNTIL_COUNT = START_GROUPING_AFTER_TOOL_COUNT;
 /**
  * If we have an opportunity to re-collapse during summarization, do so if the
  * number of tools exceeds this threshold.

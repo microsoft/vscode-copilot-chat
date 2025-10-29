@@ -322,7 +322,7 @@
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
-				"--extensionTestsPath=${workspaceFolder}/src/extension/completions-core/extension/test/run",
+				"--extensionTestsPath=${workspaceFolder}/src/extension/completions-core/vscode-node/extension/test/run",
 				"--disable-extensions"
 			],
 			"env": {

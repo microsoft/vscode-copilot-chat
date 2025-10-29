@@ -10,7 +10,7 @@ import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelB, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -65,8 +65,9 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 
 		const allowTools: Record<string, boolean> = {};
 
+		const isHiddenModelBFlag = await isHiddenModelB(model);
 		const learned = editToolLearningService.getPreferredEndpointEditTool(model);
-		if (learned) { // a learning-enabled (BYOK) model, we should go with what it prefers
+		if (!isHiddenModelBFlag && learned) { // a learning-enabled (BYOK) model, we should go with what it prefers
 			allowTools[ToolName.EditFile] = learned.includes(ToolName.EditFile);
 			allowTools[ToolName.ReplaceString] = learned.includes(ToolName.ReplaceString);
 			allowTools[ToolName.MultiReplaceString] = learned.includes(ToolName.MultiReplaceString);
@@ -80,42 +81,20 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 				allowTools[ToolName.EditFile] = false;
 			}
 
-			if (model.family === 'grok-code') {
-				const treatment = experimentationService.getTreatmentVariable<string>('copilotchat.hiddenModelBEditTool');
-				switch (treatment) {
-					case 'with_replace_string':
-						allowTools[ToolName.ReplaceString] = true;
-						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
-						allowTools[ToolName.EditFile] = true;
-						break;
-					case 'only_replace_string':
-						allowTools[ToolName.ReplaceString] = true;
-						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
-						allowTools[ToolName.EditFile] = false;
-						break;
-					case 'control':
-					default:
-						allowTools[ToolName.ReplaceString] = false;
-						allowTools[ToolName.EditFile] = true;
-				}
-			}
-
 			if (await modelCanUseReplaceStringExclusively(model)) {
 				allowTools[ToolName.ReplaceString] = true;
 				allowTools[ToolName.EditFile] = false;
 			}
 
-			if (allowTools[ToolName.ReplaceString]) {
-				if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
-					allowTools[ToolName.MultiReplaceString] = true;
-				}
+			if (allowTools[ToolName.ReplaceString] && await modelSupportsMultiReplaceString(model)) {
+				allowTools[ToolName.MultiReplaceString] = true;
 			}
 		}
 
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
 		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
-		if (model.family === 'gpt-5-codex') {
+		if (model.family === 'gpt-5-codex' || model.family.includes('grok-code') || await isHiddenModelB(model)) {
 			allowTools[ToolName.CoreManageTodoList] = false;
 		}
 
@@ -176,10 +155,6 @@ export class AgentIntent extends EditCodeIntent {
 	private async listTools(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
 		const editingTools = await getAgentTools(this.instantiationService, request);
 		const grouping = this._toolGroupingService.create(conversation.sessionId, editingTools);
-		if (!grouping.isEnabled) {
-			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
-			return;
-		}
 
 		let str = 'Available tools:\n';
 		function printTool(tool: vscode.LanguageModelToolInformation | VirtualTool, indent = 0) {

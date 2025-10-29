@@ -14,6 +14,7 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { getNotebookId } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -38,7 +39,6 @@ import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { toExternalRange } from './utils/translations';
-import { getNotebookId } from '../../../platform/notebook/common/helpers';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -93,11 +93,11 @@ function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo
 	return item.source === 'provider';
 }
 
-const GoToNextEdit = l10n.t('Go To Next Edit');
+const GoToNextEdit = l10n.t('Go To Inline Suggestion');
 
 
 export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
-	public readonly displayName = 'Next Edit Suggestion';
+	public readonly displayName = 'Inline Suggestion';
 
 	private readonly _tracer: ITracer;
 
@@ -366,7 +366,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayLocationRange ? {
 			range: displayLocationRange,
 			label: result.displayLocation.label,
-			kind: InlineCompletionDisplayLocationKind.Code
+			kind: InlineCompletionDisplayLocationKind.Code,
+			jumpToEdit: result.displayLocation.jumpToEdit
 		} : undefined;
 
 
@@ -375,6 +376,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			insertText: result.edit.newText,
 			showRange,
 			displayLocation,
+			command: result.action,
 		};
 	}
 
@@ -421,6 +423,18 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			case InlineCompletionEndOfLifeReasonKind.Ignored: {
 				const supersededBy = reason.supersededBy ? (reason.supersededBy as NesCompletionItem) : undefined;
 				tracer.trace(`Superseded by: ${supersededBy?.info.requestUuid || 'none'}, was shown: ${item.wasShown}`);
+				if (supersededBy) {
+					softAssert(item.info.requestUuid !== supersededBy.info.requestUuid, 'An inline edit cannot supersede itself.');
+					/* __GDPR__
+						"supersededInlineEdit" : {
+							"owner": "ulugbekna",
+							"comment": "Tracks when an inline edit was superseded by another edit.",
+							"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity ID of the original inline edit." },
+							"supersededByOpportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity ID of the inline edit that superseded the original edit." }
+						}
+					*/
+					this._telemetryService.sendMSFTTelemetryEvent('supersededInlineEdit', { opportunityId: item.info.requestUuid, supersededByOpportunityId: supersededBy.info.requestUuid });
+				}
 				this._handleDidIgnoreCompletionItem(item, supersededBy);
 				break;
 			}

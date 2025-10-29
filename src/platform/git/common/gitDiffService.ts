@@ -13,6 +13,7 @@ export interface IGitDiffService {
 	readonly _serviceBrand: undefined;
 
 	getChangeDiffs(repository: Repository | Uri, changes: Change[]): Promise<Diff[]>;
+	getWorkingTreeDiffsFromRef(repository: Repository | Uri, changes: Change[], ref: string): Promise<Diff[]>;
 }
 
 export interface Diff extends Change {

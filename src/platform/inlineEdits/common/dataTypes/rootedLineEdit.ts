@@ -13,7 +13,7 @@ ensureDependenciesAreSet();
 
 export class RootedLineEdit {
 	public static fromEdit<TEdit extends BaseStringEdit>(edit: RootedEdit<TEdit>): RootedLineEdit {
-		const lineEdit = LineEdit.fromEdit(edit.edit as BaseStringEdit as StringEdit, edit.base);
+		const lineEdit = LineEdit.fromStringEdit(edit.edit as BaseStringEdit as StringEdit, edit.base);
 		return new RootedLineEdit(edit.base, lineEdit);
 	}
 

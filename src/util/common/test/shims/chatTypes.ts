@@ -287,6 +287,19 @@ export class LanguageModelTextPart2 extends LanguageModelTextPart {
 		this.audience = audience;
 	}
 }
+
+export class LanguageModelThinkingPart implements vscode.LanguageModelThinkingPart {
+	value: string | string[];
+	id?: string;
+	metadata?: { readonly [key: string]: any };
+
+	constructor(value: string | string[], id?: string, metadata?: { readonly [key: string]: any }) {
+		this.value = value;
+		this.id = id;
+		this.metadata = metadata;
+	}
+}
+
 export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 	mimeType: string;
 	data: Uint8Array<ArrayBufferLike>;
@@ -445,6 +458,12 @@ export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
 		readonly participant: string,
 		readonly command?: string
 	) { }
+}
+
+export enum ChatSessionStatus {
+	Failed = 0,
+	Completed = 1,
+	InProgress = 2
 }
 
 export class LanguageModelError extends Error {

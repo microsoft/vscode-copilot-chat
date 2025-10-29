@@ -6,7 +6,6 @@
 import { BasePromptElementProps, PromptElement, PromptPiece, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { CHAT_MODEL } from '../../../platform/configuration/common/configurationService';
 import { StringTextDocumentWithLanguageId } from '../../../platform/editing/common/abstractText';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -31,9 +30,9 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
-import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/agentInstructions';
+import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/defaultAgentInstructions';
 import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
 import { processFullRewriteNotebook } from '../../prompts/node/codeMapper/codeMapper';
@@ -342,17 +341,16 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				} else {
 					this._promptContext.stream.markdown('\n```\n');
 					this._promptContext.stream.codeblockUri(notebookUri || uri, true);
-					// TODO@joyceerhl hack: when an array of text edits for a single URI
-					// are pushed in a single textEdit call, the edits are not applied
-					const edits = Array.isArray(textEdit) ? textEdit : [textEdit];
-					for (const textEdit of edits) {
-						responseStream.textEdit(uri, textEdit);
-					}
+
+					responseStream.textEdit(uri, textEdit);
 					responseStream.textEdit(uri, true);
 					this._promptContext.stream.markdown('\n' + '```\n');
 				}
 
 				files.push({ uri, isNotebook: !!notebookUri, existingDiagnostics, operation: resourceToOperation.get(uri) ?? ActionType.UPDATE });
+			}
+			if (healed && files.length) {
+				files[0].healed = healed;
 			}
 
 			timeout(2000).then(() => {
@@ -394,6 +392,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			});
 
 			// Return the result
+			const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;
 			const isNotebook = editEntires.length === 1 ? handledNotebookUris.size === 1 : undefined;
 			this.sendApplyPatchTelemetry('success', options, undefined, !!healed, isNotebook);
 			return new LanguageModelToolResult([
@@ -401,7 +400,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					await renderPromptElementJSON(
 						this.instantiationService,
 						EditFileResult,
-						{ files, diagnosticsTimeout: 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model, healed },
+						{ files, diagnosticsTimeout: isInlineChat ? -1 : 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model },
 						options.tokenizationOptions ?? {
 							tokenBudget: 1000,
 							countTokens: (t) => Promise.resolve(t.length * 3 / 4)
@@ -427,7 +426,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	 * and do another turn.
 	 */
 	private async healCommit(patch: string, docs: DocText, explanation: string, token: CancellationToken) {
-		const endpoint = await this.endpointProvider.getChatEndpoint(CHAT_MODEL.GPT4OMINI);
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		const prompt = await PromptRenderer.create(
 			this.instantiationService,
 			endpoint,

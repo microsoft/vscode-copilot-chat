@@ -56,11 +56,11 @@
 	{
 		"name": "/doc [inline] [typescript] - doc explain ts code",
 		"requests": [
-			"299fbb6baba2d695650c2c6759756840db6f1fc94b10aaf055fe2510e7687498",
-			"480960ef1b2671cdc29852a1aaced65bb7866c86e48c7a562eb6bfd11309827d",
-			"90ad5e6d28b217c04f66c66c526593bcbb8bb19c7b8846c24d36a4347e51bd90",
-			"92687f62357d50885140740f4e51e501675b75cb68afc1226e763feaef51adec",
-			"af282c783dbf9c5a89b34d89bebfaef85f875398de3c26118a8d4ca1df9614a3"
+			"27a48a63813cf2455cd5f6bbe4f0fdefaae9b25bda2b390206dbdeec63e5cc67",
+			"7b51f548afac09d4e9a8ab06d718f36be659e589b2d32d1c4fd960433183a291",
+			"af282c783dbf9c5a89b34d89bebfaef85f875398de3c26118a8d4ca1df9614a3",
+			"b0b00965c64c778dbb108886713db4e87f0ea8bbcf00f6439b0d7b2be69c8ce1",
+			"c39bda21bfeab07dd84ca83bc2b38253839a4820962a736c976c243063ebf547"
 		]
 	},
 	{
@@ -78,8 +78,8 @@
 	{
 		"name": "/doc [inline] [typescript] - issue #3692: add jsdoc comment - colors.ts",
 		"requests": [
-			"0817acbce150e6ce41bfe5a11ecce1e8ad52dd6ea46ba56c101ba8776ff6ec6f",
-			"6c59d686d0fd07289c6711f49b5bf990d5fd870fb00b19099fd6b5f2327dc42f"
+			"6c59d686d0fd07289c6711f49b5bf990d5fd870fb00b19099fd6b5f2327dc42f",
+			"7fbd8e659ee1de5e5f7ceb9e76955560457976e77bf047d9c611026bf18c156e"
 		]
 	},
 	{
@@ -91,8 +91,8 @@
 	{
 		"name": "/doc [inline] [typescript] - issue #3763: doc everywhere",
 		"requests": [
-			"8f7bc68446f782b3430375d0494054b77237d57e9d4b044ebd7525a47936f1c5",
-			"cd6a97b94f39f37f03c6d3daf38930f0cba8074a02a6b6a30bf6ed0ae3c473cb"
+			"6b9014407c76e5c2a26fc70436e23e35ec02f04ef2ce06b8befd506d468ffef4",
+			"8f7bc68446f782b3430375d0494054b77237d57e9d4b044ebd7525a47936f1c5"
 		]
 	},
 	{

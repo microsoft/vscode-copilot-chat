@@ -41,11 +41,11 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		@IAutomodeService private readonly _autoModeService: IAutomodeService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@ILogService private readonly _logService: ILogService,
+		@ILogService protected readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IEnvService _envService: IEnvService,
-		@IAuthenticationService _authService: IAuthenticationService,
+		@IAuthenticationService protected readonly _authService: IAuthenticationService,
 		@IRequestLogger _requestLogger: IRequestLogger
 	) {
 
@@ -125,7 +125,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			const model = 'model' in requestOrFamilyOrModel ? requestOrFamilyOrModel.model : requestOrFamilyOrModel;
 			if (experimentModelConfig && model && model.id === experimentModelConfig.id) {
 				endpoint = (await this.getAllChatEndpoints()).find(e => e.model === experimentModelConfig.selected) || await this.getChatEndpoint('gpt-4.1');
-			} else if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.id) {
+			} else if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.pseudoModelId) {
 				return this._autoModeService.resolveAutoModeEndpoint(requestOrFamilyOrModel as ChatRequest, Array.from(this._chatEndpoints.values()));
 			} else if (model && model.vendor === 'copilot') {
 				let modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);

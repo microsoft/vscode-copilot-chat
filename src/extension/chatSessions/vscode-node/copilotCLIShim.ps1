@@ -13,7 +13,7 @@
 # NOTE: This file intentionally keeps logic self‑contained (no external deps) so it can be dropped into PATH directly.
 
 # Minimum required Copilot CLI version
-$RequiredVersion = "0.0.339"
+$RequiredVersion = "0.0.342"
 
 function Find-RealCopilot {
     # Find the real copilot binary, avoiding this script if it's in PATH
@@ -22,7 +22,10 @@ function Find-RealCopilot {
     $CopilotPath = (Get-Command copilot -ErrorAction SilentlyContinue).Source
 
     # Check if the copilot command would point to this script
-    if ($CurrentScript -eq $CopilotPath -or (Resolve-Path $CurrentScript -ErrorAction SilentlyContinue).Path -eq (Resolve-Path $CopilotPath -ErrorAction SilentlyContinue).Path) {
+    $CurrentScriptResolved = if ($CurrentScript) { (Resolve-Path $CurrentScript -ErrorAction SilentlyContinue).Path } else { $null }
+    $CopilotPathResolved = if ($CopilotPath) { (Resolve-Path $CopilotPath -ErrorAction SilentlyContinue).Path } else { $null }
+
+    if ($CurrentScript -eq $CopilotPath -or (Split-Path $CurrentScript -Parent) -eq (Split-Path $CopilotPath -Parent) -or ($CurrentScriptResolved -and $CopilotPathResolved -and $CurrentScriptResolved -eq $CopilotPathResolved)) {
         # The copilot in PATH is this script, find the real one by temporarily removing this script's directory from PATH
         $ScriptDir = Split-Path $CurrentScript -Parent
         $OldPath = $env:PATH
@@ -75,12 +78,12 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Write-Host "Installation failed. Please check your npm configuration and try again."
-                    exit 1
+                    Read-Host "Installation failed. Please check your npm configuration and try again."
+                    return
                 }
             } catch {
-                Write-Host "Installation failed. Please check your npm configuration and try again."
-                exit 1
+                Read-Host "Installation failed. Please check your npm configuration and try again."
+                return
             }
         } else {
             exit 0
@@ -100,12 +103,12 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Write-Host "Reinstallation failed. Please check your npm configuration and try again."
-                    exit 1
+                    Read-Host "Reinstallation failed. Please check your npm configuration and try again."
+                    return
                 }
             } catch {
-                Write-Host "Reinstallation failed. Please check your npm configuration and try again."
-                exit 1
+                Read-Host "Reinstallation failed. Please check your npm configuration and try again."
+                return
             }
         } else {
             exit 0
@@ -127,12 +130,12 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Write-Host "Reinstallation failed. Please check your npm configuration and try again."
-                    exit 1
+                    Read-Host "Reinstallation failed. Please check your npm configuration and try again."
+                    return
                 }
             } catch {
-                Write-Host "Reinstallation failed. Please check your npm configuration and try again."
-                exit 1
+                Read-Host "Reinstallation failed. Please check your npm configuration and try again."
+                return
             }
         } else {
             exit 0
@@ -161,12 +164,12 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Write-Host "Reinstallation failed. Please check your npm configuration and try again."
-                    exit 1
+                    Read-Host "Reinstallation failed. Please check your npm configuration and try again."
+                    return
                 }
             } catch {
-                Write-Host "Reinstallation failed. Please check your npm configuration and try again."
-                exit 1
+                Read-Host "Reinstallation failed. Please check your npm configuration and try again."
+                return
             }
         } else {
             exit 0
@@ -184,12 +187,12 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Write-Host "Update failed. Please check your npm configuration and try again."
-                    exit 1
+                    Read-Host "Update failed. Please check your npm configuration and try again."
+                    return
                 }
             } catch {
-                Write-Host "Update failed. Please check your npm configuration and try again."
-                exit 1
+                Read-Host "Update failed. Please check your npm configuration and try again."
+                return
             }
         } else {
             exit 0
@@ -202,10 +205,17 @@ function Test-AndLaunchCopilot {
         & $realCopilot @Arguments
     } else {
         Write-Host "Error: Could not find the real GitHub Copilot CLI binary"
-        Write-Host "Please ensure it's properly installed with: npm install -g @github/copilot"
-        exit 1
+        Read-Host "Please ensure it's properly installed with: npm install -g @github/copilot"
+        return
     }
 }
 
 # Start the check and launch process
-Test-AndLaunchCopilot $args
+$finalArgs = $args
+# Handle --clear argument
+if ($args.Length -gt 0 -and $args[0] -eq '--clear') {
+    Clear-Host
+    $finalArgs = $args[1..($args.Length - 1)]
+}
+
+Test-AndLaunchCopilot $finalArgs

@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { getGithubRepoIdFromFetchUrl, GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { UriHandlerPaths, UriHandlers } from './chatSessionsUriHandler';
 
 export const MAX_PROBLEM_STATEMENT_LENGTH = 30_000 - 50; // 50 character buffer
 export const CONTINUE_TRUNCATION = vscode.l10n.t('Continue with truncation');
@@ -67,5 +69,65 @@ export function extractTitle(prompt: string, context: string | undefined): strin
 }
 
 export function formatBodyPlaceholder(title: string | undefined): string {
-	return vscode.l10n.t('Coding agent has begun work on **{0}** and will update this pull request as work progresses.', title || vscode.l10n.t('your request'));
+	return vscode.l10n.t('Cloud agent has begun work on **{0}** and will update this pull request as work progresses.', title || vscode.l10n.t('your request'));
+}
+
+export async function getRepoId(gitService: IGitService): Promise<GithubRepoId | undefined> {
+	let timeout = 5000;
+	while (!gitService.isInitialized) {
+		await new Promise(resolve => setTimeout(resolve, 100));
+		timeout -= 100;
+		if (timeout <= 0) {
+			break;
+		}
+	}
+
+	const repo = gitService.activeRepository.get();
+	if (repo && repo.remoteFetchUrls?.[0]) {
+		return getGithubRepoIdFromFetchUrl(repo.remoteFetchUrls[0]);
+	}
+}
+
+export namespace SessionIdForPr {
+
+	const prefix = 'pull-session-by-index';
+
+	export function getId(prNumber: number, sessionIndex: number): string {
+		return `${prefix}-${prNumber}-${sessionIndex}`;
+	}
+
+	export function parse(resource: vscode.Uri): { prNumber: number; sessionIndex: number } | undefined {
+		const match = resource.path.match(new RegExp(`^/${prefix}-(\\d+)-(\\d+)$`));
+		if (match) {
+			return {
+				prNumber: parseInt(match[1], 10),
+				sessionIndex: parseInt(match[2], 10)
+			};
+		}
+		return undefined;
+	}
+
+	export function parsePullRequestNumber(resource: vscode.Uri): number {
+		return parseInt(resource.path.slice(1));
+	}
+}
+
+export async function toOpenPullRequestWebviewUri(params: {
+	owner: string;
+	repo: string;
+	pullRequestNumber: number;
+}): Promise<vscode.Uri> {
+	const query = JSON.stringify(params);
+	const extensionId = UriHandlers[UriHandlerPaths.External_OpenPullRequestWebview];
+	return await vscode.env.asExternalUri(vscode.Uri.from({ scheme: vscode.env.uriScheme, authority: extensionId, path: UriHandlerPaths.External_OpenPullRequestWebview, query }));
+}
+
+export function getAuthorDisplayName(author: { login: string } | null): string {
+	if (!author) {
+		return 'Unknown';
+	}
+	if (author.login.startsWith('copilot')) {
+		return 'Copilot';
+	}
+	return author.login;
 }

@@ -31,7 +31,7 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 			return '';
 		}
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		const { messages } = await renderPromptElement(this.instantiationService, endpoint, TitlePrompt, { history: turns });
 		const response = await endpoint.makeChatRequest(
 			'title',

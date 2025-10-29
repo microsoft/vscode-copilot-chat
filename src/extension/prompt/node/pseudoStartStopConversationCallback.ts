@@ -27,6 +27,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 	private stagedDeltasToApply: IResponseDelta[] = [];
 	private currentStartStop: StartStopMapping | undefined = undefined;
 	private nonReportedDeltas: IResponseDelta[] = [];
+	private thinkingActive: boolean = false;
 
 	constructor(
 		private readonly stopStartMappings: readonly StartStopMapping[],
@@ -47,6 +48,17 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 	}
 
 	protected applyDeltaToProgress(delta: IResponseDelta, progress: ChatResponseStream) {
+		if (delta.thinking) {
+			// Don't send parts that are only encrypted content
+			if (!isEncryptedThinkingDelta(delta.thinking) || delta.thinking.text) {
+				progress.thinkingProgress(delta.thinking);
+				this.thinkingActive = true;
+			}
+		} else if (this.thinkingActive) {
+			progress.thinkingProgress({ id: '', text: '', metadata: { vscodeReasoningDone: true, stopReason: delta.text ? 'text' : 'other' } });
+			this.thinkingActive = false;
+		}
+
 		reportCitations(delta, progress);
 
 		const vulnerabilities: ChatVulnerability[] | undefined = delta.codeVulnAnnotations?.map(a => ({ title: a.details.type, description: a.details.description }));
@@ -58,13 +70,6 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 
 		if (delta.beginToolCalls?.length) {
 			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name));
-		}
-
-		if (delta.thinking) {
-			// Don't send parts that are only encrypted content
-			if (!isEncryptedThinkingDelta(delta.thinking) || delta.thinking.text) {
-				progress.thinkingProgress(delta.thinking);
-			}
 		}
 	}
 
@@ -155,6 +160,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 			this.stagedDeltasToApply = [];
 			this.currentStartStop = undefined;
 			this.nonReportedDeltas = [];
+			this.thinkingActive = false;
 			if (delta.retryReason === 'network_error') {
 				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.NoReason);
 			} else if (delta.retryReason === FilterReason.Copyright) {

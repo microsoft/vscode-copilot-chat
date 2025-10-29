@@ -89,6 +89,7 @@ export class InlineEditTriggerer extends Disposable {
 	private readonly docToLastChangeMap = this._register(new DisposableMap<DocumentId, LastChange>());
 
 	private lastDocWithSelectionUri: string | undefined;
+	private lastEditTimestamp: number | undefined;
 
 	private readonly _tracer: ITracer;
 
@@ -122,6 +123,8 @@ export class InlineEditTriggerer extends Disposable {
 			if (this._shouldIgnoreDoc(e.document)) {
 				return;
 			}
+
+			this.lastEditTimestamp = Date.now();
 
 			const tracer = this._tracer.sub('onDidChangeTextDocument');
 
@@ -181,7 +184,7 @@ export class InlineEditTriggerer extends Disposable {
 
 			const mostRecentChange = this.docToLastChangeMap.get(doc.id);
 			if (!mostRecentChange) {
-				if (!this._maybeTriggerOnDocumentSwitch(isSameDoc, tracer)) {
+				if (!this._maybeTriggerOnDocumentSwitch(e, isSameDoc, tracer)) {
 					tracer.returns('document not tracked - does not have recent changes');
 				}
 				return;
@@ -190,7 +193,7 @@ export class InlineEditTriggerer extends Disposable {
 			const hasRecentEdit = timeSince(mostRecentChange.lastEditedTimestamp) < TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT;
 
 			if (!hasRecentEdit) {
-				if (!this._maybeTriggerOnDocumentSwitch(isSameDoc, tracer)) {
+				if (!this._maybeTriggerOnDocumentSwitch(e, isSameDoc, tracer)) {
 					tracer.returns('no recent edit');
 				}
 				return;
@@ -200,7 +203,7 @@ export class InlineEditTriggerer extends Disposable {
 			if (!hasRecentTrigger) {
 				// the provider was not triggered recently, so we might be observing a cursor change event following
 				// a document edit caused outside of regular typing, otherwise the UI would have invoked us recently
-				if (!this._maybeTriggerOnDocumentSwitch(isSameDoc, tracer)) {
+				if (!this._maybeTriggerOnDocumentSwitch(e, isSameDoc, tracer)) {
 					tracer.returns('no recent trigger');
 				}
 				return;
@@ -213,10 +216,13 @@ export class InlineEditTriggerer extends Disposable {
 			}
 
 			const selectionLine = range.start.line;
+
+			const triggerOnActiveEditorChange = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
 			// If we're in a notebook cell,
 			// Its possible user made changes in one cell and now is moving to another cell
 			// In such cases we should account for the possibility of the user wanting to edit the new cell and trigger suggestions.
-			if (!isNotebookCell(e.textEditor.document.uri) || e.textEditor.document === mostRecentChange.documentTrigger) {
+			if (!triggerOnActiveEditorChange &&
+				(!isNotebookCell(e.textEditor.document.uri) || e.textEditor.document === mostRecentChange.documentTrigger)) {
 				const lastTriggerTimestampForLine = mostRecentChange.lineNumberTriggers.get(selectionLine);
 				if (lastTriggerTimestampForLine !== undefined && timeSince(lastTriggerTimestampForLine) < TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN) {
 					tracer.returns('same line cooldown');
@@ -256,9 +262,10 @@ export class InlineEditTriggerer extends Disposable {
 		}));
 	}
 
-	private _maybeTriggerOnDocumentSwitch(isSameDoc: boolean, tracer: ITracer) {
-		const isOnDocSwitchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChange, this._expService);
-		if (!isOnDocSwitchEnabled) {
+	private _maybeTriggerOnDocumentSwitch(e: vscode.TextEditorSelectionChangeEvent, isSameDoc: boolean, parentTracer: ITracer): boolean {
+		const tracer = parentTracer.subNoEntry('editorSwitch');
+		const triggerAfterSeconds = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
+		if (triggerAfterSeconds === undefined) {
 			tracer.trace('document switch disabled');
 			return false;
 		}
@@ -266,6 +273,35 @@ export class InlineEditTriggerer extends Disposable {
 			tracer.returns(`document switch didn't happen`);
 			return false;
 		}
+		if (this.lastEditTimestamp === undefined) {
+			tracer.returns('no last edit timestamp');
+			return false;
+		}
+		const timeSinceLastEdit = Date.now() - this.lastEditTimestamp;
+		if (timeSinceLastEdit > triggerAfterSeconds * 1000) {
+			tracer.returns('too long since last edit');
+			return false;
+		}
+
+		const doc = this.workspace.getDocumentByTextDocument(e.textEditor.document);
+		if (!doc) { // doc is likely copilot-ignored
+			tracer.returns('ignored document');
+			return false;
+		}
+
+		const range = doc.toRange(e.textEditor.document, e.selections[0]);
+		if (!range) {
+			tracer.returns('no range');
+			return false;
+		}
+
+		const selectionLine = range.start.line;
+
+		// mark as touched such that NES gets triggered on cursor move; otherwise, user may get a single NES then move cursor and never get the suggestion back
+		const lastChange = new LastChange(e.textEditor.document);
+		lastChange.lineNumberTriggers.set(selectionLine, Date.now());
+		this.docToLastChangeMap.set(doc.id, lastChange);
+
 		tracer.returns('triggering on document switch');
 		this._triggerInlineEdit();
 		return true;

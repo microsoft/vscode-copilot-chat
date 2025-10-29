@@ -59,13 +59,13 @@ export class GitCommitMessagePrompt extends PromptElement<GitCommitMessagePrompt
 							</>
 						))}
 					</Tag>
-					<Tag priority={900} name='reminder'>
+					<Tag priority={950} name='reminder'>
 						Now generate a commit messages that describe the CODE CHANGES.<br />
 						DO NOT COPY commits from RECENT COMMITS, but use it as reference for the commit style.<br />
 						ONLY return a single markdown code block, NO OTHER PROSE!<br />
 						<UnsafeCodeBlock languageId='text' code='commit message goes here' />
 					</Tag>
-					<Tag priority={750} name='custom-instructions'>
+					<Tag priority={950} name='custom-instructions'>
 						<CustomInstructions
 							chatVariables={undefined}
 							customIntroduction='When generating the commit message, please use the following custom instructions provided by the user.'
