@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Position, Range } from 'vscode';
-import { Context } from '../../../lib/src/context';
+import { type ICompletionsContextService } from '../../../lib/src/context';
 import { postInsertionTasks } from '../../../lib/src/postInsertion';
 import { countLines } from '../../../lib/src/suggestions/partialSuggestions';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
@@ -15,11 +15,11 @@ import { BasePanelCompletion, ISuggestionsPanel } from './basePanelTypes';
 // BaseListDocument to be shared with both the copilot and comparison completion panels.
 export abstract class BaseListDocument<TPanelCompletion extends BasePanelCompletion> extends SolutionManager {
 	private _solutionCount = 0;
-	protected readonly _ctx: Context;
+	protected readonly _ctx: ICompletionsContextService;
 	protected readonly _solutions: TPanelCompletion[] = [];
 
 	constructor(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		textDocument: ITextDocument,
 		position: IPosition,
 		readonly panel: ISuggestionsPanel,

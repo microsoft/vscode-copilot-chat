@@ -16,7 +16,7 @@ import {
 	workspace,
 } from 'vscode';
 import { debounce } from '../../../../../../util/common/debounce';
-import { Context } from '../../../lib/src/context';
+import { type ICompletionsContextService } from '../../../lib/src/context';
 import { Extension } from '../extensionContext';
 import { BasePanelCompletion, ISuggestionsPanel, PanelConfig } from './basePanelTypes';
 import { Highlighter } from './highlighter';
@@ -93,7 +93,7 @@ export abstract class BaseSuggestionsPanel<TPanelCompletion extends BasePanelCom
 	}
 
 	constructor(
-		protected readonly ctx: Context,
+		protected readonly ctx: ICompletionsContextService,
 		readonly webviewPanel: WebviewPanel,
 		document: TextDocument,
 		protected suggestionsPanelManager: SuggestionsPanelManagerInterface,

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TextDocument, WebviewPanel } from 'vscode';
-import { Context } from '../../../lib/src/context';
+import { type ICompletionsContextService } from '../../../lib/src/context';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
 import { BaseSuggestionsPanelManager, ListDocumentInterface } from '../panelShared/baseSuggestionsPanelManager';
 import { PanelCompletion } from './common';
@@ -13,12 +13,12 @@ import { CopilotSuggestionsPanel } from './copilotSuggestionsPanel';
 import { copilotPanelConfig } from './panelConfig';
 
 export class CopilotSuggestionsPanelManager extends BaseSuggestionsPanelManager<PanelCompletion> {
-	constructor(ctx: Context) {
+	constructor(ctx: ICompletionsContextService) {
 		super(ctx, copilotPanelConfig);
 	}
 
 	protected createListDocument(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		wrapped: ITextDocument,
 		position: IPosition,
 		panel: CopilotSuggestionsPanel
@@ -27,7 +27,7 @@ export class CopilotSuggestionsPanelManager extends BaseSuggestionsPanelManager<
 	}
 
 	protected createSuggestionsPanel(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		panel: WebviewPanel,
 		document: TextDocument,
 		manager: this

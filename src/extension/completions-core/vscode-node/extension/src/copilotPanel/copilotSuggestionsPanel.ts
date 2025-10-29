@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TextDocument, WebviewPanel } from 'vscode';
-import { Context } from '../../../lib/src/context';
+import { type ICompletionsContextService } from '../../../lib/src/context';
 import { BaseSuggestionsPanel, SolutionContent, WebviewMessage } from '../panelShared/baseSuggestionsPanel';
 import { PanelCompletion } from './common';
 import { CopilotSuggestionsPanelManager } from './copilotSuggestionsPanelManager';
@@ -18,7 +18,7 @@ export interface CopilotSolutionsMessage {
 
 export class CopilotSuggestionsPanel extends BaseSuggestionsPanel<PanelCompletion> {
 	constructor(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		webviewPanel: WebviewPanel,
 		document: TextDocument,
 		suggestionsPanelManager: CopilotSuggestionsPanelManager

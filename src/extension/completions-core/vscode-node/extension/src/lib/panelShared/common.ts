@@ -7,7 +7,7 @@ import { CancellationToken } from 'vscode';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { createCompletionState } from '../../../../lib/src/completionState';
 import { BlockMode } from '../../../../lib/src/config';
-import type { Context } from '../../../../lib/src/context';
+import type { ICompletionsContextService } from '../../../../lib/src/context';
 import { Features } from '../../../../lib/src/experiments/features';
 import { BlockModeConfig } from '../../../../lib/src/ghostText/configBlockMode';
 import type { Logger } from '../../../../lib/src/logger';
@@ -122,7 +122,7 @@ export interface PromptSetupResult {
  * Returns null if an error occurred that should terminate processing.
  */
 export async function setupPromptAndTelemetry(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	solutionManager: SolutionManager,
 	source: 'open copilot' | 'open comparison',
 	solutionsLogger: Logger,
@@ -237,7 +237,7 @@ export interface CompletionSetupResult {
  * Sets up block mode, completion parameters, and finished callback.
  */
 export function setupCompletionParams(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	document: ITextDocument,
 	position: IPosition,
 	prompt: Prompt,

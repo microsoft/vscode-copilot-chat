@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../../lib/src/context';
+import { type ICompletionsContextService } from '../../../lib/src/context';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
 import { solutionCountTarget } from '../lib/copilotPanel/common';
 import { runSolutions } from '../lib/copilotPanel/panel';
@@ -18,7 +18,7 @@ import { PanelCompletion } from './common';
  */
 export class CopilotListDocument extends BaseListDocument<PanelCompletion> {
 	constructor(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		textDocument: ITextDocument,
 		position: IPosition,
 		panel: ISuggestionsPanel,

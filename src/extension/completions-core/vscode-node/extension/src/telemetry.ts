@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { commands } from 'vscode';
-import { Context } from '../../lib/src/context';
+import { type ICompletionsContextService } from '../../lib/src/context';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
 import { Extension } from './extensionContext';
 
-function exception(ctx: Context, error: unknown, origin: string, logger?: Logger) {
+function exception(ctx: ICompletionsContextService, error: unknown, origin: string, logger?: Logger) {
 	if (error instanceof Error && error.name === 'Canceled') {
 		// these are VS Code cancellations
 		return;
@@ -22,7 +22,7 @@ function exception(ctx: Context, error: unknown, origin: string, logger?: Logger
 }
 
 // Wrapper that handles errors and cleans up the command on extension deactivation
-export function registerCommandWrapper(ctx: Context, command: string, fn: (...args: unknown[]) => unknown) {
+export function registerCommandWrapper(ctx: ICompletionsContextService, command: string, fn: (...args: unknown[]) => unknown) {
 	const disposable = commands.registerCommand(command, async (...args: unknown[]) => {
 		try {
 			await fn(...args);

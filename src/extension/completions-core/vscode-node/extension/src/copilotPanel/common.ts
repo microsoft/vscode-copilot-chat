@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Range, commands, window } from 'vscode';
-import { Context } from '../../../lib/src/context';
+import { type ICompletionsContextService } from '../../../lib/src/context';
 import { CopilotNamedAnnotationList } from '../../../lib/src/openai/stream';
 import * as constants from '../constants';
 import { CopilotPanelVisible } from '../constants';
@@ -28,7 +28,7 @@ export interface PanelCompletion {
 	postInsertionCallback: () => PromiseLike<void> | void;
 }
 
-export function registerPanelSupport(ctx: Context) {
+export function registerPanelSupport(ctx: ICompletionsContextService) {
 	const suggestionsPanelManager = new CopilotSuggestionsPanelManager(ctx);
 
 	registerCommandWrapper(ctx, constants.CMDOpenPanel, async () => {
@@ -40,7 +40,7 @@ export function registerPanelSupport(ctx: Context) {
 	suggestionsPanelManager.registerCommands();
 }
 
-function commandOpenPanel(ctx: Context, suggestionsPanelManager: CopilotSuggestionsPanelManager) {
+function commandOpenPanel(ctx: ICompletionsContextService, suggestionsPanelManager: CopilotSuggestionsPanelManager) {
 	const editor = window.activeTextEditor;
 	if (!editor) { return; }
 	const wrapped = wrapDoc(ctx, editor.document);

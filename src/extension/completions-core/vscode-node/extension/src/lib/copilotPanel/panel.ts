@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../../../lib/src/context';
+import { type ICompletionsContextService } from '../../../../lib/src/context';
 import { asyncIterableMapFilter } from '../../../../lib/src/helpers/iterableHelpers';
 import { Logger } from '../../../../lib/src/logger';
 import { CopilotUiKind, OpenAIFetcher } from '../../../../lib/src/openai/fetch';
@@ -29,7 +29,7 @@ const solutionsLogger = new Logger('solutions');
  * Given an `ISolutionManager` with the context of a specific "Open Copilot" request,
  * initiate the generation of a stream of solutions for that request.
  */
-export async function launchSolutions(ctx: Context, solutionManager: SolutionManager): Promise<SolutionsStream> {
+export async function launchSolutions(ctx: ICompletionsContextService, solutionManager: SolutionManager): Promise<SolutionsStream> {
 	const position = solutionManager.targetPosition;
 	const document = solutionManager.textDocument;
 
@@ -126,7 +126,7 @@ export async function launchSolutions(ctx: Context, solutionManager: SolutionMan
 }
 
 export async function runSolutions(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	solutionManager: SolutionManager,
 	solutionHandler: ISolutionHandler
 ): Promise<void> {

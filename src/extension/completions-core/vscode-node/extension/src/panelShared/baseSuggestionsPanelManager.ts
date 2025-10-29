@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TextDocument, Uri, ViewColumn, WebviewPanel, commands, window } from 'vscode';
-import { Context } from '../../../lib/src/context';
+import { type ICompletionsContextService } from '../../../lib/src/context';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
 import { basename } from '../../../lib/src/util/uri';
 import { Extension } from '../extensionContext';
@@ -22,19 +22,19 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 	private _panelCount: number = 0;
 
 	constructor(
-		protected readonly _ctx: Context,
+		protected readonly _ctx: ICompletionsContextService,
 		protected readonly config: PanelConfig
 	) { }
 
 	protected abstract createListDocument(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		wrapped: ITextDocument,
 		position: IPosition,
 		panel: BaseSuggestionsPanel<TPanelCompletion>
 	): ListDocumentInterface;
 
 	protected abstract createSuggestionsPanel(
-		ctx: Context,
+		ctx: ICompletionsContextService,
 		panel: WebviewPanel,
 		document: TextDocument,
 		manager: this
