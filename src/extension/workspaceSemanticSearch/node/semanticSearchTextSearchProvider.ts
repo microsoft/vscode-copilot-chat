@@ -307,6 +307,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					});
 				} catch (ex) {
 					// ignore rerank errors
+					this._logService.error(`SemanticSearchTextSearchProvider::provideAITextSearchResults rerank failed. error=${ex}`);
 				}
 			} else {
 				this.reportTelemetry();
