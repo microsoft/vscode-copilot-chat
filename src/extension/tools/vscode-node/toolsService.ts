@@ -8,18 +8,16 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-// import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
-import { getContributedToolName, getToolName, getToolsForCategory, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolCategory, ToolName } from '../common/toolNames';
+import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { BaseToolsService } from '../common/toolsService';
 
 export class ToolsService extends BaseToolsService {
 	declare _serviceBrand: undefined;
 
-	// private static readonly DisabledTools = [
-	// 	ToolName.Codebase, // semantic_search
-	// ];
-	private static readonly DisabledTools = getToolsForCategory(ToolCategory.Core) as ToolName[];
+	private static readonly DisabledTools = [
+		ToolName.Codebase, // semantic_search
+	];
 
 	private readonly _copilotTools: Lazy<Map<ToolName, ICopilotTool<any>>>;
 	private readonly _contributedToolCache: {
@@ -58,7 +56,7 @@ export class ToolsService extends BaseToolsService {
 				description: mapContributedToolNamesInString(tool.description),
 				inputSchema: tool.inputSchema && mapContributedToolNamesInSchema(tool.inputSchema),
 			};
-		});
+		}).filter(tool => !ToolsService.DisabledTools.includes(getToolName(tool.name) as ToolName));
 
 		this._contributedToolCache.input = input;
 		this._contributedToolCache.output = result;
