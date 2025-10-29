@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import * as path from '../../../util/vs/base/common/path';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
+import { ILanguageFeaturesService } from '../common/languageFeaturesService';
 import { TypeScriptServiceHost } from '../typescript/vscode/typescriptServiceHost';
 import { TypeScriptTypeHierarchyProvider } from '../typescript/vscode/typescriptTypeHierarchyProvider';
-import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
-import { ILanguageFeaturesService } from '../common/languageFeaturesService';
 
 export class LanguageFeaturesServiceImpl implements ILanguageFeaturesService {
 
