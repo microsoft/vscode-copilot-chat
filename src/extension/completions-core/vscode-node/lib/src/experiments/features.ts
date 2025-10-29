@@ -20,6 +20,7 @@ import { Filter, FilterSettings } from './filters';
 
 type CompletionsFiltersInfo = { uri: string; languageId: string };
 
+
 /** General-purpose API for accessing ExP variable values. */
 export class Features {
 
@@ -69,6 +70,17 @@ export class Features {
 			filters,
 			exp: exp,
 		});
+	}
+
+	/**
+	 * Request a Copilot token and use that token to call updateExPValuesAndAssignments. Do NOT call this at startup.
+	 * Instead, register a onCopilotToken handler and use that token with updateExPValuesAndAssignments directly.
+	 */
+	async fetchTokenAndUpdateExPValuesAndAssignments(
+		filtersInfo?: CompletionsFiltersInfo,
+		telemetryData?: TelemetryData
+	) {
+		return await this.updateExPValuesAndAssignments(filtersInfo, telemetryData);
 	}
 
 	private createExpConfigAndFilters(token: CopilotToken) {

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { isBlockBodyFinished, isEmptyBlockStart } from '../../../prompt/src/parseBlock';
+import { getNodeStart, isBlockBodyFinished, isEmptyBlockStart } from '../../../prompt/src/parseBlock';
 import { IPosition, LocationFactory, TextDocumentContents } from '../textDocument';
 
 export function parsingBlockFinished(
@@ -20,6 +20,19 @@ export function parsingBlockFinished(
 export function isEmptyBlockStartUtil(doc: TextDocumentContents, position: IPosition): Promise<boolean> {
 	return isEmptyBlockStart(doc.detectedLanguageId, doc.getText(), doc.offsetAt(position));
 }
+export async function getNodeStartUtil(
+	doc: TextDocumentContents,
+	position: IPosition,
+	completion: string
+): Promise<IPosition | undefined> {
+	const prefix = doc.getText(LocationFactory.range(LocationFactory.position(0, 0), position));
+	const text = prefix + completion;
+	const offset = await getNodeStart(doc.detectedLanguageId, text, doc.offsetAt(position));
+	if (offset) {
+		return doc.positionAt(offset);
+	}
+}
+
 
 // TODO: This should probably be language specific
 const continuations = [

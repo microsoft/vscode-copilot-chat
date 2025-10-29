@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ExtensionContext } from 'vscode';
+import { Disposable, ExtensionContext } from 'vscode';
 
 /**
  * Provides access to the ExtensionContext gotten from the VS Code Extension
@@ -11,4 +11,9 @@ import { ExtensionContext } from 'vscode';
  */
 export class Extension {
 	constructor(readonly context: ExtensionContext) { }
+
+	/** Registers disposables to be disposed when the extension deactivates. */
+	addSubscription(...disposables: Disposable[]): void {
+		this.context.subscriptions.push(...disposables);
+	}
 }
