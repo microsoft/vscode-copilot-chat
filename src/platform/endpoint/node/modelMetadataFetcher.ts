@@ -152,7 +152,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 		// If it's a chat model, update showInModelPicker based on experiment overrides
 		if (isChatModelInformation(resolvedModel)) {
-			resolvedModel.model_picker_enabled = await this._getShowInModelPickerOverride(resolvedModel);
+			resolvedModel.model_picker_enabled = this._getShowInModelPickerOverride(resolvedModel);
 		}
 
 		if (resolvedModel.preview && !resolvedModel.name.endsWith('(Preview)')) {
