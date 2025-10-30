@@ -368,7 +368,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						signature: ''
 					};
 				} else if ('content_block' in chunk && chunk.content_block.type === 'web_search_tool_result') {
-					if (!pendingServerToolCall) {
+					if (!pendingServerToolCall || !pendingServerToolCall.toolId) {
 						continue;
 					}
 
