@@ -254,14 +254,14 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		} else if (!previouslyStoredAt) {
 			// 2. enabling a disabled state
 			await this.fillStoragePath(storageLocation);
-			this.terminalService.contributePath('copilot-debug', storageLocation, `Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`);
+			this.terminalService.contributePath('copilot-debug', storageLocation, { command: COPILOT_DEBUG_COMMAND });
 		} else if (previouslyStoredAt.version !== versionNonce) {
 			// 3. upgrading the worker
 			await this.fillStoragePath(storageLocation);
-			this.terminalService.contributePath('copilot-debug', storageLocation, `Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`);
+			this.terminalService.contributePath('copilot-debug', storageLocation, { command: COPILOT_DEBUG_COMMAND });
 		} else if (enabled) {
 			// 4. already enabled and up to date, just ensure PATH contribution
-			this.terminalService.contributePath('copilot-debug', storageLocation, `Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`);
+			this.terminalService.contributePath('copilot-debug', storageLocation, { command: COPILOT_DEBUG_COMMAND });
 		}
 
 		this.context.globalState.update(WAS_REGISTERED_STORAGE_KEY, enabled ? {
