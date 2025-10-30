@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { commands, Disposable, LanguageStatusItem, LanguageStatusSeverity } from 'vscode';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../../lib/src/context';
 import { CMDQuotaExceeded } from '../../lib/src/openai/fetch';
 import { StatusChangedEvent, StatusReporter } from '../../lib/src/progress';
@@ -20,7 +21,8 @@ export class CopilotStatusBar extends StatusReporter { // TODO: proper disposal
 
 	constructor(
 		id: string,
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+		@ICompletionsContextService ctx: ICompletionsContextService,
+		@IInstantiationService readonly instantiationService: IInstantiationService,
 	) {
 		super();
 
@@ -64,7 +66,7 @@ export class CopilotStatusBar extends StatusReporter { // TODO: proper disposal
 	}
 
 	private checkEnabledForLanguage(): boolean {
-		return isCompletionEnabled(this.ctx) ?? true;
+		return this.instantiationService.invokeFunction(isCompletionEnabled) ?? true;
 	}
 
 	protected updateStatusBarIndicator() {

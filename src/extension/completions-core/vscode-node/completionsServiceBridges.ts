@@ -19,7 +19,7 @@ import { CompletionsCapiBridge } from './bridge/src/completionsCapiBridge';
 import { CompletionsEndpointProviderBridge } from './bridge/src/completionsEndpointProviderBridge';
 import { CompletionsExperimentationServiceBridge } from './bridge/src/completionsExperimentationServiceBridge';
 import { CompletionsIgnoreServiceBridge } from './bridge/src/completionsIgnoreServiceBridge';
-import { CompletionsTelemetryServiceBridge } from './bridge/src/completionsTelemetryServiceBridge';
+import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from './bridge/src/completionsTelemetryServiceBridge';
 import { CodeReference } from './extension/src/codeReferencing';
 import { LoggingCitationManager } from './extension/src/codeReferencing/citationManager';
 import { VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
@@ -33,7 +33,7 @@ import { ExtensionTextDocumentManager } from './extension/src/textDocumentManage
 import { CopilotTokenManager, CopilotTokenManagerImpl } from './lib/src/auth/copilotTokenManager';
 import { CitationManager } from './lib/src/citationManager';
 import { CompletionNotifier } from './lib/src/completionNotifier';
-import { BuildInfo, ConfigProvider, EditorAndPluginInfo, EditorSession } from './lib/src/config';
+import { BuildInfo, ConfigProvider, EditorAndPluginInfo, EditorSession, ICompletionsBuildInfoService, ICompletionsEditorSessionService } from './lib/src/config';
 import { CopilotContentExclusionManager } from './lib/src/contentExclusion/contentExclusionManager';
 import { Context, ICompletionsContextService } from './lib/src/context';
 import { registerDocumentTracker } from './lib/src/documentTracker';
@@ -75,13 +75,13 @@ import { RelatedFilesProvider } from './lib/src/prompt/similarFiles/relatedFiles
 import { TelemetryUserConfig } from './lib/src/telemetry';
 import { TextDocumentManager } from './lib/src/textDocumentManager';
 import { UrlOpener } from './lib/src/util/opener';
-import { PromiseQueue } from './lib/src/util/promiseQueue';
-import { RuntimeMode } from './lib/src/util/runtimeMode';
+import { ICompletionsPromiseQueueService, PromiseQueue } from './lib/src/util/promiseQueue';
+import { ICompletionsRuntimeModeService, RuntimeMode } from './lib/src/util/runtimeMode';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 
 const bridges: any[] = [];
 
 bridges.push(CompletionsIgnoreServiceBridge);
-bridges.push(CompletionsTelemetryServiceBridge);
 bridges.push(CompletionsExperimentationServiceBridge);
 bridges.push(CompletionsAuthenticationServiceBridge);
 bridges.push(CompletionsEndpointProviderBridge);
@@ -95,9 +95,43 @@ export function createContext(serviceAccessor: ServicesAccessor): IInstantiation
 	const configurationService = serviceAccessor.get(IConfigurationService);
 	const experimentationService = serviceAccessor.get(IExperimentationService);
 
-	const ctx = new Context();
 	const serviceCollection = new ServiceCollection();
+
+	const ctx = new Context();
 	serviceCollection.set(ICompletionsContextService, ctx);
+
+	ctx.set(LogTarget, new class extends LogTarget {
+		override logIt(level: LogLevel, category: string, ...extra: unknown[]): void {
+			const msg = formatLogMessage(category, ...extra);
+			switch (level) {
+				case LogLevel.DEBUG: return logService.debug(msg);
+				case LogLevel.INFO: return logService.info(msg);
+				case LogLevel.WARN: return logService.warn(msg);
+				case LogLevel.ERROR: return logService.error(msg);
+			}
+		}
+	});
+
+	const runtimeMode = RuntimeMode.fromEnvironment(false);
+	ctx.set(RuntimeMode, runtimeMode);
+	serviceCollection.set(ICompletionsRuntimeModeService, runtimeMode);
+
+	const buildInfo = new BuildInfo();
+	ctx.set(BuildInfo, buildInfo);
+	serviceCollection.set(ICompletionsBuildInfoService, buildInfo);
+
+	const editorSession = new EditorSession(env.sessionId, env.machineId, env.remoteName, uiKindToString(env.uiKind));
+	ctx.set(EditorSession, editorSession);
+	serviceCollection.set(ICompletionsEditorSessionService, editorSession);
+
+	const completionsTelemetryService = new CompletionsTelemetryServiceBridge(serviceAccessor.get(ITelemetryService));
+	serviceCollection.set(ICompletionsTelemetryService, completionsTelemetryService);
+	ctx.set(CompletionsTelemetryServiceBridge, completionsTelemetryService);
+
+	const promiseQueue = new PromiseQueue();
+	ctx.set(PromiseQueue, promiseQueue);
+	serviceCollection.set(ICompletionsPromiseQueueService, promiseQueue);
+
 	const instantiationService = serviceAccessor.get(IInstantiationService).createChild(serviceCollection);
 	ctx.setInstantiationService(instantiationService);
 
@@ -109,16 +143,13 @@ export function createContext(serviceAccessor: ServicesAccessor): IInstantiation
 	ctx.set(Extension, new Extension(extensionContext));
 	ctx.set(ConfigProvider, new VSCodeConfigProvider());
 	ctx.set(CopilotContentExclusionManager, instantiationService.createInstance(CopilotContentExclusionManager));
-	ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(false));
-	ctx.set(BuildInfo, new BuildInfo());
 	ctx.set(CompletionsCache, new CompletionsCache());
 	ctx.set(Features, instantiationService.createInstance(Features));
 	ctx.set(TelemetryLogSender, new TelemetryLogSenderImpl());
 	ctx.set(TelemetryUserConfig, instantiationService.createInstance(TelemetryUserConfig));
 	ctx.set(UserErrorNotifier, new UserErrorNotifier());
-	ctx.set(OpenAIFetcher, new LiveOpenAIFetcher());
+	ctx.set(OpenAIFetcher, new LiveOpenAIFetcher(instantiationService, ctx, runtimeMode));
 	ctx.set(BlockModeConfig, new ConfigBlockModeConfig());
-	ctx.set(PromiseQueue, new PromiseQueue());
 	ctx.set(CompletionNotifier, instantiationService.createInstance(CompletionNotifier));
 	ctx.set(FileReader, instantiationService.createInstance(FileReader));
 	try {
@@ -147,7 +178,6 @@ export function createContext(serviceAccessor: ServicesAccessor): IInstantiation
 
 	ctx.set(NotificationSender, new ExtensionNotificationSender());
 	ctx.set(EditorAndPluginInfo, new VSCodeEditorInfo());
-	ctx.set(EditorSession, new EditorSession(env.sessionId, env.machineId, env.remoteName, uiKindToString(env.uiKind)));
 	ctx.set(CopilotExtensionStatus, new CopilotExtensionStatus());
 	ctx.set(CopilotTokenManager, instantiationService.createInstance(CopilotTokenManagerImpl, false));
 	ctx.set(StatusReporter, instantiationService.createInstance(CopilotStatusBar, 'github.copilot.languageStatus'));
@@ -167,18 +197,6 @@ export function createContext(serviceAccessor: ServicesAccessor): IInstantiation
 		}
 	});
 
-	ctx.set(LogTarget, new class extends LogTarget {
-		override logIt(level: LogLevel, category: string, ...extra: unknown[]): void {
-			const msg = formatLogMessage(category, ...extra);
-			switch (level) {
-				case LogLevel.DEBUG: return logService.debug(msg);
-				case LogLevel.INFO: return logService.info(msg);
-				case LogLevel.WARN: return logService.warn(msg);
-				case LogLevel.ERROR: return logService.error(msg);
-			}
-		}
-	});
-
 	return instantiationService;
 }
 
@@ -191,25 +209,25 @@ export function setup(serviceAccessor: ServicesAccessor): IDisposable {
 	// This must be registered before activation!
 	// CodeQuote needs to listen for the initial token notification event.
 	const codeReference = instantiationService.createInstance(CodeReference);
-	ctx.set(CitationManager, new LoggingCitationManager(codeReference));
+	ctx.set(CitationManager, new LoggingCitationManager(codeReference, instantiationService));
 	disposables.add(codeReference.register());
 
 	// Send telemetry when ghost text is accepted
-	disposables.add(registerGhostTextDependencies(ctx));
+	disposables.add(registerGhostTextDependencies(serviceAccessor));
 
 	// Register to listen for changes to the active document to keep track
 	// of last access time
-	disposables.add(registerDocumentTracker(ctx));
+	disposables.add(registerDocumentTracker(serviceAccessor));
 
 	// Register the context providers enabled by default.
 	ctx.get(DefaultContextProviders).add('ms-vscode.cpptools');
 
-	disposables.add(setupCompletionsExperimentationService(ctx));
+	disposables.add(setupCompletionsExperimentationService(serviceAccessor));
 
 	return disposables;
 }
 
-function uiKindToString(uiKind: UIKind): string {
+function uiKindToString(uiKind: UIKind): 'desktop' | 'web' {
 	switch (uiKind) {
 		case UIKind.Desktop:
 			return 'desktop';

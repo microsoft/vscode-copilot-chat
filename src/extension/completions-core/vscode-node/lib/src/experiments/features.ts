@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
 import {
 	DEFAULT_MAX_COMPLETION_LENGTH,
@@ -24,7 +25,10 @@ type CompletionsFiltersInfo = { uri: string; languageId: string };
 /** General-purpose API for accessing ExP variable values. */
 export class Features {
 
-	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) { }
+	constructor(
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) { }
 
 	/**
 	 * Central logic for obtaining the assignments of treatment groups
@@ -99,7 +103,7 @@ export class Features {
 			return name + (value ? '' : 'cf');
 		});
 		const exp = new ExpConfig(exp2, features.join(';'));
-		const filterMap = createCompletionsFilters(this.ctx, token);
+		const filterMap = this.instantiationService.invokeFunction(createCompletionsFilters, token);
 		const filterRecord: Partial<Record<Filter, string>> = {};
 		for (const [key, value] of filterMap.entries()) {
 			filterRecord[key] = value;

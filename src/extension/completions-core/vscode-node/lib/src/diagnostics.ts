@@ -2,7 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { EditorAndPluginInfo, getVersion } from './config';
+import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { EditorAndPluginInfo, ICompletionsBuildInfoService } from './config';
 import { ICompletionsContextService } from './context';
 import { TelemetryData } from './telemetry';
 
@@ -23,7 +24,7 @@ interface Section {
 	items: SectionItems;
 }
 
-export function collectCompletionDiagnostics(ctx: ICompletionsContextService, telemetry: TelemetryData | undefined): Report {
+export function collectCompletionDiagnostics(accessor: ServicesAccessor, telemetry: TelemetryData | undefined): Report {
 	const telemetryItems: SectionItems = {};
 	if (telemetry !== undefined) {
 		if (telemetry.properties.headerRequestId) {
@@ -47,8 +48,8 @@ export function collectCompletionDiagnostics(ctx: ICompletionsContextService, te
 			{
 				name: 'Copilot Extension',
 				items: {
-					Version: getVersion(ctx),
-					Editor: getEditorDisplayVersion(ctx),
+					Version: accessor.get(ICompletionsBuildInfoService).getVersion(),
+					Editor: getEditorDisplayVersion(accessor),
 					...telemetryItems,
 				},
 			},
@@ -73,7 +74,7 @@ function formatSectionAsMarkdown(s: Section) {
 	);
 }
 
-function getEditorDisplayVersion(ctx: ICompletionsContextService): string {
-	const info = ctx.get(EditorAndPluginInfo).getEditorInfo();
+function getEditorDisplayVersion(accessor: ServicesAccessor): string {
+	const info = accessor.get(ICompletionsContextService).get(EditorAndPluginInfo).getEditorInfo();
 	return `${info.name} ${info.version}`;
 }

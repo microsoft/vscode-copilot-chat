@@ -71,10 +71,3 @@ export class CopilotTokenManagerImpl extends CopilotTokenManager {
 		return this.authenticationService.copilotToken;
 	}
 }
-
-/**
- * Returns the most recently fetched token.  May be expired, or invalid, or belong to the wrong account.
- */
-export function getLastCopilotToken(ctx: ICompletionsContextService): Omit<CopilotToken, "token"> | undefined {
-	return ctx.get(CopilotTokenManager).getLastToken();
-}

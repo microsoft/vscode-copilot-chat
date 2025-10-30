@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import EventEmitter from 'events';
+import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
 import { CancellationToken, Disposable } from '../../types/src';
 import { CompletionState } from './completionState';
-import { ICompletionsContextService } from './context';
 import { GetGhostTextOptions } from './ghostText/ghostText';
 import { telemetryCatch, TelemetryWithExp } from './telemetry';
+import { ICompletionsPromiseQueueService } from './util/promiseQueue';
 
 export type CompletionRequestedEvent = {
 	completionId: string;
@@ -21,7 +22,10 @@ const requestEventName = 'CompletionRequested';
 
 export class CompletionNotifier {
 	#emitter = new EventEmitter();
-	constructor(@ICompletionsContextService protected ctx: ICompletionsContextService) { }
+	constructor(
+		@ICompletionsPromiseQueueService protected completionsPromiseQueue: ICompletionsPromiseQueueService,
+		@ICompletionsTelemetryService protected completionsTelemetryService: ICompletionsTelemetryService,
+	) { }
 
 	notifyRequest(
 		completionState: CompletionState,
@@ -40,7 +44,7 @@ export class CompletionNotifier {
 	}
 
 	onRequest(listener: (event: CompletionRequestedEvent) => void): Disposable {
-		const wrapper = telemetryCatch(this.ctx, listener, `event.${requestEventName}`);
+		const wrapper = telemetryCatch(this.completionsTelemetryService, this.completionsPromiseQueue, listener, `event.${requestEventName}`);
 		this.#emitter.on(requestEventName, wrapper);
 		return Disposable.create(() => this.#emitter.off(requestEventName, wrapper));
 	}

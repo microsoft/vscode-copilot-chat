@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
+import { IInstantiationService } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../../../context';
 import { accessTimes } from '../../../documentTracker';
 import { ExpTreatmentVariables } from '../../../experiments/expConfig';
@@ -113,7 +114,8 @@ const DEFAULT_FILE_LANGUAGE = 'python';
 
 suite('neighbor files tests', function () {
 	this.timeout(TIMEOUT);
-	const ctx = createLibTestingContext();
+	const accessor = createLibTestingContext();
+	const ctx = accessor.get(ICompletionsContextService);
 	const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
 
 
@@ -219,7 +221,8 @@ suite('NeighborSource.getRelativePath tests', function () {
 });
 
 suite('Neighbor files exclusion tests', function () {
-	const ctx = createLibTestingContext();
+	const accessor = createLibTestingContext();
+	const ctx = accessor.get(ICompletionsContextService);
 	const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
 	tdm.init([{ uri: WKS_ROOTFOLDER }]);
 
@@ -240,11 +243,12 @@ suite('Neighbor files exclusion tests', function () {
 
 	class MockedRelatedFilesProvider extends RelatedFilesProvider {
 		constructor(
-			context: ICompletionsContextService,
 			private readonly relatedFiles: RelatedFilesResponseEntry[],
-			private readonly traits: RelatedFileTrait[] = [{ name: 'testTraitName', value: 'testTraitValue' }]
+			private readonly traits: RelatedFileTrait[] = [{ name: 'testTraitName', value: 'testTraitValue' }],
+			@ICompletionsContextService completionsContextService: ICompletionsContextService,
+			@IInstantiationService instantiationService: IInstantiationService
 		) {
-			super(context);
+			super(completionsContextService, instantiationService);
 		}
 
 		async getRelatedFilesResponse(
@@ -265,11 +269,12 @@ suite('Neighbor files exclusion tests', function () {
 
 	test('Test with related files excluded', async function () {
 		NeighborSource.reset();
-		ctx.forceSet(RelatedFilesProvider, new MockedRelatedFilesProvider(ctx, []));
+		const instantiationService = accessor.get(IInstantiationService);
+		ctx.forceSet(RelatedFilesProvider, instantiationService.createInstance(MockedRelatedFilesProvider, [], [{ name: 'testTraitName', value: 'testTraitValue' }]));
 		const telemetryWithExp = TelemetryWithExp.createEmptyConfigForTesting();
 		telemetryWithExp.filtersAndExp.exp.variables[ExpTreatmentVariables.ExcludeRelatedFiles] = true;
 		const { docs, neighborSource, traits } = await NeighborSource.getNeighborFilesAndTraits(
-			ctx,
+			accessor,
 			FILE_J,
 			'javascript',
 			telemetryWithExp,
