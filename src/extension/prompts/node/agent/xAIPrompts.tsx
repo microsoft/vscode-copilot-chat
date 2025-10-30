@@ -16,6 +16,8 @@ import { KeepGoingReminder } from './agentPrompt';
 import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
 
+const BYOK_PROVIDER_NAME = 'xAI';
+
 class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
@@ -122,8 +124,8 @@ class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptPro
 class XAIPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['grok-code'];
 
-	static matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isHiddenModelB(endpoint);
+	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
+		return endpoint.family === BYOK_PROVIDER_NAME || isHiddenModelB(endpoint);
 	}
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
