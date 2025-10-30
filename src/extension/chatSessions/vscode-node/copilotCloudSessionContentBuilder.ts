@@ -480,17 +480,6 @@ export class ChatSessionContentBuilder {
 			};
 		};
 
-		const buildStrReplaceDetails = (filePath: string | undefined): ParsedToolCallDetails => {
-			const fileLabel = filePath && this.toFileLabel(filePath);
-			const message = fileLabel ? `Edit [](${fileLabel})` : `Edit ${filePath}`;
-			return {
-				toolName: 'Edit',
-				invocationMessage: message,
-				pastTenseMessage: message,
-				toolSpecificData: fileLabel ? { command: 'str_replace', filePath, fileLabel } : undefined
-			};
-		};
-
 		const buildCreateDetails = (filePath: string | undefined): ParsedToolCallDetails => {
 			const fileLabel = filePath && this.toFileLabel(filePath);
 			const message = fileLabel ? `Create [](${fileLabel})` : `Create File ${filePath}`;
@@ -498,7 +487,7 @@ export class ChatSessionContentBuilder {
 				toolName: 'Create',
 				invocationMessage: message,
 				pastTenseMessage: message,
-				toolSpecificData: fileLabel ? { command: 'create', filePath, fileLabel } : undefined
+				toolSpecificData: fileLabel ? { command: 'edit', filePath, fileLabel, viewRange: undefined } : undefined
 			};
 		};
 
@@ -570,7 +559,7 @@ export class ChatSessionContentBuilder {
 				return buildEditDetails(args.path, args.command || 'edit', this.parseRange(args.view_range));
 			}
 			case 'str_replace':
-				return buildStrReplaceDetails(args.path);
+				return buildEditDetails(args.path, 'edit', undefined, { defaultName: 'Edit' });
 			case 'create':
 				return buildCreateDetails(args.path);
 			case 'view':
@@ -590,6 +579,13 @@ export class ChatSessionContentBuilder {
 				return { toolName: 'read_bash', invocationMessage: 'Read logs from Bash session' };
 			case 'stop_bash':
 				return { toolName: 'stop_bash', invocationMessage: 'Stop Bash session' };
+			case 'run_custom_setup_step':
+			case 'run_setup':
+				return { toolName: 'run_custom_setup_step', invocationMessage: content || 'Run custom setup step' };
+			case 'github-mcp-server-search_code':
+				return { toolName: 'github-mcp-server-search_code', invocationMessage: 'Search code on GitHub' };
+			case 'code_review':
+				return { toolName: 'code_review', invocationMessage: 'Review changes with Copilot code review' };
 			default:
 				return { toolName: name || 'unknown', invocationMessage: content || name || 'unknown' };
 		}
