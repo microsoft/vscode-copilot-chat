@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { AgentOptions, Attachment, ModelProvider, Session, SessionEvent } from '@github/copilot/sdk';
+import type { AgentOptions, Attachment, ModelProvider, PostToolUseHookInput, PreToolUseHookInput, Session, SessionEvent } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../../platform/env/common/envService';
@@ -15,6 +15,8 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { ExternalEditTracker } from '../../common/externalEditTracker';
+import { getAffectedUrisForEditTool } from '../common/copilotcliTools';
 import { CopilotCLIPromptResolver } from './copilotcliPromptResolver';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
 import { processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
@@ -76,6 +78,7 @@ export class CopilotCLIAgentManager extends Disposable {
 export class CopilotCLISession extends Disposable {
 	private _abortController = new AbortController();
 	private _pendingToolInvocations = new Map<string, vscode.ChatToolInvocationPart>();
+	private _editTracker = new ExternalEditTracker();
 	public readonly sessionId: string;
 
 	constructor(
@@ -139,7 +142,21 @@ export class CopilotCLISession extends Disposable {
 				return await this.requestPermission(permissionRequest, toolInvocationToken);
 			},
 			logger: getCopilotLogger(this.logService),
-			session: this._sdkSession
+			session: this._sdkSession,
+			hooks: {
+				preToolUse: [
+					async (input: PreToolUseHookInput) => {
+						const editKey = getEditOperationKey(input.toolName, input.toolArgs);
+						await this._onWillEditTool(input, editKey, stream);
+					}
+				],
+				postToolUse: [
+					async (input: PostToolUseHookInput) => {
+						const editKey = getEditOperationKey(input.toolName, input.toolArgs);
+						await this._onDidEditTool(editKey);
+					}
+				]
+			}
 		};
 
 		try {
@@ -231,4 +248,19 @@ export class CopilotCLISession extends Disposable {
 
 		return { kind: 'denied-interactively-by-user' };
 	}
+
+	private async _onWillEditTool(input: PreToolUseHookInput, editKey: string, stream: vscode.ChatResponseStream): Promise<void> {
+		const uris = getAffectedUrisForEditTool(input.toolName, input.toolArgs);
+		return this._editTracker.trackEdit(editKey, uris, stream);
+	}
+
+	private async _onDidEditTool(editKey: string): Promise<void> {
+		return this._editTracker.completeEdit(editKey);
+	}
+}
+
+
+function getEditOperationKey(toolName: string, toolArgs: unknown): string {
+	// todo@connor4312: get copilot CLI to surface the tool call ID instead?
+	return `${toolName}:${JSON.stringify(toolArgs)}`;
 }
