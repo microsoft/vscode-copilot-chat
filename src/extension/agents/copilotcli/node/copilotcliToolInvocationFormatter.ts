@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
+import { isCopilotCliEditToolCall } from '../common/copilotcliTools';
 
 /**
  * CopilotCLI tool names
@@ -197,6 +198,9 @@ export function createCopilotCLIToolInvocation(
 ): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	if (toolName === CopilotCLIToolNames.ReportIntent) {
 		return undefined; // Ignore these for now
+	}
+	if (isCopilotCliEditToolCall(toolName, args)) {
+		return undefined;
 	}
 	if (toolName === CopilotCLIToolNames.Think) {
 		const thought = (args as { thought?: string })?.thought;
