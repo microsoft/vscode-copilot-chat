@@ -15,7 +15,8 @@ import { ServiceCollection } from '../../../util/vs/platform/instantiation/commo
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
-import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
+import { CopilotCLIModels, CopilotCLISDK, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
+import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
@@ -27,7 +28,6 @@ import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
-import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 
 
 // https://github.com/microsoft/vscode-pull-request-github/blob/8a5c9a145cd80ee364a3bed9cf616b2bd8ac74c2/src/github/copilotApi.ts#L56-L71
@@ -97,33 +97,32 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		}));
 
 		// Copilot CLI sessions provider
-		const copilotCLISessionService = claudeAgentInstaService.createInstance(CopilotCLISessionService);
-
+		const copilotTerminalIntegration = this._register(claudeAgentInstaService.createInstance(CopilotCLITerminalIntegration));
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
-				[ICopilotCLISessionService, copilotCLISessionService],
+				[ICopilotCLISessionService, new SyncDescriptor(CopilotCLISessionService)],
+				[ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels)],
+				[ICopilotCLISDK, new SyncDescriptor(CopilotCLISDK)],
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
-				[ICopilotCLITerminalIntegration, new SyncDescriptor(CopilotCLITerminalIntegration)],
+				[ICopilotCLITerminalIntegration, copilotTerminalIntegration],
 			));
-
+		const copilotCliSessionService: ICopilotCLISessionService = this._register(copilotcliAgentInstaService.createInstance(CopilotCLISessionService));
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
 		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
-		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
-		const copilotcliAgentManager = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIAgentManager, promptResolver));
+		const copilotcliPromptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider);
 		const summarizer = copilotcliAgentInstaService.createInstance(ChatSummarizerProvider);
 
 		const copilotcliChatSessionParticipant = copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
-			copilotcliAgentManager,
-			copilotCLISessionService,
+			copilotcliPromptResolver,
 			copilotcliSessionItemProvider,
 			copilotSessionsProvider,
-			summarizer
+			summarizer,
 		);
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
-		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
-		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService));
+		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant, { supportsInterruptions: true }));
+		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCliSessionService));
 	}
 
 	private updateCopilotCloudRegistration() {
