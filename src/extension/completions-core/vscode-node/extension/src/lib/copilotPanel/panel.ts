@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, type ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../../../../lib/src/context';
 import { asyncIterableMapFilter } from '../../../../lib/src/helpers/iterableHelpers';
 import { Logger, LogTarget } from '../../../../lib/src/logger';
@@ -31,6 +31,8 @@ const solutionsLogger = new Logger('solutions');
  * initiate the generation of a stream of solutions for that request.
  */
 export async function launchSolutions(accessor: ServicesAccessor, solutionManager: SolutionManager): Promise<SolutionsStream> {
+	const instantiationService = accessor.get(IInstantiationService);
+	const ctx = accessor.get(ICompletionsContextService);
 	const position = solutionManager.targetPosition;
 	const document = solutionManager.textDocument;
 
@@ -44,8 +46,7 @@ export async function launchSolutions(accessor: ServicesAccessor, solutionManage
 	const { prompt, trailingWs, telemetryData, repoInfo, ourRequestId } = promptSetup;
 
 	// Setup completion parameters using shared function
-	const { extra, postOptions, finishedCb, engineInfo } = setupCompletionParams(
-		accessor,
+	const { extra, postOptions, finishedCb, engineInfo } = instantiationService.invokeFunction(setupCompletionParams,
 		document,
 		position,
 		prompt,
@@ -68,7 +69,6 @@ export async function launchSolutions(accessor: ServicesAccessor, solutionManage
 		extra,
 	};
 
-	const ctx = accessor.get(ICompletionsContextService);
 	const res = await ctx
 		.get(OpenAIFetcher)
 		.fetchAndStreamCompletions(completionParams, telemetryData.extendedBy(), finishedCb, cancellationToken);
@@ -79,7 +79,7 @@ export async function launchSolutions(accessor: ServicesAccessor, solutionManage
 
 	let choices: AsyncIterable<APIChoice> = res.choices;
 	choices = trimChoices(choices);
-	choices = asyncIterableMapFilter(choices, choice => postProcessChoiceInContext(accessor, document, position, choice, false, solutionsLogger));
+	choices = asyncIterableMapFilter(choices, choice => instantiationService.invokeFunction(postProcessChoiceInContext, document, position, choice, false, solutionsLogger));
 
 	const solutions = asyncIterableMapFilter(choices, async (apiChoice: APIChoice) => {
 		let display = apiChoice.completionText;
@@ -131,9 +131,10 @@ export async function runSolutions(
 	solutionManager: SolutionManager,
 	solutionHandler: ISolutionHandler
 ): Promise<void> {
+	const instantiationService = accessor.get(IInstantiationService);
 	const statusReporter = accessor.get(ICompletionsContextService).get(StatusReporter);
 	return statusReporter.withProgress(async () => {
-		const nextSolution = launchSolutions(accessor, solutionManager);
+		const nextSolution = instantiationService.invokeFunction(launchSolutions, solutionManager);
 		return await reportSolutions(nextSolution, solutionHandler);
 	});
 }

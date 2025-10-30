@@ -15,10 +15,8 @@ import {
 	commands,
 	workspace,
 } from 'vscode';
+import { IVSCodeExtensionContext } from '../../../../../../platform/extContext/common/extensionContext';
 import { debounce } from '../../../../../../util/common/debounce';
-import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../../lib/src/context';
-import { Extension } from '../extensionContext';
 import { BasePanelCompletion, ISuggestionsPanel, PanelConfig } from './basePanelTypes';
 import { Highlighter } from './highlighter';
 import { getNonce, pluralize } from './utils';
@@ -94,11 +92,11 @@ export abstract class BaseSuggestionsPanel<TPanelCompletion extends BasePanelCom
 	}
 
 	constructor(
-		protected readonly accessor: ServicesAccessor,
 		readonly webviewPanel: WebviewPanel,
 		document: TextDocument,
 		protected suggestionsPanelManager: SuggestionsPanelManagerInterface,
-		protected readonly config: PanelConfig
+		protected readonly config: PanelConfig,
+		@IVSCodeExtensionContext protected readonly contextService: IVSCodeExtensionContext,
 	) {
 		webviewPanel.onDidDispose(() => this._dispose(), null, this._disposables);
 		webviewPanel.webview.html = this._getWebviewContent();
@@ -147,7 +145,7 @@ export abstract class BaseSuggestionsPanel<TPanelCompletion extends BasePanelCom
 	protected abstract renderSolutionContent(item: TPanelCompletion, baseContent: SolutionContent): SolutionContent;
 
 	private _buildExtensionUri(...path: string[]): Uri {
-		const extensionPath = Uri.joinPath(this.accessor.get(ICompletionsContextService).get(Extension).context.extensionUri, ...path);
+		const extensionPath = Uri.joinPath(this.contextService.extensionUri, ...path);
 		return this.webviewPanel.webview.asWebviewUri(extensionPath);
 	}
 

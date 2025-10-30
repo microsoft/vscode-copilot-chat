@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { commands, Disposable } from 'vscode';
-import type { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, type ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../../lib/src/context';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
@@ -23,13 +23,14 @@ function exception(accessor: ServicesAccessor, error: unknown, origin: string, l
 }
 
 export function registerCommand(accessor: ServicesAccessor, command: string, fn: (...args: unknown[]) => unknown): Disposable {
+	const instantiationService = accessor.get(IInstantiationService);
 	try {
 		const disposable = commands.registerCommand(command, async (...args: unknown[]) => {
 			try {
 				await fn(...args);
 			} catch (error) {
 				// Pass in the command string as the origin
-				exception(accessor, error, command);
+				instantiationService.invokeFunction(exception, error, command);
 			}
 		});
 		return disposable;

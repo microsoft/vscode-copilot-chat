@@ -4,11 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TextDocument, Uri, ViewColumn, WebviewPanel, commands, window } from 'vscode';
-import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../../lib/src/context';
+import { IVSCodeExtensionContext } from '../../../../../../platform/extContext/common/extensionContext';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
 import { basename } from '../../../lib/src/util/uri';
-import { Extension } from '../extensionContext';
 import { registerCommandWrapper } from '../telemetry';
 import { BasePanelCompletion, PanelConfig } from './basePanelTypes';
 import { BaseSuggestionsPanel, SuggestionsPanelManagerInterface } from './baseSuggestionsPanel';
@@ -23,19 +22,18 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 	private _panelCount: number = 0;
 
 	constructor(
-		protected readonly _accessor: ServicesAccessor,
-		protected readonly config: PanelConfig
+		protected readonly config: PanelConfig,
+		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
+		@IVSCodeExtensionContext protected readonly _extensionContext: IVSCodeExtensionContext,
 	) { }
 
 	protected abstract createListDocument(
-		accessor: ServicesAccessor,
 		wrapped: ITextDocument,
 		position: IPosition,
 		panel: BaseSuggestionsPanel<TPanelCompletion>
 	): ListDocumentInterface;
 
 	protected abstract createSuggestionsPanel(
-		accessor: ServicesAccessor,
 		panel: WebviewPanel,
 		document: TextDocument,
 		manager: this
@@ -49,12 +47,11 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 		const title = `${this.config.panelTitle} for ${basename(document.uri.toString()) || document.uri.toString()}`;
 		const panel = window.createWebviewPanel(this.config.webviewId, title, ViewColumn.Two, {
 			enableScripts: true,
-			localResourceRoots: [Uri.joinPath(this._accessor.get(ICompletionsContextService).get(Extension).context.extensionUri, 'dist')],
+			localResourceRoots: [Uri.joinPath(this._extensionContext.extensionUri, 'dist')],
 			retainContextWhenHidden: true,
 		});
 
-		const suggestionPanel = this.createSuggestionsPanel(this._accessor, panel, document, this);
-
+		const suggestionPanel = this.createSuggestionsPanel(panel, document, this);
 		// Listen for the panel disposal event to clear our reference
 		suggestionPanel.onDidDispose(() => {
 			if (this.activeWebviewPanel === suggestionPanel) {
@@ -62,7 +59,7 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 			}
 		});
 
-		void this.createListDocument(this._accessor, wrapped, position, suggestionPanel).runQuery();
+		void this.createListDocument(wrapped, position, suggestionPanel).runQuery();
 
 		this.activeWebviewPanel = suggestionPanel;
 		this._panelCount = this._panelCount + 1;
@@ -70,17 +67,17 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 	}
 
 	registerCommands() {
-		registerCommandWrapper(this._accessor, this.config.commands.accept, () => {
+		this._instantiationService.invokeFunction(registerCommandWrapper, this.config.commands.accept, () => {
 			return this.activeWebviewPanel?.acceptFocusedSolution();
 		});
 
-		registerCommandWrapper(this._accessor, this.config.commands.navigatePrevious, () => {
+		this._instantiationService.invokeFunction(registerCommandWrapper, this.config.commands.navigatePrevious, () => {
 			return this.activeWebviewPanel?.postMessage({
 				command: 'navigatePreviousSolution',
 			});
 		});
 
-		registerCommandWrapper(this._accessor, this.config.commands.navigateNext, () => {
+		this._instantiationService.invokeFunction(registerCommandWrapper, this.config.commands.navigateNext, () => {
 			return this.activeWebviewPanel?.postMessage({
 				command: 'navigateNextSolution',
 			});

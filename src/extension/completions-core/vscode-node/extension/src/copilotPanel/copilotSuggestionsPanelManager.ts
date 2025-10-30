@@ -4,8 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TextDocument, WebviewPanel } from 'vscode';
-import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IVSCodeExtensionContext } from '../../../../../../platform/extContext/common/extensionContext';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
+import { solutionCountTarget } from '../lib/copilotPanel/common';
 import { BaseSuggestionsPanelManager, ListDocumentInterface } from '../panelShared/baseSuggestionsPanelManager';
 import { PanelCompletion } from './common';
 import { CopilotListDocument } from './copilotListDocument';
@@ -13,25 +15,26 @@ import { CopilotSuggestionsPanel } from './copilotSuggestionsPanel';
 import { copilotPanelConfig } from './panelConfig';
 
 export class CopilotSuggestionsPanelManager extends BaseSuggestionsPanelManager<PanelCompletion> {
-	constructor(accessor: ServicesAccessor) {
-		super(accessor, copilotPanelConfig);
+	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
+	) {
+		super(copilotPanelConfig, instantiationService, extensionContext);
 	}
 
 	protected createListDocument(
-		accessor: ServicesAccessor,
 		wrapped: ITextDocument,
 		position: IPosition,
 		panel: CopilotSuggestionsPanel
 	): ListDocumentInterface {
-		return new CopilotListDocument(accessor, wrapped, position, panel);
+		return this._instantiationService.createInstance(CopilotListDocument, wrapped, position, panel, solutionCountTarget);
 	}
 
 	protected createSuggestionsPanel(
-		accessor: ServicesAccessor,
 		panel: WebviewPanel,
 		document: TextDocument,
 		manager: this
 	): CopilotSuggestionsPanel {
-		return new CopilotSuggestionsPanel(accessor, panel, document, manager);
+		return this._instantiationService.createInstance(CopilotSuggestionsPanel, panel, document, manager);
 	}
 }

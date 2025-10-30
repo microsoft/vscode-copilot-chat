@@ -21,7 +21,6 @@ import { Filter, FilterSettings } from './filters';
 
 type CompletionsFiltersInfo = { uri: string; languageId: string };
 
-
 /** General-purpose API for accessing ExP variable values. */
 export class Features {
 

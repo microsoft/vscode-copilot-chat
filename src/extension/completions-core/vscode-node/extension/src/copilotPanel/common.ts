@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Range, commands, window, type Disposable } from 'vscode';
-import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, type ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../../../lib/src/context';
 import { CopilotNamedAnnotationList } from '../../../lib/src/openai/stream';
 import * as constants from '../constants';
@@ -30,12 +30,13 @@ export interface PanelCompletion {
 }
 
 export function registerPanelSupport(accessor: ServicesAccessor): Disposable {
-	const suggestionsPanelManager = new CopilotSuggestionsPanelManager(accessor);
+	const instantiationService = accessor.get(IInstantiationService);
+	const suggestionsPanelManager = instantiationService.createInstance(CopilotSuggestionsPanelManager);
 
 	const result = registerCommand(accessor, constants.CMDOpenPanel, async () => {
 		// hide ghost text while opening the generation ui
 		await commands.executeCommand('editor.action.inlineSuggest.hide');
-		await commandOpenPanel(accessor, suggestionsPanelManager);
+		await instantiationService.invokeFunction(commandOpenPanel, suggestionsPanelManager);
 	});
 
 	suggestionsPanelManager.registerCommands();

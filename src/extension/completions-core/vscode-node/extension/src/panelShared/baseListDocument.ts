@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Position, Range } from 'vscode';
-import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { postInsertionTasks } from '../../../lib/src/postInsertion';
 import { countLines } from '../../../lib/src/suggestions/partialSuggestions';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
@@ -15,18 +15,16 @@ import { BasePanelCompletion, ISuggestionsPanel } from './basePanelTypes';
 // BaseListDocument to be shared with both the copilot and comparison completion panels.
 export abstract class BaseListDocument<TPanelCompletion extends BasePanelCompletion> extends SolutionManager {
 	private _solutionCount = 0;
-	protected readonly _accessor: ServicesAccessor;
 	protected readonly _solutions: TPanelCompletion[] = [];
 
 	constructor(
-		accessor: ServicesAccessor,
 		textDocument: ITextDocument,
 		position: IPosition,
 		readonly panel: ISuggestionsPanel,
-		countTarget = solutionCountTarget
+		countTarget = solutionCountTarget,
+		@IInstantiationService protected readonly instantiationService: IInstantiationService
 	) {
 		super(textDocument, position, panel.cancellationToken, countTarget);
-		this._accessor = accessor;
 	}
 
 	protected abstract createPanelCompletion(
@@ -63,8 +61,7 @@ export abstract class BaseListDocument<TPanelCompletion extends BasePanelComplet
 					rank,
 				}
 			);
-			return postInsertionTasks(
-				this._accessor,
+			return this.instantiationService.invokeFunction(postInsertionTasks,
 				'solution',
 				unformatted.insertText,
 				offset,

@@ -5,7 +5,7 @@
 
 import { CancellationToken } from 'vscode';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
-import type { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, type ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCompletionState } from '../../../../lib/src/completionState';
 import { BlockMode } from '../../../../lib/src/config';
 import { ICompletionsContextService } from '../../../../lib/src/context';
@@ -147,6 +147,7 @@ export async function setupPromptAndTelemetry(
 	);
 
 	const ctx = accessor.get(ICompletionsContextService);
+	const instantiationService = accessor.get(IInstantiationService);
 	// Update telemetry with experiment values
 	solutionManager.savedTelemetryData = await ctx
 		.get(Features)
@@ -168,8 +169,7 @@ export async function setupPromptAndTelemetry(
 	}
 
 	// Extract prompt
-	const promptResponse = await extractPrompt(
-		accessor,
+	const promptResponse = await instantiationService.invokeFunction(extractPrompt,
 		ourRequestId,
 		createCompletionState(document, position),
 		solutionManager.savedTelemetryData!
@@ -214,7 +214,7 @@ export async function setupPromptAndTelemetry(
 	);
 
 	solutionsLogger.debug(ctx.get(LogTarget), 'prompt:', prompt);
-	telemetry(accessor, 'solution.requested', solutionManager.savedTelemetryData);
+	instantiationService.invokeFunction(telemetry, 'solution.requested', solutionManager.savedTelemetryData);
 
 	return {
 		prompt,
