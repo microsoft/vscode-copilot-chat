@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
-import { logger } from '../logger';
-import { ActiveExperiments } from './contextProviderRegistry';
+import { logger, LogTarget } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
+import { ActiveExperiments } from './contextProviderRegistry';
 
 interface CppContextProviderParams {
 	[key: string]: string | number | boolean;
@@ -24,7 +25,7 @@ const cppContextProviderParamsDefault: CppContextProviderParams = {
 const VSCodeCppContextProviderId = 'ms-vscode.cpptools';
 
 export function fillInCppVSCodeActiveExperiments(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	matchedContextProviders: string[],
 	activeExperiments: ActiveExperiments,
 	telemetryData: TelemetryWithExp
@@ -33,23 +34,25 @@ export function fillInCppVSCodeActiveExperiments(
 		(matchedContextProviders.length === 1 && matchedContextProviders[0] === '*') ||
 		matchedContextProviders.includes(VSCodeCppContextProviderId)
 	) {
-		addActiveExperiments(ctx, activeExperiments, telemetryData);
+		addActiveExperiments(accessor, activeExperiments, telemetryData);
 	}
 }
 
-function addActiveExperiments(ctx: Context, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
+function addActiveExperiments(accessor: ServicesAccessor, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
 	try {
+		const ctx = accessor.get(ICompletionsContextService);
+		const logTarget = ctx.get(LogTarget);
 		let params = cppContextProviderParamsDefault;
 		const cppContextProviderParams = ctx.get(Features).cppContextProviderParams(telemetryData);
 		if (cppContextProviderParams) {
 			try {
 				params = JSON.parse(cppContextProviderParams) as CppContextProviderParams;
 			} catch (e) {
-				logger.error(ctx, 'Failed to parse cppContextProviderParams', e);
+				logger.error(logTarget, 'Failed to parse cppContextProviderParams', e);
 			}
 		}
 		for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
 	} catch (e) {
-		logger.exception(ctx, e, 'fillInCppActiveExperiments');
+		logger.exception(accessor, e, 'fillInCppActiveExperiments');
 	}
 }

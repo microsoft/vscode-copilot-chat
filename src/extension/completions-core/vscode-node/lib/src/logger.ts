@@ -9,7 +9,8 @@
  *
  * Do not add any concrete dependencies here.
  */
-import type { Context } from './context';
+import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from './context';
 
 export enum LogLevel {
 	DEBUG = 4,
@@ -19,30 +20,30 @@ export enum LogLevel {
 }
 
 export abstract class LogTarget {
-	abstract logIt(ctx: Context, level: LogLevel, category: string, ...extra: unknown[]): void;
+	abstract logIt(level: LogLevel, category: string, ...extra: unknown[]): void;
 }
 
 export abstract class TelemetryLogSender {
-	abstract sendException(ctx: Context, error: unknown, origin: string): void;
+	abstract sendException(accessor: ServicesAccessor, error: unknown, origin: string): void;
 }
 
 export class Logger {
 	constructor(private readonly category: string) { }
 
-	private log(ctx: Context, level: LogLevel, ...extra: unknown[]) {
-		ctx.get(LogTarget).logIt(ctx, level, this.category, ...extra);
+	private log(logTarget: LogTarget, level: LogLevel, ...extra: unknown[]) {
+		logTarget.logIt(level, this.category, ...extra);
 	}
 
-	debug(ctx: Context, ...extra: unknown[]) {
-		this.log(ctx, LogLevel.DEBUG, ...extra);
+	debug(logTarget: LogTarget, ...extra: unknown[]) {
+		this.log(logTarget, LogLevel.DEBUG, ...extra);
 	}
 
-	info(ctx: Context, ...extra: unknown[]) {
-		this.log(ctx, LogLevel.INFO, ...extra);
+	info(logTarget: LogTarget, ...extra: unknown[]) {
+		this.log(logTarget, LogLevel.INFO, ...extra);
 	}
 
-	warn(ctx: Context, ...extra: unknown[]) {
-		this.log(ctx, LogLevel.WARN, ...extra);
+	warn(logTarget: LogTarget, ...extra: unknown[]) {
+		this.log(logTarget, LogLevel.WARN, ...extra);
 	}
 
 	/**
@@ -50,19 +51,19 @@ export class Logger {
 	 * error logging, which might not be associated with an exception. Prefer `exception()` when
 	 * logging exception details.
 	 */
-	error(ctx: Context, ...extra: unknown[]) {
-		this.log(ctx, LogLevel.ERROR, ...extra);
+	error(logTarget: LogTarget, ...extra: unknown[]) {
+		this.log(logTarget, LogLevel.ERROR, ...extra);
 	}
 
 	/**
 	 * Logs an error message and reports the exception to telemetry. Prefer this method over
 	 * `error()` when logging exception details.
 	 *
-	 * @param ctx The context
+	 * @param accessor The accessor
 	 * @param error The Error object that was thrown
 	 * @param message An optional message for context (e.g. "Request error"). Must not contain customer data. **Do not include stack trace or messages from the error object.**
 	 */
-	exception(ctx: Context, error: unknown, origin: string) {
+	exception(accessor: ServicesAccessor, error: unknown, origin: string) {
 		// ignore VS Code cancellations
 		if (error instanceof Error && error.name === 'Canceled' && error.message === 'Canceled') { return; }
 
@@ -72,10 +73,10 @@ export class Logger {
 			origin = `${this.category}${origin}`;
 		}
 
-		ctx.get(TelemetryLogSender).sendException(ctx, error, origin);
+		accessor.get(ICompletionsContextService).get(TelemetryLogSender).sendException(accessor, error, origin);
 
 		const safeError: Error = error instanceof Error ? error : new Error(`Non-error thrown: ${String(error)}`);
-		this.log(ctx, LogLevel.ERROR, `${message}:`, safeError);
+		this.log(accessor.get(ICompletionsContextService).get(LogTarget), LogLevel.ERROR, `${message}:`, safeError);
 	}
 }
 

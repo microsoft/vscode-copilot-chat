@@ -3,10 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { normalizeLanguageId, SimilarFileInfo } from '../../../../prompt/src/prompt';
 import { CancellationToken as ICancellationToken } from '../../../../types/src';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Features } from '../../experiments/features';
+import { LogTarget } from '../../logger';
 import { TelemetryWithExp } from '../../telemetry';
 import { TextDocumentManager } from '../../textDocumentManager';
 import { OpenTabFiles } from './openTabFiles';
@@ -78,7 +80,7 @@ export class NeighborSource {
 	}
 
 	static async getNeighborFilesAndTraits(
-		ctx: Context,
+		accessor: ServicesAccessor,
 		uri: string,
 		fileType: string,
 		telemetryData: TelemetryWithExp,
@@ -90,6 +92,9 @@ export class NeighborSource {
 		neighborSource: Map<NeighboringFileType, string[]>;
 		traits: RelatedFileTrait[];
 	}> {
+		const ctx = accessor.get(ICompletionsContextService);
+		const logTarget = ctx.get(LogTarget);
+		const instantiationService = accessor.get(IInstantiationService);
 		const docManager = ctx.get(TextDocumentManager);
 		if (NeighborSource.instance === undefined) {
 			NeighborSource.instance = new OpenTabFiles(docManager);
@@ -100,12 +105,11 @@ export class NeighborSource {
 			traits: [] as RelatedFileTrait[],
 		};
 
-		if (isExcludeRelatedFilesActive(ctx, telemetryData)) { return result; }
+		if (ctx.get(Features).excludeRelatedFiles(telemetryData)) { return result; }
 
 		const doc = await docManager.getTextDocument({ uri });
 		if (!doc) {
-			relatedFilesLogger.debug(
-				ctx,
+			relatedFilesLogger.debug(logTarget,
 				'neighborFiles.getNeighborFilesAndTraits',
 				`Failed to get the related files: failed to get the document ${uri}`
 			);
@@ -114,16 +118,14 @@ export class NeighborSource {
 
 		const wksFolder = docManager.getWorkspaceFolder(doc);
 		if (!wksFolder) {
-			relatedFilesLogger.debug(
-				ctx,
+			relatedFilesLogger.debug(logTarget,
 				'neighborFiles.getNeighborFilesAndTraits',
 				`Failed to get the related files: ${uri} is not under the workspace folder`
 			);
 			return result;
 		}
 
-		const relatedFiles = await getRelatedFilesAndTraits(
-			ctx,
+		const relatedFiles = await instantiationService.invokeFunction(getRelatedFilesAndTraits,
 			doc,
 			telemetryData,
 			cancellationToken,
@@ -132,8 +134,7 @@ export class NeighborSource {
 		);
 
 		if (relatedFiles.entries.size === 0) {
-			relatedFilesLogger.debug(
-				ctx,
+			relatedFilesLogger.debug(logTarget,
 				'neighborFiles.getNeighborFilesAndTraits',
 				`0 related files found for ${uri}`
 			);
@@ -186,10 +187,7 @@ export class NeighborSource {
 	}
 }
 
-function isExcludeRelatedFilesActive(ctx: Context, telemetryData: TelemetryWithExp): boolean {
-	return ctx.get(Features).excludeRelatedFiles(telemetryData);
-}
-
-export function isIncludeNeighborFilesActive(ctx: Context, telemetryData: TelemetryWithExp): boolean {
+export function isIncludeNeighborFilesActive(accessor: ServicesAccessor, telemetryData: TelemetryWithExp): boolean {
+	const ctx = accessor.get(ICompletionsContextService);
 	return ctx.get(Features).includeNeighboringFiles(telemetryData);
 }

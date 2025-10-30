@@ -114,10 +114,10 @@
 		]
 	},
 	"github.copilot.viewsWelcome.cloudSessionsEmpty.contents": {
-		"message": "[Start Cloud Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcloud-agent)",
+		"message": "[Start Cloud Agent Session](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)",
 		"comment": [
 			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilotcloud-agent)'}"
+			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)'}"
 		]
 	},
 	"github.copilot.viewsWelcome.noGitHub.contents": "Clone or open a GitHub repository to get started",
@@ -183,8 +183,6 @@
 	"github.copilot.config.alternateGptPrompt.enabled": "Enables an experimental alternate prompt for GPT models instead of the default prompt.",
 	"github.copilot.config.gpt5AlternatePrompt": "Specifies an experimental alternate prompt to use for GPT-5 models.",
 	"github.copilot.config.gpt5CodexAlternatePrompt": "Specifies an experimental alternate prompt to use for the GPT-5-Codex model.",
-	"github.copilot.config.grokCodeAlternatePrompt": "Specifies an experimental alternate prompt to use for Grok Code models.",
-	"github.copilot.config.claudeSonnet45AlternatePrompt": "Specifies an experimental alternate prompt to use for Claude Sonnet 4.5.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
 	"copilot.description": "Ask or edit in context",
 	"copilot.edits.description": "Edit files in your workspace",
@@ -347,6 +345,7 @@
 	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
 	"github.copilot.config.anthropic.thinking.enabled": "Enable extended thinking for Anthropic models that support it. \n\n **Note**: This is an experimental feature only supported in BYOK Anthropic models.",
 	"github.copilot.config.anthropic.thinking.maxTokens": "Maximum number of tokens to allocate for extended thinking in Anthropic models. Valid range is 1,024 to 32,000 tokens. Always capped at (max output tokens - 1).\n\n**Note**: This is an experimental feature only supported in BYOK Anthropic models.",
+	"github.copilot.config.anthropic.webSearchTool.enabled": "Enable Anthropic's native web search tool for BYOK Claude models. When enabled, allows Claude to search the web for current information. \n\n**Note**: This is an experimental feature only available for BYOK Anthropic Claude models.",
 	"github.copilot.config.completionsFetcher": "Sets the fetcher used for the inline completions.",
 	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions.",
 	"github.copilot.command.refreshAgentSessions": "Refresh Agent Sessions",

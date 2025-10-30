@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0-20251024",
+		"vscode": "^1.106.0-20251030",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -1189,53 +1189,9 @@
 				"fullName": "GitHub Copilot",
 				"description": "%copilot.edits.description%",
 				"isDefault": true,
-				"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
+				"when": "config.inlineChat.enableV2",
 				"locations": [
 					"editor"
-				],
-				"commands": [
-					{
-						"name": "fix",
-						"description": "%copilot.workspace.fix.description%",
-						"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
-						"disambiguation": [
-							{
-								"category": "fix",
-								"description": "Propose a fix for the problems in the selected code",
-								"examples": [
-									"There is a problem in this code. Rewrite the code to show it with the bug fixed."
-								]
-							}
-						]
-					},
-					{
-						"name": "tests",
-						"description": "%copilot.workspace.tests.description%",
-						"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
-						"disambiguation": [
-							{
-								"category": "tests",
-								"description": "Help writing tests for the selected code",
-								"examples": [
-									"Help me write tests for the selected code."
-								]
-							}
-						]
-					},
-					{
-						"name": "doc",
-						"description": "%copilot.workspace.doc.description%",
-						"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
-						"disambiguation": [
-							{
-								"category": "doc",
-								"description": "Add documentation comment for this symbol",
-								"examples": [
-									"Add jsdoc to this method"
-								]
-							}
-						]
-					}
 				]
 			},
 			{
@@ -1287,7 +1243,7 @@
 				"locations": [
 					"editor"
 				],
-				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"when": "!config.inlineChat.enableV2",
 				"disambiguation": [
 					{
 						"category": "unknown",
@@ -1679,6 +1635,7 @@
 			},
 			{
 				"vendor": "customoai",
+				"when": "productQualityType != 'stable'",
 				"displayName": "OpenAI Compatible",
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
@@ -2250,7 +2207,13 @@
 			{
 				"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
-			}
+			},
+			{
+                "command": "github.copilot.client.generate",
+                "title": "Open Completions Panel",
+                "enablement": "!isWeb",
+                "category": "GitHub Copilot"
+            }
 		],
 		"configuration": [
 			{
@@ -3097,22 +3060,6 @@
 						],
 						"description": "%github.copilot.config.gpt5AlternatePrompt%"
 					},
-					"github.copilot.chat.grokCodeAlternatePrompt": {
-						"type": "string",
-						"default": "default",
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.grokCodeAlternatePrompt%"
-					},
-					"github.copilot.chat.claudeSonnet45AlternatePrompt": {
-						"type": "string",
-						"default": "default",
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.claudeSonnet45AlternatePrompt%"
-					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
 						"default": true,
@@ -3168,6 +3115,15 @@
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.maxTokens%",
 						"minimum": 1024,
 						"maximum": 32000,
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.webSearchTool.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.anthropic.webSearchTool.enabled%",
 						"tags": [
 							"experimental",
 							"onExp"
@@ -4242,7 +4198,10 @@
 				],
 				"name": "cloud",
 				"displayName": "GitHub Copilot Cloud Agent",
-				"icon": "$(cloud)",
+				"icon": {
+					"light": "assets/copilot-cloud.svg",
+					"dark": "assets/copilot-cloud-dark.svg"
+				},
 				"welcomeTitle": "GitHub Copilot Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
@@ -4412,7 +4371,7 @@
 		"openai": "^5.11.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
-		"playwright": "^1.54.0",
+		"playwright": "^1.56.1",
 		"prettier": "^3.6.2",
 		"react": "^17.0.2",
 		"react-dom": "17.0.2",

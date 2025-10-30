@@ -2,26 +2,29 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { Value } from '@sinclair/typebox/value';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CitationManager } from '../citationManager';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
+import { TextDocumentManager } from '../textDocumentManager';
 import * as Snippy from './';
 import * as SnippyCompute from './compute';
 import { codeReferenceLogger } from './logger';
 import { MatchError } from './snippy.proto';
 import { snippyTelemetry } from './telemetryHandlers';
-import { TextDocumentManager } from '../textDocumentManager';
-import { Value } from '@sinclair/typebox/value';
+import { LogTarget } from '../logger';
 
 function isError(payload: unknown): payload is MatchError {
 	return Value.Check(MatchError, payload);
 }
 
-async function snippyRequest<T>(ctx: Context, requestFn: () => T): Promise<ReturnType<typeof requestFn> | undefined> {
+async function snippyRequest<T>(accessor: ServicesAccessor, requestFn: () => T): Promise<ReturnType<typeof requestFn> | undefined> {
+	const instantiationService = accessor.get(IInstantiationService);
 	const res = await requestFn();
 
 	if (isError(res)) {
 		snippyTelemetry.handleSnippyNetworkError({
-			context: ctx,
+			instantiationService,
 			origin: String(res.code),
 			reason: res.reason,
 			message: res.msg,
@@ -37,13 +40,16 @@ function isMatchError<T extends object>(response: T | MatchError): response is M
 	return 'kind' in response && response.kind === 'failure';
 }
 
-export async function fetchCitations(ctx: Context, uri: string, completionText: string, insertionOffset: number) {
+export async function fetchCitations(accessor: ServicesAccessor, uri: string, completionText: string, insertionOffset: number) {
+	const ctx = accessor.get(ICompletionsContextService);
+	const instantiationService = accessor.get(IInstantiationService);
+	const logTarget = ctx.get(LogTarget);
 	const documentManager = ctx.get(TextDocumentManager);
 	const insertionDoc = await documentManager.getTextDocument({ uri });
 
 	// If the match occurred in a file that no longer exists, bail.
 	if (!insertionDoc) {
-		codeReferenceLogger.debug(ctx, `Expected document matching ${uri}, got nothing.`);
+		codeReferenceLogger.debug(logTarget, `Expected document matching ${uri}, got nothing.`);
 		return;
 	}
 
@@ -81,20 +87,20 @@ export async function fetchCitations(ctx: Context, uri: string, completionText: 
 		return;
 	}
 
-	const matchResponse = await snippyRequest(ctx, () => Snippy.Match(ctx, potentialMatchContext));
+	const matchResponse = await instantiationService.invokeFunction(acc => snippyRequest(acc, () => Snippy.Match(acc, potentialMatchContext)));
 
 	if (!matchResponse || isMatchError(matchResponse) || !matchResponse.snippets.length) {
 		// No match response from Snippy
-		codeReferenceLogger.info(ctx, 'No match found');
+		codeReferenceLogger.info(logTarget, 'No match found');
 		return;
 	}
 
-	codeReferenceLogger.info(ctx, 'Match found');
+	codeReferenceLogger.info(logTarget, 'Match found');
 
 	const { snippets } = matchResponse;
 
 	const citationPromises = snippets.map(async snippet => {
-		const response = await snippyRequest(ctx, () => Snippy.FilesForMatch(ctx, { cursor: snippet.cursor }));
+		const response = await instantiationService.invokeFunction(acc => snippyRequest(acc, () => Snippy.FilesForMatch(acc, { cursor: snippet.cursor })));
 
 		if (!response || isMatchError(response)) {
 			return;
@@ -132,7 +138,7 @@ export async function fetchCitations(ctx: Context, uri: string, completionText: 
 
 		const start = insertionDoc.positionAt(offsetStart);
 		const end = insertionDoc.positionAt(offsetEnd);
-		await ctx.get(CitationManager).handleIPCodeCitation(ctx, {
+		await ctx.get(CitationManager).handleIPCodeCitation({
 			inDocumentUri: uri,
 			offsetStart,
 			offsetEnd,

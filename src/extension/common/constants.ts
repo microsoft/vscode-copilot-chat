@@ -13,6 +13,7 @@ export const enum Intent {
 	New = 'new',
 	NewNotebook = 'newNotebook',
 	notebookEditor = 'notebookEditor',
+	InlineChat = 'inlineChat',
 	Search = 'search',
 	SemanticSearch = 'semanticSearch',
 	Terminal = 'terminal',

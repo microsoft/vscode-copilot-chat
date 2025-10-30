@@ -706,7 +706,7 @@ export namespace ConfigKey {
 		export const InlineEditsXtabCodexV21NesUnified = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.codexv21nesUnified', false, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabMaxMergeConflictLines = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.maxMergeConflictLines', undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabOnlyMergeConflictLines = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.onlyMergeConflictLines', false, INTERNAL_RESTRICTED);
-		export const InlineEditsUndoInsertionFilteringEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.undoInsertionFilteringEnabled', true, INTERNAL_RESTRICTED);
+		export const InlineEditsUndoInsertionFiltering = defineExpSetting<'v1' | 'v2' | undefined>('chat.advanced.inlineEdits.undoInsertionFiltering', 'v1', INTERNAL_RESTRICTED);
 		export const InlineEditsDiagnosticsExplorationEnabled = defineSetting<boolean | undefined>('chat.advanced.inlineEdits.inlineEditsDiagnosticsExplorationEnabled', false, INTERNAL_RESTRICTED);
 		export const EditSourceTrackingShowDecorations = defineSetting('chat.advanced.editSourceTracking.showDecorations', false, INTERNAL);
 		export const EditSourceTrackingShowStatusBar = defineSetting('chat.advanced.editSourceTracking.showStatusBar', false, INTERNAL);
@@ -757,9 +757,11 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningSummary = defineExpSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', 'detailed');
 	export const EnableChatImageUpload = defineExpSetting<boolean>('chat.imageUpload.enabled', true);
 	/** Enable extended thinking for Anthropic models that support it */
-	export const EnableAnthropicThinking = defineExpSetting<boolean>('chat.anthropic.thinking.enabled', false);
+	export const AnthropicThinkingEnabled = defineExpSetting<boolean>('chat.anthropic.thinking.enabled', false);
 	/** Maximum thinking tokens for Anthropic extended thinking. If set, overrides the default calculation. */
 	export const MaxAnthropicThinkingTokens = defineSetting<number | null>('chat.anthropic.thinking.maxTokens', null);
+	/** Enable Anthropic web search tool for BYOK Claude models */
+	export const AnthropicWebSearchToolEnabled = defineExpSetting<boolean>('chat.anthropic.webSearchTool.enabled', false);
 
 	/** Add context from recently used files */
 	export const TemporalContextInlineChatEnabled = defineExpSetting<boolean>('chat.editor.temporalContext.enabled', false);
@@ -814,8 +816,6 @@ export namespace ConfigKey {
 
 	export const EnableAlternateGptPrompt = defineExpSetting<boolean>('chat.alternateGptPrompt.enabled', false);
 	export const Gpt5AlternatePrompt = defineExpSetting<string>('chat.gpt5AlternatePrompt', 'default');
-	export const GrokCodeAlternatePrompt = defineExpSetting<string>('chat.grokCodeAlternatePrompt', 'default');
-	export const ClaudeSonnet45AlternatePrompt = defineExpSetting<string>('chat.claudeSonnet45AlternatePrompt', 'default');
 
 	export const CompletionsFetcher = defineExpSetting<FetcherId | undefined>('chat.completionsFetcher', undefined);
 	export const NextEditSuggestionsFetcher = defineExpSetting<FetcherId | undefined>('chat.nesFetcher', undefined);

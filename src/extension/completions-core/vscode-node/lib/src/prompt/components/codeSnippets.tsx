@@ -6,7 +6,7 @@
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
 
 import { Chunk, ComponentContext, PromptElementProps, Text } from '../../../../prompt/src/components/components';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import {
 	CompletionRequestDocument,
 	isCompletionRequestData,
@@ -15,7 +15,7 @@ import { addRelativePathToCodeSnippets, CodeSnippetWithRelativePath } from '../c
 import { CodeSnippetWithId } from '../contextProviders/contextItemSchemas';
 
 type CodeSnippetsProps = {
-	ctx: Context;
+	ctx: ICompletionsContextService;
 } & PromptElementProps;
 
 export const CodeSnippets = (props: CodeSnippetsProps, context: ComponentContext) => {

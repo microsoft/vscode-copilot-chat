@@ -3,25 +3,26 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert';
-import { Disposable, TextEditor, commands } from 'vscode';
-import { citationsChannelName, GitHubCopilotLogger } from '../outputChannel';
-import { Context } from '../../../../lib/src/context';
+import { commands, Disposable, TextEditor } from 'vscode';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { withInMemoryTelemetry } from '../../../../lib/src/test/telemetry';
-import { CodeRefEngagementTracker } from '../codeReferenceEngagementTracker';
 import { createExtensionTestingContext } from '../../test/context';
+import { CodeRefEngagementTracker } from '../codeReferenceEngagementTracker';
+import { citationsChannelName, GitHubCopilotLogger } from '../outputChannel';
 
 suite('CodeReferenceEngagementTracker', function () {
 	let logger: GitHubCopilotLogger;
 	let commandRegistration: Disposable;
 	let engagementTracker: CodeRefEngagementTracker;
-	let ctx: Context;
+	let accessor: ServicesAccessor;
 
 	setup(function () {
-		ctx = createExtensionTestingContext();
-		logger = GitHubCopilotLogger.create(ctx);
+		accessor = createExtensionTestingContext();
+		const instaService = accessor.get(IInstantiationService);
+		logger = instaService.createInstance(GitHubCopilotLogger);
 		commandRegistration = commands.registerCommand('test.show', () => logger.forceShow());
 
-		engagementTracker = new CodeRefEngagementTracker(ctx);
+		engagementTracker = instaService.createInstance(CodeRefEngagementTracker);
 		engagementTracker.register();
 	});
 
@@ -32,7 +33,7 @@ suite('CodeReferenceEngagementTracker', function () {
 	});
 
 	test('sends a telemetry event when the output channel is focused', async function () {
-		const telemetry = await withInMemoryTelemetry(ctx, (ctx: Context) => {
+		const telemetry = await withInMemoryTelemetry(accessor, () => {
 			engagementTracker.onActiveEditorChange({
 				document: { uri: { scheme: 'output', path: citationsChannelName } },
 			} as TextEditor);
@@ -43,7 +44,7 @@ suite('CodeReferenceEngagementTracker', function () {
 	});
 
 	test('sends a telemetry event when the output channel is opened', async function () {
-		const telemetry = await withInMemoryTelemetry(ctx, (ctx: Context) => {
+		const telemetry = await withInMemoryTelemetry(accessor, () => {
 			engagementTracker.onVisibleEditorsChange([
 				{
 					document: { uri: { scheme: 'output', path: citationsChannelName } },
@@ -56,7 +57,7 @@ suite('CodeReferenceEngagementTracker', function () {
 	});
 
 	test('does not send a telemetry event when the output channel is already opened', async function () {
-		const telemetry = await withInMemoryTelemetry(ctx, (ctx: Context) => {
+		const telemetry = await withInMemoryTelemetry(accessor, () => {
 			engagementTracker.onVisibleEditorsChange([
 				{
 					document: { uri: { scheme: 'output', path: citationsChannelName } },
@@ -76,7 +77,7 @@ suite('CodeReferenceEngagementTracker', function () {
 	});
 
 	test('tracks when the log closes internally', async function () {
-		const telemetry = await withInMemoryTelemetry(ctx, (ctx: Context) => {
+		const telemetry = await withInMemoryTelemetry(accessor, () => {
 			engagementTracker.onVisibleEditorsChange([
 				{
 					document: { uri: { scheme: 'output', path: citationsChannelName } },

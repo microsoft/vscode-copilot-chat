@@ -3,18 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../context';
-import { logger } from '../../logger';
-import { ResolvedContextItem } from '../contextProviderRegistry';
+import { Type } from '@sinclair/typebox';
+import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler';
+import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	CodeSnippet,
 	SupportedContextItem,
 	SupportedContextItemType,
 	Trait,
 } from '../../../../types/src';
-import { Type } from '@sinclair/typebox';
-import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler';
-import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { logger, LogTarget } from '../../logger';
+import { ResolvedContextItem } from '../contextProviderRegistry';
+import { ICompletionsContextService } from '../../context';
 
 /**
  * Redefine all the types from contextProviderV1 as typebox schema and verify equality.
@@ -124,22 +125,23 @@ function validateContextItemId(id: string): boolean {
  * and worsen the user experience.
  */
 export function addOrValidateContextItemsIDs(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	contextItems: SupportedContextItemWithType[]
 ): SupportedContextItemWithId[] {
 	const seenIds = new Set<string>();
+	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
 
 	const contextItemsWithId: SupportedContextItemWithId[] = [];
 	for (const item of contextItems) {
 		let id = item.id ?? generateUuid();
 		if (!validateContextItemId(id)) {
 			const newID = generateUuid();
-			logger.error(ctx, `Invalid context item ID ${id}, replacing with ${newID}`);
+			logger.error(logTarget, `Invalid context item ID ${id}, replacing with ${newID}`);
 			id = newID;
 		}
 		if (seenIds.has(id)) {
 			const newID = generateUuid();
-			logger.error(ctx, `Duplicate context item ID ${id}, replacing with ${newID}`);
+			logger.error(logTarget, `Duplicate context item ID ${id}, replacing with ${newID}`);
 			id = newID;
 		}
 		seenIds.add(id);

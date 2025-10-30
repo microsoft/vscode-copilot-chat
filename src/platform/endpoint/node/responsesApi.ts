@@ -182,6 +182,16 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 	const messages: Raw.ChatMessage[] = [];
 	const pendingFunctionCalls: Raw.ChatMessageToolCall[] = [];
 
+	const flushPendingFunctionCalls = () => {
+		if (pendingFunctionCalls.length > 0) {
+			messages.push({
+				role: Raw.ChatRole.Assistant,
+				content: [],
+				toolCalls: pendingFunctionCalls.splice(0)
+			});
+		}
+	};
+
 	// Add system instructions if provided
 	if (body.instructions) {
 		messages.push({
@@ -198,14 +208,7 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 		if ('role' in item) {
 			switch (item.role) {
 				case 'user':
-					// Flush any pending function calls before adding a user message
-					if (pendingFunctionCalls.length > 0) {
-						messages.push({
-							role: Raw.ChatRole.Assistant,
-							content: [],
-							toolCalls: pendingFunctionCalls.splice(0)
-						});
-					}
+					flushPendingFunctionCalls();
 					messages.push({
 						role: Raw.ChatRole.User,
 						content: ensureContentArray(item.content).map(responseContentToRawContent).filter(isDefined)
@@ -213,30 +216,14 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 					break;
 				case 'system':
 				case 'developer':
-					// Flush any pending function calls before adding a system message
-					if (pendingFunctionCalls.length > 0) {
-						messages.push({
-							role: Raw.ChatRole.Assistant,
-							content: [],
-							toolCalls: pendingFunctionCalls.splice(0)
-						});
-					}
+					flushPendingFunctionCalls();
 					messages.push({
 						role: Raw.ChatRole.System,
 						content: ensureContentArray(item.content).map(responseContentToRawContent).filter(isDefined)
 					});
 					break;
 				case 'assistant':
-					// Flush any pending function calls before adding an assistant message
-					if (pendingFunctionCalls.length > 0) {
-						messages.push({
-							role: Raw.ChatRole.Assistant,
-							content: [],
-							toolCalls: pendingFunctionCalls.splice(0)
-						});
-					}
-
-					// This is a response output message
+					flushPendingFunctionCalls();
 					if (isResponseOutputMessage(item)) {
 						messages.push({
 							role: Raw.ChatRole.Assistant,
@@ -265,6 +252,7 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 					});
 					break;
 				case 'function_call_output':
+					flushPendingFunctionCalls();
 					messages.push({
 						role: Raw.ChatRole.Tool,
 						content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: item.output }],
@@ -274,11 +262,12 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 				case 'reasoning':
 					// We can't perfectly reconstruct the original thinking data
 					// but we can add a placeholder for logging
+					flushPendingFunctionCalls();
 					messages.push({
 						role: Raw.ChatRole.Assistant,
 						content: [{
-							type: Raw.ChatCompletionContentPartKind.Opaque,
-							value: `[Reasoning Data - ID: ${item.id}]`
+							type: Raw.ChatCompletionContentPartKind.Text,
+							text: `Reasoning summary: ${item.summary.map(s => s.text).join('\n\n')}`
 						}]
 					});
 					break;

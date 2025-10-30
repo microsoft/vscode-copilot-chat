@@ -3,25 +3,27 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../context';
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../../context';
+import { TelemetryWithExp } from '../../telemetry';
 import {
 	RelatedFilesDocumentInfo,
 	RelatedFilesProvider,
 	RelatedFilesResponse,
 	RelatedFileTrait,
 } from '../similarFiles/relatedFiles';
-import { TelemetryWithExp } from '../../telemetry';
 
 export class MockTraitsProvider extends RelatedFilesProvider {
 	constructor(
-		context: Context,
 		private readonly traits: RelatedFileTrait[] = [
 			{ name: 'testTraitName', value: 'testTraitValue' },
 			{ name: 'TargetFrameworks', value: 'net8' },
 			{ name: 'LanguageVersion', value: '12' },
-		]
+		],
+		@ICompletionsContextService context: ICompletionsContextService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
-		super(context);
+		super(context, instantiationService);
 	}
 
 	async getRelatedFilesResponse(

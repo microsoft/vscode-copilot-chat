@@ -6,20 +6,20 @@ import { env, UIKind } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
 import { VSCodeWorkspace } from '../../inlineEdits/vscode-node/parts/vscodeWorkspace';
 import { CompletionsAuthenticationServiceBridge } from './bridge/src/completionsAuthenticationServiceBridge';
 import { CompletionsCapiBridge } from './bridge/src/completionsCapiBridge';
 import { CompletionsEndpointProviderBridge } from './bridge/src/completionsEndpointProviderBridge';
 import { CompletionsExperimentationServiceBridge } from './bridge/src/completionsExperimentationServiceBridge';
 import { CompletionsIgnoreServiceBridge } from './bridge/src/completionsIgnoreServiceBridge';
-import { CompletionsTelemetryServiceBridge } from './bridge/src/completionsTelemetryServiceBridge';
+import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from './bridge/src/completionsTelemetryServiceBridge';
 import { CodeReference } from './extension/src/codeReferencing';
 import { LoggingCitationManager } from './extension/src/codeReferencing/citationManager';
 import { VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
@@ -30,12 +30,12 @@ import { extensionFileSystem } from './extension/src/fileSystem';
 import { registerGhostTextDependencies } from './extension/src/ghostText/ghostText';
 import { CopilotStatusBar } from './extension/src/statusBar';
 import { ExtensionTextDocumentManager } from './extension/src/textDocumentManager';
-import { CopilotTokenManager } from './lib/src/auth/copilotTokenManager';
+import { CopilotTokenManager, CopilotTokenManagerImpl } from './lib/src/auth/copilotTokenManager';
 import { CitationManager } from './lib/src/citationManager';
 import { CompletionNotifier } from './lib/src/completionNotifier';
-import { BuildInfo, ConfigProvider, EditorAndPluginInfo, EditorSession } from './lib/src/config';
+import { BuildInfo, ConfigProvider, EditorAndPluginInfo, EditorSession, ICompletionsBuildInfoService, ICompletionsEditorSessionService } from './lib/src/config';
 import { CopilotContentExclusionManager } from './lib/src/contentExclusion/contentExclusionManager';
-import { Context } from './lib/src/context';
+import { Context, ICompletionsContextService } from './lib/src/context';
 import { registerDocumentTracker } from './lib/src/documentTracker';
 import { UserErrorNotifier } from './lib/src/error/userErrorNotifier';
 import { setupCompletionsExperimentationService } from './lib/src/experiments/defaultExpFilters';
@@ -75,59 +75,92 @@ import { RelatedFilesProvider } from './lib/src/prompt/similarFiles/relatedFiles
 import { TelemetryUserConfig } from './lib/src/telemetry';
 import { TextDocumentManager } from './lib/src/textDocumentManager';
 import { UrlOpener } from './lib/src/util/opener';
-import { PromiseQueue } from './lib/src/util/promiseQueue';
-import { RuntimeMode } from './lib/src/util/runtimeMode';
+import { ICompletionsPromiseQueueService, PromiseQueue } from './lib/src/util/promiseQueue';
+import { ICompletionsRuntimeModeService, RuntimeMode } from './lib/src/util/runtimeMode';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 
 const bridges: any[] = [];
 
 bridges.push(CompletionsIgnoreServiceBridge);
-bridges.push(CompletionsTelemetryServiceBridge);
 bridges.push(CompletionsExperimentationServiceBridge);
 bridges.push(CompletionsAuthenticationServiceBridge);
 bridges.push(CompletionsEndpointProviderBridge);
 bridges.push(CompletionsCapiBridge);
 
 /** @public */
-export function createContext(serviceAccessor: ServicesAccessor): Context {
-	const instaService = serviceAccessor.get(IInstantiationService);
+export function createContext(serviceAccessor: ServicesAccessor): IInstantiationService {
 	const logService = serviceAccessor.get(ILogService);
 	const fetcherService = serviceAccessor.get(IFetcherService);
-	const registryService = serviceAccessor.get(ILanguageContextProviderService);
 	const extensionContext = serviceAccessor.get(IVSCodeExtensionContext);
 	const configurationService = serviceAccessor.get(IConfigurationService);
 	const experimentationService = serviceAccessor.get(IExperimentationService);
 
+	const serviceCollection = new ServiceCollection();
+
 	const ctx = new Context();
+	serviceCollection.set(ICompletionsContextService, ctx);
+
+	ctx.set(LogTarget, new class extends LogTarget {
+		override logIt(level: LogLevel, category: string, ...extra: unknown[]): void {
+			const msg = formatLogMessage(category, ...extra);
+			switch (level) {
+				case LogLevel.DEBUG: return logService.debug(msg);
+				case LogLevel.INFO: return logService.info(msg);
+				case LogLevel.WARN: return logService.warn(msg);
+				case LogLevel.ERROR: return logService.error(msg);
+			}
+		}
+	});
+
+	const runtimeMode = RuntimeMode.fromEnvironment(false);
+	ctx.set(RuntimeMode, runtimeMode);
+	serviceCollection.set(ICompletionsRuntimeModeService, runtimeMode);
+
+	const buildInfo = new BuildInfo();
+	ctx.set(BuildInfo, buildInfo);
+	serviceCollection.set(ICompletionsBuildInfoService, buildInfo);
+
+	const editorSession = new EditorSession(env.sessionId, env.machineId, env.remoteName, uiKindToString(env.uiKind));
+	ctx.set(EditorSession, editorSession);
+	serviceCollection.set(ICompletionsEditorSessionService, editorSession);
+
+	const completionsTelemetryService = new CompletionsTelemetryServiceBridge(serviceAccessor.get(ITelemetryService));
+	serviceCollection.set(ICompletionsTelemetryService, completionsTelemetryService);
+	ctx.set(CompletionsTelemetryServiceBridge, completionsTelemetryService);
+
+	const promiseQueue = new PromiseQueue();
+	ctx.set(PromiseQueue, promiseQueue);
+	serviceCollection.set(ICompletionsPromiseQueueService, promiseQueue);
+
+	const instantiationService = serviceAccessor.get(IInstantiationService).createChild(serviceCollection);
+	ctx.setInstantiationService(instantiationService);
 
 	// Bridges
 	for (const bridge of bridges) {
-		ctx.set(bridge, instaService.createInstance(bridge));
+		ctx.set(bridge, instantiationService.createInstance(bridge));
 	}
 
 	ctx.set(Extension, new Extension(extensionContext));
 	ctx.set(ConfigProvider, new VSCodeConfigProvider());
-	ctx.set(CopilotContentExclusionManager, new CopilotContentExclusionManager(ctx));
-	ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(false));
-	ctx.set(BuildInfo, new BuildInfo());
+	ctx.set(CopilotContentExclusionManager, instantiationService.createInstance(CopilotContentExclusionManager));
 	ctx.set(CompletionsCache, new CompletionsCache());
-	ctx.set(Features, new Features(ctx));
+	ctx.set(Features, instantiationService.createInstance(Features));
 	ctx.set(TelemetryLogSender, new TelemetryLogSenderImpl());
-	ctx.set(TelemetryUserConfig, new TelemetryUserConfig(ctx));
+	ctx.set(TelemetryUserConfig, instantiationService.createInstance(TelemetryUserConfig));
 	ctx.set(UserErrorNotifier, new UserErrorNotifier());
-	ctx.set(OpenAIFetcher, new LiveOpenAIFetcher());
+	ctx.set(OpenAIFetcher, new LiveOpenAIFetcher(instantiationService, ctx, runtimeMode));
 	ctx.set(BlockModeConfig, new ConfigBlockModeConfig());
-	ctx.set(PromiseQueue, new PromiseQueue());
-	ctx.set(CompletionNotifier, new CompletionNotifier(ctx));
-	ctx.set(FileReader, new FileReader(ctx));
+	ctx.set(CompletionNotifier, instantiationService.createInstance(CompletionNotifier));
+	ctx.set(FileReader, instantiationService.createInstance(FileReader));
 	try {
-		ctx.set(CompletionsPromptFactory, createCompletionsPromptFactory(ctx));
+		ctx.set(CompletionsPromptFactory, createCompletionsPromptFactory(instantiationService));
 	} catch (e) {
 		console.log(e);
 	}
 	ctx.set(LastGhostText, new LastGhostText());
 	ctx.set(CurrentGhostText, new CurrentGhostText());
-	ctx.set(AvailableModelsManager, new AvailableModelsManager(ctx));
-	ctx.set(AsyncCompletionManager, new AsyncCompletionManager(ctx));
+	ctx.set(AvailableModelsManager, instantiationService.createInstance(AvailableModelsManager, true));
+	ctx.set(AsyncCompletionManager, instantiationService.createInstance(AsyncCompletionManager));
 	ctx.set(SpeculativeRequestCache, new SpeculativeRequestCache());
 
 	ctx.set(Fetcher, new class extends Fetcher {
@@ -145,18 +178,17 @@ export function createContext(serviceAccessor: ServicesAccessor): Context {
 
 	ctx.set(NotificationSender, new ExtensionNotificationSender());
 	ctx.set(EditorAndPluginInfo, new VSCodeEditorInfo());
-	ctx.set(EditorSession, new EditorSession(env.sessionId, env.machineId, env.remoteName, uiKindToString(env.uiKind)));
 	ctx.set(CopilotExtensionStatus, new CopilotExtensionStatus());
-	ctx.set(CopilotTokenManager, new CopilotTokenManager(ctx));
-	ctx.set(StatusReporter, new CopilotStatusBar(ctx));
-	ctx.set(TextDocumentManager, new ExtensionTextDocumentManager(ctx));
-	ctx.set(ObservableWorkspace, instaService.createInstance(VSCodeWorkspace));
-	ctx.set(RecentEditsProvider, new FullRecentEditsProvider(ctx));
+	ctx.set(CopilotTokenManager, instantiationService.createInstance(CopilotTokenManagerImpl, false));
+	ctx.set(StatusReporter, instantiationService.createInstance(CopilotStatusBar, 'github.copilot.languageStatus'));
+	ctx.set(TextDocumentManager, instantiationService.createInstance(ExtensionTextDocumentManager));
+	ctx.set(ObservableWorkspace, instantiationService.createInstance(VSCodeWorkspace));
+	ctx.set(RecentEditsProvider, instantiationService.createInstance(FullRecentEditsProvider, undefined));
 	ctx.set(FileSystem, extensionFileSystem);
-	ctx.set(RelatedFilesProvider, new CompositeRelatedFilesProvider(ctx));
+	ctx.set(RelatedFilesProvider, instantiationService.createInstance(CompositeRelatedFilesProvider));
 	ctx.set(ContextProviderStatistics, new ContextProviderStatistics());
-	ctx.set(ContextProviderRegistry, getContextProviderRegistry(ctx, contextProviderMatch, registryService));
-	ctx.set(ContextProviderBridge, new ContextProviderBridge(ctx));
+	ctx.set(ContextProviderRegistry, getContextProviderRegistry(instantiationService, contextProviderMatch));
+	ctx.set(ContextProviderBridge, instantiationService.createInstance(ContextProviderBridge));
 	ctx.set(DefaultContextProviders, new DefaultContextProvidersContainer());
 	ctx.set(ForceMultiLine, ForceMultiLine.default);
 	ctx.set(UrlOpener, new class extends UrlOpener {
@@ -165,47 +197,37 @@ export function createContext(serviceAccessor: ServicesAccessor): Context {
 		}
 	});
 
-	ctx.set(LogTarget, new class extends LogTarget {
-		override logIt(ctx: Context, level: LogLevel, category: string, ...extra: unknown[]): void {
-			const msg = formatLogMessage(category, ...extra);
-			switch (level) {
-				case LogLevel.DEBUG: return logService.debug(msg);
-				case LogLevel.INFO: return logService.info(msg);
-				case LogLevel.WARN: return logService.warn(msg);
-				case LogLevel.ERROR: return logService.error(msg);
-			}
-		}
-	});
-
-	return ctx;
+	return instantiationService;
 }
 
 /** @public */
-export function setup(ctx: Context): IDisposable {
+export function setup(serviceAccessor: ServicesAccessor): IDisposable {
 	const disposables = new DisposableStore();
+	const instantiationService = serviceAccessor.get(IInstantiationService);
+	const ctx = serviceAccessor.get(ICompletionsContextService);
 
 	// This must be registered before activation!
 	// CodeQuote needs to listen for the initial token notification event.
-	const codeReference = new CodeReference(ctx);
-	ctx.set(CitationManager, new LoggingCitationManager(codeReference));
+	const codeReference = instantiationService.createInstance(CodeReference);
+	ctx.set(CitationManager, new LoggingCitationManager(codeReference, instantiationService));
 	disposables.add(codeReference.register());
 
 	// Send telemetry when ghost text is accepted
-	disposables.add(registerGhostTextDependencies(ctx));
+	disposables.add(registerGhostTextDependencies(serviceAccessor));
 
 	// Register to listen for changes to the active document to keep track
 	// of last access time
-	disposables.add(registerDocumentTracker(ctx));
+	disposables.add(registerDocumentTracker(serviceAccessor));
 
 	// Register the context providers enabled by default.
 	ctx.get(DefaultContextProviders).add('ms-vscode.cpptools');
 
-	disposables.add(setupCompletionsExperimentationService(ctx));
+	disposables.add(setupCompletionsExperimentationService(serviceAccessor));
 
 	return disposables;
 }
 
-function uiKindToString(uiKind: UIKind): string {
+function uiKindToString(uiKind: UIKind): 'desktop' | 'web' {
 	switch (uiKind) {
 		case UIKind.Desktop:
 			return 'desktop';

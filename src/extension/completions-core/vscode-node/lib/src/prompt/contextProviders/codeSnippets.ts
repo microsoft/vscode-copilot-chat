@@ -3,12 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../context';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../../context';
+import { TextDocumentValidation } from '../../textDocument';
+import { TextDocumentManager } from '../../textDocumentManager';
 import { ResolvedContextItem } from '../contextProviderRegistry';
 import { ContextProviderStatistics, PromptExpectation } from '../contextProviderStatistics';
 import { CodeSnippetWithId, filterContextItemsByType } from './contextItemSchemas';
-import { TextDocumentValidation } from '../../textDocument';
-import { TextDocumentManager } from '../../textDocumentManager';
 
 const CONTENT_EXCLUDED_EXPECTATION: PromptExpectation = 'content_excluded';
 
@@ -18,7 +19,7 @@ type SnippetWithProviderInfo = {
 };
 
 export async function getCodeSnippetsFromContextItems(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	completionId: string,
 	resolvedContextItems: ResolvedContextItem[],
 	languageId: string
@@ -40,6 +41,7 @@ export async function getCodeSnippetsFromContextItems(
 	);
 
 	// Validate all URIs at once: we already know they are distinct
+	const ctx = accessor.get(ICompletionsContextService);
 	const tdm = ctx.get(TextDocumentManager);
 	const validationMap = new Map<string, TextDocumentValidation>();
 	await Promise.all(
@@ -70,7 +72,7 @@ export async function getCodeSnippetsFromContextItems(
 export type CodeSnippetWithRelativePath = { snippet: CodeSnippetWithId; relativePath?: string };
 
 export function addRelativePathToCodeSnippets(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	codeSnippets: CodeSnippetWithId[]
 ): CodeSnippetWithRelativePath[] {
 	const tdm = ctx.get(TextDocumentManager);

@@ -3,27 +3,31 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
-import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
-import { BlockMode } from '../config';
-import { Context } from '../context';
-import { ExpConfig, ExpTreatmentVariables, ExpTreatmentVariableValue } from './expConfig';
-import { Filter, FilterSettings } from './filters';
-import { TelemetryData, TelemetryWithExp } from '../telemetry';
 import {
 	DEFAULT_MAX_COMPLETION_LENGTH,
 	DEFAULT_MAX_PROMPT_LENGTH,
 	DEFAULT_PROMPT_ALLOCATION_PERCENT,
 	DEFAULT_SUFFIX_MATCH_THRESHOLD
 } from '../../../prompt/src/prompt';
+import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
+import { BlockMode } from '../config';
+import { ICompletionsContextService } from '../context';
+import { TelemetryData, TelemetryWithExp } from '../telemetry';
 import { createCompletionsFilters } from './defaultExpFilters';
+import { ExpConfig, ExpTreatmentVariables, ExpTreatmentVariableValue } from './expConfig';
+import { Filter, FilterSettings } from './filters';
 
 type CompletionsFiltersInfo = { uri: string; languageId: string };
 
 /** General-purpose API for accessing ExP variable values. */
 export class Features {
 
-	constructor(private readonly ctx: Context) { }
+	constructor(
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) { }
 
 	/**
 	 * Central logic for obtaining the assignments of treatment groups
@@ -71,6 +75,17 @@ export class Features {
 		});
 	}
 
+	/**
+	 * Request a Copilot token and use that token to call updateExPValuesAndAssignments. Do NOT call this at startup.
+	 * Instead, register a onCopilotToken handler and use that token with updateExPValuesAndAssignments directly.
+	 */
+	async fetchTokenAndUpdateExPValuesAndAssignments(
+		filtersInfo?: CompletionsFiltersInfo,
+		telemetryData?: TelemetryData
+	) {
+		return await this.updateExPValuesAndAssignments(filtersInfo, telemetryData);
+	}
+
 	private createExpConfigAndFilters(token: CopilotToken) {
 		const expService = this.ctx.get(CompletionsExperimentationServiceBridge).experimentationService;
 
@@ -87,7 +102,7 @@ export class Features {
 			return name + (value ? '' : 'cf');
 		});
 		const exp = new ExpConfig(exp2, features.join(';'));
-		const filterMap = createCompletionsFilters(this.ctx, token);
+		const filterMap = this.instantiationService.invokeFunction(createCompletionsFilters, token);
 		const filterRecord: Partial<Record<Filter, string>> = {};
 		for (const [key, value] of filterMap.entries()) {
 			filterRecord[key] = value;
@@ -289,11 +304,7 @@ export class Features {
 	}
 
 	enablePromptContextProxyField(telemetryWithExp: TelemetryWithExp): boolean {
-		return (
-			(telemetryWithExp.filtersAndExp.exp.variables[
-				ExpTreatmentVariables.EnablePromptContextProxyField
-			] as boolean) ?? true // Exp is set to true to 100%
-		);
+		return true;
 	}
 
 	enableProgressiveReveal(telemetryWithExp: TelemetryWithExp): boolean {

@@ -3,17 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	CompletionRequestData,
 	CompletionRequestDocument,
 } from '../prompt/completionsPromptFactory/componentsCompletionsPromptFactory';
 import { CodeSnippetWithId, TraitWithId } from '../prompt/contextProviders/contextItemSchemas';
 import { TelemetryWithExp } from '../telemetry';
-import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
 
 export function createCompletionRequestData(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	doc: CompletionRequestDocument,
 	position: Position,
 	codeSnippets?: CodeSnippetWithId[],

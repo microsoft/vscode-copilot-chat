@@ -505,8 +505,29 @@ export class ChatSessionContentBuilder {
 		const buildBashDetails = (bashArgs: typeof args, contentStr: string): ParsedToolCallDetails => {
 			const command = bashArgs.command ? `$ ${bashArgs.command}` : undefined;
 			const bashContent = [command, contentStr].filter(Boolean).join('\n');
+
+			const MAX_CONTENT_LENGTH = 200;
+			let displayContent = bashContent;
+			if (bashContent && bashContent.length > MAX_CONTENT_LENGTH) {
+				// Check if content contains EOF marker (heredoc pattern)
+				const hasEOF = (bashContent && /<<\s*['"]?EOF['"]?/.test(bashContent));
+				if (hasEOF) {
+					// show the command line up to EOL
+					const firstLineEnd = bashContent.indexOf('\n');
+					if (firstLineEnd > 0) {
+						const firstLine = bashContent.substring(0, firstLineEnd);
+						const remainingChars = bashContent.length - firstLineEnd - 1;
+						displayContent = firstLine + `\n... [${remainingChars} characters of heredoc content]`;
+					} else {
+						displayContent = bashContent;
+					}
+				} else {
+					displayContent = bashContent.substring(0, MAX_CONTENT_LENGTH) + `\n... [${bashContent.length - MAX_CONTENT_LENGTH} more characters]`;
+				}
+			}
+
 			const details: ParsedToolCallDetails = { toolName: 'Run Bash command', invocationMessage: bashContent || 'Run Bash command' };
-			if (bashArgs.command) { details.toolSpecificData = { commandLine: { original: bashArgs.command }, language: 'bash' }; }
+			if (bashArgs.command) { details.toolSpecificData = { commandLine: { original: displayContent ?? '' }, language: 'bash' }; }
 			return details;
 		};
 

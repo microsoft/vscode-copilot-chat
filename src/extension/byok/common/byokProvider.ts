@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvider, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart } from 'vscode';
+import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvider, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { EndpointEditToolName, IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
@@ -30,7 +30,7 @@ interface BYOKBaseModelConfig {
 	capabilities?: BYOKModelCapabilities;
 }
 
-export type LMResponsePart = LanguageModelTextPart | LanguageModelToolCallPart | LanguageModelDataPart | LanguageModelThinkingPart;
+export type LMResponsePart = LanguageModelTextPart | LanguageModelToolCallPart | LanguageModelDataPart | LanguageModelThinkingPart | LanguageModelToolResultPart;
 
 export interface BYOKGlobalKeyModelConfig extends BYOKBaseModelConfig {
 	apiKey: string;

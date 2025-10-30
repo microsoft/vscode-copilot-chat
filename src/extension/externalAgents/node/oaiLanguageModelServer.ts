@@ -181,11 +181,19 @@ export class OpenAILanguageModelServer extends Disposable {
 				'vscode_codex'
 			);
 
+			let messagesForLogging: Raw.ChatMessage[] = [];
+			try {
+				// Don't fail based on any assumptions about the shape of the request
+				messagesForLogging = Array.isArray(requestBody.input) ?
+					responseApiInputToRawMessagesForLogging(requestBody) :
+					[];
+			} catch (e) {
+				this.exception(e, `Failed to parse messages for logging`);
+			}
+
 			await streamingEndpoint.makeChatRequest2({
 				debugName: 'oaiLMServer',
-				messages: Array.isArray(requestBody.input) ?
-					responseApiInputToRawMessagesForLogging(requestBody) :
-					[],
+				messages: messagesForLogging,
 				finishedCb: async () => undefined,
 				location: ChatLocation.ResponsesProxy,
 				userInitiatedRequest: isUserInitiatedMessage
@@ -256,6 +264,10 @@ export class OpenAILanguageModelServer extends Disposable {
 	private error(message: string): void {
 		const messageWithClassName = `[OpenAILanguageModelServer] ${message}`;
 		this.logService.error(messageWithClassName);
+	}
+
+	private exception(err: Error, message?: string): void {
+		this.logService.error(err, message);
 	}
 
 	private trace(message: string): void {

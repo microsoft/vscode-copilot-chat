@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { Context } from '../../context';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { asyncIterableToArray } from '../../helpers/iterableHelpers';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
@@ -106,10 +106,10 @@ suite('Copilot Annotations', function () {
 });
 
 suite('SSEProcessor', function () {
-	let ctx: Context;
+	let accessor: ServicesAccessor;
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
 	});
 
 	interface SimpleResult {
@@ -135,7 +135,7 @@ suite('SSEProcessor', function () {
 
 	test('empty response yields no results', async function () {
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(''),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -146,7 +146,7 @@ suite('SSEProcessor', function () {
 
 	test('done response yields no results', async function () {
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse('data: [DONE]\n'),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -157,7 +157,7 @@ suite('SSEProcessor', function () {
 
 	test('broken JSON response is skipped', async function () {
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse('data: {\n'),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -168,7 +168,7 @@ suite('SSEProcessor', function () {
 
 	test('empty JSON response is skipped', async function () {
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse('data: {}\n'),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -182,7 +182,7 @@ suite('SSEProcessor', function () {
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -201,7 +201,7 @@ data: [DONE]
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -215,7 +215,7 @@ data: [DONE]
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -236,7 +236,7 @@ data: [DONE]
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -257,7 +257,7 @@ data: [DONE]
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -277,7 +277,7 @@ data: [DONE]
 		const response = `data: {"choices":[{"text":"foo","index":0,"finish_reason":null}]}
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -297,7 +297,7 @@ data: [DONE]
 		const response = `data: {"choices":[{"delta":{"content":"foo"},"index":0,"finish_reason":null}]}
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -317,7 +317,7 @@ data: {"choices":[{"text":"bar","index":0,"finish_reason":"stop"}]}
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -337,7 +337,7 @@ data: {"choices":[{"delta":{"content":"bar"},"index":0,"finish_reason":"stop"}]}
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -357,7 +357,7 @@ data: {"choices":[{"text":"bar","index":0,"finish_reason":"stop","logprobs":{"to
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -372,7 +372,7 @@ data: {"choices":[{"delta":{"content":"bar"},"index":0,"finish_reason":"stop","l
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -387,7 +387,7 @@ data: {"choices":[{"text":"bar","index":0,"finish_reason":"stop","logprobs":{"to
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -403,7 +403,7 @@ data: {"choices":[{"delta":{"content":"bar"},"index":0,"finish_reason":"stop", "
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -419,7 +419,7 @@ data: {"choices":[{"text":"bar","index":0,"copilot_annotations": {"code_referenc
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -435,7 +435,7 @@ data: {"choices":[{"delta":{"content":"bar", "copilot_annotations": {"code_refer
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -451,7 +451,7 @@ data: {"choices":[{"text":"bar","index":1,"finish_reason":"stop"}]}
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			2,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -475,7 +475,7 @@ data: {"choices":[{"delta":{"content":"bar"},"index":1,"finish_reason":"stop"}]}
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			2,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -499,7 +499,7 @@ data: {"choices":[{"text":"bar","index":0,"finish_reason":"content_filter"}]}
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting(),
@@ -515,7 +515,7 @@ data: {"choices":[{"delta":{"content":"bar"},"index":0,"finish_reason":"content_
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting(),
@@ -531,7 +531,7 @@ data: {"choices":[{"text":"bar","index":0,"finish_reason":"content_filter"}]}
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting(),
@@ -552,7 +552,7 @@ data: {"choices":[{"delta":{"content":"bar"},"index":0,"finish_reason":"content_
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting(),
@@ -574,7 +574,7 @@ data: {"choices":[{"delta":{"content":"bar", "copilot_annotations": {"code_refer
 data: [DONE]
 `;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -600,7 +600,7 @@ data: [DONE]
 `;
 
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -637,7 +637,7 @@ data: [DONE]
 `;
 
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -667,7 +667,7 @@ data: {"choices":[{"text":"bar","index":0,"finish_reason":"stop"}]}
 data: [DONE]
 	`;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -687,7 +687,7 @@ data: {"choices":[{"delta":{"content":"bar"},"index":0,"finish_reason":"stop"}]}
 data: [DONE]
 	`;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -709,7 +709,7 @@ data: {"choices":[{"text":"quux","index":1,"finish_reason":"stop"}]}
 data: [DONE]
 	`;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			2,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -735,7 +735,7 @@ data: {"choices":[{"delta":{"content":"quux"},"index":1,"finish_reason":"stop"}]
 data: [DONE]
 	`;
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			2,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()
@@ -760,7 +760,7 @@ data: [DONE]
 `;
 
 		const processor = await SSEProcessor.create(
-			ctx,
+			accessor,
 			1,
 			createFakeStreamResponse(response),
 			TelemetryWithExp.createEmptyConfigForTesting()

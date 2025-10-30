@@ -2,14 +2,16 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { getLastCopilotToken } from './auth/copilotTokenManager';
+import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
+import { CopilotTokenManager } from './auth/copilotTokenManager';
 import { ChangeTracker } from './changeTracker';
 import { CitationManager, IPCitationDetail } from './citationManager';
 import { createCompletionState } from './completionState';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { FileReader } from './fileReader';
 import { PostInsertionCategory, telemetryAccepted, telemetryRejected } from './ghostText/telemetry';
-import { Logger } from './logger';
+import { LogTarget, Logger } from './logger';
 import { CopilotNamedAnnotationList } from './openai/stream';
 import { contextIndentationFromText, indentationBlockFinished } from './prompt/parseBlock';
 import { Prompt, extractPrompt } from './prompt/prompt';
@@ -18,8 +20,8 @@ import { editDistance, lexEditDistance } from './suggestions/editDistance';
 import { SuggestionStatus, computeCompletionText } from './suggestions/partialSuggestions';
 import { TelemetryStore, TelemetryWithExp, telemetry, telemetryCatch } from './telemetry';
 import { TextDocumentManager } from './textDocumentManager';
-import { PromiseQueue } from './util/promiseQueue';
-import { isRunningInTest } from './util/runtimeMode';
+import { ICompletionsPromiseQueueService } from './util/promiseQueue';
+import { ICompletionsRuntimeModeService } from './util/runtimeMode';
 
 const postInsertionLogger = new Logger('postInsertion');
 
@@ -62,15 +64,18 @@ const postInsertConfiguration: {
 };
 
 async function captureCode(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	uri: string,
 	completionTelemetry: TelemetryWithExp,
 	offset: number,
 	suffixOffset?: number
 ): Promise<{ prompt: Prompt; capturedCode: string; terminationOffset: number }> {
+	const ctx = accessor.get(ICompletionsContextService);
+	const instantiationService = accessor.get(IInstantiationService);
+	const logTarget = ctx.get(LogTarget);
 	const result = await ctx.get(FileReader).getOrReadTextDocumentWithFakeClientProperties({ uri });
 	if (result.status !== 'valid') {
-		postInsertionLogger.info(ctx, `Could not get document for ${uri}. Maybe it was closed by the editor.`);
+		postInsertionLogger.info(logTarget, `Could not get document for ${uri}. Maybe it was closed by the editor.`);
 		return {
 			prompt: {
 				prefix: '',
@@ -87,8 +92,7 @@ async function captureCode(
 	const position = document.positionAt(offset);
 
 	// Treat the code before offset as the hypothetical prompt
-	const hypotheticalPromptResponse = await extractPrompt(
-		ctx,
+	const hypotheticalPromptResponse = await instantiationService.invokeFunction(extractPrompt,
 		completionTelemetry.properties.headerRequestId,
 		createCompletionState(document, position),
 		completionTelemetry
@@ -131,33 +135,36 @@ async function captureCode(
 }
 
 export function postRejectionTasks(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	insertionCategory: PostInsertionCategory,
 	insertionOffset: number,
 	uri: string,
 	completions: { completionText: string; completionTelemetryData: TelemetryWithExp }[]
 ) {
+	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	const instantiationService = accessor.get(IInstantiationService);
+	const telemetryService = accessor.get(ICompletionsTelemetryService);
+	const promiseQueueService = accessor.get(ICompletionsPromiseQueueService);
+
 	//Send `.rejected` telemetry event for each rejected completion
 	completions.forEach(({ completionText, completionTelemetryData }) => {
 		postInsertionLogger.debug(
-			ctx,
+			logTarget,
 			`${insertionCategory}.rejected choiceIndex: ${completionTelemetryData.properties.choiceIndex}`
 		);
-		telemetryRejected(ctx, insertionCategory, completionTelemetryData);
+		instantiationService.invokeFunction(telemetryRejected, insertionCategory, completionTelemetryData);
 	});
-
-	const positionTracker = new ChangeTracker(ctx, uri, insertionOffset - 1);
-	const suffixTracker = new ChangeTracker(ctx, uri, insertionOffset);
+	const positionTracker = instantiationService.createInstance(ChangeTracker, uri, insertionOffset - 1);
+	const suffixTracker = instantiationService.createInstance(ChangeTracker, uri, insertionOffset);
 
 	const checkInCode = async (t: Timeout) => {
 		postInsertionLogger.debug(
-			ctx,
+			logTarget,
 			`Original offset: ${insertionOffset}, Tracked offset: ${positionTracker.offset}`
 		);
 		const { completionTelemetryData } = completions[0];
 
-		const { prompt, capturedCode, terminationOffset } = await captureCode(
-			ctx,
+		const { prompt, capturedCode, terminationOffset } = await instantiationService.invokeFunction(captureCode,
 			uri,
 			completionTelemetryData,
 			positionTracker.offset + 1,
@@ -182,11 +189,11 @@ export function postRejectionTasks(
 			}
 		);
 		postInsertionLogger.debug(
-			ctx,
+			logTarget,
 			`${insertionCategory}.capturedAfterRejected choiceIndex: ${completionTelemetryData.properties.choiceIndex}`,
 			customTelemetryData
 		);
-		telemetry(ctx, insertionCategory + '.capturedAfterRejected', customTelemetryData, TelemetryStore.Enhanced);
+		instantiationService.invokeFunction(telemetry, insertionCategory + '.capturedAfterRejected', customTelemetryData, TelemetryStore.Enhanced);
 	};
 	// Capture the code typed after we detected that completion was rejected,
 	// Uses first displayed completion as the source/seed of telemetry information.
@@ -194,14 +201,14 @@ export function postRejectionTasks(
 		.filter(t => t.captureRejection)
 		.map(t =>
 			positionTracker.push(
-				telemetryCatch(ctx, () => checkInCode(t), 'postRejectionTasks'),
+				telemetryCatch(telemetryService, promiseQueueService, () => checkInCode(t), 'postRejectionTasks'),
 				t.seconds * 1000
 			)
 		);
 }
 
 export function postInsertionTasks(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	insertionCategory: PostInsertionCategory,
 	completionText: string,
 	insertionOffset: number,
@@ -210,6 +217,12 @@ export function postInsertionTasks(
 	suggestionStatus: SuggestionStatus,
 	copilotAnnotations?: CopilotNamedAnnotationList
 ) {
+	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	const instantiationService = accessor.get(IInstantiationService);
+	const promiseQueueService = accessor.get(ICompletionsPromiseQueueService);
+	const telemetryService = accessor.get(ICompletionsTelemetryService);
+	const runtimeModeService = accessor.get(ICompletionsRuntimeModeService);
+
 	const telemetryDataWithStatus = telemetryData.extendedBy(
 		{
 			compType: suggestionStatus.compType,
@@ -221,20 +234,19 @@ export function postInsertionTasks(
 	);
 	// send ".accepted" telemetry
 	postInsertionLogger.debug(
-		ctx,
+		logTarget,
 		`${insertionCategory}.accepted choiceIndex: ${telemetryDataWithStatus.properties.choiceIndex}`
 	);
-	telemetryAccepted(ctx, insertionCategory, telemetryDataWithStatus);
+	instantiationService.invokeFunction(telemetryAccepted, insertionCategory, telemetryDataWithStatus);
 
 	const fullCompletionText = completionText;
 	completionText = computeCompletionText(completionText, suggestionStatus);
 	const trimmedCompletion = completionText.trim();
-	const tracker = new ChangeTracker(ctx, uri, insertionOffset);
-	const suffixTracker = new ChangeTracker(ctx, uri, insertionOffset + completionText.length);
+	const tracker = instantiationService.createInstance(ChangeTracker, uri, insertionOffset);
+	const suffixTracker = instantiationService.createInstance(ChangeTracker, uri, insertionOffset + completionText.length);
 
 	const stillInCodeCheck = async (timeout: Timeout) => {
-		const check = checkStillInCode(
-			ctx,
+		const check = instantiationService.invokeFunction(checkStillInCode,
 			insertionCategory,
 			trimmedCompletion,
 			insertionOffset,
@@ -248,49 +260,54 @@ export function postInsertionTasks(
 	};
 
 	// For test purposes, we add one set of these telemetry events synchronously to allow asserting the telemetry
-	if (postInsertConfiguration.triggerPostInsertionSynchroneously && isRunningInTest(ctx)) {
+	if (postInsertConfiguration.triggerPostInsertionSynchroneously && runtimeModeService.isRunningInTest()) {
 		const check = stillInCodeCheck({
 			seconds: 0,
 			captureCode: postInsertConfiguration.captureCode,
 			captureRejection: postInsertConfiguration.captureRejection,
 		});
-		ctx.get(PromiseQueue).register(check);
+		promiseQueueService.register(check);
 	} else {
 		captureTimeouts.map(timeout =>
 			tracker.push(
-				telemetryCatch(ctx, () => stillInCodeCheck(timeout), 'postInsertionTasks'),
+				telemetryCatch(telemetryService, promiseQueueService, () => stillInCodeCheck(timeout), 'postInsertionTasks'),
 				timeout.seconds * 1000
 			)
 		);
 	}
 
-	telemetryCatch(ctx, citationCheck, 'post insertion citation check')(
-		ctx,
+	instantiationService.invokeFunction(acc => telemetryCatch(telemetryService, promiseQueueService, citationCheck, 'post insertion citation check')(
+		acc,
 		uri,
 		fullCompletionText,
 		completionText,
 		insertionOffset,
 		copilotAnnotations
-	);
+	));
 }
 
 async function citationCheck(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	uri: string,
 	fullCompletionText: string,
 	insertedText: string,
 	insertionOffset: number,
 	copilotAnnotations?: CopilotNamedAnnotationList
 ) {
+	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	const textDocumentManagerService = accessor.get(ICompletionsContextService).get(TextDocumentManager);
+	const copilotTokenManager = accessor.get(ICompletionsContextService).get(CopilotTokenManager);
+	const citationManagerService = accessor.get(ICompletionsContextService).get(CitationManager);
+
 	// If there are no citations, request directly from the snippy service
 	if (!copilotAnnotations || (copilotAnnotations.ip_code_citations?.length ?? 0) < 1) {
 		// Do not request citations if in blocking mode
-		if (getLastCopilotToken(ctx)?.getTokenValue('sn') === '1') { return; }
-		await fetchCitations(ctx, uri, insertedText, insertionOffset);
+		if (copilotTokenManager.getLastToken()?.getTokenValue('sn') === '1') { return; }
+		await fetchCitations(accessor, uri, insertedText, insertionOffset);
 		return;
 	}
 
-	const doc = await ctx.get(TextDocumentManager).getTextDocument({ uri });
+	const doc = await textDocumentManagerService.getTextDocument({ uri });
 
 	// in the CLS, if the editor does not wait to send document updates until the
 	// acceptance function returns, we could be in a race condition with ongoing
@@ -311,7 +328,7 @@ async function citationCheck(
 		);
 		if (citationStart === undefined) {
 			postInsertionLogger.info(
-				ctx,
+				logTarget,
 				`Full completion for ${uri} contains a reference matching public code, but the partially inserted text did not include the match.`
 			);
 			continue;
@@ -323,7 +340,7 @@ async function citationCheck(
 		const end = doc?.positionAt(offsetEnd);
 		const text = start && end ? doc?.getText({ start, end }) : '<unknown>';
 
-		await ctx.get(CitationManager).handleIPCodeCitation(ctx, {
+		await citationManagerService.handleIPCodeCitation({
 			inDocumentUri: uri,
 			offsetStart,
 			offsetEnd,
@@ -376,7 +393,7 @@ function find(documentText: string, completion: string, margin: number, offset: 
 }
 
 async function checkStillInCode(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	insertionCategory: string,
 	completion: string,
 	insertionOffset: number, // offset where the completion was inserted to
@@ -387,6 +404,9 @@ async function checkStillInCode(
 	suffixTracker: ChangeTracker
 ) {
 	// Get contents of file from file system
+	const ctx = accessor.get(ICompletionsContextService);
+	const instantiationService = accessor.get(IInstantiationService);
+	const logTarget = ctx.get(LogTarget);
 	const result = await ctx.get(FileReader).getOrReadTextDocument({ uri });
 	if (result.status === 'valid') {
 		const document = result.document;
@@ -401,7 +421,7 @@ async function checkStillInCode(
 		}
 		// Debug and log a binary decision
 		postInsertionLogger.debug(
-			ctx,
+			logTarget,
 			`stillInCode: ${finding.stillInCodeHeuristic ? 'Found' : 'Not found'}! Completion '${completion}' in file ${uri
 			}. lexEditDistance fraction was ${finding.relativeLexEditDistance}. Char edit distance was ${finding.charEditDistance
 			}. Inserted at ${insertionOffset}, tracked at ${tracker.offset}, found at ${finding.foundOffset
@@ -411,11 +431,11 @@ async function checkStillInCode(
 		const customTelemetryData = telemetryData
 			.extendedBy({}, { timeout: timeout.seconds, insertionOffset: insertionOffset, trackedOffset: tracker.offset })
 			.extendedBy({}, finding);
-		telemetry(ctx, insertionCategory + '.stillInCode', customTelemetryData);
+		instantiationService.invokeFunction(telemetry, insertionCategory + '.stillInCode', customTelemetryData);
 
 		if (timeout.captureCode) {
-			const { prompt, capturedCode, terminationOffset } = await captureCode(
-				ctx,
+			const { prompt, capturedCode, terminationOffset } = await instantiationService.invokeFunction(
+				captureCode,
 				uri,
 				customTelemetryData,
 				tracker.offset,
@@ -439,12 +459,12 @@ async function checkStillInCode(
 				}
 			);
 			postInsertionLogger.debug(
-				ctx,
+				logTarget,
 				`${insertionCategory}.capturedAfterAccepted choiceIndex: ${telemetryData.properties.choiceIndex}`,
 				customTelemetryData
 			);
-			telemetry(
-				ctx,
+			instantiationService.invokeFunction(
+				telemetry,
 				insertionCategory + '.capturedAfterAccepted',
 				afterAcceptedTelemetry,
 				TelemetryStore.Enhanced

@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { Context } from '../../../context';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../../../context';
 import { createLibTestingContext } from '../../../test/context';
 import { ResolvedContextItem } from '../../contextProviderRegistry';
 import { ContextProviderStatistics } from '../../contextProviderStatistics';
@@ -13,7 +14,7 @@ import { TraitWithId } from './../contextItemSchemas';
 import { getTraitsFromContextItems } from './../traits';
 
 suite('traitsContextProvider', function () {
-	let ctx: Context;
+	let accessor: ServicesAccessor;
 	const resolvedContextItems: ResolvedContextItem<TraitWithId>[] = [
 		{
 			providerId: 'testTraitsProvider',
@@ -48,11 +49,11 @@ suite('traitsContextProvider', function () {
 	];
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
 	});
 
 	test('can get traits from context text providers and flattens them', function () {
-		const traits = getTraitsFromContextItems(ctx, 'COMPLETION_ID', resolvedContextItems);
+		const traits = getTraitsFromContextItems(accessor, 'COMPLETION_ID', resolvedContextItems);
 		assert.deepStrictEqual(traits.length, 3);
 		assert.deepStrictEqual(
 			traits.map(t => t.name),
@@ -61,12 +62,13 @@ suite('traitsContextProvider', function () {
 	});
 
 	test('set expectations for contextProviderStatistics', function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(
 			ContextProviderStatistics,
 			new ContextProviderStatistics(() => new TestContextProviderStatistics())
 		);
 
-		getTraitsFromContextItems(ctx, 'COMPLETION_ID', resolvedContextItems);
+		getTraitsFromContextItems(accessor, 'COMPLETION_ID', resolvedContextItems);
 
 		const statistics = ctx
 			.get(ContextProviderStatistics)

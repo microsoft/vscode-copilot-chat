@@ -2,6 +2,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+import { createDecorator, IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+
 /**
  * The type of a constructor that can be passed to `.get()` in order to receive
  * a value of the instance type.
@@ -18,11 +21,22 @@ class UnregisteredContextError extends Error {
 	}
 }
 
+export const ICompletionsContextService = createDecorator<ICompletionsContextService>('completionsContextService');
+export interface ICompletionsContextService {
+	_serviceBrand: undefined;
+
+	instantiationService: IInstantiationService;
+	get<T>(ctor: Ctor<T>): T;
+	set<C extends Ctor<unknown>>(ctor: C, instance: Instance<C>): void;
+	forceSet<C extends Ctor<unknown>>(ctor: C, instance: Instance<C>): void;
+}
+
 /**
  * Stores a set of singletons and provides type-safe access to them. Create an
  * instance and pass it through function calls.
  */
-export class Context {
+export class Context implements ICompletionsContextService {
+	_serviceBrand: undefined;
 	private instances = new Map<Ctor<unknown>, unknown>();
 
 	/**
@@ -83,5 +97,16 @@ export class Context {
 				`The instance you're trying to register for ${ctor.name} is not an instance of it (${inst}).`
 			);
 		}
+	}
+
+	private _instantiationService?: IInstantiationService;
+	get instantiationService(): IInstantiationService {
+		if (!this._instantiationService) {
+			throw new Error('InstantiationService has not been set.');
+		}
+		return this._instantiationService;
+	}
+	setInstantiationService(instaService: IInstantiationService): void {
+		this._instantiationService = instaService;
 	}
 }

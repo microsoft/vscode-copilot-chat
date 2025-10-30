@@ -17,17 +17,20 @@ import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequ
 import { ChatCompletion } from '../../networking/common/openai';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+import { CustomModel } from './endpointProvider';
 
 /**
  * This endpoint represents the "Auto" model in the model picker.
  * It just effectively wraps a different endpoint and adds the auto stuff on top
  */
 export class AutoChatEndpoint implements IChatEndpoint {
-	public static readonly id = 'auto';
+	public static readonly pseudoModelId = 'auto';
 	maxOutputTokens: number = this._wrappedEndpoint.maxOutputTokens;
-	model: string = AutoChatEndpoint.id;
+	model: string = this._wrappedEndpoint.model;
 	supportsToolCalls: boolean = this._wrappedEndpoint.supportsToolCalls;
 	supportsVision: boolean = this._wrappedEndpoint.supportsVision;
+	degradationReason?: string | undefined = this._wrappedEndpoint.degradationReason;
+	customModel?: CustomModel | undefined = this._wrappedEndpoint.customModel;
 	supportsPrediction: boolean = this._wrappedEndpoint.supportsPrediction;
 	showInModelPicker: boolean = true;
 	isPremium?: boolean | undefined = this._wrappedEndpoint.isPremium;
@@ -47,7 +50,8 @@ export class AutoChatEndpoint implements IChatEndpoint {
 		private readonly _wrappedEndpoint: IChatEndpoint,
 		private readonly _chatMLFetcher: IChatMLFetcher,
 		private readonly _sessionToken: string,
-		private readonly _discountPercent: number
+		private readonly _discountPercent: number,
+		public readonly discountRange: { low: number; high: number }
 	) {
 		// Calculate the multiplier including the discount percent, rounding to two decimal places
 		const baseMultiplier = this._wrappedEndpoint.multiplier ?? 1;

@@ -7,10 +7,10 @@
 
 import * as assert from 'assert';
 import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { Chunk, PromptElementProps, PromptSnapshotNode, Text } from '../../../../../prompt/src/components/components';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { TokenizerName } from '../../../../../prompt/src/tokenization';
-import { Context } from '../../../context';
 import { AdditionalCompletionsContext, CompletionsContext } from '../../../prompt/components/completionsContext';
 import { CompletionsPromptRenderOptions } from '../../../prompt/components/completionsPromptRenderer';
 import { BeforeCursor, CurrentFile } from '../../../prompt/components/currentFile';
@@ -54,12 +54,12 @@ for (const lineEnding of ['\n', '\r\n']) {
 	const position: Position = textDocument.positionAt(textDocument.getText().indexOf('|'));
 
 	suite(`Split context prompt renderer (line ending: ${JSON.stringify(lineEnding)})`, function () {
-		let ctx: Context;
+		let accessor: ServicesAccessor;
 		let renderer: SplitContextPromptRenderer;
 		let snapshot: PromptSnapshotNode | undefined;
 
 		setup(async function () {
-			ctx = createLibTestingContext();
+			accessor = createLibTestingContext();
 			renderer = new SplitContextPromptRenderer();
 			const vPrompt = new VirtualPrompt(
 				(
@@ -82,7 +82,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 				)
 			);
 			const pipe = vPrompt.createPipe();
-			await pipe.pump(createCompletionRequestData(ctx, textDocument, position));
+			await pipe.pump(createCompletionRequestData(accessor, textDocument, position));
 			({ snapshot } = vPrompt.snapshot());
 		});
 
@@ -564,7 +564,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 			);
 			const virtualPrompt = new VirtualPrompt(prompt);
 			const pipe = virtualPrompt.createPipe();
-			await pipe.pump(createCompletionRequestData(ctx, textDocumentWithFirstSuffix, position));
+			await pipe.pump(createCompletionRequestData(accessor, textDocumentWithFirstSuffix, position));
 			// Snapshot caches the suffix
 			virtualPrompt.snapshot();
 
@@ -575,7 +575,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 				1,
 				'function f|\n' + secondSuffix
 			);
-			await pipe.pump(createCompletionRequestData(ctx, textDocumentWithSecondSuffix, position));
+			await pipe.pump(createCompletionRequestData(accessor, textDocumentWithSecondSuffix, position));
 			const { snapshot: snapshotWithDefaultThreshold } = virtualPrompt.snapshot();
 
 			// the first suffix is used, since they are similar enough
@@ -588,7 +588,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 
 			await pipe.pump(
 				createCompletionRequestData(
-					ctx,
+					accessor,
 					textDocumentWithSecondSuffix,
 					position,
 					undefined,
@@ -627,7 +627,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 			);
 			const virtualPrompt = new VirtualPrompt(prompt);
 			const pipe = virtualPrompt.createPipe();
-			await pipe.pump(createCompletionRequestData(ctx, textDocumentWithFirstSuffix, position));
+			await pipe.pump(createCompletionRequestData(accessor, textDocumentWithFirstSuffix, position));
 			// Snapshot caches the suffix
 			virtualPrompt.snapshot();
 
@@ -638,7 +638,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 				1,
 				'function f|\n' + secondSuffix
 			);
-			await pipe.pump(createCompletionRequestData(ctx, textDocumentWithSecondSuffix, position));
+			await pipe.pump(createCompletionRequestData(accessor, textDocumentWithSecondSuffix, position));
 			const { snapshot } = virtualPrompt.snapshot();
 
 			// the second suffix is used, since they are not similar enough
@@ -658,7 +658,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 
 			const virtualPrompt = new VirtualPrompt(prompt);
 			const pipe = virtualPrompt.createPipe();
-			await pipe.pump(createCompletionRequestData(ctx, textDocumentWithoutSuffix, position));
+			await pipe.pump(createCompletionRequestData(accessor, textDocumentWithoutSuffix, position));
 			const { snapshot } = virtualPrompt.snapshot();
 			const promptWithoutSuffix = renderer.render(snapshot!, renderingOptions);
 
@@ -678,7 +678,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 
 			const virtualPrompt = new VirtualPrompt(prompt);
 			const pipe = virtualPrompt.createPipe();
-			await pipe.pump(createCompletionRequestData(ctx, emptyTextDocument, position));
+			await pipe.pump(createCompletionRequestData(accessor, emptyTextDocument, position));
 			const { snapshot } = virtualPrompt.snapshot();
 			const emptyPrompt = renderer.render(snapshot!, renderingOptions);
 
@@ -698,7 +698,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 
 			const virtualPrompt = new VirtualPrompt(prompt);
 			const pipe = virtualPrompt.createPipe();
-			await pipe.pump(createCompletionRequestData(ctx, emptyTextDocument, position));
+			await pipe.pump(createCompletionRequestData(accessor, emptyTextDocument, position));
 			const { snapshot } = virtualPrompt.snapshot();
 			const emptyPrompt = renderer.render(snapshot!, renderingOptions);
 
@@ -765,7 +765,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 			const pipe = virtualPrompt.createPipe();
 
 			// First render
-			await pipe.pump(createCompletionRequestData(ctx, textDocument, position));
+			await pipe.pump(createCompletionRequestData(accessor, textDocument, position));
 			const { snapshot } = virtualPrompt.snapshot();
 			const renderedPrompt = renderer.render(snapshot!, renderingOptions);
 
@@ -801,7 +801,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 			const pipe = virtualPrompt.createPipe();
 
 			// First render
-			await pipe.pump(createCompletionRequestData(ctx, textDocument, position));
+			await pipe.pump(createCompletionRequestData(accessor, textDocument, position));
 			const { snapshot } = virtualPrompt.snapshot();
 			const renderedPrompt = renderer.render(snapshot!, renderingOptions);
 
@@ -814,7 +814,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 			);
 			const updatedPosition = updatedTextDocument.positionAt(updatedTextDocument.getText().indexOf('|'));
 
-			await pipe.pump(createCompletionRequestData(ctx, updatedTextDocument, updatedPosition));
+			await pipe.pump(createCompletionRequestData(accessor, updatedTextDocument, updatedPosition));
 			const { snapshot: snapshotTwo } = virtualPrompt.snapshot();
 			const renderedPromptTwo = renderer.render(snapshotTwo!, renderingOptions);
 
