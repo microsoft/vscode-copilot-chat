@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../../context';
 import { TelemetryWithExp } from '../../telemetry';
 import {
@@ -20,8 +21,9 @@ export class MockTraitsProvider extends RelatedFilesProvider {
 			{ name: 'LanguageVersion', value: '12' },
 		],
 		@ICompletionsContextService context: ICompletionsContextService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
-		super(context);
+		super(context, instantiationService);
 	}
 
 	async getRelatedFilesResponse(

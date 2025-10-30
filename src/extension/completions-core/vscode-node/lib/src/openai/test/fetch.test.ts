@@ -6,6 +6,7 @@
 import * as assert from 'assert';
 import * as Sinon from 'sinon';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationTokenSource } from '../../../../types/src';
 import { CopilotTokenManager } from '../../auth/copilotTokenManager';
 import { ICompletionsContextService } from '../../context';
@@ -24,18 +25,20 @@ import {
 	sanitizeRequestOptionTelemetry
 } from '../fetch';
 import { ErrorReturningFetcher, SyntheticCompletions } from '../fetch.fake';
+import { ICompletionsRuntimeModeService } from '../../util/runtimeMode';
 
 suite('"Fetch" unit tests', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 	let resetSpy: Sinon.SinonSpy<Parameters<CopilotTokenManager['resetToken']>>;
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
+		const ctx = accessor.get(ICompletionsContextService);
 		resetSpy = Sinon.spy(ctx.get(CopilotTokenManager), 'resetToken');
 	});
 
 	test('Empty/whitespace completions are stripped', async function () {
-		const fetcher = new SyntheticCompletions(['', ' ', '\n']);
+		const fetcher = new SyntheticCompletions(['', ' ', '\n'], accessor.get(ICompletionsContextService));
 		const params: CompletionParams = {
 			prompt: {
 				prefix: '',
@@ -52,7 +55,6 @@ suite('"Fetch" unit tests', function () {
 		};
 		const cancellationToken = new CancellationTokenSource().token;
 		const res = await fetcher.fetchAndStreamCompletions(
-			ctx,
 			params,
 			TelemetryWithExp.createEmptyConfigForTesting(),
 			() => undefined,
@@ -73,7 +75,7 @@ suite('"Fetch" unit tests', function () {
 
 	test('If in the split context experiment, send the context field as part of the request', async function () {
 		const networkFetcher = new OptionsRecorderFetcher(() => createFakeStreamResponse('data: [DONE]\n'));
-		const openAIFetcher = new LiveOpenAIFetcher();
+		const openAIFetcher = new LiveOpenAIFetcher(accessor.get(IInstantiationService), accessor.get(ICompletionsContextService), accessor.get(ICompletionsRuntimeModeService));
 		const params: CompletionParams = {
 			prompt: {
 				context: ['# Language: Python'],
@@ -90,12 +92,13 @@ suite('"Fetch" unit tests', function () {
 			ourRequestId: generateUuid(),
 			extra: {},
 		};
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(Fetcher, networkFetcher);
 
 		const telemetryWithExp = TelemetryWithExp.createEmptyConfigForTesting();
 		telemetryWithExp.filtersAndExp.exp.variables.copilotenablepromptcontextproxyfield = true;
 
-		await openAIFetcher.fetchAndStreamCompletions(ctx, params, telemetryWithExp, () => undefined);
+		await openAIFetcher.fetchAndStreamCompletions(params, telemetryWithExp, () => undefined);
 
 		const options = networkFetcher.options;
 		const json = options?.json as Record<string, unknown> | undefined;
@@ -136,27 +139,27 @@ suite('"Fetch" unit tests', function () {
 	});
 
 	test('HTTP `Unauthorized` invalidates token', async function () {
-		const result = await assertResponseWithContext(ctx, 401);
+		const result = await assertResponseWithContext(accessor, 401);
 
 		assert.deepStrictEqual(result, { type: 'failed', reason: 'token expired or invalid: 401' });
 		assert.ok(resetSpy.calledOnce, 'resetToken should have been called once');
 	});
 
 	test('HTTP `Forbidden` invalidates token', async function () {
-		const result = await assertResponseWithContext(ctx, 403);
+		const result = await assertResponseWithContext(accessor, 403);
 
 		assert.deepStrictEqual(result, { type: 'failed', reason: 'token expired or invalid: 403' });
 		assert.ok(resetSpy.calledOnce, 'resetToken should have been called once');
 	});
 
 	test('HTTP `Too many requests` enforces rate limiting locally', async function () {
-		const ctx = createLibTestingContext();
-		const result = await assertResponseWithContext(ctx, 429);
+		const accessor = createLibTestingContext();
+		const result = await assertResponseWithContext(accessor, 429);
+		const ctx = accessor.get(ICompletionsContextService);
 		const fetcher = ctx.get(OpenAIFetcher);
 
 		assert.deepStrictEqual(result, { type: 'failed', reason: 'rate limited' });
 		const limited = await fetcher.fetchAndStreamCompletions(
-			ctx,
 			{} as CompletionParams,
 			TelemetryWithExp.createEmptyConfigForTesting(),
 			() => Promise.reject(new Error()),
@@ -166,11 +169,12 @@ suite('"Fetch" unit tests', function () {
 	});
 
 	test('properly handles 402 (free plan exhausted) responses from proxy', async function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		const tokenManager = ctx.get(CopilotTokenManager);
 		await tokenManager.primeToken(); // Trigger initial status
 		const statusReporter = new TestStatusReporter();
 		ctx.forceSet(StatusReporter, statusReporter);
-		const result = await assertResponseWithContext(ctx, 402);
+		const result = await assertResponseWithContext(accessor, 402);
 		const fetcher = ctx.get(OpenAIFetcher);
 
 		assert.deepStrictEqual(result, { type: 'failed', reason: 'monthly free code completions exhausted' });
@@ -179,7 +183,6 @@ suite('"Fetch" unit tests', function () {
 		assert.deepStrictEqual(statusReporter.eventCount, 1);
 		assert.deepStrictEqual(statusReporter.command, CMDQuotaExceeded);
 		const exhausted = await fetcher.fetchAndStreamCompletions(
-			ctx,
 			fakeCompletionParams(),
 			TelemetryWithExp.createEmptyConfigForTesting(),
 			() => Promise.reject(new Error()),
@@ -190,14 +193,14 @@ suite('"Fetch" unit tests', function () {
 		tokenManager.resetToken();
 		await tokenManager.getToken();
 
-		const refreshed = await assertResponseWithContext(ctx, 429);
+		const refreshed = await assertResponseWithContext(accessor, 429);
 		assert.deepStrictEqual(refreshed, { type: 'failed', reason: 'rate limited' });
 		assert.deepStrictEqual(statusReporter.kind, 'Error');
 	});
 
 	test('additional headers are included in the request', async function () {
 		const networkFetcher = new StaticFetcher(() => createFakeStreamResponse('data: [DONE]\n'));
-		const openAIFetcher = new LiveOpenAIFetcher();
+		const openAIFetcher = new LiveOpenAIFetcher(accessor.get(IInstantiationService), accessor.get(ICompletionsContextService), accessor.get(ICompletionsRuntimeModeService));
 		const params: CompletionParams = {
 			prompt: {
 				prefix: '',
@@ -213,10 +216,10 @@ suite('"Fetch" unit tests', function () {
 			headers: { Host: 'bla' },
 			extra: {},
 		};
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(Fetcher, networkFetcher);
 
 		await openAIFetcher.fetchAndStreamCompletions(
-			ctx,
 			params,
 			TelemetryWithExp.createEmptyConfigForTesting(),
 			() => undefined
@@ -228,10 +231,10 @@ suite('"Fetch" unit tests', function () {
 });
 
 suite('Telemetry sent on fetch', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
 	});
 
 	test('sanitizeRequestOptionTelemetry properly excludes top-level keys', function () {
@@ -281,7 +284,7 @@ suite('Telemetry sent on fetch', function () {
 
 	test('If context is provided while in the split context experiment, only send it in restricted telemetry events', async function () {
 		const networkFetcher = new OptionsRecorderFetcher(() => createFakeStreamResponse('data: [DONE]\n'));
-		const openAIFetcher = new LiveOpenAIFetcher();
+		const openAIFetcher = new LiveOpenAIFetcher(accessor.get(IInstantiationService), accessor.get(ICompletionsContextService), accessor.get(ICompletionsRuntimeModeService));
 		const params: CompletionParams = {
 			prompt: {
 				context: ['# Language: Python'],
@@ -298,13 +301,14 @@ suite('Telemetry sent on fetch', function () {
 			ourRequestId: generateUuid(),
 			extra: {},
 		};
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(Fetcher, networkFetcher);
 
 		const telemetryWithExp = TelemetryWithExp.createEmptyConfigForTesting();
 		telemetryWithExp.filtersAndExp.exp.variables.copilotenablepromptcontextproxyfield = true;
 
-		const { reporter } = await withInMemoryTelemetry(ctx, async () => {
-			await openAIFetcher.fetchAndStreamCompletions(ctx, params, telemetryWithExp, () => undefined);
+		const { reporter } = await withInMemoryTelemetry(accessor, async () => {
+			await openAIFetcher.fetchAndStreamCompletions(params, telemetryWithExp, () => undefined);
 		});
 
 		const standardEvents = reporter.events;
@@ -341,19 +345,20 @@ async function assertResponseWithStatus(
 	statusReporter: StatusReporter,
 	headers?: Record<string, string>
 ) {
-	const ctx = createLibTestingContext();
+	const accessor = createLibTestingContext();
+	const ctx = accessor.get(ICompletionsContextService);
 	await ctx.get(CopilotTokenManager).primeToken(); // Trigger initial status
 	ctx.forceSet(StatusReporter, statusReporter);
-	return assertResponseWithContext(ctx, statusCode, headers);
+	return assertResponseWithContext(accessor, statusCode, headers);
 }
 
-async function assertResponseWithContext(ctx: ICompletionsContextService, statusCode: number, headers?: Record<string, string>) {
+async function assertResponseWithContext(accessor: ServicesAccessor, statusCode: number, headers?: Record<string, string>) {
 	const response = createFakeResponse(statusCode, 'response-text', headers);
-	const fetcher = new ErrorReturningFetcher(response);
+	const fetcher = new ErrorReturningFetcher(response, accessor.get(IInstantiationService), accessor.get(ICompletionsContextService), accessor.get(ICompletionsRuntimeModeService));
+	const ctx = accessor.get(ICompletionsContextService);
 	ctx.forceSet(OpenAIFetcher, fetcher);
 	const completionParams: CompletionParams = fakeCompletionParams();
 	const result = await fetcher.fetchAndStreamCompletions(
-		ctx,
 		completionParams,
 		TelemetryWithExp.createEmptyConfigForTesting(),
 		() => Promise.reject(new Error()),

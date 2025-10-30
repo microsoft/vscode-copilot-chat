@@ -5,7 +5,7 @@
 
 import { Command, commands, InlineCompletionItem, Uri } from 'vscode';
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
-import { ICompletionsContextService } from '../../lib/src/context';
+import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { collectCompletionDiagnostics, formatDiagnosticsAsMarkdown } from '../../lib/src/diagnostics';
 import { telemetry, TelemetryData } from '../../lib/src/telemetry';
 import { CMDSendCompletionsFeedback } from './constants';
@@ -19,7 +19,7 @@ export const sendCompletionFeedbackCommand: Command = {
 export class CopilotCompletionFeedbackTracker extends Disposable {
 	private lastShownCopilotCompletionItem: InlineCompletionItem | undefined;
 
-	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) {
+	constructor(@IInstantiationService private readonly instantiationService: IInstantiationService) {
 		super();
 		this._register(commands.registerCommand(sendCompletionFeedbackCommand.command, async () => {
 			const commandArg: unknown = this.lastShownCopilotCompletionItem?.command?.arguments?.[0];
@@ -29,9 +29,9 @@ export class CopilotCompletionFeedbackTracker extends Disposable {
 					telemetryArg = commandArg.telemetry;
 				}
 			}
-			telemetry(this.ctx, 'ghostText.sentFeedback', telemetryArg);
+			this.instantiationService.invokeFunction(telemetry, 'ghostText.sentFeedback', telemetryArg);
 
-			await openGitHubIssue(this.ctx, this.lastShownCopilotCompletionItem, telemetryArg);
+			await this.instantiationService.invokeFunction(openGitHubIssue, this.lastShownCopilotCompletionItem, telemetryArg);
 		}));
 	}
 
@@ -41,12 +41,11 @@ export class CopilotCompletionFeedbackTracker extends Disposable {
 }
 
 async function openGitHubIssue(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	item: InlineCompletionItem | undefined,
 	telemetry: TelemetryData | undefined
 ) {
-	const body = generateGitHubIssueBody(ctx, item, telemetry);
-
+	const body = generateGitHubIssueBody(accessor, item, telemetry);
 	await commands.executeCommand('workbench.action.openIssueReporter', {
 		extensionId: 'github.copilot',
 		uri: Uri.parse('https://github.com/microsoft/vscode'),
@@ -55,11 +54,11 @@ async function openGitHubIssue(
 }
 
 function generateGitHubIssueBody(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	item: InlineCompletionItem | undefined,
 	telemetry: TelemetryData | undefined
 ) {
-	const diagnostics = collectCompletionDiagnostics(ctx, telemetry);
+	const diagnostics = collectCompletionDiagnostics(accessor, telemetry);
 	const formattedDiagnostics = formatDiagnosticsAsMarkdown(diagnostics);
 	if (typeof item?.insertText !== 'string') {
 		return '';

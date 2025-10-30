@@ -57,6 +57,20 @@ export class ChatResponseThinkingProgressPart {
 	}
 }
 
+export class ChatResponseExternalEditPart {
+	applied: Thenable<void>;
+	didGetApplied!: () => void;
+
+	constructor(
+		public uris: vscode.Uri[],
+		public callback: () => Thenable<unknown>,
+	) {
+		this.applied = new Promise<void>((resolve) => {
+			this.didGetApplied = resolve;
+		});
+	}
+}
+
 export class ChatResponseProgressPart2 {
 	value: string;
 	task?: (progress: vscode.Progress<vscode.ChatResponseWarningPart>) => Thenable<string | void>;
@@ -458,6 +472,12 @@ export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
 		readonly participant: string,
 		readonly command?: string
 	) { }
+}
+
+export enum ChatSessionStatus {
+	Failed = 0,
+	Completed = 1,
+	InProgress = 2
 }
 
 export class LanguageModelError extends Error {

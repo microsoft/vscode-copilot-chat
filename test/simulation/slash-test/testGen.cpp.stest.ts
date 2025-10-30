@@ -6,10 +6,10 @@
 import * as assert from 'assert';
 import { Intent } from '../../../src/extension/common/constants';
 import { ssuite, stest } from '../../base/stest';
-import { forInlineAndInline2, simulateInlineChatWithStrategy } from '../inlineChatSimulator';
+import { forInline, simulateInlineChatWithStrategy } from '../inlineChatSimulator';
 import { assertWorkspaceEdit, fromFixture } from '../stestUtil';
 
-forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
+forInline((strategy, nonExtensionConfigurations, suffix) => {
 
 	ssuite({ title: `/tests${suffix}`, location: 'inline', language: 'cpp', nonExtensionConfigurations }, () => {
 

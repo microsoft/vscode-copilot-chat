@@ -12,11 +12,11 @@ import { IBlockedExtensionService } from '../../../platform/chat/common/blockedE
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
-import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndpoint';
-import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
+import { AutoChatEndpoint } from '../../../platform/endpoint/vscode-node/autoChatEndpoint';
+import { IAutomodeService } from '../../../platform/endpoint/vscode-node/automodeService';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -149,7 +149,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			}
 
 			let modelCategory: { label: string; order: number } | undefined;
-			if (endpoint.model === AutoChatEndpoint.id) {
+			if (endpoint instanceof AutoChatEndpoint) {
 				modelCategory = { label: '', order: Number.MIN_SAFE_INTEGER };
 			} else if (endpoint.isPremium === undefined || this._authenticationService.copilotToken?.isFreeUser) {
 				modelCategory = { label: localize('languageModelHeader.copilot', "Copilot Models"), order: 0 };
@@ -181,8 +181,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			const session = this._authenticationService.anyGitHubSession;
 
 			const model: vscode.LanguageModelChatInformation = {
-				id: endpoint.model,
-				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
+				id: endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model,
+				name: endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,

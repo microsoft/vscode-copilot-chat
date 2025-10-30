@@ -3,58 +3,59 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { IDisposable } from '../../../../../../util/vs/base/common/lifecycle';
-import { CompletionsAuthenticationServiceBridge } from '../../../bridge/src/completionsAuthenticationServiceBridge';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
 import { CopilotToken } from '../auth/copilotTokenManager';
 import { getUserKind } from '../auth/orgs';
 import {
-	BuildInfo,
 	BuildType,
 	ConfigKey,
-	getBuildType,
 	getConfig,
-	getVersion
+	ICompletionsBuildInfoService
 } from '../config';
 import { ICompletionsContextService } from '../context';
 import { getEngineRequestInfo } from '../openai/config';
 import { Filter, Release } from './filters';
 
-export function setupCompletionsExperimentationService(ctx: ICompletionsContextService): IDisposable {
-	const authService = ctx.get(CompletionsAuthenticationServiceBridge).authenticationService;
+export function setupCompletionsExperimentationService(accessor: ServicesAccessor): IDisposable {
+	const authService = accessor.get(IAuthenticationService);
+	const instantiationService = accessor.get(IInstantiationService);
 
 	const disposable = authService.onDidAccessTokenChange(() => {
 		authService.getCopilotToken()
-			.then(t => updateCompletionsFilters(ctx, t))
+			.then(t => instantiationService.invokeFunction(updateCompletionsFilters, t))
 			.catch(err => { });
 	});
 
-	updateCompletionsFilters(ctx, authService.copilotToken);
+	updateCompletionsFilters(accessor, authService.copilotToken);
 
 	return disposable;
 }
 
-function getPluginRelease(ctx: ICompletionsContextService): Release {
-	if (getBuildType(ctx) === BuildType.NIGHTLY) {
+function getPluginRelease(accessor: ServicesAccessor): Release {
+	if (accessor.get(ICompletionsBuildInfoService).getBuildType() === BuildType.NIGHTLY) {
 		return Release.Nightly;
 	}
 	return Release.Stable;
 }
 
-function updateCompletionsFilters(ctx: ICompletionsContextService, token: Omit<CopilotToken, "token"> | undefined) {
+function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, "token"> | undefined) {
+	const ctx = accessor.get(ICompletionsContextService);
 	const exp = ctx.get(CompletionsExperimentationServiceBridge);
 
-	const filters = createCompletionsFilters(ctx, token);
+	const filters = createCompletionsFilters(accessor, token);
 
 	exp.experimentationService.setCompletionsFilters(filters);
 }
 
-export function createCompletionsFilters(ctx: ICompletionsContextService, token: Omit<CopilotToken, "token"> | undefined) {
+export function createCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, "token"> | undefined) {
 	const filters = new Map<Filter, string>();
 
-	filters.set(Filter.ExtensionRelease, getPluginRelease(ctx));
-	filters.set(Filter.CopilotOverrideEngine, getConfig(ctx, ConfigKey.DebugOverrideEngine) || getConfig(ctx, ConfigKey.DebugOverrideEngineLegacy));
-	filters.set(Filter.CopilotClientVersion, ctx.get(BuildInfo).isProduction() ? getVersion(ctx) : '1.999.0');
+	filters.set(Filter.ExtensionRelease, getPluginRelease(accessor));
+	filters.set(Filter.CopilotOverrideEngine, getConfig(accessor, ConfigKey.DebugOverrideEngine) || getConfig(accessor, ConfigKey.DebugOverrideEngineLegacy));
+	filters.set(Filter.CopilotClientVersion, accessor.get(ICompletionsBuildInfoService).isProduction() ? accessor.get(ICompletionsBuildInfoService).getVersion() : '1.999.0');
 
 	if (token) {
 		const userKind = getUserKind(token);
@@ -71,7 +72,7 @@ export function createCompletionsFilters(ctx: ICompletionsContextService, token:
 		filters.set(Filter.CopilotUserKind, getUserKind(token));
 	}
 
-	const model = getEngineRequestInfo(ctx).modelId;
+	const model = getEngineRequestInfo(accessor).modelId;
 	filters.set(Filter.CopilotEngine, model);
 	return filters;
 }

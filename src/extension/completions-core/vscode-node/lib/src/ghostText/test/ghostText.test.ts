@@ -8,6 +8,7 @@ import dedent from 'ts-dedent';
 import type { CancellationToken } from 'vscode';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { initializeTokenizers } from '../../../../prompt/src/tokenization';
 import { CompletionState, createCompletionState } from '../../completionState';
 import { ConfigKey, InMemoryConfigProvider } from '../../config';
@@ -26,6 +27,7 @@ import { withInMemoryTelemetry } from '../../test/telemetry';
 import { createTextDocument } from '../../test/textDocument';
 import { ITextDocument, LocationFactory } from '../../textDocument';
 import { Deferred } from '../../util/async';
+import { ICompletionsRuntimeModeService } from '../../util/runtimeMode';
 import { AsyncCompletionManager } from '../asyncCompletions';
 import { CompletionsCache } from '../completionsCache';
 import { CurrentGhostText } from '../current';
@@ -51,25 +53,27 @@ suite('Isolated GhostText tests', function () {
 		languageId = 'go',
 		token?: CancellationToken
 	) {
-		const ctx = createLibTestingContext();
+		const accessor = createLibTestingContext();
+		const ctx = accessor.get(ICompletionsContextService);
 		const doc = createTextDocument('file:///fizzbuzz.go', languageId, 1, docText);
 		ctx.forceSet(Fetcher, fetcher);
-		ctx.set(OpenAIFetcher, new LiveOpenAIFetcher()); // gets results from static fetcher
+		ctx.set(OpenAIFetcher, new LiveOpenAIFetcher(accessor.get(IInstantiationService), ctx, accessor.get(ICompletionsRuntimeModeService))); // gets results from static fetcher
 		const state = createCompletionState(doc, position);
 		const prefix = getPrefix(state);
 
 		// Setup closures with the state as default
 		function requestGhostText(completionState = state) {
-			return getGhostText(ctx, completionState, token);
+			return getGhostText(accessor, completionState, token);
 		}
 		async function requestPrompt(completionState = state) {
 			const telemExp = TelemetryWithExp.createEmptyConfigForTesting();
-			const result = await extractPrompt(ctx, 'COMPLETION_ID', completionState, telemExp);
+			const result = await extractPrompt(accessor, 'COMPLETION_ID', completionState, telemExp);
 			return (result as PromptResponsePresent).prompt;
 		}
 
 		// Note, that we return a copy of the state to avoid side effects
 		return {
+			accessor,
 			ctx,
 			doc,
 			position,
@@ -80,18 +84,19 @@ suite('Isolated GhostText tests', function () {
 		};
 	}
 
-	function addToCache(ctx: ICompletionsContextService, prefix: string, suffix: string, completion: string | APIChoice) {
+	function addToCache(accessor: ServicesAccessor, prefix: string, suffix: string, completion: string | APIChoice) {
 		let choice: APIChoice;
 		if (typeof completion === 'string') {
 			choice = fakeAPIChoiceFromCompletion(completion);
 		} else {
 			choice = completion;
 		}
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(CompletionsCache).append(prefix, suffix, choice);
 	}
 
 	async function acceptAndRequestNextCompletion(
-		ctx: ICompletionsContextService,
+		accessor: ServicesAccessor,
 		origDoc: ITextDocument,
 		origPosition: Position,
 		completion: GhostCompletion
@@ -105,7 +110,7 @@ suite('Isolated GhostText tests', function () {
 			origDoc.getText(LocationFactory.range(origPosition, origDoc.positionAt(origDoc.getText().length)))
 		);
 		const position = doc.positionAt(doc.offsetAt(origPosition) + completion.completionText.length);
-		const result = await getGhostTextInternal(ctx, doc, position);
+		const result = await getGhostTextInternal(accessor, doc, position);
 		return { doc, position, result };
 	}
 
@@ -137,10 +142,10 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('returns cached completion', async function () {
-		const { ctx, requestGhostText, prefix, requestPrompt } = setupCompletion(new NoFetchFetcher());
+		const { accessor, requestGhostText, prefix, requestPrompt } = setupCompletion(new NoFetchFetcher());
 		const completionText = '\tfor i := 1; i<= n; i++ {';
 		const { suffix } = await requestPrompt();
-		addToCache(ctx, prefix, suffix, completionText);
+		addToCache(accessor, prefix, suffix, completionText);
 
 		const responseWithTelemetry = await requestGhostText();
 
@@ -152,11 +157,11 @@ suite('Isolated GhostText tests', function () {
 
 	test('returns empty response when cached completion is filtered by post-processing', async function () {
 		const completionText = '\tvar i int';
-		const { ctx, requestGhostText, prefix, requestPrompt } = setupCompletion(
+		const { accessor, requestGhostText, prefix, requestPrompt } = setupCompletion(
 			new StaticFetcher(() => createFakeCompletionResponse(completionText))
 		);
 		const { suffix } = await requestPrompt();
-		addToCache(ctx, prefix, suffix, '}'); // Completion matches next line of document
+		addToCache(accessor, prefix, suffix, '}'); // Completion matches next line of document
 
 		const responseWithTelemetry = await requestGhostText();
 
@@ -175,9 +180,9 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('returns typing as suggested', async function () {
-		const { ctx, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
+		const { accessor, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
 		const { suffix } = await requestPrompt();
-		addToCache(ctx, prefix, suffix, '\tfor i := 1; i<= n; i++ {');
+		addToCache(accessor, prefix, suffix, '\tfor i := 1; i<= n; i++ {');
 		await requestGhostText();
 
 		const secondText = 'import "fmt"\n\nfunc fizzbuzz(n int) {\n\tfor\n}\n';
@@ -198,11 +203,11 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('returns multiline typing as suggested when typing into single line context', async function () {
-		const { ctx, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
+		const { accessor, ctx, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
 		ctx.get(CurrentGhostText).hasAcceptedCurrentCompletion = () => true;
 		const { suffix } = await requestPrompt();
 		const completionText = '\tfmt.Println("hi")\n\tfmt.Print("hello")';
-		addToCache(ctx, prefix, suffix, completionText);
+		addToCache(accessor, prefix, suffix, completionText);
 		const firstRes = await requestGhostText();
 		assert.strictEqual(firstRes.type, 'success');
 		assert.strictEqual(firstRes.value[0][0].completion.completionText, completionText);
@@ -248,14 +253,14 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('returns cached single-line completion that starts with newline', async function () {
-		const { ctx, requestGhostText, requestPrompt, prefix } = setupCompletion(
+		const { accessor, requestGhostText, requestPrompt, prefix } = setupCompletion(
 			new NoFetchFetcher(),
 			'import "fmt"\n\nfunc fizzbuzz(n int) {\n\ti := 0\n}\n',
 			LocationFactory.position(3, '\ti := 0'.length)
 		);
 		const { suffix } = await requestPrompt();
 		const completionText = '\n\tj := 0';
-		addToCache(ctx, prefix, suffix, completionText);
+		addToCache(accessor, prefix, suffix, completionText);
 
 		const responseWithTelemetry = await requestGhostText();
 
@@ -266,12 +271,12 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('returns prefixed cached completion', async function () {
-		const { ctx, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
+		const { accessor, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
 		const { suffix } = await requestPrompt();
 		const earlierPrefix = prefix.substring(0, prefix.length - 3);
 		const remainingPrefix = prefix.substring(prefix.length - 3);
 		const completionText = '\tfor i := 1; i<= n; i++ {';
-		addToCache(ctx, earlierPrefix, suffix, remainingPrefix + completionText);
+		addToCache(accessor, earlierPrefix, suffix, remainingPrefix + completionText);
 
 		const responseWithTelemetry = await requestGhostText();
 
@@ -284,7 +289,7 @@ suite('Isolated GhostText tests', function () {
 
 	test('does not return cached completion when exhausted', async function () {
 		const networkCompletionText = '\tfor i := 1; i<= n; i++ {';
-		const { ctx, requestGhostText, requestPrompt, prefix } = setupCompletion(
+		const { accessor, requestGhostText, requestPrompt, prefix } = setupCompletion(
 			new StaticFetcher(() => {
 				return createFakeCompletionResponse(networkCompletionText);
 			})
@@ -292,7 +297,7 @@ suite('Isolated GhostText tests', function () {
 		const { suffix } = await requestPrompt();
 		const earlierPrefix = prefix.substring(0, prefix.length - 3);
 		const remainingPrefix = prefix.substring(prefix.length - 3);
-		addToCache(ctx, earlierPrefix, suffix, remainingPrefix);
+		addToCache(accessor, earlierPrefix, suffix, remainingPrefix);
 
 		const responseWithTelemetry = await requestGhostText();
 
@@ -362,13 +367,13 @@ suite('Isolated GhostText tests', function () {
 
 	test('adds prompt metadata to telemetry', async function () {
 		const networkCompletionText = '\tfor i := 1; i<= n; i++ {';
-		const { ctx, requestGhostText } = setupCompletion(
+		const { accessor, requestGhostText } = setupCompletion(
 			new StaticFetcher(() => {
 				return createFakeCompletionResponse(networkCompletionText);
 			})
 		);
 
-		const { result, reporter } = await withInMemoryTelemetry(ctx, async () => {
+		const { result, reporter } = await withInMemoryTelemetry(accessor, async () => {
 			return await requestGhostText();
 		});
 
@@ -389,12 +394,12 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('cache hits use issuedTime in telemetry from current request, not cache', async function () {
-		const { ctx, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
+		const { accessor, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
 		const { suffix } = await requestPrompt();
 		const completionText = '\tfor i := 1; i<= n; i++ {';
 		const choice = fakeAPIChoiceFromCompletion(completionText);
 		choice.telemetryData.issuedTime -= 100;
-		addToCache(ctx, prefix, suffix, completionText);
+		addToCache(accessor, prefix, suffix, completionText);
 
 		const responseWithTelemetry = await requestGhostText();
 
@@ -407,13 +412,13 @@ suite('Isolated GhostText tests', function () {
 
 	test('sends ghostText.issued telemetry event', async function () {
 		const networkCompletionText = '\tfor i := 1; i<= n; i++ {';
-		const { ctx, requestGhostText } = setupCompletion(
+		const { accessor, requestGhostText } = setupCompletion(
 			new StaticFetcher(() => {
 				return createFakeCompletionResponse(networkCompletionText);
 			})
 		);
 
-		const { result, reporter } = await withInMemoryTelemetry(ctx, async () => {
+		const { result, reporter } = await withInMemoryTelemetry(accessor, async () => {
 			return await requestGhostText();
 		});
 
@@ -525,10 +530,10 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('updates transient document information in telemetry of cached choices', async function () {
-		const { ctx, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
+		const { accessor, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
 		const { suffix } = await requestPrompt();
 		const completionText = '\tfor i := 1; i<= n; i++ {';
-		addToCache(ctx, prefix, suffix, completionText);
+		addToCache(accessor, prefix, suffix, completionText);
 
 		const responseWithTelemetry = await requestGhostText();
 
@@ -645,19 +650,19 @@ suite('Isolated GhostText tests', function () {
 			`;
 		const lines = raw.split('\n').map(line => `    ${line}`);
 		const multilineCompletion = lines.join('\n');
-		const { ctx, doc, position, state } = setupCompletion(
+		const { accessor, ctx, doc, position, state } = setupCompletion(
 			new StaticFetcher(() => createFakeCompletionResponse(multilineCompletion))
 		);
 		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.AlwaysRequestMultiline, true);
 		ctx.get(CurrentGhostText).hasAcceptedCurrentCompletion = () => true;
 
-		const response = await getGhostText(ctx, state, undefined, { isSpeculative: true });
+		const response = await getGhostText(accessor, state, undefined, { isSpeculative: true });
 
 		assert.strictEqual(response.type, 'success');
 		assert.strictEqual(response.value[0].length, 1);
 		assert.strictEqual(response.value[0][0].completion.completionText, lines.slice(0, 9).join('\n'));
 
-		const { result } = await acceptAndRequestNextCompletion(ctx, doc, position, response.value[0][0].completion);
+		const { result } = await acceptAndRequestNextCompletion(accessor, doc, position, response.value[0][0].completion);
 
 		assert.strictEqual(result.type, 'success');
 		assert.strictEqual(result.value[0].length, 1);
@@ -671,7 +676,7 @@ function fakeResult(completionText: string): Promise<GetNetworkCompletionsType> 
 	return Promise.resolve({
 		type: 'success',
 		value: [fakeAPIChoice(generateUuid(), 0, completionText), Promise.resolve()],
-		telemetryData: mkBasicResultTelemetry(telemetryBlob, undefined),
+		telemetryData: mkBasicResultTelemetry(telemetryBlob),
 		telemetryBlob,
 		resultType: ResultType.Async,
 	});

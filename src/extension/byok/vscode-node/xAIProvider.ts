@@ -82,7 +82,7 @@ export class XAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 				throw new Error('Invalid response format from xAI API');
 			}
 			this._logService.trace(`Fetched ${data.models.length} language models from xAI`);
-			const modelList: BYOKKnownModels = { ...this._knownModels };
+			const modelList: BYOKKnownModels = this._knownModels ? { ...this._knownModels } : {};
 			for (const model of data.models) {
 				if (this._knownModels && this._knownModels[model.id]) {
 					continue; // Skip known models so that we can override these correctly from CDN

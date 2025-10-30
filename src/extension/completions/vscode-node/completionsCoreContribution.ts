@@ -11,6 +11,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { createContext, setup } from '../../completions-core/vscode-node/completionsServiceBridges';
+import { registerPanelSupport } from '../../completions-core/vscode-node/extension/src/copilotPanel/common';
 import { CopilotInlineCompletionItemProvider } from '../../completions-core/vscode-node/extension/src/inlineCompletion';
 import { unificationStateObservable } from './completionsUnificationContribution';
 
@@ -24,7 +25,7 @@ export class CompletionsCoreContribution extends Disposable {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
-		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService
 	) {
 		super();
 
@@ -45,6 +46,7 @@ export class CompletionsCoreContribution extends Disposable {
 		if (!this._provider) {
 			const instantiationService = this._instantiationService.invokeFunction(createContext);
 			this._register(instantiationService.invokeFunction(setup));
+			this._register(instantiationService.invokeFunction(registerPanelSupport));
 			this._provider = this._register(instantiationService.createInstance(CopilotInlineCompletionItemProvider));
 		}
 		return this._provider;

@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isHiddenModelB } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
@@ -125,7 +124,7 @@ class XAIPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['grok-code'];
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return endpoint.family === BYOK_PROVIDER_NAME || isHiddenModelB(endpoint);
+		return endpoint.family === BYOK_PROVIDER_NAME;
 	}
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {

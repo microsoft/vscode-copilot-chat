@@ -5,6 +5,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
 
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../../context';
 import { CodeSnippets } from './codeSnippets';
 import { AdditionalCompletionsContext, StableCompletionsContext } from './completionsContext';
@@ -18,7 +19,8 @@ import { Traits } from './traits';
  * Function that returns the prompt structure for a code completion request following the split context prompt design
  * that optimizes for cache hits.
  */
-export function splitContextCompletionsPrompt(ctx: ICompletionsContextService) {
+export function splitContextCompletionsPrompt(accessor: ServicesAccessor) {
+	const ctx = accessor.get(ICompletionsContextService);
 	return (
 		<>
 			<StableCompletionsContext>
