@@ -153,13 +153,6 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
 		const models: IChatModelInformation[] = await this._modelFetcher.getAllChatModels();
-		const chatEndpoints = [];
-
-		for (const model of models) {
-			const chatEndpoint = this.getOrCreateChatEndpointInstance(model);
-			chatEndpoints.push(chatEndpoint);
-		}
-
-		return chatEndpoints;
+		return models.map(model => this.getOrCreateChatEndpointInstance(model));
 	}
 }
