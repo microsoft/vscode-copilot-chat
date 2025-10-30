@@ -353,6 +353,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			if (result === deleteLabel) {
 				const id = SessionIdForCLI.parse(sessionItem.resource);
 				await copilotCLISessionService.deleteSession(id);
+				copilotcliSessionItemProvider.refresh();
 			}
 		}
 	}));
