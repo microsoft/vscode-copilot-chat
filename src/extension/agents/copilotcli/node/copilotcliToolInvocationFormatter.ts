@@ -84,7 +84,6 @@ export function getAffectedUrisForEditTool(toolName: string, toolArgs: unknown):
 			return [];
 		}
 		case CopilotCLIToolNames.edit:
-		case CopilotCLIToolNames.View:
 		case CopilotCLIToolNames.create: {
 			const args = toolArgs as (EditArgs | ViewArgs | CreateArgs);
 			if (args.path) {
