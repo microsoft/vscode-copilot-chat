@@ -16,7 +16,7 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
-import { ChatEndpoint } from '../node/chatEndpoint';
+import { ChatEndpoint } from './chatEndpoint';
 
 /**
  * This endpoint represents the "Auto" model in the model picker.
@@ -111,4 +111,11 @@ function calculateAutoModelInfo(endpoint: IChatEndpoint, sessionToken: string, d
 		}
 	};
 	return newModelInfo;
+}
+
+export function isAutoModel(endpoint: IChatEndpoint | undefined): number {
+	if (!endpoint) {
+		return -1;
+	}
+	return endpoint.model === AutoChatEndpoint.pseudoModelId || (endpoint instanceof AutoChatEndpoint) ? 1 : -1;
 }

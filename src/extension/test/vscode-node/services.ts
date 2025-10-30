@@ -23,10 +23,10 @@ import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/re
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
-import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/vscode-node/automodeService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';

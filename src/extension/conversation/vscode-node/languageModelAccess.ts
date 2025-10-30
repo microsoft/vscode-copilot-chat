@@ -15,8 +15,8 @@ import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } fro
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
-import { AutoChatEndpoint } from '../../../platform/endpoint/vscode-node/autoChatEndpoint';
-import { IAutomodeService } from '../../../platform/endpoint/vscode-node/automodeService';
+import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
