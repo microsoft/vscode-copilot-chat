@@ -5,6 +5,7 @@
 
 import type { Endpoints } from "@octokit/types";
 import { createServiceIdentifier } from '../../../util/common/services';
+import { decodeBase64 } from '../../../util/vs/base/common/buffer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
@@ -376,9 +377,9 @@ export class BaseOctoKitService {
 
 		// GitHub API returns base64 encoded content
 		if (response?.content && response.encoding === 'base64') {
-			return Buffer.from(response.content, 'base64').toString('utf-8');
+			return decodeBase64(response.content.replace(/\n/g, '')).toString();
+		} else {
+			return '';
 		}
-
-		throw new Error('Invalid file content response from GitHub API');
 	}
 }
