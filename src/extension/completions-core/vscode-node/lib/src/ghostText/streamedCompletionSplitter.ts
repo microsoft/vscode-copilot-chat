@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ICompletionsContextService } from '../context';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { FinishedCallback, RequestDelta, SolutionDecision } from '../openai/fetch';
 import { APIChoice, convertToAPIChoice } from '../openai/openai';
 import { CopilotNamedAnnotationList } from '../openai/stream';
@@ -74,7 +74,7 @@ export class StreamedCompletionSplitter {
 		private readonly initialSingleLine: boolean,
 		private readonly trimmerLookahead: number,
 		private readonly cacheFunction: (prefixAddition: string, item: APIChoice) => void,
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) { }
 
 	getFinishedCallback(): FinishedCallback {
@@ -180,8 +180,7 @@ export class StreamedCompletionSplitter {
 		if (trimmed.effectiveText.trim() === '') {
 			return;
 		}
-		const apiChoice = convertToAPIChoice(
-			this.ctx,
+		const apiChoice = this.instantiationService.invokeFunction(convertToAPIChoice,
 			trimmed.effectiveText.trimEnd(),
 			delta.getAPIJsonData!(),
 			trimmed.index,

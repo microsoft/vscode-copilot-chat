@@ -967,3 +967,9 @@ export async function isBlockBodyFinished(languageId: string, prefix: string, co
 	return getBlockParser(languageId).isBlockBodyFinished(prefix, completion, offset);
 }
 
+export async function getNodeStart(languageId: string, text: string, offset: number) {
+	if (!isSupportedLanguageId(languageId)) {
+		return;
+	}
+	return getBlockParser(languageId).getNodeStart(text, offset);
+}

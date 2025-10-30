@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0-20251024",
+		"vscode": "^1.106.0-20251030",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -2207,7 +2207,13 @@
 			{
 				"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
-			}
+			},
+			{
+                "command": "github.copilot.client.generate",
+                "title": "Open Completions Panel",
+                "enablement": "!isWeb",
+                "category": "GitHub Copilot"
+            }
 		],
 		"configuration": [
 			{
@@ -3109,6 +3115,15 @@
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.maxTokens%",
 						"minimum": 1024,
 						"maximum": 32000,
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.webSearchTool.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.anthropic.webSearchTool.enabled%",
 						"tags": [
 							"experimental",
 							"onExp"

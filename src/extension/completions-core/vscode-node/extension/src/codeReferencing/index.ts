@@ -8,9 +8,10 @@ import { CopilotToken } from '../../../lib/src/auth/copilotTokenManager';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
 import { ICompletionsContextService } from '../../../lib/src/context';
 import { codeReferenceLogger } from '../../../lib/src/snippy/logger';
-import { isRunningInTest } from '../../../lib/src/util/runtimeMode';
+import { ICompletionsRuntimeModeService } from '../../../lib/src/util/runtimeMode';
 import { registerCodeRefEngagementTracker } from './codeReferenceEngagementTracker';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { LogTarget } from '../../../lib/src/logger';
 
 export class CodeReference {
 	subscriptions: Disposable | undefined;
@@ -18,8 +19,9 @@ export class CodeReference {
 	enabled: boolean = false;
 
 	constructor(
-		@ICompletionsContextService readonly ctx: ICompletionsContextService,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ICompletionsRuntimeModeService readonly _runtimeMode: ICompletionsRuntimeModeService,
 	) { }
 
 	dispose() {
@@ -28,8 +30,8 @@ export class CodeReference {
 	}
 
 	register() {
-		if (!isRunningInTest(this.ctx)) {
-			this.event = onCopilotToken(this.ctx, this.onCopilotToken);
+		if (!this._runtimeMode.isRunningInTest()) {
+			this.event = this._instantiationService.invokeFunction(onCopilotToken, this.onCopilotToken);
 		}
 		return this;
 	}
@@ -43,16 +45,16 @@ export class CodeReference {
 	}
 
 	onCopilotToken = (token: Omit<CopilotToken, "token">) => {
+		const logTarget = this.ctx.get(LogTarget);
 		this.enabled = token.codeQuoteEnabled || false;
 		if (!token.codeQuoteEnabled) {
 			this.subscriptions?.dispose();
 			this.subscriptions = undefined;
-			codeReferenceLogger.debug(this.ctx, 'Public code references are disabled.');
+			codeReferenceLogger.debug(logTarget, 'Public code references are disabled.');
 			return;
 		}
 
-		codeReferenceLogger.info(this.ctx, 'Public code references are enabled.');
-
+		codeReferenceLogger.info(logTarget, 'Public code references are enabled.');
 		this.addDisposable(registerCodeRefEngagementTracker(this._instantiationService));
 	};
 }

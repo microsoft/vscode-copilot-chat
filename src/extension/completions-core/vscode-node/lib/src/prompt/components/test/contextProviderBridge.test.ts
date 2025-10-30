@@ -14,13 +14,15 @@ import { createTextDocument } from '../../../test/textDocument';
 import { LocationFactory } from '../../../textDocument';
 import { ContextProviderRegistry } from '../../contextProviderRegistry';
 import { ContextProviderBridge } from './../contextProviderBridge';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('Context Provider Bridge', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 	let bridge: ContextProviderBridge;
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(ContextProviderRegistry).registerContextProvider(new TestContextProvider());
 		ctx.get(Features).contextProviders = () => ['testContextProvider'];
 		bridge = ctx.instantiationService.createInstance(ContextProviderBridge);
@@ -59,6 +61,7 @@ suite('Context Provider Bridge', function () {
 	});
 
 	test('error in context resolution', async function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(ContextProviderRegistry).registerContextProvider(
 			new TestContextProvider({ shouldThrow: true, id: 'errorProvider' })
 		);
@@ -88,8 +91,9 @@ suite('Context Provider Bridge', function () {
 	});
 
 	test('empty provider list returns empty array', async function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(Features).contextProviders = () => [];
-		bridge = new ContextProviderBridge(createLibTestingContext());
+		bridge = new ContextProviderBridge(createLibTestingContext().get(ICompletionsContextService));
 		const state = testCompletionState();
 
 		bridge.schedule(state, 'empty-id', 'opId', TelemetryWithExp.createEmptyConfigForTesting());

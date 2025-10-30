@@ -4,16 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable, TextEditor, window } from 'vscode';
-import { ICompletionsContextService } from '../../../lib/src/context';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { citationsChannelName } from './outputChannel';
-import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 export class CodeRefEngagementTracker {
 	private activeLog = false;
 	private subscriptions: Disposable[] = [];
 
-	constructor(@ICompletionsContextService private ctx: ICompletionsContextService) { }
+	constructor(@IInstantiationService private instantiationService: IInstantiationService) { }
 
 	register() {
 		const activeEditorChangeSub = window.onDidChangeActiveTextEditor(this.onActiveEditorChange);
@@ -25,7 +24,7 @@ export class CodeRefEngagementTracker {
 
 	onActiveEditorChange = (editor: TextEditor | undefined) => {
 		if (this.isOutputLog(editor)) {
-			copilotOutputLogTelemetry.handleFocus({ context: this.ctx });
+			copilotOutputLogTelemetry.handleFocus({ instantiationService: this.instantiationService });
 		}
 	};
 
@@ -38,7 +37,7 @@ export class CodeRefEngagementTracker {
 			}
 		} else if (copilotLog) {
 			this.activeLog = true;
-			copilotOutputLogTelemetry.handleOpen({ context: this.ctx });
+			copilotOutputLogTelemetry.handleOpen({ instantiationService: this.instantiationService });
 		}
 	};
 

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ICompletionModelInformation, IEndpointProvider } from '../../../../../../platform/endpoint/common/endpointProvider';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CompletionsEndpointProviderBridge } from '../../../bridge/src/completionsEndpointProviderBridge';
 import { TokenizerName } from '../../../prompt/src/tokenization';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
@@ -24,10 +25,11 @@ export class AvailableModelsManager {
 	constructor(
 		shouldFetch: boolean = true,
 		@ICompletionsContextService private _ctx: ICompletionsContextService,
+		@IInstantiationService private instantiationService: IInstantiationService,
 	) {
 		this._endpointProvider = this._ctx.get(CompletionsEndpointProviderBridge).endpointProvider;
 		if (shouldFetch) {
-			onCopilotToken(this._ctx, () => this.refreshAvailableModels());
+			instantiationService.invokeFunction(onCopilotToken, () => this.refreshAvailableModels());
 		}
 	}
 
@@ -113,8 +115,8 @@ export class AvailableModelsManager {
 		const defaultModelId = this.getDefaultModelId();
 
 		const debugOverride =
-			getConfig<string>(this._ctx, ConfigKey.DebugOverrideEngine) ||
-			getConfig<string>(this._ctx, ConfigKey.DebugOverrideEngineLegacy);
+			this.instantiationService.invokeFunction(getConfig<string>, ConfigKey.DebugOverrideEngine) ||
+			this.instantiationService.invokeFunction(getConfig<string>, ConfigKey.DebugOverrideEngineLegacy);
 
 		if (debugOverride) {
 			return new ModelRequestInfo(debugOverride, 'override');
