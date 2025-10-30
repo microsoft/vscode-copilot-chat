@@ -194,10 +194,7 @@ export class CopilotCLISession extends Disposable {
 					stream.push(responsePart);
 				}
 				const affectedUris = getAffectedUrisForEditTool(event.data.toolName, event.data.arguments);
-				if (affectedUris.length > 0) {
-					affectedUris
-						.forEach(uri => this._filesEditedByTool.set(uri, event.data.toolCallId));
-				}
+				affectedUris.forEach(uri => this._filesEditedByTool.set(uri, event.data.toolCallId));
 				this.logService.trace(`Start Tool ${toolName || '<unknown>'}`);
 				break;
 			}
