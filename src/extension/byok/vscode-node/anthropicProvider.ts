@@ -400,7 +400,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					}, null, 2);
 
 					// TODO: @bhavyaus - instead of just pushing text, create a specialized WebSearchResult part
-					(progress.items as LMResponsePart[]).push(new LanguageModelToolResultPart(
+					progress.report(new LanguageModelToolResultPart(
 						pendingServerToolCall.toolId!,
 						[new LanguageModelTextPart(searchResults)]
 					));
