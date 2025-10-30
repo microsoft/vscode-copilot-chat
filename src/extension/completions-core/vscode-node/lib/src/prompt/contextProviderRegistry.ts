@@ -6,6 +6,7 @@
 import { CancellationToken, CancellationTokenSource, DocumentSelector } from 'vscode-languageserver-protocol';
 import { ILanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
 import { isCancellationError } from '../../../../../../util/vs/base/common/errors';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	ContextItemUsageDetails,
 	ContextProvider,
@@ -20,9 +21,9 @@ import { ConfigKey, getConfig } from '../config';
 import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { LRUCacheMap } from '../helpers/cache';
-import { logger } from '../logger';
+import { logger, LogTarget } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
-import { isDebugEnabled, isRunningInSimulation } from '../util/runtimeMode';
+import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 import { isArrayOfT, resolveAll } from './asyncUtils';
 import { fillInCppVSCodeActiveExperiments } from './contextProviderRegistryCpp';
 import { fillInCSharpActiveExperiments } from './contextProviderRegistryCSharp';
@@ -34,7 +35,6 @@ import {
 	SupportedContextItemWithId,
 } from './contextProviders/contextItemSchemas';
 import { ContextProviderStatistics } from './contextProviderStatistics';
-import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 export interface ResolvedContextItem<T extends SupportedContextItemWithId = SupportedContextItemWithId> {
 	providerId: string;
@@ -103,6 +103,8 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 		) => Promise<number> | number,
 		@ILanguageContextProviderService private registryService: ILanguageContextProviderService,
 		@ICompletionsContextService protected ctx: ICompletionsContextService,
+		@ICompletionsRuntimeModeService private runtimeMode: ICompletionsRuntimeModeService,
+		@IInstantiationService protected instantiationService: IInstantiationService,
 	) {
 		super();
 	}
@@ -132,12 +134,12 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 		data?: unknown
 	): Promise<ResolvedContextItem[]> {
 		if (completionCancellationToken?.isCancellationRequested) {
-			logger.debug(this.ctx, `Resolving context providers cancelled`);
+			logger.debug(this.ctx.get(LogTarget), `Resolving context providers cancelled`);
 			return [];
 		}
 		// Pass experiments here if needed.
 		const activeExperiments: ActiveExperiments = new Map();
-		fillInCSharpActiveExperiments(this.ctx, activeExperiments, telemetryData);
+		this.instantiationService.invokeFunction(fillInCSharpActiveExperiments, activeExperiments, telemetryData);
 		const resolvedContextItems: ResolvedContextItem[] = [];
 
 		const _providers = this.providers;
@@ -165,25 +167,22 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 			return resolvedContextItems;
 		}
 		if (completionCancellationToken?.isCancellationRequested) {
-			logger.debug(this.ctx, `Resolving context providers cancelled`);
+			logger.debug(this.ctx.get(LogTarget), `Resolving context providers cancelled`);
 			return [];
 		}
 
 		// Fill in the active experiments for the matched providers.
-		fillInCppVSCodeActiveExperiments(
-			this.ctx,
+		this.instantiationService.invokeFunction(fillInCppVSCodeActiveExperiments,
 			matchedProviders.map(p => p[0].id),
 			activeExperiments,
 			telemetryData
 		);
-		fillInMultiLanguageActiveExperiments(
-			this.ctx,
+		this.instantiationService.invokeFunction(fillInMultiLanguageActiveExperiments,
 			matchedProviders.map(p => p[0].id),
 			activeExperiments,
 			telemetryData
 		);
-		fillInTsActiveExperiments(
-			this.ctx,
+		this.instantiationService.invokeFunction(fillInTsActiveExperiments,
 			matchedProviders.map(p => p[0].id),
 			activeExperiments,
 			telemetryData
@@ -199,9 +198,9 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 
 		// Overriding this config with a value of 0 will create an infinite timeout (useful for debugging)
 		const timeBudget =
-			isDebugEnabled(this.ctx) && !isRunningInSimulation(this.ctx)
+			this.runtimeMode.isDebugEnabled() && !this.runtimeMode.isRunningInSimulation()
 				? 0
-				: getContextProviderTimeBudget(this.ctx, telemetryData);
+				: this.instantiationService.invokeFunction(getContextProviderTimeBudget, telemetryData);
 		const timeoutEnd = timeBudget > 0 ? Date.now() + timeBudget : Number.MAX_SAFE_INTEGER;
 		let timeoutId: TimeoutHandle | undefined;
 		if (timeBudget > 0) {
@@ -250,7 +249,7 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 			if (result) {
 				if (result.status === 'error') {
 					if (!isCancellationError(result.reason)) {
-						logger.error(this.ctx, `Error resolving context from ${provider.id}: `, result.reason);
+						logger.error(this.ctx.get(LogTarget), `Error resolving context from ${provider.id}: `, result.reason);
 					}
 					resolvedContextItems.push({
 						providerId: provider.id,
@@ -262,10 +261,7 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 				} else {
 					const mergedItems: SupportedContextItem[] = [...(result.value ?? [])];
 					if (result.status === 'none' || result.status === 'partial') {
-						logger.info(
-							this.ctx,
-							`Context provider ${provider.id} exceeded time budget of ${timeBudget}ms`
-						);
+						logger.info(this.ctx.get(LogTarget), `Context provider ${provider.id} exceeded time budget of ${timeBudget}ms`);
 						if (provider.resolver.resolveOnTimeout) {
 							try {
 								const fallbackItems = provider.resolver.resolveOnTimeout(request);
@@ -280,22 +276,15 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 									result.status = 'partial';
 								}
 							} catch (error) {
-								logger.error(
-									this.ctx,
-									`Error in fallback logic for context provider ${provider.id}: `,
-									error
-								);
+								logger.error(this.ctx.get(LogTarget), `Error in fallback logic for context provider ${provider.id}: `, error);
 							}
 						}
 					}
 					const [supportedItems, invalidItems] = filterSupportedContextItems(mergedItems);
 					if (invalidItems) {
-						logger.error(
-							this.ctx,
-							`Dropped ${invalidItems} context items from ${provider.id} due to invalid schema`
-						);
+						logger.error(this.ctx.get(LogTarget), `Dropped ${invalidItems} context items from ${provider.id} due to invalid schema`);
 					}
-					const filteredItemsWithId = addOrValidateContextItemsIDs(this.ctx, supportedItems);
+					const filteredItemsWithId = this.instantiationService.invokeFunction(addOrValidateContextItemsIDs, supportedItems);
 
 					const resolvedContextItem: ResolvedContextItem = {
 						providerId: provider.id,
@@ -310,7 +299,7 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 				statistics.setLastResolution(provider.id, result.status);
 			} else {
 				// This can't happen
-				logger.error(this.ctx, `Context provider ${provider.id} not found in results`);
+				logger.error(this.ctx.get(LogTarget), `Context provider ${provider.id} not found in results`);
 			}
 		}
 		// Sort the results by match score, so that the highest match score is first.
@@ -322,7 +311,7 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 		documentContext: DocumentContext,
 		telemetryData: TelemetryWithExp
 	): Promise<[ContextProvider<SupportedContextItem>, number][]> {
-		const activeContextProviders = getActiveContextProviders(this.ctx, telemetryData);
+		const activeContextProviders = this.instantiationService.invokeFunction(getActiveContextProviders, telemetryData);
 		const enableAllProviders = activeContextProviders.length === 1 && activeContextProviders[0] === '*';
 
 		const providersWithScore = await Promise.all(
@@ -351,8 +340,10 @@ class MutableContextProviderRegistry extends CoreContextProviderRegistry {
 		) => Promise<number> | number,
 		@ILanguageContextProviderService registryService: ILanguageContextProviderService,
 		@ICompletionsContextService ctx: ICompletionsContextService,
+		@ICompletionsRuntimeModeService runtimeMode: ICompletionsRuntimeModeService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
-		super(match, registryService, ctx);
+		super(match, registryService, ctx, runtimeMode, instantiationService);
 	}
 
 	override registerContextProvider<T extends SupportedContextItem>(provider: ContextProvider<T>) {
@@ -504,9 +495,9 @@ export function matchContextItems(resolvedContextItem: ResolvedContextItem): boo
 	return resolvedContextItem.matchScore > 0 && resolvedContextItem.resolution !== 'error';
 }
 
-function getActiveContextProviders(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp): string[] {
-	const expContextProviders = getExpContextProviders(ctx, telemetryData);
-	const configContextProviders: string[] = getConfig(ctx, ConfigKey.ContextProviders) ?? [];
+function getActiveContextProviders(accessor: ServicesAccessor, telemetryData: TelemetryWithExp): string[] {
+	const expContextProviders = getExpContextProviders(accessor, telemetryData);
+	const configContextProviders: string[] = getConfig(accessor, ConfigKey.ContextProviders) ?? [];
 
 	if (
 		(expContextProviders.length === 1 && expContextProviders[0] === '*') ||
@@ -516,7 +507,7 @@ function getActiveContextProviders(ctx: ICompletionsContextService, telemetryDat
 	}
 
 	// Merge the two arrays and deduplicate
-	const defaultContextProviders = ctx.get(DefaultContextProviders).getIds();
+	const defaultContextProviders = accessor.get(ICompletionsContextService).get(DefaultContextProviders).getIds();
 	return Array.from(new Set([...defaultContextProviders, ...expContextProviders, ...configContextProviders]));
 }
 
@@ -524,23 +515,23 @@ function getActiveContextProviders(ctx: ICompletionsContextService, telemetryDat
  * This only returns the context providers that are enabled by EXP.
  * Use `getActiveContextProviders` to get the context providers that are enabled by both EXP and config.
  */
-function getExpContextProviders(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp) {
-	if (isDebugEnabled(ctx)) {
+function getExpContextProviders(accessor: ServicesAccessor, telemetryData: TelemetryWithExp) {
+	if (accessor.get(ICompletionsRuntimeModeService).isDebugEnabled()) {
 		return ['*'];
 	}
 
-	return ctx.get(Features).contextProviders(telemetryData);
+	return accessor.get(ICompletionsContextService).get(Features).contextProviders(telemetryData);
 }
 
-export function useContextProviderAPI(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp) {
-	return getActiveContextProviders(ctx, telemetryData).length > 0;
+export function useContextProviderAPI(accessor: ServicesAccessor, telemetryData: TelemetryWithExp) {
+	return getActiveContextProviders(accessor, telemetryData).length > 0;
 }
 
-function getContextProviderTimeBudget(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp): number {
-	const configTimeout = getConfig<number | undefined>(ctx, ConfigKey.ContextProviderTimeBudget);
+function getContextProviderTimeBudget(accessor: ServicesAccessor, telemetryData: TelemetryWithExp): number {
+	const configTimeout = getConfig<number | undefined>(accessor, ConfigKey.ContextProviderTimeBudget);
 	if (configTimeout !== undefined && typeof configTimeout === 'number') {
 		return configTimeout;
 	}
 
-	return ctx.get(Features).contextProviderTimeBudget(telemetryData);
+	return accessor.get(ICompletionsContextService).get(Features).contextProviderTimeBudget(telemetryData);
 }

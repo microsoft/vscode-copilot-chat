@@ -7,7 +7,7 @@ import { CompletionsAuthenticationServiceBridge } from '../../../bridge/src/comp
 import { CompletionsEndpointProviderBridge } from '../../../bridge/src/completionsEndpointProviderBridge';
 import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
 import { CompletionsIgnoreServiceBridge } from '../../../bridge/src/completionsIgnoreServiceBridge';
-import { CompletionsTelemetryServiceBridge } from '../../../bridge/src/completionsTelemetryServiceBridge';
+import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from '../../../bridge/src/completionsTelemetryServiceBridge';
 import { CopilotTokenManager } from '../auth/copilotTokenManager';
 import { CitationManager, NoOpCitationManager } from '../citationManager';
 import { CompletionNotifier } from '../completionNotifier';
@@ -17,6 +17,8 @@ import {
 	DefaultsOnlyConfigProvider,
 	EditorAndPluginInfo,
 	EditorSession,
+	ICompletionsBuildInfoService,
+	ICompletionsEditorSessionService,
 	InMemoryConfigProvider,
 } from '../config';
 import { CopilotContentExclusionManager } from '../contentExclusion/contentExclusionManager';
@@ -56,19 +58,20 @@ import { RecentEditsProvider } from '../prompt/recentEdits/recentEditsProvider';
 import { TelemetryReporters, TelemetryUserConfig } from '../telemetry';
 import { TextDocumentManager } from '../textDocumentManager';
 import { UrlOpener } from '../util/opener';
-import { PromiseQueue } from '../util/promiseQueue';
-import { RuntimeMode } from '../util/runtimeMode';
+import { ICompletionsPromiseQueueService, PromiseQueue } from '../util/promiseQueue';
+import { ICompletionsRuntimeModeService, RuntimeMode } from '../util/runtimeMode';
 import { NoFetchFetcher } from './fetcher';
 import { TestNotificationSender, TestUrlOpener } from './testHelpers';
 import { TestTextDocumentManager } from './textDocument';
 
 import { ILanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
 import { NullLanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/nullLanguageContextProviderService';
-import { IInstantiationService, type ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ServiceCollection } from '../../../../../../util/vs/platform/instantiation/common/serviceCollection';
+import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../../../platform/test/node/services';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionTestingServices } from '../../../../../test/vscode-node/services';
 import { CompletionsCapiBridge } from '../../../bridge/src/completionsCapiBridge';
 import { FakeCopilotTokenManager } from './copilotTokenManager';
+import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry';
 
 class NullLog extends LogTarget {
 	logIt(..._: unknown[]) { }
@@ -79,7 +82,6 @@ bridges.push(CompletionsEndpointProviderBridge);
 bridges.push(CompletionsAuthenticationServiceBridge);
 bridges.push(CompletionsIgnoreServiceBridge);
 bridges.push(CompletionsExperimentationServiceBridge);
-bridges.push(CompletionsTelemetryServiceBridge);
 bridges.push(CompletionsCapiBridge);
 
 /**
@@ -89,14 +91,39 @@ bridges.push(CompletionsCapiBridge);
  * @see createExtensionTestingContext
  * @see createAgentTestingContext
  */
-export function _createBaselineContext(serviceAccessor: ServicesAccessor, configProvider: InMemoryConfigProvider): ICompletionsContextService {
-	const ctx = new Context();
-
-	const serviceCollection = new ServiceCollection();
+export function _createBaselineContext(serviceCollection: TestingServiceCollection, configProvider: InMemoryConfigProvider): ITestingServicesAccessor {
 	serviceCollection.set(ILanguageContextProviderService, new NullLanguageContextProviderService());
-	serviceCollection.set(ICompletionsContextService, ctx);
-	const instantiationService = serviceAccessor.get(IInstantiationService).createChild(serviceCollection);
 
+	const tmpAccessor = serviceCollection.clone().createTestingAccessor();
+	const telemetryservice = tmpAccessor.get(ITelemetryService);
+
+	const ctx = new Context();
+	serviceCollection.set(ICompletionsContextService, ctx);
+
+	ctx.set(LogTarget, new NullLog());
+
+	const runtimeMode = new RuntimeMode({ debug: false, verboseLogging: false, testMode: true, simulation: false });
+	ctx.set(RuntimeMode, runtimeMode);
+	serviceCollection.set(ICompletionsRuntimeModeService, runtimeMode);
+
+	const buildInfo = new BuildInfo();
+	ctx.set(BuildInfo, buildInfo);
+	serviceCollection.set(ICompletionsBuildInfoService, buildInfo);
+
+	const editorSession = new EditorSession('test-session', 'test-machine');
+	ctx.set(EditorSession, editorSession);
+	serviceCollection.set(ICompletionsEditorSessionService, editorSession);
+
+	const completionsTelemetryService = new CompletionsTelemetryServiceBridge(telemetryservice);
+	serviceCollection.set(ICompletionsTelemetryService, completionsTelemetryService);
+	ctx.set(CompletionsTelemetryServiceBridge, completionsTelemetryService);
+
+	const promiseQueue = new PromiseQueue();
+	ctx.set(PromiseQueue, promiseQueue);
+	serviceCollection.set(ICompletionsPromiseQueueService, promiseQueue);
+
+	const accessor = serviceCollection.createTestingAccessor();
+	const instantiationService = accessor.get(IInstantiationService);
 	ctx.setInstantiationService(instantiationService);
 
 	for (const bridge of bridges) {
@@ -105,8 +132,6 @@ export function _createBaselineContext(serviceAccessor: ServicesAccessor, config
 
 	ctx.set(ConfigProvider, configProvider);
 	ctx.set(InMemoryConfigProvider, configProvider);
-	ctx.set(BuildInfo, new BuildInfo());
-	ctx.set(RuntimeMode, new RuntimeMode({ debug: false, verboseLogging: false, testMode: true, simulation: false }));
 	ctx.set(CopilotTokenManager, instantiationService.createInstance(FakeCopilotTokenManager));
 	// Notifications from the monolith when fetching a token can trigger behavior that require these objects.
 	ctx.set(TelemetryReporters, new TelemetryReporters());
@@ -114,14 +139,11 @@ export function _createBaselineContext(serviceAccessor: ServicesAccessor, config
 	ctx.set(UrlOpener, new TestUrlOpener());
 	ctx.set(TelemetryLogSender, new TelemetryLogSenderImpl());
 	ctx.set(TelemetryUserConfig, instantiationService.createInstance(TelemetryUserConfig));
-	ctx.set(LogTarget, new NullLog());
 	ctx.set(UserErrorNotifier, new UserErrorNotifier());
-	ctx.set(EditorSession, new EditorSession('test-session', 'test-machine'));
 	ctx.set(Features, instantiationService.createInstance(Features));
 	ctx.set(CompletionsCache, new CompletionsCache());
 	ctx.set(BlockModeConfig, new ConfigBlockModeConfig());
 	ctx.set(StatusReporter, new NoOpStatusReporter());
-	ctx.set(PromiseQueue, new PromiseQueue());
 	ctx.set(CompletionNotifier, instantiationService.createInstance(CompletionNotifier));
 	//ctx.set(FileSearch, new TestingFileSearch());
 	ctx.set(CompletionsPromptFactory, createCompletionsPromptFactory(instantiationService));
@@ -148,7 +170,7 @@ export function _createBaselineContext(serviceAccessor: ServicesAccessor, config
 	ctx.set(RecentEditsProvider, new EmptyRecentEditsProvider());
 	ctx.set(SpeculativeRequestCache, new SpeculativeRequestCache());
 
-	return ctx;
+	return accessor;
 }
 
 /**
@@ -156,8 +178,8 @@ export function _createBaselineContext(serviceAccessor: ServicesAccessor, config
  */
 export function createLibTestingContext() {
 	const services = createExtensionTestingServices();
-	const accessor = services.createTestingAccessor();
-	const ctx = _createBaselineContext(accessor, new InMemoryConfigProvider(new DefaultsOnlyConfigProvider(), new Map()));
+	const accessor = _createBaselineContext(services, new InMemoryConfigProvider(new DefaultsOnlyConfigProvider(), new Map()));
+	const ctx = accessor.get(ICompletionsContextService);
 
 	ctx.set(Fetcher, new NoFetchFetcher());
 	ctx.set(EditorAndPluginInfo, new LibTestsEditorInfo());
@@ -166,7 +188,7 @@ export function createLibTestingContext() {
 	ctx.set(CopilotContentExclusionManager, ctx.instantiationService.createInstance(CopilotContentExclusionManager));
 	ctx.set(DefaultContextProviders, new DefaultContextProvidersContainer());
 
-	return ctx;
+	return accessor;
 }
 
 export class LibTestsEditorInfo extends EditorAndPluginInfo {

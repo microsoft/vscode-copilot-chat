@@ -4,21 +4,22 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ClientHttp2Stream } from 'http2';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { ICompletionsContextService } from '../context';
-import { Logger } from '../logger';
+import { Logger, LogTarget } from '../logger';
 import { Response } from '../networking';
-import { TelemetryWithExp, telemetry } from '../telemetry';
+import { TelemetryWithExp } from '../telemetry';
 import { getEngineRequestInfo } from './config';
 import { CopilotConfirmation, CopilotError, CopilotReference, SolutionDecision } from './fetch';
 import {
 	APIChoice,
 	APIJsonData,
 	APILogprobs,
-	FinishedCallback,
-	RequestId,
 	convertToAPIChoice,
+	FinishedCallback,
 	getRequestId,
+	RequestId,
 } from './openai';
 
 const streamChoicesLogger = new Logger('streamChoices');
@@ -268,6 +269,8 @@ export class SSEProcessor {
 	 */
 	private readonly solutions: Record<number, APIJsonDataStreaming | null> = {};
 
+	private logTarget: LogTarget;
+
 	private constructor(
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
@@ -275,8 +278,11 @@ export class SSEProcessor {
 		private readonly telemetryData: TelemetryWithExp,
 		private readonly dropCompletionReasons: string[],
 		private readonly cancellationToken: ICancellationToken | undefined = undefined,
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
-	) { }
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICompletionsContextService private readonly completionsContextService: ICompletionsContextService,
+	) {
+		this.logTarget = this.completionsContextService.get(LogTarget);
+	}
 
 	/**
 	 * Creates a new instance of SSEProcessor.
@@ -285,13 +291,16 @@ export class SSEProcessor {
 	 * Historically, this was used to drop RAI ('content_filter') completions, instead of showing partially finished completions to the user. We've gone back and forth on this.
 	 */
 	static async create(
-		ctx: ICompletionsContextService,
+		accessor: ServicesAccessor,
 		expectedNumChoices: number,
 		response: Response,
 		telemetryData: TelemetryWithExp,
 		dropCompletionReasons?: string[],
 		cancellationToken?: ICancellationToken
 	) {
+		const instantiationService = accessor.get(IInstantiationService);
+		const completionsContextService = accessor.get(ICompletionsContextService);
+
 		// Handle both NodeJS.ReadableStream and ReadableStream for web.  Once
 		// helix fetcher is removed, the NodeJS.ReadableStream support can be
 		let body = response.body() as unknown as NodeJS.ReadableStream;
@@ -321,7 +330,8 @@ export class SSEProcessor {
 			telemetryData,
 			dropCompletionReasons ?? [],
 			cancellationToken,
-			ctx
+			instantiationService,
+			completionsContextService,
 		);
 	}
 
@@ -344,11 +354,10 @@ export class SSEProcessor {
 			yield* this.processSSEInner(finishedCb);
 		} finally {
 			this.cancel();
-			streamChoicesLogger.debug(
-				this.ctx,
+			streamChoicesLogger.debug(this.logTarget,
 				`request done: headerRequestId: [${this.requestId.headerRequestId}] model deployment ID: [${this.requestId.deploymentId}]`
 			);
-			streamChoicesLogger.debug(this.ctx, 'request stats:', this.stats);
+			streamChoicesLogger.debug(this.logTarget, 'request stats:', this.stats);
 		}
 	}
 
@@ -367,7 +376,7 @@ export class SSEProcessor {
 				return;
 			}
 
-			streamChoicesLogger.debug(this.ctx, 'chunk', chunk.toString());
+			streamChoicesLogger.debug(this.logTarget, 'chunk', chunk.toString());
 			const [dataLines, remainder] = splitChunk(extraData + chunk.toString());
 			extraData = remainder;
 
@@ -396,7 +405,7 @@ export class SSEProcessor {
 				try {
 					json = <StreamingResponse>JSON.parse(lineWithoutData);
 				} catch (e) {
-					streamChoicesLogger.error(this.ctx, 'Error parsing JSON stream data', dataLine);
+					streamChoicesLogger.error(this.logTarget, 'Error parsing JSON stream data', dataLine);
 					continue;
 				}
 
@@ -421,10 +430,9 @@ export class SSEProcessor {
 				if (json.choices === undefined) {
 					if (!json.copilot_references && !json.copilot_confirmation) {
 						if (json.error !== undefined) {
-							streamChoicesLogger.error(this.ctx, 'Error in response:', json.error.message);
+							streamChoicesLogger.error(this.logTarget, 'Error in response:', json.error!.message);
 						} else {
-							streamChoicesLogger.error(
-								this.ctx,
+							streamChoicesLogger.error(this.logTarget,
 								'Unexpected response with no choices or error: ' + lineWithoutData
 							);
 						}
@@ -454,7 +462,7 @@ export class SSEProcessor {
 
 				for (let i = 0; i < json.choices?.length; i++) {
 					const choice: ChoiceJSON = json.choices[i];
-					streamChoicesLogger.debug(this.ctx, 'choice', choice);
+					streamChoicesLogger.debug(this.logTarget, 'choice', choice);
 					this.stats.add(choice.index);
 
 					if (!(choice.index in this.solutions)) {
@@ -518,13 +526,12 @@ export class SSEProcessor {
 					// filter out indices that correspond to excluded tokens. It will not affect the
 					// text though.
 					const loggedReason = choice.finish_reason ?? 'client-trimmed';
-					telemetry(
-						this.ctx,
+					streamChoicesLogger.debug(this.logTarget,
 						'completion.finishReason',
 						this.telemetryData.extendedBy({
 							completionChoiceFinishReason: loggedReason,
 							engineName: model ?? '',
-							engineChoiceSource: getEngineRequestInfo(this.ctx, this.telemetryData).engineChoiceSource,
+							engineChoiceSource: this.instantiationService.invokeFunction(getEngineRequestInfo, this.telemetryData).engineChoiceSource,
 						})
 					);
 					if (this.dropCompletionReasons.includes(choice.finish_reason!)) {
@@ -562,8 +569,7 @@ export class SSEProcessor {
 			if (solution === null) {
 				continue; // already finished
 			}
-			telemetry(
-				this.ctx,
+			streamChoicesLogger.debug(this.logTarget,
 				'completion.finishReason',
 				this.telemetryData.extendedBy({
 					completionChoiceFinishReason: 'Iteration Done',
@@ -591,14 +597,13 @@ export class SSEProcessor {
 			try {
 				const extraDataJson = <{ error?: { message: string } }>JSON.parse(extraData);
 				if (extraDataJson.error !== undefined) {
-					streamChoicesLogger.error(
-						this.ctx,
-						`Error in response: ${extraDataJson.error.message}`,
+					streamChoicesLogger.error(this.logTarget,
+						`Error in response: ${extraDataJson.error!.message}`,
 						extraDataJson.error
 					);
 				}
 			} catch (e) {
-				streamChoicesLogger.error(this.ctx, `Error parsing extraData: ${extraData}`);
+				streamChoicesLogger.error(this.logTarget, `Error parsing extraData: ${extraData}`);
 			}
 		}
 	}
@@ -648,8 +653,7 @@ export class SSEProcessor {
 				continue; // already produced
 			}
 			this.stats.markYielded(solutionIndex);
-			telemetry(
-				this.ctx,
+			streamChoicesLogger.debug(this.logTarget,
 				'completion.finishReason',
 				this.telemetryData.extendedBy({
 					completionChoiceFinishReason: currentFinishReason ?? 'DONE',
@@ -678,7 +682,7 @@ export class SSEProcessor {
 	 */
 	private maybeCancel(description: string) {
 		if (this.cancellationToken?.isCancellationRequested) {
-			streamChoicesLogger.debug(this.ctx, 'Cancelled: ' + description);
+			streamChoicesLogger.debug(this.logTarget, 'Cancelled: ' + description);
 			this.cancel();
 			return true;
 		}
@@ -702,24 +706,25 @@ export class SSEProcessor {
 }
 
 export function prepareSolutionForReturn(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	c: FinishedCompletion,
 	telemetryData: TelemetryWithExp
 ): APIChoice {
+	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
 	let completionText = c.solution.text.join('');
 
 	let blockFinished = false;
 	if (c.finishOffset !== undefined) {
 		// Trim solution to finishOffset returned by finishedCb
-		streamChoicesLogger.debug(ctx, `solution ${c.index}: early finish at offset ${c.finishOffset}`);
+		streamChoicesLogger.debug(logTarget, `solution ${c.index}: early finish at offset ${c.finishOffset}`);
 		completionText = completionText.substring(0, c.finishOffset);
 		blockFinished = true;
 	}
 
-	streamChoicesLogger.info(ctx, `solution ${c.index} returned. finish reason: [${c.reason}]`);
-	streamChoicesLogger.debug(ctx, `solution ${c.index} details: finishOffset: [${c.finishOffset}]`);
+	streamChoicesLogger.info(logTarget, `solution ${c.index} returned. finish reason: [${c.reason}]`);
+	streamChoicesLogger.debug(logTarget, `solution ${c.index} details: finishOffset: [${c.finishOffset}]`);
 	const jsonData: APIJsonData = convertToAPIJsonData(c.solution);
-	return convertToAPIChoice(ctx, completionText, jsonData, c.index, c.requestId, blockFinished, telemetryData);
+	return convertToAPIChoice(accessor, completionText, jsonData, c.index, c.requestId, blockFinished, telemetryData);
 }
 
 // Function to convert from APIJsonDataStreaming to APIJsonData format

@@ -20,6 +20,7 @@ import { ErrorMessages, ErrorReasons, FormattedSnippyError } from '../../snippy/
 import * as Network from '../../snippy/network';
 import { createLibTestingContext } from '../../test/context';
 import { FakeFetcher, createFakeJsonResponse } from '../../test/fetcher';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 const testEndpoints: Record<
 	string,
@@ -97,12 +98,13 @@ class SnippyFetcher extends FakeFetcher {
 }
 
 suite('snippy network primitive', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 	let originalConfigProvider: ConfigProvider;
 	let originalBuildInfo: BuildInfo;
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
+		const ctx = accessor.get(ICompletionsContextService);
 		originalConfigProvider = ctx.get(ConfigProvider);
 		originalBuildInfo = ctx.get(BuildInfo);
 		ctx.forceSet(Fetcher, new SnippyFetcher());
@@ -110,6 +112,7 @@ suite('snippy network primitive', function () {
 
 	teardown(function () {
 		ConnectionState.setConnected();
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(ConfigProvider, originalConfigProvider);
 		ctx.forceSet(BuildInfo, originalBuildInfo);
 	});
@@ -117,9 +120,10 @@ suite('snippy network primitive', function () {
 	suite('error handling', function () {
 		test.skip('should return a 401 error object when token is invalid', async function () {
 			//setStaticSessionTokenManager(ctx, undefined);
+			const ctx = accessor.get(ICompletionsContextService);
 			ctx.get(CopilotTokenManager).resetToken();
 
-			const response: FormattedSnippyError = await Network.call(ctx, '', { method: 'GET' });
+			const response: FormattedSnippyError = await Network.call(accessor, '', { method: 'GET' });
 
 			assert.strictEqual(response.kind, 'failure');
 			assert.strictEqual(response.code, 401);
@@ -129,7 +133,7 @@ suite('snippy network primitive', function () {
 		test('should return a 600 error object when connection is retrying', async function () {
 			ConnectionState.setRetrying();
 
-			const response: FormattedSnippyError = await Network.call(ctx, '', { method: 'GET' });
+			const response: FormattedSnippyError = await Network.call(accessor, '', { method: 'GET' });
 
 			assert.strictEqual(response.kind, 'failure');
 			assert.strictEqual(response.code, 600);
@@ -140,7 +144,7 @@ suite('snippy network primitive', function () {
 		test('should return a 601 error object when connection is offline', async function () {
 			ConnectionState.setDisconnected();
 
-			const response: FormattedSnippyError = await Network.call(ctx, '', { method: 'GET' });
+			const response: FormattedSnippyError = await Network.call(accessor, '', { method: 'GET' });
 
 			assert.strictEqual(response.kind, 'failure');
 			assert.strictEqual(response.code, 601);
@@ -154,7 +158,7 @@ suite('snippy network primitive', function () {
 			const stub = Sinon.stub(ConnectionState, 'enableRetry').callsFake(() => { });
 
 			for (const [endpoint, data] of testCases) {
-				const response: FormattedSnippyError = await Network.call(ctx, endpoint, { method: 'GET' });
+				const response: FormattedSnippyError = await Network.call(accessor, endpoint, { method: 'GET' });
 
 				assert.strictEqual(response.kind, 'failure');
 				assert.strictEqual(response.code, data.status);
@@ -171,6 +175,7 @@ suite('snippy network primitive', function () {
 		let networkStub: Sinon.SinonStub<Parameters<Fetcher['fetch']>>;
 
 		setup(function () {
+			const ctx = accessor.get(ICompletionsContextService);
 			networkStub = Sinon.stub(ctx.get(Fetcher), 'fetch');
 			networkStub.returns(Promise.resolve(createFakeJsonResponse(200, '{}')));
 		});
@@ -184,9 +189,10 @@ suite('snippy network primitive', function () {
 			const domainOverride = 'https://fake.net.biz/';
 			overrides.set(ConfigKey.DebugSnippyOverrideUrl, domainOverride);
 
+			const ctx = accessor.get(ICompletionsContextService);
 			ctx.forceSet(ConfigProvider, new InMemoryConfigProvider(new DefaultsOnlyConfigProvider(), overrides));
 
-			await Network.call(ctx, '', { method: 'GET' });
+			await Network.call(accessor, '', { method: 'GET' });
 
 			assert.ok(networkStub.getCall(0).args[0].startsWith(domainOverride));
 		});
@@ -194,22 +200,23 @@ suite('snippy network primitive', function () {
 		test('does not attempt to read non-existent config values in production', async function () {
 			const buildInfo = new BuildInfo();
 			buildInfo.getBuildType = () => BuildType.PROD;
+			const ctx = accessor.get(ICompletionsContextService);
 			ctx.forceSet(BuildInfo, buildInfo);
 
-			await Network.call(ctx, 'endpoint/snippy', { method: 'GET' });
+			await Network.call(accessor, 'endpoint/snippy', { method: 'GET' });
 
 			const url = networkStub.getCall(0).args[0];
 			assert.ok(url.includes('endpoint/snippy'));
 		});
 
 		test('uses the correct snippy twirp endpoint', async function () {
-			await Network.call(ctx, 'endpoint/snippy', { method: 'GET' });
+			await Network.call(accessor, 'endpoint/snippy', { method: 'GET' });
 			const url = networkStub.getCall(0).args[0];
 			assert.ok(url.includes('endpoint/snippy'));
 		});
 
 		test('supplies editor information to snippy', async function () {
-			await Network.call(ctx, '', { method: 'GET' });
+			await Network.call(accessor, '', { method: 'GET' });
 
 			const headers = networkStub.getCall(0).args[1].headers ?? {};
 			const headerKeys = Object.keys(headers);

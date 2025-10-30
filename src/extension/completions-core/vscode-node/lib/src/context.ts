@@ -24,6 +24,7 @@ class UnregisteredContextError extends Error {
 export const ICompletionsContextService = createDecorator<ICompletionsContextService>('completionsContextService');
 export interface ICompletionsContextService {
 	_serviceBrand: undefined;
+
 	instantiationService: IInstantiationService;
 	get<T>(ctor: Ctor<T>): T;
 	set<C extends Ctor<unknown>>(ctor: C, instance: Instance<C>): void;
