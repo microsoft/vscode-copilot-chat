@@ -261,7 +261,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	private async createCopilotSession(sdkSession: Session, sessionManager: SessionManager, permissionHandler: CopilotCLIPermissionsHandler, disposables: IDisposable,): Promise<ICopilotCLISession> {
+	private async createCopilotSession(sdkSession: Session, sessionManager: SessionManager, permissionHandler: CopilotCLIPermissionsHandler, disposables: IDisposable,): Promise<CopilotCLISession> {
 		this.sessionTerminators.deleteAndDispose(sdkSession.sessionId);
 		const sessionDisposables = this._register(new DisposableStore());
 		sessionDisposables.add(disposables);
@@ -292,6 +292,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					// Session is busy.
 					this.sessionTerminators.deleteAndDispose(session.sessionId);
 				}
+			}));
+			sessionDisposables.add(session.onDidAbort(() => {
+				// We need to start with a new session.
+				// https://github.com/microsoft/vscode/issues/274169
+				session.dispose();
 			}));
 
 			this._sessionWrappers.set(sdkSession.sessionId, session);

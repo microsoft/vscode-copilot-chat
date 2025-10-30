@@ -20,6 +20,8 @@ export interface ICopilotCLISession {
 	readonly sessionId: string;
 	readonly status: vscode.ChatSessionStatus | undefined;
 	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
+	readonly aborted: boolean;
+	readonly onDidAbort: vscode.Event<void>;
 
 	handleRequest(
 		prompt: string,
@@ -49,6 +51,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private readonly _statusChange = this.add(new EventEmitter<vscode.ChatSessionStatus | undefined>());
 
 	public readonly onDidChangeStatus = this._statusChange.event;
+
+	private _aborted?: boolean;
+	public get aborted(): boolean {
+		return this._aborted ?? false;
+	}
+	private readonly _onDidAbort = this.add(new EventEmitter<void>());
+
+	public readonly onDidAbort = this._onDidAbort.event;
 
 	constructor(
 		private readonly _permissionHandler: CopilotCLIPermissionsHandler,
@@ -81,7 +91,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 		}
 
-		disposables.add(token.onCancellationRequested(() => this._session.abort()));
+		disposables.add(token.onCancellationRequested(() => {
+			this._session.abort();
+			this._aborted = true;
+			this._onDidAbort.fire();
+		}));
 		disposables.add(this._permissionHandler.onDidRequestPermissions(async (permissionRequest) => {
 			return await this.requestPermission(permissionRequest, toolInvocationToken);
 		}));
