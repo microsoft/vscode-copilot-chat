@@ -4247,6 +4247,13 @@
 				"path": "./assets/agents/Plan.agent.md",
 				"description": "Researches a task to create multi-step plans"
 			}
+		],
+		"prompts": [
+			{
+				"name": "savePromptFile",
+				"path": "./assets/prompts/savePromptFile.prompt.md",
+				"description": "Generalize the current discussion into a reusable prompt and save it as a file"
+			}
 		]
 	},
 	"extensionPack": [
