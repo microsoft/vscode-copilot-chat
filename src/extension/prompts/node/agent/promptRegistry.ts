@@ -3,14 +3,23 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement } from '@vscode/prompt-tsx';
+import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { DefaultAgentPromptProps } from './defaultAgentInstructions';
+
+export interface ModelOptions {
+	readonly shouldUseUserQuery?: boolean;
+	readonly overrides?: {
+		readonly SystemMessageContent?: () => PromptElement | PromptPiece;
+		readonly UserMessageContent?: (props: { query: string; hasVariables: boolean }) => PromptElement | PromptPiece;
+	};
+}
 
 export type PromptConstructor = new (props: DefaultAgentPromptProps, ...args: any[]) => PromptElement<DefaultAgentPromptProps>;
 
 export interface IAgentPrompt {
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined;
+	resolveModelOptions?(endpoint: IChatEndpoint): ModelOptions | undefined;
 }
 
 export interface IAgentPromptCtor {

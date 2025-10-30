@@ -7,7 +7,7 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isHiddenModelB, isVSCModel, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isVSCModel, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -31,9 +31,10 @@ import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt';
-import { CopilotIdentityRules, GPT5CopilotIdentityRule } from '../base/copilotIdentity';
+import { CopilotIdentityRules } from '../base/copilotIdentity';
+import { CustomRender } from '../base/customRender';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
-import { Gpt5SafetyRule, SafetyRules } from '../base/safetyRules';
+import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { TerminalStatePromptElement } from '../base/terminalState';
 import { ChatVariables } from '../panel/chatVariables';
@@ -47,7 +48,7 @@ import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructu
 import { AgentConversationHistory } from './agentConversationHistory';
 import './allAgentPrompts';
 import { AlternateGPTPrompt, DefaultAgentPrompt } from './defaultAgentInstructions';
-import { PromptRegistry } from './promptRegistry';
+import { ModelOptions, PromptRegistry } from './promptRegistry';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -65,6 +66,11 @@ export interface AgentPromptProps extends GenericBasePromptElementProps {
 	 * Codesearch mode, aka agentic Ask mode
 	 */
 	readonly codesearchMode?: boolean;
+
+	/**
+	 * Model-specific options
+	 */
+	readonly modelOptions?: ModelOptions;
 }
 
 /** Proportion of the prompt token budget any singular textual tool result is allowed to use. */
@@ -92,17 +98,10 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{this.props.endpoint.family.startsWith('gpt-5') ? (
-					<>
-						<GPT5CopilotIdentityRule />
-						<Gpt5SafetyRule />
-					</>
-				) : (
-					<>
-						<CopilotIdentityRules />
-						<SafetyRules />
-					</>
-				)}
+				<CustomRender id='SystemMessageContent' overrides={this.props.modelOptions?.overrides}>
+					<CopilotIdentityRules />
+					<SafetyRules />
+				</CustomRender>
 			</SystemMessage>
 			{instructions}
 		</>;
@@ -129,6 +128,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 					endpoint={this.props.endpoint}
 					tools={this.props.promptContext.tools?.availableTools}
 					enableCacheBreakpoints={this.props.enableCacheBreakpoints}
+					modelOptions={this.props.modelOptions}
 				/>
 			</>;
 		} else {
@@ -141,7 +141,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 	}
 
-	private async getInstructions() {
+	private async getInstructions(): Promise<PromptPieceChild> {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
@@ -268,9 +268,10 @@ export interface AgentUserMessageProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
 	readonly sessionId?: string;
+	readonly modelOptions?: ModelOptions;
 }
 
-export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint): AgentUserMessageProps {
+export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, modelOptions: ModelOptions | undefined): AgentUserMessageProps {
 	return {
 		isHistorical: true,
 		request: turn.request.message,
@@ -279,7 +280,8 @@ export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint)
 		toolReferences: turn.toolReferences,
 		chatVariables: turn.promptVariables ?? new ChatVariablesCollection(),
 		editedFileEvents: turn.editedFileEvents,
-		enableCacheBreakpoints: false // Should only be added to the current turn - some user messages may get them in Agent post-processing
+		enableCacheBreakpoints: false, // Should only be added to the current turn - some user messages may get them in Agent post-processing
+		modelOptions,
 	};
 }
 
@@ -296,7 +298,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps):
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
-
+		modelOptions: agentProps.modelOptions,
 	};
 }
 
@@ -333,14 +335,9 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const isGpt5 = this.props.endpoint.family.startsWith('gpt-5') && this.props.endpoint.family !== 'gpt-5-codex';
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || isGpt5) && this.props.chatVariables.hasVariables() ?
-			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
-			: '';
+		const hasVariables = this.props.chatVariables.hasVariables();
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
-		const isHiddenModelBFlag = await isHiddenModelB(this.props.endpoint);
-		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code') || isHiddenModelBFlag;
 
 		return (
 			<>
@@ -368,7 +365,11 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 						{getVSCModelReminder(shouldIncludePreamble)}
 					</Tag>
-					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
+					{query && <Tag name={this.props.modelOptions?.shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>
+						<CustomRender id='UserMessageContent' overrides={this.props.modelOptions?.overrides} args={{ query, hasVariables }}>
+							{query}
+						</CustomRender>
+					</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
 			</>

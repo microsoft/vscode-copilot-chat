@@ -14,7 +14,7 @@ import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
 import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
-import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
+import { IAgentPrompt, ModelOptions, PromptConstructor, PromptRegistry } from './promptRegistry';
 
 class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -128,6 +128,12 @@ class XAIPromptResolver implements IAgentPrompt {
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
 		return DefaultGrokCodeFastAgentPrompt;
+	}
+
+	resolveModelOptions(endpoint: IChatEndpoint): ModelOptions | undefined {
+		return {
+			shouldUseUserQuery: true,
+		};
 	}
 }
 

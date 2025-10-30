@@ -37,6 +37,7 @@ import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIn
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
+import { PromptRegistry } from '../../prompts/node/agent/promptRegistry';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
@@ -259,6 +260,11 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt;
 		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
+
+		// Get model options from prompt registry
+		const agentPromptResolver = await PromptRegistry.getPrompt(endpoint);
+		const modelOptions = agentPromptResolver && this.instantiationService.createInstance(agentPromptResolver).resolveModelOptions?.(endpoint);
+
 		let result: RenderPromptResult;
 		const props: AgentPromptProps = {
 			endpoint,
@@ -271,6 +277,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			},
 			location: this.location,
 			enableCacheBreakpoints: summarizationEnabled,
+			...(modelOptions && { modelOptions }),
 			...this.extraPromptProps
 		};
 		try {
