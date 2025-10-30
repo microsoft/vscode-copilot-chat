@@ -391,7 +391,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			return modelLimit;
 		}
 
-		// Check if CAPI has promot token limits and return those
+		// Check if CAPI has prompt token limits and return those
 		if (chatModelInfo.capabilities?.limits?.max_prompt_tokens) {
 			modelLimit += chatModelInfo.capabilities.limits.max_prompt_tokens;
 			return modelLimit;
