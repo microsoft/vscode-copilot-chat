@@ -5,6 +5,7 @@
 
 import { Range, commands, window, type Disposable } from 'vscode';
 import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../../../lib/src/context';
 import { CopilotNamedAnnotationList } from '../../../lib/src/openai/stream';
 import * as constants from '../constants';
 import { CopilotPanelVisible } from '../constants';
@@ -34,17 +35,17 @@ export function registerPanelSupport(accessor: ServicesAccessor): Disposable {
 	const result = registerCommand(accessor, constants.CMDOpenPanel, async () => {
 		// hide ghost text while opening the generation ui
 		await commands.executeCommand('editor.action.inlineSuggest.hide');
-		await commandOpenPanel(suggestionsPanelManager);
+		await commandOpenPanel(accessor, suggestionsPanelManager);
 	});
 
 	suggestionsPanelManager.registerCommands();
 	return result;
 }
 
-function commandOpenPanel(suggestionsPanelManager: CopilotSuggestionsPanelManager) {
+function commandOpenPanel(accessor: ServicesAccessor, suggestionsPanelManager: CopilotSuggestionsPanelManager) {
 	const editor = window.activeTextEditor;
 	if (!editor) { return; }
-	const wrapped = wrapDoc(editor.document);
+	const wrapped = wrapDoc(accessor.get(ICompletionsContextService), editor.document);
 	if (!wrapped) { return; }
 
 	const { line, character } = editor.selection.active;
