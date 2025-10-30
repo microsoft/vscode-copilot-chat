@@ -228,12 +228,12 @@ export function getAffectedUrisForEditTool(toolName: string,
 	args: unknown,
 ): Uri[] {
 	if (toolName === CopilotCLIToolNames.StrReplaceEditor) {
-		const path = args as StrReplaceEditorArgs;
-		if (!path) {
+		const editorArgs = args as StrReplaceEditorArgs;
+		if (!editorArgs) {
 			return [];
 		}
-		const command = (args as StrReplaceEditorArgs).command;
-		const file = Uri.file(path.path);
+		const command = editorArgs.command;
+		const file = Uri.file(editorArgs.path);
 		if (['str_replace', 'insert', 'create', 'undo_edit'].includes(command)) {
 			return [file];
 		}
