@@ -361,21 +361,8 @@ export class BaseOctoKitService {
 	}
 
 	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
-		const response = await makeGitHubAPIRequest(
-			this._fetcherService,
-			this._logService,
-			this._telemetryService,
-			this._capiClientService.dotcomAPIURL,
-			`repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`,
-			'GET',
-			token,
-			undefined,
-			'2022-11-28',
-			'json',
-			'vscode-copilot-chat'
-		);
+		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, 'GET', token, undefined);
 
-		// GitHub API returns base64 encoded content
 		if (response?.content && response.encoding === 'base64') {
 			return decodeBase64(response.content.replace(/\n/g, '')).toString();
 		} else {

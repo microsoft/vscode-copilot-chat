@@ -9,12 +9,9 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 /**
- * URI schemes for PR content
+ * URI scheme for PR content
  */
-export namespace PRSchemes {
-	export const PR_BASE = 'copilot-pr-base'; // For base commit content
-	export const PR_HEAD = 'copilot-pr-head'; // For head commit content
-}
+export const PR_SCHEME = 'copilot-pr';
 
 /**
  * Parameters encoded in PR content URIs
@@ -36,9 +33,8 @@ export function toPRContentUri(
 	fileName: string,
 	params: Omit<PRContentUriParams, 'fileName'>
 ): vscode.Uri {
-	const scheme = params.isBase ? PRSchemes.PR_BASE : PRSchemes.PR_HEAD;
 	return vscode.Uri.from({
-		scheme,
+		scheme: PR_SCHEME,
 		path: `/${fileName}`,
 		query: JSON.stringify({ ...params, fileName })
 	});
@@ -48,7 +44,7 @@ export function toPRContentUri(
  * Parse parameters from a PR content URI
  */
 export function fromPRContentUri(uri: vscode.Uri): PRContentUriParams | undefined {
-	if (uri.scheme !== PRSchemes.PR_BASE && uri.scheme !== PRSchemes.PR_HEAD) {
+	if (uri.scheme !== PR_SCHEME) {
 		return undefined;
 	}
 	try {
@@ -72,16 +68,10 @@ export class PRContentProvider extends Disposable implements vscode.TextDocument
 	) {
 		super();
 
-		// Register text document content providers for both base and head schemes
+		// Register text document content provider for PR scheme
 		this._register(
 			vscode.workspace.registerTextDocumentContentProvider(
-				PRSchemes.PR_BASE,
-				this
-			)
-		);
-		this._register(
-			vscode.workspace.registerTextDocumentContentProvider(
-				PRSchemes.PR_HEAD,
+				PR_SCHEME,
 				this
 			)
 		);
