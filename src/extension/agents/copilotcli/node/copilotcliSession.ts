@@ -10,10 +10,12 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { DisposableStore, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { CopilotCLIPermissionsHandler } from './copilotCli';
-import { buildChatHistoryFromEvents, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
 export interface ICopilotCLISession {
@@ -96,11 +98,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this._aborted = true;
 			this._onDidAbort.fire();
 		}));
-		disposables.add(this._permissionHandler.onDidRequestPermissions(async (permissionRequest) => {
-			return await this.requestPermission(permissionRequest, toolInvocationToken);
-		}));
 
 		const toolNames = new Map<string, string>();
+		const editTracker = new ExternalEditTracker();
+		const editFilesAndToolCallIds = new ResourceMap<string>();
+
+		disposables.add(this._permissionHandler.onDidRequestPermissions(async (permissionRequest) => {
+			return await this.requestPermission(permissionRequest, stream, editTracker,
+				(file: Uri) => editFilesAndToolCallIds.get(file),
+				toolInvocationToken
+			);
+		}));
+
 
 		disposables.add(toDisposable(this._session.on('*', (event) => this._logService.trace(`CopilotCLI Event: ${JSON.stringify(event, null, 2)}`))));
 		disposables.add(toDisposable(this._session.on('assistant.turn_start', () => toolNames.clear())));
@@ -116,9 +125,17 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			if (responsePart instanceof ChatResponseThinkingProgressPart) {
 				stream.push(responsePart);
 			}
+			// Track edits for edit tools.
+			const editUris = getAffectedUrisForEditTool(event.data.toolName, event.data.arguments || {});
+			if (editUris.length) {
+				editUris.forEach(uri => editFilesAndToolCallIds.set(uri, event.data.toolCallId));
+			}
 			this._logService.trace(`Start Tool ${toolName || '<unknown>'}`);
 		})));
 		disposables.add(toDisposable(this._session.on('tool.execution_complete', (event) => {
+			// Mark the end of the edit if this was an edit tool.
+			editTracker.completeEdit(event.data.toolCallId);
+
 			const responsePart = processToolExecutionComplete(event, this._pendingToolInvocations);
 			if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 				stream.push(responsePart);
@@ -175,6 +192,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
+		stream: vscode.ChatResponseStream,
+		editTracker: ExternalEditTracker,
+		getEditKeyForFile: (file: Uri) => string | undefined,
 		toolInvocationToken: vscode.ChatParticipantToolToken
 	): Promise<ReturnType<NonNullable<SessionOptions['requestPermission']>>> {
 		if (permissionRequest.kind === 'read') {
@@ -196,6 +216,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			const firstResultPart = result.content.at(0);
 			if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
+				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
+				const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
+				const editKey = editFile ? getEditKeyForFile(editFile) : undefined;
+				if (editFile && editKey) {
+					await editTracker.trackEdit(editKey, [editFile], stream);
+				}
+
 				return { kind: 'approved' };
 			}
 		} catch (error) {

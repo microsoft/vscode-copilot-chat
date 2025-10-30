@@ -8,7 +8,6 @@ import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
-import { isCopilotCliEditToolCall } from '../common/copilotcliTools';
 
 /**
  * CopilotCLI tool names
@@ -69,6 +68,33 @@ export function stripReminders(text: string): string {
 		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
 		.replace(/<pr_metadata[^>]*\/?>\s*/g, '')
 		.trim();
+}
+
+
+export function getAffectedUrisForEditTool(toolName: string, toolArgs: unknown): URI[] {
+	if (!toolArgs) {
+		return [];
+	}
+	switch (toolName) {
+		case CopilotCLIToolNames.StrReplaceEditor: {
+			const args = toolArgs as StrReplaceEditorArgs;
+			if (args.path && args.command !== 'view') {
+				return [URI.file(args.path)];
+			}
+			return [];
+		}
+		case CopilotCLIToolNames.edit:
+		case CopilotCLIToolNames.View:
+		case CopilotCLIToolNames.create: {
+			const args = toolArgs as (EditArgs | ViewArgs | CreateArgs);
+			if (args.path) {
+				return [URI.file(args.path)];
+			}
+			return [];
+		}
+	}
+
+	return [];
 }
 
 /**
@@ -217,7 +243,7 @@ export function createCopilotCLIToolInvocation(
 	if (toolName === CopilotCLIToolNames.ReportIntent) {
 		return undefined; // Ignore these for now
 	}
-	if (isCopilotCliEditToolCall(toolName, args)) {
+	if (getAffectedUrisForEditTool(toolName, args).length) {
 		return undefined;
 	}
 	if (toolName === CopilotCLIToolNames.Think) {
