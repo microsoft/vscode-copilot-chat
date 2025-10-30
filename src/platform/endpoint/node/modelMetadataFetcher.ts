@@ -413,11 +413,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			// No-op if parsing experiment fails
 		}
 
-		if (modelPickerOverrides.hasOwnProperty(resolvedModel.id)) {
-			return modelPickerOverrides[resolvedModel.id];
-		}
-
-		return resolvedModel.model_picker_enabled;
+		return modelPickerOverrides[resolvedModel.id] ?? resolvedModel.model_picker_enabled;
 	}
 }
 
