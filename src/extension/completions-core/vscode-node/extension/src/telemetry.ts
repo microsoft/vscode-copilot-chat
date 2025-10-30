@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { commands, Disposable } from 'vscode';
-import { type ICompletionsContextService } from '../../lib/src/context';
+import type { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../../lib/src/context';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
 import { Extension } from './extensionContext';
 
-function exception(ctx: ICompletionsContextService, error: unknown, origin: string, logger?: Logger) {
+function exception(accessor: ServicesAccessor, error: unknown, origin: string, logger?: Logger) {
 	if (error instanceof Error && error.name === 'Canceled') {
 		// these are VS Code cancellations
 		return;
@@ -18,17 +19,17 @@ function exception(ctx: ICompletionsContextService, error: unknown, origin: stri
 		// expected errors from VS Code
 		return;
 	}
-	handleException(ctx, error, origin, logger);
+	handleException(accessor, error, origin, logger);
 }
 
-export function registerCommand(ctx: ICompletionsContextService, command: string, fn: (...args: unknown[]) => unknown): Disposable {
+export function registerCommand(accessor: ServicesAccessor, command: string, fn: (...args: unknown[]) => unknown): Disposable {
 	try {
 		const disposable = commands.registerCommand(command, async (...args: unknown[]) => {
 			try {
 				await fn(...args);
 			} catch (error) {
 				// Pass in the command string as the origin
-				exception(ctx, error, command);
+				exception(accessor, error, command);
 			}
 		});
 		return disposable;
@@ -39,6 +40,6 @@ export function registerCommand(ctx: ICompletionsContextService, command: string
 }
 
 // Wrapper that handles errors and cleans up the command on extension deactivation
-export function registerCommandWrapper(ctx: ICompletionsContextService, command: string, fn: (...args: unknown[]) => unknown) {
-	ctx.get(Extension).addSubscription(registerCommand(ctx, command, fn));
+export function registerCommandWrapper(accessor: ServicesAccessor, command: string, fn: (...args: unknown[]) => unknown) {
+	accessor.get(ICompletionsContextService).get(Extension).addSubscription(registerCommand(accessor, command, fn));
 }

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { type ICompletionsContextService } from '../../../lib/src/context';
+import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
 import { solutionCountTarget } from '../lib/copilotPanel/common';
 import { runSolutions } from '../lib/copilotPanel/panel';
@@ -18,13 +18,13 @@ import { PanelCompletion } from './common';
  */
 export class CopilotListDocument extends BaseListDocument<PanelCompletion> {
 	constructor(
-		ctx: ICompletionsContextService,
+		accessor: ServicesAccessor,
 		textDocument: ITextDocument,
 		position: IPosition,
 		panel: ISuggestionsPanel,
 		countTarget = solutionCountTarget
 	) {
-		super(ctx, textDocument, position, panel, countTarget);
+		super(accessor, textDocument, position, panel, countTarget);
 	}
 
 	protected createPanelCompletion(
@@ -44,6 +44,6 @@ export class CopilotListDocument extends BaseListDocument<PanelCompletion> {
 	}
 
 	protected runSolutionsImpl(): Promise<void> {
-		return runSolutions(this._ctx, this, this);
+		return runSolutions(this._accessor, this, this);
 	}
 }

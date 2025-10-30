@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { type ICompletionsContextService } from '../../../../lib/src/context';
+import type { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../../../../lib/src/context';
 import { asyncIterableMapFilter } from '../../../../lib/src/helpers/iterableHelpers';
-import { Logger } from '../../../../lib/src/logger';
+import { Logger, LogTarget } from '../../../../lib/src/logger';
 import { CopilotUiKind, OpenAIFetcher } from '../../../../lib/src/openai/fetch';
 import { APIChoice } from '../../../../lib/src/openai/openai';
 import { StatusReporter } from '../../../../lib/src/progress';
@@ -29,12 +30,12 @@ const solutionsLogger = new Logger('solutions');
  * Given an `ISolutionManager` with the context of a specific "Open Copilot" request,
  * initiate the generation of a stream of solutions for that request.
  */
-export async function launchSolutions(ctx: ICompletionsContextService, solutionManager: SolutionManager): Promise<SolutionsStream> {
+export async function launchSolutions(accessor: ServicesAccessor, solutionManager: SolutionManager): Promise<SolutionsStream> {
 	const position = solutionManager.targetPosition;
 	const document = solutionManager.textDocument;
 
 	// Setup prompt and telemetry using shared function
-	const promptSetup = await setupPromptAndTelemetry(ctx, solutionManager, 'open copilot', solutionsLogger);
+	const promptSetup = await setupPromptAndTelemetry(accessor, solutionManager, 'open copilot', solutionsLogger);
 	if ('status' in promptSetup) {
 		// This is a SolutionsStream indicating an error occurred
 		return promptSetup;
@@ -44,7 +45,7 @@ export async function launchSolutions(ctx: ICompletionsContextService, solutionM
 
 	// Setup completion parameters using shared function
 	const { extra, postOptions, finishedCb, engineInfo } = setupCompletionParams(
-		ctx,
+		accessor,
 		document,
 		position,
 		prompt,
@@ -67,9 +68,10 @@ export async function launchSolutions(ctx: ICompletionsContextService, solutionM
 		extra,
 	};
 
+	const ctx = accessor.get(ICompletionsContextService);
 	const res = await ctx
 		.get(OpenAIFetcher)
-		.fetchAndStreamCompletions(ctx, completionParams, telemetryData.extendedBy(), finishedCb, cancellationToken);
+		.fetchAndStreamCompletions(completionParams, telemetryData.extendedBy(), finishedCb, cancellationToken);
 
 	if (res.type === 'failed' || res.type === 'canceled') {
 		return { status: 'FinishedWithError', error: `${res.type}: ${res.reason}` };
@@ -77,13 +79,12 @@ export async function launchSolutions(ctx: ICompletionsContextService, solutionM
 
 	let choices: AsyncIterable<APIChoice> = res.choices;
 	choices = trimChoices(choices);
-	choices = asyncIterableMapFilter(choices, choice =>
-		postProcessChoiceInContext(ctx, document, position, choice, false, solutionsLogger)
-	);
+	choices = asyncIterableMapFilter(choices, choice => postProcessChoiceInContext(accessor, document, position, choice, false, solutionsLogger));
 
 	const solutions = asyncIterableMapFilter(choices, async (apiChoice: APIChoice) => {
 		let display = apiChoice.completionText;
-		solutionsLogger.info(ctx, `Open Copilot completion: [${apiChoice.completionText}]`);
+		const logTarget = ctx.get(LogTarget);
+		solutionsLogger.info(logTarget, `Open Copilot completion: [${apiChoice.completionText}]`);
 
 		// For completions that can happen in any location in the middle of the code we try to find the existing code
 		// that should be displayed in the OpenCopilot panel so the code is nicely formatted/highlighted.
@@ -126,13 +127,13 @@ export async function launchSolutions(ctx: ICompletionsContextService, solutionM
 }
 
 export async function runSolutions(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	solutionManager: SolutionManager,
 	solutionHandler: ISolutionHandler
 ): Promise<void> {
-	const statusReporter = ctx.get(StatusReporter);
+	const statusReporter = accessor.get(ICompletionsContextService).get(StatusReporter);
 	return statusReporter.withProgress(async () => {
-		const nextSolution = launchSolutions(ctx, solutionManager);
+		const nextSolution = launchSolutions(accessor, solutionManager);
 		return await reportSolutions(nextSolution, solutionHandler);
 	});
 }

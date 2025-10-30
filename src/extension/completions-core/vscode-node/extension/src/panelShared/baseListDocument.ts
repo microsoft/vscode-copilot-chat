@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Position, Range } from 'vscode';
-import { type ICompletionsContextService } from '../../../lib/src/context';
+import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { postInsertionTasks } from '../../../lib/src/postInsertion';
 import { countLines } from '../../../lib/src/suggestions/partialSuggestions';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
@@ -15,18 +15,18 @@ import { BasePanelCompletion, ISuggestionsPanel } from './basePanelTypes';
 // BaseListDocument to be shared with both the copilot and comparison completion panels.
 export abstract class BaseListDocument<TPanelCompletion extends BasePanelCompletion> extends SolutionManager {
 	private _solutionCount = 0;
-	protected readonly _ctx: ICompletionsContextService;
+	protected readonly _accessor: ServicesAccessor;
 	protected readonly _solutions: TPanelCompletion[] = [];
 
 	constructor(
-		ctx: ICompletionsContextService,
+		accessor: ServicesAccessor,
 		textDocument: ITextDocument,
 		position: IPosition,
 		readonly panel: ISuggestionsPanel,
 		countTarget = solutionCountTarget
 	) {
 		super(textDocument, position, panel.cancellationToken, countTarget);
-		this._ctx = ctx;
+		this._accessor = accessor;
 	}
 
 	protected abstract createPanelCompletion(
@@ -64,7 +64,7 @@ export abstract class BaseListDocument<TPanelCompletion extends BasePanelComplet
 				}
 			);
 			return postInsertionTasks(
-				this._ctx,
+				this._accessor,
 				'solution',
 				unformatted.insertText,
 				offset,

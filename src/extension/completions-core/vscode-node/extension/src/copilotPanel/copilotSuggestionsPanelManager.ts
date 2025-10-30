@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TextDocument, WebviewPanel } from 'vscode';
-import { type ICompletionsContextService } from '../../../lib/src/context';
+import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
 import { BaseSuggestionsPanelManager, ListDocumentInterface } from '../panelShared/baseSuggestionsPanelManager';
 import { PanelCompletion } from './common';
@@ -13,25 +13,25 @@ import { CopilotSuggestionsPanel } from './copilotSuggestionsPanel';
 import { copilotPanelConfig } from './panelConfig';
 
 export class CopilotSuggestionsPanelManager extends BaseSuggestionsPanelManager<PanelCompletion> {
-	constructor(ctx: ICompletionsContextService) {
-		super(ctx, copilotPanelConfig);
+	constructor(accessor: ServicesAccessor) {
+		super(accessor, copilotPanelConfig);
 	}
 
 	protected createListDocument(
-		ctx: ICompletionsContextService,
+		accessor: ServicesAccessor,
 		wrapped: ITextDocument,
 		position: IPosition,
 		panel: CopilotSuggestionsPanel
 	): ListDocumentInterface {
-		return new CopilotListDocument(ctx, wrapped, position, panel);
+		return new CopilotListDocument(accessor, wrapped, position, panel);
 	}
 
 	protected createSuggestionsPanel(
-		ctx: ICompletionsContextService,
+		accessor: ServicesAccessor,
 		panel: WebviewPanel,
 		document: TextDocument,
 		manager: this
 	): CopilotSuggestionsPanel {
-		return new CopilotSuggestionsPanel(ctx, panel, document, manager);
+		return new CopilotSuggestionsPanel(accessor, panel, document, manager);
 	}
 }

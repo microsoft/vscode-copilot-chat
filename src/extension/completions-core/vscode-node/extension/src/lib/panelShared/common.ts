@@ -5,12 +5,13 @@
 
 import { CancellationToken } from 'vscode';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import type { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCompletionState } from '../../../../lib/src/completionState';
 import { BlockMode } from '../../../../lib/src/config';
-import type { ICompletionsContextService } from '../../../../lib/src/context';
+import { ICompletionsContextService } from '../../../../lib/src/context';
 import { Features } from '../../../../lib/src/experiments/features';
 import { BlockModeConfig } from '../../../../lib/src/ghostText/configBlockMode';
-import type { Logger } from '../../../../lib/src/logger';
+import { LogTarget, type Logger } from '../../../../lib/src/logger';
 import { getEngineRequestInfo } from '../../../../lib/src/openai/config';
 import { CompletionHeaders, CompletionRequestExtra, PostOptions } from '../../../../lib/src/openai/fetch';
 import { APIChoice, FinishedCallback } from '../../../../lib/src/openai/openai';
@@ -122,7 +123,7 @@ export interface PromptSetupResult {
  * Returns null if an error occurred that should terminate processing.
  */
 export async function setupPromptAndTelemetry(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	solutionManager: SolutionManager,
 	source: 'open copilot' | 'open comparison',
 	solutionsLogger: Logger,
@@ -132,7 +133,7 @@ export async function setupPromptAndTelemetry(
 	const position = solutionManager.targetPosition;
 	const document = solutionManager.textDocument;
 
-	const repoInfo = extractRepoInfoInBackground(ctx, document.uri);
+	const repoInfo = extractRepoInfoInBackground(accessor, document.uri);
 
 	// Telemetry setup
 	const ourRequestId = generateUuid();
@@ -145,6 +146,7 @@ export async function setupPromptAndTelemetry(
 		{}
 	);
 
+	const ctx = accessor.get(ICompletionsContextService);
 	// Update telemetry with experiment values
 	solutionManager.savedTelemetryData = await ctx
 		.get(Features)
@@ -167,7 +169,7 @@ export async function setupPromptAndTelemetry(
 
 	// Extract prompt
 	const promptResponse = await extractPrompt(
-		ctx,
+		accessor,
 		ourRequestId,
 		createCompletionState(document, position),
 		solutionManager.savedTelemetryData!
@@ -211,8 +213,8 @@ export async function setupPromptAndTelemetry(
 		}
 	);
 
-	solutionsLogger.debug(ctx, 'prompt:', prompt);
-	telemetry(ctx, 'solution.requested', solutionManager.savedTelemetryData);
+	solutionsLogger.debug(ctx.get(LogTarget), 'prompt:', prompt);
+	telemetry(accessor, 'solution.requested', solutionManager.savedTelemetryData);
 
 	return {
 		prompt,
@@ -237,7 +239,7 @@ export interface CompletionSetupResult {
  * Sets up block mode, completion parameters, and finished callback.
  */
 export function setupCompletionParams(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	document: ITextDocument,
 	position: IPosition,
 	prompt: Prompt,
@@ -245,7 +247,7 @@ export function setupCompletionParams(
 	telemetryData: TelemetryWithExp
 ): CompletionSetupResult {
 	// Compute block mode
-	const blockMode = ctx.get(BlockModeConfig).forLanguage(ctx, document.detectedLanguageId, telemetryData);
+	const blockMode = accessor.get(ICompletionsContextService).get(BlockModeConfig).forLanguage(accessor, document.detectedLanguageId, telemetryData);
 	const isSupportedLanguage = isSupportedLanguageId(document.detectedLanguageId);
 
 	const contextIndent = contextIndentation(document, position);
@@ -261,7 +263,7 @@ export function setupCompletionParams(
 		postOptions['stop'] = ['\n\n', '\r\n\r\n'];
 	}
 
-	const engineInfo = getEngineRequestInfo(ctx, telemetryData);
+	const engineInfo = getEngineRequestInfo(accessor, telemetryData);
 
 	let finishedCb: FinishedCallback;
 

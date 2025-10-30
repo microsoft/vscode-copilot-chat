@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TextDocument, Uri, ViewColumn, WebviewPanel, commands, window } from 'vscode';
-import { type ICompletionsContextService } from '../../../lib/src/context';
+import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../../../lib/src/context';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
 import { basename } from '../../../lib/src/util/uri';
 import { Extension } from '../extensionContext';
@@ -22,19 +23,19 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 	private _panelCount: number = 0;
 
 	constructor(
-		protected readonly _ctx: ICompletionsContextService,
+		protected readonly _accessor: ServicesAccessor,
 		protected readonly config: PanelConfig
 	) { }
 
 	protected abstract createListDocument(
-		ctx: ICompletionsContextService,
+		accessor: ServicesAccessor,
 		wrapped: ITextDocument,
 		position: IPosition,
 		panel: BaseSuggestionsPanel<TPanelCompletion>
 	): ListDocumentInterface;
 
 	protected abstract createSuggestionsPanel(
-		ctx: ICompletionsContextService,
+		accessor: ServicesAccessor,
 		panel: WebviewPanel,
 		document: TextDocument,
 		manager: this
@@ -48,11 +49,11 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 		const title = `${this.config.panelTitle} for ${basename(document.uri.toString()) || document.uri.toString()}`;
 		const panel = window.createWebviewPanel(this.config.webviewId, title, ViewColumn.Two, {
 			enableScripts: true,
-			localResourceRoots: [Uri.joinPath(this._ctx.get(Extension).context.extensionUri, 'dist')],
+			localResourceRoots: [Uri.joinPath(this._accessor.get(ICompletionsContextService).get(Extension).context.extensionUri, 'dist')],
 			retainContextWhenHidden: true,
 		});
 
-		const suggestionPanel = this.createSuggestionsPanel(this._ctx, panel, document, this);
+		const suggestionPanel = this.createSuggestionsPanel(this._accessor, panel, document, this);
 
 		// Listen for the panel disposal event to clear our reference
 		suggestionPanel.onDidDispose(() => {
@@ -61,7 +62,7 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 			}
 		});
 
-		void this.createListDocument(this._ctx, wrapped, position, suggestionPanel).runQuery();
+		void this.createListDocument(this._accessor, wrapped, position, suggestionPanel).runQuery();
 
 		this.activeWebviewPanel = suggestionPanel;
 		this._panelCount = this._panelCount + 1;
@@ -69,17 +70,17 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 	}
 
 	registerCommands() {
-		registerCommandWrapper(this._ctx, this.config.commands.accept, () => {
+		registerCommandWrapper(this._accessor, this.config.commands.accept, () => {
 			return this.activeWebviewPanel?.acceptFocusedSolution();
 		});
 
-		registerCommandWrapper(this._ctx, this.config.commands.navigatePrevious, () => {
+		registerCommandWrapper(this._accessor, this.config.commands.navigatePrevious, () => {
 			return this.activeWebviewPanel?.postMessage({
 				command: 'navigatePreviousSolution',
 			});
 		});
 
-		registerCommandWrapper(this._ctx, this.config.commands.navigateNext, () => {
+		registerCommandWrapper(this._accessor, this.config.commands.navigateNext, () => {
 			return this.activeWebviewPanel?.postMessage({
 				command: 'navigateNextSolution',
 			});

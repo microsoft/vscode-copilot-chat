@@ -16,7 +16,8 @@ import {
 	workspace,
 } from 'vscode';
 import { debounce } from '../../../../../../util/common/debounce';
-import { type ICompletionsContextService } from '../../../lib/src/context';
+import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../../../lib/src/context';
 import { Extension } from '../extensionContext';
 import { BasePanelCompletion, ISuggestionsPanel, PanelConfig } from './basePanelTypes';
 import { Highlighter } from './highlighter';
@@ -93,7 +94,7 @@ export abstract class BaseSuggestionsPanel<TPanelCompletion extends BasePanelCom
 	}
 
 	constructor(
-		protected readonly ctx: ICompletionsContextService,
+		protected readonly accessor: ServicesAccessor,
 		readonly webviewPanel: WebviewPanel,
 		document: TextDocument,
 		protected suggestionsPanelManager: SuggestionsPanelManagerInterface,
@@ -146,7 +147,7 @@ export abstract class BaseSuggestionsPanel<TPanelCompletion extends BasePanelCom
 	protected abstract renderSolutionContent(item: TPanelCompletion, baseContent: SolutionContent): SolutionContent;
 
 	private _buildExtensionUri(...path: string[]): Uri {
-		const extensionPath = Uri.joinPath(this.ctx.get(Extension).context.extensionUri, ...path);
+		const extensionPath = Uri.joinPath(this.accessor.get(ICompletionsContextService).get(Extension).context.extensionUri, ...path);
 		return this.webviewPanel.webview.asWebviewUri(extensionPath);
 	}
 

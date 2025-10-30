@@ -5,7 +5,6 @@
 
 import { Range, commands, window, type Disposable } from 'vscode';
 import type { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../../lib/src/context';
 import { CopilotNamedAnnotationList } from '../../../lib/src/openai/stream';
 import * as constants from '../constants';
 import { CopilotPanelVisible } from '../constants';
@@ -29,24 +28,23 @@ export interface PanelCompletion {
 	postInsertionCallback: () => PromiseLike<void> | void;
 }
 
-export function registerPanelSupport(serviceAccessor: ServicesAccessor): Disposable {
-	const ctx = serviceAccessor.get<ICompletionsContextService>(ICompletionsContextService);
-	const suggestionsPanelManager = new CopilotSuggestionsPanelManager(ctx);
+export function registerPanelSupport(accessor: ServicesAccessor): Disposable {
+	const suggestionsPanelManager = new CopilotSuggestionsPanelManager(accessor);
 
-	const result = registerCommand(ctx, constants.CMDOpenPanel, async () => {
+	const result = registerCommand(accessor, constants.CMDOpenPanel, async () => {
 		// hide ghost text while opening the generation ui
 		await commands.executeCommand('editor.action.inlineSuggest.hide');
-		await commandOpenPanel(ctx, suggestionsPanelManager);
+		await commandOpenPanel(suggestionsPanelManager);
 	});
 
 	suggestionsPanelManager.registerCommands();
 	return result;
 }
 
-function commandOpenPanel(ctx: ICompletionsContextService, suggestionsPanelManager: CopilotSuggestionsPanelManager) {
+function commandOpenPanel(suggestionsPanelManager: CopilotSuggestionsPanelManager) {
 	const editor = window.activeTextEditor;
 	if (!editor) { return; }
-	const wrapped = wrapDoc(ctx, editor.document);
+	const wrapped = wrapDoc(editor.document);
 	if (!wrapped) { return; }
 
 	const { line, character } = editor.selection.active;
