@@ -61,7 +61,7 @@ export abstract class LintingDiagnosticsProvider extends CachingDiagnosticsProvi
 		for (const file of files) {
 			const command = await this.fetchCommand(temporaryDirectory, file.filePath);
 			const spawnResult = spawnSync(command.command, command.arguments, { shell: true, encoding: 'utf-8', env: command.env });
-			const processedDiagnostics = this.processDiagnostics(file.fileName, JSON.parse(spawnResult.stdout));
+			const processedDiagnostics = this.processDiagnostics(file.fileName, JSON.parse(spawnResult.stdout || '{}'));
 			diagnostics.push(...processedDiagnostics);
 		}
 		await cleanTempDirWithRetry(temporaryDirectory);
