@@ -9,9 +9,13 @@ import { telemetryCatch, TelemetryData, TelemetryReporters, TelemetryStore, Tele
 import { createLibTestingContext } from './context';
 import { NoopCopilotTelemetryReporter } from './noopTelemetry';
 import { withInMemoryTelemetry } from './telemetry';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsContextService } from '../context';
+import { ICompletionsTelemetryService } from '../../../bridge/src/completionsTelemetryServiceBridge';
+import { ICompletionsPromiseQueueService } from '../util/promiseQueue';
 
 suite('Telemetry unit tests', function () {
-	const ctx = createLibTestingContext();
+	const accessor = createLibTestingContext();
 	let clock: Sinon.SinonFakeTimers;
 
 	setup(function () {
@@ -25,7 +29,7 @@ suite('Telemetry unit tests', function () {
 	test('Adds additional fields', async function () {
 		const telemetry = TelemetryData.createAndMarkAsIssued();
 
-		await telemetry.makeReadyForSending(ctx, TelemetryStore.Standard, 'SkipExp', 2000);
+		await telemetry.makeReadyForSending(accessor, TelemetryStore.Standard, 'SkipExp', 2000);
 
 		assert.ok(telemetry.properties.copilot_build);
 		assert.ok(telemetry.properties.copilot_buildType);
@@ -48,8 +52,8 @@ suite('Telemetry unit tests', function () {
 	});
 
 	test('Telemetry user config has undefined tracking id', function () {
-		const ctx = createLibTestingContext();
-		const config = ctx.instantiationService.createInstance(TelemetryUserConfig);
+		const accessor = createLibTestingContext();
+		const config = accessor.get(IInstantiationService).createInstance(TelemetryUserConfig);
 
 		assert.strictEqual(config.trackingId, undefined);
 	});
@@ -82,9 +86,10 @@ suite('Telemetry unit tests', function () {
 	});
 
 	test('telemetryCatch', async function () {
-		const { enhancedReporter } = await withInMemoryTelemetry(ctx, ctx => {
+		const { enhancedReporter } = await withInMemoryTelemetry(accessor, accessor => {
 			telemetryCatch(
-				ctx,
+				accessor.get(ICompletionsTelemetryService),
+				accessor.get(ICompletionsPromiseQueueService),
 				() => {
 					throw new Error('boom!');
 				},
@@ -114,16 +119,17 @@ suite('Telemetry unit tests', function () {
 
 suite('TelemetryReporters unit tests', function () {
 	test('deactivate is safe to call synchronously', async function () {
-		const ctx = createLibTestingContext();
+		const accessor = createLibTestingContext();
 		const oldRepoter = new NoopCopilotTelemetryReporter();
 		const oldRestrictedReporter = new NoopCopilotTelemetryReporter();
+		const ctx = accessor.get(ICompletionsContextService);
 		const reporters = ctx.get(TelemetryReporters);
 		reporters.setReporter(oldRepoter);
 		reporters.setEnhancedReporter(oldRestrictedReporter);
 
 		const asyncWork = reporters.deactivate();
-		const updatedReporter = reporters.getReporter(ctx); // snapshot these before awaiting the result
-		const updatedEnhancedReporter = reporters.getEnhancedReporter(ctx);
+		const updatedReporter = reporters.getReporter(accessor); // snapshot these before awaiting the result
+		const updatedEnhancedReporter = reporters.getEnhancedReporter(accessor);
 		await asyncWork;
 
 		assert.strictEqual(updatedReporter, undefined);

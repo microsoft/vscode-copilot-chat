@@ -10,21 +10,22 @@ import { TelemetryData } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { makeFsUri } from '../../util/uri';
 import { Features } from './../features';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('updateExPValuesAndAssignments', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 
 	const filenameUri = makeFsUri(__filename);
 
 	setup(async function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
 		// Trigger extractRepoInfoInBackground early + add a sleep to force repo info to be available
-		extractRepoInfoInBackground(ctx, filenameUri);
+		extractRepoInfoInBackground(accessor, filenameUri);
 		await new Promise(resolve => setTimeout(resolve, 100));
 	});
 
 	test('If no options are provided, repo filters should be empty and there should be no telemetry properties or measurements', async function () {
-		const features = ctx.get(Features);
+		const features = accessor.get(ICompletionsContextService).get(Features);
 		const telemetry = await features.updateExPValuesAndAssignments();
 
 		assert.deepStrictEqual(telemetry.properties, {});
@@ -38,7 +39,7 @@ suite('updateExPValuesAndAssignments', function () {
 	test('If telemetry data is passed as a parameter, it should be used in the resulting telemetry object', async function () {
 		const telemetryData = TelemetryData.createAndMarkAsIssued({ foo: 'bar' }, { baz: 42 });
 
-		const features = ctx.get(Features);
+		const features = accessor.get(ICompletionsContextService).get(Features);
 		const telemetry = await features.updateExPValuesAndAssignments(undefined, telemetryData);
 
 		assert.deepStrictEqual(telemetry.properties, { foo: 'bar' });

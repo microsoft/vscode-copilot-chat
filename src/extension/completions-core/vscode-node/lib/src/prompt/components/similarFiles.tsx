@@ -44,14 +44,14 @@ export const SimilarFiles = (props: SimilarFilesProps, context: ComponentContext
 
 		let files: { docs: NeighborsCollection } = NeighborSource.defaultEmptyResult();
 		if (!requestData.turnOffSimilarFiles) {
-			files = await NeighborSource.getNeighborFilesAndTraits(
-				props.ctx,
+			files = await props.ctx.instantiationService.invokeFunction(async acc => await NeighborSource.getNeighborFilesAndTraits(
+				acc,
 				requestData.document.uri,
 				requestData.document.detectedLanguageId,
 				requestData.telemetryData,
 				requestData.cancellationToken,
 				requestData.data
-			);
+			));
 		}
 
 		const similarFiles = await produceSimilarFiles(
@@ -71,7 +71,7 @@ export const SimilarFiles = (props: SimilarFilesProps, context: ComponentContext
 			docs: NeighborsCollection;
 		}
 	): Promise<SimilarFileSnippet[]> {
-		const promptOptions = getPromptOptions(props.ctx, telemetryData, doc.detectedLanguageId);
+		const promptOptions = props.ctx.instantiationService.invokeFunction(getPromptOptions, telemetryData, doc.detectedLanguageId);
 		const similarSnippets = await findSimilarSnippets(promptOptions, telemetryData, doc, requestData, files);
 		return similarSnippets
 			.filter(s => s.snippet.length > 0)
@@ -90,7 +90,7 @@ export const SimilarFiles = (props: SimilarFilesProps, context: ComponentContext
 	) {
 		const similarFilesOptions =
 			promptOptions.similarFilesOptions ||
-			getSimilarFilesOptions(props.ctx, telemetryData, doc.detectedLanguageId);
+			props.ctx.instantiationService.invokeFunction(getSimilarFilesOptions, telemetryData, doc.detectedLanguageId);
 		const tdm = props.ctx.get(TextDocumentManager);
 		const relativePath = tdm.getRelativePath(doc);
 		const docInfo: DocumentInfoWithOffset = {

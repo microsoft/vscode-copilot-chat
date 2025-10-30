@@ -102,7 +102,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	private readonly _customHeaders: Record<string, string>;
 	constructor(
-		protected readonly modelMetadata: IChatModelInformation,
+		_modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
 		protected readonly _modelUrl: string,
 		@IFetcherService fetcherService: IFetcherService,
@@ -118,7 +118,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@ILogService protected logService: ILogService
 	) {
 		super(
-			modelMetadata,
+			_modelMetadata,
 			domainService,
 			capiClientService,
 			fetcherService,
@@ -131,7 +131,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			expService,
 			logService
 		);
-		this._customHeaders = this._sanitizeCustomHeaders(modelMetadata.requestHeaders);
+		this._customHeaders = this._sanitizeCustomHeaders(_modelMetadata.requestHeaders);
 	}
 
 	private _sanitizeCustomHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
@@ -294,7 +294,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		return this._modelUrl;
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json"
 		};

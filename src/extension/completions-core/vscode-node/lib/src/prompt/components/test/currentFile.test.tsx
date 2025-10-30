@@ -7,8 +7,8 @@
 
 import * as assert from 'assert';
 import dedent from 'ts-dedent';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
-import { ICompletionsContextService } from '../../../context';
 import { CurrentFile } from '../../../prompt/components/currentFile';
 import { createCompletionRequestData } from '../../../test/completionsPrompt';
 import { createLibTestingContext } from '../../../test/context';
@@ -16,10 +16,10 @@ import { querySnapshot } from '../../../test/snapshot';
 import { createTextDocument } from '../../../test/textDocument';
 
 suite('Completions Prompt Renderer', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
 	});
 
 	test('uses full before cursor if within limit', async function () {
@@ -65,7 +65,7 @@ suite('Completions Prompt Renderer', function () {
 		const virtualPrompt = new VirtualPrompt(<CurrentFile />);
 		const pipe = virtualPrompt.createPipe();
 		const data = createCompletionRequestData(
-			ctx,
+			accessor,
 			textDocument,
 			position,
 			undefined,

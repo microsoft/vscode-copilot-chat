@@ -30,7 +30,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/defaultAgentInstructions';
 import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -392,6 +392,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			});
 
 			// Return the result
+			const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;
 			const isNotebook = editEntires.length === 1 ? handledNotebookUris.size === 1 : undefined;
 			this.sendApplyPatchTelemetry('success', options, undefined, !!healed, isNotebook);
 			return new LanguageModelToolResult([
@@ -399,7 +400,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					await renderPromptElementJSON(
 						this.instantiationService,
 						EditFileResult,
-						{ files, diagnosticsTimeout: 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model },
+						{ files, diagnosticsTimeout: isInlineChat ? -1 : 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model },
 						options.tokenizationOptions ?? {
 							tokenBudget: 1000,
 							countTokens: (t) => Promise.resolve(t.length * 3 / 4)

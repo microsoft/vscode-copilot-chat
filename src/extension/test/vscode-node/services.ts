@@ -26,6 +26,7 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
+import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/vscode-node/automodeService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -114,6 +115,7 @@ import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/vir
  */
 export function createExtensionTestingServices(): TestingServiceCollection {
 	const testingServiceCollection = _createBaselineServices();
+	testingServiceCollection.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 	testingServiceCollection.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	testingServiceCollection.define(IEnvService, new SyncDescriptor(TestEnvService));

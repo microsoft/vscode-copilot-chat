@@ -2,14 +2,16 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../context';
+import { LogTarget } from '../logger';
 import { telemetry, TelemetryData, telemetryError } from '../telemetry';
 import { codeReferenceLogger } from './logger';
 
 export type TelemetryActor = 'user' | 'system';
 
 type Base = {
-	context: ICompletionsContextService;
+	instantiationService: IInstantiationService;
 };
 type MatchUIDetails = Base & { actor: TelemetryActor };
 
@@ -40,22 +42,22 @@ class CopilotOutputLogTelemetry extends CodeQuoteTelemetry {
 		super('github_copilot_log');
 	}
 
-	handleOpen({ context }: Base) {
+	handleOpen({ instantiationService }: Base) {
 		const key = this.buildKey('open', 'count');
 		const data = TelemetryData.createAndMarkAsIssued();
-		telemetry(context, key, data);
+		instantiationService.invokeFunction(telemetry, key, data);
 	}
 
-	handleFocus({ context }: Base) {
+	handleFocus({ instantiationService }: Base) {
 		const data = TelemetryData.createAndMarkAsIssued();
 		const key = this.buildKey('focus', 'count');
-		telemetry(context, key, data);
+		instantiationService.invokeFunction(telemetry, key, data);
 	}
 
-	handleWrite({ context }: Base) {
+	handleWrite({ instantiationService }: Base) {
 		const data = TelemetryData.createAndMarkAsIssued();
 		const key = this.buildKey('write', 'count');
-		telemetry(context, key, data);
+		instantiationService.invokeFunction(telemetry, key, data);
 	}
 }
 
@@ -66,16 +68,16 @@ class MatchNotificationTelemetry extends CodeQuoteTelemetry {
 		super('match_notification');
 	}
 
-	handleDoAction({ context, actor }: MatchUIDetails) {
+	handleDoAction({ instantiationService, actor }: MatchUIDetails) {
 		const data = TelemetryData.createAndMarkAsIssued({ actor });
 		const key = this.buildKey('acknowledge', 'count');
-		telemetry(context, key, data);
+		instantiationService.invokeFunction(telemetry, key, data);
 	}
 
-	handleDismiss({ context, actor }: MatchUIDetails) {
+	handleDismiss({ instantiationService, actor }: MatchUIDetails) {
 		const data = TelemetryData.createAndMarkAsIssued({ actor });
 		const key = this.buildKey('ignore', 'count');
-		telemetry(context, key, data);
+		instantiationService.invokeFunction(telemetry, key, data);
 	}
 }
 
@@ -86,19 +88,19 @@ class SnippyTelemetry extends CodeQuoteTelemetry {
 		super('snippy');
 	}
 
-	handleUnexpectedError({ context, origin, reason }: PostInsertionErrorDetails) {
+	handleUnexpectedError({ instantiationService, origin, reason }: PostInsertionErrorDetails) {
 		const data = TelemetryData.createAndMarkAsIssued({ origin, reason });
-		telemetryError(context, this.buildKey('unexpectedError'), data);
+		instantiationService.invokeFunction(telemetryError, this.buildKey('unexpectedError'), data);
 	}
 
-	handleCompletionMissing({ context, origin, reason }: PostInsertionErrorDetails) {
+	handleCompletionMissing({ instantiationService, origin, reason }: PostInsertionErrorDetails) {
 		const data = TelemetryData.createAndMarkAsIssued({ origin, reason });
-		telemetryError(context, this.buildKey('completionMissing'), data);
+		instantiationService.invokeFunction(telemetryError, this.buildKey('completionMissing'), data);
 	}
 
-	handleSnippyNetworkError({ context, origin, reason, message }: SnippyNetworkErrorDetails) {
+	handleSnippyNetworkError({ instantiationService, origin, reason, message }: SnippyNetworkErrorDetails) {
 		if (!origin.match(statusCodeRe)) {
-			codeReferenceLogger.debug(context, 'Invalid status code, not sending telemetry', { origin });
+			instantiationService.invokeFunction(acc => codeReferenceLogger.debug(acc.get(ICompletionsContextService).get(LogTarget), 'Invalid status code, not sending telemetry', { origin }));
 			return;
 		}
 
@@ -110,7 +112,7 @@ class SnippyTelemetry extends CodeQuoteTelemetry {
 			.join('_')
 			.toLowerCase();
 		const data = TelemetryData.createAndMarkAsIssued({ message });
-		telemetryError(context, this.buildKey(errorType, origin), data);
+		instantiationService.invokeFunction(telemetryError, this.buildKey(errorType, origin), data);
 	}
 }
 

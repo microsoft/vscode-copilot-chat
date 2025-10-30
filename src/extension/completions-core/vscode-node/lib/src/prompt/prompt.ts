@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { PromptMetadata } from '../../../prompt/src/components/components';
 import { commentBlockAsSingles } from '../../../prompt/src/languageMarker';
 import { PromptOptions } from '../../../prompt/src/prompt';
@@ -96,13 +97,14 @@ export function trimLastLine(source: string): [string, string] {
 }
 
 export function extractPrompt(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	completionId: string,
 	completionState: CompletionState,
 	telemetryData: TelemetryWithExp,
 	cancellationToken?: ICancellationToken,
 	promptOpts: ExtractPromptOptions = {}
 ): Promise<PromptResponse> {
+	const ctx = accessor.get(ICompletionsContextService);
 	const workspace = ctx.get(TextDocumentManager);
 	const notebook = workspace.findNotebook(completionState.textDocument);
 	const activeCell = notebook?.getCellFor(completionState.textDocument);
@@ -110,7 +112,7 @@ export function extractPrompt(
 		completionState = applyEditsForNotebook(completionState, notebook, activeCell);
 	}
 
-	telemetryData.extendWithConfigProperties(ctx);
+	telemetryData.extendWithConfigProperties(accessor);
 	telemetryData.sanitizeKeys();
 	const separateContext = true;
 	const promptFactory = ctx.get(CompletionsPromptFactory);
@@ -155,13 +157,14 @@ function applyEditsForNotebook(state: CompletionState, notebook: INotebookDocume
 	return state.applyEdits([{ newText, range: { start: top, end: top } }]);
 }
 
-export function getPromptOptions(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp, languageId: string): PromptOptions {
+export function getPromptOptions(accessor: ServicesAccessor, telemetryData: TelemetryWithExp, languageId: string): PromptOptions {
 	// Note: the default values of the EXP flags currently overwrite the default `PromptOptions`
+	const ctx = accessor.get(ICompletionsContextService);
 	const maxTokens = ctx.get(Features).maxPromptCompletionTokens(telemetryData);
-	const maxPromptLength = maxTokens - getMaxSolutionTokens(ctx);
+	const maxPromptLength = maxTokens - getMaxSolutionTokens();
 
 	const numberOfSnippets = getNumberOfSnippets(telemetryData, languageId);
-	const similarFilesOptions: SimilarFilesOptions = getSimilarFilesOptions(ctx, telemetryData, languageId);
+	const similarFilesOptions: SimilarFilesOptions = getSimilarFilesOptions(accessor, telemetryData, languageId);
 
 	const suffixPercent = ctx.get(Features).suffixPercent(telemetryData);
 	const suffixMatchThreshold = ctx.get(Features).suffixMatchThreshold(telemetryData);

@@ -253,7 +253,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		} catch (e) {
 			const result: ChatResponse = {
 				type: ChatFetchResponseType.Failed,
-				reason: toErrorMessage(e),
+				reason: toErrorMessage(e, true),
 				requestId: generateUuid(),
 				serverRequestId: undefined
 			};

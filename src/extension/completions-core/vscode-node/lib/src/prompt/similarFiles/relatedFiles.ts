@@ -3,12 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../../types/src';
 import { CopilotContentExclusionManager } from '../../contentExclusion/contentExclusionManager';
 import { ICompletionsContextService } from '../../context';
 import { FileSystem } from '../../fileSystem';
 import { LRUCacheMap } from '../../helpers/cache';
-import { Logger } from '../../logger';
+import { Logger, LogTarget } from '../../logger';
 import { telemetry, TelemetryWithExp } from '../../telemetry';
 import { shortCircuit } from '../../util/shortCircuit';
 import { NeighboringFileType } from './neighborFiles';
@@ -141,7 +142,10 @@ class RelatedFilesProviderFailure extends Error {
  * Class for getting the related files to the current active file (implemented in the extension or the agent).
  */
 export abstract class RelatedFilesProvider {
-	constructor(@ICompletionsContextService protected readonly context: ICompletionsContextService) { }
+	constructor(
+		@ICompletionsContextService protected readonly context: ICompletionsContextService,
+		@IInstantiationService protected readonly instantiationService: IInstantiationService,
+	) { }
 
 	// Returns the related files for the given document.
 	// An exception or `undefined` may be returned if a return value cannot be provided for some reason (e.g. failures).
@@ -156,6 +160,7 @@ export abstract class RelatedFilesProvider {
 		telemetryData: TelemetryWithExp,
 		cancellationToken: ICancellationToken | undefined
 	): Promise<RelatedFiles | undefined> {
+		const logTarget = this.context.get(LogTarget);
 		// Try/catch-ing around getRelatedFilesResponse is not useful: it is up to the
 		// concrete implementation of getRelatedFilesResponse to handle exceptions. If
 		// they are thrown at this point, let them pass through up to the memoize() to
@@ -176,23 +181,23 @@ export abstract class RelatedFilesProvider {
 			}
 			for (const uri of entry.uris) {
 				try {
-					relatedFilesLogger.debug(this.context, `Processing ${uri}`);
+					relatedFilesLogger.debug(logTarget, `Processing ${uri}`);
 
 					let content = await this.getFileContent(uri);
 					if (!content || content.length === 0) {
-						relatedFilesLogger.debug(this.context, `Skip ${uri} due to empty content or loading issue.`);
+						relatedFilesLogger.debug(logTarget, `Skip ${uri} due to empty content or loading issue.`);
 						continue;
 					}
 
 					if (await this.isContentExcluded(uri, content)) {
-						relatedFilesLogger.debug(this.context, `Skip ${uri} due content exclusion.`);
+						relatedFilesLogger.debug(logTarget, `Skip ${uri} due content exclusion.`);
 						continue;
 					}
 
 					content = RelatedFilesProvider.dropBOM(content);
 					uriToContentMap.set(uri, content);
 				} catch (e) {
-					relatedFilesLogger.warn(this.context, e);
+					relatedFilesLogger.warn(logTarget, e);
 				}
 			}
 		}
@@ -204,7 +209,7 @@ export abstract class RelatedFilesProvider {
 		try {
 			return this.context.get(FileSystem).readFileString(uri);
 		} catch (e) {
-			relatedFilesLogger.debug(this.context, e);
+			relatedFilesLogger.debug(this.context.get(LogTarget), e);
 		}
 
 		return undefined;
@@ -215,7 +220,7 @@ export abstract class RelatedFilesProvider {
 			const rcmResult = await this.context.get(CopilotContentExclusionManager).evaluate(uri, content);
 			return rcmResult.isBlocked;
 		} catch (e) {
-			relatedFilesLogger.exception(this.context, e, 'isContentExcluded');
+			this.instantiationService.invokeFunction(acc => relatedFilesLogger.exception(acc, e, 'isContentExcluded'));
 		}
 
 		// Default to being excluded if encountered error
@@ -241,18 +246,20 @@ const lruCache: PromiseExpirationCacheMap<RelatedFiles> = new PromiseExpirationC
  * If the result is not already cached, then the lookup is made based purely upon docInfo and then cached.
  * */
 async function getRelatedFiles(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	docInfo: RelatedFilesDocumentInfo,
 	telemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
 	relatedFilesProvider: RelatedFilesProvider
 ): Promise<RelatedFiles> {
+	const instantiationService = accessor.get(IInstantiationService);
+	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
 	const startTime = performance.now();
 	let result: RelatedFiles | undefined;
 	try {
 		result = await relatedFilesProvider.getRelatedFiles(docInfo, telemetryData, cancellationToken);
 	} catch (error) {
-		relatedFilesLogger.exception(ctx, error, '.getRelatedFiles');
+		instantiationService.invokeFunction(acc => relatedFilesLogger.exception(acc, error, '.getRelatedFiles'));
 		result = undefined;
 	}
 
@@ -267,8 +274,7 @@ async function getRelatedFiles(
 	}
 
 	const elapsedTime = performance.now() - startTime;
-	relatedFilesLogger.debug(
-		ctx,
+	relatedFilesLogger.debug(logTarget,
 		result !== undefined
 			? `Fetched ${[...result.entries.values()]
 				.map(value => value.size)
@@ -285,7 +291,7 @@ async function getRelatedFiles(
 }
 
 let getRelatedFilesWithCacheAndTimeout = function (
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	docInfo: RelatedFilesDocumentInfo,
 	telemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
@@ -295,7 +301,7 @@ let getRelatedFilesWithCacheAndTimeout = function (
 	if (lruCache.has(id)) {
 		return lruCache.get(id)!;
 	}
-	let result = getRelatedFiles(ctx, docInfo, telemetryData, cancellationToken, relatedFilesProvider);
+	let result = getRelatedFiles(accessor, docInfo, telemetryData, cancellationToken, relatedFilesProvider);
 	if (result instanceof Promise) {
 		result = result.catch(error => {
 			lruCache.delete(id);
@@ -323,13 +329,16 @@ getRelatedFilesWithCacheAndTimeout = shortCircuit(
  * @returns Related files and traits.
  */
 export async function getRelatedFilesAndTraits(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	doc: RelatedFilesTextDocument,
 	telemetryData: TelemetryWithExp,
 	cancellationToken?: ICancellationToken,
 	data?: unknown,
 	forceComputation: boolean = false
 ): Promise<RelatedFiles> {
+	const ctx = accessor.get(ICompletionsContextService);
+	const instantiationService = accessor.get(IInstantiationService);
+	const logTarget = ctx.get(LogTarget);
 	const relatedFilesProvider: RelatedFilesProvider = ctx.get(RelatedFilesProvider);
 
 	let relatedFiles = EmptyRelatedFiles;
@@ -340,9 +349,8 @@ export async function getRelatedFilesAndTraits(
 			data: data,
 		};
 		relatedFiles = forceComputation
-			? await getRelatedFiles(ctx, docInfo, telemetryData, cancellationToken, relatedFilesProvider)
-			: await getRelatedFilesWithCacheAndTimeout(
-				ctx,
+			? await instantiationService.invokeFunction(getRelatedFiles, docInfo, telemetryData, cancellationToken, relatedFilesProvider)
+			: await instantiationService.invokeFunction(getRelatedFilesWithCacheAndTimeout,
 				docInfo,
 				telemetryData,
 				cancellationToken,
@@ -351,12 +359,11 @@ export async function getRelatedFilesAndTraits(
 	} catch (error) {
 		relatedFiles = EmptyRelatedFiles;
 		if (error instanceof RelatedFilesProviderFailure) {
-			telemetry(ctx, 'getRelatedFilesList', telemetryData);
+			instantiationService.invokeFunction(telemetry, 'getRelatedFilesList', telemetryData);
 		}
 	}
 
-	relatedFilesLogger.debug(
-		ctx,
+	relatedFilesLogger.debug(logTarget,
 		relatedFiles !== null && relatedFiles !== undefined
 			? `Fetched following traits ${relatedFiles.traits
 				.map(trait => `{${trait.name} : ${trait.value}}`)
