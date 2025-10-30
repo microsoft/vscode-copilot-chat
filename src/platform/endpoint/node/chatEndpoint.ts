@@ -60,6 +60,7 @@ export async function defaultChatResponseProcessor(
 
 export async function defaultNonStreamChatResponseProcessor(response: Response, finishCallback: FinishedCallback, telemetryData: TelemetryData) {
 	const textResponse = await response.text();
+	console.log("response text: ", textResponse);
 	const jsonResponse = JSON.parse(textResponse);
 	const completions: ChatCompletion[] = [];
 	for (let i = 0; i < (jsonResponse?.choices?.length || 0); i++) {
