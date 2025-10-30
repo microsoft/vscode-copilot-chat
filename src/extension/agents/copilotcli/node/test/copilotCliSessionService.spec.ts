@@ -194,12 +194,12 @@ describe('CopilotCLISessionService', () => {
 		expect(session2).toBe(session1);
 	});
 
-	it('lists active (non-persisted) sessions', async () => {
+	it('should not lists active (non-persisted) sessions', async () => {
 		const service = instantiationService.createInstance(CopilotCLISessionService);
 		await service.createSession('List Me', undefined, CancellationToken.None);
 		const all = await service.getAllSessions(CancellationToken.None);
 		const labels = all.map(s => s.label);
-		expect(labels.some(l => l.includes('List Me'))).toBe(true);
+		expect(labels.some(l => l.includes('List Me'))).toBe(false);
 	});
 
 	it('generates truncated label for persisted session user message', async () => {
