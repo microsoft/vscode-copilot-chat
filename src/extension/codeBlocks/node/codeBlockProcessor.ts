@@ -120,6 +120,7 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 	reference2 = this.forward(this._wrapped.reference2.bind(this._wrapped));
 	codeCitation = this.forward(this._wrapped.codeCitation.bind(this._wrapped));
 	anchor = this.forward(this._wrapped.anchor.bind(this._wrapped));
+	externalEdit = this.forward(this._wrapped.externalEdit.bind(this._wrapped));
 	prepareToolInvocation = this.forward(this._wrapped.prepareToolInvocation.bind(this._wrapped));
 }
 

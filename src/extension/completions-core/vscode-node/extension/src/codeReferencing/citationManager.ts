@@ -5,9 +5,9 @@
 
 import { commands } from 'vscode';
 import { CodeReference } from '.';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
 import { CitationManager, IPDocumentCitation } from '../../../lib/src/citationManager';
-import { ICompletionsContextService } from '../../../lib/src/context';
 import { OutputPaneShowCommand } from '../../../lib/src/snippy/constants';
 import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { notify } from './matchNotifier';
@@ -20,13 +20,16 @@ import { GitHubCopilotLogger } from './outputChannel';
 export class LoggingCitationManager extends CitationManager {
 	private logger?: GitHubCopilotLogger;
 
-	constructor(private codeReference: CodeReference) {
+	constructor(
+		private codeReference: CodeReference,
+		@IInstantiationService private readonly instantiationService: IInstantiationService
+	) {
 		super();
-		const disposable = onCopilotToken(codeReference.ctx, _ => {
+		const disposable = instantiationService.invokeFunction(onCopilotToken, _ => {
 			if (this.logger) {
 				return;
 			}
-			this.logger = codeReference.ctx.instantiationService.createInstance(GitHubCopilotLogger);
+			this.logger = instantiationService.createInstance(GitHubCopilotLogger);
 			const initialNotificationCommand = commands.registerCommand(OutputPaneShowCommand, () =>
 				this.logger?.forceShow()
 			);
@@ -35,7 +38,7 @@ export class LoggingCitationManager extends CitationManager {
 		this.codeReference.addDisposable(disposable);
 	}
 
-	async handleIPCodeCitation(ctx: ICompletionsContextService, citation: IPDocumentCitation): Promise<void> {
+	async handleIPCodeCitation(citation: IPDocumentCitation): Promise<void> {
 		if (!this.codeReference.enabled || !this.logger || citation.details.length === 0) {
 			return;
 		}
@@ -52,7 +55,7 @@ export class LoggingCitationManager extends CitationManager {
 			const { license, url } = detail;
 			this.logger.info(`License: ${license.replace('NOASSERTION', 'unknown')}, URL: ${url}`);
 		}
-		copilotOutputLogTelemetry.handleWrite({ context: ctx });
-		await notify(ctx);
+		copilotOutputLogTelemetry.handleWrite({ instantiationService: this.instantiationService });
+		await this.instantiationService.invokeFunction(notify);
 	}
 }

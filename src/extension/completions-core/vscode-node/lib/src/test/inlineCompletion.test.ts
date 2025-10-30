@@ -16,6 +16,9 @@ import { createLibTestingContext } from './context';
 import { createFakeCompletionResponse, StaticFetcher } from './fetcher';
 import { withInMemoryTelemetry } from './telemetry';
 import { createTextDocument } from './textDocument';
+import { ICompletionsContextService } from '../context';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 
 suite('getInlineCompletions()', function () {
 	function setupCompletion(
@@ -24,17 +27,19 @@ suite('getInlineCompletions()', function () {
 		position = LocationFactory.position(1, 0),
 		languageId = 'typescript'
 	) {
-		const ctx = createLibTestingContext();
+		const accessor = createLibTestingContext();
+		const ctx = accessor.get(ICompletionsContextService);
 		const doc = createTextDocument('file:///example.ts', languageId, 1, docText);
 		ctx.forceSet(Fetcher, fetcher);
-		ctx.set(OpenAIFetcher, new LiveOpenAIFetcher()); // gets results from static fetcher
+		ctx.set(OpenAIFetcher, new LiveOpenAIFetcher(accessor.get(IInstantiationService), accessor.get(ICompletionsContextService), accessor.get(ICompletionsRuntimeModeService))); // gets results from static fetcher
 
 		// Setup closures with the state as default
 		function requestInlineCompletions(textDoc = doc, pos = position) {
-			return getInlineCompletions(ctx, textDoc, pos);
+			return getInlineCompletions(accessor, textDoc, pos);
 		}
 
 		return {
+			accessor,
 			ctx,
 			doc,
 			position,
@@ -55,14 +60,14 @@ suite('getInlineCompletions()', function () {
 			completionsDeferred.resolve(opts.json as CompletionRequest);
 			return createFakeCompletionResponse(secondCompletionText);
 		});
-		const { ctx, doc, position, requestInlineCompletions } = setupCompletion(new StaticFetcher(networkResponse));
+		const { accessor, doc, position, requestInlineCompletions } = setupCompletion(new StaticFetcher(networkResponse));
 
-		const { reporter, result } = await withInMemoryTelemetry(ctx, async () => {
+		const { reporter, result } = await withInMemoryTelemetry(accessor, async () => {
 			const firstResponse = await requestInlineCompletions();
 
 			assert.strictEqual(firstResponse?.length, 1);
 			assert.strictEqual(firstResponse[0].insertText, firstCompletionText);
-			telemetryShown(ctx, 'ghostText', firstResponse[0]);
+			telemetryShown(accessor, 'ghostText', firstResponse[0]);
 
 			// We're expecting 2 completion requests: one we explicitly requested, and a follow-up speculative request in the background.
 			return await completionsDeferred.promise;
@@ -90,7 +95,7 @@ suite('getInlineCompletions()', function () {
 			completionsDeferred.resolve();
 			return createFakeCompletionResponse(secondCompletion);
 		});
-		const { ctx, doc, position, requestInlineCompletions } = setupCompletion(
+		const { accessor, doc, position, requestInlineCompletions } = setupCompletion(
 			new StaticFetcher(networkResponse),
 			'function example() {\n    \n}\n',
 			LocationFactory.position(1, 4)
@@ -102,7 +107,7 @@ suite('getInlineCompletions()', function () {
 		assert.strictEqual(response[0].insertText, firstCompletion);
 		assert.deepStrictEqual(response[0].range, LocationFactory.range(LocationFactory.position(1, 0), position));
 
-		telemetryShown(ctx, 'ghostText', response[0]);
+		telemetryShown(accessor, 'ghostText', response[0]);
 		await completionsDeferred.promise; // Wait for speculative request to be sent
 
 		const docv2 = createTextDocument(
@@ -125,11 +130,11 @@ suite('getInlineCompletions()', function () {
 	});
 
 	test('does not send a speculative request if empty', async function () {
-		const { ctx, requestInlineCompletions } = setupCompletion(
+		const { accessor, requestInlineCompletions } = setupCompletion(
 			new StaticFetcher(() => createFakeCompletionResponse(''))
 		);
 
-		const { reporter, result } = await withInMemoryTelemetry(ctx, () => {
+		const { reporter, result } = await withInMemoryTelemetry(accessor, () => {
 			return requestInlineCompletions();
 		});
 
@@ -155,9 +160,9 @@ suite('getInlineCompletions()', function () {
 			return createFakeCompletionResponse(secondCompletionText);
 		});
 
-		const { ctx, requestInlineCompletions } = setupCompletion(new StaticFetcher(networkResponse));
+		const { accessor, requestInlineCompletions } = setupCompletion(new StaticFetcher(networkResponse));
 
-		const { reporter } = await withInMemoryTelemetry(ctx, async () => {
+		const { reporter } = await withInMemoryTelemetry(accessor, async () => {
 			const firstResponse = await requestInlineCompletions();
 			assert.strictEqual(firstResponse?.length, 1);
 			assert.strictEqual(firstResponse[0].insertText, firstCompletionText);
@@ -167,7 +172,7 @@ suite('getInlineCompletions()', function () {
 			assert.strictEqual(networkResponse.callCount, 1, 'Expected only the initial network call');
 
 			// Call telemetryShown to trigger speculative request
-			telemetryShown(ctx, 'ghostText', firstResponse[0]);
+			telemetryShown(accessor, 'ghostText', firstResponse[0]);
 
 			// Wait for speculative request to complete
 			return await completionsDeferred.promise;

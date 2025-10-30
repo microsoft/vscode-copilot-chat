@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../context';
-import { Logger } from '../logger';
+import { Logger, LogTarget } from '../logger';
 import { NotificationSender } from '../notificationSender';
 import { UrlOpener } from '../util/opener';
 
@@ -16,22 +17,24 @@ const learnMoreLink = 'https://gh.io/copilot-network-errors';
 export class UserErrorNotifier {
 	private readonly notifiedErrorCodes: string[] = [];
 
-	notifyUser(ctx: ICompletionsContextService, e: unknown) {
+	notifyUser(accessor: ServicesAccessor, e: unknown) {
 		if (!(e instanceof Error)) { return; }
 		const error: NodeJS.ErrnoException = e;
 		if (error.code && CERTIFICATE_ERRORS.includes(error.code) && !this.didNotifyBefore(error.code)) {
 			this.notifiedErrorCodes.push(error.code);
-			void this.displayCertificateErrorNotification(ctx, error);
+			void this.displayCertificateErrorNotification(accessor, error);
 		}
 	}
 
-	private async displayCertificateErrorNotification(ctx: ICompletionsContextService, err: NodeJS.ErrnoException) {
+	private async displayCertificateErrorNotification(accessor: ServicesAccessor, err: NodeJS.ErrnoException) {
+		const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
 		new Logger('certificates').error(
-			ctx,
+			logTarget,
 			`${errorMsg} Please visit ${learnMoreLink} to learn more. Original cause:`,
 			err
 		);
 		const learnMoreAction = { title: 'Learn more' };
+		const ctx = accessor.get(ICompletionsContextService);
 		return ctx
 			.get(NotificationSender)
 			.showWarningMessage(errorMsg, learnMoreAction)

@@ -16,10 +16,11 @@ import { PromiseQueue } from '../util/promiseQueue';
 import { createLibTestingContext } from './context';
 import { fakeCodeReference } from './fetcher';
 import { TestTextDocumentManager } from './textDocument';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('postInsertionTasks', function () {
-	let ctx: ICompletionsContextService;
-	let handleIPCodeCitation: Sinon.SinonSpy<[ctx: ICompletionsContextService, citation: IPDocumentCitation], Promise<void>>;
+	let accessor: ServicesAccessor;
+	let handleIPCodeCitation: Sinon.SinonSpy<[citation: IPDocumentCitation], Promise<void>>;
 	let docMgr: TestTextDocumentManager;
 	let doc: ITextDocument;
 	const uri = 'file:///hello.js';
@@ -28,7 +29,8 @@ suite('postInsertionTasks', function () {
 	let completion: CopilotCompletion;
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
+		const ctx = accessor.get(ICompletionsContextService);
 		handleIPCodeCitation = Sinon.spy(ctx.get(CitationManager), 'handleIPCodeCitation');
 		docMgr = ctx.get(TextDocumentManager) as TestTextDocumentManager;
 		doc = docMgr.setTextDocument(uri, 'javascript', 'function main() {\n\n\n}');
@@ -55,7 +57,7 @@ suite('postInsertionTasks', function () {
 
 		docMgr.updateTextDocument(doc.uri, `function main() {\n${completionText}\n\n}`);
 		postInsertionTasks(
-			ctx,
+			accessor,
 			'ghostText',
 			completionText,
 			completion.offset,
@@ -64,9 +66,10 @@ suite('postInsertionTasks', function () {
 			{ compType: 'full', acceptedLength: completionText.length, acceptedLines: 0 },
 			completion.copilotAnnotations
 		);
+		const ctx = accessor.get(ICompletionsContextService);
 		await ctx.get(PromiseQueue).flush();
 
-		Sinon.assert.calledOnceWithExactly(handleIPCodeCitation, ctx, {
+		Sinon.assert.calledOnceWithExactly(handleIPCodeCitation, {
 			inDocumentUri: doc.uri,
 			offsetStart: completion.offset,
 			offsetEnd: completion.offset + completionText.length,
@@ -86,7 +89,7 @@ suite('postInsertionTasks', function () {
 
 		docMgr.updateTextDocument(doc.uri, `function main() {\n${partial}\n\n}`);
 		postInsertionTasks(
-			ctx,
+			accessor,
 			'ghostText',
 			completionText,
 			completion.offset,
@@ -95,9 +98,10 @@ suite('postInsertionTasks', function () {
 			{ compType: 'partial', acceptedLength: partial.length, acceptedLines: 0 },
 			completion.copilotAnnotations
 		);
+		const ctx = accessor.get(ICompletionsContextService);
 		await ctx.get(PromiseQueue).flush();
 
-		Sinon.assert.calledOnceWithExactly(handleIPCodeCitation, ctx, {
+		Sinon.assert.calledOnceWithExactly(handleIPCodeCitation, {
 			inDocumentUri: doc.uri,
 			offsetStart: completion.offset,
 			offsetEnd: completion.offset + partial.length,
@@ -114,7 +118,7 @@ suite('postInsertionTasks', function () {
 
 		docMgr.updateTextDocument(doc.uri, `function main() {\n${partial}\n\n}`);
 		postInsertionTasks(
-			ctx,
+			accessor,
 			'ghostText',
 			completionText,
 			completion.offset,
@@ -123,6 +127,7 @@ suite('postInsertionTasks', function () {
 			{ compType: 'partial', acceptedLength: partial.length, acceptedLines: 0 },
 			completion.copilotAnnotations
 		);
+		const ctx = accessor.get(ICompletionsContextService);
 		await ctx.get(PromiseQueue).flush();
 
 		Sinon.assert.notCalled(handleIPCodeCitation);
@@ -139,7 +144,7 @@ suite('postInsertionTasks', function () {
 		// when it might:
 		docMgr.updateTextDocument(doc.uri, `function main() {\n    ${completionText};\n\n}`);
 		postInsertionTasks(
-			ctx,
+			accessor,
 			'ghostText',
 			completionText,
 			completion.offset,
@@ -148,9 +153,10 @@ suite('postInsertionTasks', function () {
 			{ compType: 'full', acceptedLength: completionText.length, acceptedLines: 3 },
 			completion.copilotAnnotations
 		);
+		const ctx = accessor.get(ICompletionsContextService);
 		await ctx.get(PromiseQueue).flush();
 
-		Sinon.assert.calledOnceWithExactly(handleIPCodeCitation, ctx, {
+		Sinon.assert.calledOnceWithExactly(handleIPCodeCitation, {
 			inDocumentUri: doc.uri,
 			offsetStart: completion.offset + 4,
 			offsetEnd: completion.offset + 4 + completionText.length,
