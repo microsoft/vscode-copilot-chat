@@ -203,7 +203,6 @@ export class CopilotCLISession extends Disposable {
 			}
 
 			case 'tool.execution_complete': {
-				// const wasEditTool = this._ongoingEdits.has(event.data.toolCallId);
 				const wasEditTool = this._onDidEditTool(event.data.toolCallId);
 				const responsePart = processToolExecutionComplete(event, this._pendingToolInvocations);
 				if (!wasEditTool && responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
