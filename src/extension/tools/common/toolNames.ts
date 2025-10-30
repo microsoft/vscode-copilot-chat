@@ -46,6 +46,7 @@ export enum ToolName {
 	ReadCellOutput = 'read_notebook_cell_output',
 	InstallExtension = 'install_extension',
 	FetchWebPage = 'fetch_webpage',
+	WebSearch = 'web_search',
 	FindTestFiles = 'test_search',
 	GetProjectSetupInfo = 'get_project_setup_info',
 	SearchViewResults = 'get_search_view_results',
