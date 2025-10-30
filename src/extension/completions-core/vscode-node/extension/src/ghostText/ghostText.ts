@@ -41,7 +41,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<InlineCompletionList | undefined> {
-		const textDocument = wrapDoc(vscodeDoc);
+		const textDocument = wrapDoc(this.ctx, vscodeDoc);
 		if (!textDocument) {
 			return;
 		}
