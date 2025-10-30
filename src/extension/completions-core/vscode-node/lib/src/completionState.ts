@@ -2,8 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { IntelliSenseInsertion, ITextDocument, TextDocumentContents } from './textDocument';
 import { Position, ProposedTextEdit, TextEdit } from '../../types/src';
+import { IntelliSenseInsertion, ITextDocument, type TextDocumentContents } from './textDocument';
 
 export class CompletionState {
 	readonly originalPosition: Position;
