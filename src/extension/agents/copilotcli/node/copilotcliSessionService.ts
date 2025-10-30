@@ -155,10 +155,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				})
 			));
 
-			// Merge new sessions (not yet persisted by SDK)
+			// Do not include new active sessions (as they get added into treebiew by core)
 			const allSessions = diskSessions
-				.filter(session => !this._newActiveSessions.has(session.id) && !session.isEmpty)
-				.concat(Array.from(this._newActiveSessions.values()))
+				.filter(session => !this._newActiveSessions.has(session.id))
+				.filter(session => !session.isEmpty)
 				.map(session => {
 					return {
 						...session,
@@ -217,6 +217,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const session = await this.createCopilotSession(sdkSession, sessionManager, permissionHandler, sessionDisposables);
 
 			sessionDisposables.add(session.onDidChangeStatus(() => {
+				// This will get swapped out as soon as the session has completed.
 				if (session.status === ChatSessionStatus.Completed || session.status === ChatSessionStatus.Failed) {
 					this._newActiveSessions.delete(sdkSession.sessionId);
 				}
