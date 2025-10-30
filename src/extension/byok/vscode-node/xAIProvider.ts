@@ -57,6 +57,16 @@ export class XAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 		return match ? parseInt(match[1], 10) : undefined;
 	}
 
+	private humanizeModelId(modelId: string): string {
+		const parts = modelId.split('-').filter(p => p.length > 0);
+		return parts.map(p => {
+			if (/^\d+$/.test(p)) {
+				return p; // keep pure numbers as-is
+			}
+			return p.charAt(0).toUpperCase() + p.slice(1);
+		}).join(' ');
+	}
+
 	protected override async getAllModels(): Promise<BYOKKnownModels> {
 		try {
 			const response = await this._fetcherService.fetch(`${this._baseUrl}/language-models`, {
@@ -93,7 +103,7 @@ export class XAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 				}
 
 				modelList[model.id] = {
-					name: model.id,
+					name: this.humanizeModelId(model.id),
 					toolCalling: true,
 					vision: model.input_modalities.includes('image'),
 					maxInputTokens,
