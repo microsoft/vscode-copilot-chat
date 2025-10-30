@@ -296,7 +296,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;
-			if (!this.useResponsesApi) {
+			if (!this.useResponsesApi && !body.stream) {
 				body['stream_options'] = { 'include_usage': true };
 			}
 		}
