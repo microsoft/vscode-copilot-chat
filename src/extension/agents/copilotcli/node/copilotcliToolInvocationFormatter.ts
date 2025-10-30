@@ -224,6 +224,23 @@ export function createCopilotCLIToolInvocation(
 	return invocation;
 }
 
+export function getAffectedUrisForEditTool(toolName: string,
+	args: unknown,
+): Uri[] {
+	if (toolName === CopilotCLIToolNames.StrReplaceEditor) {
+		const path = args as StrReplaceEditorArgs;
+		if (!path) {
+			return [];
+		}
+		const command = (args as StrReplaceEditorArgs).command;
+		const file = Uri.file(path.path);
+		if (['str_replace', 'insert', 'create', 'undo_edit'].includes(command)) {
+			return [file];
+		}
+	}
+	return [];
+}
+
 function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';

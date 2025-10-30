@@ -10,14 +10,16 @@ import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatResponseThinkingProgressPart, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { CopilotCLIPromptResolver } from './copilotcliPromptResolver';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
-import { processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
+import { getAffectedUrisForEditTool, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
@@ -77,7 +79,9 @@ export class CopilotCLISession extends Disposable {
 	private _abortController = new AbortController();
 	private _pendingToolInvocations = new Map<string, vscode.ChatToolInvocationPart>();
 	public readonly sessionId: string;
-
+	private _toolsWithPossibleFileEdits = new Map<string, ResourceMap<void>>();
+	private _filesEditedByTool = new ResourceMap<string>();
+	private _ongoingEdits = new Map<string, { complete: () => void; onDidComplete: Promise<void> }>();
 	constructor(
 		private readonly _sdkSession: Session,
 		@ILogService private readonly logService: ILogService,
@@ -121,6 +125,7 @@ export class CopilotCLISession extends Disposable {
 
 		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const copilotToken = await this._authenticationService.getCopilotToken();
+		const disposables = new DisposableStore();
 
 		const options: AgentOptions = {
 			modelProvider: modelId ?? {
@@ -136,7 +141,7 @@ export class CopilotCLISession extends Disposable {
 				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
 			},
 			requestPermission: async (permissionRequest) => {
-				return await this.requestPermission(permissionRequest, toolInvocationToken);
+				return await this.requestPermission(permissionRequest, stream, disposables, toolInvocationToken, token);
 			},
 			logger: getCopilotLogger(this.logService),
 			session: this._sdkSession
@@ -153,6 +158,8 @@ export class CopilotCLISession extends Disposable {
 		} catch (error) {
 			this.logService.error(`CopilotCLI session error: ${error}`);
 			stream.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
+		} finally {
+			disposables.dispose();
 		}
 	}
 
@@ -168,6 +175,8 @@ export class CopilotCLISession extends Disposable {
 			case 'assistant.turn_start':
 			case 'assistant.turn_end': {
 				this._toolNames.clear();
+				this._filesEditedByTool.clear();
+				this._toolsWithPossibleFileEdits.clear();
 				break;
 			}
 
@@ -184,13 +193,20 @@ export class CopilotCLISession extends Disposable {
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					stream.push(responsePart);
 				}
+				const affectedUris = getAffectedUrisForEditTool(event.data.toolName, event.data.arguments);
+				if (affectedUris.length > 0) {
+					affectedUris
+						.forEach(uri => this._filesEditedByTool.set(uri, event.data.toolCallId));
+				}
 				this.logService.trace(`Start Tool ${toolName || '<unknown>'}`);
 				break;
 			}
 
 			case 'tool.execution_complete': {
+				// const wasEditTool = this._ongoingEdits.has(event.data.toolCallId);
+				const wasEditTool = this._onDidEditTool(event.data.toolCallId);
 				const responsePart = processToolExecutionComplete(event, this._pendingToolInvocations);
-				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
+				if (!wasEditTool && responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					stream.push(responsePart);
 				}
 
@@ -211,9 +227,45 @@ export class CopilotCLISession extends Disposable {
 		}
 	}
 
+	private async _onWillEditTool(toolId: string, uri: Uri, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: CancellationToken): Promise<unknown> {
+		if (!stream.externalEdit) {
+			return;
+		}
+
+		return new Promise(proceedWithEdit => {
+			const deferred = new DeferredPromise<void>();
+			const cancelListen = disposables.add(token.onCancellationRequested(() => {
+				this._ongoingEdits.delete(toolId);
+				deferred.complete();
+			}));
+			const onDidComplete = Promise.resolve(stream.externalEdit(uri, async () => {
+				proceedWithEdit({});
+				await deferred.p;
+				cancelListen.dispose();
+			}));
+
+			this._ongoingEdits.set(toolId, { onDidComplete, complete: () => deferred.complete() });
+		});
+	}
+
+	private async _onDidEditTool(toolId: string) {
+		const ongoingEdit = this._ongoingEdits.get(toolId);
+		if (ongoingEdit) {
+			ongoingEdit.complete();
+			ongoingEdit.onDidComplete.finally(() => {
+				this._ongoingEdits.delete(toolId);
+			});
+			return true;
+		}
+		return false;
+	}
+
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
-		toolInvocationToken: vscode.ChatParticipantToolToken
+		stream: vscode.ChatResponseStream,
+		disposables: DisposableStore,
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		token: CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
 		try {
 			const { tool, input } = getConfirmationToolParams(permissionRequest);
@@ -223,6 +275,13 @@ export class CopilotCLISession extends Disposable {
 
 			const firstResultPart = result.content.at(0);
 			if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
+				if (permissionRequest.kind === 'write' && permissionRequest.fileName) {
+					const file = Uri.file(permissionRequest.fileName);
+					const toolId = this._filesEditedByTool.get(file);
+					if (toolId) {
+						await this._onWillEditTool(toolId, file, stream, disposables, token);
+					}
+				}
 				return { kind: 'approved' };
 			}
 		} catch (error) {
