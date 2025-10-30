@@ -134,7 +134,7 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 			type: 'chat',
 			family: modelId,
 			supports: {
-				streaming: true,
+				streaming: false,
 				tool_calls: !!knownModelInfo?.toolCalling,
 				vision: !!knownModelInfo?.vision,
 				thinking: !!knownModelInfo?.thinking
