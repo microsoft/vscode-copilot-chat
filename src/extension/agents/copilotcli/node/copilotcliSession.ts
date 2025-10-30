@@ -262,8 +262,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 		// Prompt user to save the file before reading
 		const message = reason === 'read' ?
-			l10n.t('You will need to save the {0} before reading its contents.', path.fsPath) :
-			l10n.t('You will need to save the {0} before editing its contents.', path.fsPath);
+			l10n.t('Save {0} before reading.', path.fsPath) :
+			l10n.t('Save {0} before editing.', path.fsPath);
 		const input = {
 			title: 'Save file(s)',
 			message,
@@ -350,3 +350,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 	}
 }
+
+/**
+ *
+ */
