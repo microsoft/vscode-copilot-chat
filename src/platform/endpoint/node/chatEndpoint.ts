@@ -60,18 +60,15 @@ export async function defaultChatResponseProcessor(
 
 export async function defaultNonStreamChatResponseProcessor(response: Response, finishCallback: FinishedCallback, telemetryData: TelemetryData) {
 	const textResponse = await response.text();
-	console.log("response text: ", textResponse);
 	const jsonResponse = JSON.parse(textResponse);
 	const completions: ChatCompletion[] = [];
 	for (let i = 0; i < (jsonResponse?.choices?.length || 0); i++) {
 		const choice = jsonResponse.choices[i];
-		// Convert snake_case API response to camelCase TypeScript types
-		const rawMessage = choice.message;
 		const message: Raw.AssistantChatMessage = {
-			role: rawMessage.role,
-			content: rawMessage.content,
-			name: rawMessage.name,
-			toolCalls: rawMessage.tool_calls, // API uses tool_calls, type expects toolCalls
+			role: choice.message.role,
+			content: choice.message.content,
+			name: choice.message.name,
+			toolCalls: choice.message.toolCalls ?? choice.message.tool_calls, // Type expects toolCalls, API uses tool_calls
 		};
 		const messageText = getTextPart(message.content);
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
