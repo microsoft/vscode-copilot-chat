@@ -27,8 +27,13 @@ export class NotificationService implements INotificationService {
 		return window.withProgress(options, task);
 	}
 
-	async showWarningMessage(message: string, ...items: string[]) {
-		return window.showWarningMessage(message, ...items);
+	async showWarningMessage(message: string, ...items: string[]): Promise<string | undefined>;
+	async showWarningMessage<T extends string>(message: string, options: MessageOptions, ...items: T[]): Promise<T | undefined>;
+	async showWarningMessage(message: string, optionsOrItem?: any, ...items: any[]): Promise<any> {
+		if (typeof optionsOrItem === 'object' && optionsOrItem !== null && !Array.isArray(optionsOrItem)) {
+			return window.showWarningMessage(message, optionsOrItem, ...items);
+		}
+		return window.showWarningMessage(message, optionsOrItem, ...items);
 	}
 
 	async showQuotaExceededDialog(options: { isNoAuthUser: boolean }): Promise<unknown> {

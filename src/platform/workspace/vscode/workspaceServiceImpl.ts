@@ -109,4 +109,8 @@ export class ExtensionTextDocumentManager extends AbstractWorkspaceService {
 		}
 		return;
 	}
+
+	override async save(uri: Uri): Promise<Uri | undefined> {
+		return workspace.save(uri);
+	}
 }

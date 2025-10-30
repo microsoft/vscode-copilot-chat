@@ -122,6 +122,10 @@ export class SimulationWorkspaceService extends AbstractWorkspaceService {
 	override applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
 		return Promise.resolve(true);
 	}
+
+	override async save(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
+		return uri;
+	}
 }
 
 export class SimulationLanguageDiagnosticsService extends AbstractLanguageDiagnosticsService {

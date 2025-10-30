@@ -35,6 +35,7 @@ export interface INotificationService {
 	showInformationMessage(message: string, ...items: string[]): Promise<string | undefined>;
 	showInformationMessage<T extends string>(message: string, options: MessageOptions, ...items: T[]): Promise<T | undefined>;
 	showWarningMessage(message: string, ...items: string[]): Promise<string | undefined>;
+	showWarningMessage<T extends string>(message: string, options: MessageOptions, ...items: T[]): Promise<T | undefined>;
 	showQuotaExceededDialog(options: { isNoAuthUser: boolean }): Promise<unknown>;
 	withProgress<R>(options: ProgressOptions, task: (progress: Progress<{
 		message?: string;
@@ -47,12 +48,13 @@ export class NullNotificationService implements INotificationService {
 
 	showInformationMessage<T extends string>(message: string, options: MessageOptions, ...items: T[]): Promise<T | undefined>;
 	showInformationMessage(message: string, ...items: string[]): Promise<string | undefined>;
-	showInformationMessage<T extends string>(message: string, options: MessageOptions, ...items: T[]): Promise<T | undefined>;
 	showInformationMessage(message: string, optionsOrItem?: any, ...items: any[]): Promise<any> {
 		return Promise.resolve(undefined);
 	}
 
-	showWarningMessage(message: string, ...items: string[]): Promise<string | undefined> {
+	showWarningMessage<T extends string>(message: string, options: MessageOptions, ...items: T[]): Promise<T | undefined>;
+	showWarningMessage(message: string, ...items: string[]): Promise<string | undefined>;
+	showWarningMessage(message: string, optionsOrItem?: any, ...items: any[]): Promise<any> {
 		return Promise.resolve(undefined);
 	}
 

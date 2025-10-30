@@ -4398,7 +4398,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.63.0",
-		"@github/copilot": "^0.0.353",
+		"@github/copilot": "file:../sweagentd/runtime/dist-cli",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

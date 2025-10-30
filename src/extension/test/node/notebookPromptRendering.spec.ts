@@ -135,7 +135,9 @@ describe('Notebook Prompt Rendering', function () {
 			override applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
 				throw new Error('Method not implemented.');
 			}
-
+			override async save(uri: Uri): Promise<Uri | undefined> {
+				return uri;
+			}
 		});
 		testingServiceCollection.define(IExperimentationService, new class extends NullExperimentationService {
 			override getTreatmentVariable<T extends string | number | boolean>(_name: string): T | undefined {
