@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isHiddenModelB } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
@@ -121,10 +120,6 @@ class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptPro
 
 class XAIPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['grok-code'];
-
-	static matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isHiddenModelB(endpoint);
-	}
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
 		return DefaultGrokCodeFastAgentPrompt;

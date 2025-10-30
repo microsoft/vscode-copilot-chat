@@ -30,6 +30,7 @@ import { IToolsService } from '../../tools/common/toolsService';
 import { AgentIntentInvocation } from './agentIntent';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
+import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
@@ -92,7 +93,7 @@ export class EditCode2IntentInvocation extends AgentIntentInvocation {
 		return { disable: false };
 	}
 
-	protected override prompt = EditCodePrompt2;
+	protected override prompt: typeof EditCodePrompt2 | typeof NotebookInlinePrompt = EditCodePrompt2;
 
 	constructor(
 		intent: IIntent,
