@@ -14,7 +14,7 @@ import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, 
 import { IToolsService } from '../../../tools/common/toolsService';
 import { CopilotCLIPermissionsHandler } from './copilotCli';
 import { buildChatHistoryFromEvents, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
-import { getConfirmationToolParams } from './permissionHelpers';
+import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
 export interface ICopilotCLISession {
 	readonly sessionId: string;
@@ -160,7 +160,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	}
 
 	private async requestPermission(
-		permissionRequest: Parameters<NonNullable<SessionOptions['requestPermission']>>[0],
+		permissionRequest: PermissionRequest,
 		toolInvocationToken: vscode.ChatParticipantToolToken
 	): Promise<ReturnType<NonNullable<SessionOptions['requestPermission']>>> {
 		if (permissionRequest.kind === 'read') {
@@ -174,7 +174,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		try {
-			const { tool, input } = getConfirmationToolParams(permissionRequest as Record<string, unknown>);
+			const { tool, input } = getConfirmationToolParams(permissionRequest);
 			const result = await this.toolsService.invokeTool(tool,
 				{ input, toolInvocationToken },
 				CancellationToken.None
