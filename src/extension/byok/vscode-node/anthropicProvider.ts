@@ -420,6 +420,15 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						if (citation.type === 'web_search_result_location') {
 							const citationText = citation.cited_text;
 							progress.report(new LanguageModelTextPart(citationText));
+							const citationData = JSON.stringify({
+								cited_text: citation.cited_text,
+								title: citation.title,
+								url: citation.url
+							}, null, 2);
+							progress.report(new LanguageModelToolResultPart(
+								'citation',
+								[new LanguageModelTextPart(citationData)]
+							));
 						}
 					}
 				} else if (chunk.delta.type === 'thinking_delta') {
