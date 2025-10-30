@@ -217,7 +217,7 @@ export class ChatEndpoint implements IChatEndpoint {
 
 		// If the model doesn't support streaming, don't ask for a streamed request
 		if (body && !this._supportsStreaming) {
-			body.stream = false;
+			body.stream = undefined;
 		}
 
 		// If it's o1 we must modify the body significantly as the request is very different
