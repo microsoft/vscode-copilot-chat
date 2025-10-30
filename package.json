@@ -3114,6 +3114,15 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.anthropic.webSearchTool.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.anthropic.webSearchTool.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.completionsFetcher": {
 						"type": [
 							"string",
