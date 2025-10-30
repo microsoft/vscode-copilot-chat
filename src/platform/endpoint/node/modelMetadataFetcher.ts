@@ -404,7 +404,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		return modelLimit;
 	}
 
-	private async _getShowInModelPickerOverride(resolvedModel: IModelAPIResponse): Promise<boolean> {
+	private _getShowInModelPickerOverride(resolvedModel: IModelAPIResponse): boolean {
 		let modelPickerOverrides: Record<string, boolean> = {};
 		const expResult = this._expService.getTreatmentVariable<string>('copilotchat.showInModelPicker');
 		try {
