@@ -65,7 +65,14 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 	const completions: ChatCompletion[] = [];
 	for (let i = 0; i < (jsonResponse?.choices?.length || 0); i++) {
 		const choice = jsonResponse.choices[i];
-		const message: Raw.AssistantChatMessage = choice.message;
+		// Convert snake_case API response to camelCase TypeScript types
+		const rawMessage = choice.message;
+		const message: Raw.AssistantChatMessage = {
+			role: rawMessage.role,
+			content: rawMessage.content ?? rawMessage.reasoning_content,
+			name: rawMessage.name,
+			toolCalls: rawMessage.tool_calls, // API uses tool_calls, type expects toolCalls
+		};
 		const messageText = getTextPart(message.content);
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
 		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
