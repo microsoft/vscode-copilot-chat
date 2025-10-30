@@ -415,6 +415,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					hasText ||= chunk.delta.text?.length > 0;
 				} else if (chunk.delta.type === 'citations_delta') {
 					if ('citation' in chunk.delta) {
+						// TODO: @bhavyaus - instead of just pushing text, create a specialized Citation part
 						const citation = chunk.delta.citation as Anthropic.Messages.CitationsWebSearchResultLocation;
 						if (citation.type === 'web_search_result_location') {
 							const citationText = citation.cited_text;
