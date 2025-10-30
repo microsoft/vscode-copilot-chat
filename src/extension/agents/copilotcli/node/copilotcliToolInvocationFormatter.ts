@@ -15,6 +15,8 @@ import { isCopilotCliEditToolCall } from '../common/copilotcliTools';
  */
 export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
+	edit = 'edit',
+	create = 'create',
 	View = 'view',
 	Bash = 'bash',
 	Think = 'think',
@@ -33,6 +35,22 @@ interface StrReplaceEditorArgs {
 	new_str?: string;
 	insert_line?: number;
 	file_text?: string;
+}
+
+interface CreateArgs {
+	path: string;
+	file_text?: string;
+}
+
+interface ViewArgs {
+	path: string;
+	view_range?: [number, number];
+}
+
+interface EditArgs {
+	path: string;
+	old_str?: string;
+	new_str?: string;
 }
 
 interface BashArgs {
@@ -217,10 +235,14 @@ export function createCopilotCLIToolInvocation(
 	// Format based on tool name
 	if (toolName === CopilotCLIToolNames.StrReplaceEditor) {
 		formatStrReplaceEditorInvocation(invocation, args as StrReplaceEditorArgs);
+	} else if (toolName === CopilotCLIToolNames.edit) {
+		formatEditInvocation(invocation, args as EditArgs);
+	} else if (toolName === CopilotCLIToolNames.create) {
+		formatCreateInvocation(invocation, args as CreateArgs);
 	} else if (toolName === CopilotCLIToolNames.Bash) {
 		formatBashInvocation(invocation, args as BashArgs);
 	} else if (toolName === CopilotCLIToolNames.View) {
-		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
+		formatViewToolInvocation(invocation, args as ViewArgs);
 	} else {
 		formatGenericInvocation(invocation, toolName, args);
 	}
@@ -228,7 +250,7 @@ export function createCopilotCLIToolInvocation(
 	return invocation;
 }
 
-function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
+function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: ViewArgs): void {
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 
@@ -263,6 +285,20 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 		default:
 			invocation.invocationMessage = new MarkdownString(l10n.t("Modified {0}", display));
 	}
+}
+
+function formatEditInvocation(invocation: ChatToolInvocationPart, args: EditArgs): void {
+	const path = args.path ?? '';
+	const display = path ? formatUriForMessage(path) : '';
+
+	invocation.invocationMessage = new MarkdownString(l10n.t("Edited {0}", display));
+}
+
+function formatCreateInvocation(invocation: ChatToolInvocationPart, args: CreateArgs): void {
+	const path = args.path ?? '';
+	const display = path ? formatUriForMessage(path) : '';
+
+	invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
 }
 
 function formatBashInvocation(invocation: ChatToolInvocationPart, args: BashArgs): void {
