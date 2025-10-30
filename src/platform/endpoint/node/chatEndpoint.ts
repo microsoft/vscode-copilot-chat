@@ -69,7 +69,7 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 		const rawMessage = choice.message;
 		const message: Raw.AssistantChatMessage = {
 			role: rawMessage.role,
-			content: rawMessage.content ?? rawMessage.reasoning_content,
+			content: rawMessage.content,
 			name: rawMessage.name,
 			toolCalls: rawMessage.tool_calls, // API uses tool_calls, type expects toolCalls
 		};
