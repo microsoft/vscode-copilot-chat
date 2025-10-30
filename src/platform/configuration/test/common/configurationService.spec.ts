@@ -56,250 +56,219 @@ suite('AbstractConfigurationService', () => {
 	suite('Internal Settings - Validation', () => {
 		test('ProjectLabelsChat is correctly configured', () => {
 			const setting = ConfigKey.Internal.ProjectLabelsChat;
-			assert.strictEqual(setting.id, 'chat.advanced.projectLabels.chat');
+			assert.strictEqual(setting.id, 'chat.projectLabels.chat');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('ProjectLabelsInline is correctly configured', () => {
 			const setting = ConfigKey.Internal.ProjectLabelsInline;
-			assert.strictEqual(setting.id, 'chat.advanced.projectLabels.inline');
+			assert.strictEqual(setting.id, 'chat.projectLabels.inline');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('ProjectLabelsExpanded is correctly configured', () => {
 			const setting = ConfigKey.Internal.ProjectLabelsExpanded;
-			assert.strictEqual(setting.id, 'chat.advanced.projectLabels.expanded');
+			assert.strictEqual(setting.id, 'chat.projectLabels.expanded');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('WorkspaceMaxLocalIndexSize is correctly configured', () => {
 			const setting = ConfigKey.Internal.WorkspaceMaxLocalIndexSize;
-			assert.strictEqual(setting.id, 'chat.advanced.workspace.maxLocalIndexSize');
+			assert.strictEqual(setting.id, 'chat.workspace.maxLocalIndexSize');
 			assert.strictEqual(setting.defaultValue, 100_000);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('WorkspaceEnableFullWorkspace is correctly configured', () => {
 			const setting = ConfigKey.Internal.WorkspaceEnableFullWorkspace;
-			assert.strictEqual(setting.id, 'chat.advanced.workspace.enableFullWorkspace');
+			assert.strictEqual(setting.id, 'chat.workspace.enableFullWorkspace');
 			assert.strictEqual(setting.defaultValue, true);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('WorkspaceEnableCodeSearch is correctly configured', () => {
 			const setting = ConfigKey.Internal.WorkspaceEnableCodeSearch;
-			assert.strictEqual(setting.id, 'chat.advanced.workspace.enableCodeSearch');
+			assert.strictEqual(setting.id, 'chat.workspace.enableCodeSearch');
 			assert.strictEqual(setting.defaultValue, true);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('WorkspaceEnableEmbeddingsSearch is correctly configured', () => {
 			const setting = ConfigKey.Internal.WorkspaceEnableEmbeddingsSearch;
-			assert.strictEqual(setting.id, 'chat.advanced.workspace.enableEmbeddingsSearch');
+			assert.strictEqual(setting.id, 'chat.workspace.enableEmbeddingsSearch');
 			assert.strictEqual(setting.defaultValue, true);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('WorkspacePreferredEmbeddingsModel is correctly configured', () => {
 			const setting = ConfigKey.Internal.WorkspacePreferredEmbeddingsModel;
-			assert.strictEqual(setting.id, 'chat.advanced.workspace.preferredEmbeddingsModel');
+			assert.strictEqual(setting.id, 'chat.workspace.preferredEmbeddingsModel');
 			assert.strictEqual(setting.defaultValue, '');
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('WorkspacePrototypeAdoCodeSearchEndpointOverride is correctly configured', () => {
 			const setting = ConfigKey.Internal.WorkspacePrototypeAdoCodeSearchEndpointOverride;
-			assert.strictEqual(setting.id, 'chat.advanced.workspace.prototypeAdoCodeSearchEndpointOverride');
+			assert.strictEqual(setting.id, 'chat.workspace.prototypeAdoCodeSearchEndpointOverride');
 			assert.strictEqual(setting.defaultValue, '');
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('FeedbackOnChange is correctly configured', () => {
 			const setting = ConfigKey.Internal.FeedbackOnChange;
-			assert.strictEqual(setting.id, 'chat.advanced.feedback.onChange');
+			assert.strictEqual(setting.id, 'chat.feedback.onChange');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('ReviewIntent is correctly configured', () => {
 			const setting = ConfigKey.Internal.ReviewIntent;
-			assert.strictEqual(setting.id, 'chat.advanced.review.intent');
+			assert.strictEqual(setting.id, 'chat.review.intent');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('NotebookSummaryExperimentEnabled is correctly configured', () => {
 			const setting = ConfigKey.Internal.NotebookSummaryExperimentEnabled;
-			assert.strictEqual(setting.id, 'chat.advanced.notebook.summaryExperimentEnabled');
+			assert.strictEqual(setting.id, 'chat.notebook.summaryExperimentEnabled');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('NotebookVariableFilteringEnabled is correctly configured', () => {
 			const setting = ConfigKey.Internal.NotebookVariableFilteringEnabled;
-			assert.strictEqual(setting.id, 'chat.advanced.notebook.variableFilteringEnabled');
+			assert.strictEqual(setting.id, 'chat.notebook.variableFilteringEnabled');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('NotebookAlternativeDocumentFormat is correctly configured', () => {
 			const setting = ConfigKey.Internal.NotebookAlternativeDocumentFormat;
-			assert.strictEqual(setting.id, 'chat.advanced.notebook.alternativeFormat');
+			assert.strictEqual(setting.id, 'chat.notebook.alternativeFormat');
 			assert.strictEqual(setting.defaultValue, AlternativeNotebookFormat.xml);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('UseAlternativeNESNotebookFormat is correctly configured', () => {
 			const setting = ConfigKey.Internal.UseAlternativeNESNotebookFormat;
-			assert.strictEqual(setting.id, 'chat.advanced.notebook.alternativeNESFormat.enabled');
+			assert.strictEqual(setting.id, 'chat.notebook.alternativeNESFormat.enabled');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('TerminalToDebuggerPatterns is correctly configured', () => {
 			const setting = ConfigKey.Internal.TerminalToDebuggerPatterns;
-			assert.strictEqual(setting.id, 'chat.advanced.debugTerminalCommandPatterns');
+			assert.strictEqual(setting.id, 'chat.debugTerminalCommandPatterns');
 			assert.deepStrictEqual(setting.defaultValue, []);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('EditSourceTrackingShowDecorations is correctly configured', () => {
 			const setting = ConfigKey.Internal.EditSourceTrackingShowDecorations;
-			assert.strictEqual(setting.id, 'chat.advanced.editSourceTracking.showDecorations');
+			assert.strictEqual(setting.id, 'chat.editSourceTracking.showDecorations');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('EditSourceTrackingShowStatusBar is correctly configured', () => {
 			const setting = ConfigKey.Internal.EditSourceTrackingShowStatusBar;
-			assert.strictEqual(setting.id, 'chat.advanced.editSourceTracking.showStatusBar');
+			assert.strictEqual(setting.id, 'chat.editSourceTracking.showStatusBar');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('WorkspaceRecordingEnabled is correctly configured', () => {
 			const setting = ConfigKey.Internal.WorkspaceRecordingEnabled;
-			assert.strictEqual(setting.id, 'chat.advanced.localWorkspaceRecording.enabled');
+			assert.strictEqual(setting.id, 'chat.localWorkspaceRecording.enabled');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('EditRecordingEnabled is correctly configured', () => {
 			const setting = ConfigKey.Internal.EditRecordingEnabled;
-			assert.strictEqual(setting.id, 'chat.advanced.editRecording.enabled');
+			assert.strictEqual(setting.id, 'chat.editRecording.enabled');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('TemporalContextMaxAge is correctly configured', () => {
 			const setting = ConfigKey.Internal.TemporalContextMaxAge;
-			assert.strictEqual(setting.id, 'chat.advanced.temporalContext.maxAge');
+			assert.strictEqual(setting.id, 'chat.temporalContext.maxAge');
 			assert.strictEqual(setting.defaultValue, 100);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('TemporalContextPreferSameLang is correctly configured', () => {
 			const setting = ConfigKey.Internal.TemporalContextPreferSameLang;
-			assert.strictEqual(setting.id, 'chat.advanced.temporalContext.preferSameLang');
+			assert.strictEqual(setting.id, 'chat.temporalContext.preferSameLang');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('CodeSearchAgentEnabled is correctly configured', () => {
 			const setting = ConfigKey.Internal.CodeSearchAgentEnabled;
-			assert.strictEqual(setting.id, 'chat.advanced.codesearch.agent.enabled');
+			assert.strictEqual(setting.id, 'chat.codesearch.agent.enabled');
 			assert.strictEqual(setting.defaultValue, true);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('AgentTemperature is correctly configured', () => {
 			const setting = ConfigKey.Internal.AgentTemperature;
-			assert.strictEqual(setting.id, 'chat.advanced.agent.temperature');
+			assert.strictEqual(setting.id, 'chat.agent.temperature');
 			assert.strictEqual(setting.defaultValue, undefined);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('InstantApplyShortModelName is correctly configured', () => {
 			const setting = ConfigKey.Internal.InstantApplyShortModelName;
-			assert.strictEqual(setting.id, 'chat.advanced.instantApply.shortContextModelName');
+			assert.strictEqual(setting.id, 'chat.instantApply.shortContextModelName');
 			assert.strictEqual(setting.defaultValue, 'gpt-4o-instant-apply-full-ft-v66-short');
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('InstantApplyShortContextLimit is correctly configured', () => {
 			const setting = ConfigKey.Internal.InstantApplyShortContextLimit;
-			assert.strictEqual(setting.id, 'chat.advanced.instantApply.shortContextLimit');
+			assert.strictEqual(setting.id, 'chat.instantApply.shortContextLimit');
 			assert.strictEqual(setting.defaultValue, 8000);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('EnableUserPreferences is correctly configured', () => {
 			const setting = ConfigKey.Internal.EnableUserPreferences;
-			assert.strictEqual(setting.id, 'chat.advanced.enableUserPreferences');
+			assert.strictEqual(setting.id, 'chat.enableUserPreferences');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('SummarizeAgentConversationHistoryThreshold is correctly configured', () => {
 			const setting = ConfigKey.Internal.SummarizeAgentConversationHistoryThreshold;
-			assert.strictEqual(setting.id, 'chat.advanced.summarizeAgentConversationHistoryThreshold');
+			assert.strictEqual(setting.id, 'chat.summarizeAgentConversationHistoryThreshold');
 			assert.strictEqual(setting.defaultValue, undefined);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('AgentHistorySummarizationMode is correctly configured', () => {
 			const setting = ConfigKey.Internal.AgentHistorySummarizationMode;
-			assert.strictEqual(setting.id, 'chat.advanced.agentHistorySummarizationMode');
+			assert.strictEqual(setting.id, 'chat.agentHistorySummarizationMode');
 			assert.strictEqual(setting.defaultValue, undefined);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('AgentHistorySummarizationWithPromptCache is correctly configured', () => {
 			const setting = ConfigKey.Internal.AgentHistorySummarizationWithPromptCache;
-			assert.strictEqual(setting.id, 'chat.advanced.agentHistorySummarizationWithPromptCache');
+			assert.strictEqual(setting.id, 'chat.agentHistorySummarizationWithPromptCache');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('AgentHistorySummarizationForceGpt41 is correctly configured', () => {
 			const setting = ConfigKey.Internal.AgentHistorySummarizationForceGpt41;
-			assert.strictEqual(setting.id, 'chat.advanced.agentHistorySummarizationForceGpt41');
+			assert.strictEqual(setting.id, 'chat.agentHistorySummarizationForceGpt41');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('UseResponsesApiTruncation is correctly configured', () => {
@@ -312,10 +281,9 @@ suite('AbstractConfigurationService', () => {
 
 		test('OmitBaseAgentInstructions is correctly configured', () => {
 			const setting = ConfigKey.Internal.OmitBaseAgentInstructions;
-			assert.strictEqual(setting.id, 'chat.advanced.omitBaseAgentInstructions');
+			assert.strictEqual(setting.id, 'chat.omitBaseAgentInstructions');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('PromptFileContext is correctly configured', () => {
@@ -328,26 +296,23 @@ suite('AbstractConfigurationService', () => {
 
 		test('DefaultToolsGrouped is correctly configured', () => {
 			const setting = ConfigKey.Internal.DefaultToolsGrouped;
-			assert.strictEqual(setting.id, 'chat.advanced.tools.defaultToolsGrouped');
+			assert.strictEqual(setting.id, 'chat.tools.defaultToolsGrouped');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('VirtualToolEmbeddingRanking is correctly configured', () => {
 			const setting = ConfigKey.Internal.VirtualToolEmbeddingRanking;
-			assert.strictEqual(setting.id, 'chat.advanced.virtualTools.embeddingRanking');
+			assert.strictEqual(setting.id, 'chat.virtualTools.embeddingRanking');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('MultiReplaceStringGrok is correctly configured', () => {
 			const setting = ConfigKey.Internal.MultiReplaceStringGrok;
-			assert.strictEqual(setting.id, 'chat.advanced.multiReplaceStringGrok.enabled');
+			assert.strictEqual(setting.id, 'chat.multiReplaceStringGrok.enabled');
 			assert.strictEqual(setting.defaultValue, false);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('EnableClaudeCodeAgent is correctly configured', () => {
@@ -392,28 +357,25 @@ suite('AbstractConfigurationService', () => {
 
 		test('InlineEditsTriggerOnEditorChangeAfterSeconds is correctly configured', () => {
 			const setting = ConfigKey.Internal.InlineEditsTriggerOnEditorChangeAfterSeconds;
-			assert.strictEqual(setting.id, 'chat.advanced.inlineEdits.triggerOnEditorChangeAfterSeconds');
+			assert.strictEqual(setting.id, 'chat.inlineEdits.triggerOnEditorChangeAfterSeconds');
 			const defaultValue = setting.defaultValue as DefaultValueWithTeamValue<number>;
 			assert.strictEqual(defaultValue.defaultValue, undefined);
 			assert.strictEqual(defaultValue.teamDefaultValue, 10);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('InlineEditsNextCursorPredictionDisplayLine is correctly configured', () => {
 			const setting = ConfigKey.Internal.InlineEditsNextCursorPredictionDisplayLine;
-			assert.strictEqual(setting.id, 'chat.advanced.inlineEdits.nextCursorPrediction.displayLine');
+			assert.strictEqual(setting.id, 'chat.inlineEdits.nextCursorPrediction.displayLine');
 			assert.strictEqual(setting.defaultValue, true);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 
 		test('InlineEditsNextCursorPredictionCurrentFileMaxTokens is correctly configured', () => {
 			const setting = ConfigKey.Internal.InlineEditsNextCursorPredictionCurrentFileMaxTokens;
-			assert.strictEqual(setting.id, 'chat.advanced.inlineEdits.nextCursorPrediction.currentFileMaxTokens');
+			assert.strictEqual(setting.id, 'chat.inlineEdits.nextCursorPrediction.currentFileMaxTokens');
 			assert.strictEqual(setting.defaultValue, 2000);
-			assert.strictEqual(setting.isPublic, false);
-
+			assert.strictEqual(setting.isPublic, true);
 		});
 	});
 
