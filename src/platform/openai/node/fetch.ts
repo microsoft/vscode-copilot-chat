@@ -516,8 +516,9 @@ async function fetchWithInstrumentation(
 		additionalHeaders,
 		cancel,
 		useFetcher,
-	).then(response => {
+	).then(async response => {
 		const apim = response.headers.get('apim-request-id');
+		console.log("response text: ", await response.text());
 		if (apim) {
 			logService.debug(`APIM request id: ${apim}`);
 		}
