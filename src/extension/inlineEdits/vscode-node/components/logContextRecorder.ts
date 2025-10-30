@@ -7,6 +7,7 @@ import * as fs from 'fs/promises';
 import { mkdir, rename } from 'fs/promises';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { TaskQueue } from '../../../../util/common/async';
+import { toString } from '../../../../util/common/errors';
 import { timeout } from '../../../../util/vs/base/common/async';
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
 import { Disposable, DisposableMap, toDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -53,7 +54,7 @@ export class LogContextRecorder extends Disposable {
 		return Promise.all(
 			dirContents.filter(file => file.endsWith(LogContextRecorder.fileSuffix)).map(file => {
 				const filePath = path.join(recordingDirPath, file);
-				return fs.unlink(filePath).catch(() => { });
+				return fs.unlink(filePath).catch((e) => { console.log(`Failed to delete old log context file ${filePath}: ${toString(e)}`); });
 			})
 		);
 	}
