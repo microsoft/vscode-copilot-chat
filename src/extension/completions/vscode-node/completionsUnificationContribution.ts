@@ -41,5 +41,6 @@ interface languagesMaybeWithUnification {
 interface InlineCompletionsUnificationState {
 	codeUnification: boolean;
 	modelUnification: boolean;
+	extensionUnification: boolean;
 	expAssignments: string[];
 }

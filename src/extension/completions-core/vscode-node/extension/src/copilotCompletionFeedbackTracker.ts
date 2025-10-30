@@ -8,10 +8,10 @@ import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { collectCompletionDiagnostics, formatDiagnosticsAsMarkdown } from '../../lib/src/diagnostics';
 import { telemetry, TelemetryData } from '../../lib/src/telemetry';
-import { CMDSendCompletionsFeedback } from './constants';
+import { CMDSendCompletionsFeedbackChat } from './constants';
 
 export const sendCompletionFeedbackCommand: Command = {
-	command: CMDSendCompletionsFeedback,
+	command: CMDSendCompletionsFeedbackChat,
 	title: 'Send Copilot Completion Feedback',
 	tooltip: 'Send feedback about the last shown Copilot completion item',
 };
