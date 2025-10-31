@@ -68,7 +68,9 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 			role: choice.message.role,
 			content: choice.message.content,
 			name: choice.message.name,
-			toolCalls: choice.message.toolCalls ?? choice.message.tool_calls, // Type expects toolCalls, API uses tool_calls
+			// Normalize property name: OpenAI API uses snake_case (tool_calls) but our types expect camelCase (toolCalls)
+			// See: https://platform.openai.com/docs/api-reference/chat/object#chat-object-choices-message-tool_calls
+			toolCalls: choice.message.toolCalls ?? choice.message.tool_calls,
 		};
 		const messageText = getTextPart(message.content);
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
