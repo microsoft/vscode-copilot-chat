@@ -541,7 +541,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		let responseTokensPerSecond: string | undefined;
 		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
 			const completionTokens = entry.usage?.completion_tokens;
-			if (completionTokens !== undefined && durationMs > 0) {
+			if (completionTokens && durationMs > 0) {
 				const tokensPerSecond = completionTokens / (durationMs / 1000);
 				responseTokensPerSecond = tokensPerSecond.toFixed(2);
 			}
