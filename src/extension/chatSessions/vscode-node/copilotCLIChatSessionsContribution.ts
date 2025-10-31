@@ -254,9 +254,7 @@ export class CopilotCLIChatSessionParticipant {
 			return {};
 		}
 
-		this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.InProgress);
 		await this.copilotcliAgentManager.handleRequest(id, request, context, stream, getModelProvider(_sessionModel.get(id)?.id), token);
-		this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.Completed);
 		return {};
 	}
 

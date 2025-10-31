@@ -9,8 +9,8 @@ import { IAuthenticationService } from '../../../../platform/authentication/comm
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { ChatResponseThinkingProgressPart, ChatSessionStatus, EventEmitter, LanguageModelTextPart } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getAffectedUrisForEditTool } from '../common/copilotcliTools';
@@ -19,11 +19,18 @@ import { processToolExecutionComplete, processToolExecutionStart } from './copil
 import { getCopilotLogger } from './logger';
 import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
-export class CopilotCLISession extends Disposable {
+export class CopilotCLISession extends DisposableStore {
 	private _abortController = new AbortController();
 	private _pendingToolInvocations = new Map<string, vscode.ChatToolInvocationPart>();
 	private _editTracker = new ExternalEditTracker();
 	public readonly sessionId: string;
+	private _status?: vscode.ChatSessionStatus;
+	public get status(): vscode.ChatSessionStatus | undefined {
+		return this._status;
+	}
+	private readonly _statusChange = this.add(new EventEmitter<vscode.ChatSessionStatus | undefined>());
+
+	public readonly onDidChangeStatus = this._statusChange.event;
 
 	constructor(
 		private readonly _sdkSession: Session,
@@ -57,9 +64,12 @@ export class CopilotCLISession extends Disposable {
 		modelId: ModelProvider | undefined,
 		token: vscode.CancellationToken
 	): Promise<void> {
-		if (this._store.isDisposed) {
+		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
+
+		this._status = ChatSessionStatus.InProgress;
+		this._statusChange.fire(this._status);
 
 		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const copilotToken = await this._authenticationService.getCopilotToken();
@@ -106,7 +116,11 @@ export class CopilotCLISession extends Disposable {
 
 				this._processEvent(event, stream, toolInvocationToken);
 			}
+			this._status = ChatSessionStatus.Completed;
+			this._statusChange.fire(this._status);
 		} catch (error) {
+			this._status = ChatSessionStatus.Failed;
+			this._statusChange.fire(this._status);
 			this.logService.error(`CopilotCLI session error: ${error}`);
 			stream.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 		}
