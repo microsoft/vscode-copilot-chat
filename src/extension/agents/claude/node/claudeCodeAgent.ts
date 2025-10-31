@@ -21,6 +21,7 @@ import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
+import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
@@ -153,7 +154,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _currentRequest: CurrentRequest | undefined;
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
-	private _ongoingEdits = new Map<string | undefined, { complete: () => void; onDidComplete: Thenable<void> }>();
+	private _editTracker = new ExternalEditTracker();
 
 	constructor(
 		private readonly serverConfig: ILanguageModelServerConfig,
@@ -293,37 +294,21 @@ export class ClaudeCodeSession extends Disposable {
 		} catch (error) {
 			this._log.error('Error getting affected URIs for edit tool', error);
 		}
-		if (!uris.length || !this._currentRequest || token.isCancellationRequested) {
+		if (!this._currentRequest) {
 			return {};
 		}
 
-		if (!this._currentRequest!.stream.externalEdit) {
-			return {}; // back-compat during 1.106 insiders
-		}
-
-		return new Promise(proceedWithEdit => {
-			const deferred = new DeferredPromise<void>();
-			const cancelListen = token.onCancellationRequested(() => {
-				this._ongoingEdits.delete(toolUseID);
-				deferred.complete();
-			});
-			const onDidComplete = this._currentRequest!.stream.externalEdit(uris, async () => {
-				proceedWithEdit({});
-				await deferred.p;
-				cancelListen.dispose();
-			});
-
-			this._ongoingEdits.set(toolUseID, { onDidComplete, complete: () => deferred.complete() });
-		});
+		await this._editTracker.trackEdit(
+			toolUseID ?? '',
+			uris,
+			this._currentRequest.stream,
+			token
+		);
+		return {};
 	}
 
-	private async _onDidEditTool(input: HookInput, toolUseID: string | undefined) {
-		const ongoingEdit = this._ongoingEdits.get(toolUseID);
-		if (ongoingEdit) {
-			this._ongoingEdits.delete(toolUseID);
-			ongoingEdit.complete();
-			await ongoingEdit.onDidComplete;
-		}
+	private async _onDidEditTool(_input: HookInput, toolUseID: string | undefined) {
+		await this._editTracker.completeEdit(toolUseID ?? '');
 		return {};
 	}
 

@@ -70,7 +70,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		}
 
 		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli');
-		this.terminalService.contributePath('copilot-cli', storageLocation, 'Enables use of the `copilot` command in the terminal.', true);
+		this.terminalService.contributePath('copilot-cli', storageLocation, { command: COPILOT_CLI_COMMAND }, true);
 
 		await fs.mkdir(storageLocation, { recursive: true });
 

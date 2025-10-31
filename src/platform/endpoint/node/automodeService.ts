@@ -8,13 +8,13 @@ import type { ChatRequest } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { ICAPIClientService } from '../common/capiClient';
 import { AutoChatEndpoint } from './autoChatEndpoint';
-import { ICAPIClientService } from './capiClient';
 
 interface AutoModeAPIResponse {
 	available_models: string[];
@@ -60,7 +60,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
-		@IChatMLFetcher private readonly _chatMLFetcher: IChatMLFetcher,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService
 	) {
 		super();
@@ -181,7 +181,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		}, { type: RequestType.AutoModels });
 		const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
 		const selectedModel = knownEndpoints.find(e => e.model === data.selected_model) || knownEndpoints[0];
-		const autoEndpoint = new AutoChatEndpoint(selectedModel, this._chatMLFetcher, data.session_token, data.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(data.discounted_costs));
+		const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, data.session_token, data.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(data.discounted_costs));
 		this._logService.trace(`Fetched auto model for ${debugName} in ${Date.now() - startTime}ms.`);
 		return {
 			endpoint: autoEndpoint,

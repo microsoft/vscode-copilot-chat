@@ -3,7 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import { Event, ExtensionTerminalOptions, Terminal, TerminalExecutedCommand, TerminalOptions, TerminalShellExecutionEndEvent, TerminalShellIntegrationChangeEvent, window, type TerminalDataWriteEvent } from 'vscode';
+import { coalesce } from '../../../util/vs/base/common/arrays';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
@@ -14,7 +16,7 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 
 	declare readonly _serviceBrand: undefined;
 
-	private readonly pathContributions = new Map<string, { path: string; description?: string; prepend: boolean }>();
+	private readonly pathContributions = new Map<string, { path: string; description?: string | { command: string }; prepend: boolean }>();
 
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
@@ -91,7 +93,7 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		return getActiveTerminalShellType();
 	}
 
-	contributePath(contributor: string, pathLocation: string, description?: string, prepend: boolean = false): void {
+	contributePath(contributor: string, pathLocation: string, description?: string | { command: string }, prepend: boolean = false): void {
 		this.pathContributions.set(contributor, { path: pathLocation, description, prepend });
 		this.updateEnvironmentPath();
 	}
@@ -113,12 +115,30 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 
 
 		// Build combined description
-		const allDescriptions = Array.from(this.pathContributions.values())
-			.map(c => c.description)
-			.filter(d => d)
-			.join(' and ');
+		const allDescriptions = coalesce(Array.from(this.pathContributions.values())
+			.map(c => c.description && typeof c.description === 'string' ? c.description : undefined)
+			.filter(d => d));
+		let descriptions = '';
+		if (allDescriptions.length === 1) {
+			descriptions = allDescriptions[0];
+		} else if (allDescriptions.length > 1) {
+			descriptions = `${allDescriptions.slice(0, -1).join(', ')} ${l10n.t('and')} ${allDescriptions[allDescriptions.length - 1]}`;
+		}
 
-		this.context.environmentVariableCollection.description = allDescriptions || 'Enables additional commands in the terminal.';
+		const allCommands = coalesce(Array.from(this.pathContributions.values())
+			.map(c => (c.description && typeof c.description !== 'string') ? `\`${c.description.command}\`` : undefined)
+			.filter(d => d));
+
+		let commandsDescription = '';
+		if (allCommands.length === 1) {
+			commandsDescription = l10n.t('Enables use of {0} command in the terminal', allCommands[0]);
+		} else if (allCommands.length > 1) {
+			const commands = `${allCommands.slice(0, -1).join(', ')} ${l10n.t('and')} ${allCommands[allCommands.length - 1]}`;
+			commandsDescription = l10n.t('Enables use of {0} commands in the terminal', commands);
+		}
+
+		const description = [descriptions, commandsDescription].filter(d => d).join(' and ');
+		this.context.environmentVariableCollection.description = description || 'Enables additional commands in the terminal.';
 
 		// Build combined path from all contributions
 		// Since we cannot mix and match append/prepend, if there are any prepend paths, then prepend everything.

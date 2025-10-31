@@ -1,4 +1,5 @@
 ---
+name: Plan
 description: Researches and outlines multi-step plans
 argument-hint: Outline the goal or problem to research
 tools: ['search', 'github/github-mcp-server/get_issue', 'github/github-mcp-server/get_issue_comments', 'runSubagent', 'usages', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo', 'github.vscode-pull-request-github/issue_fetch', 'github.vscode-pull-request-github/activePullRequest']
@@ -8,7 +9,7 @@ handoffs:
     prompt: Start implementation
   - label: Open in Editor
     agent: agent
-    prompt: Save the plan to a markdown file, as is
+    prompt: Save the resulting plan in a untitled file with URI `untitled:${promptFileName}.prompt.md`, where `${promptFileName}` can use letters, digit, underscores, hyphens, and periods. Add a frontmatter with `name` and `description`
 ---
 You are a PLANNING AGENT, NOT an implementation agent.
 

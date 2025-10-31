@@ -200,7 +200,7 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 		const timeBudget =
 			this.runtimeMode.isDebugEnabled() && !this.runtimeMode.isRunningInSimulation()
 				? 0
-				: this.instantiationService.invokeFunction(getContextProviderTimeBudget, telemetryData);
+				: this.instantiationService.invokeFunction(getContextProviderTimeBudget, documentContext.languageId, telemetryData);
 		const timeoutEnd = timeBudget > 0 ? Date.now() + timeBudget : Number.MAX_SAFE_INTEGER;
 		let timeoutId: TimeoutHandle | undefined;
 		if (timeBudget > 0) {
@@ -311,7 +311,7 @@ class CoreContextProviderRegistry extends ContextProviderRegistry {
 		documentContext: DocumentContext,
 		telemetryData: TelemetryWithExp
 	): Promise<[ContextProvider<SupportedContextItem>, number][]> {
-		const activeContextProviders = this.instantiationService.invokeFunction(getActiveContextProviders, telemetryData);
+		const activeContextProviders = this.instantiationService.invokeFunction(getActiveContextProviders, documentContext.languageId, telemetryData);
 		const enableAllProviders = activeContextProviders.length === 1 && activeContextProviders[0] === '*';
 
 		const providersWithScore = await Promise.all(
@@ -495,8 +495,8 @@ export function matchContextItems(resolvedContextItem: ResolvedContextItem): boo
 	return resolvedContextItem.matchScore > 0 && resolvedContextItem.resolution !== 'error';
 }
 
-function getActiveContextProviders(accessor: ServicesAccessor, telemetryData: TelemetryWithExp): string[] {
-	const expContextProviders = getExpContextProviders(accessor, telemetryData);
+function getActiveContextProviders(accessor: ServicesAccessor, languageId: string, telemetryData: TelemetryWithExp): string[] {
+	const expContextProviders = getExpContextProviders(accessor, languageId, telemetryData);
 	const configContextProviders: string[] = getConfig(accessor, ConfigKey.ContextProviders) ?? [];
 
 	if (
@@ -515,23 +515,28 @@ function getActiveContextProviders(accessor: ServicesAccessor, telemetryData: Te
  * This only returns the context providers that are enabled by EXP.
  * Use `getActiveContextProviders` to get the context providers that are enabled by both EXP and config.
  */
-function getExpContextProviders(accessor: ServicesAccessor, telemetryData: TelemetryWithExp) {
+function getExpContextProviders(accessor: ServicesAccessor, languageId: string, telemetryData: TelemetryWithExp): string[] {
 	if (accessor.get(ICompletionsRuntimeModeService).isDebugEnabled()) {
 		return ['*'];
 	}
-
-	return accessor.get(ICompletionsContextService).get(Features).contextProviders(telemetryData);
+	const features = accessor.get(ICompletionsContextService).get(Features);
+	const result = features.contextProviders(telemetryData);
+	const langSpecific = features.getContextProviderExpSettings(languageId);
+	if (langSpecific !== undefined && result.indexOf(langSpecific.id) === -1) {
+		result.push(langSpecific.id);
+	}
+	return result;
 }
 
-export function useContextProviderAPI(accessor: ServicesAccessor, telemetryData: TelemetryWithExp) {
-	return getActiveContextProviders(accessor, telemetryData).length > 0;
+export function useContextProviderAPI(accessor: ServicesAccessor, languageId: string, telemetryData: TelemetryWithExp) {
+	return getActiveContextProviders(accessor, languageId, telemetryData).length > 0;
 }
 
-function getContextProviderTimeBudget(accessor: ServicesAccessor, telemetryData: TelemetryWithExp): number {
+function getContextProviderTimeBudget(accessor: ServicesAccessor, languageId: string, telemetryData: TelemetryWithExp): number {
 	const configTimeout = getConfig<number | undefined>(accessor, ConfigKey.ContextProviderTimeBudget);
 	if (configTimeout !== undefined && typeof configTimeout === 'number') {
 		return configTimeout;
 	}
 
-	return accessor.get(ICompletionsContextService).get(Features).contextProviderTimeBudget(telemetryData);
+	return accessor.get(ICompletionsContextService).get(Features).contextProviderTimeBudget(languageId, telemetryData);
 }
