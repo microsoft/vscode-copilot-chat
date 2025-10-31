@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { suite, test } from 'vitest';
 import { parseReplay } from './replayParser';
 
 suite('replay file parsing', function () {
 	test('full parsing example', async function () {
-		const content = fs.readFileSync('src\\extension\\replay\\node\\spec.chatreplay.json', 'utf8');
+		const content = fs.readFileSync(path.join(__dirname, 'spec.chatreplay.json'), 'utf8');
 		const parsed = parseReplay(content);
 
 		assert.strictEqual(parsed.length, 9, 'should have 9 steps');
