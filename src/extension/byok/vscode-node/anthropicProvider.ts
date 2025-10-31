@@ -221,8 +221,15 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		}
 
 		const thinkingEnabled = this._enableThinking(model.id);
-		// Use beta API when thinking is enabled OR when memory tool is present
-		const useBeta = thinkingEnabled || hasMemoryTool;
+
+		// Build betas array for beta API features
+		const betas: string[] = [];
+		if (thinkingEnabled) {
+			betas.push('interleaved-thinking-2025-05-14');
+		}
+		if (hasMemoryTool) {
+			betas.push('context-management-2025-06-27');
+		}
 
 		const baseParams = {
 			model: model.id,
@@ -233,7 +240,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			tools: tools.length > 0 ? tools : undefined,
 		};
 
-		const params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming = useBeta ? {
+		const params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming = betas.length > 0 ? {
 			...baseParams,
 			thinking: thinkingEnabled ? {
 				type: 'enabled',
@@ -244,7 +251,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		const wrappedProgress = new RecordedProgress(progress);
 
 		try {
-			const result = await this._makeRequest(wrappedProgress, params, useBeta, thinkingEnabled, token);
+			const result = await this._makeRequest(wrappedProgress, params, betas, token);
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
@@ -315,18 +322,17 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming, useBeta: boolean, thinkingEnabled: boolean, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
 		if (!this._anthropicAPIClient) {
 			return { ttft: undefined, usage: undefined };
 		}
 		const start = Date.now();
 		let ttft: number | undefined;
 
-		// Use beta API when thinking is enabled OR when memory tool is present
-		const stream = useBeta
+		const stream = betas.length > 0
 			? await this._anthropicAPIClient.beta.messages.create({
 				...(params as Anthropic.Beta.Messages.MessageCreateParamsStreaming),
-				betas: thinkingEnabled ? ['interleaved-thinking-2025-05-14'] : undefined
+				betas
 			})
 			: await this._anthropicAPIClient.messages.create(params as Anthropic.Messages.MessageCreateParamsStreaming);
 
