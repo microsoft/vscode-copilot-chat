@@ -761,7 +761,9 @@ export namespace ConfigKey {
 	/** Maximum thinking tokens for Anthropic extended thinking. If set, overrides the default calculation. */
 	export const MaxAnthropicThinkingTokens = defineSetting<number | null>('chat.anthropic.thinking.maxTokens', null);
 	/** Enable Anthropic web search tool for BYOK Claude models */
-	export const AnthropicWebSearchToolEnabled = defineExpSetting<boolean>('chat.anthropic.webSearchTool.enabled', false);
+	export const AnthropicWebSearchToolEnabled = defineExpSetting<boolean>('chat.anthropic.tools.websearch.enabled', false);
+	/** Enable memory tool */
+	export const MemoryToolEnabled = defineExpSetting<boolean>('chat.tools.memory.enabled', false);
 
 	/** Add context from recently used files */
 	export const TemporalContextInlineChatEnabled = defineExpSetting<boolean>('chat.editor.temporalContext.enabled', false);

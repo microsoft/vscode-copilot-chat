@@ -171,8 +171,20 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				})),
 			});
 
+		// Check if memory tool is present
+		const hasMemoryTool = (options.tools ?? []).some(tool => tool.name === 'memory');
+
 		// Build tools array, handling both standard tools and native Anthropic tools
-		const tools: Anthropic.Messages.ToolUnion[] = (options.tools ?? []).map(tool => {
+		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
+
+			// Handle native Anthropic memory tool
+			if (tool.name === 'memory') {
+				return {
+					name: 'memory',
+					type: 'memory_20250818'
+				} as Anthropic.Beta.BetaMemoryTool20250818;
+			}
+
 			if (!tool.inputSchema) {
 				return {
 					name: tool.name,
@@ -197,7 +209,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			};
 		});
 
-		// Check if web search is enabled and append web_search tool if not already present
+		// Check if web search is enabled and append web_search tool if not already present.
+		// We need to do this because there is no local web_search tool definition we can replace.
 		const webSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicWebSearchToolEnabled, this._experimentationService);
 		if (webSearchEnabled && !tools.some(tool => tool.name === 'web_search')) {
 			tools.push({
@@ -208,8 +221,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		}
 
 		const thinkingEnabled = this._enableThinking(model.id);
-		// Only use beta API when thinking is enabled (web_search works in regular API)
-		const useBeta = thinkingEnabled;
+		// Use beta API when thinking is enabled OR when memory tool is present
+		const useBeta = thinkingEnabled || hasMemoryTool;
 
 		const baseParams = {
 			model: model.id,
@@ -309,11 +322,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		const start = Date.now();
 		let ttft: number | undefined;
 
-		// Use beta API only when thinking is enabled (web_search works in regular API)
-		const stream = useBeta && thinkingEnabled
+		// Use beta API when thinking is enabled OR when memory tool is present
+		const stream = useBeta
 			? await this._anthropicAPIClient.beta.messages.create({
 				...(params as Anthropic.Beta.Messages.MessageCreateParamsStreaming),
-				betas: ['interleaved-thinking-2025-05-14']
+				betas: thinkingEnabled ? ['interleaved-thinking-2025-05-14'] : undefined
 			})
 			: await this._anthropicAPIClient.messages.create(params as Anthropic.Messages.MessageCreateParamsStreaming);
 
