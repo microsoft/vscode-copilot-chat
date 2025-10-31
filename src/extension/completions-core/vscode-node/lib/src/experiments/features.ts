@@ -23,10 +23,18 @@ import { Filter, FilterSettings } from './filters';
 type CompletionsFiltersInfo = { uri: string; languageId: string };
 
 export type ContextProviderExpSettings = {
-	id: string;
+	ids: string[];
 	includeNeighboringFiles: boolean;
 	excludeRelatedFiles: boolean;
 	timeBudget: number;
+}
+
+type InternalContextProviderExpSettings = {
+	id?: string;
+	ids?: string[];
+	includeNeighboringFiles?: boolean;
+	excludeRelatedFiles?: boolean;
+	timeBudget?: number;
 }
 
 /** General-purpose API for accessing ExP variable values. */
@@ -250,11 +258,14 @@ export class Features {
 		const value = expService.getTreatmentVariable<string>(`config.github.copilot.chat.contextprovider.${languageId}`);
 		if (typeof value === 'string') {
 			try {
-				const parsed: Partial<ContextProviderExpSettings> = JSON.parse(value);
-				if (typeof parsed.id !== 'string' || parsed.id.length === 0) {
+				const parsed: Partial<InternalContextProviderExpSettings> = JSON.parse(value);
+				const ids = this.getProviderIDs(parsed);
+				if (ids.length === 0) {
 					return undefined;
 				}
-				return Object.assign({}, { includeNeighboringFiles: false, excludeRelatedFiles: true, timeBudget: 150 }, parsed as { id: string });
+				delete parsed.id;
+				delete parsed.ids;
+				return Object.assign({ ids }, { includeNeighboringFiles: false, excludeRelatedFiles: false, timeBudget: 150 }, parsed as { id: string });
 			} catch (err) {
 				this.instantiationService.invokeFunction((accessor) => {
 					const logService = accessor.get(ILogService);
@@ -265,6 +276,21 @@ export class Features {
 		} else {
 			return undefined;
 		}
+	}
+
+	private getProviderIDs(json: InternalContextProviderExpSettings): string[] {
+		const result = [];
+		if (typeof json.id === 'string' && json.id.length > 0) {
+			result.push(json.id);
+		}
+		if (Array.isArray(json.ids)) {
+			for (const id of json.ids) {
+				if (typeof id === 'string' && id.length > 0) {
+					result.push(id);
+				}
+			}
+		}
+		return result;
 	}
 
 	/** @returns the maximal number of tokens of prompt AND completion */
