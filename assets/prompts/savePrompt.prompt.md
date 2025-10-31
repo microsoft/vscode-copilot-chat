@@ -13,7 +13,7 @@ Think step by step:
 6. Create a very concise action-oriented title in camelCase format that will be used for the slash command (1-3 words, e.g., "generateUnitTests", "refactorForPerformance", "explainApiDesign", etc)
 7. Write a brief description (1 sentence, max 15 words) explaining the goal of the prompt
 8. If applicable, define an argument-hint that describes the expected inputs for the prompt
-9. Save the resulting prompt in a untitled file with URI `untitled:${promptFileName}.prompt.md`, where `${promptFileName}` is the concise action-oriented title from step 6
+9. Save the resulting prompt in an untitled file with URI `untitled:${promptFileName}.prompt.md`, where `${promptFileName}` is the concise action-oriented title from step 6
 
 Here's an example of the expected output format:
 ```
