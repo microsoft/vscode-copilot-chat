@@ -31,7 +31,6 @@
 	"github.copilot.command.sendChatFeedback": "Send Chat Feedback",
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
-	"github.copilot.command.claude.session.create.worktree": "Create Claude Code Session in a Worktree",
 	"github.copilot.viewsWelcome.signIn": {
 		"message": "Sign in to enable features powered by GitHub Copilot.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
 		"comment": [

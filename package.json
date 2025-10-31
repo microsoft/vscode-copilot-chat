@@ -1746,11 +1746,6 @@
 				"category": "Claude Code"
 			},
 			{
-				"command": "github.copilot.claude.sessions.create.worktree",
-				"title": "%github.copilot.command.claude.session.create.worktree%",
-				"category": "Claude Code"
-			},
-			{
 				"command": "github.copilot.cli.sessions.refresh",
 				"title": "%github.copilot.command.refreshAgentSessions%",
 				"icon": "$(refresh)",
