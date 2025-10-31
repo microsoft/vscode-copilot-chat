@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Session } from '@github/copilot/sdk';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, l10n, Uri } from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
@@ -98,14 +99,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.copilotcliSessionService.getAllSessions(token);
-		const diskSessions = sessions.filter(session => !this.copilotcliSessionService.isPendingRequest(session.id) && !session.isEmpty).map(session => ({
+		const diskSessions = sessions.map(session => ({
 			resource: SessionIdForCLI.getResource(session.id),
 			label: session.label,
 			tooltip: `Copilot CLI session: ${session.label}`,
 			timing: {
 				startTime: session.timestamp.getTime()
 			},
-			status: this.copilotcliSessionService.getSessionStatus(session.id) ?? vscode.ChatSessionStatus.Completed,
+			status: session.status ?? vscode.ChatSessionStatus.Completed,
 		} satisfies vscode.ChatSessionItem));
 
 		const count = diskSessions.length;
@@ -238,13 +239,18 @@ export class CopilotCLIChatSessionParticipant {
 
 		const { resource } = chatSessionContext.chatSessionItem;
 		const id = SessionIdForCLI.parse(resource);
+		const session = await this.sessionService.getSession(id, token);
+		if (!session) {
+			stream.warning(vscode.l10n.t('Chat session not found.'));
+			return {};
+		}
 
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
-			return await this.handleConfirmationData(id, request, context, stream, token);
+			return await this.handleConfirmationData(session.sdkSession, request, context, stream, token);
 		}
 
 		if (request.prompt.startsWith('/delegate')) {
-			await this.handleDelegateCommand(id, request, context, stream, token);
+			await this.handleDelegateCommand(session.sdkSession, request, context, stream, token);
 			return {};
 		}
 
@@ -254,7 +260,7 @@ export class CopilotCLIChatSessionParticipant {
 		return {};
 	}
 
-	private async handleDelegateCommand(id: string, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleDelegateCommand(session: Session, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (!this.cloudSessionProvider) {
 			stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
 			return {};
@@ -281,12 +287,12 @@ export class CopilotCLIChatSessionParticipant {
 				chatContext: context
 			}, stream, token);
 			if (prInfo) {
-				await this.recordPushToSession(id, request.prompt, prInfo, token);
+				await this.recordPushToSession(session, request.prompt, prInfo, token);
 			}
 		}
 	}
 
-	private async handleConfirmationData(id: string, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleConfirmationData(session: Session, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		const results: ConfirmationResult[] = [];
 		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
@@ -305,7 +311,7 @@ export class CopilotCLIChatSessionParticipant {
 							chatContext: context
 						}, stream, token);
 						if (prInfo) {
-							await this.recordPushToSession(id, request.prompt, prInfo, token);
+							await this.recordPushToSession(session, request.prompt, prInfo, token);
 						}
 						return {};
 					}
@@ -335,18 +341,13 @@ export class CopilotCLIChatSessionParticipant {
 	}
 
 	private async recordPushToSession(
-		sessionId: string,
+		session: Session,
 		userPrompt: string,
 		prInfo: { uri: string; title: string; description: string; author: string; linkTag: string },
 		token: vscode.CancellationToken
 	): Promise<void> {
-		const session = await this.sessionService.getSession(sessionId, token);
-		if (!session) {
-			return;
-		}
-
 		// Add user message event
-		session.sdkSession.addEvent({
+		session.addEvent({
 			type: 'user.message',
 			data: {
 				content: userPrompt
@@ -355,7 +356,7 @@ export class CopilotCLIChatSessionParticipant {
 
 		// Add assistant message event with embedded PR metadata
 		const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
-		session.sdkSession.addEvent({
+		session.addEvent({
 			type: 'assistant.message',
 			data: {
 				messageId: `msg_${Date.now()}`,

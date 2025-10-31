@@ -21,6 +21,7 @@ export interface ICopilotCLISessionItem {
 	readonly label: string;
 	readonly isEmpty: boolean;
 	readonly timestamp: Date;
+	readonly status?: ChatSessionStatus;
 }
 
 export type ExtendedChatRequest = ChatRequest & { prompt: string };
@@ -39,15 +40,12 @@ export interface ICopilotCLISessionService {
 	getOrCreateSDKSession(sessionId: string | undefined, prompt: string): Promise<Session>;
 	deleteSession(sessionId: string): Promise<boolean>;
 	setSessionStatus(sessionId: string, status: ChatSessionStatus): void;
-	getSessionStatus(sessionId: string): ChatSessionStatus | undefined;
 
 	// Session wrapper tracking
 	trackSessionWrapper<T extends IDisposable>(sessionId: string, wrapper: T): void;
 	findSessionWrapper<T extends IDisposable>(sessionId: string): T | undefined;
 
 	// Pending request tracking (for untitled sessions)
-	setPendingRequest(sessionId: string): void;
-	isPendingRequest(sessionId: string): boolean;
 	clearPendingRequest(sessionId: string): void;
 }
 
@@ -89,6 +87,9 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
+					if (this.isPendingRequest(metadata.sessionId)) {
+						return undefined;
+					}
 					try {
 						// Get the full session to access chat messages
 						const sdkSession = await sessionManager.getSession(metadata.sessionId);
@@ -129,7 +130,14 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 			const cachedSessions = Array.from(this._sessions.values()).filter(s => !diskSessionIds.has(s.id));
 			const allSessions = [...diskSessions, ...cachedSessions];
 
-			return allSessions;
+			return allSessions
+				.filter(session => !this.isPendingRequest(session.id) && !session.isEmpty)
+				.map(session => {
+					return {
+						...session,
+						status: this._sessionStatuses.get(session.id)
+					};
+				});
 		} catch (error) {
 			this.logService.error(`Failed to get all sessions: ${error}`);
 			return Array.from(this._sessions.values());
@@ -167,7 +175,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		}
 
 		const sdkSession = await sessionManager.createSession();
-
+		this.setPendingRequest(sdkSession.sessionId);
 		// Cache the new session immediately
 		const chatMessages = await sdkSession.getChatMessages();
 		const noUserMessages = !chatMessages.find(message => message.role === 'user');
@@ -187,10 +195,6 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 	public setSessionStatus(sessionId: string, status: ChatSessionStatus): void {
 		this._sessionStatuses.set(sessionId, status);
 		this._onDidChangeSessions.fire();
-	}
-
-	public getSessionStatus(sessionId: string): ChatSessionStatus | undefined {
-		return this._sessionStatuses.get(sessionId);
 	}
 
 	public trackSessionWrapper<T extends IDisposable>(sessionId: string, wrapper: T): void {
