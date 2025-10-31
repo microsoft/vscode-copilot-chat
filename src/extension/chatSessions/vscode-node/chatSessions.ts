@@ -15,7 +15,9 @@ import { ServiceCollection } from '../../../util/vs/platform/instantiation/commo
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+import { CopilotCLIModels, CopilotCLISDK, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
+import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
@@ -28,8 +30,6 @@ import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from '.
 import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
-import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
-import { CopilotCLIModels, CopilotCLISDK, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
 
 
 // https://github.com/microsoft/vscode-pull-request-github/blob/8a5c9a145cd80ee364a3bed9cf616b2bd8ac74c2/src/github/copilotApi.ts#L56-L71
@@ -99,17 +99,16 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		}));
 
 		// Copilot CLI sessions provider
-		const copilotCLISessionService = claudeAgentInstaService.createInstance(CopilotCLISessionService);
-
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
-				[ICopilotCLISessionService, copilotCLISessionService],
+				[ICopilotCLISessionService, new SyncDescriptor(CopilotCLISessionService)],
 				[ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels)],
 				[ICopilotCLISDK, new SyncDescriptor(CopilotCLISDK)],
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
 				[ICopilotCLITerminalIntegration, new SyncDescriptor(CopilotCLITerminalIntegration)],
 			));
 
+		const copilotCLISessionService = copilotcliAgentInstaService.createInstance(CopilotCLISessionService);
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
 		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);

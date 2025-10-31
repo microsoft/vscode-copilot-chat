@@ -146,7 +146,7 @@ export class CopilotCLISession extends Disposable {
 				postToolUse: [
 					async (input: PostToolUseHookInput) => {
 						const editKey = getEditOperationKey(input.toolName, input.toolArgs);
-						await this._onDidEditTool(editKey);
+						void this._onDidEditTool(editKey);
 					}
 				]
 			}
