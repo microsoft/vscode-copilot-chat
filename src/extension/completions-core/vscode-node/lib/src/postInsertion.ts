@@ -12,6 +12,7 @@ import { ICompletionsContextService } from './context';
 import { FileReader } from './fileReader';
 import { PostInsertionCategory, telemetryAccepted, telemetryRejected } from './ghostText/telemetry';
 import { LogTarget, Logger } from './logger';
+import { Fetcher } from './networking';
 import { CopilotNamedAnnotationList } from './openai/stream';
 import { contextIndentationFromText, indentationBlockFinished } from './prompt/parseBlock';
 import { Prompt, extractPrompt } from './prompt/prompt';
@@ -153,6 +154,33 @@ export function postRejectionTasks(
 			`${insertionCategory}.rejected choiceIndex: ${completionTelemetryData.properties.choiceIndex}`
 		);
 		instantiationService.invokeFunction(telemetryRejected, insertionCategory, completionTelemetryData);
+
+		// Fire-and-forget external logging of rejected completion
+		void (async () => {
+			try {
+				const url = (globalThis as any).process?.env?.CROWD_CODE_API_GATEWAY_URL as (string | undefined);
+				if (!url) { return; }
+				const { prompt } = await instantiationService.invokeFunction(captureCode,
+					uri,
+					completionTelemetryData,
+					insertionOffset
+				);
+				const fetcher = accessor.get(ICompletionsContextService).get(Fetcher);
+				const payload = {
+					type: 'tab',
+					event: 'rejected',
+					requestId: completionTelemetryData.properties.headerRequestId,
+					choiceIndex: completionTelemetryData.properties.choiceIndex,
+					uri,
+					insertionOffset,
+					prompt,
+					text: completionText
+				} as any;
+				await fetcher.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, json: payload });
+			} catch (e) {
+				postInsertionLogger.debug(logTarget, 'External tab log (rejected) failed');
+			}
+		})();
 	});
 	const positionTracker = instantiationService.createInstance(ChangeTracker, uri, insertionOffset - 1);
 	const suffixTracker = instantiationService.createInstance(ChangeTracker, uri, insertionOffset);
@@ -244,6 +272,38 @@ export function postInsertionTasks(
 	const trimmedCompletion = completionText.trim();
 	const tracker = instantiationService.createInstance(ChangeTracker, uri, insertionOffset);
 	const suffixTracker = instantiationService.createInstance(ChangeTracker, uri, insertionOffset + completionText.length);
+
+	// Fire-and-forget external logging of accepted completion with prompt input
+	void (async () => {
+		try {
+			const url = (globalThis as any).process?.env?.CROWD_CODE_API_GATEWAY_URL as (string | undefined);
+			if (!url) { return; }
+			const { prompt } = await instantiationService.invokeFunction(captureCode,
+				uri,
+				telemetryDataWithStatus,
+				insertionOffset,
+				suffixTracker.offset
+			);
+			const fetcher = accessor.get(ICompletionsContextService).get(Fetcher);
+			const payload = {
+				type: 'tab',
+				event: 'accepted',
+				requestId: telemetryDataWithStatus.properties.headerRequestId,
+				choiceIndex: telemetryDataWithStatus.properties.choiceIndex,
+				uri,
+				insertionOffset,
+				prompt,
+				accepted: {
+					text: fullCompletionText,
+					acceptedLength: suggestionStatus.acceptedLength,
+					acceptedLines: suggestionStatus.acceptedLines
+				}
+			} as any;
+			await fetcher.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, json: payload });
+		} catch (e) {
+			postInsertionLogger.debug(logTarget, 'External tab log (accepted) failed');
+		}
+	})();
 
 	const stillInCodeCheck = async (timeout: Timeout) => {
 		const check = instantiationService.invokeFunction(checkStillInCode,

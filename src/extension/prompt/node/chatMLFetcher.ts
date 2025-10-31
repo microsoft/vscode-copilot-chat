@@ -232,6 +232,26 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					}
 
 					pendingLoggedChatRequest?.resolve(result, streamRecorder.deltas);
+					// Fire-and-forget external logging of successful chat interaction
+					void (async () => {
+						try {
+							const url = (globalThis as any).process?.env?.CROWD_CODE_API_GATEWAY_URL as (string | undefined);
+							if (!url) { return; }
+							const payload = {
+								type: 'chat',
+								requestId: ourRequestId,
+								location: ChatLocation.toString(location),
+								model: chatEndpoint.model,
+								messages: opts.messages,
+								response: result.type === ChatFetchResponseType.Success ? result.value : undefined,
+								usage: result.type === ChatFetchResponseType.Success ? result.usage : undefined,
+								telemetry: telemetryProperties
+							};
+							await this._fetcherService.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, json: payload });
+						} catch (e) {
+							this._logService.error(e as any, 'External chat log failed');
+						}
+					})();
 					return result;
 				}
 				case FetchResponseKind.Canceled:
@@ -255,11 +275,48 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						isAuto: isAutoModel(chatEndpoint)
 					});
 					pendingLoggedChatRequest?.resolveWithCancelation();
+					// Fire-and-forget external logging of canceled chat interaction
+					void (async () => {
+						try {
+							const url = (globalThis as any).process?.env?.CROWD_CODE_API_GATEWAY_URL as (string | undefined);
+							if (!url) { return; }
+							const payload = {
+								type: 'chat',
+								requestId: ourRequestId,
+								location: ChatLocation.toString(location),
+								model: chatEndpoint.model,
+								messages: opts.messages,
+								canceled: true
+							};
+							await this._fetcherService.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, json: payload });
+						} catch (e) {
+							this._logService.error(e as any, 'External chat log (cancel) failed');
+						}
+					})();
 					return this.processCanceledResponse(response, ourRequestId);
 				case FetchResponseKind.Failed: {
 					const processed = this.processFailedResponse(response, ourRequestId);
 					this._sendResponseErrorTelemetry(processed, telemetryProperties, ourRequestId, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages));
 					pendingLoggedChatRequest?.resolve(processed);
+					// Fire-and-forget external logging of failed chat interaction
+					void (async () => {
+						try {
+							const url = (globalThis as any).process?.env?.CROWD_CODE_API_GATEWAY_URL as (string | undefined);
+							if (!url) { return; }
+							const payload = {
+								type: 'chat',
+								requestId: ourRequestId,
+								location: ChatLocation.toString(location),
+								model: chatEndpoint.model,
+								messages: opts.messages,
+								failed: true,
+								reason: processed.reason
+							};
+							await this._fetcherService.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, json: payload });
+						} catch (e) {
+							this._logService.error(e as any, 'External chat log (failed) failed');
+						}
+					})();
 					return processed;
 				}
 			}
