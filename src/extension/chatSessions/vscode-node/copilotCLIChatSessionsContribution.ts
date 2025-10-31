@@ -231,10 +231,8 @@ export class CopilotCLIChatSessionParticipant {
 				stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
 				return {};
 			}
-			if (copilotcliSessionId) {
-				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(copilotcliSessionId), label: request.prompt ?? 'CopilotCLI' });
-				this.sessionService.clearPendingRequest(copilotcliSessionId);
-			}
+			this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(copilotcliSessionId), label: request.prompt ?? 'CopilotCLI' });
+			this.sessionService.clearPendingRequest(copilotcliSessionId);
 			return {};
 		}
 
