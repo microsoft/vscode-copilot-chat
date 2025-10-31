@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { NotebookDocument, TextLine, Uri } from 'vscode';
-import { Position, Range, Selection } from '../../../vscodeTypes';
-import { AlternativeNotebookDocument } from '../../notebook/common/alternativeNotebookDocument';
-import { isUriComponents, UriComponents } from '../../../util/vs/base/common/uri';
-import { getAlternativeNotebookDocumentProvider } from '../../notebook/common/alternativeContent';
 import { isNumber, isString } from '../../../util/vs/base/common/types';
+import { isUriComponents, UriComponents } from '../../../util/vs/base/common/uri';
+import { Position, Range, Selection } from '../../../vscodeTypes';
+import { getAlternativeNotebookDocumentProvider } from '../../notebook/common/alternativeContent';
+import { AlternativeNotebookDocument } from '../../notebook/common/alternativeNotebookDocument';
 import { getDefaultLanguage } from '../../notebook/common/helpers';
 
 export interface INotebookDocumentSnapshotJSON {
@@ -32,7 +32,14 @@ export class NotebookDocumentSnapshot {
 	static create(doc: NotebookDocument, format: 'json' | 'xml' | 'text'): NotebookDocumentSnapshot {
 		const uri = doc.uri;
 		const version = doc.version;
-		return new NotebookDocumentSnapshot(doc, uri, version, format);
+
+		const alternativeDocument = getAlternativeNotebookDocumentProvider(format).getAlternativeDocument(doc);
+		return new NotebookDocumentSnapshot(doc, uri, version, format, alternativeDocument);
+	}
+	static fromNewText(text: string, doc: NotebookDocumentSnapshot) {
+		const alternativeDocument = getAlternativeNotebookDocumentProvider(doc.alternativeFormat).getAlternativeDocumentFromText(text, doc.document);
+		const nd = new NotebookDocumentSnapshot(doc.document, doc.uri, doc.version, doc.alternativeFormat, alternativeDocument);
+		return nd;
 	}
 	static fromJSON(doc: NotebookDocument, json: INotebookDocumentSnapshotJSON): NotebookDocumentSnapshot {
 		// TODO@DonJayamanne
@@ -41,22 +48,16 @@ export class NotebookDocumentSnapshot {
 
 	readonly type = 'notebook';
 	readonly document: NotebookDocument;
-	readonly _text: string;
 	readonly uri: Uri;
 	readonly version: number;
 	readonly languageId: string;
 
-	private _alternativeDocument: AlternativeNotebookDocument;
 
-
-	private constructor(doc: NotebookDocument, uri: Uri, version: number, public readonly alternativeFormat: 'json' | 'xml' | 'text') {
+	private constructor(doc: NotebookDocument, uri: Uri, version: number, public readonly alternativeFormat: 'json' | 'xml' | 'text', private readonly _alternativeDocument: AlternativeNotebookDocument) {
 		this.document = doc;
 		this.uri = uri;
 		this.version = version;
 		this.languageId = alternativeFormat === 'text' ? getDefaultLanguage(doc) || 'python' : alternativeFormat;
-
-		this._alternativeDocument = getAlternativeNotebookDocumentProvider(alternativeFormat).getAlternativeDocument(doc);
-		this._text = this._alternativeDocument.getText();
 	}
 
 	getText(range?: Range): string {

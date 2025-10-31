@@ -308,7 +308,10 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 	const session = await authenticationService.getAnyGitHubSession();
 	if (session) {
 		options.env = {
-			GH_TOKEN: session.accessToken
+			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)
+			GH_TOKEN: session.accessToken,
+			// New Token name for Copilot
+			COPILOT_GITHUB_TOKEN: session.accessToken
 		};
 	}
 	return options;

@@ -100,6 +100,9 @@ function calculateAutoModelInfo(endpoint: IChatEndpoint, sessionToken: string, d
 	const newMultiplier = Math.round((endpoint.multiplier ?? 0) * (1 - discountPercent) * 100) / 100;
 	const newModelInfo: IChatModelInformation = {
 		...originalModelInfo,
+		warning_messages: undefined,
+		model_picker_enabled: true,
+		info_messages: undefined,
 		billing: {
 			is_premium: originalModelInfo.billing?.is_premium ?? false,
 			multiplier: newMultiplier,

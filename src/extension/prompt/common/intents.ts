@@ -7,6 +7,7 @@ import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
+import { ResourceMap } from '../../../util/vs/base/common/map';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ChatRequest } from '../../../vscodeTypes';
 import { getToolName } from '../../tools/common/toolNames';
@@ -66,6 +67,18 @@ export interface IBuildPromptContext {
 	readonly toolCallRounds?: readonly IToolCallRound[];
 	readonly toolCallResults?: Record<string, vscode.LanguageModelToolResult>;
 	readonly toolGrouping?: IToolGrouping;
+
+	/**
+	 * Models are encouraged to make parallel tool calls. Sometimes, they even
+	 * do. If this happens for edit calls, because the application of text edits
+	 * is async, we need to keep track of the edited versions of documented we
+	 * see otherwise there is a race condition that can lead to garbled edits.
+	 *
+	 * This property is used by edit tools to stash their edited documents within
+	 * an edit turn, and will try to reuse a previous tool's version of the
+	 * document when available. The map is created anew each turn.
+	 */
+	turnEditedDocuments?: ResourceMap<NotebookDocumentSnapshot | TextDocumentSnapshot>;
 
 	readonly editedFileEvents?: readonly vscode.ChatRequestEditedFileEvent[];
 	readonly conversation?: Conversation;

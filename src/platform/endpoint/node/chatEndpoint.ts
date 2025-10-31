@@ -32,45 +32,6 @@ import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
 
-// get ChatMaxNumTokens from config for experimentation
-export function getMaxPromptTokens(configService: IConfigurationService, expService: IExperimentationService, chatModelInfo: IChatModelInformation): number {
-	// check debug override ChatMaxTokenNum
-	const chatMaxTokenNumOverride = configService.getConfig(ConfigKey.Internal.DebugOverrideChatMaxTokenNum); // can only be set by internal users
-	// Base 3 tokens for each OpenAI completion
-	let modelLimit = -3;
-	// if option is set, takes precedence over any other logic
-	if (chatMaxTokenNumOverride > 0) {
-		modelLimit += chatMaxTokenNumOverride;
-		return modelLimit;
-	}
-
-	let experimentalOverrides: Record<string, number> = {};
-	try {
-		const expValue = expService.getTreatmentVariable<string>('copilotchat.contextWindows');
-		experimentalOverrides = JSON.parse(expValue ?? '{}');
-	} catch {
-		// If the experiment service either is not available or returns a bad value we ignore the overrides
-	}
-
-	// If there's an experiment that takes precedence over what comes back from CAPI
-	if (experimentalOverrides[chatModelInfo.id]) {
-		modelLimit += experimentalOverrides[chatModelInfo.id];
-		return modelLimit;
-	}
-
-	// Check if CAPI has promot token limits and return those
-	if (chatModelInfo.capabilities?.limits?.max_prompt_tokens) {
-		modelLimit += chatModelInfo.capabilities.limits.max_prompt_tokens;
-		return modelLimit;
-	} else if (chatModelInfo.capabilities.limits?.max_context_window_tokens) {
-		// Otherwise return the context window as the prompt tokens for cases where CAPI doesn't configure the prompt tokens
-		modelLimit += chatModelInfo.capabilities.limits.max_context_window_tokens;
-		return modelLimit;
-	}
-
-	return modelLimit;
-}
-
 /**
  * The default processor for the stream format from CAPI
  */
@@ -103,7 +64,14 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 	const completions: ChatCompletion[] = [];
 	for (let i = 0; i < (jsonResponse?.choices?.length || 0); i++) {
 		const choice = jsonResponse.choices[i];
-		const message: Raw.AssistantChatMessage = choice.message;
+		const message: Raw.AssistantChatMessage = {
+			role: choice.message.role,
+			content: choice.message.content,
+			name: choice.message.name,
+			// Normalize property name: OpenAI API uses snake_case (tool_calls) but our types expect camelCase (toolCalls)
+			// See: https://platform.openai.com/docs/api-reference/chat/object#chat-object-choices-message-tool_calls
+			toolCalls: choice.message.toolCalls ?? choice.message.tool_calls,
+		};
 		const messageText = getTextPart(message.content);
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
 		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
@@ -245,10 +213,6 @@ export class ChatEndpoint implements IChatEndpoint {
 
 	public get apiType(): string {
 		return this.useResponsesApi ? 'responses' : 'chatCompletions';
-	}
-
-	public get supportsThinkingContentInHistory(): boolean {
-		return this.family === 'oswe';
 	}
 
 	interceptBody(body: IEndpointBody | undefined): void {

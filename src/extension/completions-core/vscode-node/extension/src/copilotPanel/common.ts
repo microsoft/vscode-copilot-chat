@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Range, commands, window, type Disposable } from 'vscode';
+import { DisposableStore, IDisposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, type ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../../../lib/src/context';
 import { CopilotNamedAnnotationList } from '../../../lib/src/openai/stream';
 import * as constants from '../constants';
-import { CopilotPanelVisible } from '../constants';
 import { registerCommand } from '../telemetry';
 import { wrapDoc } from '../textDocumentManager';
 import { CopilotSuggestionsPanelManager } from './copilotSuggestionsPanelManager';
@@ -33,14 +33,24 @@ export function registerPanelSupport(accessor: ServicesAccessor): Disposable {
 	const instantiationService = accessor.get(IInstantiationService);
 	const suggestionsPanelManager = instantiationService.createInstance(CopilotSuggestionsPanelManager);
 
-	const result = registerCommand(accessor, constants.CMDOpenPanel, async () => {
-		// hide ghost text while opening the generation ui
-		await commands.executeCommand('editor.action.inlineSuggest.hide');
-		await instantiationService.invokeFunction(commandOpenPanel, suggestionsPanelManager);
-	});
+	const disposableStore = new DisposableStore();
 
-	suggestionsPanelManager.registerCommands();
-	return result;
+	function registerOpenPanelCommand(id: string): IDisposable {
+		return registerCommand(accessor, id, async () => {
+			// hide ghost text while opening the generation ui
+			await commands.executeCommand('editor.action.inlineSuggest.hide');
+			await instantiationService.invokeFunction(commandOpenPanel, suggestionsPanelManager);
+		});
+	}
+
+	// Register both commands to also support command palette
+	disposableStore.add(registerOpenPanelCommand(constants.CMDOpenPanelChat));
+	disposableStore.add(registerOpenPanelCommand(constants.CMDOpenPanelClient));
+
+	// No command palette support needed for these commands
+	disposableStore.add(suggestionsPanelManager.registerCommands());
+
+	return disposableStore;
 }
 
 function commandOpenPanel(accessor: ServicesAccessor, suggestionsPanelManager: CopilotSuggestionsPanelManager) {
@@ -52,5 +62,5 @@ function commandOpenPanel(accessor: ServicesAccessor, suggestionsPanelManager: C
 	const { line, character } = editor.selection.active;
 
 	suggestionsPanelManager.renderPanel(editor.document, { line, character }, wrapped);
-	return commands.executeCommand('setContext', CopilotPanelVisible, true);
+	return commands.executeCommand('setContext', constants.CopilotPanelVisible, true);
 }

@@ -10,6 +10,7 @@ import { ICompletionsContextService } from '../../context';
 import { logger, LogTarget } from '../../logger';
 
 import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsTelemetryService } from '../../../../bridge/src/completionsTelemetryServiceBridge';
 import { DataPipe, VirtualPrompt } from '../../../../prompt/src/components/virtualPrompt';
 import { TokenizerName } from '../../../../prompt/src/tokenization';
 import { CancellationToken, Position } from '../../../../types/src';
@@ -58,7 +59,6 @@ import {
 	CompletionsPromptOptions,
 	PromptOpts,
 } from './completionsPromptFactory';
-import { ICompletionsTelemetryService } from '../../../../bridge/src/completionsTelemetryServiceBridge';
 
 export type CompletionRequestDocument = TextDocumentContents;
 
@@ -249,7 +249,8 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 		const renderedTrimmed = { ...rendered, prefix };
 
 		let contextProvidersTelemetry: ContextProviderTelemetry[] | undefined = undefined;
-		if (this.instantiationService.invokeFunction(useContextProviderAPI, telemetryData)) {
+		const languageId = completionState.textDocument.detectedLanguageId;
+		if (this.instantiationService.invokeFunction(useContextProviderAPI, languageId, telemetryData)) {
 			const promptMatcher = componentStatisticsToPromptMatcher(rendered.metadata.componentStatistics);
 			this.ctx
 				.get(ContextProviderStatistics)
@@ -309,7 +310,7 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 		let traits: TraitWithId[] | undefined;
 		let codeSnippets: CodeSnippetWithId[] | undefined;
 		let turnOffSimilarFiles = false;
-		if (this.instantiationService.invokeFunction(useContextProviderAPI, telemetryData)) {
+		if (this.instantiationService.invokeFunction(useContextProviderAPI, completionState.textDocument.detectedLanguageId, telemetryData)) {
 			resolvedContextItems = await this.ctx.get(ContextProviderBridge).resolution(completionId);
 			const { textDocument } = completionState;
 			// Turn off neighboring files if:
@@ -467,7 +468,7 @@ function similarFilesEnabled(
 ) {
 	const cppLanguageIds = ['cpp', 'c'];
 	const includeNeighboringFiles =
-		isIncludeNeighborFilesActive(accessor, telemetryData) || cppLanguageIds.includes(detectedLanguageId);
+		isIncludeNeighborFilesActive(accessor, detectedLanguageId, telemetryData) || cppLanguageIds.includes(detectedLanguageId);
 	return (
 		includeNeighboringFiles || !matchedContextItems.some(ci => ci.data.some(item => item.type === 'CodeSnippet'))
 	);
