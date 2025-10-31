@@ -181,7 +181,7 @@ export function createContext(serviceAccessor: ServicesAccessor): IInstantiation
 		}
 	});
 
-	ctx.set(NotificationSender, new ExtensionNotificationSender());
+	ctx.set(NotificationSender, instaService.createInstance(ExtensionNotificationSender));
 	ctx.set(EditorAndPluginInfo, new VSCodeEditorInfo());
 	ctx.set(CopilotExtensionStatus, new CopilotExtensionStatus());
 	ctx.set(CopilotTokenManager, instantiationService.createInstance(CopilotTokenManagerImpl, false));

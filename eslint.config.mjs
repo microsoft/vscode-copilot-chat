@@ -366,5 +366,11 @@ export default tseslint.config(
 			'local/no-unlayered-files': 'off',
 			'no-restricted-imports': 'off'
 		}
+	},
+	{
+		files: ['./src/lib/node/chatLibMain.ts'],
+		rules: {
+			'import/no-restricted-paths': 'off'
+		}
 	}
 );
