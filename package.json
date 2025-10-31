@@ -3758,10 +3758,6 @@
 			],
 			"chat/chatSessions": [
 				{
-					"command": "github.copilot.claude.sessions.create.worktree",
-					"group": "submenu"
-				},
-				{
 					"command": "github.copilot.cli.sessions.resumeInTerminal",
 					"when": "chatSessionType == copilotcli",
 					"group": "inline@1"
