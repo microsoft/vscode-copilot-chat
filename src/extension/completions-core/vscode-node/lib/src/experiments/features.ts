@@ -265,7 +265,7 @@ export class Features {
 				}
 				delete parsed.id;
 				delete parsed.ids;
-				return Object.assign({ ids }, { includeNeighboringFiles: false, excludeRelatedFiles: false, timeBudget: 150 }, parsed as { id: string });
+				return Object.assign({ ids }, { includeNeighboringFiles: false, excludeRelatedFiles: false, timeBudget: 150 }, parsed as Omit<InternalContextProviderExpSettings, 'id' | 'ids'>);
 			} catch (err) {
 				this.instantiationService.invokeFunction((accessor) => {
 					const logService = accessor.get(ILogService);
@@ -279,7 +279,7 @@ export class Features {
 	}
 
 	private getProviderIDs(json: InternalContextProviderExpSettings): string[] {
-		const result = [];
+		const result: string[] = [];
 		if (typeof json.id === 'string' && json.id.length > 0) {
 			result.push(json.id);
 		}
