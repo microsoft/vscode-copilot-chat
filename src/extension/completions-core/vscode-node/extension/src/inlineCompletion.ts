@@ -38,7 +38,7 @@ function quickSuggestionsDisabled() {
 	return qs.get('other') !== 'on' && qs.get('comments') !== 'on' && qs.get('strings') !== 'on';
 }
 
-function exception(accessor: ServicesAccessor, error: unknown, origin: string, logger?: Logger) {
+export function exception(accessor: ServicesAccessor, error: unknown, origin: string, logger?: Logger) {
 	if (error instanceof Error && error.name === 'Canceled') {
 		// these are VS Code cancellations
 		return;

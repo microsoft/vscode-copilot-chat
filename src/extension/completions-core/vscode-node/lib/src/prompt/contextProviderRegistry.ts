@@ -522,8 +522,12 @@ function getExpContextProviders(accessor: ServicesAccessor, languageId: string, 
 	const features = accessor.get(ICompletionsContextService).get(Features);
 	const result = features.contextProviders(telemetryData);
 	const langSpecific = features.getContextProviderExpSettings(languageId);
-	if (langSpecific !== undefined && result.indexOf(langSpecific.id) === -1) {
-		result.push(langSpecific.id);
+	if (langSpecific !== undefined) {
+		for (const id of langSpecific.ids) {
+			if (!result.includes(id)) {
+				result.push(id);
+			}
+		}
 	}
 	return result;
 }
