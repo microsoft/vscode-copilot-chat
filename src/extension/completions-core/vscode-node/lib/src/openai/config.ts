@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { TokenizerName } from '../../../prompt/src/tokenization';
 import { ICompletionsContextService } from '../context';
 import { TelemetryWithExp } from '../telemetry';
@@ -19,10 +20,10 @@ export type EngineRequestInfo = {
 };
 
 export function getEngineRequestInfo(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	telemetryData: TelemetryWithExp | undefined = undefined
 ): EngineRequestInfo {
-	const modelsManager = ctx.get(AvailableModelsManager);
+	const modelsManager = accessor.get(ICompletionsContextService).get(AvailableModelsManager);
 	const modelRequestInfo = modelsManager.getCurrentModelRequestInfo(telemetryData);
 	const tokenizer = modelsManager.getTokenizerForModel(modelRequestInfo.modelId);
 

@@ -2,13 +2,15 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { env, UIKind } from 'vscode';
+import { commands, env, UIKind } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { ILogService } from '../../../platform/log/common/logService';
+import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -19,21 +21,25 @@ import { CompletionsCapiBridge } from './bridge/src/completionsCapiBridge';
 import { CompletionsEndpointProviderBridge } from './bridge/src/completionsEndpointProviderBridge';
 import { CompletionsExperimentationServiceBridge } from './bridge/src/completionsExperimentationServiceBridge';
 import { CompletionsIgnoreServiceBridge } from './bridge/src/completionsIgnoreServiceBridge';
-import { CompletionsTelemetryServiceBridge } from './bridge/src/completionsTelemetryServiceBridge';
+import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from './bridge/src/completionsTelemetryServiceBridge';
 import { CodeReference } from './extension/src/codeReferencing';
 import { LoggingCitationManager } from './extension/src/codeReferencing/citationManager';
-import { VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
+import { disableCompletions, enableCompletions, toggleCompletions, VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
+import { CMDDisableCompletionsChat, CMDDisableCompletionsClient, CMDEnableCompletionsChat, CMDEnableCompletionsClient, CMDOpenDocumentationClient, CMDOpenLogsClient, CMDToggleCompletionsChat, CMDToggleCompletionsClient, CMDToggleStatusMenuChat, CMDToggleStatusMenuClient } from './extension/src/constants';
 import { contextProviderMatch } from './extension/src/contextProviderMatch';
+import { registerPanelSupport } from './extension/src/copilotPanel/common';
 import { Extension } from './extension/src/extensionContext';
 import { CopilotExtensionStatus } from './extension/src/extensionStatus';
 import { extensionFileSystem } from './extension/src/fileSystem';
 import { registerGhostTextDependencies } from './extension/src/ghostText/ghostText';
+import { exception } from './extension/src/inlineCompletion';
 import { CopilotStatusBar } from './extension/src/statusBar';
+import { CopilotStatusBarPickMenu } from './extension/src/statusBarPicker';
 import { ExtensionTextDocumentManager } from './extension/src/textDocumentManager';
 import { CopilotTokenManager, CopilotTokenManagerImpl } from './lib/src/auth/copilotTokenManager';
 import { CitationManager } from './lib/src/citationManager';
 import { CompletionNotifier } from './lib/src/completionNotifier';
-import { BuildInfo, ConfigProvider, EditorAndPluginInfo, EditorSession } from './lib/src/config';
+import { BuildInfo, ConfigProvider, EditorAndPluginInfo, EditorSession, ICompletionsBuildInfoService, ICompletionsEditorSessionService } from './lib/src/config';
 import { CopilotContentExclusionManager } from './lib/src/contentExclusion/contentExclusionManager';
 import { Context, ICompletionsContextService } from './lib/src/context';
 import { registerDocumentTracker } from './lib/src/documentTracker';
@@ -75,13 +81,12 @@ import { RelatedFilesProvider } from './lib/src/prompt/similarFiles/relatedFiles
 import { TelemetryUserConfig } from './lib/src/telemetry';
 import { TextDocumentManager } from './lib/src/textDocumentManager';
 import { UrlOpener } from './lib/src/util/opener';
-import { PromiseQueue } from './lib/src/util/promiseQueue';
-import { RuntimeMode } from './lib/src/util/runtimeMode';
+import { ICompletionsPromiseQueueService, PromiseQueue } from './lib/src/util/promiseQueue';
+import { ICompletionsRuntimeModeService, RuntimeMode } from './lib/src/util/runtimeMode';
 
 const bridges: any[] = [];
 
 bridges.push(CompletionsIgnoreServiceBridge);
-bridges.push(CompletionsTelemetryServiceBridge);
 bridges.push(CompletionsExperimentationServiceBridge);
 bridges.push(CompletionsAuthenticationServiceBridge);
 bridges.push(CompletionsEndpointProviderBridge);
@@ -95,9 +100,43 @@ export function createContext(serviceAccessor: ServicesAccessor): IInstantiation
 	const configurationService = serviceAccessor.get(IConfigurationService);
 	const experimentationService = serviceAccessor.get(IExperimentationService);
 
-	const ctx = new Context();
 	const serviceCollection = new ServiceCollection();
+
+	const ctx = new Context();
 	serviceCollection.set(ICompletionsContextService, ctx);
+
+	ctx.set(LogTarget, new class extends LogTarget {
+		override logIt(level: LogLevel, category: string, ...extra: unknown[]): void {
+			const msg = formatLogMessage(category, ...extra);
+			switch (level) {
+				case LogLevel.DEBUG: return logService.debug(msg);
+				case LogLevel.INFO: return logService.info(msg);
+				case LogLevel.WARN: return logService.warn(msg);
+				case LogLevel.ERROR: return logService.error(msg);
+			}
+		}
+	});
+
+	const runtimeMode = RuntimeMode.fromEnvironment(false);
+	ctx.set(RuntimeMode, runtimeMode);
+	serviceCollection.set(ICompletionsRuntimeModeService, runtimeMode);
+
+	const buildInfo = new BuildInfo();
+	ctx.set(BuildInfo, buildInfo);
+	serviceCollection.set(ICompletionsBuildInfoService, buildInfo);
+
+	const editorSession = new EditorSession(env.sessionId, env.machineId, env.remoteName, uiKindToString(env.uiKind));
+	ctx.set(EditorSession, editorSession);
+	serviceCollection.set(ICompletionsEditorSessionService, editorSession);
+
+	const completionsTelemetryService = new CompletionsTelemetryServiceBridge(serviceAccessor.get(ITelemetryService));
+	serviceCollection.set(ICompletionsTelemetryService, completionsTelemetryService);
+	ctx.set(CompletionsTelemetryServiceBridge, completionsTelemetryService);
+
+	const promiseQueue = new PromiseQueue();
+	ctx.set(PromiseQueue, promiseQueue);
+	serviceCollection.set(ICompletionsPromiseQueueService, promiseQueue);
+
 	const instantiationService = serviceAccessor.get(IInstantiationService).createChild(serviceCollection);
 	ctx.setInstantiationService(instantiationService);
 
@@ -109,16 +148,13 @@ export function createContext(serviceAccessor: ServicesAccessor): IInstantiation
 	ctx.set(Extension, new Extension(extensionContext));
 	ctx.set(ConfigProvider, new VSCodeConfigProvider());
 	ctx.set(CopilotContentExclusionManager, instantiationService.createInstance(CopilotContentExclusionManager));
-	ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(false));
-	ctx.set(BuildInfo, new BuildInfo());
 	ctx.set(CompletionsCache, new CompletionsCache());
 	ctx.set(Features, instantiationService.createInstance(Features));
 	ctx.set(TelemetryLogSender, new TelemetryLogSenderImpl());
 	ctx.set(TelemetryUserConfig, instantiationService.createInstance(TelemetryUserConfig));
 	ctx.set(UserErrorNotifier, new UserErrorNotifier());
-	ctx.set(OpenAIFetcher, new LiveOpenAIFetcher());
+	ctx.set(OpenAIFetcher, new LiveOpenAIFetcher(instantiationService, ctx, runtimeMode));
 	ctx.set(BlockModeConfig, new ConfigBlockModeConfig());
-	ctx.set(PromiseQueue, new PromiseQueue());
 	ctx.set(CompletionNotifier, instantiationService.createInstance(CompletionNotifier));
 	ctx.set(FileReader, instantiationService.createInstance(FileReader));
 	try {
@@ -147,7 +183,6 @@ export function createContext(serviceAccessor: ServicesAccessor): IInstantiation
 
 	ctx.set(NotificationSender, new ExtensionNotificationSender());
 	ctx.set(EditorAndPluginInfo, new VSCodeEditorInfo());
-	ctx.set(EditorSession, new EditorSession(env.sessionId, env.machineId, env.remoteName, uiKindToString(env.uiKind)));
 	ctx.set(CopilotExtensionStatus, new CopilotExtensionStatus());
 	ctx.set(CopilotTokenManager, instantiationService.createInstance(CopilotTokenManagerImpl, false));
 	ctx.set(StatusReporter, instantiationService.createInstance(CopilotStatusBar, 'github.copilot.languageStatus'));
@@ -167,18 +202,6 @@ export function createContext(serviceAccessor: ServicesAccessor): IInstantiation
 		}
 	});
 
-	ctx.set(LogTarget, new class extends LogTarget {
-		override logIt(level: LogLevel, category: string, ...extra: unknown[]): void {
-			const msg = formatLogMessage(category, ...extra);
-			switch (level) {
-				case LogLevel.DEBUG: return logService.debug(msg);
-				case LogLevel.INFO: return logService.info(msg);
-				case LogLevel.WARN: return logService.warn(msg);
-				case LogLevel.ERROR: return logService.error(msg);
-			}
-		}
-	});
-
 	return instantiationService;
 }
 
@@ -191,29 +214,126 @@ export function setup(serviceAccessor: ServicesAccessor): IDisposable {
 	// This must be registered before activation!
 	// CodeQuote needs to listen for the initial token notification event.
 	const codeReference = instantiationService.createInstance(CodeReference);
-	ctx.set(CitationManager, new LoggingCitationManager(codeReference));
+	ctx.set(CitationManager, new LoggingCitationManager(codeReference, instantiationService));
 	disposables.add(codeReference.register());
 
 	// Send telemetry when ghost text is accepted
-	disposables.add(registerGhostTextDependencies(ctx));
+	disposables.add(registerGhostTextDependencies(serviceAccessor));
 
 	// Register to listen for changes to the active document to keep track
 	// of last access time
-	disposables.add(registerDocumentTracker(ctx));
+	disposables.add(registerDocumentTracker(serviceAccessor));
 
 	// Register the context providers enabled by default.
 	ctx.get(DefaultContextProviders).add('ms-vscode.cpptools');
 
-	disposables.add(setupCompletionsExperimentationService(ctx));
+	disposables.add(setupCompletionsExperimentationService(serviceAccessor));
 
 	return disposables;
 }
 
-function uiKindToString(uiKind: UIKind): string {
+export function registerUnificationCommands(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+
+	disposables.add(registerEnablementCommands(accessor));
+	disposables.add(registerStatusBar(accessor));
+	disposables.add(registerDiagnosticCommands(accessor));
+	disposables.add(registerPanelSupport(accessor));
+
+	return disposables;
+}
+
+function registerEnablementCommands(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+	const instantiationService = accessor.get(IInstantiationService);
+
+	// Enable/Disable/Toggle completions commands [with Command Palette support]
+	function enable(id: string): IDisposable {
+		return registerCommandWrapper(accessor, id, async () => {
+			await instantiationService.invokeFunction(enableCompletions);
+		});
+	}
+	function disable(id: string): IDisposable {
+		return registerCommandWrapper(accessor, id, async () => {
+			await instantiationService.invokeFunction(disableCompletions);
+		});
+	}
+	function toggle(id: string): IDisposable {
+		return registerCommandWrapper(accessor, id, async () => {
+			await instantiationService.invokeFunction(toggleCompletions);
+		});
+	}
+
+	// To support command palette
+	disposables.add(enable(CMDEnableCompletionsChat));
+	disposables.add(disable(CMDDisableCompletionsChat));
+	disposables.add(toggle(CMDToggleCompletionsChat));
+
+	// To support keybindings/main functionality
+	disposables.add(enable(CMDEnableCompletionsClient));
+	disposables.add(disable(CMDDisableCompletionsClient));
+	disposables.add(toggle(CMDToggleCompletionsClient));
+
+	return disposables;
+}
+
+function registerStatusBar(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+
+	const instantiationService = accessor.get(IInstantiationService);
+	const copilotTokenManagerService = accessor.get(ICompletionsContextService).get(CopilotTokenManager);
+	const extensionStatusService = accessor.get(ICompletionsContextService).get(CopilotExtensionStatus);
+
+	// Status menu command [with Command Palette support]
+	function registerStatusMenu(menuId: string): IDisposable {
+		return registerCommandWrapper(accessor, menuId, async () => {
+			if (extensionStatusService.kind === 'Error') {
+				// Try for a fresh token to clear up the error, but don't block the UI for too long.
+				await Promise.race([
+					copilotTokenManagerService.primeToken(),
+					new Promise(resolve => setTimeout(resolve, 100)),
+				]);
+			}
+			instantiationService.createInstance(CopilotStatusBarPickMenu).showStatusMenu();
+		});
+	}
+	disposables.add(registerStatusMenu(CMDToggleStatusMenuClient));
+	disposables.add(registerStatusMenu(CMDToggleStatusMenuChat));
+
+	return disposables;
+}
+
+function registerDiagnosticCommands(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+
+	disposables.add(registerCommandWrapper(accessor, CMDOpenDocumentationClient, () => {
+		return env.openExternal(
+			URI.parse('https://docs.github.com/en/copilot/getting-started-with-github-copilot?tool=vscode')
+		);
+	}));
+	disposables.add(registerCommandWrapper(accessor, CMDOpenLogsClient, () => {
+		outputChannel.show();
+	}));
+
+	return disposables;
+}
+
+function uiKindToString(uiKind: UIKind): 'desktop' | 'web' {
 	switch (uiKind) {
 		case UIKind.Desktop:
 			return 'desktop';
 		case UIKind.Web:
 			return 'web';
 	}
+}
+
+export function registerCommandWrapper(accessor: ServicesAccessor, command: string, fn: (...args: unknown[]) => unknown): IDisposable {
+	const instantiationService = accessor.get(IInstantiationService);
+	return commands.registerCommand(command, async (...args: unknown[]) => {
+		try {
+			await fn(...args);
+		} catch (error) {
+			instantiationService.invokeFunction(exception, error, command);
+		}
+	});
 }

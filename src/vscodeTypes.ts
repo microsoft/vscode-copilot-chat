@@ -37,6 +37,7 @@ export import ChatResponseCommandButtonPart = vscode.ChatResponseCommandButtonPa
 export import ChatResponseWarningPart = vscode.ChatResponseWarningPart;
 export import ChatResponseMovePart = vscode.ChatResponseMovePart;
 export import ChatResponseExtensionsPart = vscode.ChatResponseExtensionsPart;
+export import ChatResponseExternalEditPart = vscode.ChatResponseExternalEditPart;
 export import ChatResponsePullRequestPart = vscode.ChatResponsePullRequestPart;
 export import ChatResponseMarkdownWithVulnerabilitiesPart = vscode.ChatResponseMarkdownWithVulnerabilitiesPart;
 export import ChatResponseCodeblockUriPart = vscode.ChatResponseCodeblockUriPart;

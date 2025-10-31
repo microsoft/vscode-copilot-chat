@@ -2,6 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from './context';
 import { LRUCacheMap } from './helpers/cache';
 import { TextDocumentIdentifier } from './textDocument';
@@ -28,8 +29,8 @@ export function sortByAccessTimes<T extends TextDocumentIdentifier>(docs: readon
  * Registers a listener on the `window.onDidChangeActiveTextEditor` event that records/updates the
  * access time of the document.
  */
-export const registerDocumentTracker = (ctx: ICompletionsContextService) =>
-	ctx.get(TextDocumentManager).onDidFocusTextDocument(e => {
+export const registerDocumentTracker = (accessor: ServicesAccessor) =>
+	accessor.get(ICompletionsContextService).get(TextDocumentManager).onDidFocusTextDocument(e => {
 		if (e.document) {
 			accessTimes.set(e.document.uri.toString(), Date.now());
 		}

@@ -39,6 +39,7 @@ export * from './networkingTypes';
 
 // Import what we need locally for this module's implementation
 import { FetchOptions, ReqHeaders, Response } from './networkingTypes';
+import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 
 /**
  * Encapsulates all the functionality related to making GET/POST/DELETE requests using
@@ -59,7 +60,7 @@ export abstract class Fetcher {
 }
 
 export function postRequest(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	url: string,
 	secretKey: string,
 	intent: string | undefined, // Must be passed in, even if explicitly `undefined`
@@ -70,10 +71,13 @@ export function postRequest(
 	timeout?: number,
 	modelProviderName?: string
 ): Promise<Response> {
+	const ctx = accessor.get(ICompletionsContextService);
+	const instantiationService = accessor.get(IInstantiationService);
+
 	const headers: ReqHeaders = {
 		...extraHeaders,
 		Authorization: `Bearer ${secretKey}`,
-		...editorVersionHeaders(ctx),
+		...instantiationService.invokeFunction(editorVersionHeaders),
 	};
 
 	// If we call byok endpoint, no need to add these headers
@@ -101,8 +105,7 @@ export function postRequest(
 		const abort = new AbortController();
 		cancelToken.onCancellationRequested(() => {
 			// abort the request when the token is canceled
-			telemetry(
-				ctx,
+			instantiationService.invokeFunction(telemetry,
 				'networking.cancelRequest',
 				TelemetryData.createAndMarkAsIssued({ headerRequestId: requestId })
 			);
@@ -115,7 +118,7 @@ export function postRequest(
 	const requestPromise = fetcher.fetch(url, request).catch((reason: unknown) => {
 		if (isInterruptedNetworkError(reason)) {
 			// disconnect and retry the request once if the connection was reset
-			telemetry(ctx, 'networking.disconnectAll');
+			instantiationService.invokeFunction(telemetry, 'networking.disconnectAll');
 			return fetcher.disconnectAll().then(() => {
 				return fetcher.fetch(url, request);
 			});

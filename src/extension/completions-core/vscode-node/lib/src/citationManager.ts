@@ -2,7 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ICompletionsContextService } from './context';
 import { IRange } from './textDocument';
 
 export interface IPCitationDetail {
@@ -21,11 +20,11 @@ export interface IPDocumentCitation {
 }
 
 export abstract class CitationManager {
-	abstract handleIPCodeCitation(ctx: ICompletionsContextService, citation: IPDocumentCitation): Promise<void>;
+	abstract handleIPCodeCitation(citation: IPDocumentCitation): Promise<void>;
 }
 
 export class NoOpCitationManager extends CitationManager {
-	async handleIPCodeCitation(ctx: ICompletionsContextService, citation: IPDocumentCitation): Promise<void> {
+	async handleIPCodeCitation(citation: IPDocumentCitation): Promise<void> {
 		// Do nothing
 	}
 }

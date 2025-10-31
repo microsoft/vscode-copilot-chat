@@ -5,6 +5,7 @@
 
 import type { Endpoints } from "@octokit/types";
 import { createServiceIdentifier } from '../../../util/common/services';
+import { decodeBase64 } from '../../../util/vs/base/common/buffer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
@@ -261,6 +262,16 @@ export interface IOctoKitService {
 	 * @returns A promise that resolves to true if the PR was successfully closed
 	 */
 	closePullRequest(owner: string, repo: string, pullNumber: number): Promise<boolean>;
+
+	/**
+	 * Get file content from a specific commit.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param ref The commit SHA, branch name, or tag
+	 * @param path The file path within the repository
+	 * @returns The file content as a string
+	 */
+	getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string>;
 }
 
 /**
@@ -347,5 +358,15 @@ export class BaseOctoKitService {
 
 	protected async closePullRequestWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<boolean> {
 		return closePullRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, owner, repo, pullNumber);
+	}
+
+	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
+		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, 'GET', token, undefined);
+
+		if (response?.content && response.encoding === 'base64') {
+			return decodeBase64(response.content.replace(/\n/g, '')).toString();
+		} else {
+			return '';
+		}
 	}
 }
