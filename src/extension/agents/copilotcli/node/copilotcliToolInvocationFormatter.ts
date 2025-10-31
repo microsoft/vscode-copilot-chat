@@ -8,13 +8,14 @@ import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
-import { isCopilotCliEditToolCall } from '../common/copilotcliTools';
 
 /**
  * CopilotCLI tool names
  */
 export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
+	Edit = 'edit',
+	Create = 'create',
 	View = 'view',
 	Bash = 'bash',
 	Think = 'think',
@@ -35,11 +36,50 @@ interface StrReplaceEditorArgs {
 	file_text?: string;
 }
 
+// @ts-ignore Will be used later.
+interface CreateArgs {
+	path: string;
+	file_text?: string;
+}
+
+// @ts-ignore Will be used later.
+interface ViewArgs {
+	path: string;
+	view_range?: [number, number];
+}
+
+// @ts-ignore Will be used later.
+interface EditArgs {
+	path: string;
+	old_str?: string;
+	new_str?: string;
+}
+
 interface BashArgs {
 	command: string;
 	description?: string;
 	sessionId?: string;
 	async?: boolean;
+}
+
+export function isCopilotCliEditToolCall(toolName: string, toolArgs: unknown): toolArgs is StrReplaceEditorArgs | EditArgs | CreateArgs {
+	if (toolName === CopilotCLIToolNames.StrReplaceEditor && typeof toolArgs === 'object' && toolArgs !== null) {
+		const args = toolArgs as StrReplaceEditorArgs;
+		if (args.command && args.command !== 'view') {
+			return true;
+		}
+	} else if (toolName === CopilotCLIToolNames.Edit || toolName === CopilotCLIToolNames.Create) {
+		return true;
+	}
+	return false;
+}
+
+export function getAffectedUrisForEditTool(toolName: string, toolArgs: unknown): URI[] {
+	if (isCopilotCliEditToolCall(toolName, toolArgs) && toolArgs.path) {
+		return [URI.file(toolArgs.path)];
+	}
+
+	return [];
 }
 
 export function stripReminders(text: string): string {
@@ -215,8 +255,8 @@ export function createCopilotCLIToolInvocation(
 	invocation.isComplete = false;
 
 	// Format based on tool name
-	if (toolName === CopilotCLIToolNames.StrReplaceEditor) {
-		formatStrReplaceEditorInvocation(invocation, args as StrReplaceEditorArgs);
+	if (toolName === CopilotCLIToolNames.StrReplaceEditor && (args as StrReplaceEditorArgs)?.command === 'view') {
+		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
 	} else if (toolName === CopilotCLIToolNames.Bash) {
 		formatBashInvocation(invocation, args as BashArgs);
 	} else if (toolName === CopilotCLIToolNames.View) {
@@ -235,35 +275,6 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrR
 	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 }
 
-function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
-	const command = args.command;
-	const path = args.path ?? '';
-	const display = path ? formatUriForMessage(path) : '';
-
-	switch (command) {
-		case 'view':
-			if (args.view_range) {
-				invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0} (lines {1}-{2})", display, args.view_range[0], args.view_range[1]));
-			} else {
-				invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0}", display));
-			}
-			break;
-		case 'str_replace':
-			invocation.invocationMessage = new MarkdownString(l10n.t("Edited {0}", display));
-			break;
-		case 'insert':
-			invocation.invocationMessage = new MarkdownString(l10n.t("Inserted text in {0}", display));
-			break;
-		case 'create':
-			invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
-			break;
-		case 'undo_edit':
-			invocation.invocationMessage = new MarkdownString(l10n.t("Undid edit in {0}", display));
-			break;
-		default:
-			invocation.invocationMessage = new MarkdownString(l10n.t("Modified {0}", display));
-	}
-}
 
 function formatBashInvocation(invocation: ChatToolInvocationPart, args: BashArgs): void {
 	const command = args.command ?? '';

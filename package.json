@@ -1076,6 +1076,76 @@
 				}
 			},
 			{
+				"name": "copilot_memory",
+				"toolReferenceName": "memory",
+				"displayName": "%copilot.tools.memory.name%",
+				"userDescription": "%copilot.tools.memory.description%",
+				"modelDescription": "Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).",
+				"icon": "$(database)",
+				"when": "config.github.copilot.chat.tools.memory.enabled",
+				"canBeReferencedInPrompt": true,
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"command": {
+							"type": "string",
+							"enum": [
+								"view",
+								"create",
+								"str_replace",
+								"insert",
+								"delete",
+								"rename"
+							],
+							"description": "The memory operation to perform: view (list/read), create (new file), str_replace (edit), insert (add content), delete (remove), rename (change filename)"
+						},
+						"path": {
+							"type": "string",
+							"description": "The path to the memory file (must start with /memories, e.g., /memories/notes.md or /memories/project/info.txt)"
+						},
+						"view_range": {
+							"type": "array",
+							"items": {
+								"type": "number"
+							},
+							"description": "Optional: view specific line range [start, end] for view command"
+						},
+						"file_text": {
+							"type": "string",
+							"description": "Content for create operation"
+						},
+						"old_str": {
+							"type": "string",
+							"description": "String to replace in str_replace operation"
+						},
+						"new_str": {
+							"type": "string",
+							"description": "Replacement string in str_replace operation"
+						},
+						"insert_line": {
+							"type": "number",
+							"description": "Line number for insert operation"
+						},
+						"insert_text": {
+							"type": "string",
+							"description": "Text to insert at specified line for insert operation"
+						},
+						"old_path": {
+							"type": "string",
+							"description": "Source path for rename operation"
+						},
+						"new_path": {
+							"type": "string",
+							"description": "Destination path for rename operation"
+						}
+					},
+					"required": [
+						"command"
+					]
+				}
+			},
+			{
 				"name": "copilot_editFiles",
 				"modelDescription": "This is a placeholder tool, do not use",
 				"userDescription": "Edit files",
@@ -3144,10 +3214,19 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.anthropic.webSearchTool.enabled": {
+					"github.copilot.chat.anthropic.tools.websearch.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.anthropic.webSearchTool.enabled%",
+						"markdownDescription": "%github.copilot.config.anthropic.tools.websearch.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.tools.memory.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.tools.memory.enabled%",
 						"tags": [
 							"experimental",
 							"onExp"
@@ -4428,7 +4507,7 @@
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
-		"@anthropic-ai/sdk": "^0.63.0",
+		"@anthropic-ai/sdk": "^0.68.0",
 		"@github/copilot": "^0.0.343",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",

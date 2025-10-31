@@ -114,9 +114,10 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 			return failFastPrompt;
 		}
 
+		const languageId = completionState.textDocument.detectedLanguageId;
 		const start = performance.now();
 		let contextItems;
-		if (this.instantiationService.invokeFunction(useContextProviderAPI, telemetryData)) {
+		if (this.instantiationService.invokeFunction(useContextProviderAPI, languageId, telemetryData)) {
 			contextItems = await this.resolveContext(completionId, completionState, telemetryData, cancellationToken);
 		}
 		const updateDataTimeMs = performance.now() - start;
@@ -131,7 +132,6 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 			componentStatistics: [],
 		};
 
-		const languageId = completionState.textDocument.detectedLanguageId;
 		const { maxPromptLength } = this.instantiationService.invokeFunction(getPromptOptions, telemetryData, languageId);
 		const allocation = this.getComponentAllocation(telemetryData);
 
@@ -155,7 +155,7 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 		const [prefix, trailingWs] = trimLastLine(renderedComponents.prefix!.text);
 
 		const end = performance.now();
-		const contextProvidersTelemetry = this.instantiationService.invokeFunction(useContextProviderAPI, telemetryData)
+		const contextProvidersTelemetry = this.instantiationService.invokeFunction(useContextProviderAPI, languageId, telemetryData)
 			? this.telemetrizeContext(
 				completionId,
 				aggregatedMetadata.componentStatistics,

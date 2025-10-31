@@ -5,11 +5,11 @@
 import type { CancellationToken, NotebookCell, NotebookDocument, Uri } from 'vscode';
 import { getLanguage } from '../../../util/common/languages';
 import { isUri } from '../../../util/common/types';
+import { findLast } from '../../../util/vs/base/common/arraysFind';
 import { EndOfLine, NotebookCellKind, Position } from '../../../vscodeTypes';
 import { BaseAlternativeNotebookContentProvider } from './alternativeContentProvider';
 import { AlternativeNotebookDocument } from './alternativeNotebookDocument';
 import { EOL, getCellIdMap, getDefaultLanguage, LineOfCellText, LineOfText, summarize, SummaryCell } from './helpers';
-import { findLast } from '../../../util/vs/base/common/arraysFind';
 
 const StartDelimter = `<VSCode.Cell `;
 const StartEmptyCellDelimter = `<VSCode.Cell>`;
@@ -170,6 +170,40 @@ export class AlternativeXmlNotebookContentProvider extends BaseAlternativeNotebo
 				}
 			}
 		}
+	}
+
+
+	public override getAlternativeDocumentFromText(text: string, notebook: NotebookDocument): AlternativeNotebookDocument {
+		const cellIdMap = getCellIdMap(notebook);
+		const cellOffsetMap: { offset: number; cell: NotebookCell }[] = [];
+
+		// Parse the text to find cell markers and build the offset map
+		const lines = text.split(EOL);
+		let currentOffset = 0;
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+
+			if (line.startsWith(StartDelimter) || line.startsWith(StartEmptyCellDelimter)) {
+				const cellParts = extractCellParts(line, undefined);
+				const cell = cellIdMap.get(cellParts.id) || notebook.getCells().find(c =>
+					c.document.languageId === cellParts.language &&
+					!cellOffsetMap.some(entry => entry.cell === c)
+				);
+
+				if (cell) {
+					// Calculate offset: skip the cell marker line
+					const eolLength = EOL.length;
+					const offset = currentOffset + line.length + eolLength;
+
+					cellOffsetMap.push({ offset, cell });
+				}
+			}
+
+			currentOffset += line.length + EOL.length;
+		}
+
+		return new AlternativeXmlDocument(text, cellOffsetMap, notebook);
 	}
 
 	public override getAlternativeDocument(notebook: NotebookDocument, excludeMarkdownCells?: boolean): AlternativeNotebookDocument {

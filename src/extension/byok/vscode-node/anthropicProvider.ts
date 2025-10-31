@@ -171,8 +171,20 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				})),
 			});
 
+		// Check if memory tool is present
+		const hasMemoryTool = (options.tools ?? []).some(tool => tool.name === 'memory');
+
 		// Build tools array, handling both standard tools and native Anthropic tools
-		const tools: Anthropic.Messages.ToolUnion[] = (options.tools ?? []).map(tool => {
+		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
+
+			// Handle native Anthropic memory tool
+			if (tool.name === 'memory') {
+				return {
+					name: 'memory',
+					type: 'memory_20250818'
+				} as Anthropic.Beta.BetaMemoryTool20250818;
+			}
+
 			if (!tool.inputSchema) {
 				return {
 					name: tool.name,
@@ -197,7 +209,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			};
 		});
 
-		// Check if web search is enabled and append web_search tool if not already present
+		// Check if web search is enabled and append web_search tool if not already present.
+		// We need to do this because there is no local web_search tool definition we can replace.
 		const webSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicWebSearchToolEnabled, this._experimentationService);
 		if (webSearchEnabled && !tools.some(tool => tool.name === 'web_search')) {
 			tools.push({
@@ -208,8 +221,15 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		}
 
 		const thinkingEnabled = this._enableThinking(model.id);
-		// Only use beta API when thinking is enabled (web_search works in regular API)
-		const useBeta = thinkingEnabled;
+
+		// Build betas array for beta API features
+		const betas: string[] = [];
+		if (thinkingEnabled) {
+			betas.push('interleaved-thinking-2025-05-14');
+		}
+		if (hasMemoryTool) {
+			betas.push('context-management-2025-06-27');
+		}
 
 		const baseParams = {
 			model: model.id,
@@ -220,7 +240,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			tools: tools.length > 0 ? tools : undefined,
 		};
 
-		const params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming = useBeta ? {
+		const params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming = betas.length > 0 ? {
 			...baseParams,
 			thinking: thinkingEnabled ? {
 				type: 'enabled',
@@ -231,7 +251,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		const wrappedProgress = new RecordedProgress(progress);
 
 		try {
-			const result = await this._makeRequest(wrappedProgress, params, useBeta, thinkingEnabled, token);
+			const result = await this._makeRequest(wrappedProgress, params, betas, token);
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
@@ -302,18 +322,17 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming, useBeta: boolean, thinkingEnabled: boolean, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
 		if (!this._anthropicAPIClient) {
 			return { ttft: undefined, usage: undefined };
 		}
 		const start = Date.now();
 		let ttft: number | undefined;
 
-		// Use beta API only when thinking is enabled (web_search works in regular API)
-		const stream = useBeta && thinkingEnabled
+		const stream = betas.length > 0
 			? await this._anthropicAPIClient.beta.messages.create({
 				...(params as Anthropic.Beta.Messages.MessageCreateParamsStreaming),
-				betas: ['interleaved-thinking-2025-05-14']
+				betas
 			})
 			: await this._anthropicAPIClient.messages.create(params as Anthropic.Messages.MessageCreateParamsStreaming);
 
