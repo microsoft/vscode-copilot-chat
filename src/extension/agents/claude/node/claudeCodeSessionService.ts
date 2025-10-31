@@ -36,10 +36,6 @@ type StoredSDKMessage = SDKMessage & {
 	readonly timestamp: Date;
 }
 
-type ClaudeSessionURI = URI & {
-	isAdditionalDirectory: boolean;
-}
-
 interface ParsedSessionMessage {
 	readonly raw: RawStoredSDKMessage;
 	readonly isMeta: boolean;
@@ -52,9 +48,8 @@ export const IClaudeCodeSessionService = createServiceIdentifier<IClaudeCodeSess
  */
 export interface IClaudeCodeSessionService {
 	readonly _serviceBrand: undefined;
-	getAllSessions(token: CancellationToken): Promise<readonly (IClaudeCodeSession & { workingDirectory?: string })[]>;
+	getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSession[]>;
 	getSession(resource: URI, token: CancellationToken): Promise<IClaudeCodeSession | undefined>;
-	getSessionsLocationPaths(): Promise<URI[]>;
 }
 
 export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
@@ -71,34 +66,6 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		@INativeEnvService private readonly _nativeEnvService: INativeEnvService
 	) { }
 
-	async getSessionsLocationPaths(): Promise<ClaudeSessionURI[]> {
-		const folders = this._workspace.getWorkspaceFolders();
-		const result: ClaudeSessionURI[] = [];
-
-		for (const folderUri of folders) {
-			const slug = this._computeFolderSlug(folderUri);
-			const projectsDir = URI.joinPath(this._nativeEnvService.userHome, '.claude', 'projects');
-			try {
-				const entries = await this._fileSystem.readDirectory(projectsDir);
-				const matchingDirs = entries
-					.filter(([name, type]: [string, FileType]) => type === FileType.Directory && name.startsWith(slug))
-					.map(([name]: [string, FileType]) => {
-						const uri = URI.joinPath(projectsDir, name);
-						return Object.assign(
-							uri,
-							{ isAdditionalDirectory: uri.fsPath !== URI.joinPath(this._nativeEnvService.userHome, '.claude', 'projects', slug).fsPath }
-						);
-					});
-
-				result.push(...matchingDirs);
-			} catch (e) {
-				this._logService.warn(`Failed to read .claude/projects directory: ${e}`);
-				result.push(Object.assign(URI.joinPath(projectsDir, slug), { isAdditionalDirectory: false }));
-			}
-		}
-		return result;
-	}
-
 	/**
 	 * Collect messages from all sessions in all workspace folders.
 	 * - Read all .jsonl files in the .claude/projects/<folder> dir
@@ -107,26 +74,29 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 * - Build message chains from leaf nodes
 	 * - These are the complete "sessions" that can be resumed
 	 */
-	async getAllSessions(token: CancellationToken): Promise<readonly (IClaudeCodeSession & { workingDirectory?: string })[]> {
-		const folders = await this.getSessionsLocationPaths();
-		const items: (IClaudeCodeSession & { workingDirectory?: string })[] = [];
+	async getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSession[]> {
+		const folders = this._workspace.getWorkspaceFolders();
+		const items: IClaudeCodeSession[] = [];
 
 		for (const folderUri of folders) {
 			if (token.isCancellationRequested) {
 				return items;
 			}
 
+			const slug = this._computeFolderSlug(folderUri);
+			const projectDirUri = URI.joinPath(this._nativeEnvService.userHome, '.claude', 'projects', slug);
+
 			// Check if we can use cached data
-			const cachedSessions = await this._getCachedSessionsIfValid(folderUri, token);
+			const cachedSessions = await this._getCachedSessionsIfValid(projectDirUri, token);
 			if (cachedSessions) {
-				items.push(...cachedSessions.map(session => Object.assign(session, { workingDirectory: folderUri.isAdditionalDirectory ? folderUri.fsPath : undefined })));
+				items.push(...cachedSessions);
 				continue;
 			}
 
 			// Cache miss or invalid - reload from disk
-			const freshSessions = await this._loadSessionsFromDisk(folderUri, token);
-			this._sessionCache.set(folderUri, freshSessions);
-			items.push(...freshSessions.map(session => Object.assign(session, { workingDirectory: folderUri.isAdditionalDirectory ? folderUri.fsPath : undefined })));
+			const freshSessions = await this._loadSessionsFromDisk(projectDirUri, token);
+			this._sessionCache.set(projectDirUri, freshSessions);
+			items.push(...freshSessions);
 		}
 
 		return items;
@@ -199,7 +169,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	/**
 	 * Load sessions from disk and update file modification time tracking
 	 */
-	private async _loadSessionsFromDisk(projectDirUri: ClaudeSessionURI, token: CancellationToken): Promise<readonly IClaudeCodeSession[]> {
+	private async _loadSessionsFromDisk(projectDirUri: URI, token: CancellationToken): Promise<readonly IClaudeCodeSession[]> {
 		let entries: [string, FileType][] = [];
 		try {
 			entries = await this._fileSystem.readDirectory(projectDirUri);
@@ -210,7 +180,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			return [];
 		}
 
-		const fileTasks: Promise<{ messages: Map<string, StoredSDKMessage>; summaries: Map<string, SummaryEntry>; fileUri: ClaudeSessionURI }>[] = [];
+		const fileTasks: Promise<{ messages: Map<string, StoredSDKMessage>; summaries: Map<string, SummaryEntry>; fileUri: URI }>[] = [];
 		for (const [name, type] of entries) {
 			if (type !== FileType.File) {
 				continue;
@@ -226,7 +196,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			}
 
 			const fileUri = URI.joinPath(projectDirUri, name);
-			fileTasks.push(this._getMessagesFromSessionWithUri(Object.assign(fileUri, { isAdditionalDirectory: projectDirUri.isAdditionalDirectory }), token));
+			fileTasks.push(this._getMessagesFromSessionWithUri(fileUri, token));
 		}
 
 		const results = await Promise.allSettled(fileTasks);
@@ -326,7 +296,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	/**
 	 * Wrapper for _getMessagesFromSession that includes the fileUri in the result
 	 */
-	private async _getMessagesFromSessionWithUri(fileUri: ClaudeSessionURI, token: CancellationToken): Promise<{ messages: Map<string, StoredSDKMessage>; summaries: Map<string, SummaryEntry>; fileUri: ClaudeSessionURI }> {
+	private async _getMessagesFromSessionWithUri(fileUri: URI, token: CancellationToken): Promise<{ messages: Map<string, StoredSDKMessage>; summaries: Map<string, SummaryEntry>; fileUri: URI }> {
 		const result = await this._getMessagesFromSession(fileUri, token);
 		return { ...result, fileUri };
 	}
