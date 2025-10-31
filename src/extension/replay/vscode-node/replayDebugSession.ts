@@ -240,14 +240,14 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			if (stepIx < steps.length) {
 				const step = steps[stepIx];
 				if (step.kind === 'userQuery') {
-					const match = line.match(`"prompt": "${step.query.trim()}`);
-					if (match) {
+					// Re-encode the query to match JSON representation in the file and remove surrounding quotes
+					const encodedQuery = JSON.stringify(step.query).slice(1, -1);
+					if (line.indexOf(`"prompt": "${encodedQuery}`) !== -1) {
 						step.line = index + 1;
 						stepIx++;
 					}
 				} else {
-					const match = line.match(`"id": "${step.id}"`);
-					if (match) {
+					if (line.indexOf(`"id": "${step.id}"`) !== -1) {
 						step.line = index + 1;
 						stepIx++;
 					}
