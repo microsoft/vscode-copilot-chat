@@ -14,7 +14,7 @@ export function parseReplay(content: string): ChatStep[] {
 
 	const steps: ChatStep[] = [];
 	for (const prompt of prompts) {
-		steps.push(...parsePrompt(prompt));
+		parsePrompt(prompt, steps);
 	}
 
 	let stepIx = 0;
@@ -41,8 +41,7 @@ export function parseReplay(content: string): ChatStep[] {
 	return steps;
 }
 
-function parsePrompt(prompt: { [key: string]: any }) {
-	const steps: ChatStep[] = [];
+function parsePrompt(prompt: { [key: string]: any }, steps: ChatStep[]) {
 	steps.push({
 		kind: 'userQuery',
 		query: prompt.prompt,
