@@ -451,7 +451,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 
 	constructor(
 		gitExtensionService: IGitExtensionService,
-		notebookService: INotebookService,
+		notebookService: INotebookService | undefined,
 		workspaceService: IWorkspaceService,
 		providerId: string,
 		doc: IObservableDocument,
@@ -753,6 +753,7 @@ export class TelemetrySender implements IDisposable {
 				"providerId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "NES provider identifier (StatelessNextEditProvider)" },
 				"modelName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the model used to provide the NES" },
 				"activeDocumentLanguageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "LanguageId of the active document" },
+				"mergeConflictExpanded": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If and how edit window expanded to include merge conflict lines ('normal' or 'only' or undefined if not expanded)" },
 				"acceptance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User acceptance of the edit" },
 				"disposalReason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reason for disposal of NES" },
 				"supersededByOpportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "UUID of the opportunity that superseded this edit" },
@@ -819,7 +820,9 @@ export class TelemetrySender implements IDisposable {
 				"diagnosticAlternativeImportsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of alternative imports for the diagnostic", "isMeasurement": true },
 				"diagnosticDistanceToUnknownDiagnostic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance to the unknown diagnostic", "isMeasurement": true },
 				"diagnosticDistanceToAlternativeDiagnostic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance to the alternative diagnostic", "isMeasurement": true },
-				"diagnosticHasAlternativeDiagnosticForSameRange": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether there is an alternative diagnostic for the same range", "isMeasurement": true }
+				"diagnosticHasAlternativeDiagnosticForSameRange": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether there is an alternative diagnostic for the same range", "isMeasurement": true },
+				"nextCursorLineDistance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance from next cursor line to current cursor line: newCursorLineNumber - currentCursorLineNumber", "isMeasurement": true },
+				"nextCursorLineError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error in the predicted next cursor line" }
 			}
 		*/
 		this._sendTelemetryToBoth(
@@ -829,6 +832,7 @@ export class TelemetrySender implements IDisposable {
 				providerId,
 				modelName,
 				activeDocumentLanguageId,
+				mergeConflictExpanded: telemetry.mergeConflictExpanded,
 				acceptance,
 				disposalReason,
 				supersededByOpportunityId,
@@ -841,7 +845,8 @@ export class TelemetrySender implements IDisposable {
 				pickedNES,
 				notebookType,
 				notebookId,
-				notebookCellLines
+				notebookCellLines,
+				nextCursorLineError: telemetry.nextCursorLineError,
 			},
 			{
 				requestN,
@@ -895,7 +900,8 @@ export class TelemetrySender implements IDisposable {
 				diagnosticAlternativeImportsCount: diagnosticAlternativeImportsCount,
 				diagnosticDistanceToUnknownDiagnostic: diagnosticDistanceToUnknownDiagnostic,
 				diagnosticDistanceToAlternativeDiagnostic: diagnosticDistanceToAlternativeDiagnostic,
-				diagnosticHasAlternativeDiagnosticForSameRange: this._boolToNum(diagnosticHasAlternativeDiagnosticForSameRange)
+				diagnosticHasAlternativeDiagnosticForSameRange: this._boolToNum(diagnosticHasAlternativeDiagnosticForSameRange),
+				nextCursorLineDistance: telemetry.nextCursorLineDistance,
 			}
 		);
 	}

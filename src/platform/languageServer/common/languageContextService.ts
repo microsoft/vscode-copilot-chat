@@ -24,6 +24,13 @@ export interface SnippetContext {
 	kind: ContextKind.Snippet;
 
 	/**
+	 * A unique ID for the context item, used to provide
+	 * detailed statistics about the item's usage. If an ID
+	 * is not provided, it will be generated randomly.
+	 */
+	id?: string;
+
+	/**
 	 * The priority of the snippet. Value range is [0, 1].
 	 */
 	priority: number;
@@ -49,6 +56,13 @@ export interface TraitContext {
 	 * The kind of the context.
 	 */
 	kind: ContextKind.Trait;
+
+	/**
+	 * A unique ID for the context item, used to provide
+	 * detailed statistics about the item's usage. If an ID
+	 * is not provided, it will be generated randomly.
+	 */
+	id?: string;
 
 	/**
 	 * The priority of the context.

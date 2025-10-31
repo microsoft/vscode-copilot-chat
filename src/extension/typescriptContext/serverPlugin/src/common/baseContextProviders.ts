@@ -8,7 +8,7 @@ const ts = TS();
 
 import { CodeSnippetBuilder } from './code';
 import {
-	AbstractContextRunnable, CacheScopes, ComputeCost, ContextProvider, type ComputeContextSession,
+	AbstractContextRunnable, CacheScopes, ComputeCost, ContextProvider, SnippetLocation, type ComputeContextSession,
 	type ContextResult,
 	type ContextRunnableCollector,
 	type ProviderComputeContext, type RequestContext, type RunnableResult,
@@ -38,7 +38,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 	private readonly sourceFile: tt.SourceFile;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, sourceFile: tt.SourceFile) {
-		super(session, languageService, context, 'CompilerOptionsRunnable', Priorities.Traits, ComputeCost.Low);
+		super(session, languageService, context, 'CompilerOptionsRunnable', SnippetLocation.Primary, Priorities.Traits, ComputeCost.Low);
 		this.sourceFile = sourceFile;
 	}
 
@@ -83,7 +83,7 @@ export abstract class FunctionLikeContextRunnable<T extends tt.FunctionLikeDecla
 	protected readonly sourceFile: tt.SourceFile;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, id: string, declaration: T, priority: number, cost: ComputeCost) {
-		super(session, languageService, context, id, priority, cost);
+		super(session, languageService, context, id, SnippetLocation.Primary, priority, cost);
 		this.declaration = declaration;
 		this.sourceFile = declaration.getSourceFile();
 	}
@@ -109,7 +109,9 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
-		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
+		const runnableResult = result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
+		runnableResult.debugPath = this.getDebugPath();
+		return runnableResult;
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -141,22 +143,30 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 		}
 	}
 
+	private getDebugPath(): string | undefined {
+		if (!this.session.host.isDebugging()) {
+			return undefined;
+		}
+		const { sourceFile, startPos, endPos } = SignatureRunnable.getSourceFileAndPositions(this.declaration);
+		const start = ts.getLineAndCharacterOfPosition(sourceFile, startPos);
+		const end = ts.getLineAndCharacterOfPosition(sourceFile, endPos);
+		return `SignatureRunnable:${sourceFile.fileName}:[${start.line},${start.character},${end.line},${end.character}]`;
+
+	}
+
 	private static computeId(session: ComputeContextSession, declaration: tt.FunctionLikeDeclarationBase): string {
-		const host = session.host;
+		const { sourceFile, startPos, endPos } = SignatureRunnable.getSourceFileAndPositions(declaration);
+		const hash = session.host.createHash('md5'); // CodeQL [SM04514] The 'md5' algorithm is used to compute a shorter string to represent a symbol in a map. It has no security implications.
+		hash.update(sourceFile.fileName);
+		hash.update(`[${startPos},${endPos}]`);
+		return `SignatureRunnable:${hash.digest('base64')}`;
+	}
+
+	private static getSourceFileAndPositions(declaration: tt.FunctionLikeDeclarationBase): { sourceFile: tt.SourceFile; startPos: number; endPos: number } {
 		const startPos = declaration.parameters.pos;
 		const endPos = declaration.type?.end ?? declaration.parameters.end;
-		if (host.isDebugging()) {
-			const sourceFile = declaration.getSourceFile();
-			const start = ts.getLineAndCharacterOfPosition(sourceFile, startPos);
-			const end = ts.getLineAndCharacterOfPosition(sourceFile, endPos);
-			return `SignatureRunnable:${declaration.getSourceFile().fileName}:[${start.line},${start.character},${end.line},${end.character}]`;
-		} else {
-			const hash = session.host.createHash('md5'); // CodeQL [SM04514] The 'md5' algorithm is used to compute a shorter string to represent a symbol in a map. It has no security implications.
-			const sourceFile = declaration.getSourceFile();
-			hash.update(sourceFile.fileName);
-			hash.update(`[${startPos},${endPos}]`);
-			return `SignatureRunnable:${hash.digest('base64')}`;
-		}
+		const sourceFile = declaration.getSourceFile();
+		return { sourceFile, startPos, endPos };
 	}
 }
 
@@ -168,7 +178,7 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 	private runnableResult: RunnableResult | undefined;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>, cacheScope: CacheScope | undefined, priority: number = Priorities.Locals) {
-		super(session, languageService, context, 'TypeOfLocalsRunnable', priority, ComputeCost.Medium);
+		super(session, languageService, context, 'TypeOfLocalsRunnable', SnippetLocation.Primary, priority, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 		this.excludes = excludes;
 		this.cacheScope = cacheScope;
@@ -239,8 +249,10 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 
 	private readonly tokenInfo: tss.TokenInfo;
 
+	private static SymbolsToInclude: number = ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Enum | ts.SymbolFlags.Function;
+
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, priority: number = Priorities.NeighborFiles) {
-		super(session, languageService, context, 'TypesOfNeighborFilesRunnable', priority, ComputeCost.Medium);
+		super(session, languageService, context, 'TypesOfNeighborFilesRunnable', SnippetLocation.Secondary, priority, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 	}
 
@@ -257,7 +269,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 		const symbols = this.symbols;
 		for (const neighborFile of this.context.neighborFiles) {
 			cancellationToken.throwIfCancellationRequested();
-			if (result.isTokenBudgetExhausted()) {
+			if (result.isSecondaryBudgetExhausted()) {
 				return;
 			}
 			const neighborSourceFile = this.getProgram().getSourceFile(neighborFile);
@@ -273,7 +285,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 				for (const member of sourceFileSymbol.exports) {
 					cancellationToken.throwIfCancellationRequested();
 					const memberSymbol = member[1];
-					if ((memberSymbol.flags & (ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Enum | ts.SymbolFlags.Function)) === 0) {
+					if ((memberSymbol.flags & TypesOfNeighborFilesRunnable.SymbolsToInclude) === 0) {
 						continue;
 					}
 					if (!this.handleSymbol(memberSymbol, member[0] as string, true)) {
@@ -304,7 +316,7 @@ export class ImportsRunnable extends AbstractContextRunnable {
 	]);
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>, priority: number = Priorities.Imports) {
-		super(session, languageService, context, 'ImportsRunnable', priority, ComputeCost.Medium);
+		super(session, languageService, context, 'ImportsRunnable', SnippetLocation.Secondary, priority, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 		this.excludes = excludes;
 		this.runnableResult = undefined;
@@ -459,8 +471,8 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 
 	private readonly expression: tt.Expression;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, expression: tt.Expression, priority: number = Priorities.Locals) {
-		super(session, languageService, context, 'TypeOfExpressionRunnable', priority, ComputeCost.Low);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, expression: tt.Expression, priority: number = Priorities.Expression) {
+		super(session, languageService, context, 'TypeOfExpressionRunnable', SnippetLocation.Primary, priority, ComputeCost.Low);
 		this.expression = expression;
 	}
 
@@ -521,17 +533,17 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 			if (returnTypeSymbol === undefined) {
 				continue;
 			}
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+			const snippetBuilder = new CodeSnippetBuilder(this.context, this.symbols, sourceFile);
 			snippetBuilder.addTypeSymbol(returnTypeSymbol, returnTypeSymbol.name);
-			result.addSnippet(snippetBuilder, undefined);
+			result.addSnippet(snippetBuilder, this.location, undefined);
 		}
 		const typeSymbol = type.getSymbol();
 		if (typeSymbol === undefined) {
 			return;
 		}
-		const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+		const snippetBuilder = new CodeSnippetBuilder(this.context, this.symbols, sourceFile);
 		snippetBuilder.addTypeSymbol(typeSymbol, typeSymbol.name);
-		result.addSnippet(snippetBuilder, undefined);
+		result.addSnippet(snippetBuilder, this.location, undefined);
 	}
 }
 

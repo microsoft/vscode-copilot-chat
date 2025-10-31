@@ -79,7 +79,7 @@ export class NewWorkspacePrompt extends PromptElement<NewWorkspacePromptProps, N
 		}
 
 		progress?.report(new ChatResponseProgressPart(l10n.t('Determining user intent...')));
-		const endpoint = await this.endPointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endPointProvider.getChatEndpoint('copilot-fast');
 		const { messages } = await buildNewWorkspaceMetaPrompt(this.instantiationService, endpoint, this.props.promptContext);
 
 		if (token.isCancellationRequested) {
@@ -105,7 +105,7 @@ export class NewWorkspacePrompt extends PromptElement<NewWorkspacePromptProps, N
 			}
 			else if (instruction.intent === 'Project') {
 				if (this.props.useTemplates) {
-					const result = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [instruction.question], { endpointType: 'capi' }, undefined);
+					const result = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [instruction.question], {}, undefined);
 					progress.report(new ChatResponseProgressPart(l10n.t('Searching project template index...')));
 					const similarProjects = await this.projectTemplatesIndex.nClosestValues(result.values[0], 1);
 					if (similarProjects.length > 0) {

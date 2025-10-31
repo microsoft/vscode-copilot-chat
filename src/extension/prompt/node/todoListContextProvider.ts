@@ -38,7 +38,7 @@ export class TodoListContextProvider implements ITodoListContextProvider {
 				.map(part => part.value)
 				.join('\n');
 
-			if (!todoList.trim()) {
+			if (!todoList.trim() || todoList === 'No todo list found.') {
 				return undefined;
 			}
 

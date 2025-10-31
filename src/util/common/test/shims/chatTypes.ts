@@ -57,6 +57,20 @@ export class ChatResponseThinkingProgressPart {
 	}
 }
 
+export class ChatResponseExternalEditPart {
+	applied: Thenable<void>;
+	didGetApplied!: () => void;
+
+	constructor(
+		public uris: vscode.Uri[],
+		public callback: () => Thenable<unknown>,
+	) {
+		this.applied = new Promise<void>((resolve) => {
+			this.didGetApplied = resolve;
+		});
+	}
+}
+
 export class ChatResponseProgressPart2 {
 	value: string;
 	task?: (progress: vscode.Progress<vscode.ChatResponseWarningPart>) => Thenable<string | void>;
@@ -287,6 +301,19 @@ export class LanguageModelTextPart2 extends LanguageModelTextPart {
 		this.audience = audience;
 	}
 }
+
+export class LanguageModelThinkingPart implements vscode.LanguageModelThinkingPart {
+	value: string | string[];
+	id?: string;
+	metadata?: { readonly [key: string]: any };
+
+	constructor(value: string | string[], id?: string, metadata?: { readonly [key: string]: any }) {
+		this.value = value;
+		this.id = id;
+		this.metadata = metadata;
+	}
+}
+
 export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 	mimeType: string;
 	data: Uint8Array<ArrayBufferLike>;
@@ -445,6 +472,12 @@ export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
 		readonly participant: string,
 		readonly command?: string
 	) { }
+}
+
+export enum ChatSessionStatus {
+	Failed = 0,
+	Completed = 1,
+	InProgress = 2
 }
 
 export class LanguageModelError extends Error {

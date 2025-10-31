@@ -26,21 +26,22 @@ import { CachedFunction } from '../../../util/vs/base/common/cache';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
-import { LRUCache } from '../../../util/vs/base/common/map';
 import { mapObservableArrayCached, runOnChange } from '../../../util/vs/base/common/observable';
 import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
+import { Range } from '../../../util/vs/editor/common/core/range';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency } from '../common/editRebase';
+import { jumpToPositionCommandId } from '../common/jumpToCursorPosition';
 import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
-import { INextEditResult, NextEditResult } from './nextEditResult';
+import { INextEditDisplayLocation, INextEditResult, NextEditResult } from './nextEditResult';
 
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
@@ -65,7 +66,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	private readonly _rejectionCollector = this._register(new RejectionCollector(this._workspace, s => this._logService.trace(s)));
 	private readonly _nextEditCache: NextEditCache;
-	private readonly _recentlyShownCache = new RecentlyShownCache();
 
 	private _pendingStatelessNextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit> | null = null;
 
@@ -100,7 +100,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		super();
 
 		this._tracer = createTracer(['NES', 'NextEditProvider'], (s) => this._logService.trace(s));
-		this._nextEditCache = new NextEditCache(this._workspace, this._logService);
+		this._nextEditCache = new NextEditCache(this._workspace, this._logService, this._configService, this._expService);
 
 		mapObservableArrayCached(this, this._workspace.openDocuments, (doc, store) => {
 			store.add(runOnChange(doc.value, (value) => {
@@ -170,12 +170,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		const documentAtInvocationTime = doc.value.get();
+		const selections = doc.selection.get();
 
 		const nesConfigs = this.determineNesConfigs(telemetryBuilder, logContext);
 
-		const recentlyShownCachedEdit = this._recentlyShownCache.get(docId, documentAtInvocationTime);
-		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, doc.selection.get(), nesConfigs);
-
+		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, selections, nesConfigs);
 		if (cachedEdit?.rejected) {
 			tracer.trace('cached edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejectedCache');
@@ -185,28 +184,16 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		let edit: StringReplacement | undefined;
+		let showLabel: boolean | undefined;
 		let currentDocument: StringText | undefined;
-		let throwingError: Error | undefined;
+		let error: NoNextEditReason | undefined;
 		let req: NextEditFetchRequest;
 		let targetDocumentId = docId;
 
 		let isRebasedCachedEdit = false;
 		let isSubsequentCachedEdit = false;
 
-		if (recentlyShownCachedEdit) {
-			tracer.trace('using recently shown cached edit');
-			edit = recentlyShownCachedEdit[0];
-			req = recentlyShownCachedEdit[1];
-			logContext.setIsCachedResult(req.log);
-			currentDocument = documentAtInvocationTime;
-			telemetryBuilder.setHeaderRequestId(req.headerRequestId);
-			telemetryBuilder.setIsFromCache();
-			// TODO
-			// telemetryBuilder.setSubsequentEditOrder(cachedEdit.subsequentN);
-			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
-			logContext.recordingBookmark = req.log.recordingBookmark;
-
-		} else if (cachedEdit) {
+		if (cachedEdit) {
 			tracer.trace('using cached edit');
 			edit = cachedEdit.rebasedEdit || cachedEdit.edit;
 			isRebasedCachedEdit = !!cachedEdit.rebasedEdit;
@@ -222,7 +209,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		} else {
 			tracer.trace(`fetching next edit with shouldExpandEditWindow=${shouldExpandEditWindow}`);
-			req = new NextEditFetchRequest(context.requestUuid, logContext, nesConfigs.debounceUseCoreRequestTime ? (context.requestIssuedDateTime ?? undefined) : undefined);
+			const providerRequestStartDateTime = (this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService)
+				? (context.requestIssuedDateTime ?? undefined)
+				: undefined);
+			req = new NextEditFetchRequest(context.requestUuid, logContext, providerRequestStartDateTime);
 			telemetryBuilder.setHeaderRequestId(req.headerRequestId);
 
 			const startVersion = doc.value.get();
@@ -236,9 +226,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			if (result.isError()) {
 				tracer.trace(`failed to fetch next edit ${result.err.kind}${(result.err as any).message ? ` (${(result.err as any).message})` : ''}`);
 				telemetryBuilder.setStatus(`noEdit:${result.err.kind}`);
-				if (result.err instanceof NoNextEditReason.FetchFailure || result.err instanceof NoNextEditReason.Unexpected) {
-					throwingError = result.err.error;
-				}
+				error = result.err;
 			} else {
 				targetDocumentId = result.val.docId ?? targetDocumentId;
 				const targetDoc = targetDocumentId ? this._workspace.getDocument(targetDocumentId)! : doc;
@@ -251,6 +239,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					logContext.setIsSkipped();
 				} else {
 					const suggestedNextEdit = result.val.rebasedEdit || result.val.edit;
+					showLabel = result.val.showLabel;
 					if (!suggestedNextEdit) {
 						tracer.trace('empty edits');
 						telemetryBuilder.setStatus('emptyEdits');
@@ -263,9 +252,32 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			}
 		}
 
-		if (throwingError) {
-			tracer.throws('has throwing error', throwingError);
-			throw throwingError;
+		if (error instanceof NoNextEditReason.FetchFailure || error instanceof NoNextEditReason.Unexpected) {
+			tracer.throws('has throwing error', error.error);
+			throw error.error;
+		} else if (error instanceof NoNextEditReason.NoSuggestions && error.nextCursorPosition !== undefined) {
+			tracer.trace('no suggestions but has next cursor position');
+			const transformer = documentAtInvocationTime.getTransformer();
+
+			const currentSelection = selections.at(0);
+
+			if (currentSelection) {
+				const currentCursorPosition = transformer.getRange(currentSelection);
+				const displayLocation: INextEditDisplayLocation = {
+					label: 'Jump to next edit',
+					range: currentCursorPosition,
+				};
+
+				const commandJumpToEditRange: vscode.Command = {
+					command: jumpToPositionCommandId,
+					title: "Jump to next edit",
+					arguments: [error.nextCursorPosition]
+				};
+
+				const edit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
+
+				return new NextEditResult(logContext.requestId, req, { edit, displayLocation, documentBeforeEdits: documentAtInvocationTime, action: commandJumpToEditRange });
+			}
 		}
 
 		const emptyResult = new NextEditResult(logContext.requestId, req, undefined);
@@ -289,15 +301,52 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return emptyResult;
 		}
 
+		logContext.setResult(RootedLineEdit.fromEdit(new RootedEdit(documentAtInvocationTime, new StringEdit([edit]))));
+
 		assert(currentDocument !== undefined, 'should be defined if edit is defined');
 
 		telemetryBuilder.setStatus('notAccepted'); // Acceptance pending.
-		const showRangePreference = this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit;
-		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
 
-		if (nesConfigs.isRecentlyShownCacheEnabled && !edit.isEmpty) {
-			tracer.trace('edit is not neutral');
-			this._recentlyShownCache.add(targetDocumentId, currentDocument, [edit, req]);
+		const showRangePreference = this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit;
+
+		let nextEditResult: NextEditResult;
+		const currentSelection = selections.at(0);
+		const transformer = documentAtInvocationTime.getTransformer();
+		const currentCursorPosition: Range | undefined = currentSelection ? transformer.getRange(currentSelection) : undefined;
+		const editPosition = transformer.getRange(edit.replaceRange);
+
+		if (!showLabel || !currentCursorPosition || /* is close enough to not show label */ currentCursorPosition.startLineNumber - 2 <= editPosition.startLineNumber && editPosition.endLineNumber <= currentCursorPosition.endLineNumber + 5) { // TODO@ulugbekna
+			tracer.trace('providing edit without label');
+			nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
+		} else {
+			tracer.trace('providing edit with label');
+			const lineWithCode = documentAtInvocationTime.getLineAt(editPosition.startLineNumber);
+			const trimmedLineWithCode = lineWithCode.trimStart();
+			const shortenedLineWithCode = trimmedLineWithCode.slice(0, 40);
+			const label = ['.ts', '.tsx', '.js', '.jsx'].includes(docId.extension) && this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionDisplayLine, this._expService)
+				? `Jump to line ${editPosition.startLineNumber} | ${shortenedLineWithCode.length === trimmedLineWithCode.length ? shortenedLineWithCode : trimmedLineWithCode + '...'}`
+				: `Jump to line ${editPosition.startLineNumber}`;
+			const displayLocation: INextEditDisplayLocation = {
+				label,
+				range: currentCursorPosition,
+				jumpToEdit: true,
+			};
+
+			// const commandJumpToEditRange: vscode.Command = {
+			// 	command: jumpToPositionCommandId,
+			// 	title: "Jump to next edit",
+			// 	arguments: [editPosition.getStartPosition()],
+			// };
+
+			// const noopEdit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
+			nextEditResult = new NextEditResult(logContext.requestId, req, {
+				edit, //: noopEdit,
+				showRangePreference,
+				documentBeforeEdits: currentDocument,
+				targetDocumentId,
+				displayLocation,
+				// action: commandJumpToEditRange
+			});
 		}
 
 		telemetryBuilder.setHasNextEdit(true);
@@ -317,12 +366,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	private determineNesConfigs(telemetryBuilder: LlmNESTelemetryBuilder, logContext: InlineEditRequestLogContext): INesConfigs {
-		const nesConfigs = {
+		const nesConfigs: INesConfigs = {
 			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
-			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
-			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
-			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
-			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
 		};
 
 		telemetryBuilder.setNESConfigs({ ...nesConfigs });
@@ -582,7 +627,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 									Math.max(reducedEndOffset, lineEndOffset)
 								);
 							}
-							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req, nesConfigs);
+							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req);
 						}
 					}
 					{
@@ -602,6 +647,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				const targetDocState = statePerDoc.get(result.val.targetDocument ?? curDocId);
 
 				const singleLineEdit = result.val.edit;
+				const showLabel = result.val.showLabel;
 				const lineEdit = new LineEdit([singleLineEdit]);
 				const edit = convertLineEditToEdit(lineEdit, targetDocState.docId);
 				const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
@@ -616,7 +662,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 				targetDocState.editsSoFar = targetDocState.editsSoFar.compose(rebasedEdit);
 
-				let cachedEdit;
+				let cachedEdit: CachedOrRebasedEdit | undefined;
 				if (rebasedEdit.replacements.length === 0) {
 					myTracer.trace(`WARNING: ${ithEdit} has no edits`);
 				} else if (rebasedEdit.replacements.length > 1) {
@@ -630,6 +676,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				}
 
 				if (!firstEdit.isSettled) {
+					if (cachedEdit) {
+						cachedEdit.showLabel = showLabel;
+					}
 					myTracer.trace('resolving firstEdit promise');
 					logContext.setResult(new RootedLineEdit(targetDocState.docContents, lineEdit)); // this's correct without rebasing because this's the first edit
 					firstEdit.complete(cachedEdit ? Result.ok(cachedEdit) : Result.error(new NoNextEditReason.Unexpected(new Error('No cached edit'))));
@@ -752,11 +801,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		if (shownDuration > 1000 && suggestion.result) {
 			// we can argue that the user had the time to review this
 			// so it wasn't an accidental rejection
-			this._recentlyShownCache.remove(suggestion.result.edit);
 			this._rejectionCollector.reject(docId, suggestion.result.edit);
-			if (this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService)) {
-				this._nextEditCache.rejectedNextEdit(suggestion.source.headerRequestId);
-			}
+			this._nextEditCache.rejectedNextEdit(suggestion.source.headerRequestId);
 		}
 
 		this._lastRejectionTime = Date.now();
@@ -775,7 +821,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public clearCache() {
 		this._nextEditCache.clear();
-		this._recentlyShownCache.clear();
 		this._rejectionCollector.clear();
 	}
 }
@@ -794,36 +839,5 @@ export class NextEditFetchRequest {
 		public readonly log: InlineEditRequestLogContext,
 		public readonly providerRequestStartDateTime: number | undefined,
 	) {
-	}
-}
-
-class RecentlyShownCache {
-	private readonly _cache = new LRUCache<string, [StringReplacement, NextEditFetchRequest]>(10);
-
-	add(docId: DocumentId, documentBeforeEdits: StringText, edit: [StringReplacement, NextEditFetchRequest]) {
-		const key = this._key(docId, documentBeforeEdits);
-		this._cache.set(key, edit);
-	}
-
-	get(docId: DocumentId, documentContent: StringText): [StringReplacement, NextEditFetchRequest] | undefined {
-		const key = this._key(docId, documentContent);
-		return this._cache.get(key);
-	}
-
-	remove(edit: StringReplacement): void {
-		for (const entry of this._cache) {
-			if (entry[1][0] === edit) {
-				this._cache.delete(entry[0]);
-				break;
-			}
-		}
-	}
-
-	clear() {
-		this._cache.clear();
-	}
-
-	private _key(docId: DocumentId, documentContent: StringText) {
-		return docId.uri + ';' + documentContent.value;
 	}
 }

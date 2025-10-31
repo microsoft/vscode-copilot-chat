@@ -17,11 +17,11 @@ import { promptForAPIKey } from './byokUIService';
 export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
 
 	private readonly _lmWrapper: CopilotLanguageModelWrapper;
-	private _apiKey: string | undefined;
+	protected _apiKey: string | undefined;
 	constructor(
 		public readonly authType: BYOKAuthType,
 		private readonly _name: string,
-		private readonly _baseUrl: string,
+		protected readonly _baseUrl: string,
 		protected _knownModels: BYOKKnownModels | undefined,
 		private readonly _byokStorageService: IBYOKStorageService,
 		@IFetcherService protected readonly _fetcherService: IFetcherService,
@@ -49,15 +49,16 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 			if (models.error) {
 				throw models.error;
 			}
+			this._logService.trace(`Fetched ${models.data.length} models from ${this._name}`);
 			const modelList: BYOKKnownModels = {};
 			for (const model of models.data) {
 				if (this._knownModels && this._knownModels[model.id]) {
 					modelList[model.id] = this._knownModels[model.id];
 				}
 			}
+			this._logService.trace(`Filtered to ${Object.keys(modelList).length} known models for ${this._name}`);
 			return modelList;
 		} catch (error) {
-			this._logService.error(error, `Error fetching available ${this._name} models`);
 			throw new Error(error.message ? error.message : error);
 		}
 	}
@@ -79,7 +80,8 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 					return [];
 				}
 			}
-		} catch {
+		} catch (e) {
+			this._logService.error(e, `Error fetching available ${this._name} models`);
 			return [];
 		}
 	}
@@ -114,5 +116,27 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 			this._apiKey = newAPIKey;
 			await this._byokStorageService.storeAPIKey(this._name, this._apiKey, BYOKAuthType.GlobalApiKey);
 		}
+	}
+
+	async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove' = 'update', modelId?: string): Promise<void> {
+		if (this.authType === BYOKAuthType.None) {
+			return;
+		}
+
+		if (action === 'remove') {
+			this._apiKey = undefined;
+			await this._byokStorageService.deleteAPIKey(this._name, this.authType, modelId);
+			this._logService.info(`BYOK: API key removed for provider ${this._name}`);
+			return;
+		}
+
+		const apiKey = process.env[envVarName];
+		if (!apiKey) {
+			throw new Error(`BYOK: Environment variable ${envVarName} not found or empty for API key management`);
+		}
+
+		this._apiKey = apiKey;
+		await this._byokStorageService.storeAPIKey(this._name, apiKey, this.authType, modelId);
+		this._logService.info(`BYOK: API key updated for provider ${this._name} from environment variable ${envVarName}`);
 	}
 }

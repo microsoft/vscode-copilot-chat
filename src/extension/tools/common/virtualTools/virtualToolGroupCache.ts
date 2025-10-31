@@ -7,20 +7,18 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
 import { LRUCache } from '../../../../util/vs/base/common/map';
 import { LanguageModelToolInformation } from '../../../../vscodeTypes';
-import { ISummarizedToolCategory, IToolGroupingCache } from './virtualToolTypes';
+import { ISummarizedToolCategory, ISummarizedToolCategoryUpdatable, IToolGroupingCache } from './virtualToolTypes';
 
 const GROUP_CACHE_SIZE = 128;
 const GROUP_CACHE_NAME = 'virtToolGroupCache';
 
 interface CachedValue {
-	groups: {
-		summary: string;
-		name: string;
-		tools: string[];
-	}[];
+	summary: string;
+	name: string;
 }
 
 interface StoredValue {
+	version: 2;
 	lru: [string, CachedValue][];
 }
 
@@ -28,14 +26,13 @@ export class ToolGroupingCache implements IToolGroupingCache {
 	declare readonly _serviceBrand: undefined;
 
 	private readonly _value = new LRUCache<string, CachedValue>(GROUP_CACHE_SIZE);
-	private readonly _inFlight = new Map<string, Promise<ISummarizedToolCategory[] | undefined>>();
 	private _changed = false;
 
 	constructor(
 		@IVSCodeExtensionContext private readonly _extContext: IVSCodeExtensionContext,
 	) {
 		const cached = _extContext.globalState.get<StoredValue>(GROUP_CACHE_NAME);
-		if (cached) {
+		if (cached?.version === 2) {
 			try {
 				cached.lru.forEach(([k, v]) => this._value.set(k, v));
 			} catch (e) {
@@ -47,7 +44,6 @@ export class ToolGroupingCache implements IToolGroupingCache {
 	public async clear() {
 		this._changed = false;
 		this._value.clear();
-		this._inFlight.clear();
 		await this._extContext.globalState.update(GROUP_CACHE_NAME, undefined);
 	}
 
@@ -58,49 +54,36 @@ export class ToolGroupingCache implements IToolGroupingCache {
 
 		this._changed = false;
 		const value: StoredValue = {
+			version: 2,
 			lru: this._value.toJSON(),
 		};
 
 		await this._extContext.globalState.update(GROUP_CACHE_NAME, value);
 	}
 
-	public async getOrInsert(tools: LanguageModelToolInformation[], factory: () => Promise<ISummarizedToolCategory[] | undefined>): Promise<ISummarizedToolCategory[] | undefined> {
+	public async getDescription(tools: LanguageModelToolInformation[]): Promise<ISummarizedToolCategoryUpdatable> {
 		const key = await this.getKey(tools);
-
 		const existing = this._value.get(key);
-		if (existing) {
-			this._changed = true;
-			return this.hydrate(tools, existing);
-		}
-
-		const promise = this._inFlight.get(key) || factory().then(result => {
-			if (result) {
+		return {
+			category: existing ? this.hydrate(tools, existing) : undefined,
+			tools,
+			update: (r) => {
 				this._changed = true;
 				this._value.set(key, {
-					groups: result.map(g => ({
-						summary: g.summary,
-						name: g.name,
-						tools: g.tools.map(t => t.name),
-					})),
+					summary: r.summary,
+					name: r.name,
 				});
 			}
-
-			return result;
-		}).finally(() => {
-			this._inFlight.delete(key);
-		});
-
-		this._inFlight.set(key, promise);
-
-		return promise;
+		};
 	}
 
-	private hydrate(tools: LanguageModelToolInformation[], { groups }: CachedValue): ISummarizedToolCategory[] {
-		return groups.map(g => ({
+
+	private hydrate(tools: LanguageModelToolInformation[], g: CachedValue): ISummarizedToolCategory {
+		return {
 			summary: g.summary,
 			name: g.name,
-			tools: tools.filter(t => g.tools.includes(t.name)),
-		}));
+			tools,
+		};
 	}
 
 	private async getKey(tools: LanguageModelToolInformation[]): Promise<string> {

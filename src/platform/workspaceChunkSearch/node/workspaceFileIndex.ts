@@ -143,6 +143,13 @@ const EXCLUDE_EXTENSIONS = new Set([
 	'jar', 'class', 'ear', 'war', // Java
 	'apk', 'dex', // Android
 	'phar', // PHP
+
+	// Certificates and private keys (security sensitive)
+	'pfx', 'p12', // PKCS#12 files
+	'pem', 'crt', 'cer', // Certificate files
+	'key', 'priv', // Private key files
+	'jks', 'keystore', // Java keystore files
+	'csr', // Certificate signing requests
 ]);
 
 const EXCLUDED_FOLDERS = [

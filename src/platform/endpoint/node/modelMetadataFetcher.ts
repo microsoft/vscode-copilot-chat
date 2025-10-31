@@ -12,7 +12,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IConfigurationService } from '../../configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
@@ -22,7 +22,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
-import { getMaxPromptTokens } from './chatEndpoint';
+import { ModelAliasRegistry } from '../common/modelAliasRegistry';
 
 export interface IModelMetadataFetcher {
 
@@ -121,8 +121,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
 		const chatModels: IChatModelInformation[] = [];
 		for (const [, models] of this._familyMap) {
-			for (let model of models) {
-				model = await this._hydrateResolvedModel(model);
+			for (const model of models) {
 				if (isChatModelInformation(model)) {
 					chatModels.push(model);
 				}
@@ -137,19 +136,25 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	 * @returns The resolved model with proper exp overrides and token counts
 	 */
 	private async _hydrateResolvedModel(resolvedModel: IModelAPIResponse | undefined): Promise<IModelAPIResponse> {
-		resolvedModel = resolvedModel ? await this._findExpOverride(resolvedModel) : undefined;
+		resolvedModel = resolvedModel ? await this._getExpModelOverride(resolvedModel) : undefined;
 		if (!resolvedModel) {
 			throw this._lastFetchError;
 		}
 
 		// If it's a chat model, update max prompt tokens based on settings + exp
 		if (isChatModelInformation(resolvedModel) && (resolvedModel.capabilities.limits)) {
-			resolvedModel.capabilities.limits.max_prompt_tokens = getMaxPromptTokens(this._configService, this._expService, resolvedModel);
+			resolvedModel.capabilities.limits.max_prompt_tokens = this._getMaxPromptTokensOverride(resolvedModel);
 			// Also ensure prompt tokens + output tokens <= context window. Output tokens is capped to max 15% input tokens
 			const outputTokens = Math.floor(Math.min(resolvedModel.capabilities.limits.max_output_tokens ?? 4096, resolvedModel.capabilities.limits.max_prompt_tokens * 0.15));
 			const contextWindow = resolvedModel.capabilities.limits.max_context_window_tokens ?? (outputTokens + resolvedModel.capabilities.limits.max_prompt_tokens);
 			resolvedModel.capabilities.limits.max_prompt_tokens = Math.min(resolvedModel.capabilities.limits.max_prompt_tokens, contextWindow - outputTokens);
 		}
+
+		// If it's a chat model, update showInModelPicker based on experiment overrides
+		if (isChatModelInformation(resolvedModel)) {
+			resolvedModel.model_picker_enabled = this._getShowInModelPickerOverride(resolvedModel);
+		}
+
 		if (resolvedModel.preview && !resolvedModel.name.endsWith('(Preview)')) {
 			// If the model is a preview model, we append (Preview) to the name
 			resolvedModel.name = `${resolvedModel.name} (Preview)`;
@@ -160,17 +165,16 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	public async getChatModelFromFamily(family: ChatEndpointFamily): Promise<IChatModelInformation> {
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
 		let resolvedModel: IModelAPIResponse | undefined;
+		family = ModelAliasRegistry.resolveAlias(family) as ChatEndpointFamily;
+
 		if (family === 'gpt-4.1') {
 			resolvedModel = this._familyMap.get('gpt-4.1')?.[0] ?? this._familyMap.get('gpt-4o')?.[0];
-		} else if (family === 'gpt-4o-mini') {
-			resolvedModel = this._familyMap.get('gpt-4o-mini')?.[0];
 		} else if (family === 'copilot-base') {
 			resolvedModel = this._copilotBaseModel;
 		} else {
 			resolvedModel = this._familyMap.get(family)?.[0];
 		}
-		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
-		if (!isChatModelInformation(resolvedModel)) {
+		if (!resolvedModel || !isChatModelInformation(resolvedModel)) {
 			throw new Error(`Unable to resolve chat model with family selection: ${family}`);
 		}
 		return resolvedModel;
@@ -191,7 +195,6 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		if (!resolvedModel) {
 			return;
 		}
-		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
 		if (!isChatModelInformation(resolvedModel)) {
 			throw new Error(`Unable to resolve chat model: ${apiModel.id},${apiModel.name},${apiModel.version},${apiModel.family}`);
 		}
@@ -200,9 +203,8 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 	public async getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation> {
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
-		let resolvedModel = this._familyMap.get(family)?.[0];
-		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
-		if (!isEmbeddingModelInformation(resolvedModel)) {
+		const resolvedModel = this._familyMap.get(family)?.[0];
+		if (!resolvedModel || !isEmbeddingModelInformation(resolvedModel)) {
 			throw new Error(`Unable to resolve embeddings model with family selection: ${family}`);
 		}
 		return resolvedModel;
@@ -267,7 +269,8 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 			const data: IModelAPIResponse[] = (await response.json()).data;
 			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
-			for (const model of data) {
+			for (let model of data) {
+				model = await this._hydrateResolvedModel(model);
 				const isCompletionModel = isCompletionModelInformation(model);
 				// The base model is whatever model is deemed "fallback" by the server
 				if (model.is_chat_fallback && !isCompletionModel) {
@@ -337,7 +340,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		}
 	}
 
-	private async _findExpOverride(resolvedModel: IModelAPIResponse): Promise<IModelAPIResponse | undefined> {
+	private async _getExpModelOverride(resolvedModel: IModelAPIResponse): Promise<IModelAPIResponse | undefined> {
 		// This is a mapping of model id to model id. Allowing us to override the request for any model with a different model
 		let modelExpOverrides: { [key: string]: string } = {};
 		const expResult = this._expService.getTreatmentVariable<string>('copilotchat.modelOverrides');
@@ -360,6 +363,57 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			resolvedModel = experimentalModel ?? resolvedModel;
 		}
 		return resolvedModel;
+	}
+
+	// get ChatMaxNumTokens from config for experimentation
+	private _getMaxPromptTokensOverride(chatModelInfo: IChatModelInformation): number {
+		// check debug override ChatMaxTokenNum
+		const chatMaxTokenNumOverride = this._configService.getConfig(ConfigKey.Internal.DebugOverrideChatMaxTokenNum); // can only be set by internal users
+		// Base 3 tokens for each OpenAI completion
+		let modelLimit = -3;
+		// if option is set, takes precedence over any other logic
+		if (chatMaxTokenNumOverride > 0) {
+			modelLimit += chatMaxTokenNumOverride;
+			return modelLimit;
+		}
+
+		let experimentalOverrides: Record<string, number> = {};
+		try {
+			const expValue = this._expService.getTreatmentVariable<string>('copilotchat.contextWindows');
+			experimentalOverrides = JSON.parse(expValue ?? '{}');
+		} catch {
+			// If the experiment service either is not available or returns a bad value we ignore the overrides
+		}
+
+		// If there's an experiment that takes precedence over what comes back from CAPI
+		if (experimentalOverrides[chatModelInfo.id]) {
+			modelLimit += experimentalOverrides[chatModelInfo.id];
+			return modelLimit;
+		}
+
+		// Check if CAPI has prompt token limits and return those
+		if (chatModelInfo.capabilities?.limits?.max_prompt_tokens) {
+			modelLimit += chatModelInfo.capabilities.limits.max_prompt_tokens;
+			return modelLimit;
+		} else if (chatModelInfo.capabilities.limits?.max_context_window_tokens) {
+			// Otherwise return the context window as the prompt tokens for cases where CAPI doesn't configure the prompt tokens
+			modelLimit += chatModelInfo.capabilities.limits.max_context_window_tokens;
+			return modelLimit;
+		}
+
+		return modelLimit;
+	}
+
+	private _getShowInModelPickerOverride(resolvedModel: IModelAPIResponse): boolean {
+		let modelPickerOverrides: Record<string, boolean> = {};
+		const expResult = this._expService.getTreatmentVariable<string>('copilotchat.showInModelPicker');
+		try {
+			modelPickerOverrides = JSON.parse(expResult || '{}');
+		} catch {
+			// No-op if parsing experiment fails
+		}
+
+		return modelPickerOverrides[resolvedModel.id] ?? resolvedModel.model_picker_enabled;
 	}
 }
 

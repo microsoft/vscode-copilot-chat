@@ -3,10 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LanguageModelTextPart, LanguageModelToolInformation } from 'vscode';
-import { HARD_TOOL_LIMIT, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
-import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
+import { HARD_TOOL_LIMIT } from '../../../../../platform/configuration/common/configurationService';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { shuffle } from '../../../../../util/vs/base/common/arrays';
@@ -28,11 +27,9 @@ describe('Virtual Tools - Grouping', () => {
 		constructor(
 			_tools: readonly LanguageModelToolInformation[],
 			@IInstantiationService _instantiationService: IInstantiationService,
-			@ITelemetryService _telemetryService: ITelemetryService,
-			@IConfigurationService _configurationService: IConfigurationService,
-			@IExperimentationService _experimentationService: IExperimentationService
+			@ITelemetryService _telemetryService: ITelemetryService
 		) {
-			super(_tools, _instantiationService, _telemetryService, _configurationService, _experimentationService);
+			super(_tools, _instantiationService, _telemetryService);
 			this._grouper = mockGrouper;
 		}
 
@@ -54,6 +51,9 @@ describe('Virtual Tools - Grouping', () => {
 
 	function createGroupingGrouper(): IToolCategorization {
 		return {
+			recomputeEmbeddingRankings() {
+				return Promise.resolve();
+			},
 			addGroups(query, root, tools, token) {
 				const groups = groupBy(tools, t => t.name.split('_')[0]);
 				root.contents = [];
@@ -66,7 +66,7 @@ describe('Virtual Tools - Grouping', () => {
 						`${VIRTUAL_TOOL_NAME_PREFIX}${groupName}`,
 						`Group of tools: ${groupName}`,
 						0,
-						{ groups: [], toolsetKey: '', preExpanded: true }
+						{ wasExpandedByDefault: true }
 					);
 					groupTool.contents = groupTools;
 					root.contents.push(groupTool);
@@ -78,12 +78,15 @@ describe('Virtual Tools - Grouping', () => {
 
 	function createSimpleGrouper(): IToolCategorization {
 		return {
+			recomputeEmbeddingRankings: (query, root, token) => Promise.resolve(),
 			addGroups(query, root, tools, token) {
 				root.contents = [...tools];
 				return Promise.resolve();
 			},
 		};
 	}
+
+
 
 	beforeEach(() => {
 		const testingServiceCollection = createExtensionUnitTestingServices();
@@ -409,6 +412,131 @@ describe('Virtual Tools - Grouping', () => {
 			// Since there are no virtual tools to collapse, should keep all tools
 			// even if exceeding TRIM_THRESHOLD
 			expect(result.length).toBe(150);
+		});
+	});
+
+	describe('cache invalidation integration', () => {
+		it('should trigger recomputeEmbeddingRankings during cache invalidation', async () => {
+			mockGrouper = createSimpleGrouper();
+			grouping = accessor.get(IInstantiationService).createInstance(TestToolGrouping, []);
+
+			const spy = vi.spyOn(mockGrouper, 'recomputeEmbeddingRankings');
+			const tools = [makeTool('test1'), makeTool('test2')];
+			grouping.tools = tools;
+
+			// Initial compute should not call recomputeEmbeddingRankings
+			await grouping.compute('query', CancellationToken.None);
+			expect(spy).not.toHaveBeenCalled();
+
+			// Cache invalidation should trigger recomputeEmbeddingRankings
+			grouping.didInvalidateCache();
+			await grouping.compute('query', CancellationToken.None);
+			expect(spy).toHaveBeenCalledWith('query', grouping['_root'], CancellationToken.None);
+		});
+	});
+
+	describe('canBeCollapsed metadata', () => {
+		it('should respect canBeCollapsed=false during trimming', async () => {
+			mockGrouper = {
+				recomputeEmbeddingRankings() {
+					return Promise.resolve();
+				},
+				addGroups(query, root, tools, token) {
+					// Create some virtual tools with different canBeCollapsed settings
+					const collapsibleGroup = new VirtualTool(
+						`${VIRTUAL_TOOL_NAME_PREFIX}collapsible`,
+						'Collapsible group',
+						0,
+						{ canBeCollapsed: true, wasExpandedByDefault: true }
+					);
+					collapsibleGroup.contents = tools.slice(0, 2);
+					collapsibleGroup.isExpanded = true;
+
+					const nonCollapsibleGroup = new VirtualTool(
+						`${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`,
+						'Non-collapsible group',
+						0,
+						{ canBeCollapsed: false, wasExpandedByDefault: true }
+					);
+					nonCollapsibleGroup.contents = tools.slice(2, 4);
+					nonCollapsibleGroup.isExpanded = true;
+
+					root.contents = [collapsibleGroup, nonCollapsibleGroup, ...tools.slice(4)];
+					return Promise.resolve();
+				},
+			};
+			grouping = accessor.get(IInstantiationService).createInstance(TestToolGrouping, []);
+
+			// Create many tools to trigger trimming
+			const manyTools: LanguageModelToolInformation[] = [];
+			for (let i = 0; i < TRIM_THRESHOLD + 10; i++) {
+				manyTools.push(makeTool(`tool_${i}`));
+			}
+			grouping.tools = manyTools;
+
+			// Initial compute
+			await grouping.compute('', CancellationToken.None);
+
+			// Force trimming
+			grouping.didInvalidateCache();
+			await grouping.compute('', CancellationToken.None);
+
+			// Non-collapsible group should still be expanded
+			const allResult = await grouping.computeAll('', CancellationToken.None);
+			const nonCollapsibleGroup = allResult.find(tool =>
+				tool instanceof VirtualTool && tool.name === `${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`
+			) as VirtualTool;
+			expect(nonCollapsibleGroup?.isExpanded).toBe(true);
+
+			// Collapsible group may have been collapsed - just verify it exists
+			const collapsibleGroup = allResult.find(tool =>
+				tool instanceof VirtualTool && tool.name === `${VIRTUAL_TOOL_NAME_PREFIX}collapsible`
+			) as VirtualTool;
+			expect(collapsibleGroup).toBeDefined();
+		});
+
+		it('should set lastUsedOnTurn to Infinity for non-collapsible tools during trimming attempts', async () => {
+			mockGrouper = {
+				recomputeEmbeddingRankings() {
+					return Promise.resolve();
+				},
+				addGroups(query, root, tools, token) {
+					const nonCollapsibleGroup = new VirtualTool(
+						`${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`,
+						'Non-collapsible group',
+						5, // Initial lastUsedOnTurn
+						{ canBeCollapsed: false, wasExpandedByDefault: true }
+					);
+					nonCollapsibleGroup.contents = tools.slice(0, 3);
+					nonCollapsibleGroup.isExpanded = true;
+
+					root.contents = [nonCollapsibleGroup, ...tools.slice(3)];
+					return Promise.resolve();
+				},
+			};
+			grouping = accessor.get(IInstantiationService).createInstance(TestToolGrouping, []);
+
+			// Create many tools to trigger trimming
+			const manyTools: LanguageModelToolInformation[] = [];
+			for (let i = 0; i < TRIM_THRESHOLD + 10; i++) {
+				manyTools.push(makeTool(`tool_${i}`));
+			}
+			grouping.tools = manyTools;
+
+			// Initial compute
+			await grouping.compute('', CancellationToken.None);
+
+			// Force trimming
+			grouping.didInvalidateCache();
+			await grouping.compute('', CancellationToken.None);
+
+			// Check that non-collapsible tool's lastUsedOnTurn was set to Infinity
+			const allResult = await grouping.computeAll('', CancellationToken.None);
+			const nonCollapsibleGroup = allResult.find(tool =>
+				tool instanceof VirtualTool && tool.name === `${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`
+			) as VirtualTool;
+			expect(nonCollapsibleGroup?.lastUsedOnTurn).toBe(Infinity);
+			expect(nonCollapsibleGroup?.isExpanded).toBe(true);
 		});
 	});
 

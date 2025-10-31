@@ -30,6 +30,46 @@ export class GitDiffService implements IGitDiffService {
 		return repositoryOrUri;
 	}
 
+	// Get the diff between the current state of the repository and the specified ref for each of the provided changes
+	async getWorkingTreeDiffsFromRef(repositoryOrUri: Repository | Uri, changes: Change[], ref: string): Promise<Diff[]> {
+		this._logService.debug(`[GitDiffService] Getting working tree diffs from ref ${ref} for ${changes.length} file(s)`);
+
+		const repository = await this._resolveRepository(repositoryOrUri);
+		if (!repository) {
+			this._logService.debug(`[GitDiffService] Repository not found for uri: ${repositoryOrUri.toString()}`);
+			return [];
+		}
+
+		const diffs: Diff[] = [];
+		for (const change of changes) {
+			if (await this._ignoreService.isCopilotIgnored(change.uri)) {
+				this._logService.debug(`[GitDiffService] Ignoring change due to content exclusion rule based on uri: ${change.uri.toString()}`);
+				continue;
+			}
+
+			let diff: string;
+			if (change.status === 7 /* UNTRACKED */) {
+				// For untracked files, generate a patch showing all content as additions
+				diff = await this._getUntrackedChangePatch(repository, change.uri);
+			} else {
+				// For all other changes, get diff from ref to current working tree state
+				diff = await repository.diffWith(ref, change.uri.fsPath);
+			}
+
+			diffs.push({
+				originalUri: change.originalUri,
+				renameUri: change.renameUri,
+				status: change.status,
+				uri: change.uri,
+				diff
+			});
+		}
+
+		this._logService.debug(`[GitDiffService] Working tree diffs from ref (after context exclusion): ${diffs.length} file(s)`);
+
+		return diffs;
+	}
+
 	async getChangeDiffs(repositoryOrUri: Repository | Uri, changes: Change[]): Promise<Diff[]> {
 		this._logService.debug(`[GitDiffService] Changes (before context exclusion): ${changes.length} file(s)`);
 

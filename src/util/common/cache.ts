@@ -134,6 +134,16 @@ export class LRUCache<T> {
 			}
 		}
 	}
+
+	entries(): Array<[string, T]> {
+		const entries: Array<[string, T]> = [];
+		let current = this._head.next;
+		while (current !== this._tail) {
+			entries.push([current!.key, current!.value]);
+			current = current!.next;
+		}
+		return entries;
+	}
 }
 
 export class DisposablesLRUCache<T extends IDisposable> implements IDisposable {

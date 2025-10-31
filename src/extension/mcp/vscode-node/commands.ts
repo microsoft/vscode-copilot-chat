@@ -257,7 +257,8 @@ Error: ${error}`);
 					toolInvocationToken: generateUuid() as never,
 					toolReferences: [],
 					tools: new Map(),
-					id: '1'
+					id: '1',
+					sessionId: ''
 				},
 				props: {
 					targetSchema: validateArgs.targetConfig,

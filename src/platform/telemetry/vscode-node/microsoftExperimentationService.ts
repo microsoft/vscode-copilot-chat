@@ -12,10 +12,10 @@ import { IEnvService } from '../../env/common/envService';
 import { packageJson } from '../../env/common/packagejson';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
-import { ITelemetryService } from '../common/telemetry';
-import { BaseExperimentationService, UserInfoStore } from '../node/baseExperimentationService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { FetcherService } from '../../networking/vscode-node/fetcherServiceImpl';
+import { ITelemetryService } from '../common/telemetry';
+import { BaseExperimentationService, UserInfoStore } from '../node/baseExperimentationService';
 
 function getTargetPopulation(isPreRelease: boolean): TargetPopulation {
 	if (isPreRelease) {
@@ -127,13 +127,24 @@ class GithubAccountFilterProvider implements IExperimentationFilterProvider {
 	constructor(private _userInfoStore: UserInfoStore, private _logService: ILogService) { }
 
 	getFilters(): Map<string, any> {
-		this._logService.trace(`[GithubAccountFilterProvider]::getFilters SKU: ${this._userInfoStore.sku}, Internal Org: ${this._userInfoStore.internalOrg}`);
+		this._logService.trace(`[GithubAccountFilterProvider]::getFilters SKU: ${this._userInfoStore.sku}, Internal Org: ${this._userInfoStore.internalOrg}, IsFcv1: ${this._userInfoStore.isFcv1}`);
 		const filters = new Map<string, any>();
 		filters.set('X-GitHub-Copilot-SKU', this._userInfoStore.sku);
 		filters.set('X-Microsoft-Internal-Org', this._userInfoStore.internalOrg);
+		filters.set('X-GitHub-Copilot-IsFcv1', this._userInfoStore.isFcv1 ? '1' : '0');
 		return filters;
 	}
 
+}
+
+class DevDeviceIdFilterProvider implements IExperimentationFilterProvider {
+	constructor(private _devDeviceId: string) { }
+
+	getFilters(): Map<string, any> {
+		const filters = new Map<string, any>();
+		filters.set('X-VSCode-DevDeviceId', this._devDeviceId);
+		return filters;
+	}
 }
 
 export class MicrosoftExperimentationService extends BaseExperimentationService {
@@ -163,7 +174,8 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 				new RelatedExtensionsFilterProvider(logService),
 				new CopilotExtensionsFilterProvider(logService),
 				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
-				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService)
+				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService),
+				new DevDeviceIdFilterProvider(vscode.env.devDeviceId),
 			);
 		};
 

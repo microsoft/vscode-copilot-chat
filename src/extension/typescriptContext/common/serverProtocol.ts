@@ -104,14 +104,15 @@ export namespace ContextItemReference {
 }
 
 export enum Priorities {
-	Locals = 1,
-	Inherited = 0.9,
-	Properties = 0.8,
-	Blueprints = 0.7,
-	Imports = 0.6,
-	NeighborFiles = 0.55,
-	Globals = 0.5,
-	Traits = 0.4,
+	Expression = 1.0,
+	Locals = 0.9,
+	Inherited = 0.8,
+	Traits = 0.7,
+	Blueprints = 0.6,
+	Properties = 0.5,
+	Imports = 0.4,
+	NeighborFiles = 0.3,
+	Globals = 0.2
 }
 
 export enum SpeculativeKind {
@@ -285,6 +286,11 @@ export type ContextRunnableResult = {
 	 * document and position.
 	 */
 	speculativeKind: SpeculativeKind;
+
+	/**
+	 * A human readable path to ease debugging.
+	 */
+	debugPath?: ContextRunnableResultId | undefined;
 }
 
 export type CachedContextRunnableResult = {
@@ -395,10 +401,12 @@ export type ContextRequestResult = {
 
 export interface ComputeContextRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
 	startTime: number;
-	timeBudget?: number;
-	tokenBudget?: number;
-	neighborFiles?: FilePath[];
-	clientSideRunnableResults?: CachedContextRunnableResult[];
+	timeBudget: number;
+	primaryCharacterBudget: number;
+	secondaryCharacterBudget: number;
+	includeDocumentation?: boolean;
+	neighborFiles?: readonly FilePath[];
+	clientSideRunnableResults?: readonly CachedContextRunnableResult[];
 }
 
 export interface ComputeContextRequest extends tt.server.protocol.Request {

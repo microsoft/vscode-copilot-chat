@@ -51,6 +51,7 @@ import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
+import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 
 export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
@@ -76,28 +77,8 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
 			allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5ApplyPatchExclusively, experimentationService)) {
+			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model)) {
 				allowTools[ToolName.EditFile] = false;
-			}
-
-			if (model.family === 'grok-code') {
-				const treatment = experimentationService.getTreatmentVariable<string>('copilotchat.hiddenModelBEditTool');
-				switch (treatment) {
-					case 'with_replace_string':
-						allowTools[ToolName.ReplaceString] = true;
-						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
-						allowTools[ToolName.EditFile] = true;
-						break;
-					case 'only_replace_string':
-						allowTools[ToolName.ReplaceString] = true;
-						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
-						allowTools[ToolName.EditFile] = false;
-						break;
-					case 'control':
-					default:
-						allowTools[ToolName.ReplaceString] = false;
-						allowTools[ToolName.EditFile] = true;
-				}
 			}
 
 			if (await modelCanUseReplaceStringExclusively(model)) {
@@ -105,16 +86,19 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 				allowTools[ToolName.EditFile] = false;
 			}
 
-			if (allowTools[ToolName.ReplaceString]) {
-				if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
-					allowTools[ToolName.MultiReplaceString] = true;
-				}
+			if (allowTools[ToolName.ReplaceString] && await modelSupportsMultiReplaceString(model)) {
+				allowTools[ToolName.MultiReplaceString] = true;
 			}
 		}
 
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
 		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
+		if (model.family === 'gpt-5-codex' || model.family.includes('grok-code')) {
+			allowTools[ToolName.CoreManageTodoList] = false;
+		}
+
+		allowTools[ToolName.EditFilesPlaceholder] = false;
 		if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
 			allowTools[ToolName.ApplyPatch] = false;
 			allowTools[ToolName.EditFile] = false;
@@ -171,10 +155,6 @@ export class AgentIntent extends EditCodeIntent {
 	private async listTools(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
 		const editingTools = await getAgentTools(this.instantiationService, request);
 		const grouping = this._toolGroupingService.create(conversation.sessionId, editingTools);
-		if (!grouping.isEnabled) {
-			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
-			return;
-		}
 
 		let str = 'Available tools:\n';
 		function printTool(tool: vscode.LanguageModelToolInformation | VirtualTool, indent = 0) {
@@ -218,7 +198,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 	public override readonly codeblocksRepresentEdits = false;
 
-	protected prompt: typeof AgentPrompt | typeof EditCodePrompt2 = AgentPrompt;
+	protected prompt: typeof AgentPrompt | typeof EditCodePrompt2 | typeof NotebookInlinePrompt = AgentPrompt;
 
 	protected extraPromptProps: Partial<AgentPromptProps> | undefined;
 

@@ -13,12 +13,14 @@ import { CompletionsCoreContribution } from '../../completions/vscode-node/compl
 import { CompletionsUnificationContribution } from '../../completions/vscode-node/completionsUnificationContribution';
 import { ConfigurationMigrationContribution } from '../../configuration/vscode-node/configurationMigration';
 import { ContextKeysContribution } from '../../contextKeys/vscode-node/contextKeys.contribution';
+import { PlaceholderViewContribution } from '../../contextKeys/vscode-node/placeholderView.contribution';
 import { AiMappedEditsContrib } from '../../conversation/vscode-node/aiMappedEditsContrib';
 import { ConversationFeature } from '../../conversation/vscode-node/conversationFeature';
 import { FeedbackCommandContribution } from '../../conversation/vscode-node/feedbackContribution';
 import { LanguageModelAccess } from '../../conversation/vscode-node/languageModelAccess';
 import { LogWorkspaceStateContribution } from '../../conversation/vscode-node/logWorkspaceState';
 import { RemoteAgentContribution } from '../../conversation/vscode-node/remoteAgents';
+import { LanguageModelProxyContrib } from '../../externalAgents/vscode-node/lmProxyContrib';
 import { WalkthroughCommandContribution } from '../../getting-started/vscode-node/commands';
 import * as newWorkspaceContribution from '../../getting-started/vscode-node/newWorkspace.contribution';
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
@@ -64,6 +66,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	chatBlockLanguageContribution,
 	asContributionFactory(LoggingActionsContrib),
 	asContributionFactory(ContextKeysContribution),
+	asContributionFactory(PlaceholderViewContribution),
 	asContributionFactory(CopilotDebugCommandContribution),
 	asContributionFactory(DebugCommandsContribution),
 	asContributionFactory(LanguageModelAccess),
@@ -108,5 +111,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(RelatedFilesProviderContribution),
 	asContributionFactory(BYOKContrib),
 	asContributionFactory(McpSetupCommands),
+	asContributionFactory(LanguageModelProxyContrib),
 	newWorkspaceContribution,
 ];

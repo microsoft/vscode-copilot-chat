@@ -21,6 +21,19 @@ export type CustomModel = {
 	owner_name: string;
 };
 
+export type EndpointEditToolName = 'find-replace' | 'multi-find-replace' | 'apply-patch' | 'code-rewrite';
+
+const allEndpointEditToolNames: ReadonlySet<EndpointEditToolName> = new Set([
+	'find-replace',
+	'multi-find-replace',
+	'apply-patch',
+	'code-rewrite'
+]);
+
+export function isEndpointEditToolName(toolName: string): toolName is EndpointEditToolName {
+	return allEndpointEditToolNames.has(toolName as EndpointEditToolName);
+}
+
 export type IChatModelCapabilities = {
 	type: 'chat';
 	family: string;
@@ -68,6 +81,8 @@ export interface IModelAPIResponse {
 	is_chat_default: boolean;
 	is_chat_fallback: boolean;
 	version: string;
+	warning_messages?: { code: string; message: string }[];
+	info_messages?: { code: string; message: string }[];
 	billing?: { is_premium: boolean; multiplier: number; restricted_to?: string[] };
 	capabilities: IChatModelCapabilities | ICompletionModelCapabilities | IEmbeddingModelCapabilities;
 	supported_endpoints?: ModelSupportedEndpoint[];
@@ -77,6 +92,7 @@ export interface IModelAPIResponse {
 export type IChatModelInformation = IModelAPIResponse & {
 	capabilities: IChatModelCapabilities;
 	urlOrRequestMetadata?: string | RequestMetadata;
+	requestHeaders?: Readonly<Record<string, string>>;
 };
 
 export function isChatModelInformation(model: IModelAPIResponse): model is IChatModelInformation {
@@ -97,7 +113,7 @@ export function isCompletionModelInformation(model: IModelAPIResponse): model is
 	return model.capabilities.type === 'completion';
 }
 
-export type ChatEndpointFamily = 'gpt-4.1' | 'gpt-4o-mini' | 'copilot-base';
+export type ChatEndpointFamily = 'gpt-4.1' | 'gpt-5-mini' | 'copilot-base' | 'copilot-fast';
 export type EmbeddingsEndpointFamily = 'text3small' | 'metis';
 
 export interface IEndpointProvider {

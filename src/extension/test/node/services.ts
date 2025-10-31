@@ -14,6 +14,11 @@ import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/re
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
+import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
+import { IGitService } from '../../../platform/git/common/gitService';
+import { NullGitDiffService } from '../../../platform/git/common/nullGitDiffService';
+import { NullGitExtensionService } from '../../../platform/git/common/nullGitExtensionService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
@@ -30,6 +35,7 @@ import { SimulationAlternativeNotebookContentService, SimulationNotebookService,
 import { NullTestProvider } from '../../../platform/testing/common/nullTestProvider';
 import { TestLogService } from '../../../platform/testing/common/testLogService';
 import { ITestProvider } from '../../../platform/testing/common/testProvider';
+import { IGithubAvailableEmbeddingTypesService, MockGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
@@ -46,9 +52,11 @@ import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMa
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
 import { IToolsService } from '../../tools/common/toolsService';
+import { IToolEmbeddingsComputer } from '../../tools/common/virtualTools/toolEmbeddingsComputer';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import '../../tools/node/allTools';
 import { TestToolsService } from '../../tools/node/test/testToolsService';
+import { TestToolEmbeddingsComputer } from '../../tools/test/node/virtualTools/testVirtualTools';
 
 export interface ISimulationModelConfig {
 	chatModel?: string;
@@ -98,9 +106,14 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(ITerminalService, new SyncDescriptor(NullTerminalService));
 	testingServiceCollection.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
+	testingServiceCollection.define(IToolEmbeddingsComputer, new SyncDescriptor(TestToolEmbeddingsComputer));
 	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(MockLanguageModelServer));
 	testingServiceCollection.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
+	testingServiceCollection.define(IGitService, new SyncDescriptor(NullGitExtensionService));
+	testingServiceCollection.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
+	testingServiceCollection.define(IGitDiffService, new SyncDescriptor(NullGitDiffService));
+	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(MockGithubAvailableEmbeddingTypesService));
 	return testingServiceCollection;
 }

@@ -22,10 +22,6 @@ parameters:
     displayName: 🚀 Publish Pre-Release
     type: boolean
     default: false
-  - name: mixinCompletionsCore
-    displayName: Mixin Completions Core
-    type: boolean
-    default: true
 
 extends:
   template: azure-pipelines/extension/pre-release.yml@templates
@@ -44,6 +40,28 @@ extends:
       - task: NodeTool@0
         inputs:
           versionSpec: '22.14.x'
+
+      - task: AzureKeyVault@2
+        displayName: "Azure Key Vault: Get Secrets"
+        inputs:
+          azureSubscription: vscode
+          KeyVaultName: vscode-build-secrets
+          SecretsFilter: "github-distro-mixin-password"
+
+      - pwsh: |
+          "machine github.com`nlogin vscode`npassword $(github-distro-mixin-password)" | Out-File "$Home/_netrc" -Encoding ASCII
+        condition: and(succeeded(), contains(variables['Agent.OS'], 'windows'))
+        displayName: Setup distro auth (Windows)
+
+      - script: |
+          mkdir -p .build
+          cat << EOF | tee ~/.netrc .build/.netrc > /dev/null
+          machine github.com
+          login vscode
+          password $(github-distro-mixin-password)
+          EOF
+        condition: and(succeeded(), not(contains(variables['Agent.OS'], 'windows')))
+        displayName: Setup distro auth (non-Windows)
 
       - task: Cache@2
         inputs:
@@ -80,13 +98,8 @@ extends:
         displayName: Create build cache archive
 
       - pwsh: |
-          # Get the OAuth token from the git config
-          $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
-          $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
-          $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
-
           # Clone the vscode-capi repository
-          git clone https://vscode:$oauthToken@github.com/microsoft/vscode-capi.git --depth 1 ../vscode-capi
+          git clone https://github.com/microsoft/vscode-capi.git --depth 1 ../vscode-capi
 
           # Run the mixin script
           Push-Location ../vscode-capi
@@ -96,21 +109,6 @@ extends:
           Pop-Location
           Remove-Item -Recurse -Force ../vscode-capi
         displayName: mixin
-
-      - pwsh: |
-          $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
-          $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
-          $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
-          $PackageJson = Get-Content -Path package.json -Raw | ConvertFrom-Json
-          $CompletionsCoreVersion = $PackageJson.completionsCore
-          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
-          pushd src/extension/completions-core
-          git checkout $CompletionsCoreVersion
-          popd
-          rm src/extension/completions/vscode-node/completionsCoreContribution.ts
-          mv src/extension/completions/vscode-node/completionsCoreContribution.ts.txt src/extension/completions/vscode-node/completionsCoreContribution.ts
-        condition: and(succeeded(), eq(${{ parameters.mixinCompletionsCore }}, true))
-        displayName: Mixin the completions core repo
 
       - script: npm run build -- --prerelease
         displayName: npm run build
@@ -130,6 +128,28 @@ extends:
       - task: NodeTool@0
         inputs:
           versionSpec: '22.x'
+
+      - task: AzureKeyVault@2
+        displayName: "Azure Key Vault: Get Secrets"
+        inputs:
+          azureSubscription: vscode
+          KeyVaultName: vscode-build-secrets
+          SecretsFilter: "github-distro-mixin-password"
+
+      - pwsh: |
+          "machine github.com`nlogin vscode`npassword $(github-distro-mixin-password)" | Out-File "$Home/_netrc" -Encoding ASCII
+        condition: and(succeeded(), contains(variables['Agent.OS'], 'windows'))
+        displayName: Setup distro auth (Windows)
+
+      - script: |
+          mkdir -p .build
+          cat << EOF | tee ~/.netrc .build/.netrc > /dev/null
+          machine github.com
+          login vscode
+          password $(github-distro-mixin-password)
+          EOF
+        condition: and(succeeded(), not(contains(variables['Agent.OS'], 'windows')))
+        displayName: Setup distro auth (non-Windows)
 
       - task: Cache@2
         inputs:
@@ -176,21 +196,6 @@ extends:
       - script: npm run setup:dotnet
         displayName: Install dotnet cli
 
-      - pwsh: |
-          $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
-          $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
-          $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
-          $PackageJson = Get-Content -Path package.json -Raw | ConvertFrom-Json
-          $CompletionsCoreVersion = $PackageJson.completionsCore
-          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
-          pushd src/extension/completions-core
-          git checkout $CompletionsCoreVersion
-          popd
-          rm src/extension/completions/vscode-node/completionsCoreContribution.ts
-          mv src/extension/completions/vscode-node/completionsCoreContribution.ts.txt src/extension/completions/vscode-node/completionsCoreContribution.ts
-        condition: and(succeeded(), eq(${{ parameters.mixinCompletionsCore }}, true))
-        displayName: Mixin the completions core repo
-
       - script: npm run typecheck
         displayName: npm run typecheck
 
@@ -208,6 +213,12 @@ extends:
 
       - script: xvfb-run -a npm run test:extension
         displayName: Run extension tests using VS Code
+
+      - script: npm run test:prompt
+        displayName: Run Completions Core prompt tests
+
+      - script: xvfb-run -a npm run test:completions-core
+        displayName: Run Completions Core lib tests using VS Code
 
       - script: xvfb-run -a npm run test:sanity
         displayName: Run extension sanity tests using VS Code

@@ -41,10 +41,10 @@ suite('Post Report Conversation Callback', () => {
 			}],
 			postReportFn);
 
-		responseSource.emitOne({ text: '', delta: { text: 'one' } });
-		responseSource.emitOne({ text: '', delta: { text: ' start ' } });
-		responseSource.emitOne({ text: '', delta: { text: 'two' } });
-		responseSource.emitOne({ text: '', delta: { text: ' end' } });
+		responseSource.emitOne({ delta: { text: 'one' } });
+		responseSource.emitOne({ delta: { text: ' start ' } });
+		responseSource.emitOne({ delta: { text: 'two' } });
+		responseSource.emitOne({ delta: { text: ' end' } });
 		responseSource.resolve();
 
 		await testObj.doProcessResponse(responseSource.asyncIterable, stream, CancellationToken.None);
@@ -64,9 +64,9 @@ suite('Post Report Conversation Callback', () => {
 			}],
 			postReportFn);
 
-		responseSource.emitOne({ text: '', delta: { text: 'one sta' } });
-		responseSource.emitOne({ text: '', delta: { text: 'rt' } });
-		responseSource.emitOne({ text: '', delta: { text: ' two end' } });
+		responseSource.emitOne({ delta: { text: 'one sta' } });
+		responseSource.emitOne({ delta: { text: 'rt' } });
+		responseSource.emitOne({ delta: { text: ' two end' } });
 		responseSource.resolve();
 
 		await testObj.doProcessResponse(responseSource.asyncIterable, stream, CancellationToken.None);
@@ -86,10 +86,10 @@ suite('Post Report Conversation Callback', () => {
 			}],
 			postReportFn);
 
-		responseSource.emitOne({ text: '', delta: { text: 'one ', codeVulnAnnotations: annotations } });
-		responseSource.emitOne({ text: '', delta: { text: 'sta' } });
-		responseSource.emitOne({ text: '', delta: { text: 'rt two' } });
-		responseSource.emitOne({ text: '', delta: { text: ' end' } });
+		responseSource.emitOne({ delta: { text: 'one ', codeVulnAnnotations: annotations } });
+		responseSource.emitOne({ delta: { text: 'sta' } });
+		responseSource.emitOne({ delta: { text: 'rt two' } });
+		responseSource.emitOne({ delta: { text: ' end' } });
 		responseSource.resolve();
 
 		await testObj.doProcessResponse(responseSource.asyncIterable, stream, CancellationToken.None);
@@ -111,10 +111,10 @@ suite('Post Report Conversation Callback', () => {
 			postReportFn,
 		);
 
-		responseSource.emitOne({ text: '', delta: { text: 'one' } });
-		responseSource.emitOne({ text: '', delta: { text: ' start ' } });
-		responseSource.emitOne({ text: '', delta: { text: 'two' } });
-		responseSource.emitOne({ text: '', delta: { text: ' ' } });
+		responseSource.emitOne({ delta: { text: 'one' } });
+		responseSource.emitOne({ delta: { text: ' start ' } });
+		responseSource.emitOne({ delta: { text: 'two' } });
+		responseSource.emitOne({ delta: { text: ' ' } });
 		responseSource.resolve();
 
 		await testObj.doProcessResponse(responseSource.asyncIterable, stream, CancellationToken.None);
@@ -135,10 +135,10 @@ suite('Post Report Conversation Callback', () => {
 			],
 			postReportFn);
 
-		responseSource.emitOne({ text: '', delta: { text: 'this is test text\n\n' } });
-		responseSource.emitOne({ text: '', delta: { text: 'eeep start\n\n' } });
-		responseSource.emitOne({ text: '', delta: { text: 'test test test test 123456' } });
-		responseSource.emitOne({ text: '', delta: { text: 'end\n\nhello' } });
+		responseSource.emitOne({ delta: { text: 'this is test text\n\n' } });
+		responseSource.emitOne({ delta: { text: 'eeep start\n\n' } });
+		responseSource.emitOne({ delta: { text: 'test test test test 123456' } });
+		responseSource.emitOne({ delta: { text: 'end\n\nhello' } });
 		responseSource.resolve();
 
 		await testObj.doProcessResponse(responseSource.asyncIterable, stream, CancellationToken.None);
@@ -160,7 +160,7 @@ suite('Post Report Conversation Callback', () => {
 			postReportFn);
 
 
-		responseSource.emitOne({ text: '', delta: { text: `I'm sorry, but as an AI programming assistant, I'm here to provide assistance with software development topics, specifically related to Visual Studio Code. I'm not equipped to provide a definition of a computer. [RESPONSE END]` } });
+		responseSource.emitOne({ delta: { text: `I'm sorry, but as an AI programming assistant, I'm here to provide assistance with software development topics, specifically related to Visual Studio Code. I'm not equipped to provide a definition of a computer. [RESPONSE END]` } });
 		responseSource.resolve();
 
 		await testObj.doProcessResponse(responseSource.asyncIterable, stream, CancellationToken.None);

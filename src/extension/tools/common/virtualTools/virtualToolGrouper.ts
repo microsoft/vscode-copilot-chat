@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
-import { CHAT_MODEL, ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEmbeddingsComputer } from '../../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -13,23 +13,24 @@ import { ITelemetryService } from '../../../../platform/telemetry/common/telemet
 import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { groupBy } from '../../../../util/vs/base/common/collections';
-import { Iterable } from '../../../../util/vs/base/common/iterator';
 import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolExtensionSource, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
-import { EMBEDDING_TYPE_FOR_TOOL_GROUPING, ToolEmbeddingsComputer } from './toolEmbeddingsCache';
-import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
-import { divideToolsIntoExistingGroups, divideToolsIntoGroups, summarizeToolGroup } from './virtualToolSummarizer';
-import { ISummarizedToolCategory, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
+import { BuiltInToolGroupHandler } from './builtInToolGroupHandler';
+import { EMBEDDING_TYPE_FOR_TOOL_GROUPING } from './preComputedToolEmbeddingsCache';
+import { IToolEmbeddingsComputer } from './toolEmbeddingsComputer';
+import { EMBEDDINGS_GROUP_NAME, VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
 import * as Constant from './virtualToolsConstants';
+import { TOOLS_AND_GROUPS_LIMIT } from './virtualToolsConstants';
+import { describeBulkToolGroups } from './virtualToolSummarizer';
+import { ISummarizedToolCategory, ISummarizedToolCategoryUpdatable, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
 
-const BUILT_IN_GROUP = 'builtin';
-const CATEGORIZATION_ENDPOINT = CHAT_MODEL.GPT4OMINI;
+const CATEGORIZATION_ENDPOINT = 'copilot-fast';
 const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of tools. The category of tools is described as follows:\n\n';
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
 export class VirtualToolGrouper implements IToolCategorization {
-	private readonly toolEmbeddingsComputer: ToolEmbeddingsComputer;
+	private builtInToolGroupHandler: BuiltInToolGroupHandler;
 
 	constructor(
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
@@ -39,14 +40,29 @@ export class VirtualToolGrouper implements IToolCategorization {
 		@IEmbeddingsComputer private readonly embeddingsComputer: IEmbeddingsComputer,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IToolEmbeddingsComputer private readonly _toolEmbeddingsComputer: IToolEmbeddingsComputer,
 		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
-		this.toolEmbeddingsComputer = _instantiationService.createInstance(ToolEmbeddingsComputer);
+		this.builtInToolGroupHandler = new BuiltInToolGroupHandler();
+	}
+
+	/**
+	 * Determines if built-in tool grouping should be triggered based on configuration and tool count
+	 */
+	private shouldTriggerBuiltInGrouping(tools: LanguageModelToolInformation[]): boolean {
+		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
+
+		return tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
 	}
 
 	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void> {
 		// If there's no need to group tools, just add them all directly;
-		if (tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
+
+		// if there are more than START_BUILTIN_GROUPING_AFTER_TOOL_COUNT tools, we should group built-in tools
+		// otherwise, follow the existing logic of grouping all tools together
+		const shouldGroup = this.shouldTriggerBuiltInGrouping(tools);
+
+		if (!shouldGroup && tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
 			root.contents = tools;
 			return;
 		}
@@ -57,251 +73,268 @@ export class VirtualToolGrouper implements IToolCategorization {
 			} else if (t.source instanceof LanguageModelToolMCPSource) {
 				return 'mcp_' + t.source.label;
 			} else {
-				return BUILT_IN_GROUP;
+				return BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY;
 			}
 		});
 
 		const previousGroups = new Map</* name */ string, VirtualTool>();
-		const previousCategorizations = new Map<string, ISummarizedToolCategory[]>();
 		for (const tool of root.all()) {
 			if (tool instanceof VirtualTool) {
 				previousGroups.set(tool.name, tool);
-				if (tool.metadata?.toolsetKey) {
-					previousCategorizations.set(tool.metadata.toolsetKey, tool.metadata.groups);
-				}
 			}
 		}
 
-		const virtualToolEmbeddingRankingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.VirtualToolEmbeddingRanking, this._expService);
 		const predictedToolsSw = new StopWatch();
-		const predictedToolsPromise = virtualToolEmbeddingRankingEnabled && this._getPredictedTools(query, tools, token).then(tools => ({ tools, durationMs: predictedToolsSw.elapsed() }));
+		const predictedToolsPromise = this._getPredictedTools(query, tools, token).then(tools => ({ tools, durationMs: predictedToolsSw.elapsed() }));
 
-		const grouped = await Promise.all(Object.entries(byToolset).map(([key, tools]) => {
-			if (key === BUILT_IN_GROUP) {
-				return tools;
-			} else {
-				return this._generateGroupsFromToolset(key, tools, previousCategorizations.get(key), token);
-			}
-		}));
+		// Separate builtin tools from extension/MCP tools
+		const builtinTools = byToolset[BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY] || [];
+		const toolsetEntries = Object.entries(byToolset).filter(([key]) => key !== BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY);
+
+		const groupedResults: (VirtualTool | LanguageModelToolInformation)[] = [];
+
+		// Handle built-in tools - apply grouping logic if needed
+		const shouldGroupBuiltin = this.shouldTriggerBuiltInGrouping(builtinTools);
+		if (shouldGroupBuiltin) {
+			const builtinGroups = this.builtInToolGroupHandler.createBuiltInToolGroups(builtinTools);
+			groupedResults.push(...builtinGroups);
+		} else {
+			// Add builtin tools directly without grouping
+			groupedResults.push(...builtinTools);
+		}
+
+		// Process extension/MCP tools per-toolset with proportional slot allocation
+		if (toolsetEntries.length > 0) {
+			// Calculate available slots after accounting for builtin tools/groups
+			const builtinSlotCount = groupedResults.length;
+			const availableSlots = TOOLS_AND_GROUPS_LIMIT - builtinSlotCount;
+			const slotAllocation = this._allocateSlots(toolsetEntries, availableSlots);
+
+			// Process each toolset individually
+			const toolsetGrouped = await Promise.all([...toolsetEntries].map(async ([toolsetKey, tools]) => {
+				const allocatedSlots = slotAllocation.get(toolsetKey) || 0;
+				return allocatedSlots > 0 ? await this._processToolset(tools, allocatedSlots, token) : [];
+			}));
+
+			groupedResults.push(...toolsetGrouped.flat());
+		}
 
 		this._cache.flush();
-		root.contents = VirtualToolGrouper.deduplicateGroups(grouped.flat());
+		root.contents = VirtualToolGrouper.deduplicateGroups(groupedResults);
+
+		// Send telemetry for per-toolset processing
+		if (toolsetEntries.length > 0) {
+			const totalToolsToGroup = toolsetEntries.reduce((sum, [, tools]) => sum + tools.length, 0);
+			const totalGroupsCreated = groupedResults.filter(item => item instanceof VirtualTool).length;
+
+			/* __GDPR__
+				"virtualTools.perToolsetGenerate" : {
+					"owner": "connor4312",
+					"comment": "Reports information about the per-toolset generation of virtual tools.",
+					"toolsetsProcessed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of toolsets processed", "isMeasurement": true },
+					"toolsBefore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools before categorization", "isMeasurement": true },
+					"groupsAfter": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of groups after categorization", "isMeasurement": true },
+					"builtinTools": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of builtin tools added directly", "isMeasurement": true }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('virtualTools.perToolsetGenerate', {}, {
+				toolsetsProcessed: toolsetEntries.length,
+				toolsBefore: totalToolsToGroup,
+				groupsAfter: totalGroupsCreated,
+				builtinTools: builtinTools.length,
+			});
+		}
 
 		for (const tool of root.all()) {
 			if (tool instanceof VirtualTool) {
 				const prev = previousGroups.get(tool.name);
 				if (prev) {
-					tool.isExpanded = prev.isExpanded;
-					tool.metadata.preExpanded = prev.metadata.preExpanded;
-					tool.lastUsedOnTurn = prev.lastUsedOnTurn;
+					tool.copyStateFrom(prev);
 				}
 			}
 		}
 
-		await this._reExpandTools(root, predictedToolsPromise);
+		await this._addEmbeddingMatchedTools(root, predictedToolsPromise);
 	}
 
-	private async _reExpandTools(root: VirtualTool, predictedToolsPromise: Promise<{ tools: LanguageModelToolInformation[]; durationMs: number }> | false): Promise<void> {
-		if (predictedToolsPromise) {
-			// Aggressively expand groups with predicted tools up to hard limit
-			const sw = new StopWatch();
-			let error: Error | undefined;
-			let computeMs: number | undefined;
-			try {
-				const { tools, durationMs } = await predictedToolsPromise;
-				computeMs = durationMs;
-				this._reExpandToolsToHitBudget(root, g => this._getGroupPredictedRelevancy(g, tools), HARD_TOOL_LIMIT);
-				return;
-			} catch (e) {
-				error = e;
-			} finally {
-				// Telemetry for predicted tool re-expansion
-				/* __GDPR__
-					"virtualTools.expandEmbedding" : {
-						"owner": "connor4312",
-						"comment": "Expansion of virtual tool groups using embedding-based ranking.",
-						"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "Error message if expansion failed" },
-						"blockingMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Blocking duration of the expansion operation in milliseconds", "isMeasurement": true },
-						"computeMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Duration of the expansion operation in milliseconds", "isMeasurement": true },
-						"hadError": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the operation had an error", "isMeasurement": true }
-					}
-				*/
-				this._telemetryService.sendMSFTTelemetryEvent('virtualTools.expandEmbedding', { error: error ? error.message : undefined }, {
-					blockingMs: sw.elapsed(),
-					computeMs,
-					hadError: error ? 1 : 0,
-				});
-			}
+	/** Recomputes and updates the embedding-matched tools on the `root` based on the user query. */
+	async recomputeEmbeddingRankings(query: string, root: VirtualTool, token: CancellationToken): Promise<void> {
+		const predictedToolsSw = new StopWatch();
+		const actualTools = [...root.all()].filter((t): t is LanguageModelToolInformation => !(t instanceof VirtualTool));
+		const matchedTools = this._getPredictedTools(query, actualTools, token).then(tools => ({
+			tools,
+			durationMs: predictedToolsSw.elapsed()
+		}));
+
+		await this._addEmbeddingMatchedTools(root, matchedTools);
+	}
+
+	private _addPredictedToolsGroup(root: VirtualTool, predictedTools: LanguageModelToolInformation[]): void {
+		const newGroup = new VirtualTool(EMBEDDINGS_GROUP_NAME, 'Tools with high predicted relevancy for this query', Infinity, {
+			wasEmbeddingsMatched: true,
+			wasExpandedByDefault: true,
+			canBeCollapsed: false,
+		});
+
+		newGroup.isExpanded = true;
+		for (const tool of predictedTools) {
+			newGroup.contents.push(tool);
 		}
 
-		this._reExpandToolsToHitBudget(root, g => g.contents.length);
+		const idx = root.contents.findIndex(t => t.name === EMBEDDINGS_GROUP_NAME);
+		if (idx >= 0) {
+			root.contents[idx] = newGroup;
+		} else {
+			root.contents.unshift(newGroup);
+		}
+	}
+
+	private async _addEmbeddingMatchedTools(root: VirtualTool, predictedToolsPromise: Promise<{ tools: LanguageModelToolInformation[]; durationMs: number }>): Promise<void> {
+		// Aggressively expand groups with predicted tools up to hard limit
+		const sw = new StopWatch();
+		let error: Error | undefined;
+		let computeMs: number | undefined;
+		try {
+			const { tools, durationMs } = await predictedToolsPromise;
+			computeMs = durationMs;
+			this._addPredictedToolsGroup(root, tools);
+		} catch (e) {
+			error = e;
+		} finally {
+			// Telemetry for predicted tool re-expansion
+			/* __GDPR__
+				"virtualTools.expandEmbedding" : {
+					"owner": "connor4312",
+					"comment": "Expansion of virtual tool groups using embedding-based ranking.",
+					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "Error message if expansion failed" },
+					"blockingMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Blocking duration of the expansion operation in milliseconds", "isMeasurement": true },
+					"computeMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Duration of the expansion operation in milliseconds", "isMeasurement": true },
+					"hadError": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the operation had an error", "isMeasurement": true }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('virtualTools.expandEmbedding', { error: error ? error.message : undefined }, {
+				blockingMs: sw.elapsed(),
+				computeMs,
+				hadError: error ? 1 : 0,
+			});
+		}
 	}
 
 	public static deduplicateGroups(grouped: readonly (VirtualTool | LanguageModelToolInformation)[]) {
-		const seen = new Map<string, VirtualTool | LanguageModelToolInformation>();
+		const seen = new Set<string>();
+		const result: (VirtualTool | LanguageModelToolInformation)[] = [];
 
 		for (const item of grouped) {
-			const saw = seen.get(item.name);
-			if (!saw) {
-				seen.set(item.name, item);
-				continue;
+			let name = item.name;
+			let counter = 1;
+
+			// Find a unique name by adding numeric suffix if needed
+			while (seen.has(name)) {
+				counter++;
+				name = `${item.name}_${counter}`;
 			}
 
-			if (saw instanceof VirtualTool && saw.metadata.possiblePrefix) {
-				seen.delete(saw.name);
-				const replacement = saw.cloneWithPrefix(saw.metadata.possiblePrefix);
-				seen.set(replacement.name, replacement);
-				seen.set(item.name, item);
-			} else if (item instanceof VirtualTool && item.metadata.possiblePrefix) {
-				const next = item.cloneWithPrefix(item.metadata.possiblePrefix);
-				seen.set(next.name, next);
+			// Create new virtual tool with unique name if needed
+			if (item instanceof VirtualTool && name !== item.name) {
+				const renamedTool = item.cloneWithNewName(name);
+				seen.add(name);
+				result.push(renamedTool);
+			} else {
+				seen.add(name);
+				result.push(item);
 			}
 		}
 
-		return [...seen.values()];
+		return result;
 	}
 
 	/**
-	 * Gets the predicted relevancy score for a group based on the highest priority predicted tool it contains.
-	 * Lower scores indicate higher relevancy (earlier in the predictedTools array).
+	 * Allocate slots proportionally to each toolset based on tool count, ensuring every toolset gets at least one slot
 	 */
-	private _getGroupPredictedRelevancy(group: VirtualTool, predictedTools: LanguageModelToolInformation[]): number {
-		// Create a set of predicted tool names for fast lookup
-		const predictedToolNames = new Set(predictedTools.map(tool => tool.name));
+	private _allocateSlots(toolsetEntries: Array<[string, LanguageModelToolInformation[]]>, availableSlots: number): Map<string, number> {
+		const allocation = new Map<string, number>();
 
-		// Create a map of tool name to its priority (index in predictedTools array)
-		const toolPriority = new Map<string, number>();
-		predictedTools.forEach((tool, index) => {
-			toolPriority.set(tool.name, index);
-		});
+		// If we have more toolsets than slots, give each one slot
+		if (toolsetEntries.length >= availableSlots) {
+			for (let i = 0; i < toolsetEntries.length; i++) {
+				allocation.set(toolsetEntries[i][0], i < availableSlots ? 1 : 0);
+			}
+			return allocation;
+		}
 
-		// Find the highest priority (lowest index) predicted tool in this group
-		const priorities = group.contents
-			.filter(tool => 'name' in tool && predictedToolNames.has(tool.name))
-			.map(tool => toolPriority.get(tool.name) ?? Infinity)
-			.filter(index => index !== Infinity);
+		// Calculate total tools to group
+		const totalTools = toolsetEntries.reduce((sum, [, tools]) => sum + tools.length, 0);
 
-		// Return the highest priority (lowest index), or Infinity if no predicted tools
-		return priorities.length > 0 ? Math.min(...priorities) : Infinity;
+		// Give each toolset at least one slot
+		let remainingSlots = availableSlots - toolsetEntries.length;
+		for (const [toolsetKey] of toolsetEntries) {
+			allocation.set(toolsetKey, 1);
+		}
+
+		// Distribute remaining slots proportionally
+		if (remainingSlots > 0) {
+			const proportions = toolsetEntries.map(([toolsetKey, tools]) => ({
+				toolsetKey,
+				proportion: tools.length / totalTools,
+				toolCount: tools.length
+			}));
+
+			// Sort by proportion descending to handle rounding better
+			proportions.sort((a, b) => b.proportion - a.proportion);
+
+			// Allocate additional slots based on proportion
+			for (const { toolsetKey, proportion } of proportions) {
+				const additionalSlots = Math.round(proportion * remainingSlots);
+				const slotsToAdd = Math.min(additionalSlots, remainingSlots);
+				allocation.set(toolsetKey, allocation.get(toolsetKey)! + slotsToAdd);
+				remainingSlots -= slotsToAdd;
+			}
+
+			// Distribute any remaining slots to toolsets with the most tools
+			while (remainingSlots > 0) {
+				for (const { toolsetKey } of proportions) {
+					if (remainingSlots <= 0) {
+						break;
+					}
+					allocation.set(toolsetKey, allocation.get(toolsetKey)! + 1);
+					remainingSlots--;
+				}
+			}
+		}
+
+		return allocation;
 	}
 
 	/**
-	 * Eagerly expand groups when possible just to reduce the number of indirections.
-	 * Uses the provided ranker function to determine expansion priority.
-	 *
-	 * @param root The root virtual tool containing groups to expand
-	 * @param ranker Function to rank groups (lower scores = higher priority)
-	 * @param targetLimit Maximum number of tools to expand to (defaults to EXPAND_UNTIL_COUNT)
-	 *
-	 * Note: when this is made smarter, we should increase `MIN_TOOLSET_SIZE_TO_GROUP`,
-	 * which is right now because tiny toolsets are likely to automatically be included.
+	 * Process a single toolset based on allocated slots
 	 */
-	private _reExpandToolsToHitBudget(root: VirtualTool, ranker: (group: VirtualTool) => number, targetLimit: number = Constant.EXPAND_UNTIL_COUNT): void {
-		let toolCount = Iterable.length(root.tools());
-		if (toolCount > targetLimit) {
-			return; // No need to expand further.
-		}
-
-		// Get unexpanded virtual tools, sorted by the ranker function (ascending order).
-		const expandable = root.contents
-			.filter((t): t is VirtualTool => t instanceof VirtualTool && !t.isExpanded)
-			.sort((a, b) => ranker(a) - ranker(b));
-
-		// Expand them until we hit the target limit
-		for (const vtool of expandable) {
-			const nextCount = toolCount - 1 + vtool.contents.length;
-			if (nextCount > HARD_TOOL_LIMIT) {
-				break;
-			}
-
-			vtool.isExpanded = true;
-			vtool.metadata.preExpanded = true;
-			toolCount = nextCount;
-
-			if (toolCount > targetLimit) {
-				break;
-			}
-		}
-	}
-
-	/** Top-level request to categorize a group of tools from a single source. */
-	private async _generateGroupsFromToolset(key: string, tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
-		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
+	private async _processToolset(
+		tools: LanguageModelToolInformation[],
+		allocatedSlots: number,
+		token: CancellationToken
+	): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
+		// If allocated slots >= tool count, return all tools individually
+		if (allocatedSlots >= tools.length) {
 			return tools;
 		}
 
-		let retries = 0;
-		let virts: ISummarizedToolCategory[] | undefined;
-
-		const sw = StopWatch.create();
-		for (; !virts && retries < Constant.MAX_CATEGORIZATION_RETRIES; retries++) {
-			try {
-				virts = await this._cache.getOrInsert(tools, () =>
-					tools.length <= Constant.GROUP_WITHIN_TOOLSET
-						? this._summarizeToolGroup(tools, token)
-						: this._divideToolsIntoGroups(tools, previous, token)
-				);
-			} catch (e) {
-				this._logService.warn(`Failed to categorize tools: ${e}`);
-			}
+		// If only one slot allocated, return all tools in a single group with LLM-generated summary
+		if (allocatedSlots === 1) {
+			const groupDescriptions = await this._generateBulkGroupDescriptions([tools], token);
+			const group = groupDescriptions.groups[0];
+			return [new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + group.name, SUMMARY_PREFIX + group.summary + SUMMARY_SUFFIX, 0, {}, group.tools)];
 		}
 
-		let uncategorized: LanguageModelToolInformation[] = [];
-		if (!virts) {
-			uncategorized = tools;
-		} else {
-			const group = virts.findIndex(g => g.name === Constant.UNCATEGORIZED_TOOLS_GROUP_NAME);
-			if (group >= 0) {
-				uncategorized = virts[group].tools;
-				virts.splice(group, 1);
-			}
-		}
-
-		/* __GDPR__
-			"virtualTools.generate" : {
-				"owner": "connor4312",
-				"comment": "Reports information about the generation of virtual tools.",
-				"groupKey": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Key of the categorized group (MCP or extension)" },
-
-				"toolsBefore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools before categorization", "isMeasurement": true },
-				"toolsAfter": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools after categorization", "isMeasurement": true },
-				"retries": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of retries to categorize the tools", "isMeasurement": true },
-				"uncategorizedTools": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools that could not be categorized", "isMeasurement": true },
-				"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Total duration of the operation in milliseconds", "isMeasurement": true }
-			}
-		*/
-		this._telemetryService.sendMSFTTelemetryEvent('virtualTools.generate', {
-			groupKey: key,
-		}, {
-			uncategorized: uncategorized?.length || 0,
-			toolsBefore: tools.length,
-			toolsAfter: virts?.length || 0,
-			retries,
-			durationMs: sw.elapsed(),
-		});
-
-		this._telemetryService.sendInternalMSFTTelemetryEvent('virtualTools.toolset', {
-			uncategorized: JSON.stringify(uncategorized.map(t => t.name)),
-			groups: JSON.stringify(virts?.map(v => ({ name: v.name, tools: v.tools.map(t => t.name) })) || []),
-		}, { retries, durationMs: sw.elapsed() });
-
-		const virtualTools: (VirtualTool | LanguageModelToolInformation)[] = virts?.map(v => {
-			const src = tools[0].source;
-			const possiblePrefix = src instanceof LanguageModelToolExtensionSource
-				? (src.id.split('.').at(1) || src.id)
-				: src?.label;
-			const vt = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + v.name, SUMMARY_PREFIX + v.summary + SUMMARY_SUFFIX, 0, {
-				toolsetKey: key,
-				groups: virts,
-				possiblePrefix: possiblePrefix?.replaceAll(/[^a-zA-Z0-9]/g, '_').slice(0, 10) + '_'
-			}, v.tools);
-			return vt;
-		}) || [];
-
-		return virtualTools.concat(uncategorized);
+		// Otherwise, use embedding-based grouping with the allocated slot limit
+		return await this._generateEmbeddingBasedGroups(tools, allocatedSlots, token);
 	}
 
+
 	private async _getPredictedTools(query: string, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<LanguageModelToolInformation[]> {
+		if (!query) {
+			return [];
+		}
+
 		// compute the embeddings for the query
 		const queryEmbedding = await this.embeddingsComputer.computeEmbeddings(EMBEDDING_TYPE_FOR_TOOL_GROUPING, [query], {}, new TelemetryCorrelationId('VirtualToolGrouper::_getPredictedTools'), token);
 		if (!queryEmbedding || queryEmbedding.values.length === 0) {
@@ -316,8 +349,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		);
 
 		// Get the top 10 tool embeddings for the non-built-in tools
-		const availableToolNames = new Set(nonBuiltInTools.map(tool => tool.name));
-		const toolEmbeddings = await this.toolEmbeddingsComputer.retrieveSimilarEmbeddingsForAvailableTools(queryEmbeddingVector, availableToolNames, 10, token);
+		const toolEmbeddings = await this._toolEmbeddingsComputer.retrieveSimilarEmbeddingsForAvailableTools(queryEmbeddingVector, nonBuiltInTools, 10, token);
 		if (!toolEmbeddings) {
 			return [];
 		}
@@ -330,34 +362,71 @@ export class VirtualToolGrouper implements IToolCategorization {
 		return predictedTools;
 	}
 
-	/** Makes multiple sub-groups from the given tool list. */
-	protected async _divideToolsIntoGroups(tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken) {
-		const endpoint = await this._endpointProvider.getChatEndpoint(CATEGORIZATION_ENDPOINT);
-
-
-		if (previous) {
-			const newTools = new Set(tools.map(t => t.name));
-			previous = previous
-				.map(p => ({ ...p, tools: p.tools.filter(t => newTools.has(t.name)) }))
-				.filter(p => p.tools.length > 0);
+	/**
+	 * Generate embedding-based groups for tools with a specific limit
+	 */
+	private async _generateEmbeddingBasedGroups(tools: LanguageModelToolInformation[], limit: number, token: CancellationToken): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
+		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
+			// If too few tools, return them as individual tools instead of creating groups
+			return [];
 		}
 
-		const summarized = previous?.length
-			? await divideToolsIntoExistingGroups(endpoint, previous, tools, token)
-			: await divideToolsIntoGroups(endpoint, tools, token);
+		let embeddingGroups: LanguageModelToolInformation[][] = [];
 
-		if (!summarized) {
-			return undefined;
+		try {
+			// Use the provided limit for embedding-based clustering
+			embeddingGroups = await this._toolEmbeddingsComputer.computeToolGroupings(tools, limit, token);
+
+			this._logService.trace(`[virtual-tools] Embedding-based grouping created ${embeddingGroups.length} groups from ${tools.length} tools`);
+		} catch (e) {
+			this._logService.error(`Failed to create embedding-based groups: ${e}`);
+			// Let the error bubble up as requested - no fallback
+			throw e;
 		}
 
-		return summarized;
+		const singles = embeddingGroups.filter(g => g.length === 1).map(g => g[0]);
+		const grouped = embeddingGroups.filter(g => g.length > 1);
+
+		// Generate descriptions for the groups using LLM in bulk
+		const groupDescriptions = await this._generateBulkGroupDescriptions(grouped, token);
+
+		this._logService.trace(`[virtual-tools] Embedding-based grouping created ${groupDescriptions.groups.length} groups from ${tools.length} tools`);
+
+		return groupDescriptions.groups
+			.map((v): VirtualTool | LanguageModelToolInformation => new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + v.name, SUMMARY_PREFIX + v.summary + SUMMARY_SUFFIX, 0, {}, v.tools))
+			.concat(singles);
 	}
 
-	/** Summarizes the given tool list into a single tool group. */
-	protected async _summarizeToolGroup(tools: LanguageModelToolInformation[], token: CancellationToken) {
-		const endpoint = await this._endpointProvider.getChatEndpoint(CATEGORIZATION_ENDPOINT);
+	/**
+	 * Generate descriptions for embedding-based tool groups using LLM in bulk
+	 */
+	protected async _generateBulkGroupDescriptions(embeddingGroups: LanguageModelToolInformation[][], token: CancellationToken) {
+		const cached = await Promise.all(embeddingGroups.map(group => this._cache.getDescription(group)));
+		const missing: ISummarizedToolCategoryUpdatable[] = [];
+		const output: ISummarizedToolCategory[] = [];
+		for (const entry of cached) {
+			if (entry.category) {
+				output.push(entry.category);
+			} else {
+				missing.push(entry);
+			}
+		}
 
-		const summarized = await summarizeToolGroup(endpoint, tools, token);
-		return summarized && [summarized];
+		const endpoint = await this._endpointProvider.getChatEndpoint(CATEGORIZATION_ENDPOINT);
+		const described = await describeBulkToolGroups(endpoint, missing.map(m => m.tools), token);
+		let missed = 0;
+		for (let i = 0; i < described.length; i++) {
+			const d = described[i];
+			const m = missing[i];
+			if (d) {
+				m.update(d);
+				output.push(d);
+			} else {
+				missed++;
+				output.push({ name: `group_${i}`, summary: `Contains the tools: ${m.tools.map(t => t.name).join(', ')}`, tools: m.tools });
+			}
+		}
+
+		return { groups: output, missed };
 	}
 }

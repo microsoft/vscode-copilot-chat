@@ -9,7 +9,7 @@ This is the **GitHub Copilot Chat** extension for Visual Studio Code - a VS Code
 - **Inline Chat**: AI-powered editing directly in the editor with `Ctrl+I`
 - **Agent Mode**: Multi-step autonomous coding tasks
 - **Edit Mode**: Natural language to code
-- **Code Completions**: Next edit suggestions and inline completions
+- **Inline Suggestions**: Next edit suggestions and inline completions
 - **Language Model Integration**: Support for multiple AI models (GPT-4, Claude, Gemini, etc.)
 - **Context-Aware**: Workspace understanding, semantic search, and code analysis
 
@@ -257,6 +257,8 @@ function f(x: number, y: string): void { }
 - Do not introduce new `types` or `values` to the global namespace
 - Use proper types. Do not use `any` unless absolutely necessary.
 - Use `readonly` whenever possible.
+- Avoid casts in TypeScript unless absolutely necessary. If you get type errors after your changes, look up the types of the variables involved and set up a proper system of types and interfaces instead of adding type casts.
+- Do not use `any` or `unknown` as the type for variables, parameters, or return values unless absolutely necessary. If they need type annotations, they should have proper types or interfaces defined.
 
 ## Key APIs and Integrations
 
@@ -266,7 +268,7 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 - `languageModelSystem`: System messages for LM API
 - `chatProvider`: Custom chat provider implementation
 - `mappedEditsProvider`: Advanced editing capabilities
-- `inlineCompletionsAdditions`: Enhanced inline completions
+- `inlineCompletionsAdditions`: Enhanced inline suggestions
 - `aiTextSearchProvider`: AI-powered search capabilities
 
 ### External Integrations

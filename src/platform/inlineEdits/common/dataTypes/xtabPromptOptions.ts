@@ -3,6 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { assertNever } from '../../../../util/vs/base/common/assert';
+import { vBoolean, vEnum, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
+
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
 	readonly maxTokens: number;
@@ -38,6 +41,7 @@ export type PromptOptions = {
 	readonly recentlyViewedDocuments: RecentlyViewedDocumentsOptions;
 	readonly languageContext: LanguageContextOptions;
 	readonly diffHistory: DiffHistoryOptions;
+	readonly includePostScript: boolean;
 }
 
 /**
@@ -52,6 +56,30 @@ export enum PromptingStrategy {
 	Nes41Miniv3 = 'nes41miniv3',
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
+}
+
+export enum ResponseFormat {
+	CodeBlock = 'codeBlock',
+	UnifiedWithXml = 'unifiedWithXml',
+	EditWindowOnly = 'editWindowOnly',
+}
+
+export namespace ResponseFormat {
+	export function fromPromptingStrategy(strategy: PromptingStrategy | undefined): ResponseFormat {
+		switch (strategy) {
+			case PromptingStrategy.UnifiedModel:
+			case PromptingStrategy.Codexv21NesUnified:
+			case PromptingStrategy.Nes41Miniv3:
+				return ResponseFormat.UnifiedWithXml;
+			case PromptingStrategy.Xtab275:
+				return ResponseFormat.EditWindowOnly;
+			case PromptingStrategy.SimplifiedSystemPrompt:
+			case undefined:
+				return ResponseFormat.CodeBlock;
+			default:
+				assertNever(strategy);
+		}
+	}
 }
 
 export const DEFAULT_OPTIONS: PromptOptions = {
@@ -79,6 +107,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 		onlyForDocsInPrompt: false,
 		useRelativePaths: false,
 	},
+	includePostScript: true,
 };
 
 // TODO: consider a better per language setting/experiment approach
@@ -87,3 +116,15 @@ export const LANGUAGE_CONTEXT_ENABLED_LANGUAGES: LanguageContextLanguages = {
 	'instructions': true,
 	'chatmode': true,
 };
+
+export interface ModelConfiguration {
+	modelName: string;
+	promptingStrategy: PromptingStrategy | undefined /* default */;
+	includeTagsInCurrentFile: boolean;
+}
+
+export const MODEL_CONFIGURATION_VALIDATOR = vObj({
+	'modelName': vRequired(vString()),
+	'promptingStrategy': vUnion(vEnum(...Object.values(PromptingStrategy)), vUndefined()),
+	'includeTagsInCurrentFile': vRequired(vBoolean()),
+});

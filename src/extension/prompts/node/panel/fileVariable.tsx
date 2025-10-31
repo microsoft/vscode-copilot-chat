@@ -165,7 +165,7 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 		}
 
 		if (range) {
-			const selectionDesc = this.props.description ? `${this.props.description}, this should be the main focus` : `This should be the main focus`;
+			const selectionDesc = this.props.description ? this.props.description : ``;
 			const summaryDesc = `User's active file for additional context`;
 			return (
 				<>

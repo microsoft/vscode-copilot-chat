@@ -331,12 +331,10 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			}
 		};
 
-		this._reindexDisposables.add(this._workspaceIndex.onDidCreateFiles(async uris => {
+		this._reindexDisposables.add(this._workspaceIndex.onDidCreateFiles(async _uris => {
 			updateIndexState();
-			this.tryTriggerReindexing(uris, new TelemetryCorrelationId('EmbeddingsChunkSearch::onDidCreateFiles'));
 		}));
 
-		this._reindexDisposables.add(this._workspaceIndex.onDidChangeFiles(uris => this.tryTriggerReindexing(uris, new TelemetryCorrelationId('EmbeddingsChunkSearch::onDidChangeFiles'))));
 		this._reindexDisposables.add(this._workspaceIndex.onDidDeleteFiles(uris => {
 			for (const uri of uris) {
 				this._reindexRequests.get(uri)?.dispose();
@@ -388,18 +386,17 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 		}
 	}
 
-	public tryTriggerReindexing(uris: readonly URI[], telemetryInfo: TelemetryCorrelationId, immediately = false): void {
+	public tryTriggerReindexing(uris: readonly URI[], telemetryInfo: TelemetryCorrelationId): void {
 		if (this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing
 			|| this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAutomaticIndexing
 		) {
 			return;
 		}
 
-		const defaultDelay = this._experimentationService.getTreatmentVariable<number>('workspace.embeddingIndex.automaticReindexingDelay') ?? 60000;
 		for (const uri of uris) {
 			let delayer = this._reindexRequests.get(uri);
 			if (!delayer) {
-				delayer = new Delayer<void>(defaultDelay);
+				delayer = new Delayer<void>(0);
 				this._reindexRequests.set(uri, delayer);
 			}
 
@@ -413,7 +410,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 				}
 
 				return this._embeddingsIndex.triggerIndexingOfFile(uri, telemetryInfo.addCaller('EmbeddingChunkSearch::tryTriggerReindexing'), this._disposeCts.token);
-			}, immediately ? 0 : defaultDelay);
+			}, 0);
 		}
 	}
 }

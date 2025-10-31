@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LanguageModelChat } from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { EditToolLearningService, EditTools } from '../../common/editToolLearningService';
 import { LearningConfig } from '../../common/editToolLearningStates';
@@ -48,7 +49,7 @@ describe('EditToolLearningService', () => {
 		policy: 'enabled',
 		urlOrRequestMetadata: 'test-url',
 		modelMaxPromptTokens: 4000,
-		name: 'test-model',
+		name: model.id,
 		version: '1.0',
 		tokenizer: 'gpt',
 		acceptChatPolicy: vi.fn().mockResolvedValue(true),
@@ -76,7 +77,7 @@ describe('EditToolLearningService', () => {
 		// Set up proper spies for global state methods
 		mockContext.globalState.get = vi.fn().mockReturnValue(undefined);
 		mockContext.globalState.update = vi.fn().mockResolvedValue(undefined);
-		service = new EditToolLearningService(mockContext as any, mockEndpointProvider);
+		service = new EditToolLearningService(mockContext as any, mockEndpointProvider, new NullTelemetryService());
 	});
 
 	describe('getPreferredEditTool', () => {
@@ -271,7 +272,7 @@ describe('EditToolLearningService', () => {
 			await simulateEdits(model, ToolName.ReplaceString, 10, 5);
 
 			// Create a new service instance with the same context
-			const newService = new EditToolLearningService(mockContext as any, mockEndpointProvider);
+			const newService = new EditToolLearningService(mockContext as any, mockEndpointProvider, new NullTelemetryService());
 
 			// The new service should have access to the persisted data
 			const result = await newService.getPreferredEditTool(model);

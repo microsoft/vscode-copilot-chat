@@ -18,9 +18,9 @@ import { FetchOptions, IAbortController, IHeaders, Response } from '../src/_inte
 import { IFetcher } from '../src/_internal/platform/networking/common/networking';
 import { CancellationToken } from '../src/_internal/util/vs/base/common/cancellation';
 import { URI } from '../src/_internal/util/vs/base/common/uri';
-import { StringEdit } from '../src/_internal/util/vs/editor/common/core/edits/stringEdit';
+import { StringEdit, StringReplacement } from '../src/_internal/util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../src/_internal/util/vs/editor/common/core/ranges/offsetRange';
-import { createNESProvider, ITelemetrySender } from '../src/main';
+import { createNESProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
 import { ICopilotTokenManager } from '../src/_internal/platform/authentication/common/copilotTokenManager';
 import { Emitter } from '../src/_internal/util/vs/base/common/event';
 import { CopilotToken } from '../src/_internal/platform/authentication/common/copilotToken';
@@ -97,8 +97,17 @@ class TestCopilotTokenManager implements ICopilotTokenManager {
 }
 
 class TestTelemetrySender implements ITelemetrySender {
+	events: { eventName: string; properties?: Record<string, string | undefined>; measurements?: Record<string, number | undefined> }[] = [];
 	sendTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void {
-		// No-op
+		this.events.push({ eventName, properties, measurements });
+	}
+}
+
+class TestLogTarget implements ILogTarget {
+	logs: { level: LogLevel; message: string; metadata?: any }[] = [];
+	logIt(level: LogLevel, metadataStr: string, ...extra: any[]): void {
+		this.logs.push({ level, message: metadataStr, metadata: extra });
+		console.log(`[${LogLevel[level]}]${metadataStr}`, ...extra);
 	}
 }
 
@@ -121,20 +130,26 @@ describe('NESProvider Facade', () => {
 			const myPoint = new Point(0, 1);`.trimStart()
 		});
 		doc.setSelection([new OffsetRange(1, 1)], undefined);
+		const telemetrySender = new TestTelemetrySender();
+		const logTarget = new TestLogTarget();
 		const nextEditProvider = createNESProvider({
 			workspace,
 			fetcher: new TestFetcher({ '/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8') }),
 			copilotTokenManager: new TestCopilotTokenManager(),
-			telemetrySender: new TestTelemetrySender(),
+			telemetrySender,
+			logTarget,
 		});
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));
 
 		const result = await nextEditProvider.getNextEdit(doc.id.toUri(), CancellationToken.None);
 
-		assert(result.result?.edit);
+		assert(result.result);
 
-		doc.applyEdit(result.result.edit.toEdit());
+		const { range, newText } = result.result;
+		const offsetRange = OffsetRange.fromTo(range.start, range.endExclusive);
+		const replace = StringReplacement.replace(offsetRange, newText);
+		doc.applyEdit(replace.toEdit());
 
 		expect(doc.value.get().value).toMatchInlineSnapshot(`
 			"class Point3D {
@@ -150,5 +165,16 @@ describe('NESProvider Facade', () => {
 
 			const myPoint = new Point(0, 1);"
 		`);
+
+		nextEditProvider.handleAcceptance(result);
+		await new Promise(resolve => setTimeout(resolve, 100)); // wait for async telemetry sending
+		const event = telemetrySender.events.find(e => e.eventName === 'copilot-nes/provideInlineEdit');
+		expect(event).toBeDefined();
+		expect(event!.properties?.acceptance).toBe('accepted');
+
+		nextEditProvider.dispose();
+
+		expect(logTarget.logs.length).toBeGreaterThan(0);
+		expect(logTarget.logs.filter(l => l.level === LogLevel.Error)).toHaveLength(0);
 	});
 });

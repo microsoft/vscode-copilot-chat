@@ -12,7 +12,7 @@ on:
       - .github/workflows/copilot-setup-steps.yml
 
 jobs:
-  setup-environment:
+  copilot-setup-steps:
     name: Setup Development Environment
     runs-on: vscode-large-runners
     steps:

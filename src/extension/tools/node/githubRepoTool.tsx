@@ -12,13 +12,12 @@ import { GithubRepoId, toGithubNwo } from '../../../platform/git/common/gitServi
 import { IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
 import { RemoteCodeSearchIndexStatus } from '../../../platform/remoteCodeSearch/common/remoteCodeSearch';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { GithubAvailableEmbeddingTypesManager } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { Result } from '../../../util/common/result';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { isLocation, isUri } from '../../../util/common/types';
 import { raceCancellationError, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Lazy } from '../../../util/vs/base/common/lazy';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
@@ -42,12 +41,12 @@ interface PrepareError {
 export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 	public static readonly toolName = ToolName.GithubRepo;
 
-	private readonly _availableEmbeddingTypesManager = new Lazy<GithubAvailableEmbeddingTypesManager>(() => this._instantiationService.createInstance(GithubAvailableEmbeddingTypesManager));
 
 	constructor(
 		@IRunCommandExecutionService _commandService: IRunCommandExecutionService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IGithubCodeSearchService private readonly _githubCodeSearch: IGithubCodeSearchService,
+		@IGithubAvailableEmbeddingTypesService private readonly _availableEmbeddingTypesManager: GithubAvailableEmbeddingTypesService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) { }
 
@@ -57,7 +56,7 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 			throw new Error('Invalid input. Could not parse repo');
 		}
 
-		const embeddingType = await this._availableEmbeddingTypesManager.value.getPreferredType(false);
+		const embeddingType = await this._availableEmbeddingTypesManager.getPreferredType(false);
 		if (!embeddingType) {
 			throw new Error('No embedding models available');
 		}

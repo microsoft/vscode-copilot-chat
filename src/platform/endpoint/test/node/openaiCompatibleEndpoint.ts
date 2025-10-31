@@ -144,7 +144,7 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		return this.modelConfig.version ? this.modelConfig.url + '?api-version=' + this.modelConfig.version : this.modelConfig.url;
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json"
 		};

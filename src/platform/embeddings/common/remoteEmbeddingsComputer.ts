@@ -56,7 +56,9 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 	): Promise<Embeddings> {
 		return logExecTime(this._logService, 'RemoteEmbeddingsComputer::computeEmbeddings', async () => {
 
-			if (options?.endpointType === 'capi') {
+			// Determine endpoint type: use CAPI for no-auth users, otherwise use GitHub
+			const copilotToken = await this._authService.getCopilotToken();
+			if (copilotToken.isNoAuthUser) {
 				const embeddings = await this.computeCAPIEmbeddings(inputs, options, cancellationToken);
 				return embeddings ?? { type: embeddingType, values: [] };
 			}

@@ -5,7 +5,7 @@
 
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
-import type { ChatParticipantToolToken, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
+import type { ChatParticipantToolToken, LanguageModelToolInvocationOptions, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
@@ -24,7 +24,8 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { toErrorMessage } from '../../../../util/vs/base/common/errorMessage';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { URI, UriComponents } from '../../../../util/vs/base/common/uri';
-import { LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolResult } from '../../../../vscodeTypes';
+import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolMCPSource, LanguageModelToolResult } from '../../../../vscodeTypes';
 import { isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall, IToolCallRound } from '../../../prompt/common/intents';
@@ -54,7 +55,8 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 	constructor(
 		props: PromptElementProps<ChatToolCallsProps>,
 		@IToolsService private readonly toolsService: IToolsService,
-		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint
+		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
+		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super(props);
 	}
@@ -119,19 +121,19 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 			const KeepWith = assistantToolCalls[i].keepWith;
 			children.push(
 				<KeepWith priority={index} flexGrow={index + 1} flexReserve={`/${1 / reserve1N}`}>
-					<ToolResultElement
-						toolCall={toolCall}
-						toolInvocationToken={this.props.promptContext.tools!.toolInvocationToken}
-						toolCallResult={this.props.toolCallResults?.[toolCall.id!]}
-						allowInvokingTool={!this.props.isHistorical}
-						validateInput={round.toolInputRetry < MAX_INPUT_VALIDATION_RETRIES}
-						requestId={this.props.promptContext.requestId}
-						toolCallMode={this.props.toolCallMode ?? CopilotToolMode.PartialContext}
-						promptContext={this.props.promptContext}
-						isLast={!this.props.isHistorical && i === fixedNameToolCalls.length - 1 && index === total - 1}
-						enableCacheBreakpoints={this.props.enableCacheBreakpoints ?? false}
-						truncateAt={this.props.truncateAt}
-					/>
+					{this.instantiationService.invokeFunction(buildToolResultElement, {
+						toolCall: toolCall,
+						toolInvocationToken: this.props.promptContext.tools!.toolInvocationToken,
+						toolCallResult: this.props.toolCallResults?.[toolCall.id!],
+						allowInvokingTool: !this.props.isHistorical,
+						validateInput: round.toolInputRetry < MAX_INPUT_VALIDATION_RETRIES,
+						requestId: this.props.promptContext.requestId,
+						toolCallMode: this.props.toolCallMode ?? CopilotToolMode.PartialContext,
+						promptContext: this.props.promptContext,
+						isLast: !this.props.isHistorical && i === fixedNameToolCalls.length - 1 && index === total - 1,
+						enableCacheBreakpoints: this.props.enableCacheBreakpoints ?? false,
+						truncateAt: this.props.truncateAt,
+					})}
 				</KeepWith>,
 			);
 		}
@@ -139,7 +141,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 	}
 }
 
-interface ToolResultElementProps extends BasePromptElementProps {
+interface ToolResultOpts {
 	readonly toolCall: IToolCall;
 	readonly toolInvocationToken: ChatParticipantToolToken | undefined;
 	readonly toolCallResult: LanguageModelToolResult2 | undefined;
@@ -156,65 +158,73 @@ interface ToolResultElementProps extends BasePromptElementProps {
 const toolErrorSuffix = '\nPlease check your input and try again.';
 
 /**
- * One tool call result, which either comes from the cache or from invoking the tool.
+ * Creates a <ToolResult /> element. Eagerly starts the tool call if we know
+ * that the tool will not need/consume sizing information (e.g. MCP calls) and
+ * therefore don't need to wait for other elements to sequentially render.
  */
-class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
-	constructor(
-		props: ToolResultElementProps,
-		@IToolsService private readonly toolsService: IToolsService,
-		@ILogService private readonly logService: ILogService,
-		@ITelemetryService private readonly telemetryService: ITelemetryService,
-		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
-		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint
-	) {
-		super(props);
-	}
+function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpts) {
+	const toolsService: IToolsService = accessor.get(IToolsService);
+	const logService: ILogService = accessor.get(ILogService);
+	const telemetryService: ITelemetryService = accessor.get(ITelemetryService);
+	const endpointProvider: IEndpointProvider = accessor.get(IEndpointProvider);
+	const promptEndpoint: IPromptEndpoint = accessor.get(IPromptEndpoint);
+	const tool = toolsService.getTool(props.toolCall.name);
 
-	async render(state: void, sizing: PromptSizing): Promise<PromptPiece | undefined> {
+	async function getToolResult(sizing: PromptSizing) {
 		const tokenizationOptions: LanguageModelToolTokenizationOptions = {
 			tokenBudget: sizing.tokenBudget,
 			countTokens: async (content: string) => sizing.countTokens(content),
 		};
 
-		if (!this.props.toolCallResult && !this.props.allowInvokingTool) {
-			throw new Error(`Missing tool call result for "${this.props.toolCall.id}" (${this.props.toolCall.name})`);
+		if (!props.toolCallResult && !props.allowInvokingTool) {
+			throw new Error(`Missing tool call result for "${props.toolCall.id}" (${props.toolCall.name})`);
 		}
 
 		const extraMetadata: PromptMetadata[] = [];
 		let isCancelled = false;
-		let toolResult = this.props.toolCallResult;
-		const copilotTool = this.toolsService.getCopilotTool(this.props.toolCall.name as ToolName);
+		let toolResult = props.toolCallResult;
+		const copilotTool = toolsService.getCopilotTool(props.toolCall.name as ToolName);
 		if (toolResult === undefined) {
 			let inputObj: unknown;
 			let validation: ToolValidationOutcome = ToolValidationOutcome.Unknown;
-			if (this.props.validateInput) {
-				const validationResult = this.toolsService.validateToolInput(this.props.toolCall.name, this.props.toolCall.arguments);
+			if (props.validateInput) {
+				const validationResult = toolsService.validateToolInput(props.toolCall.name, props.toolCall.arguments);
 				if ('error' in validationResult) {
 					validation = ToolValidationOutcome.Invalid;
-					extraMetadata.push(new ToolFailureEncountered(this.props.toolCall.id));
+					extraMetadata.push(new ToolFailureEncountered(props.toolCall.id));
 					toolResult = textToolResult(validationResult.error + toolErrorSuffix);
 				} else {
 					validation = ToolValidationOutcome.Valid;
 					inputObj = validationResult.inputObj;
 				}
 			} else {
-				inputObj = JSON.parse(this.props.toolCall.arguments);
+				inputObj = JSON.parse(props.toolCall.arguments);
 			}
 
 			let outcome: ToolInvocationOutcome = toolResult === undefined ? ToolInvocationOutcome.Success : ToolInvocationOutcome.InvalidInput;
 			if (toolResult === undefined) {
 				try {
-					if (this.props.promptContext.tools && !this.props.promptContext.tools.availableTools.find(t => t.name === this.props.toolCall.name)) {
+					if (props.promptContext.tools && !props.promptContext.tools.availableTools.find(t => t.name === props.toolCall.name)) {
 						outcome = ToolInvocationOutcome.DisabledByUser;
-						throw new Error(`Tool ${this.props.toolCall.name} is currently disabled by the user, and cannot be called.`);
+						throw new Error(`Tool ${props.toolCall.name} is currently disabled by the user, and cannot be called.`);
 					}
 
 					if (copilotTool?.resolveInput) {
-						inputObj = await copilotTool.resolveInput(inputObj, this.props.promptContext, this.props.toolCallMode);
+						inputObj = await copilotTool.resolveInput(inputObj, props.promptContext, props.toolCallMode);
 					}
 
-					toolResult = await this.toolsService.invokeTool(this.props.toolCall.name, { input: inputObj, toolInvocationToken: this.props.toolInvocationToken, tokenizationOptions, chatRequestId: this.props.requestId }, CancellationToken.None);
-					sendInvokedToolTelemetry(this.promptEndpoint.acquireTokenizer(), this.telemetryService, this.props.toolCall.name, toolResult);
+					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
+						input: inputObj,
+						toolInvocationToken: props.toolInvocationToken,
+						tokenizationOptions,
+						chatRequestId: props.requestId
+					};
+					if (props.promptContext.tools?.inSubAgent) {
+						invocationOptions.fromSubAgent = true;
+					}
+
+					toolResult = await toolsService.invokeTool(props.toolCall.name, invocationOptions, CancellationToken.None);
+					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
 				} catch (err) {
 					const errResult = toolCallErrorToResult(err);
 					toolResult = errResult.result;
@@ -223,14 +233,81 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 						outcome = ToolInvocationOutcome.Cancelled;
 					} else {
 						outcome = outcome === ToolInvocationOutcome.DisabledByUser ? outcome : ToolInvocationOutcome.Error;
-						extraMetadata.push(new ToolFailureEncountered(this.props.toolCall.id));
-						this.logService.error(`Error from tool ${this.props.toolCall.name} with args ${this.props.toolCall.arguments}`, toErrorMessage(err, true));
+						extraMetadata.push(new ToolFailureEncountered(props.toolCall.id));
+						logService.error(`Error from tool ${props.toolCall.name} with args ${props.toolCall.arguments}`, toErrorMessage(err, true));
 					}
 				}
 			}
-			this.sendToolCallTelemetry(outcome, validation);
+			sendToolCallTelemetry(props, outcome, validation, endpointProvider, telemetryService);
 		}
 
+		return { toolResult, isCancelled, extraMetadata };
+	}
+
+	let call: IToolResultElementActualProps['call'];
+	if (tool?.source instanceof LanguageModelToolMCPSource) {
+		const promise = getToolResult({ tokenBudget: 1, countTokens: () => 1, endpoint: { modelMaxPromptTokens: 1 } });
+		call = () => promise;
+	} else {
+		call = getToolResult;
+	}
+
+	return <ToolResultElement
+		call={call}
+		enableCacheBreakpoints={props.enableCacheBreakpoints}
+		truncateAt={props.truncateAt}
+		toolCall={props.toolCall}
+		isLast={props.isLast}
+	/>;
+}
+
+
+async function sendToolCallTelemetry(props: ToolResultOpts, invokeOutcome: ToolInvocationOutcome, validateOutcome: ToolValidationOutcome, endpointProvider: IEndpointProvider, telemetryService: ITelemetryService) {
+	const model = props.promptContext.request?.model && (await endpointProvider.getChatEndpoint(props.promptContext.request?.model)).model;
+	const toolName = props.toolCall.name;
+
+	/* __GDPR__
+		"toolInvoke" : {
+			"owner": "donjayamanne",
+			"comment": "Details about invocation of tools",
+			"validateOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool input validation. valid, invalid and unknown" },
+			"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool Invokcation. invalidInput, disabledByUser, success, error, cancelled" },
+			"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
+			"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" }
+		}
+	*/
+	telemetryService.sendMSFTTelemetryEvent('toolInvoke',
+		{
+			validateOutcome,
+			invokeOutcome,
+			toolName,
+			model
+		}
+	);
+
+	if (toolName === ToolName.EditNotebook) {
+		sendNotebookEditToolValidationTelemetry(invokeOutcome, validateOutcome, props.toolCall.arguments, telemetryService, model);
+	}
+}
+
+interface IToolResultElementActualProps {
+	call(sizing: PromptSizing): Promise<{
+		toolResult: LanguageModelToolResult2;
+		isCancelled: boolean;
+		extraMetadata: PromptMetadata[];
+	}>;
+	enableCacheBreakpoints: boolean;
+	truncateAt: number | undefined;
+	toolCall: IToolCall;
+	isLast: boolean;
+}
+
+/**
+ * One tool call result, which either comes from the cache or from invoking the tool.
+ */
+class ToolResultElement extends PromptElement<IToolResultElementActualProps & BasePromptElementProps, void> {
+	async render(state: void, sizing: PromptSizing) {
+		const { extraMetadata, toolResult, isCancelled } = await this.props.call(sizing);
 		const toolResultElement = this.props.enableCacheBreakpoints ?
 			<>
 				<Chunk>
@@ -247,33 +324,6 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 				{this.props.isLast && this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 			</ToolMessage>
 		);
-	}
-	private async sendToolCallTelemetry(invokeOutcome: ToolInvocationOutcome, validateOutcome: ToolValidationOutcome) {
-		const model = this.props.promptContext.request?.model && (await this.endpointProvider.getChatEndpoint(this.props.promptContext.request?.model)).model;
-		const toolName = this.props.toolCall.name;
-
-		/* __GDPR__
-			"toolInvoke" : {
-				"owner": "donjayamanne",
-				"comment": "Details about invocation of tools",
-				"validateOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool input validation. valid, invalid and unknown" },
-				"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool Invokcation. invalidInput, disabledByUser, success, error, cancelled" },
-				"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
-				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" }
-			}
-		*/
-		this.telemetryService.sendMSFTTelemetryEvent('toolInvoke',
-			{
-				validateOutcome,
-				invokeOutcome,
-				toolName,
-				model
-			}
-		);
-
-		if (toolName === ToolName.EditNotebook) {
-			sendNotebookEditToolValidationTelemetry(invokeOutcome, validateOutcome, this.props.toolCall.arguments, this.telemetryService, model);
-		}
 	}
 }
 
@@ -471,7 +521,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 			: false;
 
 		// Anthropic (from CAPI) currently does not support image uploads from tool calls.
-		const effectiveToken = uploadsEnabled && modelCanUseMcpResultImageURL(this.endpoint) ? githubToken : undefined;
+		const effectiveToken = uploadsEnabled && await modelCanUseMcpResultImageURL(this.endpoint) ? githubToken : undefined;
 
 		return Promise.resolve(imageDataPartToTSX(part, effectiveToken, this.endpoint.urlOrRequestMetadata, this.logService, this.imageService));
 	}

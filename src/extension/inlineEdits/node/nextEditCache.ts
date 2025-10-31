@@ -3,10 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { LRUCache } from '../../../util/common/cache';
 import { createTracer, ITracer } from '../../../util/common/tracing';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -37,7 +39,7 @@ export interface CachedEdit {
 	cacheTime: number;
 }
 
-export type CachedOrRebasedEdit = CachedEdit & { rebasedEdit?: StringReplacement; rebasedEditIndex?: number };
+export type CachedOrRebasedEdit = CachedEdit & { rebasedEdit?: StringReplacement; rebasedEditIndex?: number; showLabel?: boolean };
 
 export class NextEditCache extends Disposable {
 	private readonly _documentCaches = new Map<DocumentId, DocumentEditCache>();
@@ -46,6 +48,8 @@ export class NextEditCache extends Disposable {
 	constructor(
 		public readonly workspace: ObservableWorkspace,
 		private readonly _logService: ILogService,
+		configService: IConfigurationService,
+		expService: IExperimentationService,
 	) {
 		super();
 
@@ -59,6 +63,15 @@ export class NextEditCache extends Disposable {
 				for (const edit of data.value.changes) {
 					if (!edit.isEmpty()) {
 						state.handleEdit(edit);
+					}
+				}
+				// if editor-change triggering is allowed,
+				// 	it means an edit in file A can result in a cached edit for file B to be less relevant than with the edits in file A included
+				if (configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChangeAfterSeconds, expService) !== undefined) {
+					for (const [k, v] of this._sharedCache.entries()) {
+						if (v.docId !== doc.id) {
+							this._sharedCache.deleteKey(k);
+						}
 					}
 				}
 			}));
@@ -77,12 +90,12 @@ export class NextEditCache extends Disposable {
 		return docCache.setKthNextEdit(documentContents, editWindow, nextEdit, nextEdits, userEditSince, subsequentN, source);
 	}
 
-	public setNoNextEdit(docId: DocumentId, documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest, nesConfigs: INesConfigs) {
+	public setNoNextEdit(docId: DocumentId, documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest) {
 		const docCache = this._documentCaches.get(docId);
 		if (!docCache) {
 			return;
 		}
-		docCache.setNoNextEdit(documentContents, editWindow, source, nesConfigs);
+		docCache.setNoNextEdit(documentContents, editWindow, source);
 	}
 
 	public lookupNextEdit(docId: DocumentId, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesConfigs: INesConfigs): CachedOrRebasedEdit | undefined {
@@ -188,7 +201,7 @@ class DocumentEditCache {
 		return cachedEdit;
 	}
 
-	public setNoNextEdit(documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest, nesConfigs: INesConfigs) {
+	public setNoNextEdit(documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest) {
 		const key = this._getKey(documentContents.value);
 		const cachedEdit: CachedEdit = { docId: this.docId, edits: [], detailedEdits: [], source, documentBeforeEdit: documentContents, editWindow, cacheTime: Date.now() };
 		const existing = this._sharedCache.get(key);
@@ -208,13 +221,10 @@ class DocumentEditCache {
 		if (cachedEdit) {
 			const editWindow = cachedEdit.editWindow;
 			const cursorRange = currentSelection[0];
-			if (editWindow && cursorRange && !editWindow.containsRange(cursorRange)) {
+			if (editWindow && !editWindow.containsRange(cursorRange)) {
 				return undefined;
 			}
 			return cachedEdit;
-		}
-		if (!nesConfigs.isRevisedCacheStrategy) {
-			return undefined;
 		}
 		for (const cachedEdit of this._trackedCachedEdits) {
 			const rebased = this.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, nesConfigs);

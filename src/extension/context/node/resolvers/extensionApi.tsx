@@ -95,7 +95,7 @@ export class VSCodeAPIContextElement extends PromptElement<VSCodeAPIContextProps
 			return [];
 		}
 
-		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [this.props.query], { endpointType: 'capi' }, new TelemetryCorrelationId('VSCodeAPIContextElement::getSnippets'), token);
+		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [this.props.query], {}, new TelemetryCorrelationId('VSCodeAPIContextElement::getSnippets'), token);
 		return this.apiEmbeddingsIndex.nClosestValues(embeddingResult.values[0], 5);
 	}
 

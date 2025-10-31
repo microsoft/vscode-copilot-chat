@@ -2,6 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import * as fs from 'fs';
+import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import { Config, ConfigKey } from '../../../platform/configuration/common/configurationService';
 import { packageJson } from '../../../platform/env/common/packagejson';
@@ -75,5 +77,29 @@ describe('Configurations', () => {
 		configurationsInPackageJson.forEach(key => {
 			expect(publicKeys, 'Setting in package.json is not defined in code').toContain(key);
 		});
+	});
+
+	it('all localization strings in package.json are present in package.nls.json', async () => {
+		// Get all keys from package.nls.json
+		const packageJsonPath = path.join(__dirname, '../../../../package.json');
+		const packageNlsPath = path.join(__dirname, '../../../../package.nls.json');
+		const [packageJsonFileContents, packageNlsFileContents] = await Promise.all(
+			[
+				fs.promises.readFile(packageJsonPath, 'utf-8'),
+				fs.promises.readFile(packageNlsPath, 'utf-8'),
+			]
+		);
+
+		const packageNls = JSON.parse(packageNlsFileContents);
+		const nlsKeys = Object.keys(packageNls);
+
+		// Find all %key% references in package.json
+		const nlsReferences = Array.from(packageJsonFileContents.matchAll(/"%([^"]+)%"/g)).map(match => match[1]);
+
+		// Validate all references exist in package.nls.json
+		const missingKeys = nlsReferences.filter(key => !nlsKeys.includes(key));
+		if (missingKeys.length > 0) {
+			throw new Error(`Missing localization keys in package.nls.json but present in package.json: ${missingKeys.map(key => `'%${key}%'`).join(', ')}`);
+		}
 	});
 });

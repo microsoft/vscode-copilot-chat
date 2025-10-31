@@ -6,7 +6,7 @@ import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileT
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, MarkdownString } from '../../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
 import { LinkifiedText, LinkifySymbolAnchor } from './linkifiedText';
 import { IContributedLinkifierFactory, ILinkifier, ILinkifyService, LinkifierContext } from './linkifyService';
 
@@ -93,6 +93,10 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
+	externalEdit<T>(target: Uri | Uri[], callback: () => Thenable<T>): Thenable<T> {
+		return this.enqueue(() => this._progress.externalEdit(target, callback), true);
+	}
+
 	push(part: ChatResponsePart): ChatResponseStream {
 		if (part instanceof ChatResponseMarkdownPart) {
 			this.appendMarkdown(part.value);
@@ -107,6 +111,7 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 			|| part instanceof ChatResponseCommandButtonPart
 			|| part instanceof ChatResponseConfirmationPart
 			|| part instanceof ChatPrepareToolInvocationPart
+			|| part instanceof ChatToolInvocationPart
 			|| part instanceof ChatResponseThinkingProgressPart;
 	}
 
@@ -156,14 +161,14 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 
 	//#endregion
 
-	private sequencer: Promise<void> = Promise.resolve();
+	private sequencer: Promise<unknown> = Promise.resolve();
 
-	private enqueue(f: () => any | Promise<any>, flush: boolean) {
+	private enqueue<T>(f: () => T | Thenable<T>, flush: boolean) {
 		if (flush) {
 			this.sequencer = this.sequencer.then(() => this.doFinalize());
 		}
 		this.sequencer = this.sequencer.then(f);
-		return this.sequencer;
+		return this.sequencer as Promise<T>;
 	}
 
 	private async appendMarkdown(md: MarkdownString): Promise<void> {

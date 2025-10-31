@@ -6,6 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import * as vscode from 'vscode';
+import { FetchStreamRecorder } from '../../../platform/chat/common/chatMLFetcher';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
@@ -17,9 +18,11 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
+import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
+import { EndpointEditToolName, IEndpointProvider, isEndpointEditToolName } from '../common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
@@ -31,14 +34,18 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	public readonly isPremium: boolean = false;
 	public readonly multiplier: number = 0;
 	public readonly isExtensionContributed = true;
+	public readonly supportedEditTools?: readonly EndpointEditToolName[] | undefined;
 
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
 		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider
 	) {
 		// Initialize with the model's max tokens
 		this._maxTokens = languageModel.maxInputTokens;
+		this.supportedEditTools = languageModel.capabilities.editToolsHint?.filter(isEndpointEditToolName);
 	}
 
 	get modelMaxPromptTokens(): number {
@@ -142,11 +149,19 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	}
 
 	async makeChatRequest2({
+		debugName,
 		messages,
 		requestOptions,
 		finishedCb,
+		location,
+		source,
 	}: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		const vscodeMessages = convertToApiChatMessage(messages);
+		const ourRequestId = generateUuid();
+
+		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
+		const currentEndpoint = allEndpoints.find(endpoint => endpoint.model === this.model);
+		const isExternalModel = !currentEndpoint;
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
@@ -156,40 +171,53 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			}))
 		};
 
+		const streamRecorder = new FetchStreamRecorder(finishedCb);
+
+		const pendingLoggedChatRequest = isExternalModel ? this._requestLogger.logChatRequest(debugName + '-external', this, {
+			messages,
+			model: this.model,
+			ourRequestId,
+			location,
+			postOptions: requestOptions,
+			tools: requestOptions?.tools,
+			ignoreStatefulMarker: true
+		})
+			: undefined;
+
 		try {
 			const response = await this.languageModel.sendRequest(vscodeMessages, vscodeOptions, token);
 			let text = '';
 			let numToolsCalled = 0;
-			const requestId = generateUuid();
+			const requestId = ourRequestId;
 
 			// consume stream
 			for await (const chunk of response.stream) {
 				if (chunk instanceof vscode.LanguageModelTextPart) {
 					text += chunk.value;
 					// Call finishedCb with the current chunk of text
-					if (finishedCb) {
-						await finishedCb(text, 0, { text: chunk.value });
+					if (streamRecorder.callback) {
+						await streamRecorder.callback(text, 0, { text: chunk.value });
 					}
 				} else if (chunk instanceof vscode.LanguageModelToolCallPart) {
 					// Call finishedCb with updated tool calls
-					if (finishedCb) {
+					if (streamRecorder.callback) {
 						const functionCalls = [chunk].map(tool => ({
 							name: tool.name ?? '',
 							arguments: JSON.stringify(tool.input) ?? '',
 							id: tool.callId
 						}));
 						numToolsCalled++;
-						await finishedCb(text, 0, { text: '', copilotToolCalls: functionCalls });
+						await streamRecorder.callback(text, 0, { text: '', copilotToolCalls: functionCalls });
 					}
 				} else if (chunk instanceof vscode.LanguageModelDataPart) {
 					if (chunk.mimeType === CustomDataPartMimeTypes.StatefulMarker) {
 						const decoded = decodeStatefulMarker(chunk.data);
-						await finishedCb?.(text, 0, { text: '', statefulMarker: decoded.marker });
+						await streamRecorder.callback?.(text, 0, { text: '', statefulMarker: decoded.marker });
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
 					// Call finishedCb with the current chunk of thinking text with a specific thinking field
-					if (finishedCb) {
-						await finishedCb(text, 0, {
+					if (streamRecorder.callback) {
+						await streamRecorder.callback(text, 0, {
 							text: '',  // Use empty text to avoid creating markdown part
 							thinking: {
 								text: chunk.value,
@@ -207,24 +235,30 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					requestId,
 					serverRequestId: requestId,
 					usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } },
-					value: text
+					value: text,
+					resolvedModel: this.languageModel.id
 				};
+				pendingLoggedChatRequest?.resolve({ ...response, value: [response.value] }, streamRecorder.deltas);
 				return response;
 			} else {
-				return {
+				const result: ChatResponse = {
 					type: ChatFetchResponseType.Unknown,
 					reason: 'No response from language model',
 					requestId: requestId,
 					serverRequestId: undefined
 				};
+				pendingLoggedChatRequest?.resolve(result);
+				return result;
 			}
 		} catch (e) {
-			return {
+			const result: ChatResponse = {
 				type: ChatFetchResponseType.Failed,
-				reason: toErrorMessage(e),
+				reason: toErrorMessage(e, true),
 				requestId: generateUuid(),
 				serverRequestId: undefined
 			};
+			pendingLoggedChatRequest?.resolve(result);
+			return result;
 		}
 	}
 

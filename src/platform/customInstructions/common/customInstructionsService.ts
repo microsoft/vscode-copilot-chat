@@ -6,6 +6,8 @@
 import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { match } from '../../../util/vs/base/common/glob';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ResourceSet } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { dirname, isAbsolute } from '../../../util/vs/base/common/path';
 import { joinPath } from '../../../util/vs/base/common/resources';
@@ -14,6 +16,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { FileType, Uri } from '../../../vscodeTypes';
 import { CodeGenerationImportInstruction, CodeGenerationTextInstruction, Config, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
+import { IExtensionsService } from '../../extensions/common/extensionsService';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { IPromptPathRepresentationService } from '../../prompts/common/promptPathRepresentationService';
@@ -74,9 +77,11 @@ const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
 const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
 
 
-export class CustomInstructionsService implements ICustomInstructionsService {
+export class CustomInstructionsService extends Disposable implements ICustomInstructionsService {
 
 	readonly _serviceBrand: undefined;
+
+	private _contributedInstructions: ResourceSet | undefined;
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -85,7 +90,12 @@ export class CustomInstructionsService implements ICustomInstructionsService {
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@ILogService private readonly logService: ILogService,
+		@IExtensionsService private readonly extensionService: IExtensionsService,
 	) {
+		super();
+		this._register(this.extensionService.onDidChange(() => {
+			this._contributedInstructions = undefined;
+		}));
 	}
 
 	public async fetchInstructionsFromFile(fileUri: Uri): Promise<ICustomInstructions | undefined> {
@@ -188,6 +198,10 @@ export class CustomInstructionsService implements ICustomInstructionsService {
 		if (uri.scheme === Schemas.vscodeUserData) {
 			return true;
 		}
+		if (this.getInstructionURLFromExtensionPoint().has(uri)) {
+			return true;
+		}
+
 		if (uri.scheme !== Schemas.file) {
 			return false;
 		}
@@ -208,5 +222,25 @@ export class CustomInstructionsService implements ICustomInstructionsService {
 			}
 		}
 		return true;
+	}
+
+	private getInstructionURLFromExtensionPoint(): ResourceSet {
+		if (!this._contributedInstructions) {
+			const result = new ResourceSet();
+			for (const extension of this.extensionService.all) {
+
+				const chatInstructions = extension.packageJSON['contributes']?.['chatInstructions'];
+				if (Array.isArray(chatInstructions)) {
+					for (const contribution of chatInstructions) {
+						if (contribution.path) {
+							const fileUri = joinPath(extension.extensionUri, contribution.path);
+							result.add(fileUri);
+						}
+					}
+				}
+			}
+			this._contributedInstructions = result;
+		}
+		return this._contributedInstructions;
 	}
 }

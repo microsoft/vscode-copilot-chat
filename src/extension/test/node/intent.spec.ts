@@ -68,7 +68,6 @@ suite('Intent Streaming', function () {
 		const values: TextEdit[] = [];
 
 		const part: IResponsePart = {
-			text: 'What can be done',
 			delta: {
 				text: 'What can be done'
 			}

@@ -4,27 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { editorAgentName, getChatParticipantIdFromName } from '../../../platform/chat/common/chatAgents';
 import { trimCommonLeadingWhitespace } from '../../../platform/chunking/node/naiveChunker';
-import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
-import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
+import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { INotificationService } from '../../../platform/notification/common/notificationService';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { IReviewService, ReviewComment, ReviewSuggestionChange } from '../../../platform/review/common/reviewService';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { coalesce } from '../../../util/vs/base/common/arrays';
@@ -44,7 +36,7 @@ import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipant
 import { sendReviewActionTelemetry } from '../../prompt/node/feedbackGenerator';
 import { CurrentSelection } from '../../prompts/node/panel/currentSelection';
 import { SymbolAtCursor } from '../../prompts/node/panel/symbolAtCursor';
-import { doReview } from '../../review/node/doReview';
+import { ReviewSession } from '../../review/node/doReview';
 import { QuickFixesProvider, RefactorsProvider } from './inlineChatCodeActions';
 import { NotebookExectionStatusBarItemProvider } from './inlineChatNotebookActions';
 
@@ -287,38 +279,18 @@ ${message}`,
 		}
 	};
 
-	const getServicesForReview = (accessor: ServicesAccessor): [IScopeSelector, IInstantiationService, IReviewService, IAuthenticationService, ILogService, IGitExtensionService, ICAPIClientService, IDomainService, IFetcherService, IEnvService, IIgnoreService, ITabsAndEditorsService, IWorkspaceService, IRunCommandExecutionService, INotificationService] => {
-		return [
-			accessor.get(IScopeSelector),
-			accessor.get(IInstantiationService),
-			accessor.get(IReviewService),
-			accessor.get(IAuthenticationService),
-			accessor.get(ILogService),
-			accessor.get(IGitExtensionService),
-			accessor.get(ICAPIClientService),
-			accessor.get(IDomainService),
-			accessor.get(IFetcherService),
-			accessor.get(IEnvService),
-			accessor.get(IIgnoreService),
-			accessor.get(ITabsAndEditorsService),
-			accessor.get(IWorkspaceService),
-			accessor.get(IRunCommandExecutionService),
-			accessor.get(INotificationService),
-		];
-	};
-
 	// register commands
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain', doExplain));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain.palette', () => doExplain(undefined, true)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review', () => doReview(...instaService.invokeFunction(getServicesForReview), 'selection', vscode.ProgressLocation.Notification)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'index', vscode.ProgressLocation.Notification)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'workingTree', vscode.ProgressLocation.Notification)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes', () => doReview(...instaService.invokeFunction(getServicesForReview), 'all', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review', () => instaService.createInstance(ReviewSession).review('selection', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedChanges', () => instaService.createInstance(ReviewSession).review('index', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedChanges', () => instaService.createInstance(ReviewSession).review('workingTree', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes', () => instaService.createInstance(ReviewSession).review('all', vscode.ProgressLocation.Notification)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedFileChange', (resource: vscode.SourceControlResourceState) => {
-		return doReview(...instaService.invokeFunction(getServicesForReview), { group: 'index', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
+		return instaService.createInstance(ReviewSession).review({ group: 'index', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
 	}));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedFileChange', (resource: vscode.SourceControlResourceState) => {
-		return doReview(...instaService.invokeFunction(getServicesForReview), { group: 'workingTree', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
+		return instaService.createInstance(ReviewSession).review({ group: 'workingTree', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
 	}));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.apply', doApplyReview));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.applyAndNext', (commentThread: vscode.CommentThread) => doApplyReview(commentThread, true)));
@@ -383,7 +355,8 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			toolInvocationToken: undefined as never,
 			model: null!,
 			tools: new Map(),
-			id: '1'
+			id: '1',
+			sessionId: '1',
 		};
 		let markdown = '';
 		const edits: ReviewSuggestionChange[] = [];

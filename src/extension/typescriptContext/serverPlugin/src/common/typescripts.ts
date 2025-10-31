@@ -425,6 +425,8 @@ namespace tss {
 		}
 	}
 
+	export type DirectSuperSymbolInfo = { extends?: { symbol: tt.Symbol; name: string } | undefined; implements?: { symbol: tt.Symbol; name: string }[] }
+
 	export class Symbols {
 
 		private readonly program: tt.Program;
@@ -477,6 +479,10 @@ namespace tss {
 
 		public static isTypeAlias(symbol: tt.Symbol | undefined): boolean {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
+		}
+
+		public static isTypeParameter(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeParameter) !== 0;
 		}
 
 		public static isTypeLiteral(symbol: tt.Symbol | undefined): boolean {
@@ -776,6 +782,41 @@ namespace tss {
 				}
 			}
 			return [undefined, undefined];
+		}
+
+		public getDirectSuperSymbols(symbol: tt.Symbol): DirectSuperSymbolInfo | undefined {
+			const declarations = symbol.declarations;
+			if (declarations === undefined) {
+				return undefined;
+			}
+			const result: DirectSuperSymbolInfo = {};
+			for (const declaration of declarations) {
+				if (ts.isClassDeclaration(declaration)) {
+					const heritageClauses = declaration.heritageClauses;
+					if (heritageClauses !== undefined) {
+						for (const heritageClause of heritageClauses) {
+							const extendsNode = heritageClause.types[0]?.expression;
+							let candidate = this.typeChecker.getSymbolAtLocation(extendsNode);
+							if (Symbols.isAlias(candidate)) {
+								candidate = this.typeChecker.getAliasedSymbol(candidate!);
+							}
+							if (heritageClause.token === ts.SyntaxKind.ExtendsKeyword) {
+								if (Symbols.isClass(candidate)) {
+									result.extends = { symbol: candidate!, name: extendsNode.getText() };
+								}
+							} else if (heritageClause.token === ts.SyntaxKind.ImplementsKeyword) {
+								if (Symbols.isInterface(candidate)) {
+									if (result.implements === undefined) {
+										result.implements = [];
+									}
+									result.implements.push({ symbol: candidate!, name: extendsNode.getText() });
+								}
+							}
+						}
+					}
+				}
+			}
+			return result;
 		}
 
 		public getAliasedSymbolAtLocation(node: tt.Node): tt.Symbol | undefined {

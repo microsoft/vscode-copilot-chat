@@ -9,7 +9,7 @@ const ts = TS();
 import { FunctionLikeContextProvider, FunctionLikeContextRunnable } from './baseContextProviders';
 import { CodeSnippetBuilder } from './code';
 import {
-	AbstractContextRunnable, ComputeCost, ContextResult, Search, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
+	AbstractContextRunnable, ComputeCost, ContextResult, Search, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
 	type RunnableResult
 } from './contextProvider';
 import { EmitMode, Priorities, SpeculativeKind, type CacheInfo } from './protocol';
@@ -449,9 +449,9 @@ abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.Const
 					return;
 				}
 				const sourceFile = this.declaration.getSourceFile();
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.context.getSymbols(program), sourceFile);
+				const snippetBuilder = new CodeSnippetBuilder(this.context, this.context.getSymbols(program), sourceFile);
 				snippetBuilder.addDeclaration(candidate);
-				result.addSnippet(snippetBuilder, undefined);
+				result.addSnippet(snippetBuilder, this.location, undefined);
 			}
 		}
 	}
@@ -511,7 +511,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 	private readonly declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration, priority: number = Priorities.Properties) {
-		super(session, languageService, context, 'PropertiesTypeRunnable', priority, ComputeCost.Medium);
+		super(session, languageService, context, 'PropertiesTypeRunnable', SnippetLocation.Secondary, priority, ComputeCost.Medium);
 		this.declaration = declaration;
 	}
 

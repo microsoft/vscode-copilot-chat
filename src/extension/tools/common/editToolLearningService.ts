@@ -7,11 +7,13 @@ import type { LanguageModelChat } from 'vscode';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { LRUCache } from '../../../util/vs/base/common/map';
 import { mapValues } from '../../../util/vs/base/common/objects';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { EditTools as _EditTools, EDIT_TOOL_LEARNING_STATES, IEditToolLearningData, LearningConfig, State } from './editToolLearningStates';
-import { ToolName } from './toolNames';
+import { byokEditToolNamesToToolNames, ToolName } from './toolNames';
 
 export type EditTools = _EditTools;
 
@@ -49,6 +51,7 @@ export class EditToolLearningService implements IEditToolLearningService {
 	constructor(
 		@IVSCodeExtensionContext private readonly _context: IVSCodeExtensionContext,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) { }
 
 	async getPreferredEditTool(model: LanguageModelChat): Promise<EditTools[] | undefined> {
@@ -61,7 +64,16 @@ export class EditToolLearningService implements IEditToolLearningService {
 			return undefined;
 		}
 
-		const hardcoded = this._getHardcodedPreferences(endpoint.model);
+		const fromEndpoint = endpoint.supportedEditTools
+			?.map(e => byokEditToolNamesToToolNames.hasOwnProperty(e) ? byokEditToolNamesToToolNames[e] : undefined)
+			.filter(isDefined);
+		if (fromEndpoint?.length) {
+			return fromEndpoint;
+		}
+
+		// Note: looking at the 'name' rather than 'model' is intentional, 'model' is the user-
+		// provided model ID whereas the 'name' is the name of the model on the BYOK provider.
+		const hardcoded = this._getHardcodedPreferences(endpoint.name);
 		if (hardcoded) {
 			return hardcoded;
 		}
@@ -78,7 +90,7 @@ export class EditToolLearningService implements IEditToolLearningService {
 		}
 
 		const learningData = this._getModelLearningData(model.id);
-		this._recordEdit(learningData, tool, success);
+		this._recordEdit(model.id, learningData, tool, success);
 		await this._saveModelLearningData(model.id, learningData);
 	}
 
@@ -100,25 +112,45 @@ export class EditToolLearningService implements IEditToolLearningService {
 		return EDIT_TOOL_LEARNING_STATES[data.state].allowedTools;
 	}
 
-	private _checkStateTransitions(data: IEditToolLearningData): State {
+	private _checkStateTransitions(modelId: string, data: IEditToolLearningData): State {
 		const currentConfig = EDIT_TOOL_LEARNING_STATES[data.state];
 
+		if (!currentConfig.transitions) {
+			return data.state;
+		}
+
 		for (const [targetState, condition] of Object.entries(currentConfig.transitions)) {
-			if (condition(data)) {
-				return Number(targetState) as State;
+			if (!condition(data)) {
+				continue;
 			}
+
+			const target = Number(targetState) as State;
+
+			/* __GDPR__
+				"editToolLearning.transition" : {
+					"owner": "connor4312",
+					"comment": "Tracks state transitions in the edit tool learning system.",
+					"modelId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model ID" },
+					"state": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "State the model transitioned to", "isMeasurement": true }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('editToolLearning.transition', { modelId }, {
+				state: target,
+			});
+
+			return target;
 		}
 
 		return data.state; // No transition
 	}
 
-	private _recordEdit(data: IEditToolLearningData, tool: EditTools, success: boolean): void {
+	private _recordEdit(modelId: string, data: IEditToolLearningData, tool: EditTools, success: boolean): void {
 		const successBit = success ? 1n : 0n;
 		const toolData = (data.tools[tool] ??= { successBitset: 0n, attempts: 0 });
 		toolData.successBitset = addToWindow(toolData.successBitset, successBit);
 		toolData.attempts++;
 
-		const newState = this._checkStateTransitions(data);
+		const newState = this._checkStateTransitions(modelId, data);
 		if (newState !== data.state) {
 			data.state = newState;
 			data.tools = {};

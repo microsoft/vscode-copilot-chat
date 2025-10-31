@@ -17,6 +17,8 @@ import { APIErrorResponse, APIJsonData, APIUsage, ChoiceLogProbs, FilterReason, 
 /** Gathers together many chunks of a single completion choice. */
 class APIJsonDataStreaming {
 
+	constructor(public readonly model: string) { }
+
 	get text(): readonly string[] {
 		return this._text;
 	}
@@ -325,6 +327,7 @@ export class SSEProcessor {
 				// TODO @lramos15 - This should not be an ugly inlined type like this
 				let json: {
 					choices: ExtendedChoiceJSON[] | undefined | null;
+					model: string;
 					error?: APIErrorResponse;
 					copilot_references?: any;
 					copilot_confirmation?: any;
@@ -359,7 +362,7 @@ export class SSEProcessor {
 							yield {
 								index: 0,
 								finishOffset: undefined,
-								solution: new APIJsonDataStreaming(),
+								solution: new APIJsonDataStreaming(json.model || ''),
 								reason: FinishedCompletionReason.ServerError,
 								error: json.error,
 								requestId: this.requestId,
@@ -402,7 +405,7 @@ export class SSEProcessor {
 					thinkingFound ||= !!(thinkingDelta?.text || thinkingDelta?.id);
 
 					if (!(choice.index in this.solutions)) {
-						this.solutions[choice.index] = new APIJsonDataStreaming();
+						this.solutions[choice.index] = new APIJsonDataStreaming(json.model);
 					}
 
 					const solution = this.solutions[choice.index];
@@ -445,11 +448,13 @@ export class SSEProcessor {
 
 					let handled = true;
 					if (choice.delta?.tool_calls) {
-						if (!this.toolCalls.hasToolCalls() && solution.text.length > 0) {
+						if (!this.toolCalls.hasToolCalls()) {
 							const firstToolName = choice.delta.tool_calls.at(0)?.function?.name;
 							if (firstToolName) {
-								// Flush the linkifier stream. See #16465
-								solution.append({ index: 0, delta: { content: ' ' } });
+								if (solution.text.length) {
+									// Flush the linkifier stream. See #16465
+									solution.append({ index: 0, delta: { content: ' ' } });
+								}
 								await emitSolution({ beginToolCalls: [{ name: firstToolName }] });
 							}
 						}
@@ -481,7 +486,7 @@ export class SSEProcessor {
 					} else if (choice.delta?.function_call && (choice.delta.function_call.name || choice.delta.function_call.arguments)) {
 						allowCompletingSolution = false;
 						this.functionCallName ??= choice.delta.function_call.name;
-						this.functionCalls[this.functionCallName] ??= new APIJsonDataStreaming();
+						this.functionCalls[this.functionCallName] ??= new APIJsonDataStreaming(json.model);
 						const functionCall = this.functionCalls[this.functionCallName];
 						functionCall!.append(choice);
 					} else if ((choice.finish_reason === FinishedCompletionReason.FunctionCall || choice.finish_reason === FinishedCompletionReason.Stop) && this.functionCallName) {

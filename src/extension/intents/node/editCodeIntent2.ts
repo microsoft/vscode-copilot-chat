@@ -30,6 +30,7 @@ import { IToolsService } from '../../tools/common/toolsService';
 import { AgentIntentInvocation } from './agentIntent';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
+import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
@@ -37,8 +38,6 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const toolsService = accessor.get<IToolsService>(IToolsService);
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
 		const notebookService = accessor.get<INotebookService>(INotebookService);
-		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
-		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 		const model = await endpointProvider.getChatEndpoint(request);
 		const lookForTools = new Set<string>([ToolName.EditFile]);
 
@@ -49,7 +48,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		if (await modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
-			if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+			if (await modelSupportsMultiReplaceString(model)) {
 				lookForTools.add(ToolName.MultiReplaceString);
 			}
 		}
@@ -94,7 +93,7 @@ export class EditCode2IntentInvocation extends AgentIntentInvocation {
 		return { disable: false };
 	}
 
-	protected override prompt = EditCodePrompt2;
+	protected override prompt: typeof EditCodePrompt2 | typeof NotebookInlinePrompt = EditCodePrompt2;
 
 	constructor(
 		intent: IIntent,

@@ -106,14 +106,6 @@ suite('can resolve merge conflicts', () => {
             "documentUri": "file:///users/ulugbekna/code/vscode-copilot/../../../../Users/ulugbekna/code/vscode-copilot/src/extension/inlineEdits/vscode-node/lastEditTimeTracker.ts",
             "edit": [
                 [
-<<<<<<< HEAD
-                    893,
-                    893,
-                    ";\\n\\t}\\n\\n\\tresetLastEditTime() {\\n\\t\\tthis._lastEditTime.set(undefined, undefined)"
-                ]
-            ],
-            "scoreCategory": "bad",
-=======
                     787,
                     894,
                     "lastEditTime !== undefined && (Date.now() - lastEditTime) < 5000; // 5 seconds"
@@ -132,7 +124,6 @@ suite('can resolve merge conflicts', () => {
                 ]
             ],
             "scoreCategory": "nextEdit",
->>>>>>> a60bc6ab1 (nes: nearby: trim system message and run and score stests)
             "score": 0
         }
     ],

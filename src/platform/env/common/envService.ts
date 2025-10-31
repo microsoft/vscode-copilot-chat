@@ -44,6 +44,7 @@ export interface IEnvService {
 	 * @see vscode.env.remoteName
 	 */
 	readonly remoteName: string | undefined;
+	readonly uiKind: 'desktop' | 'web';
 	readonly OS: OperatingSystem;
 	readonly uriScheme: string;
 	readonly extensionId: string;
@@ -76,6 +77,7 @@ export abstract class AbstractEnvService implements IEnvService {
 	abstract get extensionId(): string;
 	abstract get machineId(): string;
 	abstract get remoteName(): string | undefined;
+	abstract get uiKind(): 'desktop' | 'web';
 	abstract get OS(): OperatingSystem;
 	abstract get uriScheme(): string;
 	abstract get appRoot(): string;

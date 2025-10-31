@@ -27,7 +27,6 @@ import { EditSurvivalTrackerService, IEditSurvivalTrackerService } from '../../.
 import { IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICombinedEmbeddingIndex, VSCodeCombinedIndexImpl } from '../../../platform/embeddings/common/vscodeIndex';
-import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -95,6 +94,7 @@ import { MergeConflictServiceImpl } from '../../git/vscode/mergeConflictServiceI
 import { ILaunchConfigService } from '../../onboardDebug/common/launchConfigService';
 import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigService';
 import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
+import { IToolEmbeddingsComputer, ToolEmbeddingsComputer } from '../../tools/common/virtualTools/toolEmbeddingsComputer';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
@@ -111,7 +111,6 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	const isTestMode = extensionContext.extensionMode === ExtensionMode.Test;
 
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
-	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	builder.define(ICopilotTokenStore, new CopilotTokenStore());
 	builder.define(IDebugOutputService, new DebugOutputServiceImpl());
 	builder.define(IDialogService, new DialogServiceImpl());
@@ -169,6 +168,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));
 	builder.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	builder.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
+	builder.define(IToolEmbeddingsComputer, new SyncDescriptor(ToolEmbeddingsComputer));
 	builder.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	builder.define(IMergeConflictService, new SyncDescriptor(MergeConflictServiceImpl));
 	builder.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));

@@ -70,16 +70,6 @@ suite('Conversation feature test suite', function () {
 		}
 	});
 
-	test("If the 'interactive' version does not match, the feature is not enabled and not activated", function () {
-		const conversationFeature = instaService.createInstance(ConversationFeature);
-		try {
-			assert.deepStrictEqual(conversationFeature.enabled, false);
-			assert.deepStrictEqual(conversationFeature.activated, false);
-		} finally {
-			conversationFeature.dispose();
-		}
-	});
-
 	test('The feature is enabled and activated in test mode', function () {
 		const conversationFeature = instaService.createInstance(ConversationFeature);
 		try {

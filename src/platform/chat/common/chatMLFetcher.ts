@@ -16,7 +16,6 @@ export interface Source {
 }
 
 export interface IResponsePart {
-	readonly text: string;
 	readonly delta: IResponseDelta;
 }
 
@@ -42,10 +41,14 @@ export interface IChatMLFetcher {
 	fetchMany(options: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses>;
 }
 
+interface IResponsePartWithText extends IResponsePart {
+	readonly text: string;
+}
+
 export class FetchStreamSource {
 
 	private _stream = new AsyncIterableSource<IResponsePart>();
-	private _paused?: (IResponsePart | undefined)[];
+	private _paused?: (IResponsePartWithText | undefined)[];
 
 	// This means that we will only show one instance of each annotation type, but the IDs are not correct and there is no other way
 	private _seenAnnotationTypes = new Set<string>();
@@ -95,7 +98,7 @@ export class FetchStreamSource {
 			delta.codeVulnAnnotations = delta.codeVulnAnnotations.filter(annotation => !this._seenAnnotationTypes.has(annotation.details.type));
 			delta.codeVulnAnnotations.forEach(annotation => this._seenAnnotationTypes.add(annotation.details.type));
 		}
-		this._stream.emitOne({ text, delta });
+		this._stream.emitOne({ delta });
 	}
 
 	resolve(): void {

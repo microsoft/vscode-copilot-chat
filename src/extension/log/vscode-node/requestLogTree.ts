@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as tar from 'tar';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { OutputChannelName } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -498,6 +499,11 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 			await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: requestId }, 'rawrequest')));
 		}));
+
+		this._register(vscode.commands.registerCommand('github.copilot.debug.showOutputChannel', async () => {
+			// Yes this is the correct auto-generated command for our output channel
+			await vscode.commands.executeCommand(`workbench.action.output.show.GitHub.copilot-chat.${OutputChannelName}`);
+		}));
 	}
 }
 
@@ -723,7 +729,7 @@ class ChatRequestItem extends vscode.TreeItem {
 			const tokensStrPart = tokensStr ? `[${tokensStr}] ` : '';
 			this.description = `${tokensStrPart}[${timeStr}] [${startTimeStr}]`;
 
-			this.iconPath = info.entry.type === LoggedRequestKind.ChatMLSuccess || info.entry.type === LoggedRequestKind.CompletionSuccess ? undefined : new vscode.ThemeIcon('error');
+			this.iconPath = info.entry.type === LoggedRequestKind.ChatMLSuccess ? undefined : new vscode.ThemeIcon('error');
 			this.tooltip = `${info.entry.type === LoggedRequestKind.ChatMLCancelation ? 'cancelled' : info.entry.result.type}
 	${info.entry.chatEndpoint.model}
 	${timeStr}
@@ -797,7 +803,7 @@ class LogTreeFilters extends Disposable {
 
 	private isNesRequest(item: ChatRequestItem): boolean {
 		const debugName = item.info.entry.debugName.toLowerCase();
-		return debugName.startsWith('nes |') || debugName === 'xtabprovider';
+		return debugName.startsWith('nes |') || debugName === 'xtabprovider' || debugName.startsWith('nes.');
 	}
 
 	private setShown(name: string, value: boolean): void {

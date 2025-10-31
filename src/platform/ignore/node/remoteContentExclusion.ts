@@ -104,6 +104,8 @@ export class RemoteContentExclusion implements IDisposable {
 		// We're missing entries for this repository in the cache, so we fetch it.
 		// Or it has been more than 30 minutes so the current rules are stale
 		if (this.shouldFetchContentExclusionRules(repoMetadata) || (Date.now() - this._lastRuleFetch > 30 * 60 * 1000)) {
+			this._logService.trace(`Fetching content exclusions, due to ${this.shouldFetchContentExclusionRules(repoMetadata) ? 'repository change' : 'stale cache'}.`);
+			this._lastRuleFetch = Date.now();
 			await raceCancellationError(this.makeContentExclusionRequest(), token);
 		}
 
@@ -178,6 +180,7 @@ export class RemoteContentExclusion implements IDisposable {
 		const repos = await Promise.all(repoUris.map(uri => this._gitService.getRepositoryFetchUrls(uri)));
 		const repoInfos = repos.map(repo => this.shouldFetchContentExclusionRules(this.getRepositoryInfo(repo)));
 		if (repoInfos.some(info => info)) {
+			this._lastRuleFetch = Date.now();
 			await this.makeContentExclusionRequest();
 		}
 	}

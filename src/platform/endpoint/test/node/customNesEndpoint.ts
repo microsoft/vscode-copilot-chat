@@ -96,7 +96,7 @@ export class CustomNesEndpoint extends ChatEndpoint {
 		return 'Bearer ' + this.getSecretKey();
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		return {
 			'Authorization': this.getAuthHeader(),
 			'api-key': this.getSecretKey(),

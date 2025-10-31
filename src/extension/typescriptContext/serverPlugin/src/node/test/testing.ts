@@ -7,7 +7,7 @@ import assert from 'assert';
 import { type LanguageService } from 'typescript';
 
 import { computeContext as _computeContext } from '../../common/api';
-import { ContextResult, RequestContext, SingleLanguageServiceSession, TokenBudget, type ComputeContextSession } from '../../common/contextProvider';
+import { CharacterBudget, ContextResult, RequestContext, SingleLanguageServiceSession, type ComputeContextSession } from '../../common/contextProvider';
 import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type PriorityTag, type Trait } from '../../common/protocol';
 import { NullCancellationToken } from '../../common/typescripts';
 import { NodeHost } from '../host';
@@ -112,7 +112,7 @@ export type TestSession = {
 export type ContextItemWithPriority = FullContextItem & PriorityTag;
 
 export function computeContext(session: TestSession, document: string, position: { line: number; character: number }, contextKind: ContextKind): ContextItemWithPriority[] {
-	const result: ContextResult = new ContextResult(new TokenBudget(7 * 1024), new RequestContext(session.session, [], new Map()));
+	const result: ContextResult = new ContextResult(new CharacterBudget(7 * 1024 * 4), new CharacterBudget(8 * 1024 * 4), new RequestContext(session.session, [], new Map(), true));
 	const program = session.service.getProgram();
 	if (program === undefined) {
 		return [];

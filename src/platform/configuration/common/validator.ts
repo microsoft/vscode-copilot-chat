@@ -9,6 +9,12 @@ export interface IValidator<T> {
 	validate(content: unknown): { content: T; error: undefined } | { content: undefined; error: ValidationError };
 
 	toSchema(): JsonSchema;
+
+	/**
+	 * Returns true if this validator represents a required field.
+	 * Used by vObj to determine which fields are required.
+	 */
+	isRequired?(): boolean;
 }
 
 export type ValidatorType<T> = T extends IValidator<infer U> ? U : never;
@@ -77,6 +83,23 @@ export function vUnknown(): IValidator<unknown> {
 
 export type ObjectProperties = Record<string, any>;
 
+export function vRequired<T>(validator: IValidator<T>): IValidator<T> {
+	return {
+		validate(content: unknown): { content: T; error: undefined } | { content: undefined; error: ValidationError } {
+			if (content === undefined) {
+				return { content: undefined, error: { message: "Required field is missing" } };
+			}
+			return validator.validate(content);
+		},
+		toSchema(): JsonSchema {
+			return validator.toSchema();
+		},
+		isRequired(): boolean {
+			return true;
+		}
+	};
+}
+
 export function vObj<T extends Record<string, IValidator<any>>>(properties: T): IValidator<{ [K in keyof T]: ValidatorType<T[K]> }> {
 	return {
 		validate(content: unknown): { content: any; error: undefined } | { content: undefined; error: ValidationError } {
@@ -87,9 +110,22 @@ export function vObj<T extends Record<string, IValidator<any>>>(properties: T): 
 			const result: any = {};
 			for (const key in properties) {
 				const validator = properties[key];
-				const { content: value, error } = validator.validate((content as any)[key]);
+				const fieldValue = (content as any)[key];
+
+				// Check if field is required and missing
+				const isRequired = validator.isRequired?.() ?? false;
+				if (isRequired && fieldValue === undefined) {
+					return { content: undefined, error: { message: `Required field '${key}' is missing` } };
+				}
+
+				// If field is not required and is missing, skip validation
+				if (!isRequired && fieldValue === undefined) {
+					continue;
+				}
+
+				const { content: value, error } = validator.validate(fieldValue);
 				if (error) {
-					return { content: undefined, error: { message: `Error in property ${key}: ${error.message}` } };
+					return { content: undefined, error: { message: `Error in property '${key}': ${error.message}` } };
 				}
 
 				result[key] = value;
@@ -98,10 +134,23 @@ export function vObj<T extends Record<string, IValidator<any>>>(properties: T): 
 			return { content: result, error: undefined };
 		},
 		toSchema() {
-			return {
+			const requiredFields: string[] = [];
+			const schemaProperties: Record<string, JsonSchema> = {};
+
+			for (const [key, validator] of Object.entries(properties)) {
+				schemaProperties[key] = validator.toSchema();
+				if (validator.isRequired?.()) {
+					requiredFields.push(key);
+				}
+			}
+
+			const schema: JsonSchema = {
 				type: "object",
-				properties: Object.fromEntries(Object.entries(properties).map(([key, validator]) => [key, validator.toSchema()])),
+				properties: schemaProperties,
+				...(requiredFields.length > 0 ? { required: requiredFields } : {})
 			};
+
+			return schema;
 		}
 	};
 }

@@ -5,19 +5,28 @@
 
 import { Readable } from 'stream';
 import { ILogService } from '../../log/common/logService';
-import { FetchOptions, Response } from '../common/fetcherService';
+import { FetcherId, FetchOptions, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
+import { Config, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 
 
-export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[], url: string, options: FetchOptions, logService: ILogService): Promise<{ response: Response; updatedFetchers?: IFetcher[] }> {
+const fetcherConfigKeys: Record<FetcherId, Config<boolean>> = {
+	'electron-fetch': ConfigKey.Shared.DebugUseElectronFetcher,
+	'node-fetch': ConfigKey.Shared.DebugUseNodeFetchFetcher,
+	'node-http': ConfigKey.Shared.DebugUseNodeFetcher,
+};
+
+export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[], url: string, options: FetchOptions, knownBadFetchers: Set<string>, configurationService: IConfigurationService, logService: ILogService): Promise<{ response: Response; updatedFetchers?: IFetcher[]; updatedKnownBadFetchers?: Set<string> }> {
 	if (options.retryFallbacks && availableFetchers.length > 1) {
 		let firstResult: { ok: boolean; response: Response } | { ok: false; err: any } | undefined;
+		const updatedKnownBadFetchers = new Set<string>();
 		for (const fetcher of availableFetchers) {
 			const result = await tryFetch(fetcher, url, options, logService);
 			if (fetcher === availableFetchers[0]) {
 				firstResult = result;
 			}
 			if (!result.ok) {
+				updatedKnownBadFetchers.add(fetcher.getUserAgentLibrary());
 				continue;
 			}
 			if (fetcher !== availableFetchers[0]) {
@@ -29,7 +38,7 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 				const updatedFetchers = availableFetchers.slice();
 				updatedFetchers.splice(updatedFetchers.indexOf(fetcher), 1);
 				updatedFetchers.unshift(fetcher);
-				return { response: result.response, updatedFetchers };
+				return { response: result.response, updatedFetchers, updatedKnownBadFetchers };
 			}
 			return { response: result.response };
 		}
@@ -38,7 +47,26 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 		}
 		throw firstResult!.err;
 	}
-	return { response: await availableFetchers[0].fetch(url, options) };
+	let fetcher = availableFetchers[0];
+	if (options.useFetcher) {
+		if (knownBadFetchers.has(options.useFetcher)) {
+			logService.trace(`FetcherService: not using requested fetcher ${options.useFetcher} as it is known to be failing, using ${fetcher.getUserAgentLibrary()} instead.`);
+		} else {
+			const configKey = fetcherConfigKeys[options.useFetcher];
+			if (configKey && configurationService.inspectConfig(configKey)?.globalValue === false) {
+				logService.trace(`FetcherService: not using requested fetcher ${options.useFetcher} as it is disabled in user settings, using ${fetcher.getUserAgentLibrary()} instead.`);
+			} else {
+				const requestedFetcher = availableFetchers.find(f => f.getUserAgentLibrary() === options.useFetcher);
+				if (requestedFetcher) {
+					fetcher = requestedFetcher;
+					logService.trace(`FetcherService: using ${options.useFetcher} as requested.`);
+				} else {
+					logService.info(`FetcherService: could not find requested fetcher ${options.useFetcher}, using ${fetcher.getUserAgentLibrary()} instead.`);
+				}
+			}
+		}
+	}
+	return { response: await fetcher.fetch(url, options) };
 }
 
 async function tryFetch(fetcher: IFetcher, url: string, options: FetchOptions, logService: ILogService): Promise<{ ok: boolean; response: Response } | { ok: false; err: any }> {

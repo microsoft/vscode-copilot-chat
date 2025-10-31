@@ -67,7 +67,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 		progress?.report(new ChatResponseProgressPart(l10n.t('Refining question to improve search accuracy.')));
 		let userQuery: string = this.props.promptContext.query;
 
-		const endpoint = await this.endPointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endPointProvider.getChatEndpoint('copilot-fast');
 		const renderer = PromptRenderer.create(this.instantiationService, endpoint, VscodeMetaPrompt, this.props.promptContext);
 		const { messages } = await renderer.render();
 		if (token.isCancellationRequested) {
@@ -136,7 +136,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 			return { settings: [], commands: [], query: userQuery };
 		}
 
-		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [userQuery], { endpointType: 'capi' }, undefined);
+		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [userQuery], {}, undefined);
 		if (token.isCancellationRequested) {
 			return { settings: [], commands: [], query: userQuery };
 		}

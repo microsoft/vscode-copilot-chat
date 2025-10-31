@@ -42,7 +42,7 @@ export const enum State {
 
 interface StateConfig {
 	allowedTools: EditTools[];
-	transitions: { [K in State]?: (data: IEditToolLearningData) => boolean };
+	transitions?: { [K in State]?: (data: IEditToolLearningData) => boolean };
 }
 
 
@@ -126,14 +126,11 @@ export const EDIT_TOOL_LEARNING_STATES: Record<State, StateConfig> = {
 	// Terminal states have no transitions
 	[State.EditFileOnly]: {
 		allowedTools: [ToolName.EditFile],
-		transitions: {},
 	},
 	[State.ReplaceStringOnly]: {
 		allowedTools: [ToolName.ReplaceString],
-		transitions: {},
 	},
 	[State.ReplaceStringWithMulti]: {
 		allowedTools: [ToolName.ReplaceString, ToolName.MultiReplaceString],
-		transitions: {},
 	},
 };

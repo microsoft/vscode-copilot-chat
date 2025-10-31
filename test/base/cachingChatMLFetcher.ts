@@ -206,7 +206,7 @@ export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisp
 			if (logger.shouldLog(LogLevel.Trace)) {
 				logger.trace(`Making request:\n` + opts.messages.map(m => `  ${m.role}: ${getTextPart(m.content)}`).join('\n'));
 			}
-			const result = await this.fetcher.fetchMany(opts, token);
+			const result = await this.fetcher.fetchMany({ ...opts, finishedCb: callbackWrapper.getCb() }, token);
 			const fetchingResponseTimeInMs = Date.now() - start;
 			// Don't cache failed results
 			if (

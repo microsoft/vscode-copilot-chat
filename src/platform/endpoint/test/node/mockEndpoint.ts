@@ -27,6 +27,7 @@ export class MockEndpoint implements IChatEndpoint {
 	) {
 		if (family !== undefined) {
 			this.family = family;
+			this.model = family;
 		}
 	}
 

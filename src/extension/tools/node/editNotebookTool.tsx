@@ -26,7 +26,7 @@ import { createSingleCallFunction } from '../../../util/vs/base/common/functiona
 import { DisposableStore, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { EndOfLine, EventEmitter, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, NotebookCellData, NotebookCellKind, NotebookEdit, NotebookRange, Position, Range, TextEdit } from '../../../vscodeTypes';
+import { EndOfLine, EventEmitter, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString, NotebookCellData, NotebookCellKind, NotebookEdit, NotebookRange, Position, Range, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
@@ -34,6 +34,7 @@ import { EXISTING_CODE_MARKER } from '../../prompts/node/panel/codeBlockFormatti
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
 
 export interface IEditNotebookToolParams {
 	filePath: string;
@@ -298,9 +299,9 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IEditNotebookToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
 		return {
-			invocationMessage: l10n.t('Editing notebook'),
-			presentation: 'hidden'
+			invocationMessage: new MarkdownString(l10n.t('Edit {0}', formatUriForFileWidget(uri)))
 		};
 	}
 

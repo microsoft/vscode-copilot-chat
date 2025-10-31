@@ -59,10 +59,6 @@ export class DebugCommandsContribution extends Disposable {
 			await launchConfigService.add(workspaceFolders[0].uri, launchConfig);
 			await launchConfigService.show(workspaceFolders[0].uri, launchConfig.configurations[0].name);
 		}));
-
-		this._register(vscode.commands.registerCommand('github.copilot.debug.generateConfiguration', async () => {
-			await vscode.commands.executeCommand('workbench.action.chat.open', '@vscode /startDebugging', { location: vscode.ChatLocation.Panel });
-		}));
 		this._register((vscode.commands.registerCommand('github.copilot.startDebugging', async (config: IStartDebuggingParsedResponse, progress) => {
 			const result = await this.launchConfigService.resolveConfigurationInputs(config);
 			if (result?.config) {

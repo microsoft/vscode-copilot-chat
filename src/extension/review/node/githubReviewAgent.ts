@@ -5,14 +5,15 @@
 
 import { RequestType } from '@vscode/copilot-api';
 import * as readline from 'readline';
-import type { TextDocument } from 'vscode';
+import type { Selection, TextDocument, TextEditor } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ConfigKey } from '../../../platform/configuration/common/configurationService';
+import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { normalizeFetchUrl } from '../../../platform/git/common/gitService';
 import { Repository } from '../../../platform/git/vscode/git';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -39,7 +40,9 @@ export async function githubReview(
 	envService: IEnvService,
 	ignoreService: IIgnoreService,
 	workspaceService: IWorkspaceService,
-	group: 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	customInstructionsService: ICustomInstructionsService,
+	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	editor: TextEditor | undefined,
 	progress: Progress<ReviewComment[]>,
 	cancellationToken: CancellationToken
 ): Promise<FeedbackResult> {
@@ -47,7 +50,17 @@ export async function githubReview(
 	if (!git) {
 		return { type: 'success', comments: [] };
 	}
-	const changes = (typeof group === 'string'
+	const changes = group === 'selection' ? [
+		{
+			repository: git.getRepository(editor!.document.uri) || undefined,
+			uri: editor!.document.uri,
+			relativePath: workspaceService.asRelativePath(editor!.document.uri),
+			before: '',
+			after: editor!.document.getText(),
+			selection: editor!.selection,
+			document: editor!.document,
+		}
+	] : (typeof group === 'string'
 		? (await Promise.all(git.repositories.map(async repository => {
 			const uris = new Set<Uri>();
 			if (group === 'all' || group === 'index') {
@@ -136,9 +149,12 @@ export async function githubReview(
 		capiClientService,
 		fetcherService,
 		envService,
+		customInstructionsService,
+		workspaceService,
+		group === 'selection' ? 'selection' : 'diff',
 		filteredChanges[0].repository,
-		filteredChanges.map(change => ({ path: change.relativePath, content: change.before })),
-		filteredChanges.map(change => ({ path: change.relativePath, content: change.after })),
+		filteredChanges.map(change => ({ path: change.relativePath, content: change.before, languageId: change.document.languageId })),
+		filteredChanges.map(change => ({ path: change.relativePath, content: change.after, languageId: change.document.languageId, selection: 'selection' in change ? change.selection : undefined })),
 		cancellationToken,
 	) : {
 		requestId: 'test-request-id',
@@ -223,6 +239,10 @@ interface FileState {
 	path: string;
 	// The file's contents. If the file does not exist in this state, this should be an empty string.
 	content: string;
+	// The language ID of the file
+	languageId: string;
+	// The selection within the file, if any
+	selection?: Selection;
 }
 
 // A generated pull request comment returned by the agent.
@@ -295,26 +315,47 @@ function parseLine(line: string): ResponseReference[] {
 	}
 }
 
-async function fetchComments(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, fetcherService: IFetcherService, envService: IEnvService, repository: Repository | undefined, baseFileContents: FileState[], headFileContents: FileState[], cancellationToken: CancellationToken) {
-	const codingGuidlines = repository ? await loadCodingGuidelines(logService, authService, capiClientService, repository) : [];
+async function fetchComments(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, fetcherService: IFetcherService, envService: IEnvService, customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', repository: Repository | undefined, baseFileContents: FileState[], headFileContents: FileState[], cancellationToken: CancellationToken) {
+	// Collect languageId to file patterns mapping
+	const languageIdToFilePatterns = new Map<string, Set<string>>();
+	for (const file of [...baseFileContents, ...headFileContents]) {
+		const ext = path.extname(file.path);
+		if (ext) {
+			if (!languageIdToFilePatterns.has(file.languageId)) {
+				languageIdToFilePatterns.set(file.languageId, new Set());
+			}
+			languageIdToFilePatterns.get(file.languageId)!.add(`*${ext}`);
+		}
+	}
+
+	const customInstructions = await loadCustomInstructions(customInstructionsService, workspaceService, kind, languageIdToFilePatterns, 2);
 
 	const requestBody = {
 		messages: [{
 			role: 'user',
-			// This is the minimum reference required to get the agent to generate comments.
-			// NOTE: The shape of these references is under active development and is likely to change.
+			...(kind === 'selection' ? {
+				review_type: "snippet",
+				snippet_files: headFileContents.map(f => ({
+					path: f.path,
+					regions: [
+						{
+							start_line: f.selection!.start.line + 1,
+							end_line: f.selection!.end.line + (f.selection!.end.character > 0 ? 1 : 0), // If selection ends at start of line, don't include that line
+						}
+					]
+				})),
+			} : {}),
 			copilot_references: [
 				{
 					type: 'github.pull_request',
 					id: '1',
 					data: {
 						type: 'pull-request',
-						headFileContents,
-						baseFileContents,
-						// TODO: Refer to the repository so custom coding guidelines can be selected
+						headFileContents: headFileContents.map(({ path, content }) => ({ path, content })),
+						baseFileContents: baseFileContents.map(({ path, content }) => ({ path, content })),
 					},
 				},
-				...codingGuidlines,
+				...customInstructions,
 			],
 		}]
 	};
@@ -416,54 +457,80 @@ function reverseParsedPatch(fileLines: string[], patch: LineChange[]): string[] 
 	return fileLines;
 }
 
-async function loadCodingGuidelines(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, repository: Repository) {
-	const { state } = repository;
-	const remote = state.HEAD?.upstream?.remote || state.HEAD?.remote;
-	const pushUrl = remote && state.remotes.find(r => r.name === remote)?.pushUrl || state.remotes.find(r => r.pushUrl)?.pushUrl;
-	if (!pushUrl) {
-		return [];
-	}
-	const normalized = new URL(normalizeFetchUrl(pushUrl));
-	if (normalized.hostname !== 'github.com') {
-		return [];
-	}
-	const pathSegments = normalized.pathname.split('/');
-	const owner = pathSegments[1];
-	const repo = pathSegments[2].endsWith('.git') ? pathSegments[2].substring(0, pathSegments[2].length - 4) : pathSegments[2];
-	const ghToken = (await authService.getAnyGitHubSession())?.accessToken;
-	if (!ghToken) {
-		logService.info(`Failed to fetch coding guidelines for ${owner}/${repo}: Not signed in.`);
-		return [];
-	}
-	const response = await capiClientService.makeRequest<Response>({
-		headers: {
-			'Authorization': `Bearer ${ghToken}`
-		},
-	}, { type: RequestType.CodingGuidelines, repoWithOwner: `${owner}/${repo}` });
+interface CodingGuideline {
+	type: string;
+	id: string;
+	data: {
+		id: number;
+		type: string;
+		name: string;
+		description: string;
+		filePatterns: string[];
+	};
+}
 
-	const requestId = response.headers.get('x-github-request-id') || undefined;
-	logService.info(`[github review agent] coding guidelines request id: ${requestId}`);
+async function loadCustomInstructions(customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', languageIdToFilePatterns: Map<string, Set<string>>, firstId: number): Promise<CodingGuideline[]> {
+	const customInstructionRefs = [];
+	let nextId = firstId;
 
-	if (!response.ok) {
-		if (response.status !== 404) { // 404: No coding guidelines or user not part of coding guidelines feature flag.
-			logService.info(`Failed to fetch coding guidelines for ${owner}/${repo}: ${response.statusText}`);
+	// Collect instruction files from agent instructions
+	const agentInstructionUris = await customInstructionsService.getAgentInstructions();
+	for (const uri of agentInstructionUris) {
+		const instructions = await customInstructionsService.fetchInstructionsFromFile(Uri.from(uri));
+		if (instructions) {
+			const relativePath = workspaceService.asRelativePath(Uri.from(uri));
+			for (const instruction of instructions.content) {
+				// Skip instructions with languageId if not in map
+				if (instruction.languageId && !languageIdToFilePatterns.has(instruction.languageId)) {
+					continue;
+				}
+				const filePatterns = instruction.languageId ? Array.from(languageIdToFilePatterns.get(instruction.languageId)!) : ['*'];
+				customInstructionRefs.push({
+					type: 'github.coding_guideline',
+					id: `${nextId}`,
+					data: {
+						id: nextId,
+						type: 'coding-guideline',
+						name: `Instruction from ${relativePath}`,
+						description: instruction.instruction,
+						filePatterns,
+					},
+				});
+				nextId++;
+			}
 		}
-		return [];
 	}
 
-	const text = await response.text();
-	logService.debug(`[github review agent] coding guidelines: ${text}`);
-	const codingGuidelines = JSON.parse(text) as { name: string; description: string; filePatterns: string }[];
-	const codingGuidelineRefs = codingGuidelines.map((input, index) => ({
-		type: "github.coding_guideline",
-		id: `${index + 2}`,
-		data: {
-			id: index + 2,
-			type: "coding-guideline",
-			name: input.name,
-			description: input.description,
-			filePatterns: input.filePatterns,
-		},
-	}));
-	return codingGuidelineRefs;
+	// Collect instructions from settings
+	const settingsConfigs = [
+		{ config: ConfigKey.CodeGenerationInstructions, name: 'Code Generation Instruction' },
+		...(kind === 'selection' ? [{ config: ConfigKey.CodeFeedbackInstructions, name: 'Code Review Instruction' }] : []),
+	];
+
+	for (const { config, name } of settingsConfigs) {
+		const instructionsGroups = await customInstructionsService.fetchInstructionsFromSetting(config);
+		for (const instructionsGroup of instructionsGroups) {
+			for (const instruction of instructionsGroup.content) {
+				// Skip instructions with languageId if not in map
+				if (instruction.languageId && !languageIdToFilePatterns.has(instruction.languageId)) {
+					continue;
+				}
+				const filePatterns = instruction.languageId ? Array.from(languageIdToFilePatterns.get(instruction.languageId)!) : ['*'];
+				customInstructionRefs.push({
+					type: 'github.coding_guideline',
+					id: `${nextId}`,
+					data: {
+						id: nextId,
+						type: 'coding-guideline',
+						name,
+						description: instruction.instruction,
+						filePatterns,
+					},
+				});
+				nextId++;
+			}
+		}
+	}
+
+	return customInstructionRefs;
 }

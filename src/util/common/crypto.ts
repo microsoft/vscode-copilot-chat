@@ -39,3 +39,14 @@ export async function createSha256Hash(data: string | Uint8Array): Promise<strin
 
 	return hashHex;
 }
+
+const _cachedSha256Hashes = new Map<string, string>();
+export async function getCachedSha256Hash(text: string): Promise<string> {
+	if (_cachedSha256Hashes.has(text)) {
+		return _cachedSha256Hashes.get(text)!;
+	}
+
+	const hash = await createSha256Hash(text);
+	_cachedSha256Hashes.set(text, hash);
+	return hash;
+}

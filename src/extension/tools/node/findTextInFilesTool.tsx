@@ -7,9 +7,11 @@ import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { asArray } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { count } from '../../../util/vs/base/common/strings';
@@ -40,25 +42,51 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ISearchService private readonly searchService: ISearchService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindTextInFilesToolParams>, token: CancellationToken) {
+		const endpoint = options.model && (await this.endpointProvider.getChatEndpoint(options.model));
+		const modelFamily = endpoint?.family;
+
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
-		const patterns = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService) : undefined;
+		const patterns = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService, modelFamily) : undefined;
 
 		checkCancellation(token);
 		const askedForTooManyResults = options.input.maxResults && options.input.maxResults > MaxResultsCap;
 		const maxResults = Math.min(options.input.maxResults ?? 20, MaxResultsCap);
 		const isRegExp = options.input.isRegexp ?? true;
 		const queryIsValidRegex = this.isValidRegex(options.input.query);
-		let results = await this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token);
+
+		// try find text with a timeout of 20s
+		const timeoutInMs = 20_000;
+
+		let results = await raceTimeoutAndCancellationError(
+			(searchToken) => this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, searchToken),
+			token,
+			timeoutInMs,
+			// embed message to give LLM hint about what to do next
+			`Timeout in searching text in files with ${isRegExp ? 'regex' : 'literal'} search, try a more specific search pattern or change regex/literal mode`
+		);
+
+		// If we still have no results, we need to try the opposite regex mode
 		if (!results.length && queryIsValidRegex) {
-			results = await this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token);
+			results = await raceTimeoutAndCancellationError(
+				(searchToken) => this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, searchToken),
+				token,
+				timeoutInMs,
+				// embed message to give LLM hint about what to do next
+				`Find ${results.length} results in searching text in files with ${isRegExp ? 'regex' : 'literal'} search, and then another searching hits timeout in with ${!isRegExp ? 'regex' : 'literal'} search, try a more specific search pattern`
+			);
 		}
 
-		const result = new ExtendedLanguageModelToolResult([
-			new LanguageModelPromptTsxPart(
-				await renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token))]);
+		const prompt = await renderPromptElementJSON(this.instantiationService,
+			FindTextInFilesResult,
+			{ textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) },
+			options.tokenizationOptions,
+			token);
+
+		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const textMatches = results.flatMap(r => {
 			if ('ranges' in r) {
 				return asArray(r.ranges).map(rangeInfo => new Location(r.uri, rangeInfo.sourceRange));

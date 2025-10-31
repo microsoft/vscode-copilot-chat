@@ -135,7 +135,7 @@ export class SimulationLanguageDiagnosticsService extends AbstractLanguageDiagno
 	override onDidChangeDiagnostics: vscode.Event<vscode.DiagnosticChangeEvent> = this.workspace.onDidChangeDiagnostics;
 	override getDiagnostics: (resource: vscode.Uri) => vscode.Diagnostic[] = this.workspace.getDiagnostics.bind(this.workspace);
 	override getAllDiagnostics(): [vscode.Uri, vscode.Diagnostic[]][] {
-		return [];
+		return this.workspace.getAllDiagnostics();
 	}
 }
 
@@ -837,6 +837,12 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 	}
 	getBufferWithPid(pid: number, maxChars?: number): Promise<string> {
 		throw new Error('Method not implemented.');
+	}
+	contributePath(contributor: string, pathLocation: string, description?: string | { command: string }): void {
+		// No-op for test service
+	}
+	removePathContribution(contributor: string): void {
+		// No-op for test service
 	}
 }
 
