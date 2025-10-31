@@ -47,6 +47,7 @@ export class CopilotCLIAgentManager extends Disposable {
 		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
 		modelId: ModelProvider | undefined,
+		workingDirectory: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ copilotcliSessionId: string | undefined }> {
 		const isNewSession = !copilotcliSessionId;
@@ -69,7 +70,7 @@ export class CopilotCLIAgentManager extends Disposable {
 			this.sessionService.setPendingRequest(session.sessionId);
 		}
 
-		await session.invoke(prompt, attachments, request.toolInvocationToken, stream, modelId, token);
+		await session.invoke(prompt, attachments, request.toolInvocationToken, stream, modelId, workingDirectory, token);
 
 		return { copilotcliSessionId: session.sessionId };
 	}
@@ -116,6 +117,7 @@ export class CopilotCLISession extends Disposable {
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		modelId: ModelProvider | undefined,
+		workingDirectory: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<void> {
 		if (this._store.isDisposed) {
@@ -125,6 +127,11 @@ export class CopilotCLISession extends Disposable {
 		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const copilotToken = await this._authenticationService.getCopilotToken();
 
+		// Use provided working directory or default to first workspace folder
+		if (!workingDirectory) {
+			workingDirectory = this.workspaceService.getWorkspaceFolders().at(0)?.fsPath;
+		}
+
 		const options: AgentOptions = {
 			modelProvider: modelId ?? {
 				type: 'anthropic',
@@ -132,7 +139,7 @@ export class CopilotCLISession extends Disposable {
 			},
 			abortController: this._abortController,
 			// TODO@rebornix handle workspace properly
-			workingDirectory: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
+			workingDirectory: workingDirectory,
 			copilotToken: copilotToken.token,
 			env: {
 				...process.env,
