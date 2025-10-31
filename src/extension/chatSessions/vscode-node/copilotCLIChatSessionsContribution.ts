@@ -65,7 +65,7 @@ namespace SessionIdForCLI {
 }
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
-const COPILOT_CLI_ISOLATION_MEMENTO_KEY = 'github.copilot.cli.sessionIsolation.';
+const COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY = 'github.copilot.cli.sessionIsolation';
 
 /**
  * Escape XML special characters
@@ -178,7 +178,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			_sessionModel.set(copilotcliSessionId, preferredModel);
 
 			// Get the user's preferred isolation setting from global state, default to disabled
-			const isolationEnabled = this.extensionContext.globalState.get<boolean>(COPILOT_CLI_ISOLATION_MEMENTO_KEY, false);
+			const isolationEnabled = this.extensionContext.globalState.get<boolean>(COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, false);
 			_sessionIsolation.set(copilotcliSessionId, isolationEnabled);
 		}
 
@@ -242,8 +242,10 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 				// Handle isolation option changes
 				if (update.value === 'enabled') {
 					_sessionIsolation.set(sessionId, true);
+					this.extensionContext.globalState.update(COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, true);
 				} else {
 					_sessionIsolation.set(sessionId, false);
+					this.extensionContext.globalState.update(COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, false);
 				}
 			}
 		}
