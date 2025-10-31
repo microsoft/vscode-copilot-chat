@@ -255,7 +255,9 @@ export function createCopilotCLIToolInvocation(
 	invocation.isComplete = false;
 
 	// Format based on tool name
-	if (toolName === CopilotCLIToolNames.Bash) {
+	if (toolName === CopilotCLIToolNames.StrReplaceEditor && (args as StrReplaceEditorArgs)?.command === 'view') {
+		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
+	} else if (toolName === CopilotCLIToolNames.Bash) {
 		formatBashInvocation(invocation, args as BashArgs);
 	} else if (toolName === CopilotCLIToolNames.View) {
 		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
