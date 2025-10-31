@@ -15,7 +15,7 @@ import { ICopilotCLISDK } from './copilotCli';
 import { stripReminders } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 
-export interface ICopilotCLISession {
+export interface ICopilotCLISessionItem {
 	readonly id: string;
 	readonly sdkSession: Session;
 	readonly label: string;
@@ -31,8 +31,8 @@ export interface ICopilotCLISessionService {
 	onDidChangeSessions: Event<void>;
 
 	// Session metadata querying
-	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISession[]>;
-	getSession(sessionId: string, token: CancellationToken): Promise<ICopilotCLISession | undefined>;
+	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
+	getSession(sessionId: string, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined>;
 
 	// SDK session management
 	getSessionManager(): Promise<SessionManager>;
@@ -58,7 +58,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 	private _sessionManager: SessionManager | undefined;
 	private _sessionWrappers = new DisposableMap<string, IDisposable>();
-	private _sessions = new Map<string, ICopilotCLISession>();
+	private _sessions = new Map<string, ICopilotCLISessionItem>();
 	private _pendingRequests = new Set<string>();
 
 
@@ -81,13 +81,13 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		return this._sessionManager;
 	}
 
-	async getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISession[]> {
+	async getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
 			const sessionManager = await this.getSessionManager();
 			const sessionMetadataList = await sessionManager.listSessions();
 
 			// Convert SessionMetadata to ICopilotCLISession
-			const diskSessions: ICopilotCLISession[] = coalesce(await Promise.all(
+			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
 					try {
 						// Get the full session to access chat messages
@@ -136,7 +136,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		}
 	}
 
-	async getSession(sessionId: string, token: CancellationToken): Promise<ICopilotCLISession | undefined> {
+	async getSession(sessionId: string, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined> {
 		const cached = this._sessions.get(sessionId);
 		if (cached) {
 			return cached;
@@ -172,7 +172,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		const chatMessages = await sdkSession.getChatMessages();
 		const noUserMessages = !chatMessages.find(message => message.role === 'user');
 		const label = await this._generateSessionLabel(sdkSession.sessionId, chatMessages, prompt);
-		const newSession: ICopilotCLISession = {
+		const newSession: ICopilotCLISessionItem = {
 			id: sdkSession.sessionId,
 			sdkSession,
 			label,
