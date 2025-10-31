@@ -6,7 +6,9 @@
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
-import { LinkifiedPart, LinkifiedText, coalesceParts } from './linkifiedText';
+import { Location, Position, Range } from '../../../vscodeTypes';
+import { parseLineNumberAnnotation } from './lineAnnotationParser';
+import { coalesceParts, LinkifiedPart, LinkifiedText, LinkifyLocationAnchor } from './linkifiedText';
 import type { IContributedLinkifier, ILinkifier, LinkifierContext } from './linkifyService';
 
 namespace LinkifierState {
@@ -66,6 +68,13 @@ export class Linkifier implements ILinkifier {
 	private _appliedText = '';
 
 	private _totalAddedLinkCount = 0;
+
+	// Buffer used to delay emitting a single file anchor until we either
+	// detect a line annotation or exceed buffering heuristics.
+	private _delayedAnchorBuffer: { anchor: LinkifyLocationAnchor; afterText: string; totalChars: number } | undefined;
+
+	private static readonly maxAnchorBuffer = 140; // chars of following text to wait for annotation
+	private static readonly flushTerminatorsRe = /[\.?!]\s*$|\n/; // punctuation or newline suggests end of sentence
 
 	constructor(
 		private readonly context: LinkifierContext,
@@ -210,11 +219,29 @@ export class Linkifier implements ILinkifier {
 				}
 			}
 		}
-		return { parts: coalesceParts(out) };
+		// Coalesce adjacent string parts first so upgrade regex sees complete annotation text
+		// If we are still accumulating a word (end of input chunk), finalize it so annotations like 'lines 77–85.' are present.
+		if (this._state.type === LinkifierState.Type.Accumulating && this._state.accumulationType === LinkifierState.AccumulationType.Word) {
+			const pending = this._state.pendingText;
+			this._state = LinkifierState.Default;
+			if (pending.length) {
+				const r = await this.doLinkifyAndAppend(pending, {}, token);
+				out.push(...r.parts);
+			}
+		}
+
+		const coalesced = coalesceParts(out);
+
+		return { parts: this.processCoalescedParts(coalesced) };
 	}
 
 	async flush(token: CancellationToken): Promise<LinkifiedText | undefined> {
 		let out: LinkifiedText | undefined;
+
+		// Flush any buffered anchor before finalizing
+		if (this._delayedAnchorBuffer) {
+			out = { parts: this.flushAnchorBuffer() };
+		}
 
 		switch (this._state.type) {
 			case LinkifierState.Type.CodeOrMathBlock: {
@@ -304,5 +331,61 @@ export class Linkifier implements ILinkifier {
 			}
 		}
 		return out;
+	}
+
+	// --- Simplified buffering helpers ---
+
+	private processCoalescedParts(parts: readonly LinkifiedPart[]): LinkifiedPart[] {
+		const emit: LinkifiedPart[] = [];
+		for (const part of parts) {
+			if (part instanceof LinkifyLocationAnchor) {
+				const value: any = part.value;
+				if (value && value.range) { // already has line info
+					emit.push(part);
+					continue;
+				}
+				if (this._delayedAnchorBuffer) {
+					emit.push(...this.flushAnchorBuffer());
+				}
+				this._delayedAnchorBuffer = { anchor: part, afterText: '', totalChars: 0 };
+				if (typeof process !== 'undefined' && process.env?.VITEST) {
+					console.log('[Linkifier.buffer] Started buffering anchor', { uri: String(value) });
+				}
+				continue;
+			}
+			if (this._delayedAnchorBuffer && typeof part === 'string') {
+				this._delayedAnchorBuffer.afterText += part;
+				this._delayedAnchorBuffer.totalChars += part.length;
+				if (this.shouldFlushCurrentBuffer()) {
+					emit.push(...this.flushAnchorBuffer());
+				}
+				continue;
+			}
+			emit.push(part);
+		}
+		return emit;
+	}
+
+	private shouldFlushCurrentBuffer(): boolean {
+		const b = this._delayedAnchorBuffer;
+		if (!b) { return false; }
+		return Linkifier.flushTerminatorsRe.test(b.afterText)
+			|| b.totalChars > Linkifier.maxAnchorBuffer
+			|| !!parseLineNumberAnnotation(b.afterText);
+	}
+
+	private flushAnchorBuffer(): LinkifiedPart[] {
+		if (!this._delayedAnchorBuffer) { return []; }
+		const { anchor, afterText } = this._delayedAnchorBuffer;
+		let resultAnchor: LinkifyLocationAnchor = anchor;
+		const parsed = parseLineNumberAnnotation(afterText);
+		if (parsed) {
+			resultAnchor = new LinkifyLocationAnchor({ uri: anchor.value, range: new Range(new Position(parsed.startLine, 0), new Position(parsed.startLine, 0)) } as Location);
+			if (typeof process !== 'undefined' && process.env?.VITEST) {
+				console.log('[Linkifier.buffer] Upgraded buffered anchor', { uri: String(anchor.value), lineNumber: parsed.startLine + 1 });
+			}
+		}
+		this._delayedAnchorBuffer = undefined;
+		return afterText.length > 0 ? [resultAnchor, afterText] : [resultAnchor];
 	}
 }

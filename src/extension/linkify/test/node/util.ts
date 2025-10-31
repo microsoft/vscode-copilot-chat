@@ -78,7 +78,14 @@ export function assertPartsEqual(actualParts: readonly LinkifiedPart[], expected
 			assert.strictEqual(actual, expected);
 		} else if (actual instanceof LinkifyLocationAnchor) {
 			assert(expected instanceof LinkifyLocationAnchor, "Expected LinkifyLocationAnchor");
-			assert.strictEqual(actual.value.toString(), expected.value.toString());
+			const actualVal: any = actual.value as any;
+			const expectedVal: any = expected.value as any;
+			if (actualVal && expectedVal && 'range' in actualVal && 'range' in expectedVal && 'uri' in actualVal && 'uri' in expectedVal) {
+				assert.strictEqual(actualVal.uri.toString(), expectedVal.uri.toString());
+				assert.strictEqual(actualVal.range.start.line, expectedVal.range.start.line);
+			} else {
+				assert.strictEqual(actual.value.toString(), expected.value.toString());
+			}
 		} else {
 			assert(actual instanceof LinkifySymbolAnchor);
 			assert(expected instanceof LinkifySymbolAnchor, "Expected LinkifySymbolAnchor");

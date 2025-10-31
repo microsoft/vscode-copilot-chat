@@ -79,7 +79,13 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			pathText ??= match.groups?.['inlineCodePath'] ?? match.groups?.['plainTextPath'] ?? '';
 
 			parts.push(this.resolvePathText(pathText, context)
-				.then(uri => uri ? new LinkifyLocationAnchor(uri) : matched));
+				.then(uri => {
+					if (!uri) {
+						return matched;
+					}
+					// Do not try to parse line annotations here; central parser & buffer will upgrade later.
+					return new LinkifyLocationAnchor(uri);
+				}));
 
 			endLastMatch = match.index + matched.length;
 		}
