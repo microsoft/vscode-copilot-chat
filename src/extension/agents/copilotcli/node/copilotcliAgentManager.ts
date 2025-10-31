@@ -49,6 +49,11 @@ export class CopilotCLIAgentManager extends Disposable {
 		} else {
 			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId, prompt);
 			session = this.instantiationService.createInstance(CopilotCLISession, sdkSession);
+			session.add(session.onDidChangeStatus(() => {
+				if (session && session.status) {
+					this.sessionService.setSessionStatus(session.sessionId, session.status);
+				}
+			}));
 			this.sessionService.trackSessionWrapper(sdkSession.sessionId, session);
 		}
 
