@@ -6,8 +6,6 @@
 import type { AgentOptions, Attachment, ModelProvider, PostToolUseHookInput, PreToolUseHookInput, Session, SessionEvent } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
-import { IEnvService } from '../../../../platform/env/common/envService';
-import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -17,11 +15,11 @@ import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../.
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getAffectedUrisForEditTool } from '../common/copilotcliTools';
+import { ICopilotCLISDK } from './copilotCli';
 import { CopilotCLIPromptResolver } from './copilotcliPromptResolver';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
 import { processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
-import { ensureNodePtyShim } from './nodePtyShim';
 import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
 export class CopilotCLIAgentManager extends Disposable {
@@ -87,8 +85,7 @@ export class CopilotCLISession extends Disposable {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IToolsService private readonly toolsService: IToolsService,
-		@IEnvService private readonly envService: IEnvService,
-		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -100,12 +97,8 @@ export class CopilotCLISession extends Disposable {
 	}
 
 	async *query(prompt: string, attachments: Attachment[], options: AgentOptions): AsyncGenerator<SessionEvent> {
-		// Ensure node-pty shim exists before importing SDK
-		// @github/copilot has hardcoded: import{spawn}from"node-pty"
-		await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
-
 		// Dynamically import the SDK
-		const { Agent } = await import('@github/copilot/sdk');
+		const { Agent } = await this.copilotCLISDK.getPackage();
 		const agent = new Agent(options);
 		yield* agent.query(prompt, attachments);
 	}
