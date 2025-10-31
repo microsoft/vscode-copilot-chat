@@ -8,13 +8,14 @@ import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
-import { isCopilotCliEditToolCall } from '../common/copilotcliTools';
 
 /**
  * CopilotCLI tool names
  */
 export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
+	edit = 'edit',
+	create = 'create',
 	View = 'view',
 	Bash = 'bash',
 	Think = 'think',
@@ -35,6 +36,22 @@ interface StrReplaceEditorArgs {
 	file_text?: string;
 }
 
+interface CreateArgs {
+	path: string;
+	file_text?: string;
+}
+
+interface ViewArgs {
+	path: string;
+	view_range?: [number, number];
+}
+
+interface EditArgs {
+	path: string;
+	old_str?: string;
+	new_str?: string;
+}
+
 interface BashArgs {
 	command: string;
 	description?: string;
@@ -51,6 +68,32 @@ export function stripReminders(text: string): string {
 		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
 		.replace(/<pr_metadata[^>]*\/?>\s*/g, '')
 		.trim();
+}
+
+
+export function getAffectedUrisForEditTool(toolName: string, toolArgs: unknown): URI[] {
+	if (!toolArgs) {
+		return [];
+	}
+	switch (toolName) {
+		case CopilotCLIToolNames.StrReplaceEditor: {
+			const args = toolArgs as StrReplaceEditorArgs;
+			if (args.path && args.command !== 'view') {
+				return [URI.file(args.path)];
+			}
+			return [];
+		}
+		case CopilotCLIToolNames.edit:
+		case CopilotCLIToolNames.create: {
+			const args = toolArgs as (EditArgs | ViewArgs | CreateArgs);
+			if (args.path) {
+				return [URI.file(args.path)];
+			}
+			return [];
+		}
+	}
+
+	return [];
 }
 
 /**
@@ -199,7 +242,7 @@ export function createCopilotCLIToolInvocation(
 	if (toolName === CopilotCLIToolNames.ReportIntent) {
 		return undefined; // Ignore these for now
 	}
-	if (isCopilotCliEditToolCall(toolName, args)) {
+	if (getAffectedUrisForEditTool(toolName, args).length) {
 		return undefined;
 	}
 	if (toolName === CopilotCLIToolNames.Think) {
@@ -217,10 +260,14 @@ export function createCopilotCLIToolInvocation(
 	// Format based on tool name
 	if (toolName === CopilotCLIToolNames.StrReplaceEditor) {
 		formatStrReplaceEditorInvocation(invocation, args as StrReplaceEditorArgs);
+	} else if (toolName === CopilotCLIToolNames.edit) {
+		formatEditInvocation(invocation, args as EditArgs);
+	} else if (toolName === CopilotCLIToolNames.create) {
+		formatCreateInvocation(invocation, args as CreateArgs);
 	} else if (toolName === CopilotCLIToolNames.Bash) {
 		formatBashInvocation(invocation, args as BashArgs);
 	} else if (toolName === CopilotCLIToolNames.View) {
-		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
+		formatViewToolInvocation(invocation, args as ViewArgs);
 	} else {
 		formatGenericInvocation(invocation, toolName, args);
 	}
@@ -228,7 +275,7 @@ export function createCopilotCLIToolInvocation(
 	return invocation;
 }
 
-function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
+function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: ViewArgs): void {
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 
@@ -263,6 +310,20 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 		default:
 			invocation.invocationMessage = new MarkdownString(l10n.t("Modified {0}", display));
 	}
+}
+
+function formatEditInvocation(invocation: ChatToolInvocationPart, args: EditArgs): void {
+	const path = args.path ?? '';
+	const display = path ? formatUriForMessage(path) : '';
+
+	invocation.invocationMessage = new MarkdownString(l10n.t("Edited {0}", display));
+}
+
+function formatCreateInvocation(invocation: ChatToolInvocationPart, args: CreateArgs): void {
+	const path = args.path ?? '';
+	const display = path ? formatUriForMessage(path) : '';
+
+	invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
 }
 
 function formatBashInvocation(invocation: ChatToolInvocationPart, args: BashArgs): void {
