@@ -148,7 +148,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		if (!authToken) {
 			return [];
 		}
-		const { agents } = await this.getCustomAgentsWithToken(owner, repo, authToken);
+		const { agents } = { ... await this.getCustomAgentsWithToken(owner, repo, authToken) };
 		if (!Array.isArray(agents)) {
 			return [];
 		}
