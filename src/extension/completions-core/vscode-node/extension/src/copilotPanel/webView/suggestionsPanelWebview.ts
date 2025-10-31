@@ -4,10 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { provideVSCodeDesignSystem, vsCodeButton } from '@vscode/webview-ui-toolkit';
+import DOMPurify from 'dompurify';
 
 const solutionsContainer = document.getElementById('solutionsContainer');
 const vscode = acquireVsCodeApi();
-let currentFocusIndex: number;
+let currentFocusIndex: number = 0;
+let solutionEventHandlersInitialized = false;
 
 provideVSCodeDesignSystem().register(vsCodeButton());
 
@@ -26,9 +28,10 @@ type Message = {
 window.addEventListener('DOMContentLoaded', () => {
 	// Notify the extension that the webview is ready
 	vscode.postMessage({ command: 'webviewReady' });
+	initializeSolutionEventHandlers();
 });
 
-window.addEventListener('message', function (event) {
+window.addEventListener('message', (event) => {
 	const message = event.data as Message; // The JSON data our extension sent
 
 	switch (message.command) {
@@ -53,22 +56,20 @@ function handleSolutionUpdate(message: Message) {
 				const renderedCitation = solution.citation
 					? `<p>
 						<span class="codicon codicon-warning" style="vertical-align: text-bottom" aria-hidden="true"></span>
-						${solution.citation.message}
-						<a href="${solution.citation.url}" target="_blank">Inspect source code</a>
+						${DOMPurify.sanitize(solution.citation.message)}
+						<a href="${DOMPurify.sanitize(solution.citation.url)}" target="_blank">Inspect source code</a>
 					  </p>`
 					: '';
 
 				return `<h3 class='solutionHeading' id="solution-${index + 1}-heading">Suggestion ${index + 1}</h3>
-				<div class='snippetContainer' aria-labelledby="solution-${index + 1}-heading" role="group">${solution.htmlSnippet
+				<div class='snippetContainer' aria-labelledby="solution-${index + 1}-heading" role="group" data-solution-index="${index}">${solution.htmlSnippet
 					}</div>
-				${renderedCitation}
-				<vscode-button role="button" class="acceptButton" id="acceptButton${index}" appearance="secondary">Accept suggestion ${index + 1
+				${DOMPurify.sanitize(renderedCitation)}
+				<vscode-button role="button" class="acceptButton" id="acceptButton${index}" appearance="secondary" data-solution-index="${index}">Accept suggestion ${index + 1
 					}</vscode-button>`;
 			})
 			.join('');
 	}
-	addFocusHandlers();
-	addClickHandlers();
 }
 
 function navigatePreviousSolution() {
@@ -106,23 +107,52 @@ function updateLoadingContainer(message: Message) {
 	}
 }
 
+
+function initializeSolutionEventHandlers(): void {
+	if (solutionEventHandlersInitialized || solutionsContainer === null) {
+		return;
+	}
+	solutionsContainer.addEventListener('focusin', (event) => {
+		const target = event.target as HTMLElement | null;
+		const index = extractSolutionIndex(target);
+		if (index === undefined) {
+			return;
+		}
+		handleFocus(index);
+	});
+	solutionsContainer.addEventListener('click', (event) => {
+		const target = event.target as HTMLElement | null;
+		const button = target?.closest('vscode-button[data-solution-index]');
+		if (!(button instanceof HTMLElement)) {
+			return;
+		}
+		const index = extractSolutionIndex(button);
+		if (index === undefined) {
+			return;
+		}
+		handleClick(index);
+	});
+	solutionEventHandlersInitialized = true;
+}
+
+function extractSolutionIndex(element: HTMLElement | null): number | undefined {
+	const solutionElement = element?.closest('[data-solution-index]');
+	if (!(solutionElement instanceof HTMLElement)) {
+		return undefined;
+	}
+	const attributeValue = solutionElement.getAttribute('data-solution-index');
+	if (attributeValue === null) {
+		return undefined;
+	}
+	const index = Number.parseInt(attributeValue, 10);
+	return Number.isNaN(index) ? undefined : index;
+}
+
 function handleFocus(index: number) {
 	currentFocusIndex = index;
 	vscode.postMessage({
 		command: 'focusSolution',
 		solutionIndex: index,
-	});
-}
-
-function addFocusHandlers() {
-	const snippets = document.querySelectorAll('.snippetContainer pre');
-	snippets.forEach((snippet, index) => {
-		snippet.addEventListener('focus', () => handleFocus(index));
-		// add focus listener to button sibling as well
-		const button = document.getElementById(`acceptButton${index}`);
-		if (button) {
-			button.addEventListener('focus', () => handleFocus(index));
-		}
 	});
 }
 
@@ -133,9 +163,3 @@ function handleClick(index: number) {
 	});
 }
 
-function addClickHandlers() {
-	const acceptButtons = document.querySelectorAll('.acceptButton');
-	acceptButtons.forEach((acceptButton, index) => {
-		acceptButton.addEventListener('click', () => handleClick(index));
-	});
-}
