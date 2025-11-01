@@ -320,7 +320,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				this.workspaceService,
 				this.notebookService,
 				this.alternativeNotebookContent,
-				this._promptContext?.request?.model
+				this._promptContext?.request?.model,
+				(input as any).replaceAll || false
 			);
 			updatedFile = result.updatedFile;
 			edits = result.edits;
@@ -370,7 +371,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 					this.workspaceService,
 					this.notebookService,
 					this.alternativeNotebookContent,
-					this._promptContext?.request?.model
+					this._promptContext?.request?.model,
+					(input as any).replaceAll || false
 				);
 				updatedFile = result.updatedFile;
 				edits = result.edits;
