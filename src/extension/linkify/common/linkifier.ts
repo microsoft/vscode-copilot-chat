@@ -333,7 +333,7 @@ export class Linkifier implements ILinkifier {
 		return out;
 	}
 
-	// --- Simplified buffering helpers ---
+	// --- buffering helpers ---
 
 	private processCoalescedParts(parts: readonly LinkifiedPart[]): LinkifiedPart[] {
 		const emit: LinkifiedPart[] = [];

@@ -90,21 +90,3 @@ function toLine(token: string): number | undefined {
 function reconstruct(tokens: string[], start: number, span: number): string {
 	return tokens.slice(start, start + span).join(' ');
 }
-
-if (typeof process !== 'undefined' && process.env?.VITEST_INTERNAL_EVAL === 'lineAnnotationParserDev') {
-	const samples = [
-		'(line 42)',
-		'(lines 10-15)',
-		'is located at lines 77–85.',
-		'is found at lines 5-9',
-		'is at lines 6 through 11',
-		'on line 120',
-		'at line 33',
-		'lines 44-50',
-		'Ln 22',
-		'line 9'
-	];
-	for (const s of samples) {
-		console.log('ANNOT_SAMPLE', s, parseLineNumberAnnotation(s));
-	}
-}

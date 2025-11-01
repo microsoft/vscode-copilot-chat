@@ -86,7 +86,6 @@ export class LinkifyService implements ILinkifyService {
 		@IWorkspaceService workspaceService: IWorkspaceService,
 		@IEnvService private readonly envService: IEnvService,
 	) {
-		// Single file path linkifier now handles line number annotations inline
 		this.registerGlobalLinkifier({ create: () => new FilePathLinkifier(fileSystem, workspaceService) });
 	}
 
