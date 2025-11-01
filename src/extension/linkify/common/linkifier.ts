@@ -361,6 +361,11 @@ export class Linkifier implements ILinkifier {
 							break; // stop at non-string boundary
 						}
 					}
+					// Fallback: if no contiguous prior parts (streaming emitted anchor before prose),
+					// use tail of already applied text so preceding patterns like '... line 25 in <file>' still upgrade.
+					if (!acc.length && this._appliedText.length) {
+						return this._appliedText.slice(-160);
+					}
 					return acc.slice(-160);
 				})();
 				this._delayedAnchorBuffer = { anchor: part, afterText: '', totalChars: 0, precedingText: precedingSnapshot };
@@ -403,6 +408,33 @@ export class Linkifier implements ILinkifier {
 		return afterText.length > 0 ? [resultAnchor, afterText] : [resultAnchor];
 	}
 
+	private normalizePrecedingSnapshot(raw: string, anchor: LinkifyLocationAnchor): string {
+		if (!raw) { return raw; }
+		let out = raw;
+		// Trim trailing backtick-quoted full path containing file name (with optional punctuation)
+		try {
+			const anchorStr = (() => {
+				try { return (anchor.value as any)?.toString?.() ?? String(anchor.value); } catch { return undefined; }
+			})();
+			if (anchorStr) {
+				const fileNameMatch = anchorStr.match(/([^\\\/]+)$/);
+				const fileName = fileNameMatch?.[1];
+				if (fileName) {
+					const backtickPathRe = new RegExp("`[^`]*" + escapeRegExpCharacters(fileName) + "[^`]*`[.,;:]?$", 'i');
+					out = out.replace(backtickPathRe, '').replace(/\s+$/, '');
+				}
+			}
+		} catch { /* ignore */ }
+		// Strip common inline formatting (bold, italic, code) preserving inner content
+		out = out
+			.replace(/\*\*([^*]+)\*\*/g, '$1')
+			.replace(/\*([^*]+)\*/g, '$1')
+			.replace(/`([^`]+)`/g, '$1');
+		// Remove stray leftover formatting tokens
+		out = out.replace(/[*`_]{1,2}/g, '');
+		return out;
+	}
+
 	// Preceding annotation pattern (annotation before file name):
 	// Examples: "in lines 5-7 of example.ts", "lines 10-12 of foo.py", "on line 45 of bar.ts", "ln 22 of baz.js"
 	// We only upgrade once; if already upgraded via trailing text we skip.
@@ -416,7 +448,8 @@ export class Linkifier implements ILinkifier {
 		// Snapshot may include other text after the annotation; restrict to last 160 chars.
 		const text = b.precedingText;
 		if (!text) { return false; }
-		const parsed = parsePrecedingLineNumberAnnotation(text);
+		const normalized = this.normalizePrecedingSnapshot(text, b.anchor);
+		const parsed = parsePrecedingLineNumberAnnotation(normalized);
 		if (!parsed) { return false; }
 		b.anchor = new LinkifyLocationAnchor({ uri: b.anchor.value, range: new Range(new Position(parsed.startLine, 0), new Position(parsed.startLine, 0)) } as Location);
 		return true;

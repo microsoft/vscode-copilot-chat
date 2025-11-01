@@ -577,4 +577,23 @@ suite('File Path Linkifier', () => {
 			]
 		);
 	});
+
+	test(`Should upgrade file link with formatted preceding single line annotation (bold line number)`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'The main function is defined at **line 25** in exampleScript.ts.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'The main function is defined at **line 25** in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(24, 0), new Position(24, 0)) } as Location),
+				'.'
+			]
+		);
+	});
 });
