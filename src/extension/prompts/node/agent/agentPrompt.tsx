@@ -155,7 +155,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const agentPromptResolver = await PromptRegistry.getPrompt(this.props.endpoint);
 		if (agentPromptResolver) {
 			const resolver = this.instantiationService.createInstance(agentPromptResolver);
-			const PromptClass = resolver.resolvePrompt(this.props.endpoint);
+			const PromptClass = await resolver.resolvePrompt(this.props.endpoint);
 
 			if (PromptClass) {
 				return <PromptClass

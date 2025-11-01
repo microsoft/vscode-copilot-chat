@@ -10,7 +10,7 @@ import { DefaultAgentPromptProps } from './defaultAgentInstructions';
 export type PromptConstructor = new (props: DefaultAgentPromptProps, ...args: any[]) => PromptElement<DefaultAgentPromptProps>;
 
 export interface IAgentPrompt {
-	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined;
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | Promise<PromptConstructor | undefined> | undefined;
 }
 
 export interface IAgentPromptCtor {
