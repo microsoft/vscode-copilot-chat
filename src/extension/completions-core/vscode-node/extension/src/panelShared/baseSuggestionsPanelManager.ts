@@ -5,6 +5,7 @@
 
 import { TextDocument, Uri, ViewColumn, WebviewPanel, commands, window } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../../../../platform/extContext/common/extensionContext';
+import { DisposableStore, IDisposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { IPosition, ITextDocument } from '../../../lib/src/textDocument';
 import { basename } from '../../../lib/src/util/uri';
@@ -66,22 +67,26 @@ export abstract class BaseSuggestionsPanelManager<TPanelCompletion extends BaseP
 		return suggestionPanel;
 	}
 
-	registerCommands() {
-		this._instantiationService.invokeFunction(registerCommandWrapper, this.config.commands.accept, () => {
-			return this.activeWebviewPanel?.acceptFocusedSolution();
-		});
+	registerCommands(): IDisposable {
+		const disposableStore = new DisposableStore();
 
-		this._instantiationService.invokeFunction(registerCommandWrapper, this.config.commands.navigatePrevious, () => {
+		disposableStore.add(this._instantiationService.invokeFunction(registerCommandWrapper, this.config.commands.accept, () => {
+			return this.activeWebviewPanel?.acceptFocusedSolution();
+		}));
+
+		disposableStore.add(this._instantiationService.invokeFunction(registerCommandWrapper, this.config.commands.navigatePrevious, () => {
 			return this.activeWebviewPanel?.postMessage({
 				command: 'navigatePreviousSolution',
 			});
-		});
+		}));
 
-		this._instantiationService.invokeFunction(registerCommandWrapper, this.config.commands.navigateNext, () => {
+		disposableStore.add(this._instantiationService.invokeFunction(registerCommandWrapper, this.config.commands.navigateNext, () => {
 			return this.activeWebviewPanel?.postMessage({
 				command: 'navigateNextSolution',
 			});
-		});
+		}));
+
+		return disposableStore;
 	}
 
 	decrementPanelCount() {

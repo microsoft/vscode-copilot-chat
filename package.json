@@ -2291,9 +2291,33 @@
 				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
 			},
 			{
-				"command": "github.copilot.client.generate",
+				"command": "github.copilot.chat.openSuggestionsPanel",
 				"title": "Open Completions Panel",
-				"enablement": "!isWeb",
+				"enablement": "github.copilot.extensionUnification.activated && !isWeb",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.toggleStatusMenu",
+				"title": "Open Status Menu",
+				"enablement": "github.copilot.extensionUnification.activated",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.completions.disable",
+				"title": "Disable Completions",
+				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && config.editor.inlineSuggest.enabled && github.copilot.completions.enabled",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.completions.enable",
+				"title": "Enable Completions",
+				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && !(config.editor.inlineSuggest.enabled && github.copilot.completions.enabled)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.completions.toggle",
+				"title": "Toggle (Enable/Disable) Completions",
+				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated",
 				"category": "GitHub Copilot"
 			}
 		],
@@ -4339,10 +4363,10 @@
 				"description": "Researches a task to create multi-step plans"
 			}
 		],
-		"prompts": [
+		"chatPromptFiles": [
 			{
-				"name": "savePromptFile",
-				"path": "./assets/prompts/savePromptFile.prompt.md",
+				"name": "savePrompt",
+				"path": "./assets/prompts/savePrompt.prompt.md",
 				"description": "Generalize the current discussion into a reusable prompt and save it as a file"
 			}
 		]

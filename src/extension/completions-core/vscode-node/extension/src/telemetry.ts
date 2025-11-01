@@ -4,11 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { commands, Disposable } from 'vscode';
+import { IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, type ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../lib/src/context';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
-import { Extension } from './extensionContext';
 
 function exception(accessor: ServicesAccessor, error: unknown, origin: string, logger?: Logger) {
 	if (error instanceof Error && error.name === 'Canceled') {
@@ -41,6 +40,6 @@ export function registerCommand(accessor: ServicesAccessor, command: string, fn:
 }
 
 // Wrapper that handles errors and cleans up the command on extension deactivation
-export function registerCommandWrapper(accessor: ServicesAccessor, command: string, fn: (...args: unknown[]) => unknown) {
-	accessor.get(ICompletionsContextService).get(Extension).addSubscription(registerCommand(accessor, command, fn));
+export function registerCommandWrapper(accessor: ServicesAccessor, command: string, fn: (...args: unknown[]) => unknown): IDisposable {
+	return registerCommand(accessor, command, fn);
 }
