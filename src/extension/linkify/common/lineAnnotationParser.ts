@@ -4,7 +4,36 @@
  *--------------------------------------------------------------------------------------------*/
 
 // General, extensible parser for line annotations following a file path.
-// Keeps logic maintainable by avoiding a monolithic fragile regex.
+// Supported patterns (single-line anchor uses first line in range):
+//
+// Parenthesized forms:
+//   (line 42)
+//   (lines 10-12) (hyphen / en/em dash / through|thru|to connectors)
+//
+// Prose forms (any preceding words ignored; we scan tokens):
+//   on line 45
+//   at line 33
+//   line 9
+//   lines 3 to 7
+//   lines 5 through 9
+//   lines 6–11
+//   Ln 22 / ln 22 / l 22
+//   is located at lines 77–85
+//   is found at lines 5-9
+//   is at lines 6 through 11
+//
+// We intentionally only expose the start line (zero-based) because downstream
+// logic currently navigates to a single line even if a range was referenced.
+// Extending to full range selection would involve carrying an endLine as well.
+//
+// Design notes:
+// - Token-based approach avoids brittle giant regex and makes future synonym
+//   additions trivial (expand LINE_TOKENS or RANGE_CONNECTORS sets).
+// - Max scan limits ensure we do not waste time over very long trailing text.
+// - We ignore invalid ranges like "lines 10 through" (missing second number)
+//   but still treat the first number as the target line.
+// - Returned raw snippet is a lightweight reconstruction of matched tokens for
+//   potential future highlighting or telemetry.
 
 const RANGE_CONNECTORS = new Set(['-', '–', '—', 'to', 'through', 'thru']);
 const LINE_TOKENS = new Set(['line', 'lines', 'ln', 'l']);
@@ -43,10 +72,8 @@ export function parseLineNumberAnnotation(text: string, maxScan = 160): ParsedLi
 				const maybeConnector = tokens[i + 2]?.toLowerCase();
 				if (maybeConnector && RANGE_CONNECTORS.has(maybeConnector)) {
 					const secondNum = tokens[i + 3];
-					if (!secondNum || !/^\d+$/.test(secondNum)) {
-						return { startLine: line, raw: reconstruct(tokens, i, 4) };
-					}
-					return { startLine: line, raw: reconstruct(tokens, i, 4) };
+					const span = (secondNum && /^\d+$/.test(secondNum)) ? 4 : 3;
+					return { startLine: line, raw: reconstruct(tokens, i, span) };
 				}
 				return { startLine: line, raw: reconstruct(tokens, i, 2) };
 			}

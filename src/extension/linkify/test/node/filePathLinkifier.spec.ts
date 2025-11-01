@@ -349,4 +349,116 @@ suite('File Path Linkifier', () => {
 			]
 		);
 	});
+
+	test(`Should create file link with parenthesized multi line annotation variant (lines 10-12)`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'exampleScript.ts (lines 10-12) reference'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(9, 0), new Position(9, 0)) } as Location),
+				' (lines 10-12) reference'
+			]
+		);
+	});
+
+	test(`Should create file link with 'on line' prose variant`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'The init logic in exampleScript.ts on line 45.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'The init logic in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(44, 0), new Position(44, 0)) } as Location),
+				' on line 45.'
+			]
+		);
+	});
+
+	test(`Should create file link with 'through' range connector`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'exampleScript.ts is at lines 5 through 9.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(4, 0), new Position(4, 0)) } as Location),
+				' is at lines 5 through 9.'
+			]
+		);
+	});
+
+	test(`Should create file link with 'to' range connector`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'This section in exampleScript.ts spans lines 3 to 7.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'This section in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(2, 0), new Position(2, 0)) } as Location),
+				' spans lines 3 to 7.'
+			]
+		);
+	});
+
+	test(`Should create file link with 'Ln' shorthand single line`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Check exampleScript.ts Ln 22 for setup.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Check ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(21, 0), new Position(21, 0)) } as Location),
+				' Ln 22 for setup.'
+			]
+		);
+	});
+
+	test(`Should not create file link for non-annotation word containing 'line' substring (deadline 30)`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'This exampleScript.ts deadline 30 is informational.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'This ',
+				new LinkifyLocationAnchor(workspaceFile('exampleScript.ts')),
+				' deadline 30 is informational.'
+			]
+		);
+	});
 });

@@ -339,8 +339,8 @@ export class Linkifier implements ILinkifier {
 		const emit: LinkifiedPart[] = [];
 		for (const part of parts) {
 			if (part instanceof LinkifyLocationAnchor) {
-				const value: any = part.value;
-				if (value && value.range) { // already has line info
+				const value = part.value;
+				if (typeof value === 'object' && value !== null && 'range' in value) { // already has line info
 					emit.push(part);
 					continue;
 				}
@@ -348,9 +348,6 @@ export class Linkifier implements ILinkifier {
 					emit.push(...this.flushAnchorBuffer());
 				}
 				this._delayedAnchorBuffer = { anchor: part, afterText: '', totalChars: 0 };
-				if (typeof process !== 'undefined' && process.env?.VITEST) {
-					console.log('[Linkifier.buffer] Started buffering anchor', { uri: String(value) });
-				}
 				continue;
 			}
 			if (this._delayedAnchorBuffer && typeof part === 'string') {
@@ -381,9 +378,6 @@ export class Linkifier implements ILinkifier {
 		const parsed = parseLineNumberAnnotation(afterText);
 		if (parsed) {
 			resultAnchor = new LinkifyLocationAnchor({ uri: anchor.value, range: new Range(new Position(parsed.startLine, 0), new Position(parsed.startLine, 0)) } as Location);
-			if (typeof process !== 'undefined' && process.env?.VITEST) {
-				console.log('[Linkifier.buffer] Upgraded buffered anchor', { uri: String(anchor.value), lineNumber: parsed.startLine + 1 });
-			}
 		}
 		this._delayedAnchorBuffer = undefined;
 		return afterText.length > 0 ? [resultAnchor, afterText] : [resultAnchor];
