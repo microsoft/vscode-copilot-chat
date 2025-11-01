@@ -16,6 +16,7 @@ import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
 import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
+import { isHiddenModelC } from '../../../../platform/endpoint/common/chatModelCapabilities';
 
 export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -694,15 +695,15 @@ class OpenAIPromptResolver implements IAgentPrompt {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) { }
 
-	static readonly familyPrefixes = ['gpt', 'o4-mini', 'o3-mini', 'OpenAI'];
+	static readonly familyPrefixes = ['gpt', 'o4-mini', 'o3-mini', 'OpenAI', 'CustomOAI'];
 
-	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+	async resolvePrompt(endpoint: IChatEndpoint): Promise<PromptConstructor | undefined> {
 
 		if (endpoint.model.startsWith('gpt-5-codex')) {
 			return CodexStyleGPT5CodexPrompt;
 		}
 
-		else if (endpoint.model?.startsWith('gpt-5')) {
+		else if (endpoint.model?.startsWith('gpt-5') || await isHiddenModelC(endpoint)) {
 			const promptType = this.configurationService.getExperimentBasedConfig(
 				ConfigKey.Gpt5AlternatePrompt,
 				this.experimentationService
