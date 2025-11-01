@@ -10,12 +10,12 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { ChatResponseThinkingProgressPart, ChatSessionStatus, EventEmitter, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, LanguageModelTextPart } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getAffectedUrisForEditTool } from '../common/copilotcliTools';
 import { ICopilotCLISDK } from './copilotCli';
-import { processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
+import { buildChatHistoryFromEvents, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
@@ -31,6 +31,14 @@ export class CopilotCLISession extends DisposableStore {
 	private readonly _statusChange = this.add(new EventEmitter<vscode.ChatSessionStatus | undefined>());
 
 	public readonly onDidChangeStatus = this._statusChange.event;
+
+	private _aborted?: boolean;
+	public get aborted(): boolean {
+		return this._aborted ?? false;
+	}
+	private readonly _onDidAbort = this.add(new EventEmitter<void>());
+
+	public readonly onDidAbort = this._onDidAbort.event;
 
 	constructor(
 		private readonly _sdkSession: Session,
@@ -126,6 +134,28 @@ export class CopilotCLISession extends DisposableStore {
 			this.logService.error(`CopilotCLI session error: ${error}`);
 			stream.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 		}
+	}
+
+	addUserMessage(content: string) {
+		this._sdkSession.addEvent({ type: 'user.message', data: { content } });
+	}
+
+	addUserAssistantMessage(content: string) {
+		this._sdkSession.addEvent({
+			type: 'assistant.message', data: {
+				messageId: `msg_${Date.now()}`,
+				content
+			}
+		});
+	}
+
+	public getSelectedModelId() {
+		return this._sdkSession.getSelectedModel();
+	}
+
+	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
+		const events = await this._sdkSession.getEvents();
+		return buildChatHistoryFromEvents(events);
 	}
 
 	private _toolNames = new Map<string, string>();

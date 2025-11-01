@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Session } from '@github/copilot/sdk';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, l10n, Uri } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -14,8 +13,8 @@ import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/
 import { localize } from '../../../util/vs/nls';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
+import { CopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
-import { buildChatHistoryFromEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { ConfirmationResult, CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
@@ -240,11 +239,9 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
 		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
 
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, token);
-		const selectedModelId = await existingSession?.sdkSession.getSelectedModel();
+		const existingSession = await this.sessionService.getSession(copilotcliSessionId, undefined, false, token);
+		const selectedModelId = await existingSession?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
-		const events = await existingSession?.sdkSession.getEvents();
-		const history = buildChatHistoryFromEvents(events || []);
 		const options: Record<string, string> = {
 			[MODELS_OPTION_ID]: _sessionModel.get(copilotcliSessionId)?.id ?? defaultModel.id,
 		};
@@ -253,6 +250,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
+		const history = await existingSession?.getChatHistory() || [];
 
 		if (!_sessionModel.get(copilotcliSessionId)) {
 			_sessionModel.set(copilotcliSessionId, selectedModel ?? preferredModel);
@@ -315,12 +313,12 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 export class CopilotCLIChatSessionParticipant {
 	constructor(
 		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
-		private readonly sessionService: ICopilotCLISessionService,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		private readonly cloudSessionProvider: CopilotChatSessionsProvider | undefined,
 		private readonly summarizer: ChatSummarizerProvider,
 		private readonly worktreeManager: CopilotCLIWorktreeManager,
-		@IGitService private readonly gitService: IGitService
+		@IGitService private readonly gitService: IGitService,
+		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -350,7 +348,6 @@ export class CopilotCLIChatSessionParticipant {
 				return {};
 			}
 			this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(copilotcliSessionId), label: request.prompt ?? 'CopilotCLI' });
-			this.sessionService.clearPendingRequest(copilotcliSessionId);
 
 			if (workingDirectory) {
 				await this.worktreeManager.storeWorktreePath(copilotcliSessionId, workingDirectory);
@@ -361,18 +358,18 @@ export class CopilotCLIChatSessionParticipant {
 
 		const { resource } = chatSessionContext.chatSessionItem;
 		const id = SessionIdForCLI.parse(resource);
-		const session = await this.sessionService.getSession(id, token);
+		const session = await this.sessionService.getSession(id, undefined, false, token);
 		if (!session) {
 			stream.warning(vscode.l10n.t('Chat session not found.'));
 			return {};
 		}
 
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
-			return await this.handleConfirmationData(session.sdkSession, request, context, stream, token);
+			return await this.handleConfirmationData(session, request, context, stream, token);
 		}
 
 		if (request.prompt.startsWith('/delegate')) {
-			await this.handleDelegateCommand(session.sdkSession, request, context, stream, token);
+			await this.handleDelegateCommand(session, request, context, stream, token);
 			return {};
 		}
 
@@ -382,7 +379,7 @@ export class CopilotCLIChatSessionParticipant {
 		return {};
 	}
 
-	private async handleDelegateCommand(session: Session, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleDelegateCommand(session: CopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (!this.cloudSessionProvider) {
 			stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
 			return {};
@@ -414,7 +411,7 @@ export class CopilotCLIChatSessionParticipant {
 		}
 	}
 
-	private async handleConfirmationData(session: Session, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleConfirmationData(session: CopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		const results: ConfirmationResult[] = [];
 		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
@@ -455,36 +452,25 @@ export class CopilotCLIChatSessionParticipant {
 		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
-		const sdkSession = await this.sessionService.getOrCreateSDKSession(undefined, requestPrompt);
+		const session = await this.sessionService.createSession(requestPrompt, undefined, token);
 
-		await vscode.commands.executeCommand('vscode.open', SessionIdForCLI.getResource(sdkSession.sessionId));
+		await vscode.commands.executeCommand('vscode.open', SessionIdForCLI.getResource(session.sessionId));
 		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 		return {};
 	}
 
 	private async recordPushToSession(
-		session: Session,
+		session: CopilotCLISession,
 		userPrompt: string,
 		prInfo: { uri: string; title: string; description: string; author: string; linkTag: string },
 		token: vscode.CancellationToken
 	): Promise<void> {
 		// Add user message event
-		session.addEvent({
-			type: 'user.message',
-			data: {
-				content: userPrompt
-			}
-		});
+		session.addUserMessage(userPrompt);
 
 		// Add assistant message event with embedded PR metadata
 		const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
-		session.addEvent({
-			type: 'assistant.message',
-			data: {
-				messageId: `msg_${Date.now()}`,
-				content: assistantMessage
-			}
-		});
+		session.addUserAssistantMessage(assistantMessage);
 	}
 }
 

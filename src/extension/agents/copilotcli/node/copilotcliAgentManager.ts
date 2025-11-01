@@ -4,29 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ModelProvider } from '@github/copilot/sdk';
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotCLIPromptResolver } from './copilotcliPromptResolver';
-import { CopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
 
 export class CopilotCLIAgentManager extends Disposable {
 	constructor(
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		@ILogService private readonly logService: ILogService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 	) {
 		super();
-	}
-
-	/**
-	 * Find session by SDK session ID
-	 */
-	public findSession(sessionId: string): CopilotCLISession | undefined {
-		return this.sessionService.findSessionWrapper<CopilotCLISession>(sessionId);
 	}
 
 	async handleRequest(
@@ -43,14 +34,15 @@ export class CopilotCLIAgentManager extends Disposable {
 
 		const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, token);
 		// Check if we already have a session wrapper
-		let session = copilotcliSessionId ? this.sessionService.findSessionWrapper<CopilotCLISession>(copilotcliSessionId) : undefined;
+		let session = copilotcliSessionId ? await this.sessionService.getSession(copilotcliSessionId, modelId, false, token) : undefined;
 
 		if (session) {
 			this.logService.trace(`[CopilotCLIAgentManager] Reusing CopilotCLI session ${copilotcliSessionId}.`);
+		} else if (copilotcliSessionId) {
+			stream.warning(l10n.t('Chat session not found.'));
+			return { copilotcliSessionId: undefined };
 		} else {
-			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId, prompt);
-			session = this.instantiationService.createInstance(CopilotCLISession, sdkSession);
-			this.sessionService.trackSessionWrapper(sdkSession.sessionId, session);
+			session = await this.sessionService.createSession(prompt, modelId, token);
 		}
 
 		await session.invoke(prompt, attachments, request.toolInvocationToken, stream, modelId, workingDirectory, token);

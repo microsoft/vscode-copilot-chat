@@ -109,7 +109,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			));
 
 		const copilotCLIWorktreeManager = copilotcliAgentInstaService.createInstance(CopilotCLIWorktreeManager);
-		const copilotCLISessionService = copilotcliAgentInstaService.createInstance(CopilotCLISessionService);
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider, copilotCLIWorktreeManager));
 		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
@@ -120,12 +119,12 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotcliChatSessionParticipant = copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
 			copilotcliAgentManager,
-			copilotCLISessionService,
 			copilotcliSessionItemProvider,
 			copilotSessionsProvider,
 			summarizer,
 			copilotCLIWorktreeManager
 		);
+		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
 		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService));
