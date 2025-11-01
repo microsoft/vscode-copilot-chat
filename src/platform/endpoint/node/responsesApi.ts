@@ -253,14 +253,12 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 					break;
 				case 'function_call_output': {
 					flushPendingFunctionCalls();
-					if (isResponseFunctionCallOutputItem(item)) {
-						const content = responseFunctionOutputToRawContents(item.output);
-						messages.push({
-							role: Raw.ChatRole.Tool,
-							content,
-							toolCallId: item.call_id
-						});
-					}
+					const content = responseFunctionOutputToRawContents(item.output);
+					messages.push({
+						role: Raw.ChatRole.Tool,
+						content,
+						toolCallId: item.call_id
+					});
 					break;
 				}
 				case 'reasoning':
@@ -299,10 +297,6 @@ function isResponseInputItemMessage(item: OpenAI.Responses.ResponseInputItem): i
 	return 'role' in item && item.role === 'assistant' && (!('type' in item) || item.type !== 'message');
 }
 
-function isResponseFunctionCallOutputItem(item: OpenAI.Responses.ResponseInputItem): item is OpenAI.Responses.ResponseInputItem.FunctionCallOutput {
-	return 'type' in item && item.type === 'function_call_output';
-}
-
 function ensureContentArray(content: string | OpenAI.Responses.ResponseInputMessageContentList): OpenAI.Responses.ResponseInputMessageContentList {
 	if (typeof content === 'string') {
 		return [{ type: 'input_text', text: content }];
@@ -310,14 +304,19 @@ function ensureContentArray(content: string | OpenAI.Responses.ResponseInputMess
 	return content;
 }
 
-function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent): Raw.ChatCompletionContentPart | undefined {
+function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent | OpenAI.Responses.ResponseFunctionCallOutputItem): Raw.ChatCompletionContentPart | undefined {
 	switch (part.type) {
 		case 'input_text':
 			return { type: Raw.ChatCompletionContentPartKind.Text, text: part.text };
 		case 'input_image':
 			return {
 				type: Raw.ChatCompletionContentPartKind.Image,
-				imageUrl: { url: part.image_url || '', detail: part.detail === 'auto' ? undefined : part.detail }
+				imageUrl: {
+					url: part.image_url || '',
+					detail: part.detail === 'auto' ?
+						undefined :
+						(part.detail ?? undefined)
+				}
 			};
 		case 'input_file':
 			// This is a rough approximation for logging
@@ -337,34 +336,11 @@ function responseOutputToRawContent(part: OpenAI.Responses.ResponseOutputText | 
 	}
 }
 
-function responseFunctionOutputItemToRawContent(part: OpenAI.Responses.ResponseFunctionCallOutputItem): Raw.ChatCompletionContentPart | undefined {
-	if (part.type === 'input_text') {
-		return { type: Raw.ChatCompletionContentPartKind.Text, text: part.text };
-	}
-	if (part.type === 'input_image') {
-		const detail = part.detail && part.detail !== 'auto' ? part.detail : undefined;
-		return {
-			type: Raw.ChatCompletionContentPartKind.Image,
-			imageUrl: {
-				url: part.image_url || '',
-				detail
-			}
-		};
-	}
-	if (part.type === 'input_file') {
-		return {
-			type: Raw.ChatCompletionContentPartKind.Opaque,
-			value: `[File Output - Filename: ${part.filename || 'unknown'}]`
-		};
-	}
-	return undefined;
-}
-
 function responseFunctionOutputToRawContents(output: string | OpenAI.Responses.ResponseFunctionCallOutputItemList): Raw.ChatCompletionContentPart[] {
 	if (typeof output === 'string') {
 		return [{ type: Raw.ChatCompletionContentPartKind.Text, text: output }];
 	}
-	return coalesce(output.map(responseFunctionOutputItemToRawContent));
+	return coalesce(output.map(responseContentToRawContent));
 }
 
 export async function processResponseFromChatEndpoint(instantiationService: IInstantiationService, telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {
