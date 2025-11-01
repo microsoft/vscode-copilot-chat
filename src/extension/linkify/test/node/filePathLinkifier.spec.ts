@@ -293,55 +293,43 @@ suite('File Path Linkifier', () => {
 		);
 	});
 
-	test(`Should create file link with multi line annotation using 'found' phrase`, async () => {
+	test(`Should create file link with multi line annotation using various phrases and dash types`, async () => {
 		const linkifier = createTestLinkifierService(
 			'exampleScript.ts'
 		);
 
-		const result = await linkify(linkifier,
+		// Test 'found at' with en-dash
+		const result1 = await linkify(linkifier,
 			'The return statement for the createScenarioFromLogContext function in exampleScript.ts is found at lines 76–82.'
 		);
-
 		assertPartsEqual(
-			result.parts,
+			result1.parts,
 			[
 				'The return statement for the createScenarioFromLogContext function in ',
 				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(75, 0), new Position(75, 0)) } as Location),
 				' is found at lines 76–82.'
 			]
 		);
-	});
 
-	test(`Should create file link with multi line annotation using 'at' phrase`, async () => {
-		const linkifier = createTestLinkifierService(
-			'exampleScript.ts'
-		);
-
-		const result = await linkify(linkifier,
+		// Test 'is at' with en-dash
+		const result2 = await linkify(linkifier,
 			'The return statement for the createScenarioFromLogContext function in exampleScript.ts is at lines 76–82.'
 		);
-
 		assertPartsEqual(
-			result.parts,
+			result2.parts,
 			[
 				'The return statement for the createScenarioFromLogContext function in ',
 				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(75, 0), new Position(75, 0)) } as Location),
 				' is at lines 76–82.'
 			]
 		);
-	});
 
-	test(`Should create file link with multi line annotation using hyphen range`, async () => {
-		const linkifier = createTestLinkifierService(
-			'exampleScript.ts'
-		);
-
-		const result = await linkify(linkifier,
+		// Test 'is at' with hyphen
+		const result3 = await linkify(linkifier,
 			'The return statement for the createScenarioFromLogContext function in exampleScript.ts is at lines 76-83.'
 		);
-
 		assertPartsEqual(
-			result.parts,
+			result3.parts,
 			[
 				'The return statement for the createScenarioFromLogContext function in ',
 				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(75, 0), new Position(75, 0)) } as Location),
@@ -387,35 +375,29 @@ suite('File Path Linkifier', () => {
 		);
 	});
 
-	test(`Should create file link with 'through' range connector`, async () => {
+	test(`Should create file link with range connectors ('through' and 'to')`, async () => {
 		const linkifier = createTestLinkifierService(
 			'exampleScript.ts'
 		);
 
-		const result = await linkify(linkifier,
+		// Test 'through' connector
+		const result1 = await linkify(linkifier,
 			'exampleScript.ts is at lines 5 through 9.'
 		);
-
 		assertPartsEqual(
-			result.parts,
+			result1.parts,
 			[
 				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(4, 0), new Position(4, 0)) } as Location),
 				' is at lines 5 through 9.'
 			]
 		);
-	});
 
-	test(`Should create file link with 'to' range connector`, async () => {
-		const linkifier = createTestLinkifierService(
-			'exampleScript.ts'
-		);
-
-		const result = await linkify(linkifier,
+		// Test 'to' connector
+		const result2 = await linkify(linkifier,
 			'This section in exampleScript.ts spans lines 3 to 7.'
 		);
-
 		assertPartsEqual(
-			result.parts,
+			result2.parts,
 			[
 				'This section in ',
 				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(2, 0), new Position(2, 0)) } as Location),
