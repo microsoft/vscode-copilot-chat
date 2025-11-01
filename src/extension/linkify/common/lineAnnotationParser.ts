@@ -45,7 +45,8 @@ export interface ParsedLineAnnotation {
 
 const parenRe = /^\s*\((lines?)\s+(\d+)(?:\s*([–—-]|to|through|thru)\s*(\d+))?\)/i;
 
-export function parseLineNumberAnnotation(text: string, maxScan = 160): ParsedLineAnnotation | undefined {
+// Parses trailing annotation patterns where line info appears AFTER the file name in prose, or inline parenthesized forms.
+export function parseTrailingLineNumberAnnotation(text: string, maxScan = 160): ParsedLineAnnotation | undefined {
 	if (!text) { return undefined; }
 	const slice = text.slice(0, maxScan);
 	const pm = parenRe.exec(slice);
@@ -80,6 +81,31 @@ export function parseLineNumberAnnotation(text: string, maxScan = 160): ParsedLi
 		}
 	}
 	return undefined;
+}
+
+// Parses preceding annotation patterns where line info appears BEFORE the file name.
+// Examples handled (anchor is expected to follow immediately after these tokens):
+//   in lines 5-7 of <file>
+//   lines 10-12 of <file>
+//   on line 45 of <file>
+//   at line 7 of <file>
+//   ln 22 of <file>
+//   at line 19 in <file>
+//   line 19 in <file>
+// Tokenization would work here too, but a concise end-anchored regex is sufficient
+// because we only inspect a short contiguous snapshot directly preceding the file path.
+// Returns startLine (zero-based) if matched.
+export function parsePrecedingLineNumberAnnotation(text: string): ParsedLineAnnotation | undefined {
+	if (!text) { return undefined; }
+	// Anchored at end to reduce false positives further back in the snapshot.
+	// Accept either 'of' or 'in' as the preposition connecting the line annotation to the file name.
+	// This enables patterns like 'at line 19 in file.ts' or 'line 19 in file.ts'.
+	const re = /(?:\b(?:in|on|at)\s+)?\b(lines?|ln|l)\b\s+(\d+)(?:\s*(?:-|–|—|to|through|thru)\s*(\d+))?\s+(?:of|in)\s*$/i;
+	const m = text.match(re);
+	if (!m) { return undefined; }
+	const start = toLine(m[2]);
+	if (start === undefined) { return undefined; }
+	return { startLine: start, raw: m[0] };
 }
 
 function toLine(token: string): number | undefined {

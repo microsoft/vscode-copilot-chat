@@ -7,7 +7,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 import { Location, Position, Range } from '../../../vscodeTypes';
-import { parseLineNumberAnnotation } from './lineAnnotationParser';
+import { parsePrecedingLineNumberAnnotation, parseTrailingLineNumberAnnotation } from './lineAnnotationParser';
 import { coalesceParts, LinkifiedPart, LinkifiedText, LinkifyLocationAnchor } from './linkifiedText';
 import type { IContributedLinkifier, ILinkifier, LinkifierContext } from './linkifyService';
 
@@ -71,7 +71,7 @@ export class Linkifier implements ILinkifier {
 
 	// Buffer used to delay emitting a single file anchor until we either
 	// detect a line annotation or exceed buffering heuristics.
-	private _delayedAnchorBuffer: { anchor: LinkifyLocationAnchor; afterText: string; totalChars: number } | undefined;
+	private _delayedAnchorBuffer: { anchor: LinkifyLocationAnchor; afterText: string; totalChars: number; precedingText: string } | undefined;
 
 	private static readonly maxAnchorBuffer = 140; // chars of following text to wait for annotation
 	private static readonly flushTerminatorsRe = /[\.?!]\s*$|\n/; // punctuation or newline suggests end of sentence
@@ -347,7 +347,26 @@ export class Linkifier implements ILinkifier {
 				if (this._delayedAnchorBuffer) {
 					emit.push(...this.flushAnchorBuffer());
 				}
-				this._delayedAnchorBuffer = { anchor: part, afterText: '', totalChars: 0 };
+				// Capture up to N chars of preceding applied text to allow upgrading
+				// anchors when annotation precedes file name: "in lines 5-7 of example.ts".
+				// Build a preceding snapshot from contiguous prior string parts (not entire applied text)
+				const precedingSnapshot = (() => {
+					let acc = '';
+					for (let i = emit.length - 1; i >= 0; i--) {
+						const prev = emit[i];
+						if (typeof prev === 'string') {
+							acc = prev + acc;
+							if (acc.length >= 160) { break; }
+						} else {
+							break; // stop at non-string boundary
+						}
+					}
+					return acc.slice(-160);
+				})();
+				this._delayedAnchorBuffer = { anchor: part, afterText: '', totalChars: 0, precedingText: precedingSnapshot };
+				// Try immediate upgrade using preceding annotation pattern.
+				// If upgraded, continue buffering to capture any trailing text (e.g., punctuation).
+				this.tryUpgradeBufferedAnchorFromPreceding();
 				continue;
 			}
 			if (this._delayedAnchorBuffer && typeof part === 'string') {
@@ -368,18 +387,38 @@ export class Linkifier implements ILinkifier {
 		if (!b) { return false; }
 		return Linkifier.flushTerminatorsRe.test(b.afterText)
 			|| b.totalChars > Linkifier.maxAnchorBuffer
-			|| !!parseLineNumberAnnotation(b.afterText);
+			|| !!parseTrailingLineNumberAnnotation(b.afterText)
+			|| this.tryUpgradeBufferedAnchorFromPreceding();
 	}
 
 	private flushAnchorBuffer(): LinkifiedPart[] {
 		if (!this._delayedAnchorBuffer) { return []; }
 		const { anchor, afterText } = this._delayedAnchorBuffer;
 		let resultAnchor: LinkifyLocationAnchor = anchor;
-		const parsed = parseLineNumberAnnotation(afterText);
+		const parsed = parseTrailingLineNumberAnnotation(afterText);
 		if (parsed) {
 			resultAnchor = new LinkifyLocationAnchor({ uri: anchor.value, range: new Range(new Position(parsed.startLine, 0), new Position(parsed.startLine, 0)) } as Location);
 		}
 		this._delayedAnchorBuffer = undefined;
 		return afterText.length > 0 ? [resultAnchor, afterText] : [resultAnchor];
+	}
+
+	// Preceding annotation pattern (annotation before file name):
+	// Examples: "in lines 5-7 of example.ts", "lines 10-12 of foo.py", "on line 45 of bar.ts", "ln 22 of baz.js"
+	// We only upgrade once; if already upgraded via trailing text we skip.
+	private tryUpgradeBufferedAnchorFromPreceding(): boolean {
+		const b = this._delayedAnchorBuffer;
+		if (!b) { return false; }
+		// If already has line info or we already parsed trailing text, skip.
+		const val = b.anchor.value;
+		if (typeof val === 'object' && val !== null && 'range' in val) { return false; }
+		// Extract tail ending right before the file path anchor was inserted.
+		// Snapshot may include other text after the annotation; restrict to last 160 chars.
+		const text = b.precedingText;
+		if (!text) { return false; }
+		const parsed = parsePrecedingLineNumberAnnotation(text);
+		if (!parsed) { return false; }
+		b.anchor = new LinkifyLocationAnchor({ uri: b.anchor.value, range: new Range(new Position(parsed.startLine, 0), new Position(parsed.startLine, 0)) } as Location);
+		return true;
 	}
 }

@@ -443,4 +443,138 @@ suite('File Path Linkifier', () => {
 			]
 		);
 	});
+
+	test(`Should upgrade file link with preceding range annotation 'in lines 5-7 of file'`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Critical init in lines 5-7 of exampleScript.ts ensures state.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Critical init in lines 5-7 of ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(4, 0), new Position(4, 0)) } as Location),
+				' ensures state.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding single line annotation 'on line 45 of file'`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Bug fix applied on line 45 of exampleScript.ts today.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Bug fix applied on line 45 of ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(44, 0), new Position(44, 0)) } as Location),
+				' today.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding shorthand 'ln 22 of file'`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Configuration lives ln 22 of exampleScript.ts for now.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Configuration lives ln 22 of ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(21, 0), new Position(21, 0)) } as Location),
+				' for now.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding single line annotation using 'at line N in file'`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'The main function is defined at line 19 in exampleScript.ts.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'The main function is defined at line 19 in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(18, 0), new Position(18, 0)) } as Location),
+				'.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding single line annotation using 'line N in file' (no leading preposition)`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Review line 19 in exampleScript.ts for correctness.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Review line 19 in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(18, 0), new Position(18, 0)) } as Location),
+				' for correctness.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding single line annotation and trailing punctuation`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'The main function is defined at line 25 in exampleScript.ts.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'The main function is defined at line 25 in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(24, 0), new Position(24, 0)) } as Location),
+				'.'
+			]
+		);
+	});
+
+	test(`Should not mis-upgrade when 'lines' appears without 'of' before file name`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Review lines 10-12 exampleScript.ts for coverage.'
+		);
+
+		// No preceding upgrade; file anchor should be plain (no range) because pattern missing 'of'.
+		assertPartsEqual(
+			result.parts,
+			[
+				'Review lines 10-12 ',
+				new LinkifyLocationAnchor(workspaceFile('exampleScript.ts')),
+				' for coverage.'
+			]
+		);
+	});
 });
