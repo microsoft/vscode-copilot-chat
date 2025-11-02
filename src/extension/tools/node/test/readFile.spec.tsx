@@ -227,5 +227,20 @@ suite('ReadFile', () => {
 			await expect(toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None))
 				.rejects.toThrow('Invalid offset 2: file only has 1 line. Line numbers are 1-indexed.');
 		});
+
+		test('read file with offset 0 should clamp to line 1', async () => {
+			const toolsService = accessor.get(IToolsService);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/file.ts',
+				offset: 0,
+				limit: 2
+			};
+			const result = await toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None);
+			const resultString = await toolResultToString(accessor, result);
+			// Should start from line 1 (offset clamped to 1)
+			expect(resultString).toContain('line 1');
+			expect(resultString).toContain('line 2');
+		});
 	});
 });
