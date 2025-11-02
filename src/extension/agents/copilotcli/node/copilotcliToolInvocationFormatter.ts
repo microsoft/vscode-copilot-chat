@@ -267,7 +267,7 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrR
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 
-	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
+	invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0}", display));
 }
 
 function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
