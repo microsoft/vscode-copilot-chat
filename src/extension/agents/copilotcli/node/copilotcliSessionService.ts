@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ModelProvider, Session, SessionManager } from '@github/copilot/sdk';
+import type { ModelProvider, Session, SessionManager, internal } from '@github/copilot/sdk';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { CancellationToken, ChatRequest } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -11,6 +11,7 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
+import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
@@ -51,7 +52,7 @@ export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISess
 export class CopilotCLISessionService extends Disposable implements ICopilotCLISessionService {
 	declare _serviceBrand: undefined;
 
-	private _sessionManager: SessionManager | undefined;
+	private _sessionManager: Lazy<Promise<internal.CLISessionManager>>;
 	private _sessionWrappers = new DisposableMap<string, CopilotCLISession>();
 	private _newActiveSessions = new Map<string, ICopilotCLISessionItem>();
 
@@ -65,16 +66,17 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super();
-	}
 
-	public async getSessionManager(): Promise<SessionManager> {
-		if (!this._sessionManager) {
+		this._sessionManager = new Lazy<Promise<internal.CLISessionManager>>(async () => {
 			const { internal } = await this.copilotCLISDK.getPackage();
-			this._sessionManager = new internal.CLISessionManager({
+			return new internal.CLISessionManager({
 				logger: getCopilotLogger(this.logService)
 			});
-		}
-		return this._sessionManager;
+		});
+	}
+
+	async getSessionManager() {
+		return this._sessionManager.value;
 	}
 
 	private _getAllSessionsProgress: Promise<readonly ICopilotCLISessionItem[]> | undefined;
