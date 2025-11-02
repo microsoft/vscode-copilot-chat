@@ -586,12 +586,6 @@ export namespace ConfigKey {
 		export const DebugUseElectronFetcher = defineSetting('advanced.debug.useElectronFetcher', true);
 		export const AuthProvider = defineSetting<AuthProviderId>('advanced.authProvider', AuthProviderId.GitHub);
 		export const AuthPermissions = defineSetting<AuthPermissionMode>('advanced.authPermissions', AuthPermissionMode.Default);
-		export const Enable = defineSetting<{ [key: string]: boolean }>('enable', {
-			"*": true,
-			"plaintext": false,
-			"markdown": false,
-			"scminput": false
-		});
 	}
 
 	/**
@@ -748,6 +742,13 @@ export namespace ConfigKey {
 		export const CopilotCloudEnabled = defineSetting<boolean | undefined>('chat.advanced.copilotCodingAgent.enabled', true);
 		export const Gpt5AlternativePatch = defineExpSetting<boolean>('chat.advanced.gpt5AlternativePatch', false);
 	}
+
+	export const Enable = defineSetting<{ [key: string]: boolean }>('enable', {
+		"*": true,
+		"plaintext": false,
+		"markdown": false,
+		"scminput": false
+	});
 
 	/** Use the Responses API instead of Chat Completions when supported */
 	export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.useResponsesApi', true);
