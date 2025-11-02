@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0-20251030",
+		"vscode": "^1.106.0-20251103",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -2440,6 +2440,20 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
+					},
+					"github.copilot.enable": {
+						"type": "object",
+						"scope": "window",
+						"default": {
+							"*": true,
+							"plaintext": false,
+							"markdown": false,
+							"scminput": false
+						},
+						"additionalProperties": {
+							"type": "boolean"
+						},
+						"markdownDescription": "Enable or disable auto triggering of Copilot completions for specified [languages](https://code.visualstudio.com/docs/languages/identifiers). You can still trigger suggestions manually using `Alt + \\`"
 					}
 				}
 			},
