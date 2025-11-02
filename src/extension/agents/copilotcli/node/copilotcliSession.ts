@@ -193,6 +193,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 
 			case 'tool.execution_start': {
+				this._toolNames.set(event.data.toolCallId, event.data.toolName);
 				const responsePart = processToolExecutionStart(event, this._pendingToolInvocations);
 				if (isCopilotCliEditToolCall(event.data.toolName, event.data.arguments)) {
 					this._pendingToolInvocations.delete(event.data.toolCallId);
@@ -200,7 +201,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					stream.push(responsePart);
 				}
-				this.logService.trace(`Start Tool ${event.data.toolNam || '<unknown>'}`);
+				this.logService.trace(`Start Tool ${event.data.toolName || '<unknown>'}`);
 				break;
 			}
 
