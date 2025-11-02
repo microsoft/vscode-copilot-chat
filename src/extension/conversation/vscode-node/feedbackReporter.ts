@@ -136,7 +136,7 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 		const responseDump = this._embedCodeblock('ASSISTANT', turn.responseMessage?.message || '');
 		const workspaceState = await this._instantiationService.createInstance(WorkspaceStateSnapshotHelper).captureWorkspaceStateSnapshot([]);
 		const workspaceStateDump = this._embedCodeblock('WORKSPACE STATE', JSON.stringify(workspaceState, null, 2));
-		const toolsDump = params?.tools ? this._embedCodeblock('TOOLS', JSON.stringify(params.tools, null, 2)) : '';
+		const toolsDump = params?.body?.tools ? this._embedCodeblock('TOOLS', JSON.stringify(params.body.tools, null, 2)) : '';
 		const metadata = this._embedCodeblock('METADATA', `requestID: ${turn.id}\nmodel: ${params?.model}`);
 		const edits = (await this._editLogService.getEditLog(turn.id))?.map((edit, i) => {
 			return this._embedCodeblock(`EDIT ${i + 1}`, JSON.stringify(edit, null, 2));
