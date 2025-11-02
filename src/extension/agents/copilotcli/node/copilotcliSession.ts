@@ -193,7 +193,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 
 			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, this._toolNames, this._pendingToolInvocations);
+				const responsePart = processToolExecutionStart(event, this._pendingToolInvocations);
 				const toolName = this._toolNames.get(event.data.toolCallId);
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					stream.push(responsePart);
