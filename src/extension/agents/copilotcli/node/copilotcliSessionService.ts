@@ -15,7 +15,7 @@ import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable }
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
 import { ICopilotCLISDK } from './copilotCli';
-import { CopilotCLISession } from './copilotcliSession';
+import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { stripReminders } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 
@@ -41,8 +41,8 @@ export interface ICopilotCLISessionService {
 	deleteSession(sessionId: string): Promise<void>;
 
 	// Session wrapper tracking
-	getSession(sessionId: string, model: ModelProvider | undefined, readonly: boolean, token: CancellationToken): Promise<CopilotCLISession | undefined>;
-	createSession(prompt: string, model: ModelProvider | undefined, token: CancellationToken): Promise<CopilotCLISession>;
+	getSession(sessionId: string, model: ModelProvider | undefined, readonly: boolean, token: CancellationToken): Promise<ICopilotCLISession | undefined>;
+	createSession(prompt: string, model: ModelProvider | undefined, token: CancellationToken): Promise<ICopilotCLISession>;
 }
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
@@ -239,12 +239,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const session = this.instantiationService.createInstance(CopilotCLISession, sdkSession);
 			session.add(sessionDisposables);
 			session.add(session.onDidChangeStatus(() => this._onDidChangeSessions.fire()));
-
-			sessionDisposables.add(session.onDidAbort(() => {
-				// We need to start with a new session.
-				// https://github.com/microsoft/vscode/issues/274169
-				session.dispose();
-			}));
 
 			this._sessionWrappers.set(sdkSession.sessionId, session);
 			return session;

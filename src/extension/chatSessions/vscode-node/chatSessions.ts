@@ -16,7 +16,6 @@ import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 import { CopilotCLIModels, CopilotCLISDK, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
-import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
@@ -112,13 +111,12 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider, copilotCLIWorktreeManager));
 		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
-		const copilotcliAgentManager = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIAgentManager, promptResolver));
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider, copilotCLIWorktreeManager);
 		const summarizer = copilotcliAgentInstaService.createInstance(ChatSummarizerProvider);
 
 		const copilotcliChatSessionParticipant = copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
-			copilotcliAgentManager,
+			promptResolver,
 			copilotcliSessionItemProvider,
 			copilotSessionsProvider,
 			summarizer,

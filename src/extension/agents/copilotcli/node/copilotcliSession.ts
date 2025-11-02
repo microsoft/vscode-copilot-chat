@@ -19,7 +19,27 @@ import { buildChatHistoryFromEvents, processToolExecutionComplete, processToolEx
 import { getCopilotLogger } from './logger';
 import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
-export class CopilotCLISession extends DisposableStore {
+export interface ICopilotCLISession {
+	readonly sessionId: string;
+	readonly status: vscode.ChatSessionStatus | undefined;
+	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
+
+	handleRequest(
+		prompt: string,
+		attachments: Attachment[],
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		stream: vscode.ChatResponseStream,
+		modelId: ModelProvider | undefined,
+		workingDirectory: string | undefined,
+		token: vscode.CancellationToken
+	): Promise<void>;
+
+	addUserMessage(content: string): void;
+	addUserAssistantMessage(content: string): void;
+	getSelectedModelId(): Promise<string | undefined>;
+	getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]>;
+}
+export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
 	private _abortController = new AbortController();
 	private _pendingToolInvocations = new Map<string, vscode.ChatToolInvocationPart>();
 	private _editTracker = new ExternalEditTracker();
@@ -31,14 +51,6 @@ export class CopilotCLISession extends DisposableStore {
 	private readonly _statusChange = this.add(new EventEmitter<vscode.ChatSessionStatus | undefined>());
 
 	public readonly onDidChangeStatus = this._statusChange.event;
-
-	private _aborted?: boolean;
-	public get aborted(): boolean {
-		return this._aborted ?? false;
-	}
-	private readonly _onDidAbort = this.add(new EventEmitter<void>());
-
-	public readonly onDidAbort = this._onDidAbort.event;
 
 	constructor(
 		private readonly _sdkSession: Session,
@@ -64,7 +76,7 @@ export class CopilotCLISession extends DisposableStore {
 		yield* agent.query(prompt, attachments);
 	}
 
-	public async invoke(
+	public async handleRequest(
 		prompt: string,
 		attachments: Attachment[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
