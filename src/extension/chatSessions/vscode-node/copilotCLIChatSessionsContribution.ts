@@ -35,12 +35,7 @@ export class CopilotCLIWorktreeManager {
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext) { }
 
-	async createWorktreeIfNeeded(sessionId: string, stream: vscode.ChatResponseStream): Promise<string | undefined> {
-		const isolationEnabled = this._sessionIsolation.get(sessionId) ?? false;
-		if (!isolationEnabled) {
-			return undefined;
-		}
-
+	async createWorktree(stream: vscode.ChatResponseStream): Promise<string | undefined> {
 		try {
 			const worktreePath = await vscode.commands.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
 			if (worktreePath) {
@@ -323,19 +318,18 @@ export class CopilotCLIChatSessionParticipant {
 		// For existing sessions we cannot fall back, as the model info would be updated in _sessionModel
 		const modelId = this.copilotCLIModels.toModelProvider(preferredModel?.id || defaultModel.id);
 		const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, token);
+		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
 
 		if (chatSessionContext.isUntitled) {
-			const untitledCopilotcliSessionId = SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource);
+			const workingDirectory = isolationEnabled ? await this.worktreeManager.createWorktree(stream) : undefined;
 			const session = await this.sessionService.createSession(prompt, modelId, token);
-			const workingDirectory = await this.worktreeManager.createWorktreeIfNeeded(untitledCopilotcliSessionId, stream);
+			if (workingDirectory) {
+				await this.worktreeManager.storeWorktreePath(session.sessionId, workingDirectory);
+			}
 
 			await session.handleRequest(prompt, attachments, request.toolInvocationToken, stream, modelId, workingDirectory, token);
 
 			this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.sessionId), label: request.prompt ?? 'CopilotCLI' });
-
-			if (workingDirectory) {
-				await this.worktreeManager.storeWorktreePath(session.sessionId, workingDirectory);
-			}
 
 			return {};
 		}
