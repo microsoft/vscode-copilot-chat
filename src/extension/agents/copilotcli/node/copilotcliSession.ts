@@ -15,7 +15,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getAffectedUrisForEditTool } from '../common/copilotcliTools';
 import { ICopilotCLISDK } from './copilotCli';
-import { buildChatHistoryFromEvents, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
+import { buildChatHistoryFromEvents, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
@@ -194,11 +194,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			case 'tool.execution_start': {
 				const responsePart = processToolExecutionStart(event, this._pendingToolInvocations);
-				const toolName = this._toolNames.get(event.data.toolCallId);
+				if (isCopilotCliEditToolCall(event.data.toolName, event.data.arguments)) {
+					this._pendingToolInvocations.delete(event.data.toolCallId);
+				}
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					stream.push(responsePart);
 				}
-				this.logService.trace(`Start Tool ${toolName || '<unknown>'}`);
+				this.logService.trace(`Start Tool ${event.data.toolNam || '<unknown>'}`);
 				break;
 			}
 
