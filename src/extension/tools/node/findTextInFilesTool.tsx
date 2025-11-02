@@ -94,12 +94,12 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 
 			return [];
 		}).slice(0, maxResults);
-		const query = this.formatQueryString(options.input);
+		const query = this.formatQueryString(options.input, isRegExp);
 		result.toolResultMessage = textMatches.length === 0 ?
-			new MarkdownString(l10n.t`Searched text for ${query}, no results`) :
+			new MarkdownString(l10n.t`Searched for ${query}, no results`) :
 			textMatches.length === 1 ?
-				new MarkdownString(l10n.t`Searched text for ${query}, 1 result`) :
-				new MarkdownString(l10n.t`Searched text for ${query}, ${textMatches.length} results`);
+				new MarkdownString(l10n.t`Searched for ${query}, 1 result`) :
+				new MarkdownString(l10n.t`Searched for ${query}, ${textMatches.length} results`);
 
 		result.toolResultDetails = textMatches;
 		return result;
@@ -138,8 +138,9 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindTextInFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+		const isRegExp = options.input.isRegexp ?? true;
 		return {
-			invocationMessage: new MarkdownString(l10n.t`Searching text for ${this.formatQueryString(options.input)}`),
+			invocationMessage: new MarkdownString(l10n.t`Searching for ${this.formatQueryString(options.input, isRegExp)}`),
 		};
 	}
 
@@ -157,13 +158,14 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		return `${fence}${inner}${fence}`;
 	}
 
-	private formatQueryString(input: IFindTextInFilesToolParams): string {
+	private formatQueryString(input: IFindTextInFilesToolParams, isRegExp: boolean): string {
 		const querySpan = this.formatCodeSpan(input.query);
+		const prefix = isRegExp ? 'regex ' : 'text ';
 		if (input.includePattern && input.includePattern !== '**/*') {
 			const patternSpan = this.formatCodeSpan(input.includePattern);
-			return `${querySpan} (${patternSpan})`;
+			return `${prefix}${querySpan} (${patternSpan})`;
 		}
-		return querySpan;
+		return `${prefix}${querySpan}`;
 	}
 
 	async resolveInput(input: IFindTextInFilesToolParams, _promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IFindTextInFilesToolParams> {
