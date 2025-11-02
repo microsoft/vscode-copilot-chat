@@ -325,8 +325,9 @@ export class CopilotCLIChatSessionParticipant {
 		const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, token);
 
 		if (chatSessionContext.isUntitled) {
+			const untitledCopilotcliSessionId = SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource);
 			const session = await this.sessionService.createSession(prompt, modelId, token);
-			const workingDirectory = await this.worktreeManager.createWorktreeIfNeeded(session.sessionId, stream);
+			const workingDirectory = await this.worktreeManager.createWorktreeIfNeeded(untitledCopilotcliSessionId, stream);
 
 			await session.handleRequest(prompt, attachments, request.toolInvocationToken, stream, modelId, workingDirectory, token);
 
