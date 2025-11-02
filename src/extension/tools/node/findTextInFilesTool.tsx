@@ -94,12 +94,18 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 
 			return [];
 		}).slice(0, maxResults);
-		const query = this.formatQueryString(options.input, isRegExp);
+		const query = this.formatQueryString(options.input);
 		result.toolResultMessage = textMatches.length === 0 ?
-			new MarkdownString(l10n.t`Searched for ${query}, no results`) :
+			(isRegExp ?
+				new MarkdownString(l10n.t`Searched for regex ${query}, no results`) :
+				new MarkdownString(l10n.t`Searched for text ${query}, no results`)) :
 			textMatches.length === 1 ?
-				new MarkdownString(l10n.t`Searched for ${query}, 1 result`) :
-				new MarkdownString(l10n.t`Searched for ${query}, ${textMatches.length} results`);
+				(isRegExp ?
+					new MarkdownString(l10n.t`Searched for regex ${query}, 1 result`) :
+					new MarkdownString(l10n.t`Searched for text ${query}, 1 result`)) :
+				(isRegExp ?
+					new MarkdownString(l10n.t`Searched for regex ${query}, ${textMatches.length} results`) :
+					new MarkdownString(l10n.t`Searched for text ${query}, ${textMatches.length} results`));
 
 		result.toolResultDetails = textMatches;
 		return result;
@@ -139,8 +145,11 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindTextInFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		const isRegExp = options.input.isRegexp ?? true;
+		const query = this.formatQueryString(options.input);
 		return {
-			invocationMessage: new MarkdownString(l10n.t`Searching for ${this.formatQueryString(options.input, isRegExp)}`),
+			invocationMessage: isRegExp ?
+				new MarkdownString(l10n.t`Searching for regex ${query}`) :
+				new MarkdownString(l10n.t`Searching for text ${query}`),
 		};
 	}
 
@@ -158,14 +167,13 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		return `${fence}${inner}${fence}`;
 	}
 
-	private formatQueryString(input: IFindTextInFilesToolParams, isRegExp: boolean): string {
+	private formatQueryString(input: IFindTextInFilesToolParams): string {
 		const querySpan = this.formatCodeSpan(input.query);
-		const prefix = isRegExp ? 'regex ' : 'text ';
 		if (input.includePattern && input.includePattern !== '**/*') {
 			const patternSpan = this.formatCodeSpan(input.includePattern);
-			return `${prefix}${querySpan} (${patternSpan})`;
+			return `${querySpan} (${patternSpan})`;
 		}
-		return `${prefix}${querySpan}`;
+		return querySpan;
 	}
 
 	async resolveInput(input: IFindTextInFilesToolParams, _promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IFindTextInFilesToolParams> {
