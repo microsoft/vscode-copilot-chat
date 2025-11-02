@@ -320,7 +320,7 @@ export class CopilotCLIChatSessionParticipant {
 		const { resource } = chatSessionContext.chatSessionItem;
 		const id = SessionIdForCLI.parse(resource);
 		const preferredModel = _sessionModel.get(id);
-		// For existing sessions we cannot fall back, as the model would info would be updated in _sessionModel
+		// For existing sessions we cannot fall back, as the model info would be updated in _sessionModel
 		const modelId = this.copilotCLIModels.toModelProvider(preferredModel?.id || defaultModel.id);
 		const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, token);
 
