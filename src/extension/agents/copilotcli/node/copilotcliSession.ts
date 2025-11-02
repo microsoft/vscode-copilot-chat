@@ -10,7 +10,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getAffectedUrisForEditTool } from '../common/copilotcliTools';
@@ -229,6 +229,16 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		permissionRequest: PermissionRequest,
 		toolInvocationToken: vscode.ChatParticipantToolToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
+		if (permissionRequest.kind === 'read') {
+			// If user is reading a file in the workspace, auto-approve read requests.
+			// Outisde workspace reads (e.g., /etc/passwd) will still require approval.
+			const data = Uri.file(permissionRequest.path);
+			if (this.workspaceService.getWorkspaceFolder(data)) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read workspace file ${permissionRequest.path}`);
+				return { kind: 'approved' };
+			}
+		}
+
 		try {
 			const { tool, input } = getConfirmationToolParams(permissionRequest);
 			const result = await this.toolsService.invokeTool(tool,
