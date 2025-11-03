@@ -364,7 +364,7 @@ async function main() {
 			esbuild.build(nodeSimulationWorkbenchUIBuildOptions),
 			esbuild.build(nodeExtHostSimulationTestOptions),
 			esbuild.build(typeScriptServerPluginBuildOptions),
-			esbuild.build(webviewBuildOptions)
+			esbuild.build(webviewBuildOptions),
 		]);
 	}
 }

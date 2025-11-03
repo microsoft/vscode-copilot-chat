@@ -60,9 +60,10 @@ function handleSolutionUpdate(message: Message) {
 						<a href="${DOMPurify.sanitize(solution.citation.url)}" target="_blank">Inspect source code</a>
 					  </p>`
 					: '';
+				const sanitizedSnippet = DOMPurify.sanitize(solution.htmlSnippet);
 
 				return `<h3 class='solutionHeading' id="solution-${index + 1}-heading">Suggestion ${index + 1}</h3>
-				<div class='snippetContainer' aria-labelledby="solution-${index + 1}-heading" role="group" data-solution-index="${index}">${solution.htmlSnippet
+				<div class='snippetContainer' aria-labelledby="solution-${index + 1}-heading" role="group" data-solution-index="${index}">${sanitizedSnippet
 					}</div>
 				${DOMPurify.sanitize(renderedCitation)}
 				<vscode-button role="button" class="acceptButton" id="acceptButton${index}" appearance="secondary" data-solution-index="${index}">Accept suggestion ${index + 1
