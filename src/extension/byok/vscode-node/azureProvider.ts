@@ -122,6 +122,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 				deploymentType?: 'completions' | 'responses';
 				deploymentName?: string;
 				apiVersion?: string;
+				temperature?: number;
 				url: string;
 			}> | undefined;
 
@@ -156,7 +157,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			this._logService?.info(`[Azure Debug] Raw modelConfig type: ${typeof modelConfig}, value: ${JSON.stringify(modelConfig, null, 2)}`);
 
 			// Safely access the model-specific config
-			let config: { deploymentType?: 'completions' | 'responses'; deploymentName?: string } | undefined;
+			let config: { deploymentType?: 'completions' | 'responses'; deploymentName?: string; temperature?: number } | undefined;
 			if (modelConfig && typeof modelConfig === 'object' && modelId in modelConfig) {
 				config = (modelConfig as Record<string, any>)[modelId];
 			}
@@ -187,6 +188,12 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 
 			// Always set modelInfo.id to deployment name for Azure deployments
 			modelInfo.id = deploymentName;
+
+			// Set temperature from config if specified
+			if (config?.temperature !== undefined) {
+				modelInfo.temperature = config.temperature;
+				this._logService?.info(`[Azure Debug] Set temperature from config: ${config.temperature}`);
+			}
 
 			// Set supported endpoints based on deployment type
 			if (deploymentType === 'responses') {

@@ -3035,13 +3035,17 @@
 									"type": "string",
 									"description": "URL endpoint for the Azure model"
 								},
-								"toolCalling": {
-									"type": "boolean",
-									"description": "Whether the model supports tool calling"
+								"deploymentName": {
+									"type": "string",
+									"description": "Azure deployment name for the model"
 								},
-								"vision": {
-									"type": "boolean",
-									"description": "Whether the model supports vision capabilities"
+								"deploymentType": {
+									"type": "string",
+									"description": "Type of Azure deployment"
+								},
+								"apiVersion": {
+									"type": "string",
+									"description": "Azure OpenAI API version to use"
 								},
 								"maxInputTokens": {
 									"type": "number",
@@ -3051,10 +3055,22 @@
 									"type": "number",
 									"description": "Maximum number of output tokens supported by the model"
 								},
+								"toolCalling": {
+									"type": "boolean",
+									"description": "Whether the model supports tool calling"
+								},
+								"vision": {
+									"type": "boolean",
+									"description": "Whether the model supports vision capabilities"
+								},
 								"thinking": {
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"temperature": {
+									"type": "number",
+									"description": "Temperature parameter for model responses (typically 0.0 to 2.0)"
 								},
 								"requestHeaders": {
 									"type": "object",
