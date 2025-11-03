@@ -289,9 +289,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.PromptTooLarge('currentFile'));
 		}
 
-		const { taggedCurrentFileR: { taggedCurrentFileContent, nLines: nLinesCurrentFile }, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
+		const { taggedCurrentDocLines, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
-		telemetryBuilder.setNLinesOfCurrentFileInPrompt(nLinesCurrentFile);
+		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
@@ -313,7 +313,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			activeDocument,
 			request.xtabEditHistory,
-			taggedCurrentFileContent,
+			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			langCtx,
 			XtabProvider.computeTokens,
@@ -434,8 +434,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions.currentFile,
 		);
 
-		return taggedCurrentFileContentResult.map(taggedCurrentFileR => ({
-			taggedCurrentFileR,
+		return taggedCurrentFileContentResult.map(taggedCurrentDocLines => ({
+			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 		}));
 	}
@@ -1165,7 +1165,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.fromString(currentFileContentR.err);
 		}
 
-		const { taggedCurrentFileR: { taggedCurrentFileContent }, areaAroundCodeToEdit } = currentFileContentR.val;
+		const { taggedCurrentDocLines, areaAroundCodeToEdit } = currentFileContentR.val;
 
 		const newPromptPieces = new PromptPieces(
 			promptPieces.currentDocument,
@@ -1173,7 +1173,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptPieces.areaAroundEditWindowLinesRange,
 			promptPieces.activeDoc,
 			promptPieces.xtabHistory,
-			taggedCurrentFileContent,
+			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			promptPieces.langCtx,
 			XtabProvider.computeTokens,
