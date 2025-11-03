@@ -13,9 +13,9 @@ import { IBYOKStorageService } from './byokStorageService';
 import { CustomOAIBYOKModelProvider, hasExplicitApiPath } from './customOAIProvider';
 
 export interface AzureUrlOptions {
-	deploymentType?: 'completions' | 'responses';
-	deploymentName?: string;
-	apiVersion?: string;
+	deploymentType: 'completions' | 'responses';
+	deploymentName: string;
+	apiVersion: string;
 }
 
 export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrlOptions, logService?: ILogService): string {
@@ -119,9 +119,9 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			const config = modelConfig?.[modelId];
 
 			const options: AzureUrlOptions | undefined = config ? {
-				deploymentType: config.deploymentType,
-				deploymentName: config.deploymentName,
-				apiVersion: config.apiVersion
+				deploymentType: config.deploymentType || 'completions',
+				deploymentName: config.deploymentName || modelId,
+				apiVersion: config.apiVersion || '2025-01-01-preview'
 			} : undefined;
 
 			const resolvedUrl = resolveAzureUrl(modelId, url, options, this._logService);
@@ -157,7 +157,6 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			// Set temperature from config if specified
 			if (config?.temperature !== undefined) {
 				modelInfo.temperature = config.temperature;
-				this._logService?.info(`[Warning] Set temperature from config: ${config.temperature}`);
 			}
 
 			// Set supported endpoints based on deployment type
