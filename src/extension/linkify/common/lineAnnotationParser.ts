@@ -35,6 +35,7 @@
 // - Returned raw snippet is a lightweight reconstruction of matched tokens for
 //   potential future highlighting or telemetry.
 
+// '-', '–', and '—' represent hyphen, en-dash, and em-dash respectively
 const RANGE_CONNECTORS = new Set(['-', '–', '—', 'to', 'through', 'thru']);
 const LINE_TOKENS = new Set(['line', 'lines', 'ln', 'l']);
 
@@ -45,10 +46,54 @@ export interface ParsedLineAnnotation {
 
 const parenRe = /^\s*\((lines?)\s+(\d+)(?:\s*([–—-]|to|through|thru)\s*(\d+))?\)/i;
 
+function isNumberToken(token: string | undefined): boolean {
+	return !!token && /^\d+$/.test(token);
+}
+
+interface LineRangeMatch {
+	readonly startLine: number;
+	readonly tokenSpan: number; // Number of tokens consumed (2 for "line 42", 3-4 for ranges)
+}
+
+function tryParseLineRange(tokens: string[], startIndex: number): LineRangeMatch | undefined {
+	const lineToken = tokens[startIndex];
+	if (!lineToken || !LINE_TOKENS.has(lineToken.toLowerCase())) {
+		return undefined;
+	}
+
+	const numToken = tokens[startIndex + 1];
+	if (!isNumberToken(numToken)) {
+		return undefined;
+	}
+
+	const line = toLine(numToken);
+	if (line === undefined) {
+		return undefined;
+	}
+
+	// Check for range connector (e.g., "lines 10 through 15" or "lines 10-15")
+	const maybeConnector = tokens[startIndex + 2]?.toLowerCase();
+	if (maybeConnector && RANGE_CONNECTORS.has(maybeConnector)) {
+		const secondNum = tokens[startIndex + 3];
+		// If we have a valid second number, span is 4 (line + num + connector + num)
+		// Otherwise span is 3 (line + num + connector, incomplete range)
+		const tokenSpan = isNumberToken(secondNum) ? 4 : 3;
+		return { startLine: line, tokenSpan };
+	}
+
+	// Simple case: just "line 42" (span of 2 tokens)
+	return { startLine: line, tokenSpan: 2 };
+}
+
 // Parses trailing annotation patterns where line info appears AFTER the file name in prose, or inline parenthesized forms.
 export function parseTrailingLineNumberAnnotation(text: string, maxScan = 160): ParsedLineAnnotation | undefined {
-	if (!text) { return undefined; }
+	if (!text) {
+		return undefined;
+	}
+
 	const slice = text.slice(0, maxScan);
+
+	// Fast path: Check for parenthesized form like "(line 42)" or "(lines 10-12)"
 	const pm = parenRe.exec(slice);
 	if (pm) {
 		const line = toLine(pm[2]);
@@ -56,30 +101,21 @@ export function parseTrailingLineNumberAnnotation(text: string, maxScan = 160): 
 			return { startLine: line, raw: pm[0] };
 		}
 	}
+
+	// Tokenize and scan for prose patterns like "on line 45" or "lines 10 through 15"
 	const tokenRe = /[A-Za-z]+|\d+|[–—-]/g;
-	const tokens: string[] = [];
-	let m: RegExpExecArray | null;
-	while ((m = tokenRe.exec(slice))) {
-		tokens.push(m[0]);
-		if (tokens.length > 40) { break; }
-	}
+	const tokens = Array.from(slice.matchAll(tokenRe), m => m[0]).slice(0, 40);
+
 	for (let i = 0; i < tokens.length; i++) {
-		const tk = tokens[i].toLowerCase();
-		if (LINE_TOKENS.has(tk)) {
-			const numToken = tokens[i + 1];
-			if (numToken && /^\d+$/.test(numToken)) {
-				const line = toLine(numToken);
-				if (line === undefined) { continue; }
-				const maybeConnector = tokens[i + 2]?.toLowerCase();
-				if (maybeConnector && RANGE_CONNECTORS.has(maybeConnector)) {
-					const secondNum = tokens[i + 3];
-					const span = (secondNum && /^\d+$/.test(secondNum)) ? 4 : 3;
-					return { startLine: line, raw: reconstruct(tokens, i, span) };
-				}
-				return { startLine: line, raw: reconstruct(tokens, i, 2) };
-			}
+		const match = tryParseLineRange(tokens, i);
+		if (match) {
+			return {
+				startLine: match.startLine,
+				raw: reconstruct(tokens, i, match.tokenSpan)
+			};
 		}
 	}
+
 	return undefined;
 }
 
