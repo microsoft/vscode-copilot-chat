@@ -108,14 +108,16 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 				messages: geminiMessagesToRawMessagesForLogging(contents, systemInstruction),
 				ourRequestId: requestId,
 				location: ChatLocation.Other,
-				tools: options.tools?.map((tool): OpenAiFunctionTool => ({
-					type: 'function',
-					function: {
-						name: tool.name,
-						description: tool.description,
-						parameters: tool.inputSchema
-					}
-				})),
+				body: {
+					tools: options.tools?.map((tool): OpenAiFunctionTool => ({
+						type: 'function',
+						function: {
+							name: tool.name,
+							description: tool.description,
+							parameters: tool.inputSchema
+						}
+					}))
+				}
 			});
 
 		// Convert VS Code tools to Gemini function declarations

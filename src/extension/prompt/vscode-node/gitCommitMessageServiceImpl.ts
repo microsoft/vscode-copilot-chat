@@ -12,6 +12,7 @@ import { API, Repository } from '../../../platform/git/vscode/git';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableMap, DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { basename } from '../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { RecentCommitMessages } from '../common/repository';
 import { GitCommitMessageGenerator } from '../node/gitCommitMessageGenerator';
@@ -96,8 +97,10 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 			const attemptCount = this._getAttemptCount(repository, diffs);
 			const recentCommitMessages = await this._getRecentCommitMessages(repository);
 
+			const repositoryName = basename(repository.rootUri);
+			const branchName = repository.state.HEAD?.name ?? '';
 			const gitCommitMessageGenerator = this._instantiationService.createInstance(GitCommitMessageGenerator);
-			const commitMessage = await gitCommitMessageGenerator.generateGitCommitMessage(changes, recentCommitMessages, attemptCount, cancellationToken);
+			const commitMessage = await gitCommitMessageGenerator.generateGitCommitMessage(repositoryName, branchName, changes, recentCommitMessages, attemptCount, cancellationToken);
 
 			// Save generated commit message
 			if (commitMessage && repository.state.HEAD && repository.state.HEAD.commit) {

@@ -6,6 +6,7 @@
 import { assert, expect, suite, test } from 'vitest';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { CurrentFileOptions, DEFAULT_OPTIONS } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { Result } from '../../../../util/common/result';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { buildCodeSnippetsUsingPagedClipping, createTaggedCurrentFileContentUsingPagedClipping } from '../../common/promptCrafting';
@@ -97,6 +98,25 @@ suite('Paged clipping - current file', () => {
 
 	const opts: CurrentFileOptions = DEFAULT_OPTIONS.currentFile;
 
+	function createTaggedFile(
+		currentDocLines: string[],
+		areaAroundCodeToEdit: string,
+		areaAroundEditWindowLinesRange: OffsetRange,
+		computeTokens: (s: string) => number,
+		pageSize: number,
+		opts: CurrentFileOptions,
+	): Result<string, 'outOfBudget'> {
+
+		return createTaggedCurrentFileContentUsingPagedClipping(
+			currentDocLines,
+			areaAroundCodeToEdit,
+			areaAroundEditWindowLinesRange,
+			computeTokens,
+			pageSize,
+			opts
+		).map(taggedCurrentFileContent => taggedCurrentFileContent.join('\n'));
+	}
+
 	test('unlim budget - includes whole context', () => {
 
 		const docLines = nLines(40);
@@ -113,7 +133,7 @@ suite('Paged clipping - current file', () => {
 </area_around_code_to_edit>
 `.trim();
 
-		const result = createTaggedCurrentFileContentUsingPagedClipping(
+		const result = createTaggedFile(
 			docLines.getLines(),
 			areaAroundCodeToEdit,
 			new OffsetRange(21, 26),
@@ -122,7 +142,7 @@ suite('Paged clipping - current file', () => {
 			{ ...opts, maxTokens: 2000 }
 		);
 		assert(result.isOk());
-		const { taggedCurrentFileContent } = result.val;
+		const taggedCurrentFileContent = result.val;
 
 		expect(taggedCurrentFileContent).toMatchInlineSnapshot(`
 			"1
@@ -189,7 +209,7 @@ suite('Paged clipping - current file', () => {
 </area_around_code_to_edit>
 `.trim();
 
-		const result = createTaggedCurrentFileContentUsingPagedClipping(
+		const result = createTaggedFile(
 			docLines.getLines(),
 			areaAroundCodeToEdit,
 			new OffsetRange(21, 26),
@@ -197,11 +217,10 @@ suite('Paged clipping - current file', () => {
 			10,
 			{ ...opts, maxTokens: 20 },
 		);
-		expect(result).toMatchInlineSnapshot(`
-			ResultOk {
-			  "val": {
-			    "nLines": 6,
-			    "taggedCurrentFileContent": "21
+		assert(result.isOk());
+		const taggedCurrentFileContent = result.val;
+		expect(taggedCurrentFileContent).toMatchInlineSnapshot(`
+			"21
 			<area_around_code_to_edit>
 			22
 			23
@@ -214,9 +233,7 @@ suite('Paged clipping - current file', () => {
 			27
 			28
 			29
-			30",
-			  },
-			}
+			30"
 		`);
 	});
 
@@ -236,7 +253,7 @@ suite('Paged clipping - current file', () => {
 </a>
 `.trim();
 
-		const result = createTaggedCurrentFileContentUsingPagedClipping(
+		const result = createTaggedFile(
 			docLines.getLines(),
 			areaAroundCodeToEdit,
 			new OffsetRange(10, 14),
@@ -245,7 +262,7 @@ suite('Paged clipping - current file', () => {
 			{ ...opts, maxTokens: 50 }
 		);
 		assert(result.isOk());
-		const { taggedCurrentFileContent } = result.val;
+		const taggedCurrentFileContent = result.val;
 
 		expect(taggedCurrentFileContent).toMatchInlineSnapshot(`
 			"<a>

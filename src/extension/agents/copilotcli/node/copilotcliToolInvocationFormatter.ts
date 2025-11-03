@@ -8,13 +8,14 @@ import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
-import { isCopilotCliEditToolCall } from '../common/copilotcliTools';
 
 /**
  * CopilotCLI tool names
  */
 export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
+	Edit = 'edit',
+	Create = 'create',
 	View = 'view',
 	Bash = 'bash',
 	Think = 'think',
@@ -35,11 +36,50 @@ interface StrReplaceEditorArgs {
 	file_text?: string;
 }
 
+// @ts-ignore Will be used later.
+interface CreateArgs {
+	path: string;
+	file_text?: string;
+}
+
+// @ts-ignore Will be used later.
+interface ViewArgs {
+	path: string;
+	view_range?: [number, number];
+}
+
+// @ts-ignore Will be used later.
+interface EditArgs {
+	path: string;
+	old_str?: string;
+	new_str?: string;
+}
+
 interface BashArgs {
 	command: string;
 	description?: string;
 	sessionId?: string;
 	async?: boolean;
+}
+
+export function isCopilotCliEditToolCall(toolName: string, toolArgs: unknown): toolArgs is StrReplaceEditorArgs | EditArgs | CreateArgs {
+	if (toolName === CopilotCLIToolNames.StrReplaceEditor && typeof toolArgs === 'object' && toolArgs !== null) {
+		const args = toolArgs as StrReplaceEditorArgs;
+		if (args.command && args.command !== 'view') {
+			return true;
+		}
+	} else if (toolName === CopilotCLIToolNames.Edit || toolName === CopilotCLIToolNames.Create) {
+		return true;
+	}
+	return false;
+}
+
+export function getAffectedUrisForEditTool(toolName: string, toolArgs: unknown): URI[] {
+	if (isCopilotCliEditToolCall(toolName, toolArgs) && toolArgs.path) {
+		return [URI.file(toolArgs.path)];
+	}
+
+	return [];
 }
 
 export function stripReminders(text: string): string {
@@ -93,7 +133,6 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, ChatToolInvocationPart>();
-	const toolNames = new Map<string, string>();
 
 	for (const event of events) {
 		switch (event.type) {
@@ -132,7 +171,7 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 				break;
 			}
 			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, toolNames, pendingToolInvocations);
+				const responsePart = processToolExecutionStart(event, pendingToolInvocations);
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					currentResponseParts.push(responsePart);
 				}
@@ -156,13 +195,12 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 	return turns;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(
 		event.data.toolName,
 		event.data.toolCallId,
 		event.data.arguments
 	);
-	toolNames.set(event.data.toolCallId, event.data.toolName);
 	if (toolInvocation) {
 		// Store pending invocation to update with result later
 		pendingToolInvocations.set(event.data.toolCallId, toolInvocation);
@@ -199,9 +237,6 @@ export function createCopilotCLIToolInvocation(
 	if (toolName === CopilotCLIToolNames.ReportIntent) {
 		return undefined; // Ignore these for now
 	}
-	if (isCopilotCliEditToolCall(toolName, args)) {
-		return undefined;
-	}
 	if (toolName === CopilotCLIToolNames.Think) {
 		const thought = (args as { thought?: string })?.thought;
 		if (thought && typeof thought === 'string') {
@@ -232,7 +267,7 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrR
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 
-	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
+	invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0}", display));
 }
 
 function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {

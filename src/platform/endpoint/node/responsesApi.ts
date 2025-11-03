@@ -251,14 +251,16 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 						}
 					});
 					break;
-				case 'function_call_output':
+				case 'function_call_output': {
 					flushPendingFunctionCalls();
+					const content = responseFunctionOutputToRawContents(item.output);
 					messages.push({
 						role: Raw.ChatRole.Tool,
-						content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: item.output }],
+						content,
 						toolCallId: item.call_id
 					});
 					break;
+				}
 				case 'reasoning':
 					// We can't perfectly reconstruct the original thinking data
 					// but we can add a placeholder for logging
@@ -302,14 +304,19 @@ function ensureContentArray(content: string | OpenAI.Responses.ResponseInputMess
 	return content;
 }
 
-function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent): Raw.ChatCompletionContentPart | undefined {
+function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent | OpenAI.Responses.ResponseFunctionCallOutputItem): Raw.ChatCompletionContentPart | undefined {
 	switch (part.type) {
 		case 'input_text':
 			return { type: Raw.ChatCompletionContentPartKind.Text, text: part.text };
 		case 'input_image':
 			return {
 				type: Raw.ChatCompletionContentPartKind.Image,
-				imageUrl: { url: part.image_url || '', detail: part.detail === 'auto' ? undefined : part.detail }
+				imageUrl: {
+					url: part.image_url || '',
+					detail: part.detail === 'auto' ?
+						undefined :
+						(part.detail ?? undefined)
+				}
 			};
 		case 'input_file':
 			// This is a rough approximation for logging
@@ -327,6 +334,13 @@ function responseOutputToRawContent(part: OpenAI.Responses.ResponseOutputText | 
 		case 'refusal':
 			return { type: Raw.ChatCompletionContentPartKind.Text, text: `[Refusal: ${part.refusal}]` };
 	}
+}
+
+function responseFunctionOutputToRawContents(output: string | OpenAI.Responses.ResponseFunctionCallOutputItemList): Raw.ChatCompletionContentPart[] {
+	if (typeof output === 'string') {
+		return [{ type: Raw.ChatCompletionContentPartKind.Text, text: output }];
+	}
+	return coalesce(output.map(responseContentToRawContent));
 }
 
 export async function processResponseFromChatEndpoint(instantiationService: IInstantiationService, telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {

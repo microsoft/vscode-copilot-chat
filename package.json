@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0-20251030",
+		"vscode": "^1.106.0-20251103",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -171,6 +171,7 @@
 				"userDescription": "%copilot.tools.runSubagent.description%",
 				"modelDescription": "Launch a new agent to handle complex, multi-step tasks autonomously. This tool is good at researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use this agent to perform the search for you.\n\n- Agents do not run async or in the background, you will wait for the agent's result.\n- When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n - Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.\n - The agent's outputs should generally be trusted\n - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent",
 				"tags": [],
+				"when": "!config.chat.experimental.runSubagent2",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -1073,6 +1074,76 @@
 							"description": "the arguments of the tool call"
 						}
 					}
+				}
+			},
+			{
+				"name": "copilot_memory",
+				"toolReferenceName": "memory",
+				"displayName": "%copilot.tools.memory.name%",
+				"userDescription": "%copilot.tools.memory.description%",
+				"modelDescription": "Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).",
+				"icon": "$(database)",
+				"when": "config.github.copilot.chat.tools.memory.enabled",
+				"canBeReferencedInPrompt": true,
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"command": {
+							"type": "string",
+							"enum": [
+								"view",
+								"create",
+								"str_replace",
+								"insert",
+								"delete",
+								"rename"
+							],
+							"description": "The memory operation to perform: view (list/read), create (new file), str_replace (edit), insert (add content), delete (remove), rename (change filename)"
+						},
+						"path": {
+							"type": "string",
+							"description": "The path to the memory file (must start with /memories, e.g., /memories/notes.md or /memories/project/info.txt)"
+						},
+						"view_range": {
+							"type": "array",
+							"items": {
+								"type": "number"
+							},
+							"description": "Optional: view specific line range [start, end] for view command"
+						},
+						"file_text": {
+							"type": "string",
+							"description": "Content for create operation"
+						},
+						"old_str": {
+							"type": "string",
+							"description": "String to replace in str_replace operation"
+						},
+						"new_str": {
+							"type": "string",
+							"description": "Replacement string in str_replace operation"
+						},
+						"insert_line": {
+							"type": "number",
+							"description": "Line number for insert operation"
+						},
+						"insert_text": {
+							"type": "string",
+							"description": "Text to insert at specified line for insert operation"
+						},
+						"old_path": {
+							"type": "string",
+							"description": "Source path for rename operation"
+						},
+						"new_path": {
+							"type": "string",
+							"description": "Destination path for rename operation"
+						}
+					},
+					"required": [
+						"command"
+					]
 				}
 			},
 			{
@@ -2209,11 +2280,35 @@
 				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
 			},
 			{
-                "command": "github.copilot.client.generate",
-                "title": "Open Completions Panel",
-                "enablement": "!isWeb",
-                "category": "GitHub Copilot"
-            }
+				"command": "github.copilot.chat.openSuggestionsPanel",
+				"title": "Open Completions Panel",
+				"enablement": "github.copilot.extensionUnification.activated && !isWeb",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.toggleStatusMenu",
+				"title": "Open Status Menu",
+				"enablement": "github.copilot.extensionUnification.activated",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.completions.disable",
+				"title": "Disable Completions",
+				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && config.editor.inlineSuggest.enabled && github.copilot.completions.enabled",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.completions.enable",
+				"title": "Enable Completions",
+				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && !(config.editor.inlineSuggest.enabled && github.copilot.completions.enabled)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.completions.toggle",
+				"title": "Toggle (Enable/Disable) Completions",
+				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated",
+				"category": "GitHub Copilot"
+			}
 		],
 		"configuration": [
 			{
@@ -2346,6 +2441,20 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
+					},
+					"github.copilot.enable": {
+						"type": "object",
+						"scope": "window",
+						"default": {
+							"*": true,
+							"plaintext": false,
+							"markdown": false,
+							"scminput": false
+						},
+						"additionalProperties": {
+							"type": "boolean"
+						},
+						"markdownDescription": "Enable or disable auto triggering of Copilot completions for specified [languages](https://code.visualstudio.com/docs/languages/identifiers). You can still trigger suggestions manually using `Alt + \\`"
 					}
 				}
 			},
@@ -3120,10 +3229,19 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.anthropic.webSearchTool.enabled": {
+					"github.copilot.chat.anthropic.tools.websearch.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.anthropic.webSearchTool.enabled%",
+						"markdownDescription": "%github.copilot.config.anthropic.tools.websearch.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.tools.memory.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.tools.memory.enabled%",
 						"tags": [
 							"experimental",
 							"onExp"
@@ -4248,10 +4366,10 @@
 				"description": "Researches a task to create multi-step plans"
 			}
 		],
-		"prompts": [
+		"chatPromptFiles": [
 			{
-				"name": "savePromptFile",
-				"path": "./assets/prompts/savePromptFile.prompt.md",
+				"name": "savePrompt",
+				"path": "./assets/prompts/savePrompt.prompt.md",
 				"description": "Generalize the current discussion into a reusable prompt and save it as a file"
 			}
 		]
@@ -4276,7 +4394,7 @@
 		"watch:tsc-extension": "tsc --noEmit --watch --project tsconfig.json",
 		"watch:tsc-extension-web": "tsc --noEmit --watch --project tsconfig.worker.json",
 		"watch:tsc-simulation-workbench": "tsc --noEmit --watch --project test/simulation/workbench/tsconfig.json",
-		"typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project test/simulation/workbench/tsconfig.json && tsc --noEmit --project tsconfig.worker.json",
+		"typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project test/simulation/workbench/tsconfig.json && tsc --noEmit --project tsconfig.worker.json && tsc --noEmit --project src/extension/completions-core/vscode-node/extension/src/copilotPanel/webView/tsconfig.json",
 		"lint": "eslint . --max-warnings=0",
 		"lint-staged": "eslint --max-warnings=0",
 		"tsfmt": "npx tsfmt -r --verify",
@@ -4335,6 +4453,7 @@
 		"@types/vinyl": "^2.0.12",
 		"@types/vscode": "^1.102.0",
 		"@types/yargs": "^17.0.24",
+		"@types/vscode-webview": "^1.57.4",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
 		"@typescript-eslint/parser": "^8.32.0",
 		"@typescript-eslint/typescript-estree": "^8.26.1",
@@ -4375,7 +4494,7 @@
 		"monaco-editor": "0.44.0",
 		"npm-run-all": "^4.1.5",
 		"open": "^10.1.2",
-		"openai": "^5.11.0",
+		"openai": "^6.7.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
 		"playwright": "^1.56.1",
@@ -4404,7 +4523,7 @@
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
-		"@anthropic-ai/sdk": "^0.63.0",
+		"@anthropic-ai/sdk": "^0.68.0",
 		"@github/copilot": "^0.0.343",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
@@ -4414,6 +4533,7 @@
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
+		"@vscode/webview-ui-toolkit": "^1.3.1",
 		"@xterm/headless": "^5.5.0",
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
@@ -4426,7 +4546,8 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0"
+		"web-tree-sitter": "^0.23.0",
+		"dompurify": "^3.3.0"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",

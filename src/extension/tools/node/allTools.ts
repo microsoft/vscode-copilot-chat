@@ -20,6 +20,7 @@ import './insertEditTool';
 import './installExtensionTool';
 import './listDirTool';
 import './manageTodoListToolEx';
+import './memoryTool';
 import './multiReplaceStringTool';
 import './newNotebookTool';
 import './newWorkspace/newWorkspaceTool';
@@ -39,3 +40,4 @@ import './usagesTool';
 import './userPreferencesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
+

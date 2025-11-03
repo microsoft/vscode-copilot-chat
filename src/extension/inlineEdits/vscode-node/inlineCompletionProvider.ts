@@ -126,7 +126,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
 	private _isCompletionsEnabled(document: TextDocument): boolean {
-		const enabledLanguages = this._configurationService.getConfig(ConfigKey.Shared.Enable);
+		const enabledLanguages = this._configurationService.getConfig(ConfigKey.Enable);
 		const enabledLanguagesMap = new Map(Object.entries(enabledLanguages));
 		if (!enabledLanguagesMap.has('*')) {
 			enabledLanguagesMap.set('*', false);

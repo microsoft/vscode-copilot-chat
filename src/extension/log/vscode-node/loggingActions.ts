@@ -47,6 +47,7 @@ interface ProxyAgentLog {
 
 interface ProxyAgentParams {
 	log: ProxyAgentLog;
+	loadSystemCertificatesFromNode: () => boolean | undefined;
 }
 
 interface ProxyAgent {
@@ -92,7 +93,8 @@ User Settings:
 \`\`\`${getProxyEnvVariables()}
 `);
 			const proxyAgent = loadVSCodeModule<ProxyAgent>('@vscode/proxy-agent');
-			const osCertificates = proxyAgent?.loadSystemCertificates ? await loadSystemCertificates(proxyAgent.loadSystemCertificates, this.logService) : undefined;
+			const loadSystemCertificatesFromNode = this.configurationService.getNonExtensionConfig<boolean>('http.systemCertificatesNode');
+			const osCertificates = proxyAgent?.loadSystemCertificates ? await loadSystemCertificates(proxyAgent.loadSystemCertificates, loadSystemCertificatesFromNode, this.logService) : undefined;
 			const urls = [
 				this.capiClientService.dotcomAPIURL,
 				this.capiClientService.capiPingURL,
@@ -289,7 +291,7 @@ function loadVSCodeModule<T>(moduleName: string): T | undefined {
 	return undefined;
 }
 
-async function loadSystemCertificates(load: NonNullable<ProxyAgent['loadSystemCertificates']>, logService: ILogService): Promise<(string | Buffer)[] | undefined> {
+async function loadSystemCertificates(load: NonNullable<ProxyAgent['loadSystemCertificates']>, loadSystemCertificatesFromNode: boolean | undefined, logService: ILogService): Promise<(string | Buffer)[] | undefined> {
 	try {
 		const certificates = await load({
 			log: {
@@ -308,7 +310,8 @@ async function loadSystemCertificates(load: NonNullable<ProxyAgent['loadSystemCe
 				error(message: string | Error, ..._args: any[]) {
 					logService.error(typeof message === 'string' ? message : String(message));
 				},
-			} satisfies ProxyAgentLog
+			} satisfies ProxyAgentLog,
+			loadSystemCertificatesFromNode: () => loadSystemCertificatesFromNode,
 		});
 		return Array.isArray(certificates) ? certificates : undefined;
 	} catch (err) {
@@ -379,6 +382,7 @@ function getNonDefaultSettings() {
 		'http.proxyKerberosServicePrincipal',
 		'http.systemCertificates',
 		'http.experimental.systemCertificatesV2',
+		'http.systemCertificatesNode',
 	].map(key => {
 		const i = configuration.inspect(key);
 		const v = configuration.get(key, i?.defaultValue);

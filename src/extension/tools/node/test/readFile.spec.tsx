@@ -146,7 +146,7 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = {
 				filePath: '/workspace/empty.ts',
-				offset: 2,
+				offset: 1,
 				limit: 4
 			};
 			const result = await toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None);
@@ -180,6 +180,67 @@ suite('ReadFile', () => {
 			expect(resultString).toContain('line 2000');
 			expect(resultString).toContain('[File content truncated at line 2000. Use read_file with offset/limit parameters to view more.]');
 			expect(resultString).not.toContain('line 2001');
+		});
+
+		test('read file with offset beyond file line count should throw error', async () => {
+			const toolsService = accessor.get(IToolsService);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/file.ts',
+				offset: 535 // file only has 5 lines
+			};
+			await expect(toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None))
+				.rejects.toThrow('Invalid offset 535: file only has 5 lines. Line numbers are 1-indexed.');
+		});
+
+		test('read file with offset beyond single-line file should throw error', async () => {
+			const toolsService = accessor.get(IToolsService);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/whitespace.ts', // 2 line file (has a newline)
+				offset: 10
+			};
+			await expect(toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None))
+				.rejects.toThrow('Invalid offset 10: file only has 2 lines. Line numbers are 1-indexed.');
+		});
+
+		test('read file with offset exactly at line count should succeed', async () => {
+			const toolsService = accessor.get(IToolsService);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/file.ts',
+				offset: 5, // file has exactly 5 lines
+				limit: 1
+			};
+			const result = await toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None);
+			const resultString = await toolResultToString(accessor, result);
+			expect(resultString).toContain('line 5');
+		});
+
+		test('read empty file with offset beyond bounds should throw error', async () => {
+			const toolsService = accessor.get(IToolsService);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/empty.ts',
+				offset: 2
+			};
+			await expect(toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None))
+				.rejects.toThrow('Invalid offset 2: file only has 1 line. Line numbers are 1-indexed.');
+		});
+
+		test('read file with offset 0 should clamp to line 1', async () => {
+			const toolsService = accessor.get(IToolsService);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/file.ts',
+				offset: 0,
+				limit: 2
+			};
+			const result = await toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None);
+			const resultString = await toolResultToString(accessor, result);
+			// Should start from line 1 (offset clamped to 1)
+			expect(resultString).toContain('line 1');
+			expect(resultString).toContain('line 2');
 		});
 	});
 });

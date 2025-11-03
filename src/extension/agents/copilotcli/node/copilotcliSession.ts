@@ -6,80 +6,51 @@
 import type { AgentOptions, Attachment, ModelProvider, PostToolUseHookInput, PreToolUseHookInput, Session, SessionEvent } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
-import { IEnvService } from '../../../../platform/env/common/envService';
-import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getAffectedUrisForEditTool } from '../common/copilotcliTools';
-import { CopilotCLIPromptResolver } from './copilotcliPromptResolver';
-import { ICopilotCLISessionService } from './copilotcliSessionService';
-import { processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
+import { ICopilotCLISDK } from './copilotCli';
+import { buildChatHistoryFromEvents, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
-import { ensureNodePtyShim } from './nodePtyShim';
 import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
-export class CopilotCLIAgentManager extends Disposable {
-	constructor(
-		private readonly promptResolver: CopilotCLIPromptResolver,
-		@ILogService private readonly logService: ILogService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
-	) {
-		super();
-	}
+export interface ICopilotCLISession {
+	readonly sessionId: string;
+	readonly status: vscode.ChatSessionStatus | undefined;
+	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
 
-	/**
-	 * Find session by SDK session ID
-	 */
-	public findSession(sessionId: string): CopilotCLISession | undefined {
-		return this.sessionService.findSessionWrapper<CopilotCLISession>(sessionId);
-	}
-
-	async handleRequest(
-		copilotcliSessionId: string | undefined,
-		request: vscode.ChatRequest,
-		context: vscode.ChatContext,
+	handleRequest(
+		prompt: string,
+		attachments: Attachment[],
+		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		modelId: ModelProvider | undefined,
+		workingDirectory: string | undefined,
 		token: vscode.CancellationToken
-	): Promise<{ copilotcliSessionId: string | undefined }> {
-		const isNewSession = !copilotcliSessionId;
-		const sessionIdForLog = copilotcliSessionId ?? 'new';
-		this.logService.trace(`[CopilotCLIAgentManager] Handling request for sessionId=${sessionIdForLog}.`);
+	): Promise<void>;
 
-		const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, token);
-		// Check if we already have a session wrapper
-		let session = copilotcliSessionId ? this.sessionService.findSessionWrapper<CopilotCLISession>(copilotcliSessionId) : undefined;
-
-		if (session) {
-			this.logService.trace(`[CopilotCLIAgentManager] Reusing CopilotCLI session ${copilotcliSessionId}.`);
-		} else {
-			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId, prompt);
-			session = this.instantiationService.createInstance(CopilotCLISession, sdkSession);
-			this.sessionService.trackSessionWrapper(sdkSession.sessionId, session);
-		}
-
-		if (isNewSession) {
-			this.sessionService.setPendingRequest(session.sessionId);
-		}
-
-		await session.invoke(prompt, attachments, request.toolInvocationToken, stream, modelId, token);
-
-		return { copilotcliSessionId: session.sessionId };
-	}
+	addUserMessage(content: string): void;
+	addUserAssistantMessage(content: string): void;
+	getSelectedModelId(): Promise<string | undefined>;
+	getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]>;
 }
-
-export class CopilotCLISession extends Disposable {
+export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
 	private _abortController = new AbortController();
 	private _pendingToolInvocations = new Map<string, vscode.ChatToolInvocationPart>();
 	private _editTracker = new ExternalEditTracker();
 	public readonly sessionId: string;
+	private _status?: vscode.ChatSessionStatus;
+	public get status(): vscode.ChatSessionStatus | undefined {
+		return this._status;
+	}
+	private readonly _statusChange = this.add(new EventEmitter<vscode.ChatSessionStatus | undefined>());
+
+	public readonly onDidChangeStatus = this._statusChange.event;
 
 	constructor(
 		private readonly _sdkSession: Session,
@@ -87,8 +58,7 @@ export class CopilotCLISession extends Disposable {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IToolsService private readonly toolsService: IToolsService,
-		@IEnvService private readonly envService: IEnvService,
-		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -100,30 +70,32 @@ export class CopilotCLISession extends Disposable {
 	}
 
 	async *query(prompt: string, attachments: Attachment[], options: AgentOptions): AsyncGenerator<SessionEvent> {
-		// Ensure node-pty shim exists before importing SDK
-		// @github/copilot has hardcoded: import{spawn}from"node-pty"
-		await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
-
 		// Dynamically import the SDK
-		const { Agent } = await import('@github/copilot/sdk');
+		const { Agent } = await this.copilotCLISDK.getPackage();
 		const agent = new Agent(options);
 		yield* agent.query(prompt, attachments);
 	}
 
-	public async invoke(
+	public async handleRequest(
 		prompt: string,
 		attachments: Attachment[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		modelId: ModelProvider | undefined,
+		workingDirectory: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<void> {
-		if (this._store.isDisposed) {
+		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
 
+		this._status = ChatSessionStatus.InProgress;
+		this._statusChange.fire(this._status);
+
 		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const copilotToken = await this._authenticationService.getCopilotToken();
+		// TODO@rebornix handle workspace properly
+		const effectiveWorkingDirectory = workingDirectory ?? this.workspaceService.getWorkspaceFolders().at(0)?.fsPath;
 
 		const options: AgentOptions = {
 			modelProvider: modelId ?? {
@@ -131,8 +103,7 @@ export class CopilotCLISession extends Disposable {
 				model: 'claude-sonnet-4.5',
 			},
 			abortController: this._abortController,
-			// TODO@rebornix handle workspace properly
-			workingDirectory: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
+			workingDirectory: effectiveWorkingDirectory,
 			copilotToken: copilotToken.token,
 			env: {
 				...process.env,
@@ -153,7 +124,7 @@ export class CopilotCLISession extends Disposable {
 				postToolUse: [
 					async (input: PostToolUseHookInput) => {
 						const editKey = getEditOperationKey(input.toolName, input.toolArgs);
-						await this._onDidEditTool(editKey);
+						void this._onDidEditTool(editKey);
 					}
 				]
 			}
@@ -167,10 +138,36 @@ export class CopilotCLISession extends Disposable {
 
 				this._processEvent(event, stream, toolInvocationToken);
 			}
+			this._status = ChatSessionStatus.Completed;
+			this._statusChange.fire(this._status);
 		} catch (error) {
+			this._status = ChatSessionStatus.Failed;
+			this._statusChange.fire(this._status);
 			this.logService.error(`CopilotCLI session error: ${error}`);
 			stream.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 		}
+	}
+
+	addUserMessage(content: string) {
+		this._sdkSession.addEvent({ type: 'user.message', data: { content } });
+	}
+
+	addUserAssistantMessage(content: string) {
+		this._sdkSession.addEvent({
+			type: 'assistant.message', data: {
+				messageId: `msg_${Date.now()}`,
+				content
+			}
+		});
+	}
+
+	public getSelectedModelId() {
+		return this._sdkSession.getSelectedModel();
+	}
+
+	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
+		const events = await this._sdkSession.getEvents();
+		return buildChatHistoryFromEvents(events);
 	}
 
 	private _toolNames = new Map<string, string>();
@@ -196,12 +193,15 @@ export class CopilotCLISession extends Disposable {
 			}
 
 			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, this._toolNames, this._pendingToolInvocations);
-				const toolName = this._toolNames.get(event.data.toolCallId);
+				this._toolNames.set(event.data.toolCallId, event.data.toolName);
+				const responsePart = processToolExecutionStart(event, this._pendingToolInvocations);
+				if (isCopilotCliEditToolCall(event.data.toolName, event.data.arguments)) {
+					this._pendingToolInvocations.delete(event.data.toolCallId);
+				}
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					stream.push(responsePart);
 				}
-				this.logService.trace(`Start Tool ${toolName || '<unknown>'}`);
+				this.logService.trace(`Start Tool ${event.data.toolName || '<unknown>'}`);
 				break;
 			}
 
@@ -232,6 +232,16 @@ export class CopilotCLISession extends Disposable {
 		permissionRequest: PermissionRequest,
 		toolInvocationToken: vscode.ChatParticipantToolToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
+		if (permissionRequest.kind === 'read') {
+			// If user is reading a file in the workspace, auto-approve read requests.
+			// Outisde workspace reads (e.g., /etc/passwd) will still require approval.
+			const data = Uri.file(permissionRequest.path);
+			if (this.workspaceService.getWorkspaceFolder(data)) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read workspace file ${permissionRequest.path}`);
+				return { kind: 'approved' };
+			}
+		}
+
 		try {
 			const { tool, input } = getConfirmationToolParams(permissionRequest);
 			const result = await this.toolsService.invokeTool(tool,

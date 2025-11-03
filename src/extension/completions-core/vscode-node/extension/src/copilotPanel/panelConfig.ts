@@ -14,9 +14,9 @@ export const copilotPanelConfig: PanelConfig = {
 	webviewScriptName: 'suggestionsPanelWebview.js',
 	contextVariable: CopilotPanelVisible,
 	commands: {
-		accept: constants.CMDAcceptCursorPanelSolution,
-		navigatePrevious: constants.CMDNavigatePreviousPanelSolution,
-		navigateNext: constants.CMDNavigateNextPanelSolution,
+		accept: constants.CMDAcceptCursorPanelSolutionClient,
+		navigatePrevious: constants.CMDNavigatePreviousPanelSolutionClient,
+		navigateNext: constants.CMDNavigateNextPanelSolutionClient,
 	},
 	renderingMode: 'streaming',
 	shuffleSolutions: false,

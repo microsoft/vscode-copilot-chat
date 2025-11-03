@@ -101,6 +101,7 @@ function calculateAutoModelInfo(endpoint: IChatEndpoint, sessionToken: string, d
 	const newModelInfo: IChatModelInformation = {
 		...originalModelInfo,
 		warning_messages: undefined,
+		model_picker_enabled: true,
 		info_messages: undefined,
 		billing: {
 			is_premium: originalModelInfo.billing?.is_premium ?? false,

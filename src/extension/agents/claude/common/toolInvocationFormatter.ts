@@ -75,7 +75,7 @@ function formatGlobInvocation(invocation: ChatToolInvocationPart, toolUse: Anthr
 
 function formatGrepInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
 	const pattern: string = (toolUse.input as any)?.pattern ?? '';
-	invocation.invocationMessage = new MarkdownString(l10n.t("Searched text for `{0}`", pattern));
+	invocation.invocationMessage = new MarkdownString(l10n.t("Searched for regex `{0}`", pattern));
 }
 
 function formatLSInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
