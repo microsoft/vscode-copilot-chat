@@ -3,19 +3,32 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AgentOptions } from '@github/copilot/sdk';
+import type { SessionOptions } from '@github/copilot/sdk';
 import { ToolName } from '../../../tools/common/toolNames';
 
-export interface PermissionToolParams {
-	tool: string;
-	input: unknown;
+type CoreTerminalConfirmationToolParams = {
+	tool: ToolName.CoreTerminalConfirmationTool;
+	input: {
+		message: string;
+		command: string | undefined;
+		isBackground: boolean;
+	};
+}
+
+type CoreConfirmationToolParams = {
+	tool: ToolName.CoreConfirmationTool;
+	input: {
+		title: string;
+		message: string;
+		confirmationType: 'basic';
+	};
 }
 
 /**
  * Pure function mapping a Copilot CLI permission request -> tool invocation params.
  * Keeps logic out of session class for easier unit testing.
  */
-export function getConfirmationToolParams(permissionRequest: PermissionRequest): PermissionToolParams {
+export function getConfirmationToolParams(permissionRequest: PermissionRequest): CoreTerminalConfirmationToolParams | CoreConfirmationToolParams {
 	if (permissionRequest.kind === 'shell') {
 		return {
 			tool: ToolName.CoreTerminalConfirmationTool,
@@ -86,4 +99,4 @@ function codeBlock(obj: Record<string, unknown>): string {
 /**
  * A permission request which will be used to check tool or path usage against config and/or request user approval.
  */
-export declare type PermissionRequest = Parameters<NonNullable<AgentOptions['requestPermission']>>[0] | { kind: 'read'; intention: string; path: string };
+export declare type PermissionRequest = Parameters<NonNullable<SessionOptions['requestPermission']>>[0] | { kind: 'read'; intention: string; path: string };
