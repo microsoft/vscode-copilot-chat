@@ -73,7 +73,9 @@ export class Linkifier implements ILinkifier {
 	// detect a line annotation or exceed buffering heuristics.
 	private _delayedAnchorBuffer: { anchor: LinkifyLocationAnchor; afterText: string; totalChars: number; precedingText: string } | undefined;
 
-	private static readonly maxAnchorBuffer = 140; // chars of following text to wait for annotation
+	// Buffer size chosen based on empirical testing: 140 chars covers most typical sentence lengths and ensures
+	// that line annotations following file anchors are detected without excessive memory usage or latency.
+	private static readonly maxAnchorBuffer = 140;
 	private static readonly flushTerminatorsRe = /[\.?!]\s*$|\n/; // punctuation or newline suggests end of sentence
 
 	constructor(
@@ -402,7 +404,7 @@ export class Linkifier implements ILinkifier {
 		let resultAnchor: LinkifyLocationAnchor = anchor;
 		const parsed = parseTrailingLineNumberAnnotation(afterText);
 		if (parsed) {
-			resultAnchor = new LinkifyLocationAnchor({ uri: anchor.value, range: new Range(new Position(parsed.startLine, 0), new Position(parsed.startLine, 0)) } as Location);
+			resultAnchor = new LinkifyLocationAnchor({ uri: anchor.value, range: Linkifier.createSingleLineRange(parsed.startLine) } as Location);
 		}
 		this._delayedAnchorBuffer = undefined;
 		return afterText.length > 0 ? [resultAnchor, afterText] : [resultAnchor];
@@ -451,7 +453,11 @@ export class Linkifier implements ILinkifier {
 		const normalized = this.normalizePrecedingSnapshot(text, b.anchor);
 		const parsed = parsePrecedingLineNumberAnnotation(normalized);
 		if (!parsed) { return false; }
-		b.anchor = new LinkifyLocationAnchor({ uri: b.anchor.value, range: new Range(new Position(parsed.startLine, 0), new Position(parsed.startLine, 0)) } as Location);
+		b.anchor = new LinkifyLocationAnchor({ uri: b.anchor.value, range: Linkifier.createSingleLineRange(parsed.startLine) } as Location);
 		return true;
+	}
+
+	private static createSingleLineRange(line: number): Range {
+		return new Range(new Position(line, 0), new Position(line, 0));
 	}
 }
