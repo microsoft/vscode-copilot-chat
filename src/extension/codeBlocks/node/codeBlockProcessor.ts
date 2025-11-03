@@ -106,7 +106,7 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 		const method = this._wrapped[methodName];
 		if (typeof method !== 'function') {
 			// Return a no-op function for missing methods
-			return ((() => { }) as any);
+			return (() => { }) as any;
 		}
 		return ((...args: any[]) => {
 			this._codeBlockProcessor.flush();

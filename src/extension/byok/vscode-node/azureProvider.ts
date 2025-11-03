@@ -19,12 +19,9 @@ export interface AzureUrlOptions {
 }
 
 export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrlOptions, logService?: ILogService): string {
-	logService?.info(`[Azure Debug] resolveAzureUrl called - modelId: ${modelId}, url: ${url}`);
-	logService?.info(`[Azure Debug] options: ${JSON.stringify(options, null, 2)}`);
 
 	// The fully resolved url was already passed in
 	if (hasExplicitApiPath(url)) {
-		logService?.info(`[Azure Debug] URL has explicit API path, returning as-is: ${url}`);
 		return url;
 	}
 
@@ -43,13 +40,9 @@ export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrl
 	const deploymentType = options?.deploymentType || 'completions';
 	const apiVersion = options?.apiVersion || '2025-01-01-preview';
 
-	logService?.info(`[Azure Debug] Resolved values - deploymentName: ${deploymentName}, deploymentType: ${deploymentType}, apiVersion: ${apiVersion}`);
-
 	// Determine if this is an Azure OpenAI endpoint (requires deployment name in path)
 	const isAzureOpenAIEndpointv1 = url.includes('models.ai.azure.com') || url.includes('inference.ml.azure.com');
 	const isAzureOpenAIEndpoint = url.includes('openai.azure.com') || url.includes('cognitiveservices.azure.com');
-
-	logService?.info(`[Azure Debug] Endpoint detection - v1: ${isAzureOpenAIEndpointv1}, standard: ${isAzureOpenAIEndpoint}`);
 
 	if (deploymentType === 'responses') {
 		// Handle Responses API
@@ -62,8 +55,7 @@ export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrl
 		} else {
 			throw new Error(`Unrecognized Azure deployment URL for Responses API: ${url}`);
 		}
-		logService?.info(`[Azure Debug] Responses API URL resolved to: ${resolvedUrl}`);
-		logService?.info(`[Azure Debug] NOTE: Deployment name '${deploymentName}' will be sent in request body as 'model' field`);
+
 		return resolvedUrl;
 	} else if (deploymentType === 'completions') {
 		// Handle Chat Completions API (default)
@@ -77,7 +69,6 @@ export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrl
 		} else {
 			throw new Error(`Unrecognized Azure deployment URL: ${url}`);
 		}
-		logService?.info(`[Azure Debug] Completions API URL resolved to: ${resolvedUrl}`);
 		return resolvedUrl;
 	} else {
 		throw new Error(`Invalid deployment type specified for model ${modelId}: ${deploymentType}`);

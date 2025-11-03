@@ -291,17 +291,22 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		}
 
 		if (body) {
-			if (this.modelMetadata.capabilities.supports.thinking) {
-				delete body.temperature;
-				body['max_completion_tokens'] = body.max_tokens;
-				delete body.max_tokens;
-			}
-			// Apply temperature from config if specified (and not a thinking model)
-			if (this._temperature !== undefined && !this.modelMetadata.capabilities.supports.thinking) {
+			// Apply temperature from config if specified (before thinking model checks)
+			if (this._temperature !== undefined) {
 				body.temperature = this._temperature;
 			}
-			// Removing max tokens defaults to the maximum which is what we want for BYOK
-			delete body.max_tokens;
+
+			if (this.modelMetadata.capabilities.supports.thinking) {
+				// Thinking models don't support temperature parameter
+				delete body.temperature;
+				// Thinking models use max_completion_tokens instead of max_tokens
+				body['max_completion_tokens'] = body.max_tokens;
+				delete body.max_tokens;
+			} else {
+				// For non-thinking models, removing max_tokens defaults to the maximum which is what we want for BYOK
+				delete body.max_tokens;
+			}
+
 			if (!this.useResponsesApi && body.stream) {
 				body['stream_options'] = { 'include_usage': true };
 			}
