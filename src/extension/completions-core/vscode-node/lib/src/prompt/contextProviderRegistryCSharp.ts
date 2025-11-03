@@ -21,10 +21,16 @@ export function fillInCSharpActiveExperiments(
 ): boolean {
 	const ctx = accessor.get(ICompletionsContextService);
 	try {
-		const csharpContextProviderParams = ctx.get(Features).csharpContextProviderParams(telemetryData);
+		const features = ctx.get(Features);
+		const csharpContextProviderParams = features.csharpContextProviderParams(telemetryData);
 		if (csharpContextProviderParams) {
 			const params = JSON.parse(csharpContextProviderParams) as ContextProviderParams;
 			for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
+		} else {
+			const params = features.getContextProviderExpSettings('csharp')?.params;
+			if (params) {
+				for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
+			}
 		}
 	} catch (e) {
 		logger.debug(ctx.get(LogTarget), `Failed to get the active C# experiments for the Context Provider API`, e);

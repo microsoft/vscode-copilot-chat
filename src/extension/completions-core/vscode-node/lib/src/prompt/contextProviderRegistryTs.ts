@@ -32,10 +32,16 @@ export function fillInTsActiveExperiments(
 	}
 	const ctx = accessor.get(ICompletionsContextService);
 	try {
-		const tsContextProviderParams = ctx.get(Features).tsContextProviderParams(telemetryData);
+		const features = ctx.get(Features);
+		const tsContextProviderParams = features.tsContextProviderParams(telemetryData);
 		if (tsContextProviderParams) {
 			const params = JSON.parse(tsContextProviderParams) as ContextProviderParams;
 			for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
+		} else {
+			const params = features.getContextProviderExpSettings('typescript')?.params;
+			if (params) {
+				for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
+			}
 		}
 	} catch (e) {
 		logger.debug(ctx.get(LogTarget), `Failed to get the active TypeScript experiments for the Context Provider API`, e);

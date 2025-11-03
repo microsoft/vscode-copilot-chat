@@ -41,14 +41,20 @@ export function fillInCppVSCodeActiveExperiments(
 function addActiveExperiments(accessor: ServicesAccessor, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
 	try {
 		const ctx = accessor.get(ICompletionsContextService);
+		const features = ctx.get(Features);
 		const logTarget = ctx.get(LogTarget);
 		let params = cppContextProviderParamsDefault;
-		const cppContextProviderParams = ctx.get(Features).cppContextProviderParams(telemetryData);
+		const cppContextProviderParams = features.cppContextProviderParams(telemetryData);
 		if (cppContextProviderParams) {
 			try {
 				params = JSON.parse(cppContextProviderParams) as CppContextProviderParams;
 			} catch (e) {
 				logger.error(logTarget, 'Failed to parse cppContextProviderParams', e);
+			}
+		} else {
+			const params = features.getContextProviderExpSettings('cpp')?.params;
+			if (params) {
+				for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
 			}
 		}
 		for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }

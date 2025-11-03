@@ -27,6 +27,7 @@ export type ContextProviderExpSettings = {
 	includeNeighboringFiles: boolean;
 	excludeRelatedFiles: boolean;
 	timeBudget: number;
+	params?: Record<string, string | boolean | number>;
 }
 
 type InternalContextProviderExpSettings = {
@@ -35,7 +36,8 @@ type InternalContextProviderExpSettings = {
 	includeNeighboringFiles?: boolean;
 	excludeRelatedFiles?: boolean;
 	timeBudget?: number;
-}
+	params?: Record<string, string | boolean | number>;
+};
 
 /** General-purpose API for accessing ExP variable values. */
 export class Features {
@@ -260,9 +262,6 @@ export class Features {
 			try {
 				const parsed: Partial<InternalContextProviderExpSettings> = JSON.parse(value);
 				const ids = this.getProviderIDs(parsed);
-				if (ids.length === 0) {
-					return undefined;
-				}
 				delete parsed.id;
 				delete parsed.ids;
 				return Object.assign({ ids }, { includeNeighboringFiles: false, excludeRelatedFiles: false, timeBudget: 150 }, parsed as Omit<InternalContextProviderExpSettings, 'id' | 'ids'>);
