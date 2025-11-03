@@ -38,7 +38,6 @@ export interface ICopilotCLISession extends IDisposable {
 }
 
 export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
-	private _abortController = new AbortController();
 	private _pendingToolInvocations = new Map<string, vscode.ChatToolInvocationPart>();
 	public readonly sessionId: string;
 	private _status?: vscode.ChatSessionStatus;
@@ -61,11 +60,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this.sessionId = _sdkSession.sessionId;
 	}
 
-	public override dispose(): void {
-		this._abortController.abort();
-		super.dispose();
-	}
-
 	public async handleRequest(
 		prompt: string,
 		attachments: Attachment[],
@@ -86,6 +80,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		disposables.add(token.onCancellationRequested(() => {
 			abortController.abort();
 		}));
+		disposables.add(toDisposable(() => abortController.abort()));
 
 		const toolNames = new Map<string, string>();
 		const editToolIds = new Set<string>();
