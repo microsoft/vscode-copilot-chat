@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// General, extensible parser for line annotations following a file path.
+// General parser for line annotations following a file path.
 // Supported patterns (single-line anchor uses first line in range):
 //
 // Parenthesized forms:
@@ -22,13 +22,12 @@
 //   is found at lines 5-9
 //   is at lines 6 through 11
 //
-// We intentionally only expose the start line (zero-based) because downstream
+// Intentionally only expose the start line (zero-based) because downstream
 // logic currently navigates to a single line even if a range was referenced.
 // Extending to full range selection would involve carrying an endLine as well.
 //
 // Design notes:
-// - Token-based approach avoids brittle giant regex and makes future synonym
-//   additions trivial (expand LINE_TOKENS or RANGE_CONNECTORS sets).
+// - Uses token-based approach
 // - Max scan limits ensure we do not waste time over very long trailing text.
 // - We ignore invalid ranges like "lines 10 through" (missing second number)
 //   but still treat the first number as the target line.
@@ -93,7 +92,7 @@ export function parseTrailingLineNumberAnnotation(text: string, maxScan = 160): 
 
 	const slice = text.slice(0, maxScan);
 
-	// Fast path: Check for parenthesized form like "(line 42)" or "(lines 10-12)"
+	// Check for parenthesized form like "(line 42)" or "(lines 10-12)"
 	const pm = parenRe.exec(slice);
 	if (pm) {
 		const line = toLine(pm[2]);
@@ -128,8 +127,7 @@ export function parseTrailingLineNumberAnnotation(text: string, maxScan = 160): 
 //   ln 22 of <file>
 //   at line 19 in <file>
 //   line 19 in <file>
-// Tokenization would work here too, but a concise end-anchored regex is sufficient
-// because we only inspect a short contiguous snapshot directly preceding the file path.
+// We only inspect a short contiguous snapshot directly preceding the file path.
 // Returns startLine (zero-based) if matched.
 export function parsePrecedingLineNumberAnnotation(text: string): ParsedLineAnnotation | undefined {
 	if (!text) { return undefined; }

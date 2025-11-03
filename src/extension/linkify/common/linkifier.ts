@@ -106,6 +106,21 @@ export class Linkifier implements ILinkifier {
 					} else {
 						// Start accumulating
 
+						// Early detect fenced code block openings so that linkification inside the first line
+						// of the block (before the newline token arrives) never runs. Previously we only
+						// recognized fences once the trailing whitespace/newline part was processed which meant
+						// a sequence like ['```', '\n', '[file.ts](file.ts)'] would linkify the interior filename.
+						// Recognize language spec suffixes (e.g. ```ts) by extracting just the fence marker.
+						const fenceOpen = part.match(/^(?:`{3,}|~{3,}|\$\$)[^\s]*$/);
+						if (fenceOpen) {
+							const fenceMarkerMatch = part.match(/(`{3,}|~{3,}|\$\$)/);
+							const fenceMarker = fenceMarkerMatch ? fenceMarkerMatch[1] : fenceOpen[0];
+							const indent = this._appliedText.match(/(\n|^)([ \t]*)$/);
+							this._state = new LinkifierState.CodeOrMathBlock(fenceMarker, indent?.[2] ?? '');
+							out.push(this.doAppend(part));
+							break;
+						}
+
 						// `text...
 						if (/^[^\[`]*`[^`]*$/.test(part)) {
 							this._state = new LinkifierState.Accumulating(part, LinkifierState.AccumulationType.InlineCodeOrMath, '`');
@@ -225,10 +240,14 @@ export class Linkifier implements ILinkifier {
 		// If we are still accumulating a word (end of input chunk), finalize it so annotations like 'lines 77–85.' are present.
 		if (this._state.type === LinkifierState.Type.Accumulating && this._state.accumulationType === LinkifierState.AccumulationType.Word) {
 			const pending = this._state.pendingText;
-			this._state = LinkifierState.Default;
-			if (pending.length) {
-				const r = await this.doLinkifyAndAppend(pending, {}, token);
-				out.push(...r.parts);
+			// Avoid prematurely finalizing when we may be in the middle of a split fenced code block opener
+			// Example: parts ['``', '`ts', '\n'] should not linkify '```ts' before seeing the newline.
+			if (!/^(?:`{2,}|~{2,})[^\n]*$/.test(pending)) {
+				this._state = LinkifierState.Default;
+				if (pending.length) {
+					const r = await this.doLinkifyAndAppend(pending, {}, token);
+					out.push(...r.parts);
+				}
 			}
 		}
 
