@@ -402,24 +402,21 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					}
 
 					const results = resultBlock.content.map((result: Anthropic.Messages.WebSearchResultBlock) => ({
+						type: 'web_search_result',
 						url: result.url,
 						title: result.title,
 						page_age: result.page_age,
 						encrypted_content: result.encrypted_content
 					}));
 
-					let query: string | undefined;
-					try {
-						query = pendingServerToolCall.jsonInput ? JSON.parse(pendingServerToolCall.jsonInput).query : undefined;
-					} catch (e) {
-						this._logService.error('Failed to parse server tool call JSON for query:', e);
-						query = undefined;
-					}
+					// Format according to Anthropic's web_search_tool_result specification
+					const toolResult = {
+						type: 'web_search_tool_result',
+						tool_use_id: pendingServerToolCall.toolId,
+						content: results
+					};
 
-					const searchResults = JSON.stringify({
-						query: query,
-						results: results
-					}, null, 2);
+					const searchResults = JSON.stringify(toolResult, null, 2);
 
 					// TODO: @bhavyaus - instead of just pushing text, create a specialized WebSearchResult part
 					progress.report(new LanguageModelToolResultPart(
@@ -440,24 +437,25 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						// TODO: @bhavyaus - instead of just pushing text, create a specialized Citation part
 						const citation = chunk.delta.citation as Anthropic.Messages.CitationsWebSearchResultLocation;
 						if (citation.type === 'web_search_result_location') {
-							// Format as: Reference: [Title](URL) with cited text in italics
-							const referenceText = `${localize('anthropic.citation.reference', 'Reference')}: [${citation.title}](${citation.url})\n*${citation.cited_text}*`;
-
-							// Store the full citation data including encrypted_index for multi-turn conversations
-							const citationData = JSON.stringify({
-								cited_text: citation.cited_text,
-								title: citation.title,
+							// Format citation according to Anthropic specification
+							const citationData = {
+								type: 'web_search_result_location',
 								url: citation.url,
-								encrypted_index: citation.encrypted_index
-							}, null, 2);
+								title: citation.title,
+								encrypted_index: citation.encrypted_index,
+								cited_text: citation.cited_text
+							};
+
+							// Format citation as readable blockquote with source link
+							const referenceText = `\n> "${citation.cited_text}" — [${localize('anthropic.citation.source', 'Source')}](${citation.url})\n\n`;
 
 							// Report formatted reference text to user
-							progress.report(new LanguageModelTextPart(`\n${referenceText}\n`));
+							progress.report(new LanguageModelTextPart(referenceText));
 
-							// Also store the full citation data for conversation context
+							// Store the citation data in the correct format for multi-turn conversations
 							progress.report(new LanguageModelToolResultPart(
 								'citation',
-								[new LanguageModelTextPart(citationData)]
+								[new LanguageModelTextPart(JSON.stringify(citationData, null, 2))]
 							));
 						}
 					}
