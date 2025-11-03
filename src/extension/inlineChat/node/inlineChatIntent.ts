@@ -202,6 +202,11 @@ export class InlineChatIntent implements IIntent {
 			};
 		}
 
+		if (toolCalls.length === 0) {
+			// when no tools were called, invoke the exit tool manually
+			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+		}
+
 		return {};
 
 	}
