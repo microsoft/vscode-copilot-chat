@@ -307,9 +307,9 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 function formatEditToolInvocation(invocation: ChatToolInvocationPart, args: EditArgs): void {
 	const display = args.path ? formatUriForMessage(args.path) : '';
 
-	if (display) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Edited {0}", display));
-	}
+	invocation.invocationMessage = display
+		? new MarkdownString(l10n.t("Edited {0}", display))
+		: new MarkdownString(l10n.t("Edited file"));
 }
 
 
@@ -318,6 +318,8 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, args: Ed
 
 	if (display) {
 		invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
+	} else {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Created file"));
 	}
 }
 
