@@ -219,7 +219,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						tokenizationOptions,
 						chatRequestId: props.requestId
 					};
-					if (props.promptContext.tools?.inSubAgent) {
+					if (props.promptContext.tools?.inSubAgent || props.promptContext.request?.isSubagent) {
 						invocationOptions.fromSubAgent = true;
 					}
 

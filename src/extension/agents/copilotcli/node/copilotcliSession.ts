@@ -10,16 +10,36 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { ChatResponseThinkingProgressPart, ChatSessionStatus, EventEmitter, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getAffectedUrisForEditTool } from '../common/copilotcliTools';
 import { ICopilotCLISDK } from './copilotCli';
-import { processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
+import { buildChatHistoryFromEvents, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
 
-export class CopilotCLISession extends DisposableStore {
+export interface ICopilotCLISession {
+	readonly sessionId: string;
+	readonly status: vscode.ChatSessionStatus | undefined;
+	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
+
+	handleRequest(
+		prompt: string,
+		attachments: Attachment[],
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		stream: vscode.ChatResponseStream,
+		modelId: ModelProvider | undefined,
+		workingDirectory: string | undefined,
+		token: vscode.CancellationToken
+	): Promise<void>;
+
+	addUserMessage(content: string): void;
+	addUserAssistantMessage(content: string): void;
+	getSelectedModelId(): Promise<string | undefined>;
+	getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]>;
+}
+export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
 	private _abortController = new AbortController();
 	private _pendingToolInvocations = new Map<string, vscode.ChatToolInvocationPart>();
 	private _editTracker = new ExternalEditTracker();
@@ -56,12 +76,13 @@ export class CopilotCLISession extends DisposableStore {
 		yield* agent.query(prompt, attachments);
 	}
 
-	public async invoke(
+	public async handleRequest(
 		prompt: string,
 		attachments: Attachment[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		modelId: ModelProvider | undefined,
+		workingDirectory: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<void> {
 		if (this.isDisposed) {
@@ -73,6 +94,8 @@ export class CopilotCLISession extends DisposableStore {
 
 		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const copilotToken = await this._authenticationService.getCopilotToken();
+		// TODO@rebornix handle workspace properly
+		const effectiveWorkingDirectory = workingDirectory ?? this.workspaceService.getWorkspaceFolders().at(0)?.fsPath;
 
 		const options: AgentOptions = {
 			modelProvider: modelId ?? {
@@ -80,8 +103,7 @@ export class CopilotCLISession extends DisposableStore {
 				model: 'claude-sonnet-4.5',
 			},
 			abortController: this._abortController,
-			// TODO@rebornix handle workspace properly
-			workingDirectory: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
+			workingDirectory: effectiveWorkingDirectory,
 			copilotToken: copilotToken.token,
 			env: {
 				...process.env,
@@ -126,6 +148,28 @@ export class CopilotCLISession extends DisposableStore {
 		}
 	}
 
+	addUserMessage(content: string) {
+		this._sdkSession.addEvent({ type: 'user.message', data: { content } });
+	}
+
+	addUserAssistantMessage(content: string) {
+		this._sdkSession.addEvent({
+			type: 'assistant.message', data: {
+				messageId: `msg_${Date.now()}`,
+				content
+			}
+		});
+	}
+
+	public getSelectedModelId() {
+		return this._sdkSession.getSelectedModel();
+	}
+
+	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
+		const events = await this._sdkSession.getEvents();
+		return buildChatHistoryFromEvents(events);
+	}
+
 	private _toolNames = new Map<string, string>();
 	private _processEvent(
 		event: SessionEvent,
@@ -149,12 +193,15 @@ export class CopilotCLISession extends DisposableStore {
 			}
 
 			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, this._toolNames, this._pendingToolInvocations);
-				const toolName = this._toolNames.get(event.data.toolCallId);
+				this._toolNames.set(event.data.toolCallId, event.data.toolName);
+				const responsePart = processToolExecutionStart(event, this._pendingToolInvocations);
+				if (isCopilotCliEditToolCall(event.data.toolName, event.data.arguments)) {
+					this._pendingToolInvocations.delete(event.data.toolCallId);
+				}
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					stream.push(responsePart);
 				}
-				this.logService.trace(`Start Tool ${toolName || '<unknown>'}`);
+				this.logService.trace(`Start Tool ${event.data.toolName || '<unknown>'}`);
 				break;
 			}
 
@@ -185,6 +232,16 @@ export class CopilotCLISession extends DisposableStore {
 		permissionRequest: PermissionRequest,
 		toolInvocationToken: vscode.ChatParticipantToolToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
+		if (permissionRequest.kind === 'read') {
+			// If user is reading a file in the workspace, auto-approve read requests.
+			// Outisde workspace reads (e.g., /etc/passwd) will still require approval.
+			const data = Uri.file(permissionRequest.path);
+			if (this.workspaceService.getWorkspaceFolder(data)) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read workspace file ${permissionRequest.path}`);
+				return { kind: 'approved' };
+			}
+		}
+
 		try {
 			const { tool, input } = getConfirmationToolParams(permissionRequest);
 			const result = await this.toolsService.invokeTool(tool,

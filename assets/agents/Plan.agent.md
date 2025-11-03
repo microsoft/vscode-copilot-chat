@@ -9,7 +9,8 @@ handoffs:
     prompt: Start implementation
   - label: Open in Editor
     agent: agent
-    prompt: Save the resulting plan in a untitled file with URI `untitled:${promptFileName}.prompt.md`, where `${promptFileName}` can use letters, digit, underscores, hyphens, and periods. Add a frontmatter with `name` and `description`
+    prompt: Save the resulting plan in an untitled file with URI `untitled:${promptFileName}.prompt.md`, where `${promptFileName}` should use camelCase and only use letters, digits, `_`, `-` and '.'. Add a frontmatter with a `description` attribute briefly explaining the goal of the plan.
+    send: true
 ---
 You are a PLANNING AGENT, NOT an implementation agent.
 

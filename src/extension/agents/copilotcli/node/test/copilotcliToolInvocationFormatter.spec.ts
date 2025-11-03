@@ -50,7 +50,7 @@ describe('copilotcliToolInvocationFormatter', () => {
 		const invocation = createCopilotCLIToolInvocation(CopilotCLIToolNames.StrReplaceEditor, 'id3', { command: 'view', path: '/tmp/file.ts', view_range: [1, 5] }) as ChatToolInvocationPart;
 		expect(invocation).toBeInstanceOf(ChatToolInvocationPart);
 		const msg = typeof invocation.invocationMessage === 'string' ? invocation.invocationMessage : invocation.invocationMessage?.value;
-		expect(msg).toMatch(/Read/);
+		expect(msg).toMatch(/Viewed/);
 		expect(msg).toMatch(/file.ts/);
 	});
 
@@ -73,9 +73,8 @@ describe('copilotcliToolInvocationFormatter', () => {
 
 	it('processToolExecutionStart stores invocation and processToolExecutionComplete updates status on success', () => {
 		const pending = new Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>();
-		const names = new Map<string, string>();
 		const startEvt: ToolExecutionStart = { type: 'tool.execution_start', data: { toolName: CopilotCLIToolNames.View, toolCallId: 'call-1', arguments: { command: 'view', path: '/x.ts' } } };
-		const part = processToolExecutionStart(startEvt as any, names, pending);
+		const part = processToolExecutionStart(startEvt as any, pending);
 		expect(part).toBeInstanceOf(ChatToolInvocationPart);
 		const completeEvt: ToolExecutionComplete = { type: 'tool.execution_complete', data: { toolCallId: 'call-1', success: true } };
 		const completed = processToolExecutionComplete(completeEvt as any, pending) as ChatToolInvocationPart;
@@ -86,9 +85,8 @@ describe('copilotcliToolInvocationFormatter', () => {
 
 	it('processToolExecutionComplete marks rejected error invocation', () => {
 		const pending = new Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>();
-		const names = new Map<string, string>();
 		const startEvt: ToolExecutionStart = { type: 'tool.execution_start', data: { toolName: CopilotCLIToolNames.View, toolCallId: 'call-err', arguments: { command: 'view', path: '/y.ts' } } };
-		const part = processToolExecutionStart(startEvt as any, names, pending) as ChatToolInvocationPart;
+		const part = processToolExecutionStart(startEvt as any, pending) as ChatToolInvocationPart;
 		expect(part).toBeInstanceOf(ChatToolInvocationPart);
 		const completeEvt: ToolExecutionComplete = { type: 'tool.execution_complete', data: { toolCallId: 'call-err', success: false, error: { code: 'rejected', message: 'Denied' } } };
 		const completed = processToolExecutionComplete(completeEvt as any, pending) as ChatToolInvocationPart;

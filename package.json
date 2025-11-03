@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0-20251030",
+		"vscode": "^1.106.0-20251103",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -171,6 +171,7 @@
 				"userDescription": "%copilot.tools.runSubagent.description%",
 				"modelDescription": "Launch a new agent to handle complex, multi-step tasks autonomously. This tool is good at researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use this agent to perform the search for you.\n\n- Agents do not run async or in the background, you will wait for the agent's result.\n- When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n - Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.\n - The agent's outputs should generally be trusted\n - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent",
 				"tags": [],
+				"when": "!config.chat.experimental.runSubagent2",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -2280,34 +2281,34 @@
 			},
 			{
 				"command": "github.copilot.chat.openSuggestionsPanel",
-                "title": "Open Completions Panel",
-                "enablement": "github.copilot.extensionUnification.activated && !isWeb",
+				"title": "Open Completions Panel",
+				"enablement": "github.copilot.extensionUnification.activated && !isWeb",
 				"category": "GitHub Copilot"
 			},
 			{
-                "command": "github.copilot.chat.toggleStatusMenu",
-                "title": "Open Status Menu",
+				"command": "github.copilot.chat.toggleStatusMenu",
+				"title": "Open Status Menu",
 				"enablement": "github.copilot.extensionUnification.activated",
-                "category": "GitHub Copilot"
-            },
+				"category": "GitHub Copilot"
+			},
 			{
-                "command": "github.copilot.chat.completions.disable",
-                "title": "Disable Completions",
-                "enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && config.editor.inlineSuggest.enabled && github.copilot.completions.enabled",
-                "category": "GitHub Copilot"
-            },
-            {
-                "command": "github.copilot.chat.completions.enable",
-                "title": "Enable Completions",
-                "enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && !(config.editor.inlineSuggest.enabled && github.copilot.completions.enabled)",
-                "category": "GitHub Copilot"
-            },
-            {
-                "command": "github.copilot.chat.completions.toggle",
-                "title": "Toggle (Enable/Disable) Completions",
-                "enablement": "github.copilot.extensionUnification.activated && github.copilot.activated",
-                "category": "GitHub Copilot"
-            }
+				"command": "github.copilot.chat.completions.disable",
+				"title": "Disable Completions",
+				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && config.editor.inlineSuggest.enabled && github.copilot.completions.enabled",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.completions.enable",
+				"title": "Enable Completions",
+				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && !(config.editor.inlineSuggest.enabled && github.copilot.completions.enabled)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.completions.toggle",
+				"title": "Toggle (Enable/Disable) Completions",
+				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated",
+				"category": "GitHub Copilot"
+			}
 		],
 		"configuration": [
 			{
@@ -2440,6 +2441,20 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
+					},
+					"github.copilot.enable": {
+						"type": "object",
+						"scope": "window",
+						"default": {
+							"*": true,
+							"plaintext": false,
+							"markdown": false,
+							"scminput": false
+						},
+						"additionalProperties": {
+							"type": "boolean"
+						},
+						"markdownDescription": "Enable or disable auto triggering of Copilot completions for specified [languages](https://code.visualstudio.com/docs/languages/identifiers). You can still trigger suggestions manually using `Alt + \\`"
 					}
 				}
 			},
@@ -4351,10 +4366,10 @@
 				"description": "Researches a task to create multi-step plans"
 			}
 		],
-		"prompts": [
+		"chatPromptFiles": [
 			{
-				"name": "savePromptFile",
-				"path": "./assets/prompts/savePromptFile.prompt.md",
+				"name": "savePrompt",
+				"path": "./assets/prompts/savePrompt.prompt.md",
 				"description": "Generalize the current discussion into a reusable prompt and save it as a file"
 			}
 		]
@@ -4479,7 +4494,7 @@
 		"monaco-editor": "0.44.0",
 		"npm-run-all": "^4.1.5",
 		"open": "^10.1.2",
-		"openai": "^5.11.0",
+		"openai": "^6.7.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
 		"playwright": "^1.56.1",

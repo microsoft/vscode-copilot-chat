@@ -133,7 +133,6 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, ChatToolInvocationPart>();
-	const toolNames = new Map<string, string>();
 
 	for (const event of events) {
 		switch (event.type) {
@@ -172,7 +171,7 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 				break;
 			}
 			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, toolNames, pendingToolInvocations);
+				const responsePart = processToolExecutionStart(event, pendingToolInvocations);
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					currentResponseParts.push(responsePart);
 				}
@@ -196,13 +195,12 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 	return turns;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(
 		event.data.toolName,
 		event.data.toolCallId,
 		event.data.arguments
 	);
-	toolNames.set(event.data.toolCallId, event.data.toolName);
 	if (toolInvocation) {
 		// Store pending invocation to update with result later
 		pendingToolInvocations.set(event.data.toolCallId, toolInvocation);
@@ -239,9 +237,6 @@ export function createCopilotCLIToolInvocation(
 	if (toolName === CopilotCLIToolNames.ReportIntent) {
 		return undefined; // Ignore these for now
 	}
-	if (isCopilotCliEditToolCall(toolName, args)) {
-		return undefined;
-	}
 	if (toolName === CopilotCLIToolNames.Think) {
 		const thought = (args as { thought?: string })?.thought;
 		if (thought && typeof thought === 'string') {
@@ -255,8 +250,8 @@ export function createCopilotCLIToolInvocation(
 	invocation.isComplete = false;
 
 	// Format based on tool name
-	if (toolName === CopilotCLIToolNames.StrReplaceEditor && (args as StrReplaceEditorArgs)?.command === 'view') {
-		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
+	if (toolName === CopilotCLIToolNames.StrReplaceEditor) {
+		formatStrReplaceEditorInvocation(invocation, args as StrReplaceEditorArgs);
 	} else if (toolName === CopilotCLIToolNames.Bash) {
 		formatBashInvocation(invocation, args as BashArgs);
 	} else if (toolName === CopilotCLIToolNames.View) {
@@ -272,9 +267,38 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrR
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 
-	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
+	invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0}", display));
 }
 
+function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
+	const command = args.command;
+	const path = args.path ?? '';
+	const display = path ? formatUriForMessage(path) : '';
+
+	switch (command) {
+		case 'view':
+			if (args.view_range) {
+				invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0} (lines {1}-{2})", display, args.view_range[0], args.view_range[1]));
+			} else {
+				invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0}", display));
+			}
+			break;
+		case 'str_replace':
+			invocation.invocationMessage = new MarkdownString(l10n.t("Edited {0}", display));
+			break;
+		case 'insert':
+			invocation.invocationMessage = new MarkdownString(l10n.t("Inserted text in {0}", display));
+			break;
+		case 'create':
+			invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
+			break;
+		case 'undo_edit':
+			invocation.invocationMessage = new MarkdownString(l10n.t("Undid edit in {0}", display));
+			break;
+		default:
+			invocation.invocationMessage = new MarkdownString(l10n.t("Modified {0}", display));
+	}
+}
 
 function formatBashInvocation(invocation: ChatToolInvocationPart, args: BashArgs): void {
 	const command = args.command ?? '';

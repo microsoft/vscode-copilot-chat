@@ -178,8 +178,9 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			model: this.model,
 			ourRequestId,
 			location,
-			postOptions: requestOptions,
-			tools: requestOptions?.tools,
+			body: {
+				...requestOptions
+			},
 			ignoreStatefulMarker: true
 		})
 			: undefined;

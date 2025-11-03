@@ -161,14 +161,16 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				messages: anthropicMessagesToRawMessagesForLogging(convertedMessages, system),
 				ourRequestId: requestId,
 				location: ChatLocation.Other,
-				tools: options.tools?.map((tool): OpenAiFunctionTool => ({
-					type: 'function',
-					function: {
-						name: tool.name,
-						description: tool.description,
-						parameters: tool.inputSchema
-					}
-				})),
+				body: {
+					tools: options.tools?.map((tool): OpenAiFunctionTool => ({
+						type: 'function',
+						function: {
+							name: tool.name,
+							description: tool.description,
+							parameters: tool.inputSchema
+						}
+					}))
+				},
 			});
 
 		// Check if memory tool is present

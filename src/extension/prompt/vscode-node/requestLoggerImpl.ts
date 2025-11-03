@@ -14,7 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { IEndpointBody } from '../../../platform/networking/common/networking';
-import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedPendingRequest, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
@@ -106,21 +106,6 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 			};
 		}
 
-		// Extract prediction and tools like _renderRequestToMarkdown does
-		let prediction: string | undefined;
-		let tools;
-		const postOptions = this.entry.chatParams.postOptions && { ...this.entry.chatParams.postOptions };
-		if (typeof postOptions?.prediction?.content === 'string') {
-			prediction = postOptions.prediction.content;
-			postOptions.prediction = undefined;
-		}
-		if ((this.entry.chatParams as ILoggedPendingRequest).tools) {
-			tools = (this.entry.chatParams as ILoggedPendingRequest).tools;
-			if (postOptions) {
-				postOptions.tools = undefined;
-			}
-		}
-
 		// Handle stateful marker like _renderRequestToMarkdown does
 		let lastResponseId: { marker: string; modelId: string } | undefined;
 		if (!this.entry.chatParams.ignoreStatefulMarker) {
@@ -167,9 +152,8 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 				this.entry.chatEndpoint.urlOrRequestMetadata?.type : undefined,
 			model: this.entry.chatParams.model,
 			maxPromptTokens: this.entry.chatEndpoint.modelMaxPromptTokens,
-			maxResponseTokens: this.entry.chatParams.postOptions?.max_tokens,
+			maxResponseTokens: this.entry.chatParams.body?.max_tokens,
 			location: this.entry.chatParams.location,
-			postOptions: postOptions,
 			reasoning: this.entry.chatParams.body?.reasoning,
 			intent: this.entry.chatParams.intent,
 			startTime: this.entry.startTime?.toISOString(),
@@ -182,12 +166,12 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 			serverRequestId: this.entry.type === LoggedRequestKind.ChatMLSuccess || this.entry.type === LoggedRequestKind.ChatMLFailure ? this.entry.result.serverRequestId : undefined,
 			timeToFirstToken: this.entry.type === LoggedRequestKind.ChatMLSuccess ? this.entry.timeToFirstToken : undefined,
 			usage: this.entry.type === LoggedRequestKind.ChatMLSuccess ? this.entry.usage : undefined,
-			tools: tools,
+			tools: this.entry.chatParams.body?.tools,
 		};
 
 		const requestMessages = {
 			messages: this.entry.chatParams.messages,
-			prediction: prediction
+			prediction: this.entry.chatParams.body?.prediction
 		};
 
 		const response = responseData || errorInfo ? {
@@ -573,7 +557,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 		result.push(`model            : ${entry.chatParams.model}`);
 		result.push(`maxPromptTokens  : ${entry.chatEndpoint.modelMaxPromptTokens}`);
-		result.push(`maxResponseTokens: ${entry.chatParams.postOptions?.max_tokens}`);
+		result.push(`maxResponseTokens: ${entry.chatParams.body?.max_tokens}`);
 		result.push(`location         : ${entry.chatParams.location}`);
 		result.push(`otherOptions     : ${JSON.stringify(otherOptions)}`);
 		if (entry.chatParams.body?.reasoning) {
@@ -606,8 +590,8 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`requestId        : ${entry.result.requestId}`);
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);
 		}
-		if (entry.chatParams.tools) {
-			result.push(`tools            : ${JSON.stringify(entry.chatParams.tools, undefined, 4)}`);
+		if (entry.chatParams.body?.tools) {
+			result.push(`tools            : ${JSON.stringify(entry.chatParams.body.tools, undefined, 4)}`);
 		}
 		result.push(`~~~`);
 

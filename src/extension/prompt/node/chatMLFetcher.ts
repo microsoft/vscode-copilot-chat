@@ -131,9 +131,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			model: chatEndpoint.model,
 			ourRequestId,
 			location: opts.location,
-			postOptions,
 			body: requestBody,
-			tools: requestBody.tools,
 			ignoreStatefulMarker: opts.ignoreStatefulMarker
 		});
 		let tokenCount = -1;
