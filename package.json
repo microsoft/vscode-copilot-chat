@@ -3070,7 +3070,9 @@
 								},
 								"temperature": {
 									"type": "number",
-									"description": "Temperature parameter for model responses (typically 0.0 to 2.0)"
+									"description": "Temperature parameter for model responses (typically 0.0 to 2.0)",
+									"minimum": 0,
+									"maximum": 2
 								},
 								"requestHeaders": {
 									"type": "object",

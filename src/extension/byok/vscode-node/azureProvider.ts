@@ -18,6 +18,14 @@ export interface AzureUrlOptions {
 	apiVersion: string;
 }
 
+interface AzureModelConfig {
+	deploymentType?: 'completions' | 'responses';
+	deploymentName?: string;
+	apiVersion?: string;
+	temperature?: number;
+	url: string;
+}
+
 export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrlOptions, logService?: ILogService): string {
 
 	// The fully resolved url was already passed in
@@ -108,13 +116,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 	protected override resolveUrl(modelId: string, url: string): string {
 		try {
 			// Get model config to access deployment options
-			const modelConfig = this._configurationService?.getConfig(this.getConfigKey()) as Record<string, {
-				deploymentType?: 'completions' | 'responses';
-				deploymentName?: string;
-				apiVersion?: string;
-				temperature?: number;
-				url: string;
-			}> | undefined;
+			const modelConfig = this._configurationService?.getConfig(this.getConfigKey()) as Record<string, AzureModelConfig> | undefined;
 
 			const config = modelConfig?.[modelId];
 
@@ -140,9 +142,9 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			const modelConfig = this._configurationService?.getConfig(configKey);
 
 			// Safely access the model-specific config
-			let config: { deploymentType?: 'completions' | 'responses'; deploymentName?: string; temperature?: number } | undefined;
+			let config: AzureModelConfig | undefined;
 			if (modelConfig && typeof modelConfig === 'object' && modelId in modelConfig) {
-				config = (modelConfig as Record<string, any>)[modelId];
+				config = (modelConfig as Record<string, AzureModelConfig>)[modelId];
 			}
 
 			const deploymentType = config?.deploymentType || 'completions';
