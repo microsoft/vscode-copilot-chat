@@ -52,9 +52,9 @@ function addActiveExperiments(accessor: ServicesAccessor, activeExperiments: Act
 				logger.error(logTarget, 'Failed to parse cppContextProviderParams', e);
 			}
 		} else {
-			const params = features.getContextProviderExpSettings('cpp')?.params;
-			if (params) {
-				for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
+			const langSpecific = features.getContextProviderExpSettings('cpp')?.params;
+			if (langSpecific) {
+				params = { ...langSpecific };
 			}
 		}
 		for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
