@@ -115,7 +115,6 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 	}
 
 	protected override resolveUrl(modelId: string, url: string): string {
-		this._logService?.info(`[Azure Debug] resolveUrl called for modelId: ${modelId}`);
 		try {
 			// Get model config to access deployment options
 			const modelConfig = this._configurationService?.getConfig(this.getConfigKey()) as Record<string, {
@@ -127,7 +126,6 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			}> | undefined;
 
 			const config = modelConfig?.[modelId];
-			this._logService?.info(`[Azure Debug] Model config for ${modelId}: ${JSON.stringify(config, null, 2)}`);
 
 			const options: AzureUrlOptions | undefined = config ? {
 				deploymentType: config.deploymentType,
@@ -136,25 +134,19 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			} : undefined;
 
 			const resolvedUrl = resolveAzureUrl(modelId, url, options, this._logService);
-			this._logService?.info(`[Azure Debug] Final resolved URL: ${resolvedUrl}`);
 			return resolvedUrl;
 		} catch (error) {
-			this._logService?.error(`AzureBYOKModelProvider: Error resolving URL for model ${modelId}:`, error);
 			// Fallback to basic URL resolution
 			return resolveAzureUrl(modelId, url, undefined, this._logService);
 		}
 	}
 
 	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
-		this._logService?.info(`[Azure Debug] getModelInfo called for modelId: ${modelId}`);
-		this._logService?.info(`[Azure Debug] Initial modelCapabilities: ${JSON.stringify(modelCapabilities, null, 2)}`);
 		try {
 			// Get model config to check deployment type and deployment name
 			const configKey = this.getConfigKey();
-			this._logService?.info(`[Azure Debug] Config key: ${configKey}`);
 
 			const modelConfig = this._configurationService?.getConfig(configKey);
-			this._logService?.info(`[Azure Debug] Raw modelConfig type: ${typeof modelConfig}, value: ${JSON.stringify(modelConfig, null, 2)}`);
 
 			// Safely access the model-specific config
 			let config: { deploymentType?: 'completions' | 'responses'; deploymentName?: string; temperature?: number } | undefined;
@@ -162,29 +154,11 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 				config = (modelConfig as Record<string, any>)[modelId];
 			}
 
-			this._logService?.info(`[Azure Debug] Model config for ${modelId}: ${JSON.stringify(config, null, 2)}`);
-
 			const deploymentType = config?.deploymentType || 'completions';
 			// If no deployment name is provided, use modelId as fallback
 			const deploymentName = config?.deploymentName || modelId;
 
-			this._logService?.info(`[Azure Debug] Deployment info - type: ${deploymentType}, name: ${deploymentName}`);
-
-			// For Azure Responses API, the 'model' field in the request body must be the deployment name
-			// We override the modelCapabilities.name to be the deployment name so it gets used correctly
-			let updatedCapabilities = modelCapabilities;
-			if (deploymentType === 'responses' && modelCapabilities) {
-				updatedCapabilities = {
-					...modelCapabilities,
-					name: deploymentName
-				};
-				this._logService?.info(`[Azure Debug] RESPONSES API: Overriding model name from '${modelCapabilities.name}' to '${deploymentName}'`);
-				this._logService?.info(`[Azure Debug] Updated capabilities: ${JSON.stringify(updatedCapabilities, null, 2)}`);
-			} else {
-				this._logService?.info(`[Azure Debug] COMPLETIONS API: Using capabilities as-is (deployment name in URL)`);
-			}
-
-			const modelInfo = await super.getModelInfo(modelId, apiKey, updatedCapabilities);
+			const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
 
 			// Always set modelInfo.id to deployment name for Azure deployments
 			modelInfo.id = deploymentName;
@@ -192,21 +166,16 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			// Set temperature from config if specified
 			if (config?.temperature !== undefined) {
 				modelInfo.temperature = config.temperature;
-				this._logService?.info(`[Azure Debug] Set temperature from config: ${config.temperature}`);
+				this._logService?.info(`[Warning] Set temperature from config: ${config.temperature}`);
 			}
 
 			// Set supported endpoints based on deployment type
 			if (deploymentType === 'responses') {
 				modelInfo.supported_endpoints = [ModelSupportedEndpoint.Responses];
-				this._logService?.info(`[Azure Debug] Set supported_endpoints to: [Responses]`);
 			} else {
 				// For completions API, only support chat completions
 				modelInfo.supported_endpoints = [ModelSupportedEndpoint.ChatCompletions];
-				this._logService?.info(`[Azure Debug] Set supported_endpoints to: [ChatCompletions]`);
 			}
-			this._logService?.info(`[Azure Debug] Set modelInfo.id to deployment name: '${deploymentName}'`);
-			this._logService?.info(`[Azure Debug] Final modelInfo.id: ${modelInfo.id}`);
-			this._logService?.info(`[Azure Debug] Final modelInfo.supported_endpoints: ${JSON.stringify(modelInfo.supported_endpoints)}`);
 
 			return modelInfo;
 		} catch (error) {
