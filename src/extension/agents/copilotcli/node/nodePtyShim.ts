@@ -9,6 +9,13 @@ import { ILogService } from '../../../../platform/log/common/logService';
 
 let shimCreated: Promise<void> | undefined = undefined;
 
+const RETRIABLE_COPY_ERROR_CODES = new Set(['EPERM', 'EBUSY']);
+const MAX_COPY_ATTEMPTS = 6;
+const RETRY_DELAY_BASE_MS = 50;
+const RETRY_DELAY_CAP_MS = 500;
+const MATERIALIZATION_TIMEOUT_MS = 4000;
+const MATERIALIZATION_POLL_INTERVAL_MS = 100;
+
 /**
  * Copies the node-pty files from VS Code's installation into a @github/copilot location
  *
@@ -24,7 +31,11 @@ export async function ensureNodePtyShim(extensionPath: string, vscodeAppRoot: st
 		return shimCreated;
 	}
 
-	shimCreated = _ensureNodePtyShim(extensionPath, vscodeAppRoot, logService);
+	const creation = _ensureNodePtyShim(extensionPath, vscodeAppRoot, logService);
+	shimCreated = creation.catch(error => {
+		shimCreated = undefined;
+		throw error;
+	});
 	return shimCreated;
 }
 
@@ -32,17 +43,98 @@ async function _ensureNodePtyShim(extensionPath: string, vscodeAppRoot: string, 
 	const nodePtyDir = path.join(extensionPath, 'node_modules', '@github', 'copilot', 'prebuilds', process.platform + "-" + process.arch);
 	const vscodeNodePtyPath = path.join(vscodeAppRoot, 'node_modules', 'node-pty', 'build', 'Release');
 
+	logService.info(`Creating node-pty shim: source=${vscodeNodePtyPath}, dest=${nodePtyDir}`);
+
 	try {
-		const files = (await fs.readdir(vscodeNodePtyPath)).map(f => path.join(vscodeNodePtyPath, f));
 		await fs.mkdir(nodePtyDir, { recursive: true });
-		await Promise.all(files.map(async file => {
-			const dest = path.join(nodePtyDir, path.basename(file));
-			if (!(await fs.stat(dest).then(stat => stat.isFile()).catch(() => false))) {
-				await fs.copyFile(file, dest);
-			}
-		}));
-	} catch (error) {
+		const entries = await fs.readdir(vscodeNodePtyPath);
+		const uniqueEntries = [...new Set(entries)];
+		logService.info(`Found ${uniqueEntries.length} entries to copy${uniqueEntries.length !== entries.length ? ` (${entries.length - uniqueEntries.length} duplicates ignored)` : ''}: ${uniqueEntries.join(', ')}`);
+
+		await copyNodePtyWithRetries(vscodeNodePtyPath, nodePtyDir, uniqueEntries, logService);
+	} catch (error: any) {
 		logService.error(`Failed to create node-pty shim (vscode dir: ${vscodeNodePtyPath}, extension dir: ${nodePtyDir})`, error);
 		throw error;
 	}
+}
+
+async function copyNodePtyWithRetries(sourceDir: string, destDir: string, entries: string[], logService: ILogService): Promise<void> {
+	const primaryBinary = entries.find(entry => entry.endsWith('.node'));
+	for (let attempt = 1; attempt <= MAX_COPY_ATTEMPTS; attempt++) {
+		try {
+			await fs.cp(sourceDir, destDir, {
+				recursive: true,
+				dereference: true,
+				force: true,
+				filter: async (srcPath) => shouldCopyEntry(srcPath, logService)
+			});
+			logService.trace(`Copied node-pty prebuilds to ${destDir} (attempt ${attempt})`);
+			return;
+		} catch (error: any) {
+			if (await waitForMaterializedShim(destDir, primaryBinary, logService)) {
+				logService.trace(`Detected node-pty shim materialized at ${destDir} by another extension host`);
+				return;
+			}
+
+			if (!RETRIABLE_COPY_ERROR_CODES.has(error?.code) || attempt === MAX_COPY_ATTEMPTS) {
+				throw error;
+			}
+
+			const delayMs = Math.min(RETRY_DELAY_BASE_MS * Math.pow(2, attempt - 1), RETRY_DELAY_CAP_MS);
+			logService.warn(`Retryable error (${error.code}) copying node-pty shim. Retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_COPY_ATTEMPTS})`);
+			await new Promise(resolve => setTimeout(resolve, delayMs));
+		}
+	}
+}
+
+async function shouldCopyEntry(srcPath: string, logService: ILogService): Promise<boolean> {
+	try {
+		const stat = await fs.stat(srcPath);
+		if (stat.isDirectory()) {
+			return true;
+		}
+
+		if (stat.size === 0) {
+			logService.trace(`Skipping ${path.basename(srcPath)}: zero-byte file (likely symlink or special file)`);
+			return false;
+		}
+
+		return true;
+	} catch (error: any) {
+		logService.warn(`Failed to stat ${srcPath}: ${error?.message ?? error}`);
+		return false;
+	}
+}
+
+async function waitForMaterializedShim(destDir: string, primaryBinary: string | undefined, logService: ILogService): Promise<boolean> {
+	const deadline = Date.now() + MATERIALIZATION_TIMEOUT_MS;
+	while (Date.now() <= deadline) {
+		if (await isShimMaterialized(destDir, primaryBinary)) {
+			logService.trace(`Reusing node-pty shim that materialized at ${destDir}`);
+			return true;
+		}
+
+		await new Promise(resolve => setTimeout(resolve, MATERIALIZATION_POLL_INTERVAL_MS));
+	}
+
+	return false;
+}
+
+async function isShimMaterialized(destDir: string, primaryBinary: string | undefined): Promise<boolean> {
+	if (primaryBinary) {
+		const binaryStat = await fs.stat(path.join(destDir, primaryBinary)).catch(() => undefined);
+		if (binaryStat && binaryStat.isFile() && binaryStat.size > 0) {
+			return true;
+		}
+	}
+
+	const entries = await fs.readdir(destDir).catch(() => []);
+	for (const entry of entries) {
+		const stat = await fs.stat(path.join(destDir, entry)).catch(() => undefined);
+		if (stat && stat.isFile() && stat.size > 0) {
+			return true;
+		}
+	}
+
+	return false;
 }
