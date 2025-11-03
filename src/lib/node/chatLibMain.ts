@@ -104,6 +104,7 @@ import { ISnippyService, NullSnippyService } from '../../platform/snippy/common/
 import { IExperimentationService, TreatmentsChangeEvent } from '../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
+import { unwrapEventNameFromPrefix } from '../../platform/telemetry/node/azureInsightsReporter';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
@@ -624,6 +625,20 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 	}
 }
 
+class UnwrappingTelemetrySender implements ITelemetrySender {
+	constructor(private readonly sender: ITelemetrySender) { }
+
+	sendTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void {
+		this.sender.sendTelemetryEvent(this.normalizeEventName(eventName), properties, measurements);
+	}
+
+	private normalizeEventName(eventName: string): string {
+		const unwrapped = unwrapEventNameFromPrefix(eventName);
+		const withoutPrefix = unwrapped.match(/^[^/]+\/(.*)/);
+		return withoutPrefix ? withoutPrefix[1] : unwrapped;
+	}
+}
+
 function createContext(options: IInlineCompletionsProviderOptions): Context {
 	const { fetcher, authService, statusHandler, documentManager, workspace, telemetrySender, urlOpener, editorSession } = options;
 	const logTarget = options.logTarget || new ConsoleLog(undefined, InternalLogLevel.Trace);
@@ -631,7 +646,7 @@ function createContext(options: IInlineCompletionsProviderOptions): Context {
 	const builder = new InstantiationServiceBuilder();
 	builder.define(IAuthenticationService, authService);
 	builder.define(IIgnoreService, options.ignoreService || new NullIgnoreService());
-	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [telemetrySender]));
+	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [new UnwrappingTelemetrySender(telemetrySender)]));
 	builder.define(IExperimentationService, options.experimentationService || new NullExperimentationService());
 	builder.define(IEndpointProvider, options.endpointProvider);
 	builder.define(ICAPIClientService, options.capiClientService);
