@@ -30,6 +30,11 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	return HIDDEN_MODEL_A_HASHES.includes(h);
 }
 
+export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	const h = await getCachedSha256Hash(model.family);
+	return h === '8f398886c326b5f8f07b20ac250c87de6723e062474465273fe1524f2b9092fa';
+}
+
 export async function isVSCModel(model: LanguageModelChat | IChatEndpoint) {
 	const h = await getCachedSha256Hash(getModelId(model));
 	return VSC_MODEL_HASHES.includes(h);
@@ -56,7 +61,7 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
  * Model supports apply_patch as an edit tool.
  */
 export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || await isHiddenModelA(model);
+	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || await isHiddenModelA(model) || await isHiddenModelB(model);
 }
 
 /**
@@ -110,13 +115,12 @@ export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): b
 	return !model.family.startsWith('gemini');
 }
 
-
 /**
  * The model is capable of using apply_patch as an edit tool exclusively,
  * without needing insert_edit_into_file.
  */
-export function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('gpt-5');
+export async function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	return model.family.startsWith('gpt-5') || await isHiddenModelB(model);
 }
 
 /**

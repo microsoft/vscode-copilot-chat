@@ -5,6 +5,7 @@
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { isHiddenModelB } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -722,4 +723,18 @@ class OpenAIPromptResolver implements IAgentPrompt {
 	}
 }
 
+class ModelBPromptResolver implements IAgentPrompt {
+
+	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
+		return isHiddenModelB(endpoint);
+	}
+
+	static readonly familyPrefixes = [];
+
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+		return CodexStyleGPTPrompt;
+	}
+}
+
 PromptRegistry.registerPrompt(OpenAIPromptResolver);
+PromptRegistry.registerPrompt(ModelBPromptResolver);
