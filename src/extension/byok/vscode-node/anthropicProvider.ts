@@ -15,6 +15,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { localize } from '../../../util/vs/nls';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from '../common/anthropicMessageConverter';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart } from '../common/byokProvider';
 import { IBYOKStorageService } from './byokStorageService';
@@ -439,11 +440,21 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						// TODO: @bhavyaus - instead of just pushing text, create a specialized Citation part
 						const citation = chunk.delta.citation as Anthropic.Messages.CitationsWebSearchResultLocation;
 						if (citation.type === 'web_search_result_location') {
+							// Format as: Reference: [Title](URL) with cited text in italics
+							const referenceText = `${localize('anthropic.citation.reference', 'Reference')}: [${citation.title}](${citation.url})\n*${citation.cited_text}*`;
+
+							// Store the full citation data including encrypted_index for multi-turn conversations
 							const citationData = JSON.stringify({
 								cited_text: citation.cited_text,
 								title: citation.title,
-								url: citation.url
+								url: citation.url,
+								encrypted_index: citation.encrypted_index
 							}, null, 2);
+
+							// Report formatted reference text to user
+							progress.report(new LanguageModelTextPart(`\n${referenceText}\n`));
+
+							// Also store the full citation data for conversation context
 							progress.report(new LanguageModelToolResultPart(
 								'citation',
 								[new LanguageModelTextPart(citationData)]
