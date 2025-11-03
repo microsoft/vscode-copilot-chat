@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -26,7 +25,7 @@ import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLIWorktreeManager, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
-import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
+import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
 
@@ -55,7 +54,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ILogService private readonly logService: ILogService,
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
 	) {
@@ -88,16 +86,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			[IOctoKitService, new SyncDescriptor(OctoKitService)],
 			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
 		));
-
-		// Register or unregister based on initial configuration and changes
-		const copilotSessionsProvider = this.updateCopilotCloudRegistration();
-		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(ConfigKey.Internal.CopilotCloudEnabled.fullyQualifiedId)) {
-				this.updateCopilotCloudRegistration();
-			}
-		}));
-
-		// Copilot CLI sessions provider
+		const cloudSessionProvider = this.registerCopilotCloudAgent();
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[ICopilotCLISessionService, new SyncDescriptor(CopilotCLISessionService)],
@@ -118,7 +107,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			CopilotCLIChatSessionParticipant,
 			promptResolver,
 			copilotcliSessionItemProvider,
-			copilotSessionsProvider,
+			cloudSessionProvider,
 			summarizer,
 			copilotCLIWorktreeManager
 		);
@@ -128,66 +117,59 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService));
 	}
 
-	private updateCopilotCloudRegistration() {
+	private registerCopilotCloudAgent() {
 		if (!this.copilotAgentInstaService) {
 			return;
 		}
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCloudEnabled);
-
-		if (enabled && !this.copilotCloudRegistrations) {
-			// Register the Copilot Cloud chat participant
-			this.copilotCloudRegistrations = new DisposableStore();
-
-			this.copilotCloudRegistrations.add(
-				this.copilotAgentInstaService.createInstance(PRContentProvider)
-			);
-
-			const copilotSessionsProvider = this.copilotCloudRegistrations.add(
-				this.copilotAgentInstaService.createInstance(CopilotChatSessionsProvider)
-			);
-			this.copilotCloudRegistrations.add(
-				vscode.chat.registerChatSessionItemProvider(CopilotChatSessionsProvider.TYPE, copilotSessionsProvider)
-			);
-			this.copilotCloudRegistrations.add(
-				vscode.chat.registerChatSessionContentProvider(
-					CopilotChatSessionsProvider.TYPE,
-					copilotSessionsProvider,
-					copilotSessionsProvider.chatParticipant,
-					{ supportsInterruptions: true }
-				)
-			);
-			this.copilotCloudRegistrations.add(
-				vscode.commands.registerCommand('github.copilot.cloud.sessions.refresh', () => {
-					copilotSessionsProvider.refresh();
-				})
-			);
-			this.copilotCloudRegistrations.add(
-				vscode.commands.registerCommand('github.copilot.cloud.sessions.openInBrowser', async (chatSessionItem: vscode.ChatSessionItem) => {
-					copilotSessionsProvider.openSessionsInBrowser(chatSessionItem);
-				})
-			);
-			this.copilotCloudRegistrations.add(
-				vscode.commands.registerCommand(CLOSE_SESSION_PR_CMD, async (ctx: CrossChatSessionWithPR) => {
-					// await this.installPullRequestExtension();
-					try {
-						const success = await this.octoKitService.closePullRequest(
-							ctx.pullRequestDetails.repository.owner.login,
-							ctx.pullRequestDetails.repository.name,
-							ctx.pullRequestDetails.number);
-						if (!success) {
-							this.logService.error(`${CLOSE_SESSION_PR_CMD}: Failed to close PR #${ctx.pullRequestDetails.number}`);
-						}
-						copilotSessionsProvider.refresh();
-					} catch (e) {
-						this.logService.error(`${CLOSE_SESSION_PR_CMD}: Exception ${e}`);
-					}
-				})
-			);
-
-			return copilotSessionsProvider;
-		} else if (!enabled && this.copilotCloudRegistrations) {
+		if (this.copilotCloudRegistrations) {
 			this.copilotCloudRegistrations.dispose();
 			this.copilotCloudRegistrations = undefined;
 		}
+		this.copilotCloudRegistrations = new DisposableStore();
+		this.copilotCloudRegistrations.add(
+			this.copilotAgentInstaService.createInstance(PRContentProvider)
+		);
+		const cloudSessionsProvider = this.copilotCloudRegistrations.add(
+			this.copilotAgentInstaService.createInstance(CopilotCloudSessionsProvider)
+		);
+		this.copilotCloudRegistrations.add(
+			vscode.chat.registerChatSessionItemProvider(CopilotCloudSessionsProvider.TYPE, cloudSessionsProvider)
+		);
+		this.copilotCloudRegistrations.add(
+			vscode.chat.registerChatSessionContentProvider(
+				CopilotCloudSessionsProvider.TYPE,
+				cloudSessionsProvider,
+				cloudSessionsProvider.chatParticipant,
+				{ supportsInterruptions: true }
+			)
+		);
+		this.copilotCloudRegistrations.add(
+			vscode.commands.registerCommand('github.copilot.cloud.sessions.refresh', () => {
+				cloudSessionsProvider.refresh();
+			})
+		);
+		this.copilotCloudRegistrations.add(
+			vscode.commands.registerCommand('github.copilot.cloud.sessions.openInBrowser', async (chatSessionItem: vscode.ChatSessionItem) => {
+				cloudSessionsProvider.openSessionsInBrowser(chatSessionItem);
+			})
+		);
+		this.copilotCloudRegistrations.add(
+			vscode.commands.registerCommand(CLOSE_SESSION_PR_CMD, async (ctx: CrossChatSessionWithPR) => {
+				// await this.installPullRequestExtension();
+				try {
+					const success = await this.octoKitService.closePullRequest(
+						ctx.pullRequestDetails.repository.owner.login,
+						ctx.pullRequestDetails.repository.name,
+						ctx.pullRequestDetails.number);
+					if (!success) {
+						this.logService.error(`${CLOSE_SESSION_PR_CMD}: Failed to close PR #${ctx.pullRequestDetails.number}`);
+					}
+					cloudSessionsProvider.refresh();
+				} catch (e) {
+					this.logService.error(`${CLOSE_SESSION_PR_CMD}: Exception ${e}`);
+				}
+			})
+		);
+		return cloudSessionsProvider;
 	}
 }

@@ -17,7 +17,7 @@ import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSessi
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
-import { ConfirmationResult, CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
+import { ConfirmationResult, CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
 const MODELS_OPTION_ID = 'model';
 const ISOLATION_OPTION_ID = 'isolation';
@@ -291,7 +291,7 @@ export class CopilotCLIChatSessionParticipant {
 	constructor(
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
-		private readonly cloudSessionProvider: CopilotChatSessionsProvider | undefined,
+		private readonly cloudSessionProvider: CopilotCloudSessionsProvider | undefined,
 		private readonly summarizer: ChatSummarizerProvider,
 		private readonly worktreeManager: CopilotCLIWorktreeManager,
 		@IGitService private readonly gitService: IGitService,
