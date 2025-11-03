@@ -265,24 +265,33 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 				throw new Error(`Failed to fetch models (${requestId}): ${(await response.text()) || response.statusText || `HTTP ${response.status}`}`);
 			}
 
-			this._familyMap.clear();
-
 			const data: IModelAPIResponse[] = (await response.json()).data;
 			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
+
+			// Build new maps before clearing old ones to avoid race condition
+			const newFamilyMap: Map<string, IModelAPIResponse[]> = new Map();
+			const newCompletionsFamilyMap: Map<string, IModelAPIResponse[]> = new Map();
+			let newCopilotBaseModel: IModelAPIResponse | undefined;
+
 			for (let model of data) {
 				model = await this._hydrateResolvedModel(model);
 				const isCompletionModel = isCompletionModelInformation(model);
 				// The base model is whatever model is deemed "fallback" by the server
 				if (model.is_chat_fallback && !isCompletionModel) {
-					this._copilotBaseModel = model;
+					newCopilotBaseModel = model;
 				}
 				const family = model.capabilities.family;
-				const familyMap = isCompletionModel ? this._completionsFamilyMap : this._familyMap;
+				const familyMap = isCompletionModel ? newCompletionsFamilyMap : newFamilyMap;
 				if (!familyMap.has(family)) {
 					familyMap.set(family, []);
 				}
 				familyMap.get(family)?.push(model);
 			}
+
+			// Atomically swap in the new maps
+			this._familyMap = newFamilyMap;
+			this._completionsFamilyMap = newCompletionsFamilyMap;
+			this._copilotBaseModel = newCopilotBaseModel;
 			this._lastFetchError = undefined;
 			this._onDidModelRefresh.fire();
 
