@@ -95,20 +95,26 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			return [];
 		}).slice(0, maxResults);
 		const query = this.formatQueryString(options.input);
-		result.toolResultMessage = textMatches.length === 0 ?
-			(isRegExp ?
-				new MarkdownString(l10n.t`Searched for regex ${query}, no results`) :
-				new MarkdownString(l10n.t`Searched for text ${query}, no results`)) :
-			textMatches.length === 1 ?
-				(isRegExp ?
-					new MarkdownString(l10n.t`Searched for regex ${query}, 1 result`) :
-					new MarkdownString(l10n.t`Searched for text ${query}, 1 result`)) :
-				(isRegExp ?
-					new MarkdownString(l10n.t`Searched for regex ${query}, ${textMatches.length} results`) :
-					new MarkdownString(l10n.t`Searched for text ${query}, ${textMatches.length} results`));
+		result.toolResultMessage = this.getResultMessage(isRegExp, query, textMatches.length);
 
 		result.toolResultDetails = textMatches;
 		return result;
+	}
+
+	private getResultMessage(isRegExp: boolean, query: string, count: number): MarkdownString {
+		if (count === 0) {
+			return isRegExp
+				? new MarkdownString(l10n.t`Searched for regex ${query}, no results`)
+				: new MarkdownString(l10n.t`Searched for text ${query}, no results`);
+		} else if (count === 1) {
+			return isRegExp
+				? new MarkdownString(l10n.t`Searched for regex ${query}, 1 result`)
+				: new MarkdownString(l10n.t`Searched for text ${query}, 1 result`);
+		} else {
+			return isRegExp
+				? new MarkdownString(l10n.t`Searched for regex ${query}, ${count} results`)
+				: new MarkdownString(l10n.t`Searched for text ${query}, ${count} results`);
+		}
 	}
 
 	private isValidRegex(pattern: string): boolean {
