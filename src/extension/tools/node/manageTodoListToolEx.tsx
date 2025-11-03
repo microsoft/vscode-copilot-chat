@@ -31,7 +31,8 @@ class ManageTodoListToolExtension implements ICopilotToolExtension<IManageTodoLi
 
 	alternativeDefinition(originTool: vscode.LanguageModelToolInformation, chatEndpoint: IChatEndpoint | undefined): vscode.LanguageModelToolInformation {
 		// specialize the tool definition for gpt-5 to reduce the frequency
-		if (chatEndpoint?.model === 'gpt-5') {
+		const model = chatEndpoint?.model;
+		if (model === 'gpt-5' || model === 'gpt-5-codex') {
 			return {
 				...originTool,
 				description: originTool.description?.replace('VERY frequently ', ''),
