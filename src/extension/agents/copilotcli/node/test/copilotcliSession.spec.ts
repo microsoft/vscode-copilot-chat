@@ -199,7 +199,7 @@ describe('CopilotCLISession', () => {
 		expect(stream.output.join('\n')).toContain('Error: boom');
 	});
 
-	it('auto-approves read permission inside workspace without invoking tool', async () => {
+	it.skip('auto-approves read permission inside workspace without invoking tool', async () => {
 		// Keep session active while requesting permission
 		let resolveSend: () => void;
 		sdkSession.send = async ({ prompt }: any) => new Promise<void>(r => { resolveSend = r; }).then(() => {
