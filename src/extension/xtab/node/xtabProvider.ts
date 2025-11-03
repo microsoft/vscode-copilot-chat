@@ -54,7 +54,7 @@ import { Position as VscodePosition } from '../../../vscodeTypes';
 import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
+import { countTokensForLines, createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
@@ -270,6 +270,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const editWindow = currentDocument.transformer.getOffsetRange(new Range(editWindowLinesRange.start + 1, 1, editWindowLinesRange.endExclusive, editWindowLastLineLength + 1));
 
 		const editWindowLines = currentDocument.lines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+
+		const editWindowTokenLimit = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabEditWindowMaxTokens, this.expService);
+		if (editWindowTokenLimit !== undefined && countTokensForLines(editWindowLines, XtabProvider.computeTokens) > editWindowTokenLimit) {
+			return Result.error(new NoNextEditReason.PromptTooLarge('editWindow'));
+		}
 
 		// Expected: editWindow.substring(activeDocument.documentAfterEdits.value) === editWindowLines.join('\n')
 

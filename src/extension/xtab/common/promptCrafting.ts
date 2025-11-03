@@ -409,7 +409,7 @@ export function buildCodeSnippetsUsingPagedClipping(
 	return { snippets: snippets.reverse(), docsInPrompt };
 }
 
-function countTokensForLines(page: string[], computeTokens: (s: string) => number): number {
+export function countTokensForLines(page: string[], computeTokens: (s: string) => number): number {
 	return page.reduce((sum, line) => sum + computeTokens(line) + 1 /* \n */, 0);
 }
 
