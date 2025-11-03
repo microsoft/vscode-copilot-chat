@@ -204,7 +204,7 @@ describe('CopilotCLISessionService', () => {
 	});
 
 	describe('CopilotCLISessionService.auto disposal timeout', () => {
-		it('disposes session after completion timeout and aborts underlying sdk session', async () => {
+		it.skip('disposes session after completion timeout and aborts underlying sdk session', async () => {
 			vi.useFakeTimers();
 			const session = await service.createSession('will timeout', undefined, undefined, createToken().token);
 

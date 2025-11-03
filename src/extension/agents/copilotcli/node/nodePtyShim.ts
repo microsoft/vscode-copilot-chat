@@ -37,7 +37,7 @@ async function _ensureNodePtyShim(extensionPath: string, vscodeAppRoot: string, 
 		await fs.mkdir(nodePtyDir, { recursive: true });
 		await Promise.all(files.map(async file => {
 			const dest = path.join(nodePtyDir, path.basename(file));
-			if ((await fs.stat(dest).then(stat => stat.isFile()).catch(() => false)) === false) {
+			if (!(await fs.stat(dest).then(stat => stat.isFile()).catch(() => false))) {
 				await fs.copyFile(file, dest);
 			}
 		}));

@@ -273,11 +273,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					this.sessionTerminators.deleteAndDispose(session.sessionId);
 				}
 			}));
-			// Possible the session was idle already.
-			this.sessionTerminators.set(session.sessionId, disposableTimeout(() => {
-				session.dispose();
-				this.sessionTerminators.deleteAndDispose(session.sessionId);
-			}, SESSION_SHUTDOWN_TIMEOUT_MS));
 
 			this._sessionWrappers.set(sdkSession.sessionId, session);
 			return session;

@@ -281,7 +281,7 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 
 	switch (command) {
 		case 'view':
-			if (args.view_range && args.view_range[1] > args.view_range[0]) {
+			if (args.view_range && args.view_range[1] >= args.view_range[0]) {
 				invocation.invocationMessage = new MarkdownString(l10n.t("Read {0} (lines {1}-{2})", display, args.view_range[0], args.view_range[1]));
 			} else {
 				invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
