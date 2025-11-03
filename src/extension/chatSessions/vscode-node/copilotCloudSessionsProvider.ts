@@ -70,6 +70,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	public chatParticipant = vscode.chat.createChatParticipant(CopilotChatSessionsProvider.TYPE, async (request, context, stream, token) =>
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
+	private cachedSessionsSize: number = 0;
+	private backgroundSessionsRefreshInterval: TimeoutHandle | undefined;
 
 	constructor(
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
@@ -80,6 +82,21 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
 	) {
 		super();
+		this.backgroundSessionsRefreshInterval = setInterval(async () => {
+			const repoId = await getRepoId(this._gitService);
+			if (repoId) {
+				const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
+				if (this.cachedSessionsSize !== sessions.length) {
+					this.refresh();
+				}
+			}
+		}, 1 * 60 * 1000);
+	}
+
+	public override dispose(): void {
+		super.dispose();
+		clearInterval(this.backgroundSessionsRefreshInterval);
+		this.backgroundSessionsRefreshInterval = undefined;
 	}
 
 	public refresh(): void {
@@ -142,6 +159,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			}
 
 			const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
+			this.cachedSessionsSize = sessions.length;
 
 			// Group sessions by resource_id and keep only the latest per resource_id
 			const latestSessionsMap = new Map<number, SessionInfo>();
