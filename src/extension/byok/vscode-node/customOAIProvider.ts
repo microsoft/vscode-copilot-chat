@@ -86,8 +86,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return modelInfo;
 	}
 
-	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }> {
-		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }>;
+	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string>; deploymentType?: 'completions' | 'responses'; deploymentName?: string; apiVersion?: string }> {
+		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string>; deploymentType?: 'completions' | 'responses'; deploymentName?: string; apiVersion?: string }>;
 		return modelConfig;
 	}
 

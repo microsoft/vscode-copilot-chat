@@ -102,26 +102,31 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 		return new CodeBlocksMetadata(this._codeBlocks);
 	}
 
-	private forward(fc: CallableFunction) {
-		return (...args: any[]) => {
+	private forward<K extends keyof ChatResponseStream>(methodName: K): ChatResponseStream[K] {
+		const method = this._wrapped[methodName];
+		if (typeof method !== 'function') {
+			// Return a no-op function for missing methods
+			return ((() => { }) as any);
+		}
+		return ((...args: any[]) => {
 			this._codeBlockProcessor.flush();
-			return fc(...args);
-		};
+			return (method as Function).apply(this._wrapped, args);
+		}) as any;
 	}
 
-	button = this.forward(this._wrapped.button.bind(this._wrapped));
-	filetree = this.forward(this._wrapped.filetree.bind(this._wrapped));
-	progress = this._wrapped.progress.bind(this._wrapped);
-	reference = this.forward(this._wrapped.reference.bind(this._wrapped));
-	textEdit = this.forward(this._wrapped.textEdit.bind(this._wrapped));
-	notebookEdit = this.forward(this._wrapped.notebookEdit.bind(this._wrapped));
-	confirmation = this.forward(this._wrapped.confirmation.bind(this._wrapped));
-	warning = this.forward(this._wrapped.warning.bind(this._wrapped));
-	reference2 = this.forward(this._wrapped.reference2.bind(this._wrapped));
-	codeCitation = this.forward(this._wrapped.codeCitation.bind(this._wrapped));
-	anchor = this.forward(this._wrapped.anchor.bind(this._wrapped));
-	externalEdit = this.forward(this._wrapped.externalEdit.bind(this._wrapped));
-	prepareToolInvocation = this.forward(this._wrapped.prepareToolInvocation.bind(this._wrapped));
+	button = this.forward('button');
+	filetree = this.forward('filetree');
+	progress = this.forward('progress');
+	reference = this.forward('reference');
+	textEdit = this.forward('textEdit');
+	notebookEdit = this.forward('notebookEdit');
+	confirmation = this.forward('confirmation');
+	warning = this.forward('warning');
+	reference2 = this.forward('reference2');
+	codeCitation = this.forward('codeCitation');
+	anchor = this.forward('anchor');
+	externalEdit = this.forward('externalEdit');
+	prepareToolInvocation = this.forward('prepareToolInvocation');
 }
 
 
