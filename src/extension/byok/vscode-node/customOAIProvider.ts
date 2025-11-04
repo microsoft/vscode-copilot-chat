@@ -45,7 +45,6 @@ export function hasExplicitApiPath(url: string): boolean {
 }
 
 interface UserModelConfig {
-	requestHeaders?: Record<string, string>;
 	name: string;
 	url: string;
 	deploymentType?: 'completions' | 'responses';
@@ -59,13 +58,14 @@ interface UserModelConfig {
 	vision: boolean;
 	thinking?: boolean;
 	temperature?: number;
+	requestHeaders?: Record<string, string>;
 }
 
 interface CustomOAIModelInfo extends LanguageModelChatInformation {
-	requestHeaders?: Record<string, string>;
 	url: string;
 	thinking: boolean;
 	temperature?: number;
+	requestHeaders?: Record<string, string>;
 }
 
 export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIModelInfo> {
@@ -125,14 +125,14 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			models[modelId] = {
 				name: modelInfo.name,
 				url: resolvedUrl,
-				toolCalling: modelInfo.toolCalling,
-				vision: modelInfo.vision,
 				maxInputTokens: modelInfo.maxInputTokens,
 				maxOutputTokens: modelInfo.maxOutputTokens,
-				thinking: modelInfo.thinking,
+				toolCalling: modelInfo.toolCalling,
 				editTools: modelInfo.editTools,
+				vision: modelInfo.vision,
+				thinking: modelInfo.thinking,
+				temperature: modelInfo.temperature,
 				requestHeaders: modelInfo.requestHeaders ? { ...modelInfo.requestHeaders } : undefined,
-				temperature: modelInfo.temperature
 			};
 		}
 		return models;
@@ -164,8 +164,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 	private createModelInfo(id: string, capabilities: BYOKKnownModels[string]): CustomOAIModelInfo {
 		const baseInfo: CustomOAIModelInfo = {
 			id,
-			url: capabilities.url || '',
 			name: capabilities.name,
+			url: capabilities.url || '',
 			detail: this.providerName,
 			version: '1.0.0',
 			maxOutputTokens: capabilities.maxOutputTokens,
@@ -178,8 +178,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 				editTools: capabilities.editTools
 			},
 			thinking: capabilities.thinking || false,
-			requestHeaders: capabilities.requestHeaders,
 			temperature: capabilities.temperature,
+			requestHeaders: capabilities.requestHeaders,
 		};
 		return baseInfo;
 	}
@@ -210,16 +210,16 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			}
 		}
 		const modelInfo = await this.getModelInfo(model.id, apiKey, {
+			name: model.name,
+			url: model.url,
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,
-			vision: !!model.capabilities?.imageInput || false,
-			name: model.name,
-			url: model.url,
-			thinking: model.thinking,
 			editTools: model.capabilities.editTools?.filter(isEndpointEditToolName),
-			requestHeaders: model.requestHeaders,
+			vision: !!model.capabilities?.imageInput || false,
+			thinking: model.thinking,
 			temperature: model.temperature,
+			requestHeaders: model.requestHeaders,
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
 		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.requestInitiator, progress, token);
@@ -237,15 +237,15 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		}
 
 		const modelInfo = await this.getModelInfo(model.id, apiKey, {
+			name: model.name,
+			url: model.url,
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,
 			vision: !!model.capabilities?.imageInput || false,
-			name: model.name,
-			url: model.url,
 			thinking: model.thinking,
-			requestHeaders: model.requestHeaders,
 			temperature: model.temperature,
+			requestHeaders: model.requestHeaders,
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
 		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);

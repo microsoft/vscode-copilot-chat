@@ -148,7 +148,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 
 			const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
 
-			// Always set modelInfo.id to deployment name for Azure deployments
+			// Set modelInfo.id to deployment name (or modelId if no deployment name configured)
 			modelInfo.id = deploymentName;
 
 			// Set temperature from config if specified
