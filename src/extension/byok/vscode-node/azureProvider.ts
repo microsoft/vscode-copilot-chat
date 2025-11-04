@@ -122,8 +122,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
 		// Get model config to check deployment type and deployment name
 		const configKey = this.getConfigKey();
-
-		const modelConfig = this._configurationService?.getConfig(configKey);
+		const modelConfig = this._configurationService.getConfig(configKey);
 
 		// Safely access the model-specific config
 		let config: AzureModelConfig | undefined;
