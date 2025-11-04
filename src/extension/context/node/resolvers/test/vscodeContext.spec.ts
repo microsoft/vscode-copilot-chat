@@ -130,7 +130,7 @@ describe('parseSettingsAndCommands', () => {
 		expect(result[0].commandToRun?.arguments).toEqual(['@id:editor.fontSize ']);
 	});
 
-	it('returns empty array for unknown command', async () => {
+	it('returns empty quickOpen for unknown command', async () => {
 		const mockService = new MockWorkbenchService({}, [
 			{ label: 'Show All Commands', command: 'workbench.action.showCommands', keybinding: 'Ctrl+Shift+P' }
 		]);
