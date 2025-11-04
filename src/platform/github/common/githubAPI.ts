@@ -109,7 +109,7 @@ export async function makeGitHubAPIRequest(
 	if (!response.ok) {
 		logService.error(`[GitHubAPI] ${method} ${host}/${routeSlug} - Status: ${response?.status}`);
 		if (returnStatusCodeOnError) {
-			return { status: response?.status };
+			return { status: response.status };
 		}
 		return undefined;
 	}
