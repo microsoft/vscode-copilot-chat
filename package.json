@@ -3230,6 +3230,55 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.anthropic.tools.websearch.maxUses": {
+						"type": "number",
+						"default": 5,
+						"markdownDescription": "%github.copilot.config.anthropic.tools.websearch.maxUses%",
+						"minimum": 1,
+						"maximum": 20
+					},
+					"github.copilot.chat.anthropic.tools.websearch.allowedDomains": {
+						"type": "array",
+						"default": [],
+						"markdownDescription": "%github.copilot.config.anthropic.tools.websearch.allowedDomains%",
+						"items": {
+							"type": "string"
+						}
+					},
+					"github.copilot.chat.anthropic.tools.websearch.blockedDomains": {
+						"type": "array",
+						"default": [],
+						"markdownDescription": "%github.copilot.config.anthropic.tools.websearch.blockedDomains%",
+						"items": {
+							"type": "string"
+						}
+					},
+					"github.copilot.chat.anthropic.tools.websearch.userLocation": {
+						"type": [
+							"object",
+							"null"
+						],
+						"default": null,
+						"markdownDescription": "%github.copilot.config.anthropic.tools.websearch.userLocation%",
+						"properties": {
+							"city": {
+								"type": "string",
+								"description": "City name (e.g., 'San Francisco')"
+							},
+							"region": {
+								"type": "string",
+								"description": "State or region (e.g., 'California')"
+							},
+							"country": {
+								"type": "string",
+								"description": "ISO country code (e.g., 'US')"
+							},
+							"timezone": {
+								"type": "string",
+								"description": "IANA timezone identifier (e.g., 'America/Los_Angeles')"
+							}
+						}
+					},
 					"github.copilot.chat.tools.memory.enabled": {
 						"type": "boolean",
 						"default": false,

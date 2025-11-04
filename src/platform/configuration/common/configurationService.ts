@@ -764,6 +764,19 @@ export namespace ConfigKey {
 	export const MaxAnthropicThinkingTokens = defineSetting<number | null>('chat.anthropic.thinking.maxTokens', null);
 	/** Enable Anthropic web search tool for BYOK Claude models */
 	export const AnthropicWebSearchToolEnabled = defineExpSetting<boolean>('chat.anthropic.tools.websearch.enabled', false);
+	/** Maximum number of web searches allowed per request */
+	export const AnthropicWebSearchMaxUses = defineSetting<number>('chat.anthropic.tools.websearch.maxUses', 5);
+	/** List of domains to restrict web search results to */
+	export const AnthropicWebSearchAllowedDomains = defineSetting<string[]>('chat.anthropic.tools.websearch.allowedDomains', []);
+	/** List of domains to exclude from web search results */
+	export const AnthropicWebSearchBlockedDomains = defineSetting<string[]>('chat.anthropic.tools.websearch.blockedDomains', []);
+	/** User location for personalizing web search results */
+	export const AnthropicWebSearchUserLocation = defineSetting<{
+		city?: string;
+		region?: string;
+		country?: string;
+		timezone?: string;
+	} | null>('chat.anthropic.tools.websearch.userLocation', null);
 	/** Enable memory tool */
 	export const MemoryToolEnabled = defineExpSetting<boolean>('chat.tools.memory.enabled', false);
 

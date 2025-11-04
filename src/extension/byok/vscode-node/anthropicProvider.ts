@@ -216,11 +216,35 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		// We need to do this because there is no local web_search tool definition we can replace.
 		const webSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicWebSearchToolEnabled, this._experimentationService);
 		if (webSearchEnabled && !tools.some(tool => tool.name === 'web_search')) {
-			tools.push({
+			const maxUses = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchMaxUses);
+			const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
+			const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);
+			const userLocation = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchUserLocation);
+
+			const webSearchTool: Anthropic.Beta.BetaWebSearchTool20250305 = {
 				name: 'web_search',
 				type: 'web_search_20250305',
-				max_uses: 5
-			});
+				max_uses: maxUses
+			};
+
+			// Add domain filtering if configured
+			// Cannot use both allowed and blocked domains simultaneously
+			if (allowedDomains && allowedDomains.length > 0) {
+				webSearchTool.allowed_domains = allowedDomains;
+			} else if (blockedDomains && blockedDomains.length > 0) {
+				webSearchTool.blocked_domains = blockedDomains;
+			}
+
+			// Add user location if configured
+			// Note: All fields are optional according to Anthropic docs
+			if (userLocation && (userLocation.city || userLocation.region || userLocation.country || userLocation.timezone)) {
+				webSearchTool.user_location = {
+					type: 'approximate',
+					...userLocation
+				};
+			}
+
+			tools.push(webSearchTool);
 		}
 
 		const thinkingEnabled = this._enableThinking(model.id);
