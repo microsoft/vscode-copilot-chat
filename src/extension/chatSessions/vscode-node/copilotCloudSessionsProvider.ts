@@ -1088,7 +1088,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						return false;
 					}
 					const candidateName =
-						(branch.remote && branch.name.startsWith(branch.remote))
+						(branch.remote && branch.name.startsWith(branch.remote + '/'))
 							? branch.name
 							: `${branch.remote}/${branch.name}`;
 					return alternateNames.has(candidateName);
