@@ -15,6 +15,8 @@ import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { IChunkingEndpointClient } from '../../../platform/chunking/common/chunkingEndpointClient';
 import { ChunkingEndpointClientImpl } from '../../../platform/chunking/common/chunkingEndpointClientImpl';
 import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/chunking/node/naiveChunkerService';
+import { ICodemapService } from '../../../platform/codemap/common/codemapService';
+import { CodemapServiceImpl } from '../../../platform/codemap/node/codemapServiceImpl';
 import { IDevContainerConfigurationService } from '../../../platform/devcontainer/common/devContainerConfigurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
@@ -162,6 +164,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	builder.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage)); // Used for test generation (/tests intent)
 	builder.define(IParserService, new SyncDescriptor(ParserServiceImpl, [/*useWorker*/ true]));
+	builder.define(ICodemapService, new SyncDescriptor(CodemapServiceImpl));
 	builder.define(IIntentService, new SyncDescriptor(IntentService));
 	builder.define(IIgnoreService, new SyncDescriptor(VsCodeIgnoreService));
 	builder.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));

@@ -29,5 +29,7 @@ export namespace PromptTags {
 	export const RECENT_FILES = createTag("recently_viewed_code_snippets");
 
 	export const RECENT_FILE = createTag("recently_viewed_code_snippet");
+
+	export const CODEMAP = createTag("file_structure");
 }
 

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Codemap } from '../../../platform/codemap/common/codemapService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
@@ -31,13 +32,14 @@ export class PromptPieces {
 		public readonly langCtx: LanguageContextResponse | undefined,
 		public readonly computeTokens: (s: string) => number,
 		public readonly opts: PromptOptions,
+		public readonly codemap?: Codemap,
 	) {
 	}
 }
 
 export function getUserPrompt(promptPieces: PromptPieces): string {
 
-	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, computeTokens, opts } = promptPieces;
+	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, computeTokens, opts, codemap } = promptPieces;
 	const currentFileContent = taggedCurrentDocLines.join('\n');
 
 	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
@@ -52,7 +54,14 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath) : '';
 
-	const mainPrompt = `${PromptTags.RECENT_FILES.start}
+	// Include codemap if available
+	const codemapSection = codemap ? `${PromptTags.CODEMAP.start}
+File structure summary: ${codemap.summary}
+${PromptTags.CODEMAP.end}
+
+` : '';
+
+	const mainPrompt = `${codemapSection}${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}
 ${PromptTags.RECENT_FILES.end}
 

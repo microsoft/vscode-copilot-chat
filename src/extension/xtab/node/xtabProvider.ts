@@ -9,6 +9,7 @@ import { ChatCompletionContentPartKind } from '@vscode/prompt-tsx/dist/base/outp
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
+import { ICodemapService } from '../../../platform/codemap/common/codemapService';
 import { ConfigKey, ExperimentBasedConfig, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
@@ -111,7 +112,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
-		@ITelemetryService private readonly telemetryService: ITelemetryService
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@ICodemapService private readonly codemapService: ICodemapService
 	) {
 		this.delayer = new Delayer(this.configService, this.expService);
 		this.tracer = createTracer(['NES', 'XtabProvider'], (s) => this.logService.trace(s));
@@ -312,6 +314,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.GotCancelled('afterLanguageContextAwait'));
 		}
 
+		// Generate codemap if enabled
+		const useCodemap = this.configService.getExperimentBasedConfig(ConfigKey.Internal.NesUseCodemap, this.expService);
+		let codemap;
+		if (useCodemap) {
+			const activeDocSnapshot = this.workspaceService.textDocuments.find(doc => doc.uri.toString() === activeDocument.id.toUri().toString());
+			if (activeDocSnapshot) {
+				codemap = await this.codemapService.getCodemap(activeDocSnapshot, cancellationToken);
+			}
+		}
+
 		const promptPieces = new PromptPieces(
 			currentDocument,
 			editWindowLinesRange,
@@ -322,7 +334,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundCodeToEdit,
 			langCtx,
 			XtabProvider.computeTokens,
-			promptOptions
+			promptOptions,
+			codemap
 		);
 
 		const userPrompt = getUserPrompt(promptPieces);
@@ -1185,7 +1198,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			{
 				...promptPieces.opts,
 				includePostScript: false,
-			}
+			},
+			promptPieces.codemap
 		);
 
 		const userMessage = getUserPrompt(newPromptPieces);
