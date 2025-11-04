@@ -146,7 +146,10 @@ describe('parseSettingsAndCommands', () => {
 \`\`\``;
 
 		const result = await parseSettingsAndCommands(mockService, codeBlock);
-		expect(result).toEqual([]);
+		expect(result).toHaveLength(1);
+		expect(result[0].commandToRun?.command).toBe('workbench.action.quickOpen');
+		expect(result[0].commandToRun?.arguments).toEqual(['>']);
+		expect(result[0].commandToRun?.title).toBe('Open Command Palette');
 	});
 
 	it('processes extension search command', async () => {
