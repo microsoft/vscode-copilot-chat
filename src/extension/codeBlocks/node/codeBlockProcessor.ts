@@ -108,12 +108,14 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 		const method = this._wrapped[methodName];
 		if (typeof method !== 'function') {
 			this._logService.warn(`[CodeBlockTrackingChatResponseStream] Method '${String(methodName)}' does not exist on the wrapped ChatResponseStream.`);
-			return (() => undefined) as any;
+			// Return a typed no-op function that matches the expected signature
+			return ((() => undefined) as unknown as ChatResponseStream[K]);
 		}
-		return ((...args: any[]) => {
+		// Preserve the function signature by casting to the specific method type
+		return ((...args: Parameters<Extract<ChatResponseStream[K], (...args: any[]) => any>>) => {
 			this._codeBlockProcessor.flush();
 			return (method as Function).apply(this._wrapped, args);
-		}) as any;
+		}) as ChatResponseStream[K];
 	}
 
 	button = this.forward('button');
