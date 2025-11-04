@@ -59,7 +59,6 @@ const DEFAULT_AGENT_ID = '___vscode_default___';
 
 export class CopilotChatSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
 	public static readonly TYPE = 'copilot-cloud-agent';
-	private readonly DELEGATE_MODAL_DETAILS = vscode.l10n.t('The agent will work asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
 	private readonly _onDidChangeChatSessionItems = this._register(new vscode.EventEmitter<void>());
 	public readonly onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
 	private readonly _onDidCommitChatSessionItem = this._register(new vscode.EventEmitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
@@ -423,19 +422,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
 		for (const data of results) {
 			switch (data.step) {
-				case 'create':
-					{
-						if (!data.accepted || !data.metadata) {
-							stream.markdown(vscode.l10n.t('Cloud agent request cancelled.'));
-							return {};
-						}
-						if (!await this.tryHandleUncommittedChanges(data.metadata, stream, token)) {
-							// We are NOT handling an uncommitted changes case, so no confirmation was pushed.
-							// This means we (the caller) should continue processing the request.
-							await this.createDelegatedChatSession(data.metadata, stream, token);
-						}
-						break;
-					}
 				case 'uncommitted-changes':
 					{
 						if (!data.accepted || !data.metadata) {
@@ -651,20 +637,17 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			}
 		} else {
 			/* @copilot invoked from a 'normal' chat or 'cloud button' */
-			stream.confirmation(
-				vscode.l10n.t('Delegate to cloud agent'),
-				this.DELEGATE_MODAL_DETAILS,
-				{
-					step: 'create',
-					metadata: {
-						prompt: context.chatSummary?.prompt ?? request.prompt,
-						history: context.chatSummary?.history,
-						references: request.references,
-						chatContext: context,
-					} satisfies ConfirmationMetadata
-				},
-				['Delegate', 'Cancel']
-			);
+			const metadata: ConfirmationMetadata = {
+				prompt: context.chatSummary?.prompt ?? request.prompt,
+				history: context.chatSummary?.history,
+				references: request.references,
+				chatContext: context,
+			};
+			if (!await this.tryHandleUncommittedChanges(metadata, stream, token)) {
+				// We are NOT handling an uncommitted changes case, so no confirmation was pushed.
+				// This means we (the caller) should continue processing the request.
+				await this.createDelegatedChatSession(metadata, stream, token);
+			}
 		}
 	}
 
