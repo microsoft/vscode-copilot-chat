@@ -4038,7 +4038,7 @@
 				{
 					"id": "codex-placeholder",
 					"name": "OpenAI Codex",
-					"when": "github.copilot.chat.codex.showPlaceholder && config.chat.experimental.codex.enabled",
+					"when": "github.copilot.chat.codex.showPlaceholder",
 					"icon": "$(file)"
 				},
 				{
