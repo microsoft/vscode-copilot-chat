@@ -102,11 +102,6 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 		);
 		// Override the instance properties
 		this.providerName = AzureBYOKModelProvider.providerName;
-
-		// Bind methods to ensure proper context
-		this.resolveUrl = this.resolveUrl.bind(this);
-		this.getModelInfo = this.getModelInfo.bind(this);
-		this.getConfigKey = this.getConfigKey.bind(this);
 	}
 
 	protected override getConfigKey() {

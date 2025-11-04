@@ -108,7 +108,7 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 		const method = this._wrapped[methodName];
 		if (typeof method !== 'function') {
 			this._logService.warn(`[CodeBlockTrackingChatResponseStream] Method '${String(methodName)}' does not exist on the wrapped ChatResponseStream.`);
-			return (() => { }) as any;
+			return (() => undefined) as any;
 		}
 		return ((...args: any[]) => {
 			this._codeBlockProcessor.flush();
