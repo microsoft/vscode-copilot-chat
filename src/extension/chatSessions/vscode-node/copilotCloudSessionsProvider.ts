@@ -1151,7 +1151,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const response = await this._octoKitService.postCopilotAgentJob(repoId.org, repoId.repo, JOBS_API_VERSION, payload);
 			if (!this.validateRemoteAgentJobResponse(response)) {
 				const statusCode = response?.status;
-				return { error: vscode.l10n.t(`Received invalid response ${statusCode ? statusCode + ' ' : ''}from cloud agent.`), innerError: `Response ${JSON.stringify(response)}`, state: 'error' };
+				return { error: vscode.l10n.t('Received invalid response {0}from cloud agent.', statusCode ? statusCode + ' ' : ''), innerError: `Response ${JSON.stringify(response)}`, state: 'error' };
 			}
 			// For v1 API, we need to fetch the job details to get the PR info
 			// Since the PR might not be created immediately, we need to poll for it
