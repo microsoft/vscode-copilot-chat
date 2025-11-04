@@ -683,6 +683,7 @@ export namespace ConfigKey {
 		export const InlineEditsXtabProviderEmitFastCursorLineChange = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.emitFastCursorLineChange', true, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabIncludeViewedFiles = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeViewedFiles', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.includeViewedFiles, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabPageSize = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.pageSize', xtabPromptOptions.DEFAULT_OPTIONS.pagedClipping.pageSize, INTERNAL_RESTRICTED);
+		export const InlineEditsXtabEditWindowMaxTokens = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.editWindowMaxTokens', undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabIncludeTagsInCurrentFile = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeTagsInCurrentFile', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.includeTags, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabCurrentFileMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.currentFileMaxTokens', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.maxTokens, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabPrioritizeAboveCursor = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.currentFile.prioritizeAboveCursor', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.prioritizeAboveCursor, INTERNAL_RESTRICTED);
@@ -739,7 +740,6 @@ export namespace ConfigKey {
 		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false);
 		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false);
 		export const CopilotCLIEnabled = defineSetting<boolean | undefined>('chat.advanced.copilotCLI.enabled', true);
-		export const CopilotCloudEnabled = defineSetting<boolean | undefined>('chat.advanced.copilotCodingAgent.enabled', true);
 		export const CLIIsolationEnabled = defineSetting<boolean | undefined>('chat.advanced.cli.isolation.enabled', false);
 		export const Gpt5AlternativePatch = defineExpSetting<boolean>('chat.advanced.gpt5AlternativePatch', false);
 	}
@@ -819,7 +819,6 @@ export namespace ConfigKey {
 	export const CustomInstructionsInSystemMessage = defineSetting<boolean>('chat.customInstructionsInSystemMessage', true);
 
 	export const EnableAlternateGptPrompt = defineExpSetting<boolean>('chat.alternateGptPrompt.enabled', false);
-	export const Gpt5AlternatePrompt = defineExpSetting<string>('chat.gpt5AlternatePrompt', 'default');
 
 	export const CompletionsFetcher = defineExpSetting<FetcherId | undefined>('chat.completionsFetcher', undefined);
 	export const NextEditSuggestionsFetcher = defineExpSetting<FetcherId | undefined>('chat.nesFetcher', undefined);

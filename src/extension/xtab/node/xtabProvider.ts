@@ -54,7 +54,7 @@ import { Position as VscodePosition } from '../../../vscodeTypes';
 import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
+import { countTokensForLines, createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
@@ -271,6 +271,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const editWindowLines = currentDocument.lines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
 
+		const editWindowTokenLimit = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabEditWindowMaxTokens, this.expService);
+		if (editWindowTokenLimit !== undefined && countTokensForLines(editWindowLines, XtabProvider.computeTokens) > editWindowTokenLimit) {
+			return Result.error(new NoNextEditReason.PromptTooLarge('editWindow'));
+		}
+
 		// Expected: editWindow.substring(activeDocument.documentAfterEdits.value) === editWindowLines.join('\n')
 
 		const doesIncludeCursorTag = editWindowLines.some(line => line.includes(PromptTags.CURSOR));
@@ -289,9 +294,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.PromptTooLarge('currentFile'));
 		}
 
-		const { taggedCurrentFileR: { taggedCurrentFileContent, nLines: nLinesCurrentFile }, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
+		const { taggedCurrentDocLines, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
-		telemetryBuilder.setNLinesOfCurrentFileInPrompt(nLinesCurrentFile);
+		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
@@ -313,7 +318,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			activeDocument,
 			request.xtabEditHistory,
-			taggedCurrentFileContent,
+			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			langCtx,
 			XtabProvider.computeTokens,
@@ -434,8 +439,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions.currentFile,
 		);
 
-		return taggedCurrentFileContentResult.map(taggedCurrentFileR => ({
-			taggedCurrentFileR,
+		return taggedCurrentFileContentResult.map(taggedCurrentDocLines => ({
+			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 		}));
 	}
@@ -1165,7 +1170,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.fromString(currentFileContentR.err);
 		}
 
-		const { taggedCurrentFileR: { taggedCurrentFileContent }, areaAroundCodeToEdit } = currentFileContentR.val;
+		const { taggedCurrentDocLines, areaAroundCodeToEdit } = currentFileContentR.val;
 
 		const newPromptPieces = new PromptPieces(
 			promptPieces.currentDocument,
@@ -1173,7 +1178,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptPieces.areaAroundEditWindowLinesRange,
 			promptPieces.activeDoc,
 			promptPieces.xtabHistory,
-			taggedCurrentFileContent,
+			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			promptPieces.langCtx,
 			XtabProvider.computeTokens,

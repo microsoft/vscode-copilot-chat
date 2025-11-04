@@ -271,6 +271,15 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrR
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 
+	if (args.view_range && args.view_range[1] >= args.view_range[0]) {
+		const [start, end] = args.view_range;
+		const localizedMessage = start === end
+			? l10n.t("Read {0} (line {1})", display, start)
+			: l10n.t("Read {0} (lines {1}-{2})", display, start, end);
+		invocation.invocationMessage = new MarkdownString(localizedMessage);
+		return;
+	}
+
 	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 }
 
@@ -282,7 +291,11 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 	switch (command) {
 		case 'view':
 			if (args.view_range && args.view_range[1] >= args.view_range[0]) {
-				invocation.invocationMessage = new MarkdownString(l10n.t("Read {0} (lines {1}-{2})", display, args.view_range[0], args.view_range[1]));
+				const [start, end] = args.view_range;
+				const localizedMessage = start === end
+					? l10n.t("Read {0} (line {1})", display, start)
+					: l10n.t("Read {0} (lines {1}-{2})", display, start, end);
+				invocation.invocationMessage = new MarkdownString(localizedMessage);
 			} else {
 				invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 			}
@@ -307,9 +320,9 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 function formatEditToolInvocation(invocation: ChatToolInvocationPart, args: EditArgs): void {
 	const display = args.path ? formatUriForMessage(args.path) : '';
 
-	if (display) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Edited {0}", display));
-	}
+	invocation.invocationMessage = display
+		? new MarkdownString(l10n.t("Edited {0}", display))
+		: new MarkdownString(l10n.t("Edited file"));
 }
 
 
@@ -318,6 +331,8 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, args: Ed
 
 	if (display) {
 		invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
+	} else {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Created file"));
 	}
 }
 

@@ -77,7 +77,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
 			allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model)) {
+			if (allowTools[ToolName.ApplyPatch] && await modelCanUseApplyPatchExclusively(model)) {
 				allowTools[ToolName.EditFile] = false;
 			}
 

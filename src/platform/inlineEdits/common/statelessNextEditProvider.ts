@@ -213,7 +213,7 @@ export namespace NoNextEditReason {
 	}
 	export class PromptTooLarge {
 		public readonly kind = 'promptTooLarge';
-		constructor(public readonly message: 'currentFile' | 'final') {
+		constructor(public readonly message: 'editWindow' | 'currentFile' | 'final') {
 		}
 	}
 	export class Uncategorized {

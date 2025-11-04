@@ -107,6 +107,14 @@ describe('CopilotCLI ToolInvocationFormatter', () => {
 				expect((markdownPart as any).value?.value || (markdownPart as any).value).toContain('This is the PR body.');
 			}
 		});
+    
+	  it('createCopilotCLIToolInvocation formats str_replace_editor view with range', () => {
+		  const invocation = createCopilotCLIToolInvocation(CopilotCLIToolNames.StrReplaceEditor, 'id3', { command: 'view', path: '/tmp/file.ts', view_range: [1, 5] }) as ChatToolInvocationPart;
+		  expect(invocation).toBeInstanceOf(ChatToolInvocationPart);
+  		const msg = typeof invocation.invocationMessage === 'string' ? invocation.invocationMessage : invocation.invocationMessage?.value;
+	  	expect(msg).toMatch(/Read/);
+		  expect(msg).toMatch(/file.ts/);
+  	});
 
 		it('includes tool invocation parts and thinking progress without duplication', () => {
 			const events: any[] = [
