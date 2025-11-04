@@ -3235,7 +3235,10 @@
 						"default": 5,
 						"markdownDescription": "%github.copilot.config.anthropic.tools.websearch.maxUses%",
 						"minimum": 1,
-						"maximum": 20
+						"maximum": 20,
+						"tags": [
+							"experimental"
+						]
 					},
 					"github.copilot.chat.anthropic.tools.websearch.allowedDomains": {
 						"type": "array",
@@ -3243,7 +3246,10 @@
 						"markdownDescription": "%github.copilot.config.anthropic.tools.websearch.allowedDomains%",
 						"items": {
 							"type": "string"
-						}
+						},
+						"tags": [
+							"experimental"
+						]
 					},
 					"github.copilot.chat.anthropic.tools.websearch.blockedDomains": {
 						"type": "array",
@@ -3251,7 +3257,10 @@
 						"markdownDescription": "%github.copilot.config.anthropic.tools.websearch.blockedDomains%",
 						"items": {
 							"type": "string"
-						}
+						},
+						"tags": [
+							"experimental"
+						]
 					},
 					"github.copilot.chat.anthropic.tools.websearch.userLocation": {
 						"type": [
@@ -3277,7 +3286,10 @@
 								"type": "string",
 								"description": "IANA timezone identifier (e.g., 'America/Los_Angeles')"
 							}
-						}
+						},
+						"tags": [
+							"experimental"
+						]
 					},
 					"github.copilot.chat.tools.memory.enabled": {
 						"type": "boolean",
