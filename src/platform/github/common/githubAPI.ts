@@ -86,7 +86,8 @@ export async function makeGitHubAPIRequest(
 	body?: { [key: string]: any },
 	version?: string,
 	type: 'json' | 'text' = 'json',
-	userAgent?: string) {
+	userAgent?: string,
+	returnStatusCodeOnError: boolean = false) {
 	const headers: any = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -106,6 +107,10 @@ export async function makeGitHubAPIRequest(
 		body: body ? JSON.stringify(body) : undefined
 	});
 	if (!response.ok) {
+		logService.error(`[GitHubAPI] ${method} ${host}/${routeSlug} - Status: ${response?.status}`);
+		if (returnStatusCodeOnError) {
+			return { status: response?.status };
+		}
 		return undefined;
 	}
 
