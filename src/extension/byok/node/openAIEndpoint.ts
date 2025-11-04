@@ -301,11 +301,11 @@ export class OpenAIEndpoint extends ChatEndpoint {
 				delete body.temperature;
 				// Thinking models use max_completion_tokens instead of max_tokens
 				body['max_completion_tokens'] = body.max_tokens;
-				delete body.max_tokens;
-			} else {
-				// For non-thinking models, removing max_tokens defaults to the maximum which is what we want for BYOK
-				delete body.max_tokens;
 			}
+
+			// For thinking models, replace max_tokens with max_completion_tokens
+			// For non-thinking models, removing max_tokens defaults to the maximum which is what we want for BYOK
+			delete body.max_tokens;
 
 			if (!this.useResponsesApi && body.stream) {
 				body['stream_options'] = { 'include_usage': true };
