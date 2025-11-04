@@ -44,10 +44,27 @@ export function hasExplicitApiPath(url: string): boolean {
 	return url.includes('/responses') || url.includes('/chat/completions');
 }
 
+interface UserModelConfig {
+	requestHeaders?: Record<string, string>;
+	name: string;
+	url: string;
+	deploymentType?: 'completions' | 'responses';
+	deploymentName?: string;
+	apiVersion?: string;
+	maxInputTokens: number;
+	maxOutputTokens: number;
+	requiresAPIKey: boolean;
+	toolCalling: boolean;
+	editTools?: EndpointEditToolName[];
+	vision: boolean;
+	thinking?: boolean;
+	temperature?: number;
+}
+
 interface CustomOAIModelInfo extends LanguageModelChatInformation {
+	requestHeaders?: Record<string, string>;
 	url: string;
 	thinking: boolean;
-	requestHeaders?: Record<string, string>;
 	temperature?: number;
 }
 
@@ -87,8 +104,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return modelInfo;
 	}
 
-	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string>; deploymentType?: 'completions' | 'responses'; deploymentName?: string; apiVersion?: string; temperature?: number }> {
-		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string>; deploymentType?: 'completions' | 'responses'; deploymentName?: string; apiVersion?: string; temperature?: number }>;
+	private getUserModelConfig(): Record<string, UserModelConfig> {
+		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, UserModelConfig>;
 		return modelConfig;
 	}
 

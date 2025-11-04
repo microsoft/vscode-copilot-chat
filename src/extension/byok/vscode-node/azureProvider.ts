@@ -26,7 +26,7 @@ interface AzureModelConfig {
 	url: string;
 }
 
-export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrlOptions, logService?: ILogService): string {
+export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrlOptions): string {
 
 	// The fully resolved url was already passed in
 	if (hasExplicitApiPath(url)) {
@@ -121,11 +121,11 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 				apiVersion: config.apiVersion || '2025-01-01-preview'
 			} : undefined;
 
-			const resolvedUrl = resolveAzureUrl(modelId, url, options, this._logService);
+			const resolvedUrl = resolveAzureUrl(modelId, url, options);
 			return resolvedUrl;
 		} catch (error) {
 			this._logService?.error(`AzureBYOKModelProvider: Error resolving URL for model ${modelId}, falling back to basic resolution:`, error);
-			return resolveAzureUrl(modelId, url, undefined, this._logService);
+			return resolveAzureUrl(modelId, url, undefined);
 		}
 	}
 
