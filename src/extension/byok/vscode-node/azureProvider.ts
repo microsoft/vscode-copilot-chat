@@ -19,14 +19,21 @@ export interface AzureUrlOptions {
 }
 
 interface AzureModelConfig {
-	deploymentType?: 'completions' | 'responses';
-	deploymentName?: string;
-	apiVersion?: string;
+	deploymentType: 'completions' | 'responses';
+	deploymentName: string;
+	apiVersion: string;
 	temperature?: number;
-	url: string;
 }
 
-export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrlOptions): string {
+function createAzureUrlOptions(modelId: string, config?: Partial<AzureModelConfig>): AzureUrlOptions {
+	return {
+		deploymentType: config?.deploymentType ?? 'completions',
+		deploymentName: config?.deploymentName ?? modelId,
+		apiVersion: config?.apiVersion ?? '2025-01-01-preview'
+	};
+}
+
+export function resolveAzureUrl(modelId: string, url: string, options: AzureUrlOptions): string {
 
 	// The fully resolved url was already passed in
 	if (hasExplicitApiPath(url)) {
@@ -42,11 +49,7 @@ export function resolveAzureUrl(modelId: string, url: string, options?: AzureUrl
 		url = url.slice(0, -3);
 	}
 
-	// Check if deployment type is specified
-	// If no deployment name is provided, use modelId as fallback
-	const deploymentName = options?.deploymentName || modelId;
-	const deploymentType = options?.deploymentType || 'completions';
-	const apiVersion = options?.apiVersion || '2025-01-01-preview';
+	const { deploymentName, deploymentType, apiVersion } = options;
 
 	// Determine if this is an Azure OpenAI endpoint (requires deployment name in path)
 	const isAzureOpenAIEndpointv1 = url.includes('models.ai.azure.com') || url.includes('inference.ml.azure.com');
@@ -109,65 +112,44 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 	}
 
 	protected override resolveUrl(modelId: string, url: string): string {
-		try {
-			// Get model config to access deployment options
-			const modelConfig = this._configurationService?.getConfig(this.getConfigKey()) as Record<string, AzureModelConfig> | undefined;
-
-			const config = modelConfig?.[modelId];
-
-			const options: AzureUrlOptions | undefined = config ? {
-				deploymentType: config.deploymentType || 'completions',
-				deploymentName: config.deploymentName || modelId,
-				apiVersion: config.apiVersion || '2025-01-01-preview'
-			} : undefined;
-
-			const resolvedUrl = resolveAzureUrl(modelId, url, options);
-			return resolvedUrl;
-		} catch (error) {
-			this._logService?.error(`AzureBYOKModelProvider: Error resolving URL for model ${modelId}, falling back to basic resolution:`, error);
-			return resolveAzureUrl(modelId, url, undefined);
-		}
+		// Get model config to access deployment options
+		const modelConfig = this._configurationService?.getConfig(this.getConfigKey()) as Record<string, AzureModelConfig> | undefined;
+		const config = modelConfig?.[modelId];
+		const options = createAzureUrlOptions(modelId, config);
+		return resolveAzureUrl(modelId, url, options);
 	}
 
 	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
-		try {
-			// Get model config to check deployment type and deployment name
-			const configKey = this.getConfigKey();
+		// Get model config to check deployment type and deployment name
+		const configKey = this.getConfigKey();
 
-			const modelConfig = this._configurationService?.getConfig(configKey);
+		const modelConfig = this._configurationService?.getConfig(configKey);
 
-			// Safely access the model-specific config
-			let config: AzureModelConfig | undefined;
-			if (modelConfig && typeof modelConfig === 'object' && modelId in modelConfig) {
-				config = (modelConfig as Record<string, AzureModelConfig>)[modelId];
-			}
-
-			const deploymentType = config?.deploymentType || 'completions';
-			// If no deployment name is provided, use modelId as fallback
-			const deploymentName = config?.deploymentName || modelId;
-
-			const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
-
-			// Set modelInfo.id to deployment name (or modelId if no deployment name configured)
-			modelInfo.id = deploymentName;
-
-			// Set temperature from config if specified
-			if (config?.temperature !== undefined) {
-				modelInfo.temperature = config.temperature;
-			}
-
-			// Set supported endpoints based on deployment type
-			if (deploymentType === 'responses') {
-				modelInfo.supported_endpoints = [ModelSupportedEndpoint.Responses];
-			} else {
-				// For completions API, only support chat completions
-				modelInfo.supported_endpoints = [ModelSupportedEndpoint.ChatCompletions];
-			}
-
-			return modelInfo;
-		} catch (error) {
-			this._logService?.error(`AzureBYOKModelProvider: Error getting model info for ${modelId}:`, error);
-			throw error;
+		// Safely access the model-specific config
+		let config: AzureModelConfig | undefined;
+		if (modelConfig && typeof modelConfig === 'object' && modelId in modelConfig) {
+			config = (modelConfig as Record<string, AzureModelConfig>)[modelId];
 		}
+
+		const options = createAzureUrlOptions(modelId, config);
+		const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
+
+		// Set modelInfo.id to deployment name (or modelId if no deployment name configured)
+		modelInfo.id = options.deploymentName;
+
+		// Set temperature from config if specified
+		if (config?.temperature !== undefined) {
+			modelInfo.temperature = config.temperature;
+		}
+
+		// Set supported endpoints based on deployment type
+		if (options.deploymentType === 'responses') {
+			modelInfo.supported_endpoints = [ModelSupportedEndpoint.Responses];
+		} else {
+			// For completions API, only support chat completions
+			modelInfo.supported_endpoints = [ModelSupportedEndpoint.ChatCompletions];
+		}
+
+		return modelInfo;
 	}
 }
