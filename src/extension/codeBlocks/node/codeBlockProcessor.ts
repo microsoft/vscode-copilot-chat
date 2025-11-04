@@ -9,6 +9,7 @@ import { createFilepathRegexp, mdCodeBlockLangToLanguageId } from '../../../util
 import { CharCode } from '../../../util/vs/base/common/charCode';
 import { isFalsyOrWhitespace, splitLinesIncludeSeparators } from '../../../util/vs/base/common/strings';
 
+import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, MarkdownString } from '../../../vscodeTypes';
 import { CodeBlock } from '../../prompt/common/conversation';
@@ -38,6 +39,7 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 		private readonly _wrapped: ChatResponseStream,
 		codeblocksRepresentEdits: boolean | undefined,
 		@IPromptPathRepresentationService _promptPathRepresentationService: IPromptPathRepresentationService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		let uriReportedForIndex = -1;
 		this._codeBlockProcessor = new CodeBlockProcessor(
@@ -105,7 +107,7 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 	private forward<K extends keyof ChatResponseStream>(methodName: K): ChatResponseStream[K] {
 		const method = this._wrapped[methodName];
 		if (typeof method !== 'function') {
-			// Return a no-op function for missing methods
+			this._logService.warn(`[CodeBlockTrackingChatResponseStream] Method '${String(methodName)}' does not exist on the wrapped ChatResponseStream.`);
 			return (() => { }) as any;
 		}
 		return ((...args: any[]) => {

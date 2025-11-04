@@ -129,7 +129,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			const resolvedUrl = resolveAzureUrl(modelId, url, options, this._logService);
 			return resolvedUrl;
 		} catch (error) {
-			// Fallback to basic URL resolution
+			this._logService?.error(`AzureBYOKModelProvider: Error resolving URL for model ${modelId}, falling back to basic resolution:`, error);
 			return resolveAzureUrl(modelId, url, undefined, this._logService);
 		}
 	}
