@@ -29,7 +29,6 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 				});
 			}
 			// Skip incremental thinking parts - we only care about the complete one
-			continue;
 		}
 
 		if (part instanceof LanguageModelToolCallPart) {
