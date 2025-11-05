@@ -22,6 +22,9 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 	) {
 		super();
+		// As env variables are persisted, clear them on startup
+		// This way any old contributions from previous versions/sessions are cleared out.
+		this.context.environmentVariableCollection.clear();
 		for (const l of installTerminalBufferListeners()) {
 			this._register(l);
 		}
