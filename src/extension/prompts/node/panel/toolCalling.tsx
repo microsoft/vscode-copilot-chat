@@ -104,7 +104,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 
 		// Don't include this when rendering and triggering summarization
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
-		const thinking = (!this.props.isHistorical || this.promptEndpoint?.supportsThinkingContentInHistory) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
+		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}
@@ -219,7 +219,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						tokenizationOptions,
 						chatRequestId: props.requestId
 					};
-					if (props.promptContext.tools?.inSubAgent) {
+					if (props.promptContext.tools?.inSubAgent || props.promptContext.request?.isSubagent) {
 						invocationOptions.fromSubAgent = true;
 					}
 

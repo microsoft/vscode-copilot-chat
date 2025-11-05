@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ClientHttp2Stream } from 'http2';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { asyncIterableFilter, asyncIterableMap } from '../helpers/iterableHelpers';
-import { Logger } from '../logger';
+import { LogTarget, Logger } from '../logger';
 import { getEndpointUrl } from '../networkConfiguration';
 import { Response, isAbortError, postRequest } from '../networking';
 import { StatusReporter } from '../progress';
@@ -36,6 +37,7 @@ import {
 	getTopP,
 } from './openai';
 import { CopilotAnnotations, SSEProcessor, prepareSolutionForReturn } from './stream';
+import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 
 const logger = new Logger('fetchCompletions');
 
@@ -255,7 +257,6 @@ export abstract class OpenAIFetcher {
 	 * Sends a request to the code completion endpoint.
 	 */
 	abstract fetchAndStreamCompletions(
-		ctx: Context,
 		params: CompletionParams,
 		baseTelemetryData: TelemetryWithExp,
 		finishedCb: FinishedCallback,
@@ -279,8 +280,8 @@ export type CompletionHeaders = {
 	'X-Copilot-Speculative'?: string;
 };
 
-function getProxyEngineUrl(ctx: Context, token: CopilotToken, modelId: string, endpoint: string): string {
-	return getEndpointUrl(ctx, token, 'proxy', 'v1/engines', modelId, endpoint);
+function getProxyEngineUrl(accessor: ServicesAccessor, token: CopilotToken, modelId: string, endpoint: string): string {
+	return getEndpointUrl(accessor, token, 'proxy', 'v1/engines', modelId, endpoint);
 }
 
 export function sanitizeRequestOptionTelemetry(
@@ -309,7 +310,7 @@ export function sanitizeRequestOptionTelemetry(
 }
 
 async function fetchWithInstrumentation(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	prompt: Prompt,
 	engineModelId: string,
 	endpoint: string,
@@ -321,8 +322,11 @@ async function fetchWithInstrumentation(
 	cancel?: ICancellationToken,
 	headers?: CompletionHeaders
 ): Promise<Response> {
+	const ctx = accessor.get(ICompletionsContextService);
+	const instantiationService = accessor.get(IInstantiationService);
+	const logTarget = ctx.get(LogTarget);
 	const statusReporter = ctx.get(StatusReporter);
-	const uri = getProxyEngineUrl(ctx, copilotToken, engineModelId, endpoint);
+	const uri = instantiationService.invokeFunction(getProxyEngineUrl, copilotToken, engineModelId, endpoint);
 
 	const telemetryData = telemetryExp.extendedBy(
 		{
@@ -341,13 +345,13 @@ async function fetchWithInstrumentation(
 	// the request and response.
 	telemetryData.properties['headerRequestId'] = ourRequestId;
 
-	telemetry(ctx, 'request.sent', telemetryData);
+	instantiationService.invokeFunction(telemetry, 'request.sent', telemetryData);
 
 	const requestStart = now();
 	const intent = uiKindToIntent(uiKind);
 
 	// Wrap the Promise with success/error callbacks so we can log/measure it
-	return postRequest(ctx, uri, copilotToken.token, intent, ourRequestId, request, cancel, headers)
+	return instantiationService.invokeFunction(postRequest, uri, copilotToken.token, intent, ourRequestId, request, cancel, headers)
 		.then(response => {
 			// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
 			// If they are different then we will override the original one we set in telemetryData above.
@@ -359,28 +363,28 @@ async function fetchWithInstrumentation(
 			telemetryData.measurements.totalTimeMs = totalTimeMs;
 
 			logger.info(
-				ctx,
+				logTarget,
 				`Request ${ourRequestId} at <${uri}> finished with ${response.status} status after ${totalTimeMs}ms`
 			);
 			telemetryData.properties.status = String(response.status);
-			logger.debug(ctx, 'request.response properties', telemetryData.properties);
-			logger.debug(ctx, 'request.response measurements', telemetryData.measurements);
+			logger.debug(logTarget, 'request.response properties', telemetryData.properties);
+			logger.debug(logTarget, 'request.response measurements', telemetryData.measurements);
 
-			logger.debug(ctx, 'prompt:', prompt);
+			logger.debug(logTarget, 'prompt:', prompt);
 
-			telemetry(ctx, 'request.response', telemetryData);
+			instantiationService.invokeFunction(telemetry, 'request.response', telemetryData);
 
 			return response;
 		})
 		.catch((error: unknown) => {
 			if (isAbortError(error)) {
 				// If we cancelled a network request, we want to log a `request.cancel` instead of `request.error`
-				telemetry(ctx, 'request.cancel', telemetryData);
+				instantiationService.invokeFunction(telemetry, 'request.cancel', telemetryData);
 				throw error;
 			}
 			statusReporter.setWarning(getKey(error, 'message') ?? '');
 			const warningTelemetry = telemetryData.extendedBy({ error: 'Network exception' });
-			telemetry(ctx, 'request.shownWarning', warningTelemetry);
+			instantiationService.invokeFunction(telemetry, 'request.shownWarning', warningTelemetry);
 
 			telemetryData.properties.message = String(getKey(error, 'name') ?? '');
 			telemetryData.properties.code = String(getKey(error, 'code') ?? '');
@@ -391,18 +395,18 @@ async function fetchWithInstrumentation(
 			telemetryData.measurements.totalTimeMs = totalTimeMs;
 
 			logger.info(
-				ctx,
+				logTarget,
 				`Request ${ourRequestId} at <${uri}> rejected with ${String(error)} after ${totalTimeMs}ms`
 			);
-			logger.debug(ctx, 'request.error properties', telemetryData.properties);
-			logger.debug(ctx, 'request.error measurements', telemetryData.measurements);
+			logger.debug(logTarget, 'request.error properties', telemetryData.properties);
+			logger.debug(logTarget, 'request.error measurements', telemetryData.measurements);
 
-			telemetry(ctx, 'request.error', telemetryData);
+			instantiationService.invokeFunction(telemetry, 'request.error', telemetryData);
 
 			throw error;
 		})
 		.finally(() => {
-			logEnginePrompt(ctx, prompt, telemetryData);
+			instantiationService.invokeFunction(logEnginePrompt, prompt, telemetryData);
 		});
 }
 
@@ -415,8 +419,15 @@ export const CMDQuotaExceeded = 'github.copilot.completions.quotaExceeded';
 export class LiveOpenAIFetcher extends OpenAIFetcher {
 	#disabledReason: string | undefined;
 
+	constructor(
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICompletionsContextService private readonly completionsContextService: ICompletionsContextService,
+		@ICompletionsRuntimeModeService private readonly runtimeModeService: ICompletionsRuntimeModeService
+	) {
+		super();
+	}
+
 	async fetchAndStreamCompletions(
-		ctx: Context,
 		params: CompletionParams,
 		baseTelemetryData: TelemetryWithExp,
 		finishedCb: FinishedCallback,
@@ -425,11 +436,11 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		if (this.#disabledReason) {
 			return { type: 'canceled', reason: this.#disabledReason };
 		}
-		const statusReporter = ctx.get(StatusReporter);
+		const statusReporter = this.completionsContextService.get(StatusReporter);
 		const endpoint = 'completions';
-		const tokenManager = ctx.get(CopilotTokenManager);
+		const tokenManager = this.completionsContextService.get(CopilotTokenManager);
 		const copilotToken = tokenManager.token ?? await tokenManager.getToken();
-		const response = await this.fetchWithParameters(ctx, endpoint, params, copilotToken, baseTelemetryData, cancel);
+		const response = await this.fetchWithParameters(endpoint, params, copilotToken, baseTelemetryData, cancel);
 		if (response === 'not-sent') {
 			return { type: 'canceled', reason: 'before fetch request' };
 		}
@@ -444,19 +455,19 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 					void body.cancel();
 				}
 			} catch (e) {
-				logger.exception(ctx, e, `Error destroying stream`);
+				this.instantiationService.invokeFunction(acc => logger.exception(acc, e, `Error destroying stream`));
 			}
 			return { type: 'canceled', reason: 'after fetch request' };
 		}
 
 		if (response.status !== 200) {
-			const telemetryData = this.createTelemetryData(endpoint, ctx, params);
-			return this.handleError(ctx, statusReporter, telemetryData, response, copilotToken);
+			const telemetryData = this.createTelemetryData(endpoint, params);
+			return this.handleError(statusReporter, telemetryData, response, copilotToken);
 		}
-		const processor = await SSEProcessor.create(ctx, params.count, response, baseTelemetryData, [], cancel);
+		const processor = await this.instantiationService.invokeFunction(SSEProcessor.create, params.count, response, baseTelemetryData, [], cancel);
 		const finishedCompletions = processor.processSSE(finishedCb);
 		const choices = asyncIterableMap(finishedCompletions, solution =>
-			prepareSolutionForReturn(ctx, solution, baseTelemetryData)
+			this.instantiationService.invokeFunction(prepareSolutionForReturn, solution, baseTelemetryData)
 		);
 		return {
 			type: 'success',
@@ -465,7 +476,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		};
 	}
 
-	private createTelemetryData(endpoint: string, ctx: Context, params: CompletionParams | SpeculationFetchParams) {
+	private createTelemetryData(endpoint: string, params: CompletionParams | SpeculationFetchParams) {
 		return TelemetryData.createAndMarkAsIssued({
 			endpoint: endpoint,
 			engineName: params.engineModelId,
@@ -475,23 +486,22 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	}
 
 	async fetchWithParameters(
-		ctx: Context,
 		endpoint: string,
 		params: CompletionParams,
 		copilotToken: CopilotToken,
 		baseTelemetryData: TelemetryWithExp,
 		cancel?: ICancellationToken
 	): Promise<Response | 'not-sent'> {
-		const disableLogProb = ctx.get(Features).disableLogProb(baseTelemetryData);
+		const disableLogProb = this.completionsContextService.get(Features).disableLogProb(baseTelemetryData);
 
 		const request: CompletionRequest = {
 			prompt: params.prompt.prefix,
 			suffix: params.prompt.suffix,
-			max_tokens: getMaxSolutionTokens(ctx),
-			temperature: getTemperatureForSamples(ctx, params.count),
-			top_p: getTopP(ctx),
+			max_tokens: getMaxSolutionTokens(),
+			temperature: getTemperatureForSamples(this.runtimeModeService, params.count),
+			top_p: getTopP(),
 			n: params.count,
-			stop: getStops(ctx, params.languageId),
+			stop: getStops(params.languageId),
 			stream: true, // Always true: non streaming requests are not supported by this proxy
 			extra: params.extra,
 		};
@@ -520,8 +530,8 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			return 'not-sent';
 		}
 
-		const response = await fetchWithInstrumentation(
-			ctx,
+		const response = await this.instantiationService.invokeFunction(
+			fetchWithInstrumentation,
 			params.prompt,
 			params.engineModelId,
 			endpoint,
@@ -537,12 +547,13 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	}
 
 	async handleError(
-		ctx: Context,
 		statusReporter: StatusReporter,
 		telemetryData: TelemetryData,
 		response: Response,
 		copilotToken: CopilotToken
 	): Promise<CompletionError> {
+		const logTarget = this.completionsContextService.get(LogTarget);
+		const copilotTokenManager = this.completionsContextService.get(CopilotTokenManager);
 		const text = await response.text();
 		if (response.status === 402) {
 			this.#disabledReason = 'monthly free code completions exhausted';
@@ -551,27 +562,28 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				command: CMDQuotaExceeded,
 				title: 'Learn More',
 			});
-			const event = onCopilotToken(ctx, t => {
-				this.#disabledReason = undefined;
-				if (!t.isCompletionsQuotaExceeded) {
-					statusReporter.forceNormal();
-					event.dispose();
-				}
-			});
+			const event = this.instantiationService.invokeFunction(
+				onCopilotToken, t => {
+					this.#disabledReason = undefined;
+					if (!t.isCompletionsQuotaExceeded) {
+						statusReporter.forceNormal();
+						event.dispose();
+					}
+				});
 			return { type: 'failed', reason: this.#disabledReason };
 		}
 		if (response.status === 466) {
 			statusReporter.setError(text);
-			logger.info(ctx, text);
+			logger.info(logTarget, text);
 			return { type: 'failed', reason: `client not supported: ${text}` };
 		}
 		if (isClientError(response) && !response.headers.get('x-github-request-id')) {
 			const message = `Last response was a ${response.status} error and does not appear to originate from GitHub. Is a proxy or firewall intercepting this request? https://gh.io/copilot-firewall`;
-			logger.error(ctx, message);
+			logger.error(logTarget, message);
 			statusReporter.setWarning(message);
 			telemetryData.properties.error = `Response status was ${response.status} with no x-github-request-id header`;
 		} else if (isClientError(response)) {
-			logger.warn(ctx, `Response status was ${response.status}:`, text);
+			logger.warn(logTarget, `Response status was ${response.status}:`, text);
 			statusReporter.setWarning(`Last response was a ${response.status} error: ${text}`);
 			telemetryData.properties.error = `Response status was ${response.status}: ${text}`;
 		} else {
@@ -579,12 +591,12 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			telemetryData.properties.error = `Response status was ${response.status}`;
 		}
 		telemetryData.properties.status = String(response.status);
-		telemetry(ctx, 'request.shownWarning', telemetryData);
+		this.instantiationService.invokeFunction(telemetry, 'request.shownWarning', telemetryData);
 		// check for 4xx responses which will point to a forbidden
 		if (response.status === 401 || response.status === 403) {
 			// Token has expired or invalid, fetch a new one on next request
 			// TODO(drifkin): these actions should probably happen in vsc specific code
-			ctx.get(CopilotTokenManager).resetToken(response.status);
+			copilotTokenManager.resetToken(response.status);
 			return { type: 'failed', reason: `token expired or invalid: ${response.status}` };
 		}
 		if (response.status === 429) {
@@ -593,14 +605,14 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				this.#disabledReason = undefined;
 			}, rateLimitSeconds * 1000);
 			this.#disabledReason = 'rate limited';
-			logger.warn(ctx, `Rate limited by server. Denying completions for the next ${rateLimitSeconds} seconds.`);
+			logger.warn(logTarget, `Rate limited by server. Denying completions for the next ${rateLimitSeconds} seconds.`);
 			return { type: 'failed', reason: this.#disabledReason };
 		}
 		if (response.status === 499) {
-			logger.info(ctx, 'Cancelled by server');
+			logger.info(logTarget, 'Cancelled by server');
 			return { type: 'failed', reason: 'canceled by server' };
 		}
-		logger.error(ctx, 'Unhandled status from server:', response.status, text);
+		logger.error(logTarget, 'Unhandled status from server:', response.status, text);
 		return { type: 'failed', reason: `unhandled status from server: ${response.status} ${text}` };
 	}
 }

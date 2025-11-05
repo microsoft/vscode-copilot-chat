@@ -17,11 +17,11 @@ import { promptForAPIKey } from './byokUIService';
 export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
 
 	private readonly _lmWrapper: CopilotLanguageModelWrapper;
-	private _apiKey: string | undefined;
+	protected _apiKey: string | undefined;
 	constructor(
 		public readonly authType: BYOKAuthType,
 		private readonly _name: string,
-		private readonly _baseUrl: string,
+		protected readonly _baseUrl: string,
 		protected _knownModels: BYOKKnownModels | undefined,
 		private readonly _byokStorageService: IBYOKStorageService,
 		@IFetcherService protected readonly _fetcherService: IFetcherService,

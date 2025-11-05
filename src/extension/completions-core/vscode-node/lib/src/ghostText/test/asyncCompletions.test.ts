@@ -6,7 +6,7 @@ import * as assert from 'node:assert';
 import sinon from 'sinon';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { CancellationTokenSource } from '../../../../types/src';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Features } from '../../experiments/features';
 import { fakeAPIChoice } from '../../openai/fetch.fake';
 import { APIChoice } from '../../openai/openai';
@@ -17,15 +17,16 @@ import { delay } from '../../util/async';
 import { ResultType } from '../ghostText';
 import { AsyncCompletionManager } from './../asyncCompletions';
 import { GhostTextResultWithTelemetry, mkBasicResultTelemetry } from './../telemetry';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('AsyncCompletionManager', function () {
-	let ctx: Context;
+	let accessor: ServicesAccessor;
 	let manager: AsyncCompletionManager;
 	let clock: sinon.SinonFakeTimers;
 
 	setup(function () {
-		ctx = createLibTestingContext();
-		manager = new AsyncCompletionManager(ctx);
+		accessor = createLibTestingContext();
+		manager = accessor.get(IInstantiationService).createInstance(AsyncCompletionManager);
 		clock = sinon.useFakeTimers();
 	});
 
@@ -153,6 +154,7 @@ suite('AsyncCompletionManager', function () {
 				CTS(),
 				fakeResult('Println("Hi")', r => delay(1, r))
 			);
+			const ctx = accessor.get(ICompletionsContextService);
 			ctx.get(Features).asyncCompletionsTimeout = () => 1000;
 
 			const choicePromise = manager.getFirstMatchingRequestWithTimeout(
@@ -177,6 +179,7 @@ suite('AsyncCompletionManager', function () {
 				CTS(),
 				fakeResult('Println("Hello")', r => delay(2000, r))
 			);
+			const ctx = accessor.get(ICompletionsContextService);
 			ctx.get(Features).asyncCompletionsTimeout = () => 10;
 
 			const choicePromise = manager.getFirstMatchingRequestWithTimeout(
@@ -200,6 +203,7 @@ suite('AsyncCompletionManager', function () {
 				CTS(),
 				fakeResult('Println("Hi")', r => delay(100, r))
 			);
+			const ctx = accessor.get(ICompletionsContextService);
 			ctx.get(Features).asyncCompletionsTimeout = () => -1;
 
 			const choicePromise = manager.getFirstMatchingRequestWithTimeout(
@@ -292,7 +296,7 @@ function fakeResult(completionText: string, resolver = (r: Result) => Promise.re
 	return resolver({
 		type: 'success',
 		value: [fakeAPIChoice(generateUuid(), 0, completionText), new Promise(() => { })],
-		telemetryData: mkBasicResultTelemetry(telemetryBlob, undefined),
+		telemetryData: mkBasicResultTelemetry(telemetryBlob),
 		telemetryBlob,
 		resultType: ResultType.Async,
 	});

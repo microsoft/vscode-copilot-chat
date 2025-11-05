@@ -55,7 +55,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 				this.thinkingActive = true;
 			}
 		} else if (this.thinkingActive) {
-			progress.thinkingProgress({ id: '', text: '', metadata: { vscode_reasoning_done: true } });
+			progress.thinkingProgress({ id: '', text: '', metadata: { vscodeReasoningDone: true, stopReason: delta.text ? 'text' : 'other' } });
 			this.thinkingActive = false;
 		}
 

@@ -3,18 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CancellationToken, CancellationTokenSource } from 'vscode-languageserver-protocol';
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { VirtualPrompt } from '../../../../prompt/src/components/virtualPrompt';
+import { TokenizerName } from '../../../../prompt/src/tokenization';
 import { CompletionState } from '../../completionState';
-import { Context } from '../../context';
+import { TelemetryWithExp } from '../../telemetry';
+import { PromptResponse, _promptCancelled, _promptError, _promptTimeout } from '../prompt';
 import {
 	ComponentsCompletionsPromptFactory,
 	PromptOrdering,
 } from './componentsCompletionsPromptFactory';
-import { WorkspaceContextPromptFactory } from './workspaceContextPromptFactory';
-import { PromptResponse, _promptCancelled, _promptError, _promptTimeout } from '../prompt';
-import { TelemetryWithExp } from '../../telemetry';
-import { VirtualPrompt } from '../../../../prompt/src/components/virtualPrompt';
-import { TokenizerName } from '../../../../prompt/src/tokenization';
-import { CancellationToken, CancellationTokenSource } from 'vscode-languageserver-protocol';
 
 export interface PromptOpts {
 	data?: unknown;
@@ -34,19 +33,13 @@ export abstract class CompletionsPromptFactory {
 }
 
 export function createCompletionsPromptFactory(
-	ctx: Context,
+	instantiationService: IInstantiationService,
 	virtualPrompt?: VirtualPrompt,
 	ordering?: PromptOrdering
 ): CompletionsPromptFactory {
 	return new SequentialCompletionsPromptFactory(
 		new TimeoutHandlingCompletionsPromptFactory(
-			new ExperimentalCompletionsPromptFactory(
-				ctx,
-				// Timeout should wrap the real prompt factory
-				new ComponentsCompletionsPromptFactory(ctx, virtualPrompt, ordering),
-				new WorkspaceContextPromptFactory(ctx),
-				workspaceContextEnabledAndActive
-			)
+			instantiationService.createInstance(ComponentsCompletionsPromptFactory, virtualPrompt, ordering)
 		)
 	);
 }
@@ -108,26 +101,4 @@ class TimeoutHandlingCompletionsPromptFactory implements CompletionsPromptFactor
 			}),
 		]);
 	}
-}
-
-// Wrapper that chooses which factory to use depending on a feature flag
-class ExperimentalCompletionsPromptFactory implements CompletionsPromptFactory {
-	constructor(
-		private readonly ctx: Context,
-		private readonly defaultDelegate: CompletionsPromptFactory,
-		private readonly experimentalDelegate: CompletionsPromptFactory,
-		private readonly fn: (ctx: Context, t: TelemetryWithExp) => boolean
-	) { }
-
-	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
-		if (this.fn(this.ctx, opts.telemetryData)) {
-			return this.experimentalDelegate.prompt(opts, cancellationToken);
-		}
-
-		return this.defaultDelegate.prompt(opts, cancellationToken);
-	}
-}
-
-function workspaceContextEnabledAndActive(ctx: Context, telemetryWithExp: TelemetryWithExp): boolean {
-	return false;
 }

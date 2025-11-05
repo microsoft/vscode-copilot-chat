@@ -24,6 +24,12 @@ export abstract class BaseAlternativeNotebookContentProvider {
 	public abstract getAlternativeDocument(notebook: NotebookDocument, excludeMarkdownCells?: boolean): AlternativeNotebookDocument;
 
 	/**
+	 * Gets the alternative Document with specific text representation which
+	 * may have been model-edited.
+	 */
+	public abstract getAlternativeDocumentFromText(text: string, notebook: NotebookDocument): AlternativeNotebookDocument;
+
+	/**
 	 * Generate the summary of the structure of the notebook document that is LLM friendly.
 	 * & includes just the cells that are passed in.
 	 * This is used to help the LLM understand the structure of the notebook, without including the entire code of all cells.

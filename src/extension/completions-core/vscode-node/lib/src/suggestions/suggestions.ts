@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 // General utility functions for all kinds of suggestions (Ghost Text, Open Copilot)
 
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { getBlockCloseToken } from '../../../prompt/src/parse';
-import { Context } from '../context';
-import { Logger } from '../logger';
+import { ICompletionsContextService } from '../context';
+import { Logger, LogTarget } from '../logger';
 import { APIChoice } from '../openai/openai';
 import { TelemetryData, TelemetryStore, telemetry } from '../telemetry';
 import { IPosition, TextDocumentContents } from '../textDocument';
@@ -20,7 +21,7 @@ import { isRepetitive } from './anomalyDetection';
  * after the cursor starts with that same token at the same indentation. If so,
  * we snip.
  */
-function maybeSnipCompletion(ctx: Context, doc: TextDocumentContents, position: IPosition, completion: string): string {
+function maybeSnipCompletion(accessor: ServicesAccessor, doc: TextDocumentContents, position: IPosition, completion: string): string {
 	// Default to `}` for block closing token
 	let blockCloseToken = '}';
 
@@ -161,19 +162,20 @@ function matchesNextLine(
  * Post-processed a completion choice in the context of the document where the choice is offered.
  */
 export function postProcessChoiceInContext(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	document: TextDocumentContents,
 	position: IPosition,
 	choice: APIChoice,
 	isMoreMultiline: boolean,
 	logger: Logger
 ): APIChoice | undefined {
+	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
 	if (isRepetitive(choice.tokens)) {
 		const telemetryData = TelemetryData.createAndMarkAsIssued();
 		telemetryData.extendWithRequestId(choice.requestId);
-		telemetry(ctx, 'repetition.detected', telemetryData, TelemetryStore.Enhanced);
+		telemetry(accessor, 'repetition.detected', telemetryData, TelemetryStore.Enhanced);
 		// FIXME: trim request at start of repetitive block? for now we just skip
-		logger.info(ctx, 'Filtered out repetitive solution');
+		logger.info(logTarget, 'Filtered out repetitive solution');
 		return undefined;
 	}
 
@@ -183,22 +185,22 @@ export function postProcessChoiceInContext(
 	if (matchesNextLine(document, position, postProcessedChoice.completionText, !isMoreMultiline)) {
 		const baseTelemetryData = TelemetryData.createAndMarkAsIssued();
 		baseTelemetryData.extendWithRequestId(choice.requestId);
-		telemetry(ctx, 'completion.alreadyInDocument', baseTelemetryData);
+		telemetry(accessor, 'completion.alreadyInDocument', baseTelemetryData);
 		telemetry(
-			ctx,
+			accessor,
 			'completion.alreadyInDocument',
 			baseTelemetryData.extendedBy({
 				completionTextJson: JSON.stringify(postProcessedChoice.completionText),
 			}),
 			TelemetryStore.Enhanced
 		);
-		logger.info(ctx, 'Filtered out solution matching next line');
+		logger.info(logTarget, 'Filtered out solution matching next line');
 		return undefined;
 	}
 
 	// Avoid double-closing blocks (#272)
 	postProcessedChoice.completionText = maybeSnipCompletion(
-		ctx,
+		accessor,
 		document,
 		position,
 		postProcessedChoice.completionText

@@ -170,4 +170,20 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 		return this.getPullRequestFilesWithToken(owner, repo, pullNumber, authToken);
 	}
+
+	async closePullRequest(owner: string, repo: string, pullNumber: number): Promise<boolean> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			return false;
+		}
+		return this.closePullRequestWithToken(owner, repo, pullNumber, authToken);
+	}
+
+	async getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			throw new Error('No GitHub authentication available');
+		}
+		return this.getFileContentWithToken(owner, repo, ref, path, authToken);
+	}
 }

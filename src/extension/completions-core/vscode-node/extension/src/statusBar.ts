@@ -3,68 +3,72 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { commands, Disposable, LanguageStatusItem, LanguageStatusSeverity } from 'vscode';
-import { Context } from '../../lib/src/context';
+import { commands, Disposable, languages, LanguageStatusItem, LanguageStatusSeverity, window, workspace } from 'vscode';
+import { IDisposable } from '../../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { CopilotConfigPrefix } from '../../lib/src/constants';
+import { ICompletionsContextService } from '../../lib/src/context';
 import { CMDQuotaExceeded } from '../../lib/src/openai/fetch';
 import { StatusChangedEvent, StatusReporter } from '../../lib/src/progress';
 import { isCompletionEnabled, isInlineSuggestEnabled } from './config';
-import { CMDToggleStatusMenu } from './constants';
+import { CMDToggleStatusMenuChat } from './constants';
 import { CopilotExtensionStatus } from './extensionStatus';
 import { Icon } from './icon';
 
-export class CopilotStatusBar extends StatusReporter { // TODO: proper disposal
+export class CopilotStatusBar extends StatusReporter implements IDisposable {
 	readonly item!: LanguageStatusItem;
 	showingMessage = false;
 	state!: CopilotExtensionStatus;
 	private disposables: Disposable[] = [];
 
 	constructor(
-		private readonly ctx: Context,
-		id = 'github.copilot.languageStatus'
+		id: string,
+		@ICompletionsContextService ctx: ICompletionsContextService,
+		@IInstantiationService readonly instantiationService: IInstantiationService,
 	) {
 		super();
 
 		this.state = ctx.get(CopilotExtensionStatus);
-		/*  this.item = languages.createLanguageStatusItem(id, '*');
-		 this.disposables.push(this.item);
+		this.item = languages.createLanguageStatusItem(id, '*');
+		this.disposables.push(this.item);
 
-		 this.updateStatusBarIndicator();
+		this.updateStatusBarIndicator();
 
-		 this.disposables.push(
-			 window.onDidChangeActiveTextEditor(() => {
-				 this.updateStatusBarIndicator();
-			 })
-		 );
+		this.disposables.push(
+			window.onDidChangeActiveTextEditor(() => {
+				this.updateStatusBarIndicator();
+			})
+		);
 
-		 this.disposables.push(
-			 workspace.onDidCloseTextDocument(() => {
-				 this.updateStatusBarIndicator();
-			 })
-		 );
+		this.disposables.push(
+			workspace.onDidCloseTextDocument(() => {
+				this.updateStatusBarIndicator();
+			})
+		);
 
-		 this.disposables.push(
-			 workspace.onDidOpenTextDocument(() => {
-				 this.updateStatusBarIndicator();
-			 })
-		 );
+		this.disposables.push(
+			workspace.onDidOpenTextDocument(() => {
+				this.updateStatusBarIndicator();
+			})
+		);
 
-		 this.disposables.push(
-			 workspace.onDidChangeConfiguration(e => {
-				 if (!e.affectsConfiguration(CopilotConfigPrefix)) { return; }
-				 this.updateStatusBarIndicator();
-			 })
-		 ); */
+		this.disposables.push(
+			workspace.onDidChangeConfiguration(e => {
+				if (!e.affectsConfiguration(CopilotConfigPrefix)) { return; }
+				this.updateStatusBarIndicator();
+			})
+		);
 	}
 
 	override didChange(event: StatusChangedEvent): void {
 		this.state.kind = event.kind;
 		this.state.message = event.message;
 		this.state.command = event.command;
-		//this.updateStatusBarIndicator();
+		this.updateStatusBarIndicator();
 	}
 
 	private checkEnabledForLanguage(): boolean {
-		return isCompletionEnabled(this.ctx) ?? true;
+		return this.instantiationService.invokeFunction(isCompletionEnabled) ?? true;
 	}
 
 	protected updateStatusBarIndicator() {
@@ -78,7 +82,7 @@ export class CopilotStatusBar extends StatusReporter { // TODO: proper disposal
 		);
 		const enabled = this.checkEnabledForLanguage();
 		void commands.executeCommand('setContext', 'github.copilot.completions.enabled', enabled);
-		this.item.command = { command: CMDToggleStatusMenu, title: 'View Details' };
+		this.item.command = { command: CMDToggleStatusMenuChat, title: 'View Details' };
 		switch (this.state.kind) {
 			case 'Error':
 				this.item.severity = LanguageStatusSeverity.Error;

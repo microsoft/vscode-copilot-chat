@@ -181,7 +181,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 
 		this.logService.trace('Building intent detector');
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 
 		const preferredIntent = await this.getPreferredIntent(location, documentContext, history, messageText);
 
@@ -254,7 +254,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 		history: Turn[] = [],
 		document?: TextDocumentSnapshot
 	) {
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 
 		const { messages: currentSelection } = await renderPromptElement(this.instantiationService, endpoint, CurrentSelection, { document });
 		const { messages: conversationHistory } = await renderPromptElement(this.instantiationService, endpoint, ConversationHistory, { history, priority: 1000 }, undefined, undefined).catch(() => ({ messages: [] }));

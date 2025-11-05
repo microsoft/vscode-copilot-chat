@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../prompt/src/prompt';
-import { Context } from '../context';
 import { logger } from '../logger';
 import { TelemetryWithExp, logEngineCompletion } from '../telemetry';
-import { isRunningInTest } from '../util/runtimeMode';
+import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 import { CopilotNamedAnnotationList } from './stream';
 
 export { FinishedCallback, getRequestId } from './fetch';
@@ -56,7 +56,7 @@ export interface APIJsonData {
 }
 
 export function convertToAPIChoice(
-	ctx: Context,
+	accessor: ServicesAccessor,
 	completionText: string,
 	jsonData: APIJsonData,
 	choiceIndex: number,
@@ -64,15 +64,15 @@ export function convertToAPIChoice(
 	blockFinished: boolean,
 	telemetryData: TelemetryWithExp
 ): APIChoice {
-	logEngineCompletion(ctx, completionText, jsonData, requestId, choiceIndex);
+	logEngineCompletion(accessor, completionText, jsonData, requestId, choiceIndex);
 
 	// NOTE: It's possible that the completion text we care about is not exactly jsonData.text but a prefix,
 	// so we pass it down directly.
 	return {
 		// NOTE: This does not contain stop tokens necessarily
 		completionText: completionText,
-		meanLogProb: calculateMeanLogProb(ctx, jsonData),
-		meanAlternativeLogProb: calculateMeanAlternativeLogProb(ctx, jsonData),
+		meanLogProb: calculateMeanLogProb(accessor, jsonData),
+		meanAlternativeLogProb: calculateMeanAlternativeLogProb(accessor, jsonData),
 		choiceIndex: choiceIndex,
 		requestId: requestId,
 		blockFinished: blockFinished,
@@ -86,7 +86,7 @@ export function convertToAPIChoice(
 }
 
 // Helper functions
-function calculateMeanLogProb(ctx: Context, jsonData: APIJsonData): number | undefined {
+function calculateMeanLogProb(accessor: ServicesAccessor, jsonData: APIJsonData): number | undefined {
 	if (!jsonData?.logprobs?.token_logprobs) {
 		return undefined;
 	}
@@ -110,11 +110,11 @@ function calculateMeanLogProb(ctx: Context, jsonData: APIJsonData): number | und
 			return undefined;
 		}
 	} catch (e) {
-		logger.exception(ctx, e, `Error calculating mean prob`);
+		logger.exception(accessor, e, `Error calculating mean prob`);
 	}
 }
 
-function calculateMeanAlternativeLogProb(ctx: Context, jsonData: APIJsonData): number | undefined {
+function calculateMeanAlternativeLogProb(accessor: ServicesAccessor, jsonData: APIJsonData): number | undefined {
 	if (!jsonData?.logprobs?.top_logprobs) {
 		return undefined;
 	}
@@ -140,14 +140,14 @@ function calculateMeanAlternativeLogProb(ctx: Context, jsonData: APIJsonData): n
 			return undefined;
 		}
 	} catch (e) {
-		logger.exception(ctx, e, `Error calculating mean prob`);
+		logger.exception(accessor, e, `Error calculating mean prob`);
 	}
 }
 
 // Returns a temperature in range 0.0-1.0, using either a config setting,
 // or the following ranges: 1=0.0, <10=0.2, <20=0.4, >=20=0.8
-export function getTemperatureForSamples(ctx: Context, numShots: number): number {
-	if (isRunningInTest(ctx)) {
+export function getTemperatureForSamples(runtime: ICompletionsRuntimeModeService, numShots: number): number {
+	if (runtime.isRunningInTest()) {
 		return 0.0;
 	}
 
@@ -167,14 +167,14 @@ const stopsForLanguage: { [key: string]: string[] } = {
 	python: ['\ndef ', '\nclass ', '\nif ', '\n\n#'],
 };
 
-export function getStops(ctx: Context, languageId?: string) {
+export function getStops(languageId?: string) {
 	return stopsForLanguage[languageId ?? ''] ?? ['\n\n\n', '\n```'];
 }
 
-export function getTopP(ctx: Context): number {
+export function getTopP(): number {
 	return 1;
 }
 
-export function getMaxSolutionTokens(ctx: Context): number {
+export function getMaxSolutionTokens(): number {
 	return DEFAULT_MAX_COMPLETION_LENGTH;
 }

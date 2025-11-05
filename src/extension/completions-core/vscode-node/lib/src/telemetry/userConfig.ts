@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CopilotToken } from '../../../../../../platform/authentication/common/copilotToken';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
-import { Context } from '../context';
 
 interface UserConfigProperties {
 	copilot_trackingId: string;
@@ -35,8 +35,8 @@ export class TelemetryUserConfig {
 	optedIn = false;
 	ftFlag = '';
 
-	constructor(ctx: Context) {
-		onCopilotToken(ctx, copilotToken => this.updateFromToken(copilotToken));
+	constructor(@IInstantiationService instantiationService: IInstantiationService) {
+		instantiationService.invokeFunction(onCopilotToken, copilotToken => this.updateFromToken(copilotToken));
 	}
 
 	getProperties() {

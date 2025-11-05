@@ -7,7 +7,7 @@
 
 import { Chunk, ComponentContext, PromptElementProps, Text } from '../../../../prompt/src/components/components';
 import { newLineEnded } from '../../../../prompt/src/languageMarker';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { TextDocumentManager } from '../../textDocumentManager';
 import {
 	CompletionRequestData,
@@ -46,7 +46,7 @@ export function editIsTooCloseToCursor(
 }
 
 type RecentEditsProps = {
-	ctx: Context;
+	ctx: ICompletionsContextService;
 } & PromptElementProps;
 
 /**

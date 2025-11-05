@@ -3,3 +3,10 @@
 build/pr-check-cache-files.ts @lszomoru @joaomoreno
 test/base/cache-cli.ts @lszomoru @joaomoreno
 test/base/cache.ts @lszomoru @joaomoreno
+# Model prompts
+src/extension/prompts/node/agent/openAIPrompts.tsx @roblourens
+src/extension/prompts/node/agent/anthropicPrompts.tsx @bhavyaus
+src/extension/prompts/node/agent/geminiPrompts.tsx @vijayupadya
+src/extension/prompts/node/agent/xAIPrompts.tsx @pwang347
+src/extension/prompts/node/agent/vscModelPrompts.tsx @karthiknadig
+src/extension/prompts/node/agent/promptRegistry.ts @bhavyaus

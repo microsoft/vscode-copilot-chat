@@ -5,6 +5,7 @@
 import { createExtensionTestingServices } from '../../../../../test/vscode-node/services';
 import { EditorAndPluginInfo } from '../../../lib/src/config';
 import { CopilotContentExclusionManager } from '../../../lib/src/contentExclusion/contentExclusionManager';
+import { ICompletionsContextService } from '../../../lib/src/context';
 import { FileSystem } from '../../../lib/src/fileSystem';
 import { Fetcher } from '../../../lib/src/networking';
 import { _createBaselineContext } from '../../../lib/src/test/context';
@@ -23,15 +24,17 @@ import { ExtensionTestConfigProvider } from './config';
  * Only includes items that are needed for almost all extension tests.
  */
 export function createExtensionTestingContext() {
-	const services = createExtensionTestingServices();
-	const accessor = services.createTestingAccessor();
-	const ctx = _createBaselineContext(accessor, new ExtensionTestConfigProvider());
+	const serviceCollection = createExtensionTestingServices();
+	const accessor = _createBaselineContext(serviceCollection, new ExtensionTestConfigProvider());
+	const ctx = accessor.get(ICompletionsContextService);
+
 	ctx.set(Fetcher, new StaticFetcher());
 	ctx.set(EditorAndPluginInfo, new VSCodeEditorInfo());
-	ctx.set(TextDocumentManager, new ExtensionTextDocumentManager(ctx));
+	ctx.set(TextDocumentManager, ctx.instantiationService.createInstance(ExtensionTextDocumentManager));
 	ctx.set(FileSystem, extensionFileSystem);
 	ctx.forceSet(PromiseQueue, new TestPromiseQueue());
-	ctx.forceSet(CopilotContentExclusionManager, new CopilotContentExclusionManager(ctx));
+	ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(CopilotContentExclusionManager));
 	ctx.set(CopilotExtensionStatus, new CopilotExtensionStatus());
-	return ctx;
+
+	return accessor;
 }

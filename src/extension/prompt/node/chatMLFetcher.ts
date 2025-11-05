@@ -10,6 +10,7 @@ import { ChatFetchError, ChatFetchResponseType, ChatFetchRetriableError, ChatLoc
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { getTextPart, toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { HARD_TOOL_LIMIT } from '../../../platform/configuration/common/configurationService';
+import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -25,7 +26,7 @@ import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { OpenAIEndpoint } from '../../byok/node/openAIEndpoint';
+import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
 
 export interface IMadeChatRequestEvent {
@@ -130,9 +131,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			model: chatEndpoint.model,
 			ourRequestId,
 			location: opts.location,
-			postOptions,
 			body: requestBody,
-			tools: requestBody.tools,
 			ignoreStatefulMarker: opts.ignoreStatefulMarker
 		});
 		let tokenCount = -1;
@@ -250,7 +249,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						timeToFirstTokenEmitted: (baseTelemetry && streamRecorder.firstTokenEmittedTime) ? streamRecorder.firstTokenEmittedTime - baseTelemetry.issuedTime : -1,
 						timeToCancelled: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
 						isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
-						isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
+						isBYOK: isBYOKModel(chatEndpoint),
+						isAuto: isAutoModel(chatEndpoint)
 					});
 					pendingLoggedChatRequest?.resolveWithCancelation();
 					return this.processCanceledResponse(response, ourRequestId);
@@ -305,7 +305,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					timeToFirstToken: undefined,
 					timeToCancelled: timeToError,
 					isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
-					isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
+					isBYOK: isBYOKModel(chatEndpoint),
+					isAuto: isAutoModel(chatEndpoint)
 				});
 			} else {
 				this._sendResponseErrorTelemetry(processed, telemetryProperties, ourRequestId, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
@@ -337,7 +338,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			timeToFirstTokenEmitted,
 			timeToCancelled,
 			isVisionRequest,
-			isBYOK
+			isBYOK,
+			isAuto
 		}: {
 			totalTokenMax: number;
 			promptTokenCount: number;
@@ -347,6 +349,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			timeToCancelled: number;
 			isVisionRequest: number;
 			isBYOK: number;
+			isAuto: number;
 		}
 	) {
 		/* __GDPR__
@@ -366,6 +369,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
 				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
 				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
@@ -384,7 +388,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			timeToFirstTokenEmitted,
 			timeToCancelled,
 			isVisionRequest,
-			isBYOK
+			isBYOK,
+			isAuto
 		});
 	}
 
@@ -419,6 +424,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
 				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
 				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
@@ -441,7 +447,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			tokenCountMax: maxResponseTokens,
 			timeToFirstToken,
 			isVisionRequest: isVisionRequest ? 1 : -1,
-			isBYOK: chatEndpointInfo instanceof OpenAIEndpoint ? 1 : -1
+			isBYOK: isBYOKModel(chatEndpointInfo),
+			isAuto: isAutoModel(chatEndpointInfo)
 		});
 	}
 
@@ -471,6 +478,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
 					"initiatorType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was initiated by a user or an agent" },
 					"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+					"modelInvoked": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Actual model invoked for the response" },
 					"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 					"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
 					"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
@@ -491,6 +499,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
 					"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+					"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
 					"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
 					"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 				}
@@ -501,6 +510,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				source: baseTelemetry?.properties.messageSource ?? 'unknown',
 				initiatorType: userInitiatedRequest ? 'user' : 'agent',
 				model: chatEndpointInfo?.model,
+				modelInvoked: chatCompletion.model,
 				apiType: chatEndpointInfo?.apiType,
 				requestId,
 				associatedRequestId: baseTelemetry?.properties.associatedRequestId,
@@ -523,7 +533,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				timeToFirstTokenEmitted: (baseTelemetry && streamRecorder.firstTokenEmittedTime) ? streamRecorder.firstTokenEmittedTime - baseTelemetry.issuedTime : -1,
 				timeToComplete: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
 				isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
-				isBYOK: chatEndpointInfo instanceof OpenAIEndpoint ? 1 : -1
+				isBYOK: isBYOKModel(chatEndpointInfo),
+				isAuto: isAutoModel(chatEndpointInfo)
 			});
 			if (!this.isRepetitive(chatCompletion, baseTelemetry?.properties)) {
 				completions.push(chatCompletion);

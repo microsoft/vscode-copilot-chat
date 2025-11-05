@@ -30,7 +30,7 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
   {
     "parts": [
       {
-        "invocationMessage": "Searched text for \`ClaudeAgentManager\`",
+        "invocationMessage": "Searched for regex \`ClaudeAgentManager\`",
         "isError": undefined,
         "toolCallId": "toolu_01FqdrDGdxXUWRRLziM7gS2R",
         "toolName": "Grep",
@@ -70,15 +70,7 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
     "type": "response",
   },
   {
-    "parts": [
-      {
-        "invocationMessage": "Edited [](file:///Users/roblou/code/vscode-copilot-chat/src/extension/agents/claude/vscode-node/claudeCodeAgent.ts)",
-        "isError": undefined,
-        "toolCallId": "toolu_01NXDY5nya4UzHwUxPnhmQDX",
-        "toolName": "Edit",
-        "type": "tool",
-      },
-    ],
+    "parts": [],
     "type": "response",
   },
   {

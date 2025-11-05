@@ -24,6 +24,7 @@ const VSC_MODEL_HASHES_A = [
 	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
 	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
 	'b576d46942ee2c45ecd979cbbcb62688ae3171a07ac83f53b783787f345e3dd7',
+
 ];
 const VSC_MODEL_HASHES_B = [
 	'e30111497b2a7e8f1aa7beed60b69952537d99bcdc18987abc2f6add63a89960',
@@ -40,21 +41,21 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	return HIDDEN_MODEL_A_HASHES.includes(h);
 }
 
-export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
-	const h = await getCachedSha256Hash(getModelId(model));
-	return HIDDEN_MODEL_B_HASHES.includes(h);
+export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	const h = await getCachedSha256Hash(model.family);
+	return h === '8f398886c326b5f8f07b20ac250c87de6723e062474465273fe1524f2b9092fa';
 }
 
-export async function isVSCModelB(model: LanguageModelChat | IChatEndpoint) {
-	const h = await getCachedSha256Hash(getModelId(model));
-	return VSC_MODEL_HASHES_B.includes(h);
-}
 
 export async function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
 	const h = await getCachedSha256Hash(getModelId(model));
 	return VSC_MODEL_HASHES_A.includes(h);
 }
 
+export async function isVSCModelB(model: LanguageModelChat | IChatEndpoint) {
+	const h = await getCachedSha256Hash(getModelId(model));
+	return VSC_MODEL_HASHES_B.includes(h);
+}
 
 /**
  * Returns whether the instructions should be given in a user message instead
@@ -76,7 +77,7 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
  * Model supports apply_patch as an edit tool.
  */
 export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || await isHiddenModelA(model);
+	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || await isHiddenModelA(model) || await isHiddenModelB(model);
 }
 
 /**
@@ -90,7 +91,7 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
  * Model supports replace_string_in_file as an edit tool.
  */
 export async function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.includes('gemini') || model.family.includes('grok-code') || await isHiddenModelB(model) || await modelSupportsMultiReplaceString(model);
+	return model.family.includes('gemini') || model.family.includes('grok-code') || await modelSupportsMultiReplaceString(model);
 }
 
 /**
@@ -105,7 +106,7 @@ export async function modelSupportsMultiReplaceString(model: LanguageModelChat |
  * without needing insert_edit_into_file.
  */
 export async function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code') || await isHiddenModelB(model);
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code');
 }
 
 /**
@@ -130,13 +131,12 @@ export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): b
 	return !model.family.startsWith('gemini');
 }
 
-
 /**
  * The model is capable of using apply_patch as an edit tool exclusively,
  * without needing insert_edit_into_file.
  */
-export function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('gpt-5');
+export async function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	return model.family.startsWith('gpt-5') || await isHiddenModelB(model);
 }
 
 /**

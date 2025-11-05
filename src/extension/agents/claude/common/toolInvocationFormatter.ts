@@ -35,9 +35,9 @@ export function createFormattedToolInvocation(
 	} else if (toolUse.name === ClaudeToolNames.LS) {
 		formatLSInvocation(invocation, toolUse);
 	} else if (toolUse.name === ClaudeToolNames.Edit || toolUse.name === ClaudeToolNames.MultiEdit) {
-		formatEditInvocation(invocation, toolUse);
+		return; // edit diff is shown
 	} else if (toolUse.name === ClaudeToolNames.Write) {
-		formatWriteInvocation(invocation, toolUse);
+		return; // edit diff is shown
 	} else if (toolUse.name === ClaudeToolNames.ExitPlanMode) {
 		formatExitPlanModeInvocation(invocation, toolUse);
 	} else if (toolUse.name === ClaudeToolNames.Task) {
@@ -75,25 +75,13 @@ function formatGlobInvocation(invocation: ChatToolInvocationPart, toolUse: Anthr
 
 function formatGrepInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
 	const pattern: string = (toolUse.input as any)?.pattern ?? '';
-	invocation.invocationMessage = new MarkdownString(l10n.t("Searched text for `{0}`", pattern));
+	invocation.invocationMessage = new MarkdownString(l10n.t("Searched for regex `{0}`", pattern));
 }
 
 function formatLSInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
 	const path: string = (toolUse.input as any)?.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
-}
-
-function formatEditInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
-	const filePath: string = (toolUse.input as any)?.file_path ?? '';
-	const display = filePath ? formatUriForMessage(filePath) : '';
-	invocation.invocationMessage = new MarkdownString(l10n.t("Edited {0}", display));
-}
-
-function formatWriteInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
-	const filePath: string = (toolUse.input as any)?.file_path ?? '';
-	const display = filePath ? formatUriForMessage(filePath) : '';
-	invocation.invocationMessage = new MarkdownString(l10n.t("Wrote {0}", display));
 }
 
 function formatExitPlanModeInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {

@@ -2001,6 +2001,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		if (item.kind === ContextKind.Snippet) {
 			const converted: Copilot.CodeSnippet = {
 				importance: item.priority * 100,
+				id: item.id,
 				uri: item.uri.toString(),
 				value: item.value
 			};
@@ -2011,6 +2012,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		} else if (item.kind === ContextKind.Trait) {
 			const converted: Copilot.Trait = {
 				importance: item.priority * 100,
+				id: item.id,
 				name: item.name,
 				value: item.value
 			};

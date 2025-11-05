@@ -27,7 +27,6 @@ import { EditSurvivalTrackerService, IEditSurvivalTrackerService } from '../../.
 import { IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICombinedEmbeddingIndex, VSCodeCombinedIndexImpl } from '../../../platform/embeddings/common/vscodeIndex';
-import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -99,6 +98,8 @@ import { IToolEmbeddingsComputer, ToolEmbeddingsComputer } from '../../tools/com
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
+import { PromptsServiceImpl } from '../../../platform/promptFiles/common/promptsServiceImpl';
+import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
 
 // ##########################################################################
 // ###                                                                    ###
@@ -112,7 +113,6 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	const isTestMode = extensionContext.extensionMode === ExtensionMode.Test;
 
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
-	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	builder.define(ICopilotTokenStore, new CopilotTokenStore());
 	builder.define(IDebugOutputService, new DebugOutputServiceImpl());
 	builder.define(IDialogService, new DialogServiceImpl());
@@ -164,6 +164,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISurveyService, new SyncDescriptor(SurveyService));
 	builder.define(IEditSurvivalTrackerService, new SyncDescriptor(EditSurvivalTrackerService));
 	builder.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationService));
+	builder.define(IPromptsService, new SyncDescriptor(PromptsServiceImpl));
 	builder.define(IReleaseNotesService, new SyncDescriptor(ReleaseNotesService));
 	builder.define(ISnippyService, new SyncDescriptor(SnippyService));
 	builder.define(IInteractiveSessionService, new InteractiveSessionServiceImpl());

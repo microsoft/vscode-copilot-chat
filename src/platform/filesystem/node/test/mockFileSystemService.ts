@@ -81,17 +81,55 @@ export class MockFileSystemService implements IFileSystemService {
 	isWritableFileSystem(): boolean | undefined { return true; }
 	createFileSystemWatcher(): FileSystemWatcher { throw new Error('not implemented'); }
 
-	createDirectory(uri: URI): Promise<void> {
-		throw new Error('Method not implemented.');
+	async createDirectory(uri: URI): Promise<void> {
+		const uriString = uri.toString();
+		// Mark as directory by adding empty entry list
+		if (!this.mockDirs.has(uriString)) {
+			this.mockDirs.set(uriString, []);
+		}
 	}
-	writeFile(uri: URI, content: Uint8Array): Promise<void> {
-		throw new Error('Method not implemented.');
+
+	async writeFile(uri: URI, content: Uint8Array): Promise<void> {
+		const uriString = uri.toString();
+		const text = new TextDecoder().decode(content);
+		this.mockFiles.set(uriString, text);
 	}
-	delete(uri: URI, options?: { recursive?: boolean; useTrash?: boolean }): Promise<void> {
-		throw new Error('Method not implemented.');
+
+	async delete(uri: URI, options?: { recursive?: boolean; useTrash?: boolean }): Promise<void> {
+		const uriString = uri.toString();
+		this.mockFiles.delete(uriString);
+		this.mockDirs.delete(uriString);
+		this.mockErrors.delete(uriString);
+		this.mockMtimes.delete(uriString);
 	}
-	rename(oldURI: URI, newURI: URI, options?: { overwrite?: boolean }): Promise<void> {
-		throw new Error('Method not implemented.');
+
+	async rename(oldURI: URI, newURI: URI, options?: { overwrite?: boolean }): Promise<void> {
+		const oldUriString = oldURI.toString();
+		const newUriString = newURI.toString();
+
+		// Check if target exists and overwrite is not allowed
+		if (!options?.overwrite && (this.mockFiles.has(newUriString) || this.mockDirs.has(newUriString))) {
+			throw new Error('EEXIST: File exists');
+		}
+
+		// Move file or directory
+		if (this.mockFiles.has(oldUriString)) {
+			const content = this.mockFiles.get(oldUriString)!;
+			this.mockFiles.set(newUriString, content);
+			this.mockFiles.delete(oldUriString);
+
+			if (this.mockMtimes.has(oldUriString)) {
+				const mtime = this.mockMtimes.get(oldUriString)!;
+				this.mockMtimes.set(newUriString, mtime);
+				this.mockMtimes.delete(oldUriString);
+			}
+		} else if (this.mockDirs.has(oldUriString)) {
+			const entries = this.mockDirs.get(oldUriString)!;
+			this.mockDirs.set(newUriString, entries);
+			this.mockDirs.delete(oldUriString);
+		} else {
+			throw new Error('ENOENT: File not found');
+		}
 	}
 	copy(source: URI, destination: URI, options?: { overwrite?: boolean }): Promise<void> {
 		throw new Error('Method not implemented.');

@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { packageJson } from '../../../../../platform/env/common/packagejson';
+import { createDecorator, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotConfigPrefix } from './constants';
-import { Context } from './context';
+import { ICompletionsContextService } from './context';
 import { Filter } from './experiments/filters';
 import { Emitter, Event } from './util/event';
 
@@ -285,20 +286,35 @@ const configDefaults = new Map<ConfigKeyType, unknown>([
 	[ConfigKey.DebugFilterLogCategories, []],
 ]);
 
-export function getConfig<T>(ctx: Context, key: ConfigKeyType): T {
-	return ctx.get(ConfigProvider).getConfig(key);
+export function getConfig<T>(accessor: ServicesAccessor, key: ConfigKeyType): T {
+	return accessor.get(ICompletionsContextService).get(ConfigProvider).getConfig(key);
 }
 
-export function dumpForTelemetry(ctx: Context) {
+export function dumpForTelemetry(accessor: ServicesAccessor) {
 	try {
-		return ctx.get(ConfigProvider).dumpForTelemetry();
+		return accessor.get(ICompletionsContextService).get(ConfigProvider).dumpForTelemetry();
 	} catch (e) {
 		console.error(`Error dumping config for telemetry: ${e}`);
 		return {};
 	}
 }
 
-export class BuildInfo {
+export const ICompletionsBuildInfoService = createDecorator<ICompletionsBuildInfoService>('completionsBuildInfoService');
+export interface ICompletionsBuildInfoService {
+	_serviceBrand: undefined;
+
+	isPreRelease(): boolean;
+	isProduction(): boolean;
+	getBuildType(): BuildType;
+	getVersion(): string;
+	getDisplayVersion(): string;
+	getBuild(): string;
+	getName(): string;
+}
+
+export class BuildInfo implements ICompletionsBuildInfoService {
+	_serviceBrand: undefined;
+
 	// TODO for now this is just initialised from `packageJson` which is the same across agent/extension.
 	// Consider reworking this.
 	private packageJson = packageJson;
@@ -346,32 +362,24 @@ export class BuildInfo {
 	}
 }
 
-export function isPreRelease(ctx: Context): boolean {
-	return ctx.get(BuildInfo).isPreRelease();
+export const ICompletionsEditorSessionService = createDecorator<ICompletionsEditorSessionService>('completionsEditorSessionService');
+export interface ICompletionsEditorSessionService {
+	_serviceBrand: undefined;
+
+	readonly sessionId: string;
+	readonly machineId: string;
+	readonly remoteName: string;
+	readonly uiKind: 'desktop' | 'web';
 }
 
-export function isProduction(ctx: Context): boolean {
-	return ctx.get(BuildInfo).isProduction();
-}
+export class EditorSession implements ICompletionsEditorSessionService {
+	_serviceBrand: undefined;
 
-export function getBuildType(ctx: Context): BuildType {
-	return ctx.get(BuildInfo).getBuildType();
-}
-
-export function getBuild(ctx: Context): string {
-	return ctx.get(BuildInfo).getBuild();
-}
-
-export function getVersion(ctx: Context): string {
-	return ctx.get(BuildInfo).getVersion();
-}
-
-export class EditorSession {
 	constructor(
 		readonly sessionId: string,
 		readonly machineId: string,
 		readonly remoteName = 'none',
-		readonly uiKind = 'desktop'
+		readonly uiKind: 'desktop' | 'web' = 'desktop'
 	) { }
 }
 
@@ -414,11 +422,13 @@ export abstract class EditorAndPluginInfo {
  */
 export const apiVersion = '2025-05-01';
 
-export function editorVersionHeaders(ctx: Context): { [key: string]: string } {
+export function editorVersionHeaders(accessor: ServicesAccessor): { [key: string]: string } {
+	const ctx = accessor.get(ICompletionsContextService);
 	const info = ctx.get(EditorAndPluginInfo);
+	const buildInfo = accessor.get(ICompletionsBuildInfoService);
 	return {
 		'Editor-Version': formatNameAndVersion(info.getEditorInfo()),
 		'Editor-Plugin-Version': formatNameAndVersion(info.getEditorPluginInfo()),
-		'Copilot-Language-Server-Version': getVersion(ctx),
+		'Copilot-Language-Server-Version': buildInfo.getVersion(),
 	};
 }

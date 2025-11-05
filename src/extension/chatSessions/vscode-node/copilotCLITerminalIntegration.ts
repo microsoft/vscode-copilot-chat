@@ -55,7 +55,6 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	) {
 		super();
 		this.pythonTerminalService = new PythonTerminalService(logService);
-		void this.updateGHTokenInTerminalEnvVars().catch(console.error);
 		this.initialization = this.initialize();
 	}
 
@@ -71,7 +70,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		}
 
 		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli');
-		this.terminalService.contributePath('copilot-cli', storageLocation, 'Enables use of the `copilot` command in the terminal.', true);
+		this.terminalService.contributePath('copilot-cli', storageLocation, { command: COPILOT_CLI_COMMAND }, true);
 
 		await fs.mkdir(storageLocation, { recursive: true });
 
@@ -96,16 +95,6 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		}
 	}
 
-	private async updateGHTokenInTerminalEnvVars() {
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
-		if (enabled) {
-			const session = await this._authenticationService.getAnyGitHubSession();
-			if (session) {
-				this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
-			}
-		}
-	}
-
 	public async openTerminal(name: string, cliArgs: string[] = []) {
 		// Generate another set of shell args, but with --clear to clear the terminal before running the command.
 		// We'd like to hide all of the custom shell commands we send to the terminal from the user.
@@ -113,11 +102,10 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 
 		let [shellPathAndArgs] = await Promise.all([
 			this.getShellInfo(cliArgs),
-			this.updateGHTokenInTerminalEnvVars(),
 			this.initialization
 		]);
 
-		const options = getCommonTerminalOptions(name);
+		const options = await getCommonTerminalOptions(name, this._authenticationService);
 		if (shellPathAndArgs) {
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
 		}
@@ -310,13 +298,23 @@ function quoteArgsForShell(shellScript: string, args: string[]): string {
 	return args.length ? `${escapeArg(shellScript)} ${escapedArgs.join(' ')}` : escapeArg(shellScript);
 }
 
-function getCommonTerminalOptions(name: string): TerminalOptions {
-	return {
+async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService): Promise<TerminalOptions> {
+	const options: TerminalOptions = {
 		name,
 		iconPath: new ThemeIcon('terminal'),
 		location: { viewColumn: ViewColumn.Active },
 		hideFromUser: false
 	};
+	const session = await authenticationService.getAnyGitHubSession();
+	if (session) {
+		options.env = {
+			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)
+			GH_TOKEN: session.accessToken,
+			// New Token name for Copilot
+			COPILOT_GITHUB_TOKEN: session.accessToken
+		};
+	}
+	return options;
 }
 
 const pathValidations = new Map<string, boolean>();

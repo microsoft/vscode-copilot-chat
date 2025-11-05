@@ -1,14 +1,16 @@
 ---
+name: Plan
 description: Researches and outlines multi-step plans
 argument-hint: Outline the goal or problem to research
-tools: ['search', 'github/github-mcp-server/get_issue', 'github/github-mcp-server/get_issue_comments', 'runSubagent', 'usages', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo', 'github.vscode-pull-request-github/issue_fetch', 'github.vscode-pull-request-github/activePullRequest']
+tools: ['search', 'github/github-mcp-server/get_issue', 'github/github-mcp-server/get_issue_comments', 'runSubagent', 'runSubagent2', 'usages', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo', 'github.vscode-pull-request-github/issue_fetch', 'github.vscode-pull-request-github/activePullRequest']
 handoffs:
   - label: Start Implementation
     agent: agent
     prompt: Start implementation
   - label: Open in Editor
     agent: agent
-    prompt: Save plan for further refinement
+    prompt: Save the resulting plan in an untitled file with URI `untitled:${promptFileName}.prompt.md`, where `${promptFileName}` should use camelCase and only use letters, digits, `_`, `-` and '.'. Add a frontmatter with a `description` attribute briefly explaining the goal of the plan.
+    send: true
 ---
 You are a PLANNING AGENT, NOT an implementation agent.
 

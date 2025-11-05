@@ -7,7 +7,7 @@ import { IObservableDocument, ObservableWorkspace } from '../../../../../../../p
 import { autorunWithChanges } from '../../../../../../../platform/inlineEdits/common/utils/observable';
 import { Disposable } from '../../../../../../../util/vs/base/common/lifecycle';
 import { mapObservableArrayCached } from '../../../../../../../util/vs/base/common/observableInternal';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import {
 	getAllRecentEditsByTimestamp,
 	RecentEdit,
@@ -71,12 +71,14 @@ export class FullRecentEditsProvider extends RecentEditsProvider {
 	private recentEdits: RecentEdit[] = [];
 	private recentEditSummaries: WeakMap<RecentEdit, string | null> = new WeakMap();
 	private debounceTimeouts: { [key: string]: TimeoutHandle } = {};
+	private readonly _config: RecentEditsConfig;
 
 	constructor(
-		private readonly ctx: Context,
-		private readonly _config: RecentEditsConfig = Object.assign({}, RECENT_EDITS_DEFAULT_CONFIG)
+		config: RecentEditsConfig | undefined,
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
 	) {
 		super();
+		this._config = config ?? Object.assign({}, RECENT_EDITS_DEFAULT_CONFIG);
 	}
 
 	get config(): RecentEditsConfig {

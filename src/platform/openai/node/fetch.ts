@@ -589,5 +589,7 @@ function locationToIntent(location: ChatLocation): string {
 			return 'conversation-other';
 		case ChatLocation.Agent:
 			return 'conversation-agent';
+		case ChatLocation.ResponsesProxy:
+			return 'responses-proxy';
 	}
 }
