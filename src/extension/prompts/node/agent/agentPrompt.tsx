@@ -19,7 +19,6 @@ import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAnd
 import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { basename } from '../../../../util/vs/base/common/path';
 import { isDefined } from '../../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
@@ -243,7 +242,6 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 		return <UserMessage>
 			<Tag name='environment_info'>
 				<UserOSPrompt />
-				<UserShellPrompt />
 			</Tag>
 			<Tag name='workspace_info'>
 				<AgentTasksInstructions availableTools={this.props.availableTools} />
@@ -444,29 +442,6 @@ class UserOSPrompt extends PromptElement<BasePromptElementProps> {
 		const osForDisplay = userOS === OperatingSystem.Macintosh ? 'macOS' :
 			userOS;
 		return <>The user's current OS is: {osForDisplay}</>;
-	}
-}
-
-class UserShellPrompt extends PromptElement<BasePromptElementProps> {
-	constructor(props: BasePromptElementProps, @IEnvService private readonly envService: IEnvService) {
-		super(props);
-	}
-
-	async render(state: void, sizing: PromptSizing) {
-		const shellName: string = basename(this.envService.shell);
-		const shellNameHint = shellName === 'powershell.exe' ? ' (Windows PowerShell v5.1)' : '';
-		let additionalHint = '';
-		switch (shellName) {
-			case 'powershell.exe': {
-				additionalHint = ' Use the `;` character if joining commands on a single line is needed.';
-				break;
-			}
-			case 'fish': {
-				additionalHint = ' Note that fish shell does not support heredocs - prefer printf or echo instead.';
-				break;
-			}
-		}
-		return <>The user's default shell is: "{shellName}"{shellNameHint}. When you generate terminal commands, please generate them correctly for this shell.{additionalHint}</>;
 	}
 }
 
