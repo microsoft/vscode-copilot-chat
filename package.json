@@ -2293,19 +2293,19 @@
 			},
 			{
 				"command": "github.copilot.chat.completions.disable",
-				"title": "Disable Completions",
+				"title": "Disable Inline Suggestions",
 				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && config.editor.inlineSuggest.enabled && github.copilot.completions.enabled",
 				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.chat.completions.enable",
-				"title": "Enable Completions",
+				"title": "Enable Inline Suggestions",
 				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && !(config.editor.inlineSuggest.enabled && github.copilot.completions.enabled)",
 				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.chat.completions.toggle",
-				"title": "Toggle (Enable/Disable) Completions",
+				"title": "Toggle (Enable/Disable) Inline Suggestions",
 				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated",
 				"category": "GitHub Copilot"
 			}

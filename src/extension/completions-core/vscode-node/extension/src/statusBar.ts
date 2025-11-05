@@ -115,7 +115,7 @@ export class CopilotStatusBar extends StatusReporter implements IDisposable {
 				break;
 		}
 		this.item.accessibilityInformation = {
-			label: 'Copilot Completions',
+			label: 'Inline Suggestions',
 		};
 		if (this.state.command) {
 			this.item.command = this.state.command;
