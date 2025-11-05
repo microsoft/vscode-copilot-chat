@@ -87,6 +87,10 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 			name: 'Claude Sonnet 4'
 		},
 		{
+			id: "claude-haiku-4.5",
+			name: "Claude Haiku 4.5"
+		},
+		{
 			id: 'gpt-5',
 			name: 'GPT-5'
 		}];
