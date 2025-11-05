@@ -14,7 +14,7 @@ import { Extension } from '../../extensionContext';
 import { createExtensionTestingContext } from '../../test/context';
 import { notify } from '../matchNotifier';
 import { IVSCodeExtensionContext } from '../../../../../../../platform/extContext/common/extensionContext';
-import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 /**
  * Minimal fake implementation of the VS Code globalState object.
@@ -44,7 +44,7 @@ suite('.match', function () {
 			new Extension({
 				extensionMode: ExtensionMode.Test,
 				subscriptions: [] as { dispose(): void }[],
-				extension: { id: 'copilot.extension-test' },
+				extension: { id: 'copilot.extension-tfest' },
 				globalState: new FakeGlobalState(),
 			} as unknown as IVSCodeExtensionContext)
 		);
@@ -139,14 +139,15 @@ suite('.match', function () {
 
 	test('does not notify if already notified', async function () {
 		const ctx = accessor.get(ICompletionsContextService);
-		const extensionContext = ctx.get(Extension);
-		const globalState = extensionContext.context.globalState;
+		const extensionContext = accessor.get(IVSCodeExtensionContext);
+		const instantiationService = accessor.get(IInstantiationService);
+		const globalState = extensionContext.globalState;
 		const testNotificationSender = ctx.get(NotificationSender) as TestNotificationSender;
 		testNotificationSender.performAction('View reference');
 
 		await globalState.update('codeReference.notified', true);
 
-		await notify(accessor);
+		await instantiationService.invokeFunction(notify);
 
 		await testNotificationSender.waitForMessages();
 
