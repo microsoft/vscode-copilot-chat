@@ -245,6 +245,9 @@ export class ChatSessionContentBuilder {
 					const toolPart = this.createToolInvocationPart(pullRequest, toolCall, args.name || delta.content);
 					if (toolPart) {
 						responseParts.push(toolPart);
+						if (toolPart instanceof ChatResponseThinkingProgressPart) {
+							responseParts.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+						}
 					}
 				}
 				// Skip if content is empty (running state)
@@ -267,6 +270,9 @@ export class ChatSessionContentBuilder {
 						const toolPart = this.createToolInvocationPart(pullRequest, toolCall, delta.content || '');
 						if (toolPart) {
 							responseParts.push(toolPart);
+							if (toolPart instanceof ChatResponseThinkingProgressPart) {
+								responseParts.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+							}
 						}
 					}
 

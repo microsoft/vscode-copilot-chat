@@ -841,6 +841,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 								if (toolPart) {
 									stream.push(toolPart);
 									hasStreamedContent = true;
+									if (toolPart instanceof vscode.ChatResponseThinkingProgressPart) {
+										stream.push(new vscode.ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+									}
 								}
 							} else {
 								// Running setup step - just track progress
@@ -861,6 +864,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 									if (toolPart) {
 										stream.push(toolPart);
 										hasStreamedContent = true;
+										if (toolPart instanceof vscode.ChatResponseThinkingProgressPart) {
+											stream.push(new vscode.ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+										}
 									}
 								}
 							}
