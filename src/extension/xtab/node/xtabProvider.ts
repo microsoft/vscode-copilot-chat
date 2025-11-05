@@ -907,7 +907,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				} else {
 					const nextCursorLineOneBased = nextCursorLineZeroBased + 1;
 					const nextCursorLine = promptPieces.activeDoc.documentAfterEditsLines.at(nextCursorLineZeroBased);
-					const nextCursorColumn = (nextCursorLine?.match(/^(\s+)/)?.at(0)?.length ?? 0) + 1;
+					const nextCursorColumn = (nextCursorLine?.length ?? 0) + 1;
 					switch (nextCursorLinePrediction) {
 						case NextCursorLinePrediction.Jump: {
 							const nextCursorPosition = new Position(nextCursorLineOneBased, nextCursorColumn);
