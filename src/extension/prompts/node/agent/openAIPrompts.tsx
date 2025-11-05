@@ -14,6 +14,7 @@ import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
 import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
+import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
 
 export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
@@ -101,6 +102,7 @@ export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptPr
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				<FileLinkificationInstructions />
 				<Tag name='example'>
 					The class `Person` is in `src/models/person.ts`.<br />
 					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
@@ -313,6 +315,7 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.<br />
 				<br />
 				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				<FileLinkificationInstructions />
 				<Tag name='example'>
 					The class `Person` is in `src/models/person.ts`.
 				</Tag>
@@ -394,9 +397,13 @@ class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 			* Accepted: absolute, workspace-relative, a/ or b/ diff prefixes, or bare filename/suffix.<br />
 			* Do not use URIs like file://, vscode://, or https://.<br />
 			* Examples: src/app.ts, C:\repo\project\main.rs<br />
+			<br />
+			<FileLinkificationInstructions />
 		</InstructionMessage>;
 	}
 }
+
+// FileLinkificationInstructions extracted to shared fileLinkificationInstructions.tsx
 
 class OpenAIPromptResolver implements IAgentPrompt {
 

@@ -79,7 +79,14 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			pathText ??= match.groups?.['inlineCodePath'] ?? match.groups?.['plainTextPath'] ?? '';
 
 			parts.push(this.resolvePathText(pathText, context)
-				.then(uri => uri ? new LinkifyLocationAnchor(uri) : matched));
+				.then(uri => {
+					if (uri) {
+						// TEMP DEBUG: log when legacy linkifier creates a link (remove before release)
+						try { console.log('[linkify][legacy] linkified', { path: uri.toString(), requestId: context.requestId }); } catch { /* noop */ }
+						return new LinkifyLocationAnchor(uri);
+					}
+					return matched;
+				}));
 
 			endLastMatch = match.index + matched.length;
 		}
