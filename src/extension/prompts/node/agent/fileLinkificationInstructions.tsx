@@ -22,6 +22,8 @@ export class FileLinkificationInstructions extends PromptElement<{}> {
 			Good: `Config lives in [docs/My File.md](docs/My%20File.md)`<br />
 			Rules (enforced):<br />
 			- Bracket text MUST exactly equal the file path portion before any `#` anchor (omit line hash from text).<br />
+			Wrong: `[src/file.ts#L10](src/file.ts#L10)` (anchor included inside brackets)<br />
+			Correct: `[src/file.ts](src/file.ts#L10)` (anchor only in link target)<br />
 			- Use workspace-relative POSIX paths (forward slashes). Do NOT invent paths; only cite existing ones or ones already shown in context. If uncertain about directory, prefer reading context before guessing.<br />
 			- If you state a line or range in prose, IMMEDIATELY integrate it into the link anchor instead of leaving it separate.<br />
 			- Only add an anchor when certain; if unsure about exact lines, emit the whole-file link (no anchor) and optionally gather more context before citing lines.<br />
@@ -30,6 +32,7 @@ export class FileLinkificationInstructions extends PromptElement<{}> {
 			- Percent-encode spaces ONLY in the target; bracket text remains unencoded (e.g. `[docs/My File.md](docs/My%20File.md)`).<br />
 			- Prefer citing a range (`#L10-12`) if you reference ≥2 consecutive lines; otherwise single line anchor (`#L10`).<br />
 			- Never leave a bare filename like `exampleScript.ts` in prose without converting it to a link unless you are explicitly quoting user input you will transform next.<br />
+			- Backticks vs links: Backtick wrapping applies ONLY to ordinary inline path mentions you are not converting into links. When producing a markdown link (`[path](path[#Lx[-y]])`), do NOT wrap the link itself in backticks; the link replaces the backticked form.<br />
 			Self-correction: If you output a filename without the required link format, immediately correct yourself in the very next message by restating it with the proper link.<br />
 			Goal: Maximize model-emitted links so fallback legacy linkifier rarely triggers.<br />
 		</Tag>;
