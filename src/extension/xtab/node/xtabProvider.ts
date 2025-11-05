@@ -61,6 +61,7 @@ import { PromptTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
+import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 
 namespace ResponseTags {
 	export const NO_CHANGE = {
@@ -320,7 +321,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		if (useCodemap) {
 			const activeDocSnapshot = this.workspaceService.textDocuments.find(doc => doc.uri.toString() === activeDocument.id.toUri().toString());
 			if (activeDocSnapshot) {
-				codemap = await this.codemapService.getCodemap(activeDocSnapshot, cancellationToken);
+				codemap = await this.codemapService.getCodemap(TextDocumentSnapshot.create(activeDocSnapshot), cancellationToken);
 			}
 		}
 

@@ -60,15 +60,15 @@ export class CodemapServiceImpl implements ICodemapService {
 		const counts = this.countNodeTypes(node);
 		const parts: string[] = [];
 
-		if (counts.CLASS_DECLARATION > 0) {
-			parts.push(`${counts.CLASS_DECLARATION} class${counts.CLASS_DECLARATION > 1 ? 'es' : ''}`);
+		if (counts.class_declaration > 0) {
+			parts.push(`${counts.class_declaration} class${counts.class_declaration > 1 ? 'es' : ''}`);
 		}
-		if (counts.FUNCTION_DECLARATION > 0 || counts.METHOD_DEFINITION > 0) {
-			const total = counts.FUNCTION_DECLARATION + counts.METHOD_DEFINITION;
+		if (counts.function_declaration > 0 || counts.method_definition > 0) {
+			const total = counts.function_declaration + counts.method_definition;
 			parts.push(`${total} function${total > 1 ? 's' : ''}/method${total > 1 ? 's' : ''}`);
 		}
-		if (counts.INTERFACE_DECLARATION > 0) {
-			parts.push(`${counts.INTERFACE_DECLARATION} interface${counts.INTERFACE_DECLARATION > 1 ? 's' : ''}`);
+		if (counts.interface_declaration > 0) {
+			parts.push(`${counts.interface_declaration} interface${counts.interface_declaration > 1 ? 's' : ''}`);
 		}
 
 		return parts.length > 0 ? parts.join(', ') : 'No major structures detected';
