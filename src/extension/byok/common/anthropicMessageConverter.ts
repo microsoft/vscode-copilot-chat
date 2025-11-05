@@ -29,9 +29,7 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 				});
 			}
 			// Skip incremental thinking parts - we only care about the complete one
-		}
-
-		if (part instanceof LanguageModelToolCallPart) {
+		} else if (part instanceof LanguageModelToolCallPart) {
 			convertedContent.push({
 				type: 'tool_use',
 				id: part.callId,
@@ -87,7 +85,6 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 			});
 		}
 	}
-
 	return convertedContent;
 }
 
