@@ -24,6 +24,8 @@ assets/walkthroughs/**
 node_modules/@github/copilot/index.js
 !node_modules/@github/copilot/sdk/*.js
 !node_modules/@github/copilot/node_modules/**/*.js
+!node_modules/@vscode/codicons/dist/*.*
+!node_modules/@vscode/codicons/package.json
 !CHANGELOG.md
 !README.md
 !package.json

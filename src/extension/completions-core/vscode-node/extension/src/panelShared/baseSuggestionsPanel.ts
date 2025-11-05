@@ -153,7 +153,6 @@ export abstract class BaseSuggestionsPanel<TPanelCompletion extends BasePanelCom
 		const nonce = getNonce();
 		const scriptUri = this._buildExtensionUri('dist', this.config.webviewScriptName);
 		const codiconsUri = this._buildExtensionUri(
-			'dist',
 			'node_modules',
 			'@vscode',
 			'codicons',
