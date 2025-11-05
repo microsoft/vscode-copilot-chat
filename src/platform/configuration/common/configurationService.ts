@@ -750,6 +750,7 @@ export namespace ConfigKey {
 		"markdown": false,
 		"scminput": false
 	});
+	export const selectedCompletionsModel = defineSetting<string>('selectedCompletionModel', '');
 
 	/** Use the Responses API instead of Chat Completions when supported */
 	export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.useResponsesApi', true);
