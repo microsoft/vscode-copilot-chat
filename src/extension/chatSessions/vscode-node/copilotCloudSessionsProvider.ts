@@ -410,7 +410,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const result = await this.invokeRemoteAgent(
 			prompt,
 			[
-				this.extractFileReferences(references),
+				await this.extractFileReferences(references),
 				history
 			].join('\n\n').trim(),
 			token,
@@ -694,28 +694,44 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
-	private extractFileReferences(references: readonly vscode.ChatPromptReference[] | undefined): string | undefined {
+	private async extractFileReferences(references: readonly vscode.ChatPromptReference[] | undefined): Promise<string | undefined> {
 		if (!references || references.length === 0) {
 			return;
 		}
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
-		const parts: string[] = [];
+		const fileRefs: string[] = [];
+		const fullFileParts: string[] = [];
 		for (const ref of references) {
 			if (ref.value instanceof vscode.Uri && ref.value.scheme === 'file') { // TODO: Add support for more kinds of references
 				const git = this._gitExtensionService.getExtensionApi();
 				const repositoryForFile = git?.getRepository(ref.value);
 				if (repositoryForFile) {
 					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, ref.value.fsPath);
-					parts.push(` - ${relativePath}`);
+					fileRefs.push(` - ${relativePath}`);
+				}
+				// TODO: If file is not tracked, modified, or staged, or is outside the repo, include the entire file
+			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'untitled') {
+				// Get full content of untitled file
+				try {
+					const document = await vscode.workspace.openTextDocument(ref.value);
+					const content = document.getText();
+					fullFileParts.push(`<file-start>${ref.value.path}</file-start>`);
+					fullFileParts.push(content);
+					fullFileParts.push(`<file-end>${ref.value.path}</file-end>`);
+				} catch (error) {
+					this.logService.error(`Error reading untitled file content for reference: ${ref.value.toString()}: ${error}`);
 				}
 			}
 		}
 
+		const parts: string[] = [
+			...(fullFileParts.length ? ['The user has attached the following uncommitted or modified files as relevant context:', ...fullFileParts] : []),
+			...(fileRefs.length ? ['The user has attached the following file paths as relevant context:', ...fileRefs] : [])
+		];
+
 		if (!parts.length) {
 			return;
 		}
-
-		parts.unshift('The user has attached the following files as relevant context:');
 		return parts.join('\n');
 	}
 
