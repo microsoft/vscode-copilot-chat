@@ -241,7 +241,7 @@ export interface IChatEndpoint extends IEndpoint {
 	/**
 	 * Creates the request body to be sent to the endpoint based on the request.
 	 */
-	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody | Promise<IEndpointBody>;
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody;
 
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
 }

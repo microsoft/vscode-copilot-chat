@@ -26,6 +26,8 @@ const VSC_MODEL_HASHES_B = [
 	'df610ed210bb9266ff8ab812908d5837538cdb1d7436de907fb7e970dab5d289',
 ];
 
+let hiddenModelBFamily: string | undefined;
+const HIDDEN_MODEL_B_HASH = '8f398886c326b5f8f07b20ac250c87de6723e062474465273fe1524f2b9092fa';
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 	return 'id' in model ? model.id : model.model;
@@ -38,7 +40,11 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 
 export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
 	const h = await getCachedSha256Hash(model.family);
-	return h === '8f398886c326b5f8f07b20ac250c87de6723e062474465273fe1524f2b9092fa';
+	if (h === HIDDEN_MODEL_B_HASH) {
+		hiddenModelBFamily = model.family;
+		return true;
+	}
+	return false;
 }
 
 
@@ -150,6 +156,9 @@ export function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageMod
 	return model.family.startsWith('gpt-5');
 }
 
-export async function getVerbosityForModel(model: IChatEndpoint): Promise<'low' | 'medium' | 'high' | undefined> {
-	return await isHiddenModelB(model) ? 'low' : undefined;
+export function getVerbosityForModelSync(model: IChatEndpoint): 'low' | 'medium' | 'high' | undefined {
+	if (model.family === hiddenModelBFamily) {
+		return 'low';
+	}
+	return undefined;
 }

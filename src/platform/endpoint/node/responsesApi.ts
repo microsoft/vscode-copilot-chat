@@ -23,14 +23,14 @@ import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../ne
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { getVerbosityForModel } from '../common/chatModelCapabilities';
+import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
-export async function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): Promise<IEndpointBody> {
+export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
 	const configService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
-	const verbosity = await getVerbosityForModel(endpoint);
+	const verbosity = getVerbosityForModelSync(endpoint);
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
