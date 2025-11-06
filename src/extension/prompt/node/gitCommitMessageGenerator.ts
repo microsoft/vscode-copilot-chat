@@ -33,7 +33,7 @@ export class GitCommitMessageGenerator {
 	async generateGitCommitMessage(repositoryName: string, branchName: string, changes: Diff[], recentCommitMessages: RecentCommitMessages, attemptCount: number, token: CancellationToken): Promise<string | undefined> {
 		const startTime = Date.now();
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-5-mini');
+		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
 		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitCommitMessagePrompt, { repositoryName, branchName, changes, recentCommitMessages });
 		const prompt = await promptRenderer.render(undefined, undefined);
 
