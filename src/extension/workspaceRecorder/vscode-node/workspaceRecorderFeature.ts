@@ -176,7 +176,7 @@ class InitializedWorkspaceRecorderFeature extends Disposable {
 			const workspaceRecorder = this.getWorkspaceRecorder(docUri);
 			if (workspaceRecorder) {
 				const edit = editFromTextDocumentContentChangeEvents(e.contentChanges);
-				workspaceRecorder.handleOnDidChangeTextDocument(docUri, edit, e.document.version);
+				workspaceRecorder.handleOnDidChangeTextDocument(docUri, edit, e.document.version, e.detailedReason?.metadata);
 			}
 		}));
 

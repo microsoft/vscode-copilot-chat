@@ -27,6 +27,14 @@ import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
+enum ChatImageMimeType {
+	PNG = 'image/png',
+	JPEG = 'image/jpeg',
+	GIF = 'image/gif',
+	WEBP = 'image/webp',
+	BMP = 'image/bmp',
+}
+
 export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	private readonly _maxTokens: number;
 	public readonly isDefault: boolean = false;
@@ -291,7 +299,7 @@ export function convertToApiChatMessage(messages: Raw.ChatMessage[]): Array<vsco
 
 					if (match) {
 						const [, mimeType, base64Data] = match;
-						apiContent.push(new vscode.LanguageModelDataPart(Buffer.from(base64Data, 'base64'), mimeType as vscode.ChatImageMimeType));
+						apiContent.push(new vscode.LanguageModelDataPart(Buffer.from(base64Data, 'base64'), mimeType as ChatImageMimeType));
 					}
 				} else {
 					// Not a base64 image

@@ -5,7 +5,7 @@
 
 import { mkdir, rename } from 'fs/promises';
 import { env } from 'vscode';
-import { LogDocumentId, LogEntry, serializeEdit, serializeOffsetRange } from '../../../platform/workspaceRecorder/common/workspaceLog';
+import { IChangedMetadata, LogDocumentId, LogEntry, serializeEdit, serializeOffsetRange } from '../../../platform/workspaceRecorder/common/workspaceLog';
 import { TaskQueue } from '../../../util/common/async';
 import { timeout } from '../../../util/vs/base/common/async';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
@@ -51,10 +51,10 @@ export class WorkspaceRecorder extends Disposable {
 		this._schedule(() => this._impl.then(v => v.handleOnDidHideTextDocument(this._getTime(), documentUri)));
 	}
 
-	handleOnDidChangeTextDocument(documentUri: string, edit: StringEdit, newModelVersion: number): void {
+	handleOnDidChangeTextDocument(documentUri: string, edit: StringEdit, newModelVersion: number, metadata: IChangedMetadata | undefined): void {
 		if (edit.isEmpty()) { return; }
 
-		this._schedule(() => this._impl.then(v => v.handleOnDidChangeTextDocument(this._getTime(), documentUri, edit, newModelVersion)));
+		this._schedule(() => this._impl.then(v => v.handleOnDidChangeTextDocument(this._getTime(), documentUri, edit, newModelVersion, metadata)));
 	}
 
 	handleOnDidFocusedDocumentChange(documentUri: string): void {
@@ -90,7 +90,7 @@ export class WorkspaceRecorderImpl extends Disposable {
 	public static async create(repoRootUri: string, recordingDirPath: string, logFilePath: string, context: IWorkspaceRecorderContext): Promise<WorkspaceRecorderImpl> {
 		await mkdir(recordingDirPath, { recursive: true });
 
-		const currentVersion = 3;
+		const currentVersion = 4;
 
 		const state = await FlushableJSONFile.loadOrCreate<WorkspaceRecordingState>(path.join(recordingDirPath, 'state.json'), {
 			version: currentVersion,
@@ -143,7 +143,7 @@ export class WorkspaceRecorderImpl extends Disposable {
 		}
 
 		const log = new FlushableSafeJSONLFile<LogEntry>(logFilePath);
-		return new WorkspaceRecorderImpl(repoRootUri, state, log, context, logFileExists);
+		return new WorkspaceRecorderImpl(repoRootUri, state, log, context, logFileExists, currentVersion);
 	}
 
 	private constructor(
@@ -152,6 +152,7 @@ export class WorkspaceRecorderImpl extends Disposable {
 		private readonly _log: FlushableSafeJSONLFile<LogEntry>,
 		private readonly _context: IWorkspaceRecorderContext,
 		private readonly _logFileExists: boolean,
+		private readonly _revision: number,
 	) {
 		super();
 		this._register(toDisposable(() => {
@@ -165,6 +166,7 @@ export class WorkspaceRecorderImpl extends Disposable {
 				repoRootUri: this.repoRootUri,
 				time: Date.now(),
 				uuid: generateUuid(),
+				revision: this._revision,
 			});
 		}
 
@@ -199,10 +201,10 @@ export class WorkspaceRecorderImpl extends Disposable {
 		this._appendEntry({ kind: 'closed', id, time });
 	}
 
-	async handleOnDidChangeTextDocument(time: number, documentUri: string, edit: StringEdit, newModelVersion: number): Promise<void> {
+	async handleOnDidChangeTextDocument(time: number, documentUri: string, edit: StringEdit, newModelVersion: number, metadata: IChangedMetadata | undefined): Promise<void> {
 		const id = await this._getId(documentUri);
 		if (id === undefined) { return; }
-		this._appendEntry({ kind: 'changed', id, time, edit: serializeEdit(edit), v: newModelVersion });
+		this._appendEntry({ kind: 'changed', id, time, edit: serializeEdit(edit), v: newModelVersion, metadata });
 	}
 
 	async handleOnDidFocusedDocumentChange(time: number, documentUri: string): Promise<void> {
@@ -307,7 +309,7 @@ export class WorkspaceRecorderImpl extends Disposable {
 
 
 type WorkspaceRecordingState = {
-	version: 3;
+	version: 3 | 4;
 	logCount: number;
 	documents: Record</* relativePath */ string, { id: LogDocumentId; lastHash: string }>;
 } | {

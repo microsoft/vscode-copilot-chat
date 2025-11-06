@@ -18,18 +18,19 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
-import { ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { IChatModelInformation } from '../common/endpointProvider';
+import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
-export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
+export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
 	const configService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
+	const verbosity = getVerbosityForModelSync(endpoint);
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
@@ -48,7 +49,8 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 			? { type: 'function', name: options.postOptions.tool_choice.function.name }
 			: options.postOptions.tool_choice,
 		top_logprobs: options.postOptions.logprobs ? 3 : undefined,
-		store: false
+		store: false,
+		text: verbosity ? { verbosity } : undefined,
 	};
 
 	body.truncation = configService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?

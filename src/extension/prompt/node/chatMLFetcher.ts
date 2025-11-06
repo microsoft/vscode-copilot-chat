@@ -113,7 +113,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}
 
 		const postOptions = this.preparePostOptions(requestOptions);
-		const requestBody = chatEndpoint.createRequestBody({
+		const requestBody = await chatEndpoint.createRequestBody({
 			...opts,
 			requestId: ourRequestId,
 			postOptions

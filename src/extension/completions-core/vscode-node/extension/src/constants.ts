@@ -39,3 +39,6 @@ export const CMDCollectDiagnosticsChat = 'github.copilot.debug.collectDiagnostic
 // Context variable that enable/disable panel-specific commands
 export const CopilotPanelVisible = 'github.copilot.panelVisible';
 export const ComparisonPanelVisible = 'github.copilot.comparisonPanelVisible';
+
+export const CMDOpenModelPickerClient = 'github.copilot.openModelPicker';
+export const CMDOpenModelPickerChat = 'github.copilot.chat.openModelPicker';

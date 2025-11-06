@@ -102,6 +102,10 @@ export interface RemoteAgentJobResponse {
 	updated_at: string;
 }
 
+export interface ErrorResponseWithStatusCode {
+	status: number;
+}
+
 export interface RemoteAgentJobPayload {
 	problem_statement: string;
 	event_type: string;
@@ -199,7 +203,7 @@ export interface IOctoKitService {
 		name: string,
 		apiVersion: string,
 		payload: RemoteAgentJobPayload,
-	): Promise<RemoteAgentJobResponse>;
+	): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode>;
 
 	/**
 	 * Gets a job by its job ID.
@@ -317,8 +321,8 @@ export class BaseOctoKitService {
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}`, 'GET', token, undefined, undefined, 'text');
 	}
 
-	protected async postCopilotAgentJobWithToken(owner: string, name: string, apiVersion: string, userAgent: string, payload: RemoteAgentJobPayload, token: string): Promise<RemoteAgentJobResponse> {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent);
+	protected async postCopilotAgentJobWithToken(owner: string, name: string, apiVersion: string, userAgent: string, payload: RemoteAgentJobPayload, token: string) {
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent, true);
 	}
 
 	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo> {

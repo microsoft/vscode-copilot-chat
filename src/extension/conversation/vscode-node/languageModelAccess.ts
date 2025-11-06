@@ -113,6 +113,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		if (this._authenticationService.copilotToken?.isNoAuthUser) {
 			// No Auth users always get Auto as the default model
 			defaultChatEndpoint = autoEndpoint;
+		} else if (defaultExpModel === AutoChatEndpoint.pseudoModelId) {
+			// Auto is a fake model id so force map it
+			defaultChatEndpoint = autoEndpoint;
 		} else if (defaultExpModel) {
 			// Find exp default
 			defaultChatEndpoint = chatEndpoints.find(e => e.model === defaultExpModel);

@@ -135,7 +135,7 @@ export class AvailableModelsManager {
 	}
 }
 
-interface ModelItem {
+export interface ModelItem {
 	modelId: string;
 	label: string;
 	preview: boolean;

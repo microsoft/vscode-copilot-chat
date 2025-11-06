@@ -43,7 +43,10 @@ function run() {
 	const mocha = new Mocha(mochaOptions);
 
 	let fileCount = 0;
-	(process.env.MOCHA_FILES || path.resolve(projectRoot, 'lib/src/**/*.test.{ts,tsx}')).split('\n').forEach(f => {
+	(process.env.MOCHA_FILES || [
+		path.resolve(projectRoot, 'lib/src/**/*.test.{ts,tsx}'),
+		path.resolve(projectRoot, 'extension/src/**/*.test.{ts,tsx}')
+	].join('\n')).split('\n').forEach(f => {
 		globSync(f, { windowsPathsNoEscape: true }).forEach(f => {
 			fileCount++;
 			mocha.addFile(f);

@@ -68,7 +68,6 @@ export import LanguageModelDataPart2 = vscode.LanguageModelDataPart2;
 export import LanguageModelPartAudience = vscode.LanguageModelPartAudience;
 export import LanguageModelToolMCPSource = vscode.LanguageModelToolMCPSource;
 export import LanguageModelToolExtensionSource = vscode.LanguageModelToolExtensionSource;
-export import ChatImageMimeType = vscode.ChatImageMimeType;
 export import ChatReferenceBinaryData = vscode.ChatReferenceBinaryData;
 export import ChatReferenceDiagnostic = vscode.ChatReferenceDiagnostic;
 export import TextSearchMatch2 = vscode.TextSearchMatch2;

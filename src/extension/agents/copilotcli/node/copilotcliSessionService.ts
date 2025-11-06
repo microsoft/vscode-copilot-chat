@@ -6,6 +6,9 @@
 import type { ModelMetadata, Session, internal } from '@github/copilot/sdk';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { CancellationToken, ChatRequest } from 'vscode';
+import { INativeEnvService } from '../../../../platform/env/common/envService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
@@ -13,6 +16,7 @@ import { disposableTimeout, raceCancellationError } from '../../../../util/vs/ba
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { joinPath } from '../../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
 import { CopilotCLIPermissionsHandler, ICopilotCLISDK, ICopilotCLISessionOptionsService } from './copilotCli';
@@ -68,9 +72,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ICopilotCLISessionOptionsService private readonly optionsService: ICopilotCLISessionOptionsService,
+		@INativeEnvService private readonly nativeEnv: INativeEnvService,
+		@IFileSystemService private readonly fileSystem: IFileSystemService,
 	) {
 		super();
-
+		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.CLISessionManager>>(async () => {
 			const { internal } = await this.copilotCLISDK.getPackage();
 			return new internal.CLISessionManager({
@@ -79,6 +85,15 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		});
 	}
 
+	private monitorSessionFiles() {
+		try {
+			const sessionDir = joinPath(this.nativeEnv.userHome, '.copilot', 'session-state');
+			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '*.jsonl')));
+			this._register(watcher.onDidCreate(() => this._onDidChangeSessions.fire()));
+		} catch (error) {
+			this.logService.error(`Failed to monitor Copilot CLI session files: ${error}`);
+		}
+	}
 	async getSessionManager() {
 		return this._sessionManager.value;
 	}

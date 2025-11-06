@@ -33,7 +33,15 @@ export namespace DocumentLogEntry {
 }
 
 /** First entry of the log */
-export type HeaderLogEntry = { documentType: "workspaceRecording@1.0"; kind: 'header'; repoRootUri: string; time: number; uuid: string };
+export type HeaderLogEntry = {
+	documentType: "workspaceRecording@1.0";
+	kind: 'header';
+	repoRootUri: string;
+	time: number;
+	uuid: string;
+	/** Increments on non-breaking changes */
+	revision?: number;
+};
 
 export type ApplicationStartLogEntry = { kind: 'applicationStart'; time: number; commitHash?: string };
 
@@ -48,7 +56,8 @@ export type DocumentOpenedLogEntry = DocumentLogEntry & { kind: 'opened' };
 
 export type DocumentClosedLogEntry = DocumentLogEntry & { kind: 'closed' };
 
-export type DocumentChangedLogEntry = DocumentLogEntry & { kind: 'changed'; edit: ISerializedEdit; v: number };
+export type IChangedMetadata = Record<string, unknown>;
+export type DocumentChangedLogEntry = DocumentLogEntry & { kind: 'changed'; edit: ISerializedEdit; v: number; metadata?: IChangedMetadata };
 
 export type DocumentFocusChangedLogEntry = DocumentLogEntry & { kind: 'focused' };
 

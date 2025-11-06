@@ -152,14 +152,6 @@ export abstract class BaseSuggestionsPanel<TPanelCompletion extends BasePanelCom
 	private _getWebviewContent() {
 		const nonce = getNonce();
 		const scriptUri = this._buildExtensionUri('dist', this.config.webviewScriptName);
-		const codiconsUri = this._buildExtensionUri(
-			'dist',
-			'node_modules',
-			'@vscode',
-			'codicons',
-			'dist',
-			'codicon.css'
-		);
 
 		return `
 		<!DOCTYPE html>
@@ -172,7 +164,6 @@ export abstract class BaseSuggestionsPanel<TPanelCompletion extends BasePanelCom
 						content="default-src 'none'; font-src ${this.webviewPanel.webview.cspSource}; style-src 'unsafe-inline' ${this.webviewPanel.webview.cspSource}; script-src 'nonce-${nonce}';"
 					/>
 					<title>${this.config.panelTitle}</title>
-					<link href="${codiconsUri.toString()}" rel="stylesheet" />
 					<style>
 						.solutionHeading {
 							margin-top: 40px;

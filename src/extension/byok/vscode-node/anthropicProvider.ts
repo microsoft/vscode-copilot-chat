@@ -216,11 +216,35 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		// We need to do this because there is no local web_search tool definition we can replace.
 		const webSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicWebSearchToolEnabled, this._experimentationService);
 		if (webSearchEnabled && !tools.some(tool => tool.name === 'web_search')) {
-			tools.push({
+			const maxUses = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchMaxUses);
+			const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
+			const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);
+			const userLocation = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchUserLocation);
+
+			const webSearchTool: Anthropic.Beta.BetaWebSearchTool20250305 = {
 				name: 'web_search',
 				type: 'web_search_20250305',
-				max_uses: 5
-			});
+				max_uses: maxUses
+			};
+
+			// Add domain filtering if configured
+			// Cannot use both allowed and blocked domains simultaneously
+			if (allowedDomains && allowedDomains.length > 0) {
+				webSearchTool.allowed_domains = allowedDomains;
+			} else if (blockedDomains && blockedDomains.length > 0) {
+				webSearchTool.blocked_domains = blockedDomains;
+			}
+
+			// Add user location if configured
+			// Note: All fields are optional according to Anthropic docs
+			if (userLocation && (userLocation.city || userLocation.region || userLocation.country || userLocation.timezone)) {
+				webSearchTool.user_location = {
+					type: 'approximate',
+					...userLocation
+				};
+			}
+
+			tools.push(webSearchTool);
 		}
 
 		const thinkingEnabled = this._enableThinking(model.id);
@@ -348,6 +372,9 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			thinking?: string;
 			signature?: string;
 		} | undefined;
+		let pendingRedactedThinking: {
+			data: string;
+		} | undefined;
 		let pendingServerToolCall: {
 			toolId?: string;
 			name?: string;
@@ -388,6 +415,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					pendingThinking = {
 						thinking: '',
 						signature: ''
+					};
+				} else if ('content_block' in chunk && chunk.content_block.type === 'redacted_thinking') {
+					const redactedBlock = chunk.content_block as Anthropic.Messages.RedactedThinkingBlock;
+					pendingRedactedThinking = {
+						data: redactedBlock.data
 					};
 				} else if ('content_block' in chunk && chunk.content_block.type === 'web_search_tool_result') {
 					if (!pendingServerToolCall || !pendingServerToolCall.toolId) {
@@ -462,6 +494,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				} else if (chunk.delta.type === 'thinking_delta') {
 					if (pendingThinking) {
 						pendingThinking.thinking = (pendingThinking.thinking || '') + (chunk.delta.thinking || '');
+						progress.report(new LanguageModelThinkingPart(chunk.delta.thinking || ''));
 					}
 				} else if (chunk.delta.type === 'signature_delta') {
 					// Accumulate signature
@@ -505,14 +538,17 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					}
 					pendingToolCall = undefined;
 				} else if (pendingThinking) {
-					progress.report(
-						new LanguageModelThinkingPart(
-							pendingThinking.thinking || '',
-							undefined, // id
-							{ signature: pendingThinking.signature || '' }
-						)
-					);
+					if (pendingThinking.signature) {
+						const finalThinkingPart = new LanguageModelThinkingPart('');
+						finalThinkingPart.metadata = {
+							signature: pendingThinking.signature,
+							_completeThinking: pendingThinking.thinking
+						};
+						progress.report(finalThinkingPart);
+					}
 					pendingThinking = undefined;
+				} else if (pendingRedactedThinking) {
+					pendingRedactedThinking = undefined;
 				}
 			}
 
