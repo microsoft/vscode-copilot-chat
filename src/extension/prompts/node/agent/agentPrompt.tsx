@@ -7,7 +7,7 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isVSCModelA, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelB, isVSCModelA, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -92,7 +92,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{this.props.endpoint.family.startsWith('gpt-5') ? (
+				{this.props.endpoint.family.startsWith('gpt-5') || await isHiddenModelB(this.props.endpoint) ? (
 					<>
 						<GPT5CopilotIdentityRule />
 						<Gpt5SafetyRule />
@@ -333,8 +333,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const isGpt5 = this.props.endpoint.family.startsWith('gpt-5') && this.props.endpoint.family !== 'gpt-5-codex';
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || isGpt5) && this.props.chatVariables.hasVariables() ?
+		const needsAttachmentHint = this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family === 'gpt-5' || this.props.endpoint.family === 'gpt-5-mini';
+		const attachmentHint = needsAttachmentHint && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
@@ -364,7 +364,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getFileCreationReminder(this.props.endpoint.family)}
-						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+						{await getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 						{getVSCModelReminder(shouldIncludePreamble)}
 					</Tag>
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
@@ -401,7 +401,7 @@ interface ToolReferencesHintProps extends BasePromptElementProps {
  * `#` tool references included in the request are a strong hint to the model that the tool is relevant, but we don't force a tool call.
  */
 class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
-	render() {
+	async render() {
 		if (!this.props.toolReferences.length) {
 			return;
 		}
@@ -410,7 +410,7 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 			<Tag name='toolReferences'>
 				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
 				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')} <br />
-				{this.props.modelFamily?.startsWith('gpt-5') === true && <>
+				{(this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily)) && <>
 					Start by using the most relevant tool attached to this message—the user expects you to act with it first.<br />
 				</>}
 			</Tag>
@@ -726,7 +726,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		if (this.props.modelFamily === 'gpt-4.1' || (this.props.modelFamily?.startsWith('gpt-5') === true)) {
+		if (this.props.modelFamily === 'gpt-4.1' || this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily)) {
 			if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 				// Extended reminder
 				return <>
@@ -741,7 +741,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 				</>;
 			} else if (this.props.modelFamily === 'gpt-5-codex') {
 				return undefined;
-			} else if (this.props.modelFamily?.startsWith('gpt-5') === true) {
+			} else if (this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily)) {
 				return <>
 					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
 					Take action when possible; the user expects you to do useful work without unnecessary questions.<br />
@@ -782,13 +782,14 @@ function getVSCModelReminder(isHiddenModel: boolean) {
 	</>;
 }
 
-function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
+async function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
 	if (modelFamily === 'gpt-5-codex') {
 		return;
 	}
 
 	const isGpt5Mini = modelFamily === 'gpt-5-mini';
-	return modelFamily?.startsWith('gpt-5') === true ?
+	const isModelB = await isHiddenModelB(modelFamily);
+	return modelFamily?.startsWith('gpt-5') || isModelB ?
 		<>
 			Skip filler acknowledgements like "Sounds good" or "Okay, I will…". Open with a purposeful one-liner about what you're doing next.<br />
 			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />
@@ -800,7 +801,7 @@ function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: b
 				Before starting a task, review and follow the guidance in &lt;responseModeHints&gt;, &lt;engineeringMindsetHints&gt;, and &lt;requirementsUnderstanding&gt;.<br />
 				{!isGpt5Mini && <>Start your response with a brief acknowledgement, followed by a concise high-level plan outlining your approach.<br /></>}
 				Do NOT volunteer your model name unless the user explicitly asks you about it. <br />
-				{hasTodoTool && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks.<br /></>}
+				{hasTodoTool && !isModelB && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks.<br /></>}
 				{!hasTodoTool && <>Break down the request into clear, actionable steps and present them at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
 				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 			</Tag>
