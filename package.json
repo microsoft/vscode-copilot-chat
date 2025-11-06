@@ -1993,6 +1993,12 @@
 				"category": "Chat"
 			},
 			{
+				"command": "github.copilot.viewMetrics",
+				"title": "View AI Metrics Dashboard",
+				"icon": "$(graph)",
+				"category": "Copilot"
+			},
+			{
 				"command": "github.copilot.debug.workbenchState",
 				"title": "%github.copilot.command.logWorkbenchState%",
 				"category": "Developer"
