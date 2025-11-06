@@ -16,6 +16,8 @@ import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
+import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 
 export type ConfirmationResult = { step: string; accepted: boolean; metadata?: ConfirmationMetadata };
 
@@ -80,11 +82,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@ILogService private readonly logService: ILogService,
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 	) {
 		super();
 		const interval = setInterval(async () => {
 			const repoId = await getRepoId(this._gitService);
 			if (repoId) {
+				// TODO: handle no auth token case more gracefully
+				if (!this._authenticationService.permissiveGitHubSession) {
+					return;
+				}
 				const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
 				if (this.cachedSessionsSize !== sessions.length) {
 					this.refresh();
@@ -104,6 +112,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return { optionGroups: [] };
 		}
 
+		// TODO: handle no auth token case more gracefully
+		if (!this._authenticationService.permissiveGitHubSession) {
+			return { optionGroups: [] };
+		}
 		try {
 			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo);
 			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
@@ -153,6 +165,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				return [];
 			}
 
+			// TODO: handle no auth token case more gracefully
+			if (!this._authenticationService.permissiveGitHubSession) {
+				return [];
+			}
 			const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
 			this.cachedSessionsSize = sessions.length;
 
@@ -430,9 +446,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 
-	private async handleConfirmationData(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleConfirmationData(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, context: vscode.ChatContext, token: vscode.CancellationToken) {
 		const results: ConfirmationResult[] = [];
-		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
+		results.push(...(request.acceptedConfirmationData?.filter(data => !data?.authPermissionPrompted).map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
 		for (const data of results) {
 			switch (data.step) {
@@ -576,7 +592,26 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
-			return await this.handleConfirmationData(request, stream, token);
+			const findConfirmRequest = request.acceptedConfirmationData?.find(ref => ref?.authPermissionPrompted);
+			if (findConfirmRequest) {
+				const result = await this._authenticationUpgradeService.handleConfirmationRequestWithContext(stream, request, context.history);
+				request = result.request;
+				context = result.context ?? context;
+			} else {
+				return await this.handleConfirmationData(request, stream, context, token);
+			}
+		}
+
+		const accessToken = this._authenticationService.permissiveGitHubSession;
+		if (!accessToken) {
+			// Otherwise, show the permissive session upgrade prompt because it's required
+			this._authenticationUpgradeService.showPermissiveSessionUpgradeInChat(
+				stream,
+				request,
+				vscode.l10n.t('GitHub Copilot Cloud Agent requires access to your repositories on GitHub for handling requests.'),
+				context
+			);
+			return {};
 		}
 
 		/* __GDPR__
