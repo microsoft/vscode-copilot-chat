@@ -111,8 +111,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 
 			disposables.add(toDisposable(this._sdkSession.on('*', (event) => this.logService.trace(`[CopilotCLISession]CopilotCLI Event: ${JSON.stringify(event, null, 2)}`))));
-			disposables.add(toDisposable(this._sdkSession.on('assistant.turn_start', () => toolNames.clear())));
-			disposables.add(toDisposable(this._sdkSession.on('assistant.turn_end', () => toolNames.clear())));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
 				if (typeof event.data.content === 'string' && event.data.content.length) {
 					stream.markdown(event.data.content);
