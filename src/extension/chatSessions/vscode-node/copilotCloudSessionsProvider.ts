@@ -139,6 +139,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
 	private cachedSessionsSize: number = 0;
+	private readonly plainTextRenderer = new PlainTextRenderer();
 
 	constructor(
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
@@ -479,8 +480,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// Icon, title, and PR number
 		const icon = this.getIconMarkdown(pr);
 		// Strip markdown from title for plain text display
-		const renderer = new PlainTextRenderer();
-		const title = renderer.render(pr.title);
+		const title = this.plainTextRenderer.render(pr.title);
 		markdown.appendMarkdown(
 			`${icon} **${title}** [#${pr.number}](${pr.url})  \n`
 		);
@@ -488,7 +488,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// Body/Description (truncated if too long)
 		markdown.appendMarkdown('  \n');
 		const maxBodyLength = 200;
-		let body = renderer.render(pr.body || '');
+		let body = this.plainTextRenderer.render(pr.body || '');
 		// Convert plain text newlines to markdown line breaks (two spaces + newline)
 		body = body.replace(/\n/g, '  \n');
 		body = body.length > maxBodyLength ? body.substring(0, maxBodyLength) + '...' : body;
