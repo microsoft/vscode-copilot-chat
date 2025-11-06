@@ -7,10 +7,8 @@ import * as vscode from 'vscode';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { AiMetricsCollector } from '../common/aiMetricsCollector';
 import { IAiMetricsStorageService } from '../common/aiMetricsStorageService';
 import { AiMetricsStorageService } from '../node/aiMetricsStorageService';
 import { AiMetricsDashboardPanel } from './aiMetricsDashboardPanel';
@@ -19,6 +17,8 @@ import { AiMetricsDashboardPanel } from './aiMetricsDashboardPanel';
  * Contribution for AI Metrics Dashboard functionality
  */
 export class AiMetricsContrib extends Disposable {
+	private storageService: IAiMetricsStorageService | undefined;
+
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -30,22 +30,24 @@ export class AiMetricsContrib extends Disposable {
 	}
 
 	private async initialize(): Promise<void> {
-		// Register the storage service
-		const storageService = this.instantiationService.createInstance(AiMetricsStorageService);
+		// Create and register the storage service
+		this.storageService = this.instantiationService.createInstance(AiMetricsStorageService);
 
 		// Register the view metrics command
 		this._register(
 			vscode.commands.registerCommand('github.copilot.viewMetrics', () => {
-				AiMetricsDashboardPanel.createOrShow(
-					this.extensionContext,
-					storageService,
-					this.logService
-				);
+				if (this.storageService) {
+					AiMetricsDashboardPanel.createOrShow(
+						this.extensionContext,
+						this.storageService,
+						this.logService
+					);
+				}
 			})
 		);
 
 		// Prune old data on activation
-		await storageService.pruneOldData();
+		await this.storageService.pruneOldData();
 
 		this.logService.info('[AiMetrics] AI Metrics contribution initialized');
 	}
