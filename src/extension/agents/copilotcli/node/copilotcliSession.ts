@@ -10,6 +10,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
@@ -110,7 +111,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
 			},
 			requestPermission: async (permissionRequest) => {
-				return await this.requestPermission(permissionRequest, toolInvocationToken);
+				return await this.requestPermission(permissionRequest, toolInvocationToken, workingDirectory);
 			},
 			logger: getCopilotLogger(this.logService),
 			session: this._sdkSession,
@@ -231,14 +232,34 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
-		toolInvocationToken: vscode.ChatParticipantToolToken
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		workingDirectory?: string
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
 		if (permissionRequest.kind === 'read') {
-			// If user is reading a file in the workspace, auto-approve read requests.
-			// Outisde workspace reads (e.g., /etc/passwd) will still require approval.
+			// If user is reading a file in the working directory or workspace, auto-approve
+			// read requests. Outside workspace reads (e.g., /etc/passwd) will still require
+			// approval.
 			const data = Uri.file(permissionRequest.path);
+
+			if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(data, Uri.file(workingDirectory))) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read file in working directory ${permissionRequest.path}`);
+				return { kind: 'approved' };
+			}
+
 			if (this.workspaceService.getWorkspaceFolder(data)) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request to read workspace file ${permissionRequest.path}`);
+				return { kind: 'approved' };
+			}
+		}
+
+		if (workingDirectory && permissionRequest.kind === 'write') {
+			// If user is writing a file in the working directory, approve it.
+			// At the moment, working directory is only set when the session is
+			// using a git worktree.
+			const data = Uri.file(permissionRequest.fileName);
+
+			if (extUriBiasedIgnorePathCase.isEqualOrParent(data, Uri.file(workingDirectory))) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in working directory ${permissionRequest.fileName}`);
 				return { kind: 'approved' };
 			}
 		}
