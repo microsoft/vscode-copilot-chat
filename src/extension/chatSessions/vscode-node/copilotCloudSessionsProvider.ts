@@ -68,9 +68,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private chatSessions: Map<number, PullRequestSearchItem> = new Map();
 	private chatSessionItemsPromise: Promise<vscode.ChatSessionItem[]> | undefined;
 	private sessionAgentMap: Map<Uri, string> = new Map();
-	public chatParticipant = vscode.chat.createChatParticipant(CopilotCloudSessionsProvider.TYPE, async (request, context, stream, token) =>
-		await this.chatParticipantImpl(request, context, stream, token)
-	);
 	private cachedSessionsSize: number = 0;
 
 	constructor(
@@ -96,6 +93,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	public refresh(): void {
 		this._onDidChangeChatSessionItems.fire();
+	}
+
+	createHandler(): vscode.ChatExtendedRequestHandler {
+		return this.chatParticipantImpl.bind(this);
 	}
 
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {

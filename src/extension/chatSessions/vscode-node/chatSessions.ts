@@ -135,11 +135,12 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this.copilotCloudRegistrations.add(
 			vscode.chat.registerChatSessionItemProvider(CopilotCloudSessionsProvider.TYPE, cloudSessionsProvider)
 		);
+		const cloudChatParticipant = vscode.chat.createChatParticipant(CopilotCloudSessionsProvider.TYPE, cloudSessionsProvider.createHandler());
 		this.copilotCloudRegistrations.add(
 			vscode.chat.registerChatSessionContentProvider(
 				CopilotCloudSessionsProvider.TYPE,
 				cloudSessionsProvider,
-				cloudSessionsProvider.chatParticipant,
+				cloudChatParticipant,
 				{ supportsInterruptions: true }
 			)
 		);
