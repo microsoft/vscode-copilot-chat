@@ -212,7 +212,9 @@ function createReviewComment(ghComment: ResponseComment | ExcludedComment, reque
 	const range = new Range(fromLine.lineNumber, fromLine.firstNonWhitespaceCharacterIndex, fromLine.lineNumber, lastNonWhitespaceCharacterIndex);
 	const raw = ghComment.data.body;
 	// Remove suggestion because that interfers with our own suggestion rendering later.
-	const content = removeSuggestion(raw);
+	const { content, suggestions } = removeSuggestion(raw);
+	const startLine = typeof ghComment.data.start_line === 'number' ? ghComment.data.start_line : ghComment.data.line;
+	const suggestionRange = new Range(startLine - 1, 0, ghComment.data.line, 0);
 	const comment: ReviewComment = {
 		request,
 		document: TextDocumentSnapshot.create(document),
@@ -224,13 +226,32 @@ function createReviewComment(ghComment: ResponseComment | ExcludedComment, reque
 		severity: 'medium',
 		originalIndex: index,
 		actionCount: 0,
+		skipSuggestion: true,
+		suggestion: {
+			markdown: '',
+			edits: suggestions.map(suggestion => {
+				const oldText = document.getText(suggestionRange);
+				return {
+					range: suggestionRange,
+					newText: suggestion,
+					oldText,
+				};
+			}),
+		},
 	};
 	return comment;
 }
 
 const SUGGESTION_EXPRESSION = /```suggestion(\u0020*(\r\n|\n))((?<suggestion>[\s\S]*?)(\r\n|\n))?```/g;
 function removeSuggestion(body: string) {
-	return body.replaceAll(SUGGESTION_EXPRESSION, '');
+	const suggestions: string[] = [];
+	const content = body.replaceAll(SUGGESTION_EXPRESSION, (_match, _ws, _nl, suggestion) => {
+		if (suggestion) {
+			suggestions.push(suggestion);
+		}
+		return '';
+	});
+	return { content, suggestions };
 }
 
 // Represents the "before" or "after" state of a file, sent to the agent
@@ -279,6 +300,7 @@ interface ResponseComment {
 		line: number;
 		// The body of the comment, including a ```suggestion block if there is a suggested change
 		body: string;
+		start_line?: number;
 	};
 }
 
@@ -288,6 +310,7 @@ interface ExcludedComment {
 		path: string;
 		line: number;
 		body: string;
+		start_line?: number;
 		exclusion_reason: 'denylisted_type' | 'unknown';
 	};
 }
