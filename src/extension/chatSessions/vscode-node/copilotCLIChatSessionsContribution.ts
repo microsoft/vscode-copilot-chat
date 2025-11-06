@@ -8,6 +8,7 @@ import { ChatExtendedRequestHandler, l10n, Uri } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
@@ -297,6 +298,7 @@ export class CopilotCLIChatSessionParticipant {
 		@IGitService private readonly gitService: IGitService,
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -305,6 +307,23 @@ export class CopilotCLIChatSessionParticipant {
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
+
+
+		/* __GDPR__
+			"copilotcli.chat.invoke" : {
+				"owner": "joshspicer",
+				"comment": "Event sent when a CopilotCLI chat request is made.",
+				"hasChatSessionItem": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Invoked with a chat session item." },
+				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." },
+				"hasDelegatePrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the prompt is a /delegate command." }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('copilotcli.chat.invoke', {
+			hasChatSessionItem: String(!!chatSessionContext?.chatSessionItem),
+			isUntitled: String(chatSessionContext?.isUntitled),
+			hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
+		});
+
 		if (!chatSessionContext) {
 			if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
 				stream.warning(vscode.l10n.t('No chat session context available for confirmation data handling.'));
