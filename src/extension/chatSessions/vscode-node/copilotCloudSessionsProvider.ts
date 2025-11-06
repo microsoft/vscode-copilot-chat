@@ -710,7 +710,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, fileUri.fsPath);
 					if (repositoryForFile.state.workingTreeChanges.some(change => change.renameUri?.fsPath === fileUri.fsPath)) {
 						try {
-							// TODO: just show the file diffs
+							// TODO: Consider just showing the file diffs
 							const document = await vscode.workspace.openTextDocument(fileUri);
 							const content = document.getText();
 							fullFileParts.push(`<file-start>${fileUri.path}</file-start>`);
@@ -723,7 +723,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						fileRefs.push(` - ${relativePath}`);
 					}
 				}
-				// TODO: If file is not tracked, modified, or staged, or is outside the repo, include the entire file
 			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'untitled') {
 				// Get full content of untitled file
 				try {
