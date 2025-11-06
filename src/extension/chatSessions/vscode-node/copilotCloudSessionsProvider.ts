@@ -83,8 +83,6 @@ class PlainTextRenderer {
 			// Process child tokens recursively
 			if (token.children) {
 				result += this.renderTokens(token.children);
-				// If token has children, don't process its own content
-				// Continue to check for closing tags
 			}
 
 			// Handle different token types to match marked.js PlainTextRenderer behavior
