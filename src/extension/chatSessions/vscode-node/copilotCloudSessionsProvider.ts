@@ -701,13 +701,27 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
 		const fileRefs: string[] = [];
 		const fullFileParts: string[] = [];
+		const git = this._gitExtensionService.getExtensionApi();
 		for (const ref of references) {
 			if (ref.value instanceof vscode.Uri && ref.value.scheme === 'file') { // TODO: Add support for more kinds of references
-				const git = this._gitExtensionService.getExtensionApi();
-				const repositoryForFile = git?.getRepository(ref.value);
+				const fileUri = ref.value;
+				const repositoryForFile = git?.getRepository(fileUri);
 				if (repositoryForFile) {
-					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, ref.value.fsPath);
-					fileRefs.push(` - ${relativePath}`);
+					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, fileUri.fsPath);
+					if (repositoryForFile.state.workingTreeChanges.some(change => change.renameUri?.fsPath === fileUri.fsPath)) {
+						try {
+							// TODO: just show the file diffs
+							const document = await vscode.workspace.openTextDocument(fileUri);
+							const content = document.getText();
+							fullFileParts.push(`<file-start>${fileUri.path}</file-start>`);
+							fullFileParts.push(content);
+							fullFileParts.push(`<file-end>${fileUri.path}</file-end>`);
+						} catch (error) {
+							this.logService.error(`Error reading file content for reference: ${fileUri.toString()}: ${error}`);
+						}
+					} else {
+						fileRefs.push(` - ${relativePath}`);
+					}
 				}
 				// TODO: If file is not tracked, modified, or staged, or is outside the repo, include the entire file
 			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'untitled') {
