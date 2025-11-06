@@ -101,6 +101,9 @@ export interface IEndpointBody {
 	truncation?: 'auto' | 'disabled';
 	include?: ['reasoning.encrypted_content'];
 	store?: boolean;
+	text?: {
+		verbosity?: 'low' | 'medium' | 'high';
+	};
 }
 
 export interface IEndpointFetchOptions {
@@ -238,7 +241,7 @@ export interface IChatEndpoint extends IEndpoint {
 	/**
 	 * Creates the request body to be sent to the endpoint based on the request.
 	 */
-	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody;
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody | Promise<IEndpointBody>;
 
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
 }

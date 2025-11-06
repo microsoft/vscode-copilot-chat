@@ -149,3 +149,7 @@ export function modelNeedsStrongReplaceStringHint(model: LanguageModelChat | ICh
 export function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): boolean {
 	return model.family.startsWith('gpt-5');
 }
+
+export async function getVerbosityForModel(model: IChatEndpoint): Promise<'low' | 'medium' | 'high' | undefined> {
+	return await isHiddenModelB(model) ? 'low' : undefined;
+}

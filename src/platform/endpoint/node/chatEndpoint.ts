@@ -244,9 +244,9 @@ export class ChatEndpoint implements IChatEndpoint {
 		}
 	}
 
-	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+	async createRequestBody(options: ICreateEndpointBodyOptions): Promise<IEndpointBody> {
 		if (this.useResponsesApi) {
-			const body = this._instantiationService.invokeFunction(createResponsesRequestBody, options, this.model, this.modelMetadata);
+			const body = await this._instantiationService.invokeFunction(createResponsesRequestBody, options, this.model, this);
 			return this.customizeResponsesBody(body);
 		} else {
 			const body = createCapiRequestBody(options, this.model, this.getCompletionsCallback());
