@@ -8,6 +8,7 @@ import * as https from 'https';
 import { IEnvService } from '../../env/common/envService';
 import { FetchOptions, IAbortController, IHeaders, Response } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
+import { collectSingleLineErrorMessage } from '../../log/common/logService';
 
 export class NodeFetcher implements IFetcher {
 
@@ -97,7 +98,7 @@ export class NodeFetcher implements IFetcher {
 		return e && ['EADDRINUSE', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EPIPE', 'ETIMEDOUT'].includes(e.code);
 	}
 	getUserMessageForFetcherError(err: any): string {
-		return `Please check your firewall rules and network connection then try again. Error Code: ${err.code}.`;
+		return `Please check your firewall rules and network connection then try again. Error Code: ${collectSingleLineErrorMessage(err)}.`;
 	}
 }
 
