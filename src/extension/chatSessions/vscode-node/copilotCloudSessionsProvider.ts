@@ -491,9 +491,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		markdown.appendMarkdown('  \n');
 		const maxBodyLength = 200;
 		let body = renderer.render(pr.body || '');
-		body = body.length > maxBodyLength ? body.substring(0, maxBodyLength) + '...' : body;
 		// Convert plain text newlines to markdown line breaks (two spaces + newline)
 		body = body.replace(/\n/g, '  \n');
+		body = body.length > maxBodyLength ? body.substring(0, maxBodyLength) + '...' : body;
 		markdown.appendMarkdown(body + '  \n');
 
 		return markdown;
@@ -501,16 +501,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	private getIconMarkdown(pr: PullRequestSearchItem): string {
 		const state = pr.state.toUpperCase();
-		switch (state) {
-			case 'OPEN':
-				return '$(git-pull-request)';
-			case 'CLOSED':
-				return '$(git-pull-request)';
-			case 'MERGED':
-				return '$(git-merge)';
-			default:
-				return '$(git-pull-request)';
-		}
+		return state === 'MERGED' ? '$(git-merge)' : '$(git-pull-request)';
 	}
 
 	private async startSession(stream: vscode.ChatResponseStream, token: vscode.CancellationToken, source: string, prompt: string, history?: string, references?: readonly vscode.ChatPromptReference[], customAgentName?: string) {
