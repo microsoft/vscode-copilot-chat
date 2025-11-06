@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { FileStat, FileSystem, FileSystemWatcher, Uri } from 'vscode';
+import type { FileStat, FileSystem, FileSystemWatcher, RelativePattern, Uri } from 'vscode';
 import { LRUCache } from '../../../util/common/cache';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { FileType } from './fileTypes';
@@ -29,7 +29,7 @@ export interface IFileSystemService extends FileSystem {
 	copy(source: Uri, destination: Uri, options?: { overwrite?: boolean }): Promise<void>;
 	isWritableFileSystem(scheme: string): boolean | undefined;
 
-	createFileSystemWatcher(glob: string): FileSystemWatcher;
+	createFileSystemWatcher(glob: string | RelativePattern): FileSystemWatcher;
 }
 
 /**

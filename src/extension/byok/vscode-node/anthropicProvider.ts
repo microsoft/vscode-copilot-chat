@@ -44,6 +44,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
 	 * - Claude Opus 4.1 (claude-opus-4-1-*)
 	 * - Claude Opus 4 (claude-opus-4-*)
+	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
 	 */
 	private _enableThinking(modelId: string): boolean {
 
@@ -56,6 +57,25 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return normalized.startsWith('claude-sonnet-4-5') ||
 			normalized.startsWith('claude-sonnet-4') ||
 			normalized.startsWith('claude-3-7-sonnet') ||
+			normalized.startsWith('claude-haiku-4-5') ||
+			normalized.startsWith('claude-opus-4-1') ||
+			normalized.startsWith('claude-opus-4');
+	}
+
+	/**
+	 * Checks if a model supports memory based on its model ID.
+	 * Memory is supported by:
+	 * - Claude Sonnet 4.5 (claude-sonnet-4-5-*)
+	 * - Claude Sonnet 4 (claude-sonnet-4-*)
+	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
+	 * - Claude Opus 4.1 (claude-opus-4-1-*)
+	 * - Claude Opus 4 (claude-opus-4-*)
+	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
+	 */
+	private _enableMemory(modelId: string): boolean {
+		const normalized = modelId.toLowerCase();
+		return normalized.startsWith('claude-sonnet-4-5') ||
+			normalized.startsWith('claude-sonnet-4') ||
 			normalized.startsWith('claude-haiku-4-5') ||
 			normalized.startsWith('claude-opus-4-1') ||
 			normalized.startsWith('claude-opus-4');
@@ -181,7 +201,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
 
 			// Handle native Anthropic memory tool
-			if (tool.name === 'memory') {
+			if (hasMemoryTool && this._enableMemory(model.id)) {
 				return {
 					name: 'memory',
 					type: 'memory_20250818'
@@ -372,6 +392,9 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			thinking?: string;
 			signature?: string;
 		} | undefined;
+		let pendingRedactedThinking: {
+			data: string;
+		} | undefined;
 		let pendingServerToolCall: {
 			toolId?: string;
 			name?: string;
@@ -412,6 +435,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					pendingThinking = {
 						thinking: '',
 						signature: ''
+					};
+				} else if ('content_block' in chunk && chunk.content_block.type === 'redacted_thinking') {
+					const redactedBlock = chunk.content_block as Anthropic.Messages.RedactedThinkingBlock;
+					pendingRedactedThinking = {
+						data: redactedBlock.data
 					};
 				} else if ('content_block' in chunk && chunk.content_block.type === 'web_search_tool_result') {
 					if (!pendingServerToolCall || !pendingServerToolCall.toolId) {
@@ -486,6 +514,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				} else if (chunk.delta.type === 'thinking_delta') {
 					if (pendingThinking) {
 						pendingThinking.thinking = (pendingThinking.thinking || '') + (chunk.delta.thinking || '');
+						progress.report(new LanguageModelThinkingPart(chunk.delta.thinking || ''));
 					}
 				} else if (chunk.delta.type === 'signature_delta') {
 					// Accumulate signature
@@ -529,14 +558,17 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					}
 					pendingToolCall = undefined;
 				} else if (pendingThinking) {
-					progress.report(
-						new LanguageModelThinkingPart(
-							pendingThinking.thinking || '',
-							undefined, // id
-							{ signature: pendingThinking.signature || '' }
-						)
-					);
+					if (pendingThinking.signature) {
+						const finalThinkingPart = new LanguageModelThinkingPart('');
+						finalThinkingPart.metadata = {
+							signature: pendingThinking.signature,
+							_completeThinking: pendingThinking.thinking
+						};
+						progress.report(finalThinkingPart);
+					}
 					pendingThinking = undefined;
+				} else if (pendingRedactedThinking) {
+					pendingRedactedThinking = undefined;
 				}
 			}
 

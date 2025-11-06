@@ -9,7 +9,7 @@ import { Uri } from 'vscode';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
-import { IOctoKitService, JobInfo, RemoteAgentJobPayload } from '../../../platform/github/common/githubService';
+import { IOctoKitService, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -579,6 +579,19 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return await this.handleConfirmationData(request, stream, token);
 		}
 
+		/* __GDPR__
+			"copilotcloud.chat.invoke" : {
+				"owner": "joshspicer",
+				"comment": "Event sent when a Copilot Cloud chat request is made.",
+				"hasChatSessionItem": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Invoked with a chat session item." },
+				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." }
+			}
+		*/
+		this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.invoke', {
+			hasChatSessionItem: String(!!context.chatSessionContext?.chatSessionItem),
+			isUntitled: String(context.chatSessionContext?.isUntitled)
+		});
+
 		if (context.chatSessionContext?.isUntitled) {
 			/* Generate new cloud agent session from an 'untitled' session */
 
@@ -841,6 +854,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 								if (toolPart) {
 									stream.push(toolPart);
 									hasStreamedContent = true;
+									if (toolPart instanceof vscode.ChatResponseThinkingProgressPart) {
+										stream.push(new vscode.ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+									}
 								}
 							} else {
 								// Running setup step - just track progress
@@ -861,6 +877,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 									if (toolPart) {
 										stream.push(toolPart);
 										hasStreamedContent = true;
+										if (toolPart instanceof vscode.ChatResponseThinkingProgressPart) {
+											stream.push(new vscode.ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+										}
 									}
 								}
 							}
@@ -1001,6 +1020,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
+	// https://github.com/github/sweagentd/blob/main/docs/adr/0001-create-job-api.md
+	private validateRemoteAgentJobResponse(response: unknown): response is RemoteAgentJobResponse {
+		return typeof response === 'object' && response !== null && 'job_id' in response && 'session_id' in response;
+	}
+
 	private async waitForJobWithPullRequest(
 		owner: string,
 		repo: string,
@@ -1056,8 +1080,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (!base_ref) {
 			return { error: vscode.l10n.t('Unable to determine the current branch.'), state: 'error' };
 		}
-		let head_ref: string | undefined; // This is the ref cloud agent starts work from (omitted unless we push local changes)
+		let head_ref: string | undefined; // TODO: UNUSED! This is the ref cloud agent starts work from (omitted unless we push local changes)
 
+		// TODO: Make this automatic instead of a fatal error.
 		const remoteName =
 			repo?.state.HEAD?.upstream?.remote ??
 			currentRepository?.upstreamRemote ??
@@ -1065,7 +1090,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		if (repo && remoteName && base_ref) {
 			try {
-				const remoteBranches = await repo.getBranches({ remote: true });
+				const remoteBranches =
+					(await repo.getBranches({ remote: true }))
+						.filter(b => b.remote); // Has an associated remote
 				const expectedRemoteBranch = `${remoteName}/${base_ref}`;
 				const alternateNames = new Set<string>([
 					expectedRemoteBranch,
@@ -1079,7 +1106,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					if (branch.remote && branch.remote !== remoteName) {
 						return false;
 					}
-					const candidateName = branch.remote ? `${branch.remote}/${branch.name}` : branch.name;
+					const candidateName =
+						(branch.remote && branch.name.startsWith(branch.remote + '/'))
+							? branch.name
+							: `${branch.remote}/${branch.name}`;
 					return alternateNames.has(candidateName);
 				});
 
@@ -1138,7 +1168,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			chatStream?.progress(vscode.l10n.t('Delegating to cloud agent'));
 			this.logService.trace(`Invoking cloud agent job with payload: ${JSON.stringify(payload)}`);
 			const response = await this._octoKitService.postCopilotAgentJob(repoId.org, repoId.repo, JOBS_API_VERSION, payload);
-
+			if (!this.validateRemoteAgentJobResponse(response)) {
+				const statusCode = response?.status;
+				return { error: vscode.l10n.t('Received invalid response {0}from cloud agent.', statusCode ? statusCode + ' ' : ''), innerError: `Response ${JSON.stringify(response)}`, state: 'error' };
+			}
 			// For v1 API, we need to fetch the job details to get the PR info
 			// Since the PR might not be created immediately, we need to poll for it
 			chatStream?.progress(vscode.l10n.t('Creating pull request'));

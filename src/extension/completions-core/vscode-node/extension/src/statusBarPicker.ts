@@ -7,7 +7,7 @@ import { isWeb } from '../../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsContextService } from '../../lib/src/context';
 import { isCompletionEnabled, isInlineSuggestEnabled } from './config';
-import { CMDCollectDiagnosticsChat, CMDDisableCompletionsChat, CMDEnableCompletionsChat, CMDOpenDocumentationClient, CMDOpenLogsClient } from './constants';
+import { CMDCollectDiagnosticsChat, CMDDisableCompletionsChat, CMDEnableCompletionsChat, CMDOpenDocumentationClient, CMDOpenLogsClient, CMDOpenModelPickerClient, CMDOpenPanelClient } from './constants';
 import { CopilotExtensionStatus } from './extensionStatus';
 import { Icon } from './icon';
 
@@ -24,7 +24,7 @@ export class CopilotStatusBarPickMenu {
 	showStatusMenu() {
 		const quickpickList = window.createQuickPick();
 		quickpickList.placeholder = 'Select an option';
-		quickpickList.title = 'Configure Copilot Completions';
+		quickpickList.title = 'Configure Inline Suggestions';
 		quickpickList.items = this.collectQuickPickItems();
 		quickpickList.onDidAccept(() => this.handleItemSelection(quickpickList));
 		quickpickList.show();
@@ -64,11 +64,9 @@ export class CopilotStatusBarPickMenu {
 		if (!this.hasActiveStatus()) { return items; }
 
 		const editor = window.activeTextEditor;
-		//if (!isWeb && editor) { items.push(this.newPanelItem()); }
+		if (!isWeb && editor) { items.push(this.newPanelItem()); }
 		// Always show the model picker even if only one model is available
-		// Except on web where the model picker is not available pending CORS
-		// support from CAPI https://github.com/github/copilot-api/pull/12233
-		//if (!isWeb) { items.push(this.newChangeModelItem()); }
+		if (!isWeb) { items.push(this.newChangeModelItem()); }
 		if (editor) { items.push(...this.newEnableLanguageItem()); }
 		if (items.length) { items.push(this.newSeparator()); }
 
@@ -86,9 +84,9 @@ export class CopilotStatusBarPickMenu {
 	private newEnableLanguageItem() {
 		const isEnabled = this.isCompletionEnabled();
 		if (isEnabled) {
-			return [this.newCommandItem('Disable Completions', CMDDisableCompletionsChat)];
+			return [this.newCommandItem('Disable Inline Suggestions', CMDDisableCompletionsChat)];
 		} else if (isEnabled === false) {
-			return [this.newCommandItem('Enable Completions', CMDEnableCompletionsChat)];
+			return [this.newCommandItem('Enable Inline Suggestions', CMDEnableCompletionsChat)];
 		} else {
 			return [];
 		}
@@ -138,18 +136,14 @@ export class CopilotStatusBarPickMenu {
 			'GitHub Copilot',
 		]);
 	}
-	/* 	private newPanelItem() {
+
 	private newPanelItem() {
-		return this.newCommandItem('Open Completions Panel...', CMDOpenPanel);
+		return this.newCommandItem('Open Completions Panel...', CMDOpenPanelClient);
 	}
 
 	private newChangeModelItem() {
-		return this.newCommandItem('Change Completions Model...', CMDOpenModelPicker);
+		return this.newCommandItem('Change Completions Model...', CMDOpenModelPickerClient);
 	}
-
-	private newForumItem() {
-		return this.newCommandItem('$(comments-view-icon) View Copilot Forum...', CMDSendFeedback);
-	} */
 
 	private newDocsItem() {
 		return this.newCommandItem(

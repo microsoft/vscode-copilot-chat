@@ -25,7 +25,7 @@ import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from 
 import { CodeReference } from './extension/src/codeReferencing';
 import { LoggingCitationManager } from './extension/src/codeReferencing/citationManager';
 import { disableCompletions, enableCompletions, toggleCompletions, VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
-import { CMDDisableCompletionsChat, CMDDisableCompletionsClient, CMDEnableCompletionsChat, CMDEnableCompletionsClient, CMDOpenDocumentationClient, CMDOpenLogsClient, CMDToggleCompletionsChat, CMDToggleCompletionsClient, CMDToggleStatusMenuChat, CMDToggleStatusMenuClient } from './extension/src/constants';
+import { CMDDisableCompletionsChat, CMDDisableCompletionsClient, CMDEnableCompletionsChat, CMDEnableCompletionsClient, CMDOpenDocumentationClient, CMDOpenLogsClient, CMDOpenModelPickerChat, CMDOpenModelPickerClient, CMDToggleCompletionsChat, CMDToggleCompletionsClient, CMDToggleStatusMenuChat, CMDToggleStatusMenuClient } from './extension/src/constants';
 import { contextProviderMatch } from './extension/src/contextProviderMatch';
 import { registerPanelSupport } from './extension/src/copilotPanel/common';
 import { Extension } from './extension/src/extensionContext';
@@ -33,6 +33,7 @@ import { CopilotExtensionStatus } from './extension/src/extensionStatus';
 import { extensionFileSystem } from './extension/src/fileSystem';
 import { registerGhostTextDependencies } from './extension/src/ghostText/ghostText';
 import { exception } from './extension/src/inlineCompletion';
+import { ModelPickerManager } from './extension/src/modelPicker';
 import { CopilotStatusBar } from './extension/src/statusBar';
 import { CopilotStatusBarPickMenu } from './extension/src/statusBarPicker';
 import { ExtensionTextDocumentManager } from './extension/src/textDocumentManager';
@@ -239,6 +240,7 @@ export function registerUnificationCommands(accessor: ServicesAccessor): IDispos
 	disposables.add(registerStatusBar(accessor));
 	disposables.add(registerDiagnosticCommands(accessor));
 	disposables.add(registerPanelSupport(accessor));
+	disposables.add(registerModelPickerCommands(accessor));
 
 	return disposables;
 }
@@ -273,6 +275,26 @@ function registerEnablementCommands(accessor: ServicesAccessor): IDisposable {
 	disposables.add(enable(CMDEnableCompletionsClient));
 	disposables.add(disable(CMDDisableCompletionsClient));
 	disposables.add(toggle(CMDToggleCompletionsClient));
+
+	return disposables;
+}
+
+function registerModelPickerCommands(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+
+	const instantiationService = accessor.get(IInstantiationService);
+
+	const modelsPicker = instantiationService.createInstance(ModelPickerManager);
+
+	function registerModelPicker(commandId: string): IDisposable {
+		return registerCommandWrapper(accessor, commandId, async () => {
+			await modelsPicker.showModelPicker();
+		});
+	}
+
+	// Model picker command [with Command Palette support]
+	disposables.add(registerModelPicker(CMDOpenModelPickerClient));
+	disposables.add(registerModelPicker(CMDOpenModelPickerChat));
 
 	return disposables;
 }

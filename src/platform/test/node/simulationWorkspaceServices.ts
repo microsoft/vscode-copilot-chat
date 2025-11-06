@@ -235,7 +235,7 @@ export class SimulationFileSystemAdaptor implements IFileSystemService {
 		return this._delegate.isWritableFileSystem(scheme);
 	}
 
-	createFileSystemWatcher(glob: string): vscode.FileSystemWatcher {
+	createFileSystemWatcher(glob: string | vscode.RelativePattern): vscode.FileSystemWatcher {
 		return this._delegate.createFileSystemWatcher(glob);
 	}
 }
