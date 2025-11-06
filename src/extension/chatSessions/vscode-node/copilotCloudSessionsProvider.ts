@@ -708,14 +708,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const repositoryForFile = git?.getRepository(fileUri);
 				if (repositoryForFile) {
 					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, fileUri.fsPath);
-					if (repositoryForFile.state.workingTreeChanges.some(change => change.renameUri?.fsPath === fileUri.fsPath)) {
+					if (repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath)) {
 						try {
 							// TODO: Consider just showing the file diffs
 							const document = await vscode.workspace.openTextDocument(fileUri);
 							const content = document.getText();
-							fullFileParts.push(`<file-start>${fileUri.path}</file-start>`);
+							fullFileParts.push(`<file-start>${relativePath}</file-start>`);
 							fullFileParts.push(content);
-							fullFileParts.push(`<file-end>${fileUri.path}</file-end>`);
+							fullFileParts.push(`<file-end>${relativePath}</file-end>`);
 						} catch (error) {
 							this.logService.error(`Error reading file content for reference: ${fileUri.toString()}: ${error}`);
 						}
