@@ -431,7 +431,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		*/
 		this._telemetryService.sendTelemetryEvent('response.error', { github: true, microsoft: true }, {
 			type: processed.type,
-			reason: processed.reason,
+			reason: processed.reasonDetail || processed.reason,
 			source: telemetryProperties?.messageSource ?? 'unknown',
 			requestId: ourRequestId,
 			model: chatEndpointInfo.model,
@@ -709,18 +709,20 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}
 		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
 		this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
-		// this.logger.exception(err, `Error on conversation request`);
+		const errorDetail = fetcher.getUserMessageForFetcherError(err);
 		if (fetcher.isInternetDisconnectedError(err)) {
 			return {
 				type: ChatFetchResponseType.NetworkError,
 				reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
+				reasonDetail: errorDetail,
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
 		} else if (fetcher.isFetcherError(err)) {
 			return {
 				type: ChatFetchResponseType.NetworkError,
-				reason: fetcher.getUserMessageForFetcherError(err),
+				reason: errorDetail,
+				reasonDetail: errorDetail,
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
@@ -728,6 +730,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			return {
 				type: ChatFetchResponseType.Failed,
 				reason: 'Error on conversation request. Check the log for more details.',
+				reasonDetail: errorDetail,
 				requestId: requestId,
 				serverRequestId: undefined,
 			};

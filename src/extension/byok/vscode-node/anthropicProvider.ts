@@ -44,6 +44,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
 	 * - Claude Opus 4.1 (claude-opus-4-1-*)
 	 * - Claude Opus 4 (claude-opus-4-*)
+	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
 	 */
 	private _enableThinking(modelId: string): boolean {
 
@@ -56,6 +57,25 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return normalized.startsWith('claude-sonnet-4-5') ||
 			normalized.startsWith('claude-sonnet-4') ||
 			normalized.startsWith('claude-3-7-sonnet') ||
+			normalized.startsWith('claude-haiku-4-5') ||
+			normalized.startsWith('claude-opus-4-1') ||
+			normalized.startsWith('claude-opus-4');
+	}
+
+	/**
+	 * Checks if a model supports memory based on its model ID.
+	 * Memory is supported by:
+	 * - Claude Sonnet 4.5 (claude-sonnet-4-5-*)
+	 * - Claude Sonnet 4 (claude-sonnet-4-*)
+	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
+	 * - Claude Opus 4.1 (claude-opus-4-1-*)
+	 * - Claude Opus 4 (claude-opus-4-*)
+	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
+	 */
+	private _enableMemory(modelId: string): boolean {
+		const normalized = modelId.toLowerCase();
+		return normalized.startsWith('claude-sonnet-4-5') ||
+			normalized.startsWith('claude-sonnet-4') ||
 			normalized.startsWith('claude-haiku-4-5') ||
 			normalized.startsWith('claude-opus-4-1') ||
 			normalized.startsWith('claude-opus-4');
@@ -181,7 +201,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
 
 			// Handle native Anthropic memory tool
-			if (tool.name === 'memory') {
+			if (hasMemoryTool && this._enableMemory(model.id)) {
 				return {
 					name: 'memory',
 					type: 'memory_20250818'

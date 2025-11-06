@@ -85,7 +85,6 @@ export class ConversationFeature implements IExtensionContribution {
 		// Register Copilot token listener
 		this.registerCopilotTokenListener();
 
-		this.activated = true;
 	}
 
 	get enabled() {
@@ -304,11 +303,13 @@ export class ConversationFeature implements IExtensionContribution {
 	}
 
 	private registerCopilotTokenListener() {
-		this._disposables.add(this.authenticationService.onDidAuthenticationChange(() => {
+		const tokenListener = () => {
 			const chatEnabled = this.authenticationService.copilotToken?.isChatEnabled();
 			this.logService.info(`copilot token chat_enabled: ${chatEnabled}, sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
 			this.enabled = chatEnabled ?? false;
-		}));
+		};
+		this._disposables.add(this.authenticationService.onDidAuthenticationChange(tokenListener));
+		tokenListener();
 	}
 
 	private registerTerminalQuickFixProviders() {

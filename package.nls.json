@@ -28,6 +28,7 @@
 	"github.copilot.command.generateDocs": "Generate Docs",
 	"github.copilot.command.generateTests": "Generate Tests",
 	"github.copilot.command.openUserPreferences": "Open User Preferences",
+	"github.copilot.command.openMemoryFolder": "Open Memory Folder",
 	"github.copilot.command.sendChatFeedback": "Send Chat Feedback",
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
@@ -359,7 +360,5 @@
 	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume Agent Session in Terminal",
 	"github.copilot.cli.sessions.newTerminalSession": "New Agent Session in Terminal",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
-	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
-	"copilot.tools.runSubagent.name": "Run Subagent",
-	"copilot.tools.runSubagent.description": "Runs a task within an isolated subagent context. Enables efficient organization of tasks and context window management."
+	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request"
 }

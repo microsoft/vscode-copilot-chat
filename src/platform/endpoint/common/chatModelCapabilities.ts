@@ -39,10 +39,19 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	return HIDDEN_MODEL_A_HASHES.includes(h);
 }
 
-export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	const h = await getCachedSha256Hash(model.family);
+export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint | string | undefined): Promise<boolean> {
+	if (!model) {
+		return false;
+	}
+
+	const family = typeof model === 'string' ? model : model.family;
+	if (hiddenModelBFamily === family) {
+		return true;
+	}
+
+	const h = await getCachedSha256Hash(family);
 	if (h === HIDDEN_MODEL_B_HASH) {
-		hiddenModelBFamily = model.family;
+		hiddenModelBFamily = family;
 		return true;
 	}
 	return false;
@@ -153,8 +162,8 @@ export function modelNeedsStrongReplaceStringHint(model: LanguageModelChat | ICh
 /**
  * Model can take the simple, modern apply_patch instructions.
  */
-export function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('gpt-5');
+export async function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	return model.family.startsWith('gpt-5') || await isHiddenModelB(model);
 }
 
 export function getVerbosityForModelSync(model: IChatEndpoint): 'low' | 'medium' | 'high' | undefined {
