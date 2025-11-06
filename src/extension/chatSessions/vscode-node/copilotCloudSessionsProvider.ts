@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import MarkdownIt from 'markdown-it';
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
@@ -57,6 +58,74 @@ export interface ICommentResult {
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
 const BACKGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Custom renderer for markdown-it that converts markdown to plain text
+ */
+class PlainTextRenderer {
+	private md: MarkdownIt;
+
+	constructor() {
+		this.md = new MarkdownIt();
+	}
+
+	/**
+	 * Renders markdown text as plain text by extracting text content from all tokens
+	 */
+	render(markdown: string): string {
+		const tokens = this.md.parse(markdown, {});
+		return this.renderTokens(tokens).trim();
+	}
+
+	private renderTokens(tokens: MarkdownIt.Token[]): string {
+		let result = '';
+		for (const token of tokens) {
+			// Process child tokens recursively
+			if (token.children) {
+				result += this.renderTokens(token.children);
+				// If token has children, don't process its own content
+				// Continue to check for closing tags
+			}
+
+			// Handle different token types to match marked.js PlainTextRenderer behavior
+			switch (token.type) {
+				case 'text':
+				case 'code_inline':
+					// Only add content if no children were processed
+					if (!token.children) {
+						result += token.content;
+					}
+					break;
+
+				case 'softbreak':
+				case 'hardbreak':
+					result += ' '; // Space instead of newline to match original
+					break;
+
+				case 'paragraph_close':
+					result += '\n'; // Newline after paragraphs for separation
+					break;
+
+				case 'heading_close':
+					result += '\n'; // Newline after headings
+					break;
+
+				case 'list_item_close':
+					result += '\n'; // Newline after list items
+					break;
+
+				case 'fence':
+				case 'code_block':
+				case 'hr':
+					// Skip these entirely
+					break;
+
+				// Don't add default case - only explicitly handle what we want
+			}
+		}
+		return result;
+	}
+}
 
 export class CopilotCloudSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
 	public static readonly TYPE = 'copilot-cloud-agent';
@@ -184,12 +253,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const uri = await toOpenPullRequestWebviewUri({ owner: repoId.org, repo: repoId.repo, pullRequestNumber: pr.number });
 				const prLinkTitle = vscode.l10n.t('Open pull request in VS Code');
 				const description = new vscode.MarkdownString(`[#${pr.number}](${uri.toString()} "${prLinkTitle}")`);
+				const tooltip = this.createPullRequestTooltip(pr);
 
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status: this.getSessionStatusFromSession(sessionItem),
 					description,
+					tooltip,
 					timing: {
 						startTime: new Date(sessionItem.last_updated_at).getTime(),
 					},
@@ -389,6 +460,56 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				return vscode.ChatSessionStatus.Completed;
 			default:
 				return vscode.ChatSessionStatus.Completed;
+		}
+	}
+
+	private createPullRequestTooltip(pr: PullRequestSearchItem): vscode.MarkdownString {
+		const markdown = new vscode.MarkdownString(undefined, true);
+		markdown.supportHtml = true;
+
+		// Repository and date
+		const date = new Date(pr.createdAt);
+		const ownerName = `${pr.repository.owner.login}/${pr.repository.name}`;
+		markdown.appendMarkdown(
+			`[${ownerName}](https://github.com/${ownerName}) on ${date.toLocaleString('default', {
+				day: 'numeric',
+				month: 'short',
+				year: 'numeric',
+			})}  \n`
+		);
+
+		// Icon, title, and PR number
+		const icon = this.getIconMarkdown(pr);
+		// Strip markdown from title for plain text display
+		const renderer = new PlainTextRenderer();
+		const title = renderer.render(pr.title);
+		markdown.appendMarkdown(
+			`${icon} **${title}** [#${pr.number}](${pr.url})  \n`
+		);
+
+		// Body/Description (truncated if too long)
+		markdown.appendMarkdown('  \n');
+		const maxBodyLength = 200;
+		let body = renderer.render(pr.body || '');
+		body = body.length > maxBodyLength ? body.substring(0, maxBodyLength) + '...' : body;
+		// Convert plain text newlines to markdown line breaks (two spaces + newline)
+		body = body.replace(/\n/g, '  \n');
+		markdown.appendMarkdown(body + '  \n');
+
+		return markdown;
+	}
+
+	private getIconMarkdown(pr: PullRequestSearchItem): string {
+		const state = pr.state.toUpperCase();
+		switch (state) {
+			case 'OPEN':
+				return '$(git-pull-request)';
+			case 'CLOSED':
+				return '$(git-pull-request)';
+			case 'MERGED':
+				return '$(git-merge)';
+			default:
+				return '$(git-pull-request)';
 		}
 	}
 
