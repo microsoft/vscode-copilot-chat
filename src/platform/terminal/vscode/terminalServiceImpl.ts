@@ -22,9 +22,12 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 	) {
 		super();
-		// As env variables are persisted, clear them on startup
-		// This way any old contributions from previous versions/sessions are cleared out.
-		this.context.environmentVariableCollection.clear();
+		// This used to be setup in the past for Copilot CLI auth in terminals.
+		// It was only ever shipped in the VSCode insiders and never got into stable.
+		// So this is only required for users who had insiders installed before it was removed.
+		// Safe to remove this after a few months or so (https://github.com/microsoft/vscode/issues/275692).
+		this.context.environmentVariableCollection.delete('GH_TOKEN');
+
 		for (const l of installTerminalBufferListeners()) {
 			this._register(l);
 		}
