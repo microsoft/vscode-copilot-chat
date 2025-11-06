@@ -8,7 +8,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -29,16 +29,6 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			return undefined;
 		}
 		return await this.getCurrentAuthedUserWithToken(authToken);
-	}
-
-	async getTeamMembership(teamId: number): Promise<any | undefined> {
-		const session = (await this._authService.getAnyGitHubSession());
-		const token = session?.accessToken;
-		const username = session?.account.label;
-		if (!token || !username) {
-			return undefined;
-		}
-		return await this.getTeamMembershipWithToken(teamId, token, username);
 	}
 
 	async getCopilotPullRequestsForUser(owner: string, repo: string): Promise<PullRequestSearchItem[]> {
@@ -153,14 +143,6 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			return [];
 		}
 		return agents;
-	}
-
-	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined> {
-		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
-		if (!authToken) {
-			return undefined;
-		}
-		return this.getCustomAgentDetailsWithToken(owner, repo, agentName, authToken, version);
 	}
 
 	async getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<PullRequestFile[]> {
