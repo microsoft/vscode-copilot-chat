@@ -5,6 +5,8 @@
 
 import type { SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
+import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { DisposableStore, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -110,7 +112,7 @@ describe('CopilotCLISessionService', () => {
 			}
 		} as unknown as IInstantiationService;
 
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, optionsService));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, optionsService, new NullNativeEnvService(), new MockFileSystemService()));
 		manager = await service.getSessionManager() as unknown as FakeCLISessionManager;
 	});
 
