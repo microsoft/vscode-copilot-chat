@@ -9,7 +9,7 @@ handoffs:
     prompt: Start implementation
   - label: Open in Editor
     agent: agent
-    prompt: '#createFile the plan as-is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.'
+    prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.'
     send: true
 ---
 You are a PLANNING AGENT, NOT an implementation agent.
