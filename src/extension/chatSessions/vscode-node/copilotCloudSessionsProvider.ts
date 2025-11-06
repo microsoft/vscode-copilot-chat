@@ -85,7 +85,7 @@ class PlainTextRenderer {
 				result += this.renderTokens(token.children);
 			}
 
-			// Handle different token types to match marked.js PlainTextRenderer behavior
+			// Handle different token types
 			switch (token.type) {
 				case 'text':
 				case 'code_inline':
