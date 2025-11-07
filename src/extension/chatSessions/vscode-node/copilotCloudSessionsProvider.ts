@@ -100,6 +100,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}, BACKGROUND_REFRESH_INTERVAL_MS);
 		this._register(toDisposable(() => clearInterval(interval)));
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			this.refresh();
+		}));
 	}
 
 	public refresh(): void {
