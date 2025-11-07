@@ -72,6 +72,7 @@ export class CodemapServiceImpl implements ICodemapService {
 			'interface_declaration': /interface\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
 			'type_alias_declaration': /type\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
 			'variable_declaration': /(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
+			'variable_declarator': /([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=/,  // Matches: name = value
 			'property_declaration': /([a-zA-Z_$][a-zA-Z0-9_$]*)\s*[:=]/,
 			'enum_declaration': /enum\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/
 		};
