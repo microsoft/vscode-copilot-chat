@@ -230,7 +230,9 @@ export class CodemapServiceImpl implements ICodemapService {
 		let asyncFunctionsCount = 0;
 		let componentsCount = 0;
 
-		const processNode = (n: CodemapNode, parentClass?: { name: string; range: { start: number; end: number }; methods: any[]; properties: any[] }) => {
+		// Track function depth to limit how deep we look for nested functions
+		// Only find functions within the first 2 levels to avoid over-capturing
+		const processNode = (n: CodemapNode, parentClass?: { name: string; range: { start: number; end: number }; methods: any[]; properties: any[] }, depth: number = 0) => {
 			if (n.type === 'class_declaration' && n.name && n.range) {
 				const classInfo = {
 					name: n.name,
@@ -241,7 +243,7 @@ export class CodemapServiceImpl implements ICodemapService {
 				classes.push(classInfo);
 
 				// Process children within this class
-				n.children?.forEach(child => processNode(child, classInfo));
+				n.children?.forEach(child => processNode(child, classInfo, depth + 1));
 			} else if (n.type === 'interface_declaration' && n.name && n.range) {
 				interfaces.push({
 					name: n.name,
@@ -285,7 +287,7 @@ export class CodemapServiceImpl implements ICodemapService {
 					metadata: Object.keys(metadata).length > 0 ? metadata : undefined
 				});
 				// IMPORTANT: Recurse into function body to find nested arrow functions
-				n.children?.forEach(child => processNode(child, parentClass));
+				n.children?.forEach(child => processNode(child, parentClass, depth + 1));
 			} else if (n.type === 'variable_declarator' && n.name && n.range && n.children) {
 				// Handle arrow functions: const myFunc = () => {}
 				// Check if this variable has an arrow_function or function child
@@ -294,7 +296,7 @@ export class CodemapServiceImpl implements ICodemapService {
 					c.type === 'function' ||
 					c.type === 'function_expression'
 				);
-				if (hasFunction) {
+				if (hasFunction && depth <= 2) {  // Only capture functions within first 2 levels
 					const line = this.offsetToLine(n.range.start, document);
 					const metadata = this.extractLanguageMetadata(n, document);
 					if (metadata.isAsync) {
@@ -313,14 +315,14 @@ export class CodemapServiceImpl implements ICodemapService {
 					});
 				}
 				// Always recurse into children
-				n.children?.forEach(child => processNode(child, parentClass));
+				n.children?.forEach(child => processNode(child, parentClass, depth + 1));
 			} else {
 				// Recurse for other node types
-				n.children?.forEach(child => processNode(child, parentClass));
+				n.children?.forEach(child => processNode(child, parentClass, depth + 1));
 			}
 		};
 
-		processNode(node);
+		processNode(node, undefined, 0);
 
 		const patterns = {
 			reactHooksCount: reactHooksCount > 0 ? reactHooksCount : undefined,
