@@ -13,6 +13,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { ILanguageModelServer } from '../../node/langModelServer';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 
@@ -116,15 +117,19 @@ export class CopilotCLISessionOptionsService implements ICopilotCLISessionOption
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ILogService private readonly logService: ILogService,
+		@ILanguageModelServer private readonly languageModelServer: ILanguageModelServer,
 	) { }
 
 	public async createOptions(options: SessionOptions, permissionHandler: CopilotCLIPermissionsHandler) {
 		const copilotToken = await this._authenticationService.getAnyGitHubSession();
 		const workingDirectory = options.workingDirectory ?? await this.getWorkspaceFolderPath();
+		const serverConfig = this.languageModelServer.getConfig();
 		const allOptions: SessionOptions = {
 			env: {
 				...process.env,
-				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
+				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+				OPENAI_BASE_URL: `http://localhost:${serverConfig.port}`,
+				OPENAI_API_KEY: serverConfig.nonce,
 			},
 			logger: getCopilotLogger(this.logService),
 			requestPermission: async (permissionRequest) => {
