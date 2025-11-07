@@ -1225,6 +1225,7 @@ function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalCh
 function asUnexpected(reason: string) {
 	return `Prompt failed validation with the reason: ${reason}. Please file an issue.`;
 }
+
 export function createTelemetryData(chatEndpointInfo: IChatEndpoint, location: ChatLocation, headerRequestId: string) {
 	return TelemetryData.createAndMarkAsIssued({
 		endpoint: 'completions',
@@ -1233,6 +1234,7 @@ export function createTelemetryData(chatEndpointInfo: IChatEndpoint, location: C
 		headerRequestId
 	});
 }
+
 /**
  * WARNING: The value that is returned from this function drives the disablement of RAI for full-file rewrite requests
  * in Copilot Edits, Copilot Chat, Agent Mode, and Inline Chat.
