@@ -96,6 +96,18 @@ export class MockFileSystemService implements IFileSystemService {
 		const uriString = uri.toString();
 		const text = new TextDecoder().decode(content);
 		this.mockFiles.set(uriString, text);
+
+		// add the file to the mock directory listing of its parent directory
+		const parentUri = uriString.substring(0, uriString.lastIndexOf('/'));
+		if (this.mockDirs.has(parentUri)) {
+			const entries = this.mockDirs.get(parentUri)!;
+			const fileName = uriString.substring(uriString.lastIndexOf('/') + 1);
+			if (!entries.find(e => e[0] === fileName)) {
+				entries.push([fileName, FileType.File]);
+			}
+		} else {
+			this.mockDirs.set(parentUri, [[uriString.substring(uriString.lastIndexOf('/') + 1), FileType.File]]);
+		}
 	}
 
 	async delete(uri: URI, options?: { recursive?: boolean; useTrash?: boolean }): Promise<void> {
