@@ -284,6 +284,34 @@ export class CodemapServiceImpl implements ICodemapService {
 					line,
 					metadata: Object.keys(metadata).length > 0 ? metadata : undefined
 				});
+			} else if ((n.type === 'lexical_declaration' || n.type === 'variable_declaration') && n.children) {
+				// Handle arrow functions: const myFunc = () => {}
+				for (const child of n.children) {
+					if (child.type === 'variable_declarator' && child.name && child.children) {
+						// Check if it has an arrow_function child
+						const hasArrowFunc = child.children.some(c => c.type === 'arrow_function' || c.type === 'function');
+						if (hasArrowFunc && child.range) {
+							const line = this.offsetToLine(child.range.start, document);
+							const metadata = this.extractLanguageMetadata(child, document);
+							if (metadata.isAsync) {
+								asyncFunctionsCount++;
+							}
+							if (metadata.reactHooks && metadata.reactHooks.length > 0) {
+								reactHooksCount += metadata.reactHooks.length;
+							}
+							if (metadata.returnsJSX) {
+								componentsCount++;
+							}
+							functions.push({
+								name: child.name,
+								line,
+								metadata: Object.keys(metadata).length > 0 ? metadata : undefined
+							});
+						}
+					}
+				}
+				// Still recurse for nested structures
+				n.children?.forEach(child => processNode(child, parentClass));
 			} else {
 				// Recurse for other node types
 				n.children?.forEach(child => processNode(child, parentClass));
