@@ -104,8 +104,10 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 						inputUri = undefined;
 						matchedExactPath = true;
 					} else if (!matchedExactPath) {
-						// Folder match - only set if we haven't found an exact match
-						inputUri = path.uri;
+						// Folder match - only set if we haven't found an exact match or a previous folder match
+						if (inputUri === undefined) {
+							inputUri = path.uri;
+						}
 					}
 
 					if (pendingMatchPaths.has(path.uri)) {
@@ -117,10 +119,7 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 					} else {
 						// no range, so all diagnostics for this file
 						shouldTakeAll = true;
-						// only break for exact matches
-						if (isExactMatch) {
-							break;
-						}
+						break;
 					}
 				}
 			}
@@ -146,7 +145,7 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IGetErrorsParams>, token: CancellationToken) {
 		const getAll = () => this.languageDiagnosticsService.getAllDiagnostics()
-			.map(d => ({ uri: d[0], diagnostics: d[1].filter(e => e.severity <= DiagnosticSeverity.Warning), inputUri: undefined as URI | undefined }))
+			.map(d => ({ uri: d[0], diagnostics: d[1].filter(e => e.severity <= DiagnosticSeverity.Warning), inputUri: undefined }))
 			// filter any documents w/o warnings or errors
 			.filter(d => d.diagnostics.length > 0);
 
@@ -306,7 +305,9 @@ ToolRegistry.registerTool(GetErrorsTool);
 interface IDiagnosticToolOutputProps extends BasePromptElementProps {
 	diagnosticsGroups: { context: DiagnosticContext; uri: URI; diagnostics: vscode.Diagnostic[]; inputUri?: URI }[];
 	maxDiagnostics?: number;
-}export class DiagnosticToolOutput extends PromptElement<IDiagnosticToolOutputProps> {
+}
+
+export class DiagnosticToolOutput extends PromptElement<IDiagnosticToolOutputProps> {
 	constructor(
 		props: PromptElementProps<IDiagnosticToolOutputProps>,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
