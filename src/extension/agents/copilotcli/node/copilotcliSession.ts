@@ -88,7 +88,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const editToolIds = new Set<string>();
 		const editTracker = new ExternalEditTracker();
 		const editFilesAndToolCallIds = new ResourceMap<string[]>();
-
 		disposables.add(this._permissionHandler.onDidRequestPermissions(async (permissionRequest) => {
 			return await this.requestPermission(permissionRequest, stream, editTracker,
 				(file: Uri) => {
