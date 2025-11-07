@@ -115,7 +115,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			return undefined;
 		});
 
-		if (modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, experimentationService)) {
+		if (await modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, experimentationService)) {
 			const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
 			if (ap !== -1) {
 				tools[ap] = { ...tools[ap], description: applyPatch5Description };

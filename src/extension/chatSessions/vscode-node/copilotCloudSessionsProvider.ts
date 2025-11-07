@@ -16,6 +16,8 @@ import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
+import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 
 export type ConfirmationResult = { step: string; accepted: boolean; metadata?: ConfirmationMetadata };
 
@@ -80,11 +82,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@ILogService private readonly logService: ILogService,
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 	) {
 		super();
 		const interval = setInterval(async () => {
 			const repoId = await getRepoId(this._gitService);
 			if (repoId) {
+				// TODO: handle no auth token case more gracefully
+				if (!this._authenticationService.permissiveGitHubSession) {
+					return;
+				}
 				const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
 				if (this.cachedSessionsSize !== sessions.length) {
 					this.refresh();
@@ -104,6 +112,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return { optionGroups: [] };
 		}
 
+		// TODO: handle no auth token case more gracefully
+		if (!this._authenticationService.permissiveGitHubSession) {
+			return { optionGroups: [] };
+		}
 		try {
 			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo);
 			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
@@ -153,6 +165,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				return [];
 			}
 
+			// TODO: handle no auth token case more gracefully
+			if (!this._authenticationService.permissiveGitHubSession) {
+				return [];
+			}
 			const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
 			this.cachedSessionsSize = sessions.length;
 
@@ -410,7 +426,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const result = await this.invokeRemoteAgent(
 			prompt,
 			[
-				this.extractFileReferences(references),
+				await this.extractFileReferences(references),
 				history
 			].join('\n\n').trim(),
 			token,
@@ -430,9 +446,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 
-	private async handleConfirmationData(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleConfirmationData(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, context: vscode.ChatContext, token: vscode.CancellationToken) {
 		const results: ConfirmationResult[] = [];
-		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
+		results.push(...(request.acceptedConfirmationData?.filter(data => !data?.authPermissionPrompted).map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
 		for (const data of results) {
 			switch (data.step) {
@@ -576,7 +592,26 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
-			return await this.handleConfirmationData(request, stream, token);
+			const findConfirmRequest = request.acceptedConfirmationData?.find(ref => ref?.authPermissionPrompted);
+			if (findConfirmRequest) {
+				const result = await this._authenticationUpgradeService.handleConfirmationRequestWithContext(stream, request, context.history);
+				request = result.request;
+				context = result.context ?? context;
+			} else {
+				return await this.handleConfirmationData(request, stream, context, token);
+			}
+		}
+
+		const accessToken = this._authenticationService.permissiveGitHubSession;
+		if (!accessToken) {
+			// Otherwise, show the permissive session upgrade prompt because it's required
+			this._authenticationUpgradeService.showPermissiveSessionUpgradeInChat(
+				stream,
+				request,
+				vscode.l10n.t('GitHub Copilot Cloud Agent requires access to your repositories on GitHub for handling requests.'),
+				context
+			);
+			return {};
 		}
 
 		/* __GDPR__
@@ -694,28 +729,57 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
-	private extractFileReferences(references: readonly vscode.ChatPromptReference[] | undefined): string | undefined {
+	private async extractFileReferences(references: readonly vscode.ChatPromptReference[] | undefined): Promise<string | undefined> {
 		if (!references || references.length === 0) {
 			return;
 		}
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
-		const parts: string[] = [];
+		const fileRefs: string[] = [];
+		const fullFileParts: string[] = [];
+		const git = this._gitExtensionService.getExtensionApi();
 		for (const ref of references) {
 			if (ref.value instanceof vscode.Uri && ref.value.scheme === 'file') { // TODO: Add support for more kinds of references
-				const git = this._gitExtensionService.getExtensionApi();
-				const repositoryForFile = git?.getRepository(ref.value);
+				const fileUri = ref.value;
+				const repositoryForFile = git?.getRepository(fileUri);
 				if (repositoryForFile) {
-					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, ref.value.fsPath);
-					parts.push(` - ${relativePath}`);
+					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, fileUri.fsPath);
+					if (repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath)) {
+						try {
+							// TODO: Consider just showing the file diffs
+							const document = await vscode.workspace.openTextDocument(fileUri);
+							const content = document.getText();
+							fullFileParts.push(`<file-start>${relativePath}</file-start>`);
+							fullFileParts.push(content);
+							fullFileParts.push(`<file-end>${relativePath}</file-end>`);
+						} catch (error) {
+							this.logService.error(`Error reading file content for reference: ${fileUri.toString()}: ${error}`);
+						}
+					} else {
+						fileRefs.push(` - ${relativePath}`);
+					}
+				}
+			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'untitled') {
+				// Get full content of untitled file
+				try {
+					const document = await vscode.workspace.openTextDocument(ref.value);
+					const content = document.getText();
+					fullFileParts.push(`<file-start>${ref.value.path}</file-start>`);
+					fullFileParts.push(content);
+					fullFileParts.push(`<file-end>${ref.value.path}</file-end>`);
+				} catch (error) {
+					this.logService.error(`Error reading untitled file content for reference: ${ref.value.toString()}: ${error}`);
 				}
 			}
 		}
 
+		const parts: string[] = [
+			...(fullFileParts.length ? ['The user has attached the following uncommitted or modified files as relevant context:', ...fullFileParts] : []),
+			...(fileRefs.length ? ['The user has attached the following file paths as relevant context:', ...fileRefs] : [])
+		];
+
 		if (!parts.length) {
 			return;
 		}
-
-		parts.unshift('The user has attached the following files as relevant context:');
 		return parts.join('\n');
 	}
 
@@ -1170,7 +1234,22 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const response = await this._octoKitService.postCopilotAgentJob(repoId.org, repoId.repo, JOBS_API_VERSION, payload);
 			if (!this.validateRemoteAgentJobResponse(response)) {
 				const statusCode = response?.status;
-				return { error: vscode.l10n.t('Received invalid response {0}from cloud agent.', statusCode ? statusCode + ' ' : ''), innerError: `Response ${JSON.stringify(response)}`, state: 'error' };
+				switch (statusCode) {
+					case 422:
+						// NOTE: Although earlier checks should prevent this, ensure that if we end up
+						//       with a 422 from the API, we give a useful error message
+						return {
+							error: vscode.l10n.t('The cloud agent was unable to create a pull request with the specified base branch \'{0}\'. Please push branch to the remote and try again.', base_ref),
+							innerError: `Status code 422 received from cloud agent.`,
+							state: 'error',
+						};
+					default:
+						return {
+							error: vscode.l10n.t('Received invalid response {0}from cloud agent.', statusCode ? statusCode + ' ' : ''),
+							innerError: `Response ${JSON.stringify(response)}`,
+							state: 'error',
+						};
+				}
 			}
 			// For v1 API, we need to fetch the job details to get the PR info
 			// Since the PR might not be created immediately, we need to poll for it

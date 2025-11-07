@@ -217,7 +217,8 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
 		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
 
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, undefined, false, token);
+		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
+		const existingSession = await this.sessionService.getSession(copilotcliSessionId, undefined, workingDirectory, false, token);
 		const selectedModelId = await existingSession?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
 		const options: Record<string, string> = {
@@ -344,22 +345,22 @@ export class CopilotCLIChatSessionParticipant {
 		const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, token);
 
 		if (chatSessionContext.isUntitled) {
-			const untitledCopilotcliSessionId = SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource);
-			const session = await this.sessionService.createSession(prompt, modelId, token);
-			const workingDirectory = await this.worktreeManager.createWorktreeIfNeeded(untitledCopilotcliSessionId, stream);
-
-			await session.handleRequest(prompt, attachments, request.toolInvocationToken, stream, modelId, workingDirectory, token);
-
-			this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.sessionId), label: request.prompt ?? 'CopilotCLI' });
-
+			const workingDirectory = await this.worktreeManager.createWorktreeIfNeeded(id, stream);
+			const session = await this.sessionService.createSession(prompt, modelId, workingDirectory, token);
 			if (workingDirectory) {
 				await this.worktreeManager.storeWorktreePath(session.sessionId, workingDirectory);
 			}
 
+			await session.handleRequest(prompt, attachments, modelId, stream, request.toolInvocationToken, token);
+
+			this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.sessionId), label: request.prompt ?? 'CopilotCLI' });
+
+
 			return {};
 		}
 
-		const session = await this.sessionService.getSession(id, undefined, false, token);
+		const workingDirectory = this.worktreeManager.getWorktreePath(id);
+		const session = await this.sessionService.getSession(id, undefined, workingDirectory, false, token);
 		if (!session) {
 			stream.warning(vscode.l10n.t('Chat session not found.'));
 			return {};
@@ -374,8 +375,7 @@ export class CopilotCLIChatSessionParticipant {
 			return {};
 		}
 
-		const workingDirectory = this.worktreeManager.getWorktreePath(id);
-		await session.handleRequest(prompt, attachments, request.toolInvocationToken, stream, modelId, workingDirectory, token);
+		await session.handleRequest(prompt, attachments, modelId, stream, request.toolInvocationToken, token);
 		return {};
 	}
 
@@ -452,7 +452,7 @@ export class CopilotCLIChatSessionParticipant {
 		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
-		const session = await this.sessionService.createSession(requestPrompt, undefined, token);
+		const session = await this.sessionService.createSession(requestPrompt, undefined, undefined, token);
 
 		await vscode.commands.executeCommand('vscode.open', SessionIdForCLI.getResource(session.sessionId));
 		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
