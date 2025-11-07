@@ -20,22 +20,45 @@ import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { ConfirmationResult, CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
+/** Option ID for model selection in chat session options */
 const MODELS_OPTION_ID = 'model';
+
+/** Option ID for worktree isolation in chat session options */
 const ISOLATION_OPTION_ID = 'isolation';
 
-// Track model selections per session
-// TODO@rebornix: we should have proper storage for the session model preference (revisit with API)
+/**
+ * Track model selections per session.
+ * Maps session IDs to their selected model options.
+ * TODO@rebornix: we should have proper storage for the session model preference (revisit with API)
+ */
 const _sessionModel: Map<string, vscode.ChatSessionProviderOptionItem | undefined> = new Map();
 
+/**
+ * Manages git worktrees for Copilot CLI chat sessions.
+ * Handles creation, storage, and retrieval of isolated worktrees for sessions.
+ */
 export class CopilotCLIWorktreeManager {
+	/** Storage key for default session isolation preference */
 	static COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY = 'github.copilot.cli.sessionIsolation';
+
+	/** Storage key for session-to-worktree path mappings */
 	static COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 
+	/** Maps session IDs to their isolation preference */
 	private _sessionIsolation: Map<string, boolean> = new Map();
+
+	/** Maps session IDs to their worktree paths */
 	private _sessionWorktrees: Map<string, string> = new Map();
+
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext) { }
 
+	/**
+	 * Creates a git worktree for a session if isolation is enabled.
+	 * @param sessionId - The unique identifier of the chat session
+	 * @param stream - The chat response stream for progress messages
+	 * @returns The path to the created worktree, or undefined if isolation is disabled or creation failed
+	 */
 	async createWorktreeIfNeeded(sessionId: string, stream: vscode.ChatResponseStream): Promise<string | undefined> {
 		const isolationEnabled = this._sessionIsolation.get(sessionId) ?? false;
 		if (!isolationEnabled) {
@@ -56,6 +79,11 @@ export class CopilotCLIWorktreeManager {
 		return undefined;
 	}
 
+	/**
+	 * Stores the worktree path for a session in both memory and persistent storage.
+	 * @param sessionId - The unique identifier of the chat session
+	 * @param workingDirectory - The path to the worktree
+	 */
 	async storeWorktreePath(sessionId: string, workingDirectory: string): Promise<void> {
 		this._sessionWorktrees.set(sessionId, workingDirectory);
 		const sessionWorktrees = this.extensionContext.globalState.get<Record<string, string>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, {});
@@ -63,6 +91,11 @@ export class CopilotCLIWorktreeManager {
 		await this.extensionContext.globalState.update(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, sessionWorktrees);
 	}
 
+	/**
+	 * Retrieves the worktree path for a session from memory or persistent storage.
+	 * @param sessionId - The unique identifier of the chat session
+	 * @returns The worktree path, or undefined if not found
+	 */
 	getWorktreePath(sessionId: string): string | undefined {
 		let workingDirectory = this._sessionWorktrees.get(sessionId);
 		if (!workingDirectory) {
@@ -75,6 +108,12 @@ export class CopilotCLIWorktreeManager {
 		return workingDirectory;
 	}
 
+	/**
+	 * Gets the relative (display) name of the worktree for a session.
+	 * Extracts the worktree name from its full path.
+	 * @param sessionId - The unique identifier of the chat session
+	 * @returns The worktree name (last path segment), or undefined if no worktree exists
+	 */
 	getWorktreeRelativePath(sessionId: string): string | undefined {
 		const worktreePath = this.getWorktreePath(sessionId);
 		if (!worktreePath) {
@@ -87,6 +126,12 @@ export class CopilotCLIWorktreeManager {
 
 	}
 
+	/**
+	 * Gets the isolation preference for a session.
+	 * Falls back to the global default isolation setting if not set for this session.
+	 * @param sessionId - The unique identifier of the chat session
+	 * @returns true if isolation is enabled for this session, false otherwise
+	 */
 	getIsolationPreference(sessionId: string): boolean {
 		if (!this._sessionIsolation.has(sessionId)) {
 			const defaultIsolation = this.extensionContext.globalState.get<boolean>(CopilotCLIWorktreeManager.COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, false);
@@ -95,6 +140,11 @@ export class CopilotCLIWorktreeManager {
 		return this._sessionIsolation.get(sessionId) ?? false;
 	}
 
+	/**
+	 * Sets the isolation preference for a session and updates the global default.
+	 * @param sessionId - The unique identifier of the chat session
+	 * @param enabled - Whether isolation should be enabled
+	 */
 	async setIsolationPreference(sessionId: string, enabled: boolean): Promise<void> {
 		this._sessionIsolation.set(sessionId, enabled);
 		await this.extensionContext.globalState.update(CopilotCLIWorktreeManager.COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, enabled);
@@ -102,20 +152,37 @@ export class CopilotCLIWorktreeManager {
 }
 
 
+/**
+ * Utility namespace for converting between session IDs and VS Code URIs.
+ * Uses the 'copilotcli' URI scheme to represent CLI sessions.
+ */
 namespace SessionIdForCLI {
+	/**
+	 * Converts a session ID to a VS Code URI.
+	 * @param sessionId - The session ID to convert
+	 * @returns A URI with the 'copilotcli' scheme
+	 */
 	export function getResource(sessionId: string): vscode.Uri {
 		return vscode.Uri.from({
 			scheme: 'copilotcli', path: `/${sessionId}`,
 		});
 	}
 
+	/**
+	 * Extracts the session ID from a VS Code URI.
+	 * @param resource - The URI to parse
+	 * @returns The session ID (path without leading slash)
+	 */
 	export function parse(resource: vscode.Uri): string {
 		return resource.path.slice(1);
 	}
 }
 
 /**
- * Escape XML special characters
+ * Escapes XML special characters in a string.
+ * Used to safely embed text in XML attributes and elements.
+ * @param text - The text to escape
+ * @returns The escaped text with XML entities
  */
 function escapeXml(text: string): string {
 	return text
@@ -126,10 +193,16 @@ function escapeXml(text: string): string {
 		.replace(/'/g, '&apos;');
 }
 
+/**
+ * Provides chat session items for Copilot CLI sessions.
+ * Implements VS Code's ChatSessionItemProvider interface to display CLI sessions in the chat panel.
+ */
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
+	/** Event fired when the list of chat session items changes */
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
 	public readonly onDidChangeChatSessionItems: Event<void> = this._onDidChangeChatSessionItems.event;
 
+	/** Event fired when a chat session item is committed (e.g., renamed after creation) */
 	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 	constructor(
@@ -144,24 +217,45 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		}));
 	}
 
+	/**
+	 * Refreshes the list of chat session items.
+	 * Triggers a refresh in the chat panel UI.
+	 */
 	public refresh(): void {
 		this._onDidChangeChatSessionItems.fire();
 	}
 
+	/**
+	 * Swaps a chat session item with a modified version.
+	 * Used when updating session metadata (e.g., after creation).
+	 * @param original - The original session item
+	 * @param modified - The modified session item
+	 */
 	public swap(original: vscode.ChatSessionItem, modified: vscode.ChatSessionItem): void {
 		this._onDidCommitChatSessionItem.fire({ original, modified });
 	}
 
+	/**
+	 * Provides all chat session items for display in the chat panel.
+	 * @param token - Cancellation token
+	 * @returns Array of chat session items
+	 */
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.copilotcliSessionService.getAllSessions(token);
 		const diskSessions = sessions.map(session => this._toChatSessionItem(session));
 
+		// Update context for UI state (e.g., showing empty state)
 		const count = diskSessions.length;
 		vscode.commands.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
 
 		return diskSessions;
 	}
 
+	/**
+	 * Converts a session object to a VS Code chat session item.
+	 * @param session - The session data to convert
+	 * @returns A chat session item for display in the UI
+	 */
 	private _toChatSessionItem(session: { id: string; label: string; timestamp: Date; status?: vscode.ChatSessionStatus }): vscode.ChatSessionItem {
 		const resource = SessionIdForCLI.getResource(session.id);
 		const label = session.label || 'Copilot CLI';
@@ -186,12 +280,21 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		};
 	}
 
+	/**
+	 * Creates and opens a new Copilot CLI terminal.
+	 * The terminal name can be customized via the COPILOTCLI_TERMINAL_TITLE environment variable.
+	 */
 	public async createCopilotCLITerminal(): Promise<void> {
 		// TODO@rebornix should be set by CLI
 		const terminalName = process.env.COPILOTCLI_TERMINAL_TITLE || 'Copilot CLI';
 		await this.terminalIntegration.openTerminal(terminalName);
 	}
 
+	/**
+	 * Resumes a Copilot CLI session in a terminal.
+	 * Opens a terminal and passes the --resume flag with the session ID.
+	 * @param sessionItem - The session item to resume
+	 */
 	public async resumeCopilotCLISessionInTerminal(sessionItem: vscode.ChatSessionItem): Promise<void> {
 		const id = SessionIdForCLI.parse(sessionItem.resource);
 		const terminalName = sessionItem.label || id;
@@ -200,6 +303,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 }
 
+/**
+ * Provides content and options for Copilot CLI chat sessions.
+ * Implements VS Code's ChatSessionContentProvider interface to manage session state and options.
+ */
 export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionContentProvider {
 	constructor(
 		private readonly worktreeManager: CopilotCLIWorktreeManager,
@@ -208,6 +315,13 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
 
+	/**
+	 * Provides the content and initial state for a chat session.
+	 * Loads session history, selected model, and configuration options.
+	 * @param resource - The URI identifying the chat session
+	 * @param token - Cancellation token
+	 * @returns A chat session object with history and options
+	 */
 	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const [models, defaultModel] = await Promise.all([
 			this.copilotCLIModels.getAvailableModels(),
@@ -243,6 +357,10 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		};
 	}
 
+	/**
+	 * Provides the available options for chat sessions (e.g., model selection, isolation).
+	 * @returns Configuration options for the chat session provider
+	 */
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
 		return {
 			optionGroups: [
@@ -265,7 +383,13 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		};
 	}
 
-	// Handle option changes for a session (store current state in a map)
+	/**
+	 * Handles changes to session options (e.g., model selection, isolation preference).
+	 * Stores the updated settings in memory and persists user preferences.
+	 * @param resource - The URI identifying the chat session
+	 * @param updates - Array of option updates to apply
+	 * @param token - Cancellation token
+	 */
 	async provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): Promise<void> {
 		const sessionId = SessionIdForCLI.parse(resource);
 		const models = await this.copilotCLIModels.getAvailableModels();
@@ -289,6 +413,10 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	}
 }
 
+/**
+ * Handles chat requests for Copilot CLI sessions.
+ * Orchestrates request processing, delegation to cloud agents, and session management.
+ */
 export class CopilotCLIChatSessionParticipant {
 	constructor(
 		private readonly promptResolver: CopilotCLIPromptResolver,
@@ -302,10 +430,23 @@ export class CopilotCLIChatSessionParticipant {
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) { }
 
+	/**
+	 * Creates a chat request handler function.
+	 * @returns A bound handler function for processing chat requests
+	 */
 	createHandler(): ChatExtendedRequestHandler {
 		return this.handleRequest.bind(this);
 	}
 
+	/**
+	 * Handles an incoming chat request.
+	 * Routes requests to appropriate handlers based on session state and request type.
+	 * @param request - The chat request to process
+	 * @param context - The chat context including session information
+	 * @param stream - The response stream for sending messages
+	 * @param token - Cancellation token
+	 * @returns A chat result or void
+	 */
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
 
@@ -331,11 +472,11 @@ export class CopilotCLIChatSessionParticipant {
 				return {};
 			}
 
-			/* Invoked from a 'normal' chat or 'cloud button' without CLI session context */
-			// Handle confirmation data
+			// Invoked from a 'normal' chat or 'cloud button' without CLI session context
 			return await this.handlePushConfirmationData(request, context, stream, token);
 		}
 
+		// Determine which model to use for this request
 		const defaultModel = await this.copilotCLIModels.getDefaultModel();
 		const { resource } = chatSessionContext.chatSessionItem;
 		const id = SessionIdForCLI.parse(resource);
@@ -344,6 +485,7 @@ export class CopilotCLIChatSessionParticipant {
 		const modelId = this.copilotCLIModels.toModelProvider(preferredModel?.id || defaultModel.id);
 		const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, token);
 
+		// Handle new (untitled) sessions
 		if (chatSessionContext.isUntitled) {
 			const workingDirectory = await this.worktreeManager.createWorktreeIfNeeded(id, stream);
 			const session = await this.sessionService.createSession(prompt, modelId, workingDirectory, token);
@@ -353,6 +495,7 @@ export class CopilotCLIChatSessionParticipant {
 
 			await session.handleRequest(prompt, attachments, modelId, stream, request.toolInvocationToken, token);
 
+			// Update the session item with the actual session ID and user's prompt as the label
 			this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.sessionId), label: request.prompt ?? 'CopilotCLI' });
 
 
@@ -379,6 +522,15 @@ export class CopilotCLIChatSessionParticipant {
 		return {};
 	}
 
+	/**
+	 * Handles the /delegate command to delegate work to a cloud agent.
+	 * Creates a pull request with the current chat context and history.
+	 * @param session - The current CLI session
+	 * @param request - The chat request containing the delegate command
+	 * @param context - The chat context
+	 * @param stream - The response stream
+	 * @param token - Cancellation token
+	 */
 	private async handleDelegateCommand(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (!this.cloudSessionProvider) {
 			stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
@@ -411,6 +563,15 @@ export class CopilotCLIChatSessionParticipant {
 		}
 	}
 
+	/**
+	 * Handles user confirmation responses for actions like delegating with uncommitted changes.
+	 * @param session - The current CLI session
+	 * @param request - The chat request with confirmation data
+	 * @param context - The chat context
+	 * @param stream - The response stream
+	 * @param token - Cancellation token
+	 * @returns A chat result
+	 */
 	private async handleConfirmationData(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		const results: ConfirmationResult[] = [];
 		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
@@ -442,6 +603,15 @@ export class CopilotCLIChatSessionParticipant {
 		return {};
 	}
 
+	/**
+	 * Handles pushing chat content to a new CLI session when invoked without session context.
+	 * Creates a new session and opens it with the current prompt and history.
+	 * @param request - The chat request
+	 * @param context - The chat context
+	 * @param stream - The response stream
+	 * @param token - Cancellation token
+	 * @returns A chat result or void
+	 */
 	private async handlePushConfirmationData(
 		request: vscode.ChatRequest,
 		context: vscode.ChatContext,
@@ -459,6 +629,14 @@ export class CopilotCLIChatSessionParticipant {
 		return {};
 	}
 
+	/**
+	 * Records a delegation to cloud agent in the session history.
+	 * Adds user and assistant messages with PR metadata.
+	 * @param session - The CLI session to update
+	 * @param userPrompt - The user's original prompt
+	 * @param prInfo - Information about the created pull request
+	 * @param token - Cancellation token
+	 */
 	private async recordPushToSession(
 		session: ICopilotCLISession,
 		userPrompt: string,
@@ -474,6 +652,13 @@ export class CopilotCLIChatSessionParticipant {
 	}
 }
 
+/**
+ * Registers VS Code commands for Copilot CLI chat sessions.
+ * Includes commands for refreshing, deleting, and managing CLI sessions and terminals.
+ * @param copilotcliSessionItemProvider - The session item provider
+ * @param copilotCLISessionService - The session service
+ * @returns A disposable for unregistering all commands
+ */
 export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService): IDisposable {
 	const disposableStore = new DisposableStore();
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.copilotcli.sessions.refresh', () => {
