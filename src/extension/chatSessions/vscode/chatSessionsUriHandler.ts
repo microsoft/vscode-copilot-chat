@@ -11,6 +11,7 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { API, Repository } from '../../../platform/git/vscode/git';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { EXTENSION_ID } from '../../common/constants';
 import { getRepoId } from './copilotCodingAgentUtils';
@@ -46,6 +47,7 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly _logService: ILogService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) {
 		super();
 	}
@@ -59,6 +61,18 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 					const prId = params.get('id');
 					const url = decodeURIComponent(params.get('url') || '');
 					const branch = decodeURIComponent(params.get('branch') || '');
+					/* __GDPR__
+						"copilot.codingAgent.deeplink" : {
+							"owner": "rebornix",
+							"comment": "Reports when the ChatSessionsUriHandler handles a URI to open a chat session",
+							"sessionType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The type of chat session" },
+							"hasId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the session has an ID" }
+						}
+					*/
+					this._telemetryService.sendTelemetryEvent('copilot.codingAgent.deeplink', { microsoft: true, github: false }, {
+						sessionType: type || 'unknown',
+						hasId: prId ? 'true' : 'false',
+					});
 					if (type?.startsWith('copilot') && prId) {
 						// For now we hardcode it to this type, eventually the full type should come in the URI
 						return this._openGitHubSession('copilot-cloud-agent', prId, url, branch);
