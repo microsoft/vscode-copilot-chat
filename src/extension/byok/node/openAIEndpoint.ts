@@ -306,7 +306,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 				}
 			}
 			else {
-				// Non thinking models does not use max_tokens
+				// For non-thinking models, removing max_tokens defaults to the maximum allowed value, which is what we want for BYOK
 				if (typeof body.max_tokens !== 'undefined') {
 					delete body.max_tokens;
 				}

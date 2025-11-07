@@ -49,13 +49,13 @@ interface UserModelConfig {
 	url: string;
 	maxInputTokens: number;
 	maxOutputTokens: number;
-	requiresAPIKey: boolean;
-	toolCalling: boolean;
+	toolCalling?: boolean;
 	editTools?: EndpointEditToolName[];
 	temperature?: number;
 	thinking?: boolean;
-	vision: boolean;
+	vision?: boolean;
 	requestHeaders?: Record<string, string>;
+	requiresAPIKey: boolean;
 }
 
 interface CustomOAIModelInfo extends LanguageModelChatInformation {
@@ -124,9 +124,9 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 				url: resolvedUrl,
 				maxInputTokens: modelInfo.maxInputTokens,
 				maxOutputTokens: modelInfo.maxOutputTokens,
-				toolCalling: modelInfo.toolCalling,
+				toolCalling: modelInfo.toolCalling ?? false,
 				editTools: modelInfo.editTools,
-				vision: modelInfo.vision,
+				vision: modelInfo.vision ?? false,
 				thinking: modelInfo.thinking,
 				temperature: modelInfo.temperature,
 				requestHeaders: modelInfo.requestHeaders ? { ...modelInfo.requestHeaders } : undefined,

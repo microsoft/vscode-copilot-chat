@@ -17,19 +17,20 @@ The `chat.azureModels` setting accepts a record of model configurations where ea
 {
   "chat.azureModels": {
     "[modelId]": {
-      "name": string,                    // Display name for the model
-      "url": string,                     // Azure endpoint URL (base URL without API path)
+      "name": string,                     // Display name for the model
+      "url": string,                      // Azure endpoint URL (base URL without API path)
       "deploymentType"?: "completions" | "responses",  // API type (optional, defaults to "completions")
       "deploymentName"?: string,          // Azure deployment name (optional, defaults to modelId)
       "apiVersion"?: string,              // Azure API version (optional, default: "2025-01-01-preview")
-      "maxInputTokens": number,          // Maximum input context window size
-      "maxOutputTokens": number,         // Maximum output tokens per response
-      "toolCalling": boolean,            // Whether model supports function/tool calling
-      "temperature"?: number,             // Temperature setting (optional, 0.0-2.0)
-      "thinking"?: boolean,               // Whether model supports thinking/reasoning tokens (optional)
-      "vision": boolean,                 // Whether model supports vision/image inputs (optional)
-      "requestHeaders"?: Record<string, string>,  // Custom HTTP headers for requests (optional)
-      "requiresAPIKey"?: boolean,        // Whether model requires API key (optional, default: true)
+      "maxInputTokens": number,           // Maximum input context window size
+      "maxOutputTokens": number,          // Maximum output tokens per response
+      "toolCalling"?: boolean,            // Whether model supports function/tool calling (optional, default: false)
+      "editTools"?: string[],             // List of supported edit tools (optional, default: [])
+      "temperature"?: number,             // Temperature setting (optional, 0.0-2.0, default: 1.0)
+      "thinking"?: boolean,               // Whether model supports thinking/reasoning tokens (optional, default: false)
+      "vision"?: boolean,                 // Whether model supports vision/image inputs (optional, default: false)
+      "requestHeaders"?: Record<string, string>,  // Custom HTTP headers for requests (optional, default: null)
+      "requiresAPIKey"?: boolean,         // Whether model requires API key (optional, default: true)
     }
   }
 }

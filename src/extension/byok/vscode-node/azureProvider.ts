@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
+import { EndpointEditToolName, IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -26,9 +26,10 @@ interface AzureModelConfig {
 	apiVersion?: string;
 	maxInputTokens: number;
 	maxOutputTokens: number;
-	toolCalling: boolean;
+	toolCalling?: boolean;
+	editTools?: EndpointEditToolName[];
 	thinking?: boolean;
-	vision: boolean;
+	vision?: boolean;
 	temperature?: number;
 	requiresAPIKey?: boolean;
 	requestHeaders?: Record<string, string>;
