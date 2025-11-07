@@ -1172,7 +1172,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const tracer = this.tracer.sub('predictNextCursorPosition');
 
-		const systemMessage = 'Your task is to predict the next line number in the current file where the developer is most likely to make their next edit, using the provided context.';
+		const systemMessage = `Your task is to predict the next line number in the current file where the developer is most likely to make their next edit.
+
+IMPORTANT: You MUST respond with ONLY a line number (e.g., "120"). Do NOT include any explanation, reasoning, or additional text.
+
+Use the provided context to make an informed prediction:
+1. **File structure** - Use the codemap to understand class/function organization, React hooks, async patterns
+2. **Recent edits** - Analyze the edit history to understand the pattern
+3. **Current location** - Consider where the cursor is now and what code is nearby
+
+Look for:
+- If user added state (useState), predict setter call location or usage in JSX/functions
+- If user added async function, predict where loading states or error handling should go
+- If user modified a class method, predict related methods that need similar changes
+- Follow the pattern established by recent edits
+
+Respond with ONLY the line number as a plain integer.`;
 
 		const maxTokens = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionCurrentFileMaxTokens, this.expService);
 
