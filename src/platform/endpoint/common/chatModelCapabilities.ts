@@ -46,7 +46,7 @@ export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint | 
 		return false;
 	}
 
-	const family = (typeof model === 'string' ? model : model.family).toLowerCase();
+	const family = typeof model === 'string' ? model : model.family;
 	const h = familyToHash.get(family) ?? await getCachedSha256Hash(family);
 	if (HIDDEN_MODEL_B_HASHES.includes(h)) {
 		familyToHash.set(family, h);
