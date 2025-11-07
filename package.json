@@ -290,6 +290,10 @@
 						"maxResults": {
 							"type": "number",
 							"description": "The maximum number of results to return. Do not use this unless necessary, it can slow things down. By default, only some matches are returned. If you use this and don't see what you're looking for, you can try again with a more specific query or a larger maxResults."
+						},
+						"includeIgnoredFiles": {
+							"type": "boolean",
+							"description": "Whether to include files that would normally be ignored according to .gitignore, other ignore files and `files.exclude` and `search.exclude` settings."
 						}
 					},
 					"required": [

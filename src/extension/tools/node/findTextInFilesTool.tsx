@@ -18,7 +18,7 @@ import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, Location, MarkdownString, Range } from '../../../vscodeTypes';
+import { ExcludeSettingOptions, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, Location, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
@@ -31,6 +31,8 @@ interface IFindTextInFilesToolParams {
 	isRegexp?: boolean;
 	includePattern?: string;
 	maxResults?: number;
+	/** Whether to include files that would normally be ignored according to .gitignore, other ignore files and `files.exclude` and `search.exclude` settings. */
+	includeIgnoredFiles?: boolean;
 }
 
 const MaxResultsCap = 200;
@@ -62,7 +64,7 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		const timeoutInMs = 20_000;
 
 		let results = await raceTimeoutAndCancellationError(
-			(searchToken) => this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, searchToken),
+			(searchToken) => this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, options.input.includeIgnoredFiles, searchToken),
 			token,
 			timeoutInMs,
 			// embed message to give LLM hint about what to do next
@@ -72,7 +74,7 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		// If we still have no results, we need to try the opposite regex mode
 		if (!results.length && queryIsValidRegex) {
 			results = await raceTimeoutAndCancellationError(
-				(searchToken) => this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, searchToken),
+				(searchToken) => this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, options.input.includeIgnoredFiles, searchToken),
 				token,
 				timeoutInMs,
 				// embed message to give LLM hint about what to do next
@@ -126,16 +128,20 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		}
 	}
 
-	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {
+	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, includeIgnoredFiles: boolean | undefined, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {
+		const findOptions = {
+			include: patterns ? patterns : undefined,
+			maxResults: maxResults + 1,
+			useExcludeSettings: includeIgnoredFiles ? ExcludeSettingOptions.None : ExcludeSettingOptions.SearchAndFilesExclude,
+			useIgnoreFiles: includeIgnoredFiles ? { local: false, parent: false, global: false } : undefined,
+		} as vscode.FindTextInFilesOptions2;
+
 		const searchResult = this.searchService.findTextInFiles2(
 			{
 				pattern: query,
 				isRegExp,
 			},
-			{
-				include: patterns ? patterns : undefined,
-				maxResults: maxResults + 1
-			},
+			findOptions,
 			token);
 		const results: vscode.TextSearchResult2[] = [];
 		for await (const item of searchResult.results) {
