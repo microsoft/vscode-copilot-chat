@@ -15,7 +15,6 @@ export enum FetchResponseKind {
 export interface ChatResults {
 	type: FetchResponseKind.Success;
 	chatCompletions: AsyncIterable<ChatCompletion>;
-	getProcessingTime(): number;
 }
 
 export interface ChatRequestFailed {

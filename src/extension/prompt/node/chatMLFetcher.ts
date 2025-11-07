@@ -423,8 +423,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 		return {
 			type: FetchResponseKind.Success,
-			chatCompletions: chatCompletions,
-			getProcessingTime: () => getProcessingTime(response),
+			chatCompletions,
 		};
 	}
 
@@ -1260,15 +1259,3 @@ export function locationToIntent(location: ChatLocation): string {
 			return 'responses-proxy';
 	}
 }
-export function getProcessingTime(response: Response): number {
-	const reqIdStr = response.headers.get('openai-processing-ms');
-	if (reqIdStr) {
-		return parseInt(reqIdStr, 10);
-	}
-	return 0;
-}
-
-
-
-
-
