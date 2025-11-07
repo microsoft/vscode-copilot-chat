@@ -56,24 +56,10 @@ import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearb
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { countTokensForLines, createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
-import { PromptTags } from '../common/tags';
+import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
-
-namespace ResponseTags {
-	export const NO_CHANGE = {
-		start: '<NO_CHANGE>'
-	};
-	export const EDIT = {
-		start: '<EDIT>',
-		end: '</EDIT>'
-	};
-	export const INSERT = {
-		start: '<INSERT>',
-		end: '</INSERT>'
-	};
-}
 
 const enum RetryState {
 	NotRetrying,
