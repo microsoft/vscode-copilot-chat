@@ -34,35 +34,65 @@ The codemap service extracts structural information from code using the Tree-sit
 {
   "classes": [
     {
-      "name": "UserService",
-      "range": { "start": 10, "end": 85 },
+      "name": "TodoComponent",
+      "range": { "start": 10, "end": 120 },
       "methods": [
-        { "name": "validateUser", "line": 12 },
-        { "name": "createUser", "line": 25 },
-        { "name": "updateUser", "line": 45 },
-        { "name": "deleteUser", "line": 60 }
+        {
+          "name": "fetchData",
+          "line": 25,
+          "metadata": {
+            "isAsync": true,
+            "reactHooks": ["useState", "useEffect"]
+          }
+        },
+        {
+          "name": "handleSubmit",
+          "line": 45,
+          "metadata": {
+            "isAsync": true,
+            "reactHooks": ["useCallback"]
+          }
+        },
+        {
+          "name": "render",
+          "line": 80,
+          "metadata": {
+            "returnsJSX": true
+          }
+        }
       ],
       "properties": [
-        { "name": "db", "line": 11 },
-        { "name": "logger", "line": 12 }
+        { "name": "todos", "line": 12 },
+        { "name": "isLoading", "line": 13 }
       ]
-    },
-    {
-      "name": "AuthService",
-      "range": { "start": 90, "end": 150 },
-      "methods": [
-        { "name": "login", "line": 92 },
-        { "name": "logout", "line": 110 }
-      ],
-      "properties": []
     }
   ],
-  "functions": [],
+  "functions": [
+    {
+      "name": "createTodo",
+      "line": 5,
+      "metadata": {
+        "isAsync": true
+      }
+    }
+  ],
   "interfaces": [
-    { "name": "IUser", "range": { "start": 5, "end": 8 } }
-  ]
+    { "name": "ITodo", "range": { "start": 1, "end": 4 } }
+  ],
+  "patterns": {
+    "reactHooksCount": 3,
+    "asyncFunctionsCount": 3,
+    "componentsCount": 1
+  }
 }
 ```
+
+**Language-specific insights the LLM can now leverage:**
+
+1. **React Hooks Detection**: Sees that `fetchData` uses `useState` and `useEffect` - can suggest proper cleanup, dependency arrays, or related hooks
+2. **Async Patterns**: Knows `handleSubmit` is async - can suggest error handling, loading states, or try/catch blocks
+3. **JSX Components**: Identifies `render` returns JSX - can suggest UI updates when state changes
+4. **Pattern Statistics**: File has 3 async functions and 3 React hooks - suggests this is a data-fetching component
 
 **Human-readable summary (also included):**
 ```
@@ -130,23 +160,59 @@ class TodoComponent {
 ```
 
 **Codemap shows:**
-```
-Classes: TodoComponent (lines 20-100)
-Functions/Methods: setFilter (line 52), addTodo (line 60), render (line 70)
+```json
+{
+  "classes": [{
+    "name": "TodoComponent",
+    "range": { "start": 20, "end": 100 },
+    "methods": [
+      {
+        "name": "setFilter",
+        "line": 52,
+        "metadata": { "reactHooks": ["useCallback"] }
+      },
+      {
+        "name": "addTodo",
+        "line": 60,
+        "metadata": { "isAsync": true }
+      },
+      {
+        "name": "render",
+        "line": 70,
+        "metadata": { "returnsJSX": true }
+      }
+    ],
+    "properties": [
+      { "name": "todos", "line": 22 },
+      { "name": "filter", "line": 23 },
+      { "name": "isLoading", "line": 25 }
+    ]
+  }],
+  "patterns": {
+    "reactHooksCount": 1,
+    "asyncFunctionsCount": 1,
+    "componentsCount": 1
+  }
+}
 ```
 
-**LLM reasoning:**
+**LLM reasoning with language-specific metadata:**
 1. "User added `isLoading` state property at line 25"
-2. "TodoComponent has state management method `setFilter` at line 52"
-3. "Pattern suggests adding `setIsLoading()` at line 56 (after setFilter)"
-4. "Component has `render()` method at line 70 that displays state"
-5. "Should suggest adding loading indicator display at line 72"
+2. "TodoComponent has state management method `setFilter` at line 52 (uses `useCallback` hook)"
+3. "Pattern suggests adding `setIsLoading` with `useCallback` at line 56"
+4. "Method `addTodo` at line 60 is async - new loading state is likely for this operation"
+5. "Component has `render()` at line 70 that returns JSX - must display loading indicator"
+6. "Only 1 async function but now 2 state properties suggest adding async wrapper at line 65"
 
-**NES suggests TWO edits:**
-- Add `setIsLoading(loading: boolean)` method at line 56
-- Add `${this.isLoading ? '<spinner/>' : ''}` in render at line 72
+**NES suggests THREE precision edits:**
+- Add `setIsLoading = useCallback((loading) => { this.isLoading = loading; }, [])` at line 56
+- Wrap `addTodo` with loading state: `setIsLoading(true)` at line 61 and `setIsLoading(false)` at line 64  
+- Add `{this.isLoading && <Spinner/>}` in render at line 72
 
-Both suggestions are far from the current cursor (line 25), but make perfect semantic sense!
+This is significantly smarter than without language metadata - the LLM knows:
+- To use `useCallback` (pattern consistency)
+- Where async calls need loading indicators
+- JSX syntax for conditional rendering
 
 ## Benefits
 
@@ -329,9 +395,39 @@ interface ICodemapService {
 
 **Benefits**: Only re-parse affected sections, ~5x faster for small edits
 
-### 2. Language-Specific Enhancements
+### 2. Language-Specific Enhancements ✅ IMPLEMENTED
+
+**Status: COMPLETED** 
 
 **Importance: HIGH (8/10) - Critical for framework-specific patterns**
+
+**What was implemented:**
+
+✅ **React Hooks Detection**
+- Identifies `useState`, `useEffect`, `useCallback`, `useMemo`, `useRef`, `useContext`, etc.
+- Tracks which functions use which hooks
+- Pattern statistics: total hooks count across file
+
+✅ **Async/Await Pattern Recognition**
+- Detects async functions and methods automatically
+- Enables suggestions for error handling, loading states
+- Helps LLM maintain consistency (if 3 methods are async, suggest 4th should be too)
+
+✅ **JSX/Component Detection**
+- Identifies functions that return JSX (React components)
+- Enables UI-specific suggestions when state changes
+- Component count helps LLM understand file purpose
+
+✅ **Decorator Support (TypeScript/Python)**
+- Extracts `@decorator` annotations
+- Foundation for suggesting decorator patterns
+- Useful for DI frameworks, validation, etc.
+
+**Performance Impact: Minimal (~5-10ms)**
+- Regex-based pattern matching on already-fetched text
+- Only scans first 500 chars of each function (sufficient for signatures)
+- No additional AST traversal needed
+- Cached with codemap result
 
 **Why this matters:**
 

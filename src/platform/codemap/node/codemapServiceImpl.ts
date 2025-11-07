@@ -7,7 +7,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { TextDocumentSnapshot } from '../../editing/common/textDocumentSnapshot';
 import { OverlayNode } from '../../parser/node/nodes';
 import { IParserService } from '../../parser/node/parserService';
-import { Codemap, CodemapNode, ICodemapService, StructuredCodemap } from '../common/codemapService';
+import { Codemap, CodemapNode, ICodemapService, LanguageMetadata, StructuredCodemap } from '../common/codemapService';
 
 export class CodemapServiceImpl implements ICodemapService {
 	readonly _serviceBrand: undefined;
@@ -226,6 +226,9 @@ export class CodemapServiceImpl implements ICodemapService {
 		const classes: StructuredCodemap['classes'] = [];
 		const functions: StructuredCodemap['functions'] = [];
 		const interfaces: StructuredCodemap['interfaces'] = [];
+		let reactHooksCount = 0;
+		let asyncFunctionsCount = 0;
+		let componentsCount = 0;
 
 		const processNode = (n: CodemapNode, parentClass?: { name: string; range: { start: number; end: number }; methods: any[]; properties: any[] }) => {
 			if (n.type === 'class_declaration' && n.name && n.range) {
@@ -246,8 +249,18 @@ export class CodemapServiceImpl implements ICodemapService {
 				});
 			} else if (n.type === 'method_definition' && n.name && n.range) {
 				const line = this.offsetToLine(n.range.start, document);
+				const metadata = this.extractLanguageMetadata(n, document);
+				if (metadata.isAsync) {
+					asyncFunctionsCount++;
+				}
+				if (metadata.reactHooks && metadata.reactHooks.length > 0) {
+					reactHooksCount += metadata.reactHooks.length;
+				}
+				if (metadata.returnsJSX) {
+					componentsCount++;
+				}
 				if (parentClass) {
-					parentClass.methods.push({ name: n.name, line });
+					parentClass.methods.push({ name: n.name, line, metadata: Object.keys(metadata).length > 0 ? metadata : undefined });
 				}
 			} else if ((n.type === 'property_declaration' || n.type === 'public_field_definition') && n.name && n.range) {
 				const line = this.offsetToLine(n.range.start, document);
@@ -255,9 +268,21 @@ export class CodemapServiceImpl implements ICodemapService {
 					parentClass.properties.push({ name: n.name, line });
 				}
 			} else if (n.type === 'function_declaration' && n.name && n.range) {
+				const line = this.offsetToLine(n.range.start, document);
+				const metadata = this.extractLanguageMetadata(n, document);
+				if (metadata.isAsync) {
+					asyncFunctionsCount++;
+				}
+				if (metadata.reactHooks && metadata.reactHooks.length > 0) {
+					reactHooksCount += metadata.reactHooks.length;
+				}
+				if (metadata.returnsJSX) {
+					componentsCount++;
+				}
 				functions.push({
 					name: n.name,
-					line: this.offsetToLine(n.range.start, document)
+					line,
+					metadata: Object.keys(metadata).length > 0 ? metadata : undefined
 				});
 			} else {
 				// Recurse for other node types
@@ -267,6 +292,59 @@ export class CodemapServiceImpl implements ICodemapService {
 
 		processNode(node);
 
-		return { classes, functions, interfaces };
+		const patterns = {
+			reactHooksCount: reactHooksCount > 0 ? reactHooksCount : undefined,
+			asyncFunctionsCount: asyncFunctionsCount > 0 ? asyncFunctionsCount : undefined,
+			componentsCount: componentsCount > 0 ? componentsCount : undefined
+		};
+
+		return {
+			classes,
+			functions,
+			interfaces,
+			patterns: (patterns.reactHooksCount || patterns.asyncFunctionsCount || patterns.componentsCount) ? patterns : undefined
+		};
+	}
+
+	private extractLanguageMetadata(node: CodemapNode, document: TextDocumentSnapshot): LanguageMetadata {
+		if (!node.range) {
+			return {};
+		}
+
+		const text = document.getText();
+		const nodeText = text.substring(node.range.start, Math.min(node.range.end, node.range.start + 500));
+		const metadata: LanguageMetadata = {};
+
+		// Detect async functions/methods
+		if (/\basync\s+(function|\(|[a-zA-Z_$])/.test(nodeText)) {
+			metadata.isAsync = true;
+		}
+
+		// Detect React hooks (useState, useEffect, useCallback, etc.)
+		const hookMatches = nodeText.match(/\b(use[A-Z][a-zA-Z]*)\s*\(/g);
+		if (hookMatches) {
+			const hooks = hookMatches.map(h => h.replace(/\s*\($/, ''));
+			// Filter to known React hooks
+			const knownHooks = hooks.filter(h =>
+				['useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'useContext',
+					'useReducer', 'useLayoutEffect', 'useImperativeHandle', 'useDebugValue'].includes(h)
+			);
+			if (knownHooks.length > 0) {
+				metadata.reactHooks = [...new Set(knownHooks)]; // Deduplicate
+			}
+		}
+
+		// Detect JSX return (React components)
+		if (/return\s+[(<]/.test(nodeText) && /<[A-Z]/.test(nodeText)) {
+			metadata.returnsJSX = true;
+		}
+
+		// Detect decorators (TypeScript/Python style)
+		const decoratorMatches = nodeText.match(/@[a-zA-Z_$][a-zA-Z0-9_$]*/g);
+		if (decoratorMatches) {
+			metadata.decorators = [...new Set(decoratorMatches)];
+		}
+
+		return metadata;
 	}
 }

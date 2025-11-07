@@ -20,17 +20,40 @@ export interface CodemapNode {
 }
 
 /**
+ * Language-specific metadata for enhanced suggestions
+ */
+export interface LanguageMetadata {
+	/** React hooks used (useState, useEffect, etc.) */
+	reactHooks?: string[];
+	/** Is this an async function/method? */
+	isAsync?: boolean;
+	/** Does this return JSX? */
+	returnsJSX?: boolean;
+	/** Decorators (Python/TypeScript) */
+	decorators?: string[];
+}
+
+/**
  * Structured representation of code organization for LLM consumption
  */
 export interface StructuredCodemap {
 	readonly classes: Array<{
 		name: string;
 		range: { start: number; end: number };
-		methods: Array<{ name: string; line: number }>;
+		methods: Array<{ name: string; line: number; metadata?: LanguageMetadata }>;
 		properties: Array<{ name: string; line: number }>;
 	}>;
-	readonly functions: Array<{ name: string; line: number }>;
+	readonly functions: Array<{ name: string; line: number; metadata?: LanguageMetadata }>;
 	readonly interfaces: Array<{ name: string; range: { start: number; end: number } }>;
+	/** Language-specific patterns detected */
+	readonly patterns?: {
+		/** Total React hooks found in file */
+		reactHooksCount?: number;
+		/** Async functions/methods count */
+		asyncFunctionsCount?: number;
+		/** JSX/TSX components count */
+		componentsCount?: number;
+	};
 }
 
 /**
