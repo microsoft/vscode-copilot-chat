@@ -47,17 +47,14 @@ export function hasExplicitApiPath(url: string): boolean {
 interface UserModelConfig {
 	name: string;
 	url: string;
-	deploymentType?: 'completions' | 'responses';
-	deploymentName?: string;
-	apiVersion?: string;
 	maxInputTokens: number;
 	maxOutputTokens: number;
 	requiresAPIKey: boolean;
 	toolCalling: boolean;
 	editTools?: EndpointEditToolName[];
-	vision: boolean;
-	thinking?: boolean;
 	temperature?: number;
+	thinking?: boolean;
+	vision: boolean;
 	requestHeaders?: Record<string, string>;
 }
 

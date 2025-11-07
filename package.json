@@ -3040,7 +3040,11 @@
 									"description": "Azure deployment name for the model"
 								},
 								"deploymentType": {
-									"type": "string",
+									"enum": [
+										"completions",
+										"responses"
+									],
+									"default": "completions",
 									"description": "Type of Azure deployment"
 								},
 								"apiVersion": {

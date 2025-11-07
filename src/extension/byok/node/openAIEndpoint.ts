@@ -306,6 +306,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 				}
 			}
 			else {
+				// Non thinking models does not use max_tokens
 				if (typeof body.max_tokens !== 'undefined') {
 					delete body.max_tokens;
 				}

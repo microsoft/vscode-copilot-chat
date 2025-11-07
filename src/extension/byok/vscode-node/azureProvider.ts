@@ -19,10 +19,19 @@ export interface AzureUrlOptions {
 }
 
 interface AzureModelConfig {
-	deploymentType: 'completions' | 'responses';
-	deploymentName: string;
-	apiVersion: string;
+	name: string;
+	url: string;
+	deploymentType?: 'completions' | 'responses';
+	deploymentName?: string;
+	apiVersion?: string;
+	maxInputTokens: number;
+	maxOutputTokens: number;
+	toolCalling: boolean;
+	thinking?: boolean;
+	vision: boolean;
 	temperature?: number;
+	requiresAPIKey?: boolean;
+	requestHeaders?: Record<string, string>;
 }
 
 function createAzureUrlOptions(modelId: string, config?: Partial<AzureModelConfig>): AzureUrlOptions {
@@ -136,11 +145,6 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 		// Override modelInfo.id with the deployment name (deployment name is also handled).
 		// This is required because Azure OpenAI uses the deployment name for API routing.
 		modelInfo.id = options.deploymentName;
-
-		// Set temperature from config if specified
-		if (config?.temperature !== undefined) {
-			modelInfo.temperature = config.temperature;
-		}
 
 		// Set supported endpoints based on deployment type
 		if (options.deploymentType === 'responses') {
