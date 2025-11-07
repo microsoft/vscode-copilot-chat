@@ -100,8 +100,8 @@ export class CodemapServiceImpl implements ICodemapService {
 		if (counts.class_declaration > 0) {
 			parts.push(`${counts.class_declaration} class${counts.class_declaration > 1 ? 'es' : ''}`);
 		}
-		if (counts.function_declaration > 0 || counts.method_definition > 0) {
-			const total = counts.function_declaration + counts.method_definition;
+		if ((counts.function_declaration || 0) > 0 || (counts.method_definition || 0) > 0) {
+			const total = (counts.function_declaration || 0) + (counts.method_definition || 0);
 			parts.push(`${total} function${total > 1 ? 's' : ''}/method${total > 1 ? 's' : ''}`);
 		}
 		if (counts.interface_declaration > 0) {
