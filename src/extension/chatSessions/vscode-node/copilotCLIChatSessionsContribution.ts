@@ -27,7 +27,7 @@ const MODELS_OPTION_ID = 'model';
 const ISOLATION_OPTION_ID = 'isolation';
 
 /**
- * Track model selections per session.
+ * Tracks model selections per session.
  * Maps session IDs to their selected model options.
  * TODO@rebornix: we should have proper storage for the session model preference (revisit with API)
  */
@@ -182,7 +182,7 @@ namespace SessionIdForCLI {
  * Escapes XML special characters in a string.
  * Used to safely embed text in XML attributes and elements.
  * @param text - The text to escape
- * @returns The escaped text with XML entities
+ * @returns The escaped text with HTML/XML entities (&amp;, &lt;, &gt;, &quot;, &apos;)
  */
 function escapeXml(text: string): string {
 	return text
