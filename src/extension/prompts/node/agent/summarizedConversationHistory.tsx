@@ -525,6 +525,9 @@ class ConversationHistorySummarizer {
 			throw e;
 		}
 
+		// Use the actual endpoint's budget for validation, not this.sizing.tokenBudget.
+		// When Simple mode uses copilot-fast, the endpoint's max tokens differs from
+		// the original endpoint's budget (e.g., copilot-fast has different limits than GPT-4.1).
 		return this.handleSummarizationResponse(summaryResponse, mode, stopwatch.elapsed(), endpoint.model, endpoint.modelMaxPromptTokens);
 	}
 
