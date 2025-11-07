@@ -40,4 +40,13 @@ export interface ICodemapService {
 	 * @returns A codemap containing the document structure
 	 */
 	getCodemap(document: TextDocumentSnapshot, token: CancellationToken): Promise<Codemap | undefined>;
+
+	/**
+	 * Get the code segment for a specific structural element by name
+	 * @param document The document
+	 * @param elementName The name of the element (e.g., "handleClick", "UserService")
+	 * @param codemap Pre-computed codemap (optional)
+	 * @returns The code text and line range for that element
+	 */
+	getElementCode(document: TextDocumentSnapshot, elementName: string, codemap?: Codemap): Promise<{ code: string; lineRange: { start: number; end: number } } | undefined>;
 }

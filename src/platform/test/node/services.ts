@@ -27,6 +27,8 @@ import { IConversationOptions } from '../../chat/common/conversationOptions';
 import { IInteractionService, InteractionService } from '../../chat/common/interactionService';
 import { TestChatSessionService } from '../../chat/test/common/testChatSessionService';
 import { INaiveChunkingService, NaiveChunkingService } from '../../chunking/node/naiveChunkerService';
+import { ICodemapService } from '../../codemap/common/codemapService';
+import { CodemapServiceImpl } from '../../codemap/node/codemapServiceImpl';
 import { MockRunCommandExecutionService } from '../../commands/common/mockRunCommandExecutionService';
 import { IRunCommandExecutionService } from '../../commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../configuration/common/configurationService';
@@ -254,6 +256,7 @@ export function createPlatformServices(disposables: Pick<DisposableStore, 'add'>
 	testingServiceCollection.define(ILanguageFeaturesService, new SyncDescriptor(NoopLanguageFeaturesService));
 	testingServiceCollection.define(IRunCommandExecutionService, new SyncDescriptor(MockRunCommandExecutionService));
 	testingServiceCollection.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));
+	testingServiceCollection.define(ICodemapService, new SyncDescriptor(CodemapServiceImpl));
 	testingServiceCollection.define(IHeatmapService, nullHeatmapService);
 	testingServiceCollection.define(IImageService, nullImageService);
 	testingServiceCollection.define(ILanguageContextService, NullLanguageContextService);
