@@ -231,7 +231,8 @@ export class CodemapServiceImpl implements ICodemapService {
 		let componentsCount = 0;
 
 		// Track function depth to limit how deep we look for nested functions
-		// Only find functions within the first 2 levels to avoid over-capturing
+		// Depth 3 is needed for React components where helper functions are defined inside the component:
+		// depth=1: function_declaration (Component), depth=2: statement_block, depth=3: lexical_declaration with arrow functions
 		const processNode = (n: CodemapNode, parentClass?: { name: string; range: { start: number; end: number }; methods: any[]; properties: any[] }, depth: number = 0) => {
 			if (n.type === 'class_declaration' && n.name && n.range) {
 				const classInfo = {
@@ -296,7 +297,7 @@ export class CodemapServiceImpl implements ICodemapService {
 					c.type === 'function' ||
 					c.type === 'function_expression'
 				);
-				if (hasFunction && depth <= 2) {  // Only capture functions within first 2 levels
+				if (hasFunction && depth <= 3) {  // Depth 3 for React helper functions inside components
 					const line = this.offsetToLine(n.range.start, document);
 					const metadata = this.extractLanguageMetadata(n, document);
 					if (metadata.isAsync) {
