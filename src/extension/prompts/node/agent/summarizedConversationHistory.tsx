@@ -382,6 +382,7 @@ enum SummaryMode {
 
 class ConversationHistorySummarizer {
 	private readonly summarizationId = generateUuid();
+	private cachedSimpleEndpoint?: IChatEndpoint;
 
 	constructor(
 		private readonly props: SummarizedAgentHistoryProps,
@@ -438,11 +439,21 @@ class ConversationHistorySummarizer {
 
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
 		const stopwatch = new StopWatch(false);
-		const forceGpt41 = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.AgentHistorySummarizationForceGpt41, this.experimentationService);
-		const gpt41Endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
-		const endpoint = forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens) ?
-			gpt41Endpoint :
-			this.props.endpoint;
+
+		// Use faster endpoint for Simple mode
+		let endpoint: IChatEndpoint;
+		if (mode === SummaryMode.Simple) {
+			if (!this.cachedSimpleEndpoint) {
+				this.cachedSimpleEndpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
+			}
+			endpoint = this.cachedSimpleEndpoint;
+		} else {
+			const forceGpt41 = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.AgentHistorySummarizationForceGpt41, this.experimentationService);
+			const gpt41Endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+			endpoint = forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens) ?
+				gpt41Endpoint :
+				this.props.endpoint;
+		}
 
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
@@ -453,8 +464,8 @@ class ConversationHistorySummarizer {
 					...propsInfo.props,
 					triggerSummarize: false
 				};
-				const expandedEndpoint = endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * 1.05);
-				summarizationPrompt = (await renderPromptElement(this.instantiationService, expandedEndpoint, AgentPromptWithSummaryPrompt, props, undefined, this.token)).messages;
+				// Use original endpoint without expansion to reduce token overhead
+				summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, AgentPromptWithSummaryPrompt, props, undefined, this.token)).messages;
 			} else {
 				summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
 			}
@@ -463,12 +474,13 @@ class ConversationHistorySummarizer {
 			const budgetExceeded = e instanceof BudgetExceededError;
 			const outcome = budgetExceeded ? 'budget_exceeded' : 'renderError';
 			this.logInfo(`Error rendering summarization prompt in mode: ${mode}. ${e.stack}`, mode);
-			this.sendSummarizationTelemetry(outcome, '', this.props.endpoint.model, mode, stopwatch.elapsed(), undefined);
+			this.sendSummarizationTelemetry(outcome, '', endpoint.model, mode, stopwatch.elapsed(), undefined);
 			throw e;
 		}
 
 		let summaryResponse: ChatResponse;
 		try {
+			// Prepare tool options for Full mode
 			const toolOpts = mode === SummaryMode.Full ? {
 				tool_choice: 'none' as const,
 				tools: normalizeToolSchema(
@@ -487,6 +499,7 @@ class ConversationHistorySummarizer {
 				),
 			} : undefined;
 
+			// Apply cache breakpoints synchronously
 			if (promptCacheMode) {
 				addCacheBreakpoints(summarizationPrompt);
 			} else {
@@ -508,17 +521,17 @@ class ConversationHistorySummarizer {
 			}, this.token ?? CancellationToken.None);
 		} catch (e) {
 			this.logInfo(`Error from summarization request. ${e.message}`, mode);
-			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode, stopwatch.elapsed(), undefined);
+			this.sendSummarizationTelemetry('requestThrow', '', endpoint.model, mode, stopwatch.elapsed(), undefined);
 			throw e;
 		}
 
-		return this.handleSummarizationResponse(summaryResponse, mode, stopwatch.elapsed());
+		return this.handleSummarizationResponse(summaryResponse, mode, stopwatch.elapsed(), endpoint.model, endpoint.modelMaxPromptTokens);
 	}
 
-	private async handleSummarizationResponse(response: ChatResponse, mode: SummaryMode, elapsedTime: number): Promise<FetchSuccess<string>> {
+	private async handleSummarizationResponse(response: ChatResponse, mode: SummaryMode, elapsedTime: number, actualModel: string, endpointMaxTokens: number): Promise<FetchSuccess<string>> {
 		if (response.type !== ChatFetchResponseType.Success) {
 			const outcome = response.type;
-			this.sendSummarizationTelemetry(outcome, response.requestId, this.props.endpoint.model, mode, elapsedTime, undefined, response.reason);
+			this.sendSummarizationTelemetry(outcome, response.requestId, actualModel, mode, elapsedTime, undefined, response.reason);
 			this.logInfo(`Summarization request failed. ${response.type} ${response.reason}`, mode);
 			if (response.type === ChatFetchResponseType.Canceled) {
 				throw new CancellationError();
@@ -527,18 +540,20 @@ class ConversationHistorySummarizer {
 			throw new Error('Summarization request failed');
 		}
 
-		const summarySize = await this.sizing.countTokens(response.value);
+		// Use server-reported token count if available to avoid expensive client-side counting
+		const summarySize = response.usage?.completion_tokens ?? await this.sizing.countTokens(response.value);
+		// Use the actual endpoint's budget that generated this response, not the original sizing's budget
 		const effectiveBudget =
 			!!this.props.maxSummaryTokens
-				? Math.min(this.sizing.tokenBudget, this.props.maxSummaryTokens)
-				: this.sizing.tokenBudget;
+				? Math.min(endpointMaxTokens, this.props.maxSummaryTokens)
+				: endpointMaxTokens;
 		if (summarySize > effectiveBudget) {
-			this.sendSummarizationTelemetry('too_large', response.requestId, this.props.endpoint.model, mode, elapsedTime, response.usage);
+			this.sendSummarizationTelemetry('too_large', response.requestId, actualModel, mode, elapsedTime, response.usage);
 			this.logInfo(`Summary too large: ${summarySize} tokens (effective budget ${effectiveBudget})`, mode);
 			throw new Error('Summary too large');
 		}
 
-		this.sendSummarizationTelemetry('success', response.requestId, this.props.endpoint.model, mode, elapsedTime, response.usage);
+		this.sendSummarizationTelemetry('success', response.requestId, actualModel, mode, elapsedTime, response.usage);
 		return response;
 	}
 
@@ -547,26 +562,33 @@ class ConversationHistorySummarizer {
 	 * @param success Whether the summarization was successful
 	 */
 	private sendSummarizationTelemetry(outcome: string, requestId: string, model: string, mode: SummaryMode, elapsedTime: number, usage: APIUsage | undefined, detailedOutcome?: string): void {
-		const numRoundsInHistory = this.props.promptContext.history
-			.map(turn => turn.rounds.length)
-			.reduce((a, b) => a + b, 0);
-		const numRoundsInCurrentTurn = this.props.promptContext.toolCallRounds?.length ?? 0;
-		const numRounds = numRoundsInHistory + numRoundsInCurrentTurn;
+		// Lazy evaluation of expensive metrics - only compute when needed
+		const getNumRounds = () => {
+			const numRoundsInHistory = this.props.promptContext.history
+				.map(turn => turn.rounds.length)
+				.reduce((a, b) => a + b, 0);
+			const numRoundsInCurrentTurn = this.props.promptContext.toolCallRounds?.length ?? 0;
+			return numRoundsInHistory + numRoundsInCurrentTurn;
+		};
 
-		const reversedCurrentRounds = [...(this.props.promptContext.toolCallRounds ?? [])].reverse();
-		let numRoundsSinceLastSummarization = reversedCurrentRounds.findIndex(round => round.summary) ?? -1;
-		if (numRoundsSinceLastSummarization === -1) {
-			let count = numRoundsInCurrentTurn;
-			outer: for (const turn of Iterable.reverse(Array.from(this.props.promptContext.history))) {
-				for (const round of Iterable.reverse(Array.from(turn.rounds ?? []))) {
-					if (round.summary) {
-						numRoundsSinceLastSummarization = count;
-						break outer;
+		const getNumRoundsSinceLastSummarization = () => {
+			const reversedCurrentRounds = [...(this.props.promptContext.toolCallRounds ?? [])].reverse();
+			let numRoundsSinceLastSummarization = reversedCurrentRounds.findIndex(round => round.summary) ?? -1;
+			if (numRoundsSinceLastSummarization === -1) {
+				const numRoundsInCurrentTurn = this.props.promptContext.toolCallRounds?.length ?? 0;
+				let count = numRoundsInCurrentTurn;
+				outer: for (const turn of Iterable.reverse(Array.from(this.props.promptContext.history))) {
+					for (const round of Iterable.reverse(Array.from(turn.rounds ?? []))) {
+						if (round.summary) {
+							numRoundsSinceLastSummarization = count;
+							break outer;
+						}
+						count++;
 					}
-					count++;
 				}
 			}
-		}
+			return numRoundsSinceLastSummarization;
+		};
 
 		const turnIndex = this.props.promptContext.history.length;
 		const curTurnRoundIndex = this.props.promptContext.toolCallRounds?.length ?? 0;
@@ -616,8 +638,8 @@ class ConversationHistorySummarizer {
 			mode,
 			summarizationMode: mode, // Try to unstick GDPR
 		}, {
-			numRounds,
-			numRoundsSinceLastSummarization,
+			numRounds: getNumRounds(),
+			numRoundsSinceLastSummarization: getNumRoundsSinceLastSummarization(),
 			turnIndex,
 			curTurnRoundIndex,
 			isDuringToolCalling,
