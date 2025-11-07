@@ -48,8 +48,15 @@ export class CodemapServiceImpl implements ICodemapService {
 		const name = this.extractNodeName(node, document);
 
 		// DEBUG: Log what we're converting
-		if (node.kind === 'variable_declarator' || node.kind === 'lexical_declaration') {
-			console.log(`[Codemap Convert] ${node.kind}, name=${name || '(none)'}, hasChildren=${!!node.children?.length}`);
+		if (node.kind === 'lexical_declaration' && node.children?.length) {
+			const childTypes = node.children.map(c => c.kind).join(', ');
+			console.log(`[Codemap Convert] lexical_declaration children: ${childTypes}`);
+			// Log first child's text if it exists
+			if (node.children[0]) {
+				const text = document.getText();
+				const firstChildText = text.substring(node.children[0].startIndex, Math.min(node.children[0].endIndex, node.children[0].startIndex + 50));
+				console.log(`[Codemap Convert] first child text: "${firstChildText}"`);
+			}
 		}
 
 		return {
