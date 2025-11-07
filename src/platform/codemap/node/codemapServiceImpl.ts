@@ -47,6 +47,11 @@ export class CodemapServiceImpl implements ICodemapService {
 		// Extract the actual text for this node to include names
 		const name = this.extractNodeName(node, document);
 
+		// DEBUG: Log what we're converting
+		if (node.kind === 'variable_declarator' || node.kind === 'lexical_declaration') {
+			console.log(`[Codemap Convert] ${node.kind}, name=${name || '(none)'}, hasChildren=${!!node.children?.length}`);
+		}
+
 		return {
 			type: node.kind,
 			name,
@@ -296,6 +301,7 @@ export class CodemapServiceImpl implements ICodemapService {
 				// IMPORTANT: Recurse into function body to find nested arrow functions
 				n.children?.forEach(child => processNode(child, parentClass, depth + 1));
 			} else if (n.type === 'variable_declarator' && n.name && n.range && n.children) {
+				console.log(`[Codemap Process] Found variable_declarator: ${n.name}, depth=${depth}, hasChildren=${!!n.children?.length}`);
 				// Handle arrow functions: const myFunc = () => {}
 				// Check if this variable has an arrow_function or function child
 				const hasFunction = n.children.some(c =>
@@ -303,6 +309,7 @@ export class CodemapServiceImpl implements ICodemapService {
 					c.type === 'function' ||
 					c.type === 'function_expression'
 				);
+				console.log(`[Codemap Process] variable_declarator hasFunction=${hasFunction}, childTypes=${n.children.map(c => c.type).join(', ')}`);
 				if (hasFunction && depth <= 4) {  // Depth 4 for variable_declarator inside lexical_declaration in React components
 					const line = this.offsetToLine(n.range.start, document);
 					const metadata = this.extractLanguageMetadata(n, document);
