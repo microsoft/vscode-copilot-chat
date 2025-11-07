@@ -47,20 +47,6 @@ export class CodemapServiceImpl implements ICodemapService {
 		// Extract the actual text for this node to include names
 		const name = this.extractNodeName(node, document);
 
-		// DEBUG: Log what we're converting - look for arrow function patterns
-		if (node.kind === 'lexical_declaration') {
-			const text = document.getText();
-			const nodeFullText = text.substring(node.startIndex, Math.min(node.endIndex, node.startIndex + 80));
-			// Check if this looks like an arrow function declaration
-			if (nodeFullText.includes('=>') && nodeFullText.includes('const')) {
-				console.log(`[Codemap] FOUND ARROW FUNCTION: "${nodeFullText.replace(/\n/g, ' ')}"`);
-				console.log(`[Codemap] Parent kind: ${parentKind || 'none'}`);
-				if (node.children?.length) {
-					console.log(`[Codemap] Children: ${node.children.map(c => c.kind).join(', ')}`);
-				}
-			}
-		}
-
 		return {
 			type: node.kind,
 			name,
@@ -78,9 +64,13 @@ export class CodemapServiceImpl implements ICodemapService {
 		const text = document.getText();
 		const nodeText = text.substring(node.startIndex, Math.min(node.endIndex, node.startIndex + 100));
 
-		// DEBUG: Log variable_declarator nodes
-		if (node.kind === 'variable_declarator') {
-			console.log(`[Codemap] variable_declarator text: "${nodeText.substring(0, 50)}"`);
+		// Special handling for arrow functions in lexical_declaration
+		// Pattern: const functionName = (...) => { ... }
+		if (node.kind === 'lexical_declaration' && nodeText.includes('=>')) {
+			const arrowFunctionMatch = nodeText.match(/const\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=/);
+			if (arrowFunctionMatch && arrowFunctionMatch[1]) {
+				return arrowFunctionMatch[1];
+			}
 		}
 
 		// Common patterns for extracting names from different node types
@@ -309,8 +299,21 @@ export class CodemapServiceImpl implements ICodemapService {
 				});
 				// IMPORTANT: Recurse into function body to find nested arrow functions
 				n.children?.forEach(child => processNode(child, parentClass, depth + 1));
+			} else if (n.type === 'lexical_declaration' && n.name && n.range) {
+				// Handle arrow functions: const myFunc = () => {}
+				// Check if this is an arrow function by looking at the node text
+				const text = document.getText();
+				const nodeText = text.substring(n.range.start, Math.min(n.range.end, n.range.start + 100));
+				if (nodeText.includes('=>')) {
+					functions.push({
+						name: n.name,
+						line: this.offsetToLine(n.range.start, document),
+						metadata: {
+							isAsync: nodeText.includes('async')
+						}
+					});
+				}
 			} else if (n.type === 'variable_declarator' && n.name && n.range && n.children) {
-				console.log(`[Codemap Process] Found variable_declarator: ${n.name}, depth=${depth}, hasChildren=${!!n.children?.length}`);
 				// Handle arrow functions: const myFunc = () => {}
 				// Check if this variable has an arrow_function or function child
 				const hasFunction = n.children.some(c =>
@@ -318,7 +321,6 @@ export class CodemapServiceImpl implements ICodemapService {
 					c.type === 'function' ||
 					c.type === 'function_expression'
 				);
-				console.log(`[Codemap Process] variable_declarator hasFunction=${hasFunction}, childTypes=${n.children.map(c => c.type).join(', ')}`);
 				if (hasFunction && depth <= 4) {  // Depth 4 for variable_declarator inside lexical_declaration in React components
 					const line = this.offsetToLine(n.range.start, document);
 					const metadata = this.extractLanguageMetadata(n, document);
