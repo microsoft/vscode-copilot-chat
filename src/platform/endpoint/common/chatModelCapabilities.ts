@@ -27,8 +27,10 @@ const VSC_MODEL_HASHES_B = [
 	'df610ed210bb9266ff8ab812908d5837538cdb1d7436de907fb7e970dab5d289',
 ];
 
-let hiddenModelBFamily: string | undefined;
-const HIDDEN_MODEL_B_HASH = '8f398886c326b5f8f07b20ac250c87de6723e062474465273fe1524f2b9092fa';
+const familyToHash = new Map<string, string>();
+const HIDDEN_MODEL_B_HASHES = [
+	'8f398886c326b5f8f07b20ac250c87de6723e062474465273fe1524f2b9092fa',
+	'40903c59d19feef1d67c455499304c194ebdec82df78790c3ceaac92bd1d84be'];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 	return 'id' in model ? model.id : model.model;
@@ -44,14 +46,10 @@ export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint | 
 		return false;
 	}
 
-	const family = typeof model === 'string' ? model : model.family;
-	if (hiddenModelBFamily === family) {
-		return true;
-	}
-
-	const h = await getCachedSha256Hash(family);
-	if (h === HIDDEN_MODEL_B_HASH) {
-		hiddenModelBFamily = family;
+	const family = (typeof model === 'string' ? model : model.family).toLowerCase();
+	const h = familyToHash.get(family) ?? await getCachedSha256Hash(family);
+	if (HIDDEN_MODEL_B_HASHES.includes(h)) {
+		familyToHash.set(family, h);
 		return true;
 	}
 	return false;
@@ -166,8 +164,16 @@ export async function modelSupportsSimplifiedApplyPatchInstructions(model: Langu
 	return model.family.startsWith('gpt-5') || await isHiddenModelB(model);
 }
 
+/**
+ * This takes a sync shortcut and should only be called when a model hash would have already been computed while rendering the prompt.
+ */
 export function getVerbosityForModelSync(model: IChatEndpoint): 'low' | 'medium' | 'high' | undefined {
-	if (model.family === hiddenModelBFamily) {
+	const syncHash = familyToHash.get(model.family);
+	if (!syncHash) {
+		return undefined;
+	}
+
+	if (HIDDEN_MODEL_B_HASHES.includes(syncHash)) {
 		return 'low';
 	}
 	return undefined;
