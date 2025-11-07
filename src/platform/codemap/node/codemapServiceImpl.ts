@@ -64,6 +64,11 @@ export class CodemapServiceImpl implements ICodemapService {
 		const text = document.getText();
 		const nodeText = text.substring(node.startIndex, Math.min(node.endIndex, node.startIndex + 100));
 
+		// DEBUG: Log variable_declarator nodes
+		if (node.kind === 'variable_declarator') {
+			console.log(`[Codemap] variable_declarator text: "${nodeText.substring(0, 50)}"`);
+		}
+
 		// Common patterns for extracting names from different node types
 		const patterns: Record<string, RegExp> = {
 			'function_declaration': /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/,
