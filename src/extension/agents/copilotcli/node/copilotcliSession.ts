@@ -228,12 +228,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		if (workingDirectory && permissionRequest.kind === 'write') {
-			// If user is writing a file in the working directory, approve it.
-			// At the moment, working directory is only set when the session is
-			// using a git worktree.
+			// TODO:@rebornix @lszomoru
+			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
+			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
 			const data = Uri.file(permissionRequest.fileName);
 
-			if (extUriBiasedIgnorePathCase.isEqualOrParent(data, Uri.file(workingDirectory))) {
+			if (!this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(data, Uri.file(workingDirectory))) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in working directory ${permissionRequest.fileName}`);
 				return { kind: 'approved' };
 			}
