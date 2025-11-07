@@ -19,14 +19,14 @@ The `chat.azureModels` setting accepts a record of model configurations where ea
     "[modelId]": {
       "name": string,                    // Display name for the model
       "url": string,                     // Azure endpoint URL (base URL without API path)
-      "deploymentType": "completions" | "responses",  // API type (default: "completions")
+      "deploymentType": "completions" | "responses",  // API type (optional, defaults to "completions")
       "deploymentName": string,          // Azure deployment name (optional, defaults to modelId)
       "apiVersion": string,              // Azure API version (optional, default: "2025-01-01-preview")
       "maxInputTokens": number,          // Maximum input context window size
       "maxOutputTokens": number,         // Maximum output tokens per response
       "toolCalling": boolean,            // Whether model supports function/tool calling
       "temperature": number,             // Temperature setting (optional, 0.0-2.0)
-      "thinking": boolean                // Whether model supports thinking/reasoning tokens (optional)
+      "thinking": boolean,               // Whether model supports thinking/reasoning tokens (optional)
       "vision": boolean,                 // Whether model supports vision/image inputs (optional)
     }
   }
@@ -158,7 +158,7 @@ The `getModelInfo` method in `AzureBYOKModelProvider`:
 1. **Use explicit deployment names**: Always specify `deploymentName` to avoid confusion with model IDs
 2. **Match API versions**: Use the API version that matches your Azure deployment capabilities
 3. **Set accurate token limits**: Configure `maxInputTokens` and `maxOutputTokens` based on your deployment
-4. **Enable appropriate capabilities**: Set `toolCalling`, `thinking` and `vision`, flags based on model support
+4. **Enable appropriate capabilities**: Set `toolCalling`, `thinking` and `vision` flags based on model support
 5. **Test endpoint URLs**: Verify base URLs are correct and accessible before adding models
 6. **Group related models**: Use descriptive model IDs for easy identification in the UI
 7. **Document custom configurations**: Add comments in settings.json to explain non-standard configurations

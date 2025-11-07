@@ -307,7 +307,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 			else {
 				if (typeof body.max_tokens !== 'undefined') {
-					body['max_completion_tokens'] = body.max_tokens;
 					delete body.max_tokens;
 				}
 			}

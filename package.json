@@ -3085,8 +3085,6 @@
 							"required": [
 								"name",
 								"url",
-								"deploymentName",
-								"deploymentType",
 								"maxInputTokens",
 								"maxOutputTokens",
 								"toolCalling",
