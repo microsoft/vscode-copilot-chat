@@ -30,14 +30,6 @@ export function getRequestId(response: Response, json?: any): RequestId {
 	};
 }
 
-export function getProcessingTime(response: Response): number {
-	const reqIdStr = response.headers.get('openai-processing-ms');
-	if (reqIdStr) {
-		return parseInt(reqIdStr, 10);
-	}
-	return 0;
-}
-
 // Request methods
 
 export interface ICodeVulnerabilityAnnotation {
