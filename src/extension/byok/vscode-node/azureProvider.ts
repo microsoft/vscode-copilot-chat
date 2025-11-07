@@ -133,7 +133,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 		const options = createAzureUrlOptions(modelId, config);
 		const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
 
-		// IMPORTANT: Override modelInfo.id with the deployment name (handled above).
+		// Override modelInfo.id with the deployment name (deployment name is also handled).
 		// This is required because Azure OpenAI uses the deployment name for API routing.
 		modelInfo.id = options.deploymentName;
 
