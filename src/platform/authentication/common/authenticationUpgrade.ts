@@ -25,7 +25,7 @@ export interface IAuthenticationChatUpgradeService {
 	 * Displays a modal dialog requesting the user to grant an upgrade to a more permissive session.
 	 * @returns A promise that resolves to a boolean indicating whether the user granted the upgrade.
 	 */
-	showPermissiveSessionModal(): Promise<boolean>;
+	showPermissiveSessionModal(skipRepeatCheck?: boolean): Promise<boolean>;
 
 	/**
 	 * Presents the upgrade prompt within the chat interface itself.
