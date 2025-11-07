@@ -436,7 +436,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		};
 	}
 
-	async _fetchWithInstrumentation(
+	private async _fetchWithInstrumentation(
 		chatEndpoint: IChatEndpoint,
 		ourRequestId: string,
 		request: IEndpointBody,
@@ -548,7 +548,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			});
 	}
 
-	async _handleError(
+	private async _handleError(
 		telemetryData: TelemetryData,
 		response: Response,
 		requestId: string
