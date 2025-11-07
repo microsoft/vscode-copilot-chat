@@ -1716,6 +1716,11 @@
 			},
 			{
 				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
+				"when": "github.copilot.auth.missingPermissiveSession",
+				"contents": "%github.copilot.viewsWelcome.noPermissiveToken.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
 				"when": "workspaceFolderCount == 0",
 				"contents": "%github.copilot.viewsWelcome.noFolder.contents%"
 			},
@@ -1785,6 +1790,10 @@
 			}
 		],
 		"commands": [
+			{
+				"command": "github.copilot.chat.triggerPermissiveSignIn",
+				"title": "%github.copilot.command.triggerPermissiveSignIn%"
+			},
 			{
 				"command": "github.copilot.claude.sessions.refresh",
 				"title": "%github.copilot.command.refreshClaudeCodeSessions%",
@@ -3415,6 +3424,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.chat.triggerPermissiveSignIn",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.interactiveSession.feedback",
 					"when": "github.copilot-chat.activated && !github.copilot.interactiveSession.disabled"
