@@ -167,8 +167,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					opts.location,
 					ourRequestId,
 					postOptions.n,
-					userInitiatedRequest,
 					token,
+					userInitiatedRequest,
 					telemetryProperties,
 					opts.useFetcher,
 				);
@@ -334,13 +334,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		location: ChatLocation,
 		ourRequestId: string,
 		nChoices: number | undefined,
+		cancellationToken: CancellationToken,
 		userInitiatedRequest?: boolean,
-		cancel?: CancellationToken | undefined,
 		telemetryProperties?: TelemetryProperties | undefined,
 		useFetcher?: FetcherId
 	): Promise<ChatResults | ChatRequestFailed | ChatRequestCanceled> {
 
-		if (cancel?.isCancellationRequested) {
+		if (cancellationToken.isCancellationRequested) {
 			return { type: FetchResponseKind.Canceled, reason: 'before fetch request' };
 		}
 
@@ -371,13 +371,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			request,
 			secretKey,
 			location,
+			cancellationToken,
 			userInitiatedRequest,
-			cancel,
 			{ ...telemetryProperties, modelCallId },
 			useFetcher
 		);
 
-		if (cancel?.isCancellationRequested) {
+		if (cancellationToken.isCancellationRequested) {
 			const body = await response!.body();
 			try {
 				// Destroy the stream so that the server is hopefully notified we don't want any more data
@@ -410,7 +410,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			nChoices ?? /* OpenAI's default */ 1,
 			finishedCb,
 			extendedBaseTelemetryData,
-			cancel
+			cancellationToken
 		);
 
 		// CAPI will return us a Copilot Edits Session Header which is our token to using the speculative decoding endpoint
@@ -434,8 +434,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		request: IEndpointBody,
 		secretKey: string,
 		location: ChatLocation,
+		cancellationToken: CancellationToken,
 		userInitiatedRequest?: boolean,
-		cancel?: CancellationToken,
 		telemetryProperties?: TelemetryProperties,
 		useFetcher?: FetcherId
 	): Promise<Response> {
@@ -486,7 +486,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			ourRequestId,
 			request,
 			additionalHeaders,
-			cancel,
+			cancellationToken,
 			useFetcher
 		).then(response => {
 			const apim = response.headers.get('apim-request-id');
