@@ -52,7 +52,7 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const currentFilePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
 
-	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath) : '';
+	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath, codemap) : '';
 
 	// Include codemap if available with structured format for better LLM reasoning
 	const codemapSection = codemap ? `${PromptTags.CODEMAP.start}
@@ -93,8 +93,27 @@ function wrapInBackticks(content: string) {
 	return `\`\`\`\n${content}\n\`\`\``;
 }
 
-function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
+function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string, codemap?: Codemap) {
 	let postScript: string | undefined;
+
+	// Add cursor prediction instruction if codemap is available
+	const cursorPredictionInstruction = codemap ? `
+
+CURSOR PREDICTION:
+After providing your edit, predict where the developer should move their cursor next by analyzing the file structure and patterns.
+Consider:
+- Related code that needs updating based on this change
+- Pattern completion (e.g., if adding state, cursor should go to setter method or usage location)
+- Async functions that might need loading states
+- JSX components that might need UI updates
+- Methods in the same class that follow similar patterns
+
+Provide your response in this format:
+<next_cursor_line>[line_number]</next_cursor_line>
+<cursor_reasoning>[brief explanation of why that location makes sense]</cursor_reasoning>
+
+If no clear next location exists, omit these tags.` : '';
+
 	switch (strategy) {
 		case PromptingStrategy.Codexv21NesUnified:
 			break;
@@ -120,7 +139,7 @@ they would have made next. Provide the revised code that was between the \`${Pro
 	}
 
 	const formattedPostScript = postScript === undefined ? '' : `\n\n${postScript}`;
-	return formattedPostScript;
+	return formattedPostScript + cursorPredictionInstruction;
 }
 
 function getRelatedInformation(langCtx: LanguageContextResponse | undefined): string {

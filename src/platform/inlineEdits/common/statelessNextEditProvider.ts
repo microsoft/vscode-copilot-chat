@@ -308,6 +308,11 @@ export interface IStatelessNextEditTelemetry {
 	readonly nextCursorLineError: string | undefined;
 	/** nextCursorLineNumber - currentCursorLineNumber */
 	readonly nextCursorLineDistance: number | undefined;
+
+	/* cursor prediction info */
+	readonly predictedNextCursorLine: number | undefined;
+	readonly cursorPredictionReasoning: string | undefined;
+	readonly cursorPredictionConfidence: number | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -379,6 +384,9 @@ export class StatelessNextEditTelemetryBuilder {
 			nextCursorLineError: this._nextCursorLineError,
 			nextCursorLineDistance: this._nextCursorLineDistance,
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
+			predictedNextCursorLine: this._predictedNextCursorLine,
+			cursorPredictionReasoning: this._cursorPredictionReasoning,
+			cursorPredictionConfidence: this._cursorPredictionConfidence,
 		};
 	}
 
@@ -494,6 +502,17 @@ export class StatelessNextEditTelemetryBuilder {
 	 */
 	public setNextCursorLineDistance(distance: number): this {
 		this._nextCursorLineDistance = distance;
+		return this;
+	}
+
+	private _predictedNextCursorLine: number | undefined;
+	private _cursorPredictionReasoning: string | undefined;
+	private _cursorPredictionConfidence: number | undefined;
+
+	public setCursorPrediction(line: number | undefined, reasoning: string | undefined, confidence: number | undefined): this {
+		this._predictedNextCursorLine = line;
+		this._cursorPredictionReasoning = reasoning;
+		this._cursorPredictionConfidence = confidence;
 		return this;
 	}
 }

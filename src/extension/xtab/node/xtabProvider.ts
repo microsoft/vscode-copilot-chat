@@ -19,6 +19,7 @@ import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { LanguageContextEntry, LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
+import { CursorPredictionMetadata, extractCursorPrediction, removeCursorPredictionTags } from '../../../platform/inlineEdits/common/dataTypes/cursorPredictionMetadata';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
@@ -603,6 +604,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const fetchRequestStopWatch = new StopWatch();
 
 		let responseSoFar = '';
+		let cursorPredictionMetadata: CursorPredictionMetadata = {};
 
 		let chatResponseFailure: ChatFetchError | undefined;
 
@@ -684,6 +686,17 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				}
 
 				fetchStreamSource.resolve();
+
+				// Extract cursor prediction metadata from full response
+				cursorPredictionMetadata = extractCursorPrediction(responseSoFar);
+				if (cursorPredictionMetadata.nextCursorLine) {
+					logContext.addLog(`Cursor prediction: line ${cursorPredictionMetadata.nextCursorLine} - ${cursorPredictionMetadata.reasoning || 'no reasoning'}`);
+					telemetryBuilder.setCursorPrediction(
+						cursorPredictionMetadata.nextCursorLine,
+						cursorPredictionMetadata.reasoning,
+						cursorPredictionMetadata.confidence
+					);
+				}
 
 				logContext.setResponse(responseSoFar);
 			});
