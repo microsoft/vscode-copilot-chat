@@ -54,9 +54,13 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath) : '';
 
-	// Include codemap if available
+	// Include codemap if available with structured format for better LLM reasoning
 	const codemapSection = codemap ? `${PromptTags.CODEMAP.start}
-File structure summary: ${codemap.summary}
+File structure: ${codemap.summary}
+${codemap.structured ? `
+Structured format:
+${JSON.stringify(codemap.structured, null, 2)}
+` : ''}
 ${PromptTags.CODEMAP.end}
 
 ` : '';
