@@ -233,6 +233,11 @@ export class CodemapServiceImpl implements ICodemapService {
 		// Track function depth to limit how deep we look for nested functions
 		// Only find functions within the first 2 levels to avoid over-capturing
 		const processNode = (n: CodemapNode, parentClass?: { name: string; range: { start: number; end: number }; methods: any[]; properties: any[] }, depth: number = 0) => {
+			// Debug logging to understand tree structure
+			if (depth <= 3) {
+				console.log(`[Codemap Debug] depth=${depth}, type=${n.type}, name=${n.name || '(no name)'}, hasChildren=${!!n.children?.length}`);
+			}
+
 			if (n.type === 'class_declaration' && n.name && n.range) {
 				const classInfo = {
 					name: n.name,
@@ -296,6 +301,9 @@ export class CodemapServiceImpl implements ICodemapService {
 					c.type === 'function' ||
 					c.type === 'function_expression'
 				);
+				if (hasFunction) {
+					console.log(`[Codemap Debug] Found variable_declarator with function: ${n.name} at depth ${depth}`);
+				}
 				if (hasFunction && depth <= 2) {  // Only capture functions within first 2 levels
 					const line = this.offsetToLine(n.range.start, document);
 					const metadata = this.extractLanguageMetadata(n, document);
