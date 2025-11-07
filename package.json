@@ -4354,7 +4354,6 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
 				"description": "The GitHub Copilot CLI Agent works on your local machine",
-				"when": "!chatEntitlementSignedOut && chatIsEnabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
@@ -4383,7 +4382,6 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 1,
 				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
-				"when": "!chatEntitlementSignedOut && chatIsEnabled",
 				"capabilities": {
 					"supportsFileAttachments": true
 				}
