@@ -1234,7 +1234,22 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const response = await this._octoKitService.postCopilotAgentJob(repoId.org, repoId.repo, JOBS_API_VERSION, payload);
 			if (!this.validateRemoteAgentJobResponse(response)) {
 				const statusCode = response?.status;
-				return { error: vscode.l10n.t('Received invalid response {0}from cloud agent.', statusCode ? statusCode + ' ' : ''), innerError: `Response ${JSON.stringify(response)}`, state: 'error' };
+				switch (statusCode) {
+					case 422:
+						// NOTE: Although earlier checks should prevent this, ensure that if we end up
+						//       with a 422 from the API, we give a useful error message
+						return {
+							error: vscode.l10n.t('The cloud agent was unable to create a pull request with the specified base branch \'{0}\'. Please push branch to the remote and try again.', base_ref),
+							innerError: `Status code 422 received from cloud agent.`,
+							state: 'error',
+						};
+					default:
+						return {
+							error: vscode.l10n.t('Received invalid response {0}from cloud agent.', statusCode ? statusCode + ' ' : ''),
+							innerError: `Response ${JSON.stringify(response)}`,
+							state: 'error',
+						};
+				}
 			}
 			// For v1 API, we need to fetch the job details to get the PR info
 			// Since the PR might not be created immediately, we need to poll for it
