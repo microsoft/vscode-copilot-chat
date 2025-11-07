@@ -43,19 +43,21 @@ export class CodemapServiceImpl implements ICodemapService {
 		};
 	}
 
-	private convertToCodemapNode(node: OverlayNode, document: TextDocumentSnapshot): CodemapNode {
+	private convertToCodemapNode(node: OverlayNode, document: TextDocumentSnapshot, parentKind?: string): CodemapNode {
 		// Extract the actual text for this node to include names
 		const name = this.extractNodeName(node, document);
 
-		// DEBUG: Log what we're converting
-		if (node.kind === 'lexical_declaration' && node.children?.length) {
-			const childTypes = node.children.map(c => c.kind).join(', ');
-			console.log(`[Codemap Convert] lexical_declaration children: ${childTypes}`);
-			// Log first child's text if it exists
-			if (node.children[0]) {
-				const text = document.getText();
-				const firstChildText = text.substring(node.children[0].startIndex, Math.min(node.children[0].endIndex, node.children[0].startIndex + 50));
-				console.log(`[Codemap Convert] first child text: "${firstChildText}"`);
+		// DEBUG: Log what we're converting - look for arrow function patterns
+		if (node.kind === 'lexical_declaration') {
+			const text = document.getText();
+			const nodeFullText = text.substring(node.startIndex, Math.min(node.endIndex, node.startIndex + 80));
+			// Check if this looks like an arrow function declaration
+			if (nodeFullText.includes('=>') && nodeFullText.includes('const')) {
+				console.log(`[Codemap] FOUND ARROW FUNCTION: "${nodeFullText.replace(/\n/g, ' ')}"`);
+				console.log(`[Codemap] Parent kind: ${parentKind || 'none'}`);
+				if (node.children?.length) {
+					console.log(`[Codemap] Children: ${node.children.map(c => c.kind).join(', ')}`);
+				}
 			}
 		}
 
@@ -66,7 +68,7 @@ export class CodemapServiceImpl implements ICodemapService {
 				start: node.startIndex,
 				end: node.endIndex
 			},
-			children: node.children?.map(child => this.convertToCodemapNode(child, document))
+			children: node.children?.map(child => this.convertToCodemapNode(child, document, node.kind))
 		};
 	}
 
