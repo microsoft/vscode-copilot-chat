@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ModelMetadata, Session, internal } from '@github/copilot/sdk';
+import type { ModelMetadata, Session, SessionOptions, internal } from '@github/copilot/sdk';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { CancellationToken, ChatRequest } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
@@ -211,7 +211,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 			sessionDisposables.add(toDisposable(() => this._newActiveSessions.delete(sdkSession.sessionId)));
 
-			const session = await this.createCopilotSession(sdkSession, sessionManager, permissionHandler, sessionDisposables);
+			const session = await this.createCopilotSession(sdkSession, options, sessionManager, permissionHandler, sessionDisposables);
 
 			sessionDisposables.add(session.onDidChangeStatus(() => {
 				// This will get swapped out as soon as the session has completed.
@@ -250,14 +250,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				return undefined;
 			}
 
-			return this.createCopilotSession(sdkSession, sessionManager, permissionHandler, sessionDisposables);
+			return this.createCopilotSession(sdkSession, options, sessionManager, permissionHandler, sessionDisposables);
 		} catch (error) {
 			sessionDisposables.dispose();
 			throw error;
 		}
 	}
 
-	private async createCopilotSession(sdkSession: Session, sessionManager: internal.CLISessionManager, permissionHandler: CopilotCLIPermissionsHandler, disposables: IDisposable,): Promise<CopilotCLISession> {
+	private async createCopilotSession(sdkSession: Session, options: SessionOptions, sessionManager: internal.CLISessionManager, permissionHandler: CopilotCLIPermissionsHandler, disposables: IDisposable,): Promise<CopilotCLISession> {
 		const sessionDisposables = this._register(new DisposableStore());
 		sessionDisposables.add(disposables);
 		try {
@@ -267,7 +267,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				void sessionManager.closeSession(sdkSession.sessionId);
 			}));
 
-			const session = this.instantiationService.createInstance(CopilotCLISession, sdkSession, permissionHandler);
+			const session = this.instantiationService.createInstance(CopilotCLISession, sdkSession, options, permissionHandler);
 			session.add(sessionDisposables);
 			session.add(session.onDidChangeStatus(() => this._onDidChangeSessions.fire()));
 

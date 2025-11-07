@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Attachment, Session } from '@github/copilot/sdk';
+import type { Attachment, Session, SessionOptions } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -51,6 +51,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	constructor(
 		private readonly _sdkSession: Session,
+		private readonly _options: SessionOptions,
 		private readonly _permissionHandler: CopilotCLIPermissionsHandler,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -88,25 +89,24 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const editTracker = new ExternalEditTracker();
 		const editFilesAndToolCallIds = new ResourceMap<string[]>();
 
+		disposables.add(this._permissionHandler.onDidRequestPermissions(async (permissionRequest) => {
+			return await this.requestPermission(permissionRequest, stream, editTracker,
+				(file: Uri) => {
+					const ids = editFilesAndToolCallIds.get(file);
+					return ids?.shift();
+				},
+				toolInvocationToken,
+				this._options.workingDirectory
+			);
+		}));
+
 		try {
 			const [currentModel,
 				sessionOptions
 			] = await Promise.all([
 				modelId ? this._sdkSession.getSelectedModel() : undefined,
-				this.cliSessionOptions.createOptions({}, this._permissionHandler)
+				this.cliSessionOptions.createOptions(this._options, this._permissionHandler)
 			]);
-			const workingDirectory = sessionOptions.workingDirectory;
-
-			disposables.add(this._permissionHandler.onDidRequestPermissions(async (permissionRequest) => {
-				return await this.requestPermission(permissionRequest, stream, editTracker,
-					(file: Uri) => {
-						const ids = editFilesAndToolCallIds.get(file);
-						return ids?.shift();
-					},
-					toolInvocationToken,
-					workingDirectory
-				);
-			}));
 			if (sessionOptions.authInfo) {
 				this._sdkSession.setAuthInfo(sessionOptions.authInfo);
 			}
