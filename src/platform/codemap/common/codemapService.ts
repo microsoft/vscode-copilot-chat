@@ -20,11 +20,27 @@ export interface CodemapNode {
 }
 
 /**
+ * Structured representation of code organization for LLM consumption
+ */
+export interface StructuredCodemap {
+	readonly classes: Array<{
+		name: string;
+		range: { start: number; end: number };
+		methods: Array<{ name: string; line: number }>;
+		properties: Array<{ name: string; line: number }>;
+	}>;
+	readonly functions: Array<{ name: string; line: number }>;
+	readonly interfaces: Array<{ name: string; range: { start: number; end: number } }>;
+}
+
+/**
  * Represents a structured map of the code showing its high-level organization
  */
 export interface Codemap {
 	readonly structure: CodemapNode | undefined;
 	readonly summary: string;
+	/** Structured data optimized for LLM consumption */
+	readonly structured?: StructuredCodemap;
 }
 
 /**

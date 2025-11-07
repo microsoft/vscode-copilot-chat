@@ -29,23 +29,55 @@ The codemap service extracts structural information from code using the Tree-sit
 
 ### Example Codemap Output
 
-```xml
-<CODEMAP>
+**Structured JSON format (optimized for LLM):**
+```json
+{
+  "classes": [
+    {
+      "name": "UserService",
+      "range": { "start": 10, "end": 85 },
+      "methods": [
+        { "name": "validateUser", "line": 12 },
+        { "name": "createUser", "line": 25 },
+        { "name": "updateUser", "line": 45 },
+        { "name": "deleteUser", "line": 60 }
+      ],
+      "properties": [
+        { "name": "db", "line": 11 },
+        { "name": "logger", "line": 12 }
+      ]
+    },
+    {
+      "name": "AuthService",
+      "range": { "start": 90, "end": 150 },
+      "methods": [
+        { "name": "login", "line": 92 },
+        { "name": "logout", "line": 110 }
+      ],
+      "properties": []
+    }
+  ],
+  "functions": [],
+  "interfaces": [
+    { "name": "IUser", "range": { "start": 5, "end": 8 } }
+  ]
+}
+```
+
+**Human-readable summary (also included):**
+```
 File structure: 2 classes, 8 functions/methods, 1 interface
 Classes: UserService (lines 10-85), AuthService (lines 90-150)
 Functions/Methods: validateUser (line 12), createUser (line 25), updateUser (line 45), deleteUser (line 60), login (line 92), logout (line 110)
 Interfaces: IUser (lines 5-8)
-</CODEMAP>
-
-<EDIT_WINDOW>
-// Current edit window (lines 20-30)
-class UserService {
-    createUser(data) {
-        // User just edited this method
-    }
-}
-</EDIT_WINDOW>
 ```
+
+**Why structured format?**
+1. **Precise parsing** - LLM can directly access `classes[0].methods[1].line` without text parsing
+2. **Hierarchical clarity** - Shows which methods belong to which class unambiguously
+3. **No parsing ambiguity** - JSON is unambiguous, text summaries can have edge cases
+4. **Tool compatibility** - Ready for future tool-calling features
+5. **Better reasoning** - LLM can programmatically reason: "find all methods in class containing cursor"
 
 ## How It Works
 
@@ -299,17 +331,67 @@ interface ICodemapService {
 
 ### 2. Language-Specific Enhancements
 
-**TypeScript/JavaScript**:
-- Extract JSX component hierarchies
-- Identify React hooks and their dependencies
-- Detect async/await patterns
+**Importance: HIGH (8/10) - Critical for framework-specific patterns**
 
-**Python**:
-- Decorator information
-- Class inheritance chains
-- Import dependencies
+**Why this matters:**
 
-**Implementation**: Extend `extractNodeName()` with language-specific patterns
+Generic AST parsing misses critical semantic information that developers care about:
+
+**TypeScript/JavaScript/React:**
+```typescript
+// Generic parsing sees: "function MyComponent"
+// Language-specific parsing sees:
+{
+  "name": "MyComponent",
+  "type": "react_component",
+  "hooks": ["useState", "useEffect", "useCallback"],
+  "hookDependencies": {
+    "useEffect": ["user.id", "isLoading"],  // Missing deps = bug!
+    "useCallback": ["handleSubmit"]
+  },
+  "jsxReturns": true,
+  "exportType": "default"
+}
+```
+
+**Real-world impact:**
+- **Hook dependencies**: LLM can suggest: "useEffect depends on user.id but it's not in deps array - add it at line 45"
+- **Component patterns**: "This component uses useState but no useEffect - might need one for data fetching"
+- **Async/await**: "Function createUser is async, but deleteUser isn't - pattern inconsistency at line 60"
+
+**Python:**
+```python
+# Generic: "class UserService"
+# Language-specific:
+{
+  "name": "UserService", 
+  "decorators": ["@dataclass", "@validate_schema"],
+  "inherits": ["BaseService", "LoggerMixin"],
+  "methods": {
+    "save": {
+      "decorators": ["@transaction", "@retry(3)"],
+      "isAsync": true
+    }
+  }
+}
+```
+
+**Real-world impact:**
+- **Decorators**: "You added @transaction to save() - should also add to update() and delete() at lines 45, 60"
+- **Inheritance**: "BaseService requires implementing validate() - missing in UserService"
+- **Import analysis**: "Using Logger but not imported - add import at line 1"
+
+**Implementation complexity:** Medium (2-3 days)
+- Extend `extractNodeName()` with language-specific regex patterns
+- Add ~200 lines of language-specific AST visitors
+- Most code is pattern definitions, not complex logic
+
+**Recommendation: Implement for TypeScript/React first**
+- Highest usage in VS Code ecosystem
+- React hooks are common source of bugs
+- Clear patterns that LLM can leverage
+
+This is a **force multiplier** - makes suggestions 2-3x more valuable in framework-heavy codebases.
 
 ### 3. Visual Codemap in Editor
 

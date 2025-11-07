@@ -7,7 +7,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { TextDocumentSnapshot } from '../../editing/common/textDocumentSnapshot';
 import { OverlayNode } from '../../parser/node/nodes';
 import { IParserService } from '../../parser/node/parserService';
-import { Codemap, CodemapNode, ICodemapService } from '../common/codemapService';
+import { Codemap, CodemapNode, ICodemapService, StructuredCodemap } from '../common/codemapService';
 
 export class CodemapServiceImpl implements ICodemapService {
 	readonly _serviceBrand: undefined;
@@ -34,10 +34,12 @@ export class CodemapServiceImpl implements ICodemapService {
 		// Convert OverlayNode to CodemapNode with richer information
 		const codemapStructure = this.convertToCodemapNode(structure, document);
 		const summary = this.generateSummary(codemapStructure, document);
+		const structured = this.generateStructuredCodemap(codemapStructure, document);
 
 		return {
 			structure: codemapStructure,
-			summary
+			summary,
+			structured
 		};
 	}
 
@@ -218,5 +220,53 @@ export class CodemapServiceImpl implements ICodemapService {
 
 		traverse(node);
 		return counts;
+	}
+
+	private generateStructuredCodemap(node: CodemapNode, document: TextDocumentSnapshot): StructuredCodemap {
+		const classes: StructuredCodemap['classes'] = [];
+		const functions: StructuredCodemap['functions'] = [];
+		const interfaces: StructuredCodemap['interfaces'] = [];
+
+		const processNode = (n: CodemapNode, parentClass?: { name: string; range: { start: number; end: number }; methods: any[]; properties: any[] }) => {
+			if (n.type === 'class_declaration' && n.name && n.range) {
+				const classInfo = {
+					name: n.name,
+					range: { start: this.offsetToLine(n.range.start, document), end: this.offsetToLine(n.range.end, document) },
+					methods: [] as Array<{ name: string; line: number }>,
+					properties: [] as Array<{ name: string; line: number }>
+				};
+				classes.push(classInfo);
+
+				// Process children within this class
+				n.children?.forEach(child => processNode(child, classInfo));
+			} else if (n.type === 'interface_declaration' && n.name && n.range) {
+				interfaces.push({
+					name: n.name,
+					range: { start: this.offsetToLine(n.range.start, document), end: this.offsetToLine(n.range.end, document) }
+				});
+			} else if (n.type === 'method_definition' && n.name && n.range) {
+				const line = this.offsetToLine(n.range.start, document);
+				if (parentClass) {
+					parentClass.methods.push({ name: n.name, line });
+				}
+			} else if ((n.type === 'property_declaration' || n.type === 'public_field_definition') && n.name && n.range) {
+				const line = this.offsetToLine(n.range.start, document);
+				if (parentClass) {
+					parentClass.properties.push({ name: n.name, line });
+				}
+			} else if (n.type === 'function_declaration' && n.name && n.range) {
+				functions.push({
+					name: n.name,
+					line: this.offsetToLine(n.range.start, document)
+				});
+			} else {
+				// Recurse for other node types
+				n.children?.forEach(child => processNode(child, parentClass));
+			}
+		};
+
+		processNode(node);
+
+		return { classes, functions, interfaces };
 	}
 }
