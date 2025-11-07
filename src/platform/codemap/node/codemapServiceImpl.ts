@@ -284,6 +284,8 @@ export class CodemapServiceImpl implements ICodemapService {
 					line,
 					metadata: Object.keys(metadata).length > 0 ? metadata : undefined
 				});
+				// IMPORTANT: Recurse into function body to find nested arrow functions
+				n.children?.forEach(child => processNode(child, parentClass));
 			} else if (n.type === 'variable_declarator' && n.name && n.range && n.children) {
 				// Handle arrow functions: const myFunc = () => {}
 				// Check if this variable has an arrow_function or function child
