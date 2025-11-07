@@ -74,6 +74,9 @@ export class MockFileSystemService implements IFileSystemService {
 			const mtime = this.mockMtimes.get(uriString) ?? Date.now();
 			return { type: FileType.File as unknown as FileType, ctime: Date.now() - 1000, mtime, size: contents.length };
 		}
+		if (this.mockDirs.has(uriString)) {
+			return { type: FileType.Directory as unknown as FileType, ctime: Date.now() - 1000, mtime: Date.now(), size: 0 };
+		}
 		throw new Error('ENOENT');
 	}
 

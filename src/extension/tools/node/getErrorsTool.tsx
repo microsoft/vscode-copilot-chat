@@ -56,8 +56,8 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 	 * Get diagnostics for the given paths and optional ranges.
 	 * Note - This is made public for testing purposes only.
 	 */
-	public getDiagnostics(paths: { uri: URI; range: Range | undefined }[]): Array<{ uri: URI; diagnostics: vscode.Diagnostic[] }> {
-		const results: Array<{ uri: URI; diagnostics: vscode.Diagnostic[] }> = [];
+	public getDiagnostics(paths: { uri: URI; range: Range | undefined }[]): Array<{ uri: URI; diagnostics: vscode.Diagnostic[]; inputUri?: URI }> {
+		const results: Array<{ uri: URI; diagnostics: vscode.Diagnostic[]; inputUri?: URI }> = [];
 
 		// for notebooks, we need to find the cell matching the range and get diagnostics for that cell
 		const nonNotebookPaths = paths.filter(p => {
@@ -89,10 +89,24 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 			const ranges: Range[] = [];
 			let shouldTakeAll = false;
 			let foundMatch = false;
+			let inputUri: URI | undefined;
+			let matchedExactPath = false;
+
 			for (const path of nonNotebookPaths) {
 				// we support file or folder paths
 				if (isEqualOrParent(resource, path.uri)) {
 					foundMatch = true;
+
+					// Track the input URI that matched - prefer exact matches, otherwise use the folder
+					const isExactMatch = resource.toString() === path.uri.toString();
+					if (isExactMatch) {
+						// Exact match - this is the file itself, no input folder
+						inputUri = undefined;
+						matchedExactPath = true;
+					} else if (!matchedExactPath) {
+						// Folder match - only set if we haven't found an exact match
+						inputUri = path.uri;
+					}
 
 					if (pendingMatchPaths.has(path.uri)) {
 						pendingMatchPaths.delete(path.uri);
@@ -103,19 +117,22 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 					} else {
 						// no range, so all diagnostics for this file
 						shouldTakeAll = true;
-						break;
+						// only break for exact matches
+						if (isExactMatch) {
+							break;
+						}
 					}
 				}
 			}
 
 			if (shouldTakeAll) {
-				results.push({ uri: resource, diagnostics: pendingDiagnostics });
+				results.push({ uri: resource, diagnostics: pendingDiagnostics, inputUri });
 				continue;
 			}
 
 			if (foundMatch && ranges.length > 0) {
 				const diagnostics = pendingDiagnostics.filter(d => ranges.some(range => d.range.intersection(range)));
-				results.push({ uri: resource, diagnostics });
+				results.push({ uri: resource, diagnostics, inputUri });
 			}
 		}
 
@@ -129,7 +146,7 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IGetErrorsParams>, token: CancellationToken) {
 		const getAll = () => this.languageDiagnosticsService.getAllDiagnostics()
-			.map(d => ({ uri: d[0], diagnostics: d[1].filter(e => e.severity <= DiagnosticSeverity.Warning) }))
+			.map(d => ({ uri: d[0], diagnostics: d[1].filter(e => e.severity <= DiagnosticSeverity.Warning), inputUri: undefined as URI | undefined }))
 			// filter any documents w/o warnings or errors
 			.filter(d => d.diagnostics.length > 0);
 
@@ -146,14 +163,15 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 
 		const ds = options.input.filePaths?.length ? getSome(options.input.filePaths) : getAll();
 
-		const diagnostics = coalesce(await Promise.all(ds.map((async ({ uri, diagnostics }) => {
+		const diagnostics = coalesce(await Promise.all(ds.map((async ({ uri, diagnostics, inputUri }) => {
 			try {
 				const document = await this.workspaceService.openTextDocumentAndSnapshot(uri);
 				checkCancellation(token);
 				return {
 					uri,
 					diagnostics,
-					context: { document, language: getLanguage(document) }
+					context: { document, language: getLanguage(document) },
+					inputUri
 				};
 			} catch (e) {
 				this.logService.error(e, 'get_errors failed to open doc with diagnostics');
@@ -169,7 +187,17 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 		]);
 
 		const numDiagnostics = diagnostics.reduce((acc, { diagnostics }) => acc + diagnostics.length, 0);
-		const formattedURIs = this.formatURIs(diagnostics.map(d => d.uri));
+
+		// For display message, use inputUri if available (indicating file was found via folder input), otherwise use the file uri
+		// Deduplicate URIs since multiple files may have the same inputUri
+		const displayUriSet = new Set<string>();
+		for (const d of diagnostics) {
+			const displayUri = d.inputUri ?? d.uri;
+			displayUriSet.add(displayUri.toString());
+		}
+		const displayUris = Array.from(displayUriSet).map(uriStr => URI.parse(uriStr));
+		const formattedURIs = this.formatURIs(displayUris);
+
 		if (options.input.filePaths?.length) {
 			result.toolResultMessage = numDiagnostics === 0 ?
 				new MarkdownString(l10n.t`Checked ${formattedURIs}, no problems found`) :
@@ -276,11 +304,9 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 ToolRegistry.registerTool(GetErrorsTool);
 
 interface IDiagnosticToolOutputProps extends BasePromptElementProps {
-	diagnosticsGroups: { context: DiagnosticContext; uri: URI; diagnostics: vscode.Diagnostic[] }[];
+	diagnosticsGroups: { context: DiagnosticContext; uri: URI; diagnostics: vscode.Diagnostic[]; inputUri?: URI }[];
 	maxDiagnostics?: number;
-}
-
-export class DiagnosticToolOutput extends PromptElement<IDiagnosticToolOutputProps> {
+}export class DiagnosticToolOutput extends PromptElement<IDiagnosticToolOutputProps> {
 	constructor(
 		props: PromptElementProps<IDiagnosticToolOutputProps>,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
