@@ -21,7 +21,6 @@ import { CopilotCLIPermissionsHandler, ICopilotCLISessionOptionsService } from '
 import { CopilotCLISession } from '../copilotcliSession';
 import { CopilotCLIToolNames } from '../copilotcliToolInvocationFormatter';
 import { IGitService } from '../../../../../platform/git/common/gitService';
-import { TestingGitService } from '../../../../../platform/test/node/simulationWorkspaceServices';
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
@@ -117,6 +116,7 @@ describe('CopilotCLISession', () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logger = accessor.get(ILogService);
+		gitService = accessor.get(IGitService);
 
 		sdkSession = new MockSdkSession();
 		permissionHandler = new CopilotCLIPermissionsHandler();
@@ -136,6 +136,7 @@ describe('CopilotCLISession', () => {
 			sdkSession as unknown as Session,
 			{} as unknown as SessionOptions,
 			permissionHandler,
+			gitService,
 			logger,
 			workspaceService,
 			toolsService,
