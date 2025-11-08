@@ -7,6 +7,7 @@ import * as Sinon from 'sinon';
 import { Disposable, ExtensionContext } from 'vscode';
 import { CodeReference } from '..';
 import { CopilotToken } from '../../../../../../../platform/authentication/common/copilotToken';
+import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ConnectionState } from '../../../../lib/src/snippy/connectionState';
 import { createExtensionTestingContext } from '../../test/context';
@@ -45,8 +46,8 @@ suite('CodeReference', function () {
 
 		test('should be updated correctly when token change events received', function () {
 			const codeQuote = instantiationService.createInstance(CodeReference);
-			const enabledToken = new CopilotToken({ token: this._completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: true });
-			const disabledToken = new CopilotToken({ token: this._completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: false });
+			const enabledToken = new CopilotToken({ token: `test token ${generateUuid()}`, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: true });
+			const disabledToken = new CopilotToken({ token: `test token ${generateUuid()}`, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: false });
 
 			codeQuote.onCopilotToken(enabledToken);
 

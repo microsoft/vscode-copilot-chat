@@ -677,9 +677,12 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 	protected override async fetch(opts: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const messageSourcePrefix = this.options.location === ChatLocation.Editor ? 'inline' : 'chat';
+		const debugName = this.options.request.isSubagent ?
+			`tool/runSubagent` :
+			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`;
 		return this.options.invocation.endpoint.makeChatRequest2({
 			...opts,
-			debugName: `${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`,
+			debugName,
 			finishedCb: (text, index, delta) => {
 				this.telemetry.markReceivedToken();
 				this._doMirroredCallWithVirtualTools(delta, opts.messages, opts.requestOptions!);

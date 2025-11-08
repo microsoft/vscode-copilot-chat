@@ -3,19 +3,24 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ModelProvider, Session, SessionManager } from '@github/copilot/sdk';
+import type { ModelMetadata, Session, SessionOptions, internal } from '@github/copilot/sdk';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { CancellationToken, ChatRequest } from 'vscode';
+import { INativeEnvService } from '../../../../platform/env/common/envService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { raceCancellationError } from '../../../../util/vs/base/common/async';
+import { disposableTimeout, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
+import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { joinPath } from '../../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
-import { ICopilotCLISDK } from './copilotCli';
-import { CopilotCLISession } from './copilotcliSession';
+import { CopilotCLIPermissionsHandler, ICopilotCLISDK, ICopilotCLISessionOptionsService } from './copilotCli';
+import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { stripReminders } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 
@@ -41,17 +46,18 @@ export interface ICopilotCLISessionService {
 	deleteSession(sessionId: string): Promise<void>;
 
 	// Session wrapper tracking
-	getSession(sessionId: string, model: ModelProvider | undefined, readonly: boolean, token: CancellationToken): Promise<CopilotCLISession | undefined>;
-	createSession(prompt: string, model: ModelProvider | undefined, token: CancellationToken): Promise<CopilotCLISession>;
+	getSession(sessionId: string, model: string | undefined, workingDirectory: string | undefined, readonly: boolean, token: CancellationToken): Promise<ICopilotCLISession | undefined>;
+	createSession(prompt: string, model: string | undefined, workingDirectory: string | undefined, token: CancellationToken): Promise<ICopilotCLISession>;
 }
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
 
+const SESSION_SHUTDOWN_TIMEOUT_MS = 30 * 1000;
 
 export class CopilotCLISessionService extends Disposable implements ICopilotCLISessionService {
 	declare _serviceBrand: undefined;
 
-	private _sessionManager: SessionManager | undefined;
+	private _sessionManager: Lazy<Promise<internal.CLISessionManager>>;
 	private _sessionWrappers = new DisposableMap<string, CopilotCLISession>();
 	private _newActiveSessions = new Map<string, ICopilotCLISessionItem>();
 
@@ -59,22 +65,37 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private readonly _onDidChangeSessions = new Emitter<void>();
 	public readonly onDidChangeSessions = this._onDidChangeSessions.event;
 
+	private readonly sessionTerminators = new DisposableMap<string, IDisposable>();
+
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICopilotCLISessionOptionsService private readonly optionsService: ICopilotCLISessionOptionsService,
+		@INativeEnvService private readonly nativeEnv: INativeEnvService,
+		@IFileSystemService private readonly fileSystem: IFileSystemService,
 	) {
 		super();
-	}
-
-	public async getSessionManager(): Promise<SessionManager> {
-		if (!this._sessionManager) {
+		this.monitorSessionFiles();
+		this._sessionManager = new Lazy<Promise<internal.CLISessionManager>>(async () => {
 			const { internal } = await this.copilotCLISDK.getPackage();
-			this._sessionManager = new internal.CLISessionManager({
+			return new internal.CLISessionManager({
 				logger: getCopilotLogger(this.logService)
 			});
+		});
+	}
+
+	private monitorSessionFiles() {
+		try {
+			const sessionDir = joinPath(this.nativeEnv.userHome, '.copilot', 'session-state');
+			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '*.jsonl')));
+			this._register(watcher.onDidCreate(() => this._onDidChangeSessions.fire()));
+		} catch (error) {
+			this.logService.error(`Failed to monitor Copilot CLI session files: ${error}`);
 		}
-		return this._sessionManager;
+	}
+	async getSessionManager() {
+		return this._sessionManager.value;
 	}
 
 	private _getAllSessionsProgress: Promise<readonly ICopilotCLISessionItem[]> | undefined;
@@ -108,7 +129,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							this.logService.warn(`Copilot CLI session not found, ${metadata.sessionId}`);
 							return;
 						}
-						const chatMessages = await raceCancellationError(session.getChatMessages(), token);
+						const chatMessages = await raceCancellationError(session.getChatContextMessages(), token);
 						const noUserMessages = !chatMessages.find(message => message.role === 'user');
 						const label = await this._generateSessionLabel(session.sessionId, chatMessages, undefined);
 
@@ -156,22 +177,27 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private async getReadonlySdkSession(sessionId: string, token: CancellationToken): Promise<{ session: Session; dispose: () => Promise<void> } | undefined> {
-		// let session = this._sessionWrappers.get(sessionId)?.session;
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-		const session = await sessionManager.getSession(sessionId);
+		const session = await sessionManager.getSession({ sessionId }, false);
 		if (!session) {
 			return undefined;
 		}
 		return { session, dispose: () => Promise.resolve() };
 	}
 
-	public async createSession(prompt: string, model: ModelProvider | undefined, token: CancellationToken): Promise<CopilotCLISession> {
+	public async createSession(prompt: string, model: string | undefined, workingDirectory: string | undefined, token: CancellationToken): Promise<CopilotCLISession> {
 		const sessionDisposables = this._register(new DisposableStore());
+		const permissionHandler = sessionDisposables.add(new CopilotCLIPermissionsHandler());
 		try {
-			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
+			const options = await raceCancellationError(this.optionsService.createOptions(
+				{
+					model: model as unknown as ModelMetadata['model'],
+					workingDirectory
 
-			const sdkSession = await sessionManager.createSession();
-			const chatMessages = await sdkSession.getChatMessages();
+				}, permissionHandler), token);
+			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
+			const sdkSession = await sessionManager.createSession(options);
+			const chatMessages = await sdkSession.getChatContextMessages();
 			const noUserMessages = !chatMessages.find(message => message.role === 'user');
 			const label = this._generateSessionLabel(sdkSession.sessionId, chatMessages as any, prompt);
 			const newSession: ICopilotCLISessionItem = {
@@ -185,7 +211,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 			sessionDisposables.add(toDisposable(() => this._newActiveSessions.delete(sdkSession.sessionId)));
 
-			const session = await this.createCopilotSession(sdkSession, sessionManager, sessionDisposables);
+			const session = await this.createCopilotSession(sdkSession, options, sessionManager, permissionHandler, sessionDisposables);
 
 			sessionDisposables.add(session.onDidChangeStatus(() => {
 				// This will get swapped out as soon as the session has completed.
@@ -200,7 +226,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	public async getSession(sessionId: string, model: ModelProvider | undefined, readonly: boolean, token: CancellationToken): Promise<CopilotCLISession | undefined> {
+	public async getSession(sessionId: string, model: string | undefined, workingDirectory: string | undefined, readonly: boolean, token: CancellationToken): Promise<CopilotCLISession | undefined> {
 		const session = this._sessionWrappers.get(sessionId);
 
 		if (session) {
@@ -211,39 +237,56 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		const sessionDisposables = this._register(new DisposableStore());
 		try {
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
+			const permissionHandler = sessionDisposables.add(new CopilotCLIPermissionsHandler());
+			const options = await raceCancellationError(this.optionsService.createOptions({
+				model: model as unknown as ModelMetadata['model'],
+				workingDirectory
+			}, permissionHandler), token);
 
-			const sdkSession = await sessionManager.getSession(sessionId);
+			const sdkSession = await sessionManager.getSession({ ...options, sessionId }, !readonly);
 			if (!sdkSession) {
 				this.logService.error(`[CopilotCLIAgentManager] CopilotCLI failed to get session ${sessionId}.`);
 				sessionDisposables.dispose();
 				return undefined;
 			}
 
-			return this.createCopilotSession(sdkSession, sessionManager, sessionDisposables);
+			return this.createCopilotSession(sdkSession, options, sessionManager, permissionHandler, sessionDisposables);
 		} catch (error) {
 			sessionDisposables.dispose();
 			throw error;
 		}
 	}
 
-	private async createCopilotSession(sdkSession: Session, sessionManager: SessionManager, disposables: IDisposable,): Promise<CopilotCLISession> {
+	private async createCopilotSession(sdkSession: Session, options: SessionOptions, sessionManager: internal.CLISessionManager, permissionHandler: CopilotCLIPermissionsHandler, disposables: IDisposable,): Promise<CopilotCLISession> {
 		const sessionDisposables = this._register(new DisposableStore());
 		sessionDisposables.add(disposables);
 		try {
 			sessionDisposables.add(toDisposable(() => {
 				this._sessionWrappers.deleteAndLeak(sdkSession.sessionId);
-				// sdkSession.abort();
-				// sessionManager.closeSession(sdkSession);
+				sdkSession.abort();
+				void sessionManager.closeSession(sdkSession.sessionId);
 			}));
 
-			const session = this.instantiationService.createInstance(CopilotCLISession, sdkSession);
+			const session = this.instantiationService.createInstance(CopilotCLISession, sdkSession, options, permissionHandler);
 			session.add(sessionDisposables);
 			session.add(session.onDidChangeStatus(() => this._onDidChangeSessions.fire()));
 
-			sessionDisposables.add(session.onDidAbort(() => {
-				// We need to start with a new session.
-				// https://github.com/microsoft/vscode/issues/274169
-				session.dispose();
+			// We have no way of tracking Chat Editor life cycle.
+			// Hence when we're done with a request, lets dispose the chat session (say 60s after).
+			// If in the mean time we get another request, we'll clear the timeout.
+			// When vscode shuts the sessions will be disposed anyway.
+			// This code is to avoid leaving these sessions alive forever in memory.
+			session.add(session.onDidChangeStatus(e => {
+				if (session.status === undefined || session.status === ChatSessionStatus.Completed || session.status === ChatSessionStatus.Failed) {
+					// We're done with this session, start timeout to dispose it
+					this.sessionTerminators.set(session.sessionId, disposableTimeout(() => {
+						session.dispose();
+						this.sessionTerminators.deleteAndDispose(session.sessionId);
+					}, SESSION_SHUTDOWN_TIMEOUT_MS));
+				} else {
+					// Session is busy.
+					this.sessionTerminators.deleteAndDispose(session.sessionId);
+				}
 			}));
 
 			this._sessionWrappers.set(sdkSession.sessionId, session);
@@ -266,10 +309,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 			// Delete from session manager first
 			const sessionManager = await this.getSessionManager();
-			const sdkSession = await sessionManager.getSession(sessionId);
-			if (sdkSession) {
-				await sessionManager.deleteSession(sdkSession);
-			}
+			await sessionManager.deleteSession(sessionId);
 
 		} catch (error) {
 			this.logService.error(`Failed to delete session ${sessionId}: ${error}`);

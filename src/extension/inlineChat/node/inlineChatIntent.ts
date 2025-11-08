@@ -11,6 +11,7 @@ import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { Event } from '../../../util/vs/base/common/event';
 import { assertType } from '../../../util/vs/base/common/types';
 import { localize } from '../../../util/vs/nls';
@@ -101,6 +102,7 @@ export class InlineChatIntent implements IIntent {
 
 		stream = outcomeComputer.spyOnStream(stream);
 		const toolCalls: IToolCall[] = [];
+		let toolError: unknown | undefined;
 
 		const fetchResult = await endpoint.makeChatRequest2({
 			debugName: 'InlineChat2Intent',
@@ -127,25 +129,33 @@ export class InlineChatIntent implements IIntent {
 							break;
 						}
 
-						const input = isValidatedToolInput(validationResult)
-							? validationResult.inputObj
-							: JSON.parse(toolCall.arguments);
+						try {
+							let input = isValidatedToolInput(validationResult)
+								? validationResult.inputObj
+								: JSON.parse(toolCall.arguments);
 
-						const copilotTool = this._toolsService.getCopilotTool(toolCall.name as ToolName);
-						if (copilotTool?.resolveInput) {
-							copilotTool.resolveInput(input, {
-								request,
-								stream,
-								query: request.prompt,
-								chatVariables,
-								history: [],
-							}, CopilotToolMode.FullContext);
+							const copilotTool = this._toolsService.getCopilotTool(toolCall.name as ToolName);
+							if (copilotTool?.resolveInput) {
+								input = await copilotTool.resolveInput(input, {
+									request,
+									stream,
+									query: request.prompt,
+									chatVariables,
+									history: [],
+								}, CopilotToolMode.FullContext);
+							}
+
+							const result = await this._toolsService.invokeTool(toolCall.name, {
+								input,
+								toolInvocationToken: request.toolInvocationToken,
+							}, token);
+
+							this._logService.trace(`Tool ${toolCall.name} invocation result: ${JSON.stringify(result)}`);
+
+						} catch (err) {
+							this._logService.error(err, `Tool ${toolCall.name} invocation failed`);
+							toolError = err;
 						}
-
-						await this._toolsService.invokeTool(toolCall.name, {
-							input,
-							toolInvocationToken: request.toolInvocationToken,
-						}, token);
 					}
 				}
 
@@ -200,6 +210,19 @@ export class InlineChatIntent implements IIntent {
 					responseIsFiltered: details.responseIsFiltered
 				}
 			};
+		}
+
+		if (toolError) {
+			return {
+				errorDetails: {
+					message: toErrorMessage(toolError)
+				}
+			};
+		}
+
+		if (toolCalls.length === 0) {
+			// when no tools were called, invoke the exit tool manually
+			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
 		}
 
 		return {};

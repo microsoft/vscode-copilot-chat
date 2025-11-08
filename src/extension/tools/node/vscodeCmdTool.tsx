@@ -34,18 +34,25 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 		const command = options.input.commandId;
 		const args = options.input.args ?? [];
 
-		const allcommands = (await this._workbenchService.getAllCommands(/* filterByPreCondition */true));
-		const commandItem = allcommands.find(commandItem => commandItem.command === command);
+		const allCommands = (await this._workbenchService.getAllCommands(/* filterByPreCondition */true));
+		const commandItem = allCommands.find(commandItem => commandItem.command === command);
 		if (!commandItem) {
-			return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to find ${options.input.name} command.`)]);
+			// Try again but without filtering by preconditions to see if the command exists at all
+			const allCommandsNoFilter = (await this._workbenchService.getAllCommands(/* filterByPreCondition */false));
+			const commandItemNoFilter = allCommandsNoFilter.find(commandItem => commandItem.command === command);
+			if (commandItemNoFilter) {
+				return new LanguageModelToolResult([new LanguageModelTextPart(`Command \`${options.input.name}\` exists, but its preconditions are not currently met. Ask the user to try running it manually via the command palette.`)]);
+			} else {
+				return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to find command \`${options.input.name}\`.`)]);
+			}
 		}
 
 		try {
 			await this._commandService.executeCommand(command, ...args);
-			return new LanguageModelToolResult([new LanguageModelTextPart(`Finished running ${options.input.name} command`)]);
+			return new LanguageModelToolResult([new LanguageModelTextPart(`Finished running command \`${options.input.name}\`.`)]);
 		} catch (error) {
 			this._logService.error(`[VSCodeCmdTool] ${error}`);
-			return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to run ${options.input.name} command.`)]);
+			return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to run command \`${options.input.name}\`.`)]);
 		}
 	}
 

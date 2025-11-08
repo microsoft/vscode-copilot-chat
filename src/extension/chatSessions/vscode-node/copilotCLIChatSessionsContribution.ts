@@ -8,16 +8,17 @@ import { ChatExtendedRequestHandler, l10n, Uri } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
-import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
-import { CopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
+import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
+import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
-import { ConfirmationResult, CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
+import { ConfirmationResult, CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
 const MODELS_OPTION_ID = 'model';
 const ISOLATION_OPTION_ID = 'isolation';
@@ -41,17 +42,19 @@ export class CopilotCLIWorktreeManager {
 			return undefined;
 		}
 
-		try {
-			const worktreePath = await vscode.commands.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
-			if (worktreePath) {
-				stream.progress(vscode.l10n.t('Created isolated worktree at {0}', worktreePath));
-				return worktreePath;
-			} else {
-				stream.warning(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory'));
+		await stream.progress(vscode.l10n.t('Creating isolated worktree for session...'), async (progress) => {
+			try {
+				const worktreePath = await vscode.commands.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
+				if (worktreePath) {
+					return vscode.l10n.t('Created isolated worktree at {0}', worktreePath);
+				} else {
+					progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+				}
+			} catch (error) {
+				progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
 			}
-		} catch (error) {
-			stream.warning(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error)));
-		}
+		});
+
 		return undefined;
 	}
 
@@ -100,29 +103,6 @@ export class CopilotCLIWorktreeManager {
 	}
 }
 
-/**
- * Convert a model ID to a ModelProvider object for the Copilot CLI SDK
- */
-function getModelProvider(modelId: string | undefined): { type: 'anthropic' | 'openai'; model: string } | undefined {
-	if (!modelId) {
-		return undefined;
-	}
-
-	// Map model IDs to their provider and model name
-	if (modelId.startsWith('claude-')) {
-		return {
-			type: 'anthropic',
-			model: modelId
-		};
-	} else if (modelId.startsWith('gpt-')) {
-		return {
-			type: 'openai',
-			model: modelId
-		};
-	}
-
-	return undefined;
-}
 
 namespace SessionIdForCLI {
 	export function getResource(sessionId: string): vscode.Uri {
@@ -239,7 +219,8 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
 		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
 
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, undefined, false, token);
+		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
+		const existingSession = await this.sessionService.getSession(copilotcliSessionId, undefined, workingDirectory, false, token);
 		const selectedModelId = await existingSession?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
 		const options: Record<string, string> = {
@@ -312,13 +293,15 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 
 export class CopilotCLIChatSessionParticipant {
 	constructor(
-		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
+		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
-		private readonly cloudSessionProvider: CopilotChatSessionsProvider | undefined,
+		private readonly cloudSessionProvider: CopilotCloudSessionsProvider | undefined,
 		private readonly summarizer: ChatSummarizerProvider,
 		private readonly worktreeManager: CopilotCLIWorktreeManager,
 		@IGitService private readonly gitService: IGitService,
+		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -327,6 +310,23 @@ export class CopilotCLIChatSessionParticipant {
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
+
+
+		/* __GDPR__
+			"copilotcli.chat.invoke" : {
+				"owner": "joshspicer",
+				"comment": "Event sent when a CopilotCLI chat request is made.",
+				"hasChatSessionItem": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Invoked with a chat session item." },
+				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." },
+				"hasDelegatePrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the prompt is a /delegate command." }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('copilotcli.chat.invoke', {
+			hasChatSessionItem: String(!!chatSessionContext?.chatSessionItem),
+			isUntitled: String(chatSessionContext?.isUntitled),
+			hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
+		});
+
 		if (!chatSessionContext) {
 			if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
 				stream.warning(vscode.l10n.t('No chat session context available for confirmation data handling.'));
@@ -338,27 +338,31 @@ export class CopilotCLIChatSessionParticipant {
 			return await this.handlePushConfirmationData(request, context, stream, token);
 		}
 
+		const defaultModel = await this.copilotCLIModels.getDefaultModel();
+		const { resource } = chatSessionContext.chatSessionItem;
+		const id = SessionIdForCLI.parse(resource);
+		const preferredModel = _sessionModel.get(id);
+		// For existing sessions we cannot fall back, as the model info would be updated in _sessionModel
+		const modelId = this.copilotCLIModels.toModelProvider(preferredModel?.id || defaultModel.id);
+		const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, token);
+
 		if (chatSessionContext.isUntitled) {
-			const untitledCopilotcliSessionId = SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource);
-			const workingDirectory = await this.worktreeManager.createWorktreeIfNeeded(untitledCopilotcliSessionId, stream);
-
-			const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, request, context, stream, undefined, workingDirectory, token);
-			if (!copilotcliSessionId) {
-				stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
-				return {};
-			}
-			this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(copilotcliSessionId), label: request.prompt ?? 'CopilotCLI' });
-
+			const workingDirectory = await this.worktreeManager.createWorktreeIfNeeded(id, stream);
+			const session = await this.sessionService.createSession(prompt, modelId, workingDirectory, token);
 			if (workingDirectory) {
-				await this.worktreeManager.storeWorktreePath(copilotcliSessionId, workingDirectory);
+				await this.worktreeManager.storeWorktreePath(session.sessionId, workingDirectory);
 			}
+
+			await session.handleRequest(prompt, attachments, modelId, stream, request.toolInvocationToken, token);
+
+			this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.sessionId), label: request.prompt ?? 'CopilotCLI' });
+
 
 			return {};
 		}
 
-		const { resource } = chatSessionContext.chatSessionItem;
-		const id = SessionIdForCLI.parse(resource);
-		const session = await this.sessionService.getSession(id, undefined, false, token);
+		const workingDirectory = this.worktreeManager.getWorktreePath(id);
+		const session = await this.sessionService.getSession(id, undefined, workingDirectory, false, token);
 		if (!session) {
 			stream.warning(vscode.l10n.t('Chat session not found.'));
 			return {};
@@ -373,13 +377,11 @@ export class CopilotCLIChatSessionParticipant {
 			return {};
 		}
 
-		const workingDirectory = this.worktreeManager.getWorktreePath(id);
-
-		await this.copilotcliAgentManager.handleRequest(id, request, context, stream, getModelProvider(_sessionModel.get(id)?.id), workingDirectory, token);
+		await session.handleRequest(prompt, attachments, modelId, stream, request.toolInvocationToken, token);
 		return {};
 	}
 
-	private async handleDelegateCommand(session: CopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleDelegateCommand(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (!this.cloudSessionProvider) {
 			stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
 			return {};
@@ -411,7 +413,7 @@ export class CopilotCLIChatSessionParticipant {
 		}
 	}
 
-	private async handleConfirmationData(session: CopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleConfirmationData(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		const results: ConfirmationResult[] = [];
 		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
@@ -452,7 +454,7 @@ export class CopilotCLIChatSessionParticipant {
 		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
-		const session = await this.sessionService.createSession(requestPrompt, undefined, token);
+		const session = await this.sessionService.createSession(requestPrompt, undefined, undefined, token);
 
 		await vscode.commands.executeCommand('vscode.open', SessionIdForCLI.getResource(session.sessionId));
 		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
@@ -460,7 +462,7 @@ export class CopilotCLIChatSessionParticipant {
 	}
 
 	private async recordPushToSession(
-		session: CopilotCLISession,
+		session: ICopilotCLISession,
 		userPrompt: string,
 		prInfo: { uri: string; title: string; description: string; author: string; linkTag: string },
 		token: vscode.CancellationToken

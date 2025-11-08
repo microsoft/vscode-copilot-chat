@@ -82,6 +82,10 @@ const getParamRanges = (params: ReadFileParams, snapshot: NotebookDocumentSnapsh
 	let end: number;
 	let truncated = false;
 	if (isParamsV2(params)) {
+		// Check if offset is out of bounds before clamping
+		if (params.offset !== undefined && params.offset > snapshot.lineCount) {
+			throw new Error(`Invalid offset ${params.offset}: file only has ${snapshot.lineCount} line${snapshot.lineCount === 1 ? '' : 's'}. Line numbers are 1-indexed.`);
+		}
 		const limit = clamp(params.limit || Infinity, 1, MAX_LINES_PER_READ - 1);
 		start = clamp(params.offset ?? 1, 1, snapshot.lineCount);
 		end = clamp(start + limit, 1, snapshot.lineCount);
@@ -178,10 +182,12 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		};
 	}
 
-	public alternativeDefinition(): vscode.LanguageModelToolInformation | undefined {
+	public alternativeDefinition(originTool: vscode.LanguageModelToolInformation): vscode.LanguageModelToolInformation {
 		if (this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.EnableReadFileV2, this.experimentationService)) {
 			return readFileV2Description;
 		}
+
+		return originTool;
 	}
 
 	private async getSnapshot(uri: URI) {

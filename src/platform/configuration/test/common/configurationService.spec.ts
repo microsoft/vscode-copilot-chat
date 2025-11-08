@@ -374,14 +374,6 @@ suite('AbstractConfigurationService', () => {
 
 		});
 
-		test('CopilotCloudEnabled is correctly configured', () => {
-			const setting = ConfigKey.Internal.CopilotCloudEnabled;
-			assert.strictEqual(setting.id, 'chat.advanced.copilotCodingAgent.enabled');
-			assert.strictEqual(setting.defaultValue, true);
-			assert.strictEqual(setting.isPublic, false);
-
-		});
-
 		test('Gpt5AlternativePatch is correctly configured', () => {
 			const setting = ConfigKey.Internal.Gpt5AlternativePatch;
 			assert.strictEqual(setting.id, 'chat.advanced.gpt5AlternativePatch');
