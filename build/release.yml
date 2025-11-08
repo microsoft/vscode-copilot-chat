@@ -215,6 +215,12 @@ extends:
       - script: xvfb-run -a npm run test:extension
         displayName: Run extension tests using VS Code
 
+      - script: npm run test:prompt
+        displayName: Run Completions Core prompt tests
+
+      - script: xvfb-run -a npm run test:completions-core
+        displayName: Run Completions Core lib tests using VS Code
+
       - script: xvfb-run -a npm run test:sanity
         displayName: Run extension sanity tests using VS Code
 

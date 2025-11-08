@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CompletionsIgnoreServiceBridge } from '../../../bridge/src/completionsIgnoreServiceBridge';
-import { Context } from '../context';
 import { IIgnoreService } from '../../../../../../platform/ignore/common/ignoreService';
 import { URI } from '../../../../../../util/vs/base/common/uri';
+import { CompletionsIgnoreServiceBridge } from '../../../bridge/src/completionsIgnoreServiceBridge';
+import { ICompletionsContextService } from '../context';
 
 export enum StatusBarEvent {
 	UPDATE = 'UPDATE',
@@ -22,7 +22,7 @@ export class CopilotContentExclusionManager {
 
 	private readonly ignoreService: IIgnoreService;
 
-	constructor(private ctx: Context) {
+	constructor(@ICompletionsContextService private ctx: ICompletionsContextService) {
 		this.ignoreService = this.ctx.get(CompletionsIgnoreServiceBridge).ignoreService;
 	}
 

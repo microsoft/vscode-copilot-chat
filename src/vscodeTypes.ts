@@ -37,6 +37,7 @@ export import ChatResponseCommandButtonPart = vscode.ChatResponseCommandButtonPa
 export import ChatResponseWarningPart = vscode.ChatResponseWarningPart;
 export import ChatResponseMovePart = vscode.ChatResponseMovePart;
 export import ChatResponseExtensionsPart = vscode.ChatResponseExtensionsPart;
+export import ChatResponseExternalEditPart = vscode.ChatResponseExternalEditPart;
 export import ChatResponsePullRequestPart = vscode.ChatResponsePullRequestPart;
 export import ChatResponseMarkdownWithVulnerabilitiesPart = vscode.ChatResponseMarkdownWithVulnerabilitiesPart;
 export import ChatResponseCodeblockUriPart = vscode.ChatResponseCodeblockUriPart;
@@ -67,7 +68,6 @@ export import LanguageModelDataPart2 = vscode.LanguageModelDataPart2;
 export import LanguageModelPartAudience = vscode.LanguageModelPartAudience;
 export import LanguageModelToolMCPSource = vscode.LanguageModelToolMCPSource;
 export import LanguageModelToolExtensionSource = vscode.LanguageModelToolExtensionSource;
-export import ChatImageMimeType = vscode.ChatImageMimeType;
 export import ChatReferenceBinaryData = vscode.ChatReferenceBinaryData;
 export import ChatReferenceDiagnostic = vscode.ChatReferenceDiagnostic;
 export import TextSearchMatch2 = vscode.TextSearchMatch2;
@@ -96,6 +96,7 @@ export import SymbolKind = vscode.SymbolKind;
 export import SnippetString = vscode.SnippetString;
 export import SnippetTextEdit = vscode.SnippetTextEdit;
 export import FileType = vscode.FileType;
+export import ChatSessionStatus = vscode.ChatSessionStatus;
 
 export const l10n = {
 	/**

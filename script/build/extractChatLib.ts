@@ -372,7 +372,10 @@ class ChatLibExtractor {
 
 		// Find all vscode.proposed.*.d.ts files in src/extension/
 		const extensionDir = path.join(REPO_ROOT, 'src', 'extension');
-		const proposedTypeFiles = await glob('vscode.proposed.*.d.ts', { cwd: extensionDir });
+		const proposedTypeFiles = [
+			...await glob('vscode.proposed.*.d.ts', { cwd: extensionDir }),
+			'vscode.d.ts'
+		];
 
 		for (const file of proposedTypeFiles) {
 			const srcPath = path.join(extensionDir, file);

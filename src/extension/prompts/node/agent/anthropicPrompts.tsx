@@ -4,9 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
@@ -113,7 +111,7 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 	}
 }
 
-class ClaudeSonnet45PromptV2 extends PromptElement<DefaultAgentPromptProps> {
+class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 
@@ -210,24 +208,13 @@ class ClaudeSonnet45PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 }
 
 class AnthropicPromptResolver implements IAgentPrompt {
-	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
-	) { }
-
 	static readonly familyPrefixes = ['claude', 'Anthropic'];
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
-
-		if (endpoint.model?.startsWith('claude-sonnet-4.5') ||
-			endpoint.model?.startsWith('claude-haiku-4.5')) {
-			const promptType = this.configurationService.getExperimentBasedConfig(
-				ConfigKey.ClaudeSonnet45AlternatePrompt,
-				this.experimentationService);
-
-			if (promptType === 'v2') {
-				return ClaudeSonnet45PromptV2;
-			}
+		const normalizedModel = endpoint.model?.replace(/\./g, '-');
+		if (normalizedModel?.startsWith('claude-sonnet-4-5') ||
+			normalizedModel?.startsWith('claude-haiku-4-5')) {
+			return Claude45DefaultPrompt;
 		}
 		return DefaultAnthropicAgentPrompt;
 	}

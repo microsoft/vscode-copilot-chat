@@ -3,15 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
-import { useSubsetMatching } from './similarFileOptionsProvider';
-import { TelemetryWithExp } from '../telemetry';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { defaultCppSimilarFilesOptions, SimilarFilesOptions } from '../../../prompt/src/snippetInclusion/similarFiles';
+import { TelemetryWithExp } from '../telemetry';
+import { useSubsetMatching } from './similarFileOptionsProvider';
 
-export function getCppSimilarFilesOptions(ctx: Context, telemetryWithExp: TelemetryWithExp): SimilarFilesOptions {
+export function getCppSimilarFilesOptions(accessor: ServicesAccessor, telemetryWithExp: TelemetryWithExp): SimilarFilesOptions {
 	return {
 		...defaultCppSimilarFilesOptions,
-		useSubsetMatching: useSubsetMatching(ctx, telemetryWithExp),
+		useSubsetMatching: useSubsetMatching(accessor, telemetryWithExp),
 	};
 }
 

@@ -12,12 +12,16 @@ import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { createFakeCompletionResponse, fakeCodeReference, StaticFetcher } from '../../test/fetcher';
 import { StreamedCompletionSplitter } from '../streamedCompletionSplitter';
+import { ICompletionsContextService } from '../../context';
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsRuntimeModeService } from '../../util/runtimeMode';
 
 suite('StreamedCompletionSplitter', function () {
 	function setupSplitter(fetcher: Fetcher, docPrefix = 'function example(arg) {\n', languageId = 'javascript') {
-		const ctx = createLibTestingContext();
+		const accessor = createLibTestingContext();
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(Fetcher, fetcher);
-		ctx.set(OpenAIFetcher, new LiveOpenAIFetcher()); // gets results from static fetcher
+		ctx.set(OpenAIFetcher, new LiveOpenAIFetcher(accessor.get(IInstantiationService), ctx, accessor.get(ICompletionsRuntimeModeService))); // gets results from static fetcher
 		const telemetry = TelemetryWithExp.createEmptyConfigForTesting();
 		const params = {
 			prompt: {
@@ -35,11 +39,11 @@ suite('StreamedCompletionSplitter', function () {
 			extra: {},
 		};
 		const cacheFunction = Sinon.stub<[string, APIChoice], void>();
-		const splitter = new StreamedCompletionSplitter(ctx, docPrefix, languageId, true, 7, cacheFunction);
+		const splitter = ctx.instantiationService.createInstance(StreamedCompletionSplitter, docPrefix, languageId, true, 7, cacheFunction);
 		const fetchAndStreamCompletions = async function () {
 			return await ctx
 				.get(OpenAIFetcher)
-				.fetchAndStreamCompletions(ctx, params, telemetry, splitter.getFinishedCallback());
+				.fetchAndStreamCompletions(params, telemetry, splitter.getFinishedCallback());
 		};
 		return { ctx, splitter, cacheFunction, fetchAndStreamCompletions };
 	}

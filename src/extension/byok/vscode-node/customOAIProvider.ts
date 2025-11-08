@@ -27,14 +27,17 @@ export function resolveCustomOAIUrl(modelId: string, url: string): string {
 		url = url.slice(0, -1);
 	}
 
+	// Default to chat completions for base URLs
+	const defaultApiPath = '/chat/completions';
+
 	// Check if URL already contains any version pattern like /v1, /v2, etc
 	const versionPattern = /\/v\d+$/;
 	if (versionPattern.test(url)) {
-		return `${url}/chat/completions`;
+		return `${url}${defaultApiPath}`;
 	}
 
 	// For standard OpenAI-compatible endpoints, just append the standard path
-	return `${url}/v1/chat/completions`;
+	return `${url}/v1${defaultApiPath}`;
 }
 
 export function hasExplicitApiPath(url: string): boolean {
@@ -74,8 +77,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 
 	protected async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
 		const modelInfo = await resolveModelInfo(modelId, this.providerName, undefined, modelCapabilities);
-		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._experimentationService);
-		if (enableResponsesApi) {
+		if (modelCapabilities?.url?.includes('/responses')) {
 			modelInfo.supported_endpoints = [
 				ModelSupportedEndpoint.ChatCompletions,
 				ModelSupportedEndpoint.Responses
@@ -97,15 +99,10 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 	private async getAllModels(): Promise<BYOKKnownModels> {
 		const modelConfig = this.getUserModelConfig();
 		const models: BYOKKnownModels = {};
-		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._experimentationService);
 
 		for (const [modelId, modelInfo] of Object.entries(modelConfig)) {
-			let resolvedUrl = this.resolveUrl(modelId, modelInfo.url);
-
-			// If user didn't specify explicit endpoint and Responses API is enabled, use Responses API
-			if (!hasExplicitApiPath(modelInfo.url) && enableResponsesApi && resolvedUrl.includes('/chat/completions')) {
-				resolvedUrl = resolvedUrl.replace('/chat/completions', '/responses');
-			}
+			const resolvedUrl = this.resolveUrl(modelId, modelInfo.url);
+			this._logService.info(`BYOK: Resolved URL for model ${this.providerName}/${modelId}: ${resolvedUrl}`);
 
 			models[modelId] = {
 				name: modelInfo.name,

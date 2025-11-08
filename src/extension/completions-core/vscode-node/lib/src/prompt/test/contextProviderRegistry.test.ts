@@ -15,7 +15,7 @@ import {
 	Trait,
 } from '../../../../types/src/index';
 import { ConfigKey, InMemoryConfigProvider } from '../../config';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Features } from '../../experiments/features';
 import { LogLevel, LogTarget } from '../../logger';
 import { TelemetryWithExp } from '../../telemetry';
@@ -27,9 +27,10 @@ import { ContextProviderRegistry, ResolvedContextItem } from '../contextProvider
 import { TraitWithId } from '../contextProviders/contextItemSchemas';
 import { ContextProviderStatistics } from '../contextProviderStatistics';
 import { TestContextProviderStatistics } from '../test/contextProviderStatistics';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('ContextProviderRegistry', function () {
-	let ctx: Context;
+	let accessor: ServicesAccessor;
 	let registry: ContextProviderRegistry;
 	let statistics: TestContextProviderStatistics;
 	let testLogTarget: TestLogTarget;
@@ -61,7 +62,8 @@ suite('ContextProviderRegistry', function () {
 	};
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
+		const ctx = accessor.get(ICompletionsContextService);
 		testLogTarget = new TestLogTarget();
 		ctx.forceSet(LogTarget, testLogTarget);
 		registry = ctx.get(ContextProviderRegistry);
@@ -158,6 +160,7 @@ suite('ContextProviderRegistry', function () {
 					telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = provider;
 				} else {
 					telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = '';
+					const ctx = accessor.get(ICompletionsContextService);
 					ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviders, [provider]);
 				}
 
@@ -535,6 +538,7 @@ suite('ContextProviderRegistry', function () {
 	test('all providers are enabled in debug mode', async function () {
 		// Feature flag doesn't matter in debug mode
 		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = '';
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(RuntimeMode, RuntimeMode.fromEnvironment(false, [], { GITHUB_COPILOT_DEBUG: 'true' }));
 
 		const anotherTraitProvider: ContextProvider<Trait> = {
@@ -616,6 +620,7 @@ suite('ContextProviderRegistry', function () {
 
 	test('provider rejects', async function () {
 		testLogTarget = new TestLogTarget();
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(LogTarget, testLogTarget);
 
 		const errorProvider: ContextProvider<SupportedContextItem> = {
@@ -652,6 +657,7 @@ suite('ContextProviderRegistry', function () {
 
 	test('provider cancels', async function () {
 		testLogTarget = new TestLogTarget();
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(LogTarget, testLogTarget);
 
 		const errorProvider: ContextProvider<SupportedContextItem> = {
@@ -799,6 +805,7 @@ suite('ContextProviderRegistry', function () {
 
 	test('timeout is passed correctly', async function () {
 		clock.tick(1000);
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviderTimeBudget, 100);
 
 		let providerRequest: ResolveRequest | undefined;
@@ -822,6 +829,7 @@ suite('ContextProviderRegistry', function () {
 
 	test('infinite timeout is passed correctly', async function () {
 		clock.tick(1000);
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviderTimeBudget, 0);
 
 		let providerRequest: ResolveRequest | undefined;
@@ -844,6 +852,7 @@ suite('ContextProviderRegistry', function () {
 	});
 
 	test('does not timeout when time budget set to 0', async function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviderTimeBudget, 0);
 
 		const slowProvider: ContextProvider<Trait> = {
@@ -906,6 +915,7 @@ suite('ContextProviderRegistry', function () {
 		let interceptedCancellation: CancellationToken;
 		let interceptedRequest: ResolveRequest | undefined;
 
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(Features).contextProviderTimeBudget = () => 10;
 
 		const slowProvider: ContextProvider<Trait> = {
@@ -937,6 +947,7 @@ suite('ContextProviderRegistry', function () {
 	test('config timeout is preferred to EXP', async function () {
 		let interceptedCancellation: CancellationToken;
 		let interceptedRequest: ResolveRequest | undefined;
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(Features).contextProviderTimeBudget = () => 10;
 		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviderTimeBudget, 20);
 
@@ -1472,6 +1483,7 @@ suite('ContextProviderRegistry', function () {
 		registry.registerContextProvider(traitProvider);
 		const resolverSpy = Sinon.spy(traitProvider.resolver, 'resolve');
 		const statistics = new ContextProviderStatistics(() => new TestContextProviderStatistics());
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.forceSet(ContextProviderStatistics, statistics);
 
 		const previousStatistics: ContextUsageStatistics = { usage: 'partial', resolution: 'full' };

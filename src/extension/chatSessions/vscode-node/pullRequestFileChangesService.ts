@@ -4,13 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem } from '../../../platform/github/common/githubAPI';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { getRepoId } from '../vscode/copilotCodingAgentUtils';
+import { toPRContentUri } from './prContentProvider';
 
 export const IPullRequestFileChangesService = createServiceIdentifier<IPullRequestFileChangesService>('IPullRequestFileChangesService');
 
@@ -25,9 +25,13 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 	constructor(
 		@IGitService private readonly _gitService: IGitService,
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
-		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@ILogService private readonly logService: ILogService,
 	) { }
+
+	private isPullRequestExtensionInstalled(): boolean {
+		return vscode.extensions
+			.getExtension('GitHub.vscode-pull-request-github') !== undefined;
+	}
 
 	async getFileChangesMultiDiffPart(pullRequest: PullRequestSearchItem): Promise<vscode.ChatResponseMultiDiffPart | undefined> {
 		try {
@@ -47,34 +51,54 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 				return undefined;
 			}
 
-			const diffEntries: vscode.ChatResponseDiffEntry[] = [];
-			const git = this._gitExtensionService.getExtensionApi();
-			const repo = git?.repositories[0];
-			const workspaceRoot = repo?.rootUri;
-
-			if (!workspaceRoot) {
-				this.logService.warn('No workspace root found for file URIs');
+			// Check if we have base and head commit SHAs
+			if (!pullRequest.baseRefOid || !pullRequest.headRefOid) {
+				this.logService.warn('PR missing base or head commit SHA, cannot create diff URIs');
 				return undefined;
 			}
 
-			for (const file of files) {
-				const fileUri = vscode.Uri.joinPath(workspaceRoot, file.filename);
-				const originalUri = file.previous_filename
-					? vscode.Uri.joinPath(workspaceRoot, file.previous_filename)
-					: fileUri;
+			const diffEntries: vscode.ChatResponseDiffEntry[] = [];
 
-				this.logService.trace(`DiffEntry -> original='${originalUri.fsPath}' modified='${fileUri.fsPath}' (+${file.additions} -${file.deletions})`);
+			for (const file of files) {
+				// Always use remote URIs to ensure we show the exact PR content
+				// Local files may be on different branches or have different changes
+				this.logService.trace(`Creating remote URIs for ${file.filename}`);
+
+				const originalUri = toPRContentUri(
+					file.previous_filename || file.filename,
+					{
+						owner: repoId.org,
+						repo: repoId.repo,
+						prNumber: pullRequest.number,
+						commitSha: pullRequest.baseRefOid,
+						isBase: true,
+						previousFileName: file.previous_filename
+					}
+				);
+
+				const modifiedUri = toPRContentUri(
+					file.filename,
+					{
+						owner: repoId.org,
+						repo: repoId.repo,
+						prNumber: pullRequest.number,
+						commitSha: pullRequest.headRefOid,
+						isBase: false
+					}
+				);
+
+				this.logService.trace(`DiffEntry -> original='${originalUri.toString()}' modified='${modifiedUri.toString()}' (+${file.additions} -${file.deletions})`);
 				diffEntries.push({
 					originalUri,
-					modifiedUri: fileUri,
-					goToFileUri: fileUri,
+					modifiedUri,
+					goToFileUri: modifiedUri,
 					added: file.additions,
 					removed: file.deletions,
 				});
 			}
 
 			const title = `Changes in Pull Request #${pullRequest.number}`;
-			return new vscode.ChatResponseMultiDiffPart(diffEntries, title, true /* readOnly */);
+			return new vscode.ChatResponseMultiDiffPart(diffEntries, title, !this.isPullRequestExtensionInstalled());
 		} catch (error) {
 			this.logService.error(`Failed to get file changes multi diff part: ${error}`);
 			return undefined;

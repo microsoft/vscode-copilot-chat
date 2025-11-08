@@ -8,9 +8,34 @@ import { IFileSystemService } from '../../../platform/filesystem/common/fileSyst
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { getOrderedRepoInfosFromContext, IGitService, normalizeFetchUrl } from '../../../platform/git/common/gitService';
+import { Change } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
+
+// Create a mapping for the git status enum to put the actual status string in telemetry
+// The enum is a const enum and part of the public git extension API, so the order should stay stable
+const STATUS_TO_STRING: Record<number, string> = {
+	0: 'INDEX_MODIFIED',
+	1: 'INDEX_ADDED',
+	2: 'INDEX_DELETED',
+	3: 'INDEX_RENAMED',
+	4: 'INDEX_COPIED',
+	5: 'MODIFIED',
+	6: 'DELETED',
+	7: 'UNTRACKED',
+	8: 'IGNORED',
+	9: 'INTENT_TO_ADD',
+	10: 'INTENT_TO_RENAME',
+	11: 'TYPE_CHANGED',
+	12: 'ADDED_BY_US',
+	13: 'ADDED_BY_THEM',
+	14: 'DELETED_BY_US',
+	15: 'DELETED_BY_THEM',
+	16: 'BOTH_ADDED',
+	17: 'BOTH_DELETED',
+	18: 'BOTH_MODIFIED',
+};
 
 // Max telemetry payload size is 1MB, we add shared properties in further code and JSON structure overhead to that
 // so check our diff JSON size against 900KB to be conservative with space
@@ -192,7 +217,29 @@ export class RepoInfoTelemetry {
 				diffSizeBytes: 0, // Will be updated
 			};
 
-			const changes = await this._gitService.diffWith(repoContext.rootUri, upstreamCommit);
+			// Combine our diff against the upstream commit with untracked changes, and working tree changes
+			// A change like a new untracked file could end up in either the untracked or working tree changes and won't be in the diffWith.
+			const diffChanges = await this._gitService.diffWith(repoContext.rootUri, upstreamCommit) ?? [];
+
+			const changeMap = new Map<string, Change>();
+
+			// Prority to the diffWith changes, then working tree changes, then untracked changes.
+			for (const change of diffChanges) {
+				changeMap.set(change.uri.toString(), change);
+			}
+			for (const change of repository.state.workingTreeChanges) {
+				if (!changeMap.has(change.uri.toString())) {
+					changeMap.set(change.uri.toString(), change);
+				}
+			}
+			for (const change of repository.state.untrackedChanges) {
+				if (!changeMap.has(change.uri.toString())) {
+					changeMap.set(change.uri.toString(), change);
+				}
+			}
+
+			const changes = Array.from(changeMap.values());
+
 			if (!changes || changes.length === 0) {
 				return {
 					properties: { ...baseProperties, diffsJSON: undefined, result: 'noChanges' },
@@ -217,12 +264,12 @@ export class RepoInfoTelemetry {
 				};
 			}
 
-			const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
+			const diffs = (await this._gitDiffService.getWorkingTreeDiffsFromRef(repoContext.rootUri, changes, upstreamCommit)).map(diff => {
 				return {
 					uri: diff.uri.toString(),
 					originalUri: diff.originalUri.toString(),
 					renameUri: diff.renameUri?.toString(),
-					status: diff.status,
+					status: STATUS_TO_STRING[diff.status] ?? `UNKNOWN_${diff.status}`,
 					diff: diff.diff,
 				};
 			});

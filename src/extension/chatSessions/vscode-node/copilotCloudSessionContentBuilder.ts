@@ -159,7 +159,7 @@ export class ChatSessionContentBuilder {
 	private async createResponseTurn(pullRequest: PullRequestSearchItem, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
 		if (logs.trim().length > 0) {
 			return await this.parseSessionLogsIntoResponseTurn(pullRequest, logs, session);
-		} else if (session.state === 'in_progress') {
+		} else if (session.state === 'in_progress' || session.state === 'queued') {
 			// For in-progress sessions without logs, create a placeholder response
 			const placeholderParts = [new ChatResponseProgressPart('Session is initializing...')];
 			const responseResult: ChatResult = {};
@@ -245,6 +245,9 @@ export class ChatSessionContentBuilder {
 					const toolPart = this.createToolInvocationPart(pullRequest, toolCall, args.name || delta.content);
 					if (toolPart) {
 						responseParts.push(toolPart);
+						if (toolPart instanceof ChatResponseThinkingProgressPart) {
+							responseParts.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+						}
 					}
 				}
 				// Skip if content is empty (running state)
@@ -267,6 +270,9 @@ export class ChatSessionContentBuilder {
 						const toolPart = this.createToolInvocationPart(pullRequest, toolCall, delta.content || '');
 						if (toolPart) {
 							responseParts.push(toolPart);
+							if (toolPart instanceof ChatResponseThinkingProgressPart) {
+								responseParts.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+							}
 						}
 					}
 
@@ -449,7 +455,7 @@ export class ChatSessionContentBuilder {
 			};
 		};
 
-		const buildEditDetails = (filePath: string | undefined, command: string, parsedRange: { start: number; end: number } | undefined, opts?: { defaultName?: string }): ParsedToolCallDetails => {
+		const buildEditDetails = (filePath: string | undefined, command: string = 'edit', parsedRange: { start: number; end: number } | undefined, opts?: { defaultName?: string }): ParsedToolCallDetails => {
 			const fileLabel = filePath && this.toFileLabel(filePath);
 			const rangeSuffix = parsedRange ? `, lines ${parsedRange.start} to ${parsedRange.end}` : '';
 			let invocationMessage: string;
@@ -505,8 +511,29 @@ export class ChatSessionContentBuilder {
 		const buildBashDetails = (bashArgs: typeof args, contentStr: string): ParsedToolCallDetails => {
 			const command = bashArgs.command ? `$ ${bashArgs.command}` : undefined;
 			const bashContent = [command, contentStr].filter(Boolean).join('\n');
+
+			const MAX_CONTENT_LENGTH = 200;
+			let displayContent = bashContent;
+			if (bashContent && bashContent.length > MAX_CONTENT_LENGTH) {
+				// Check if content contains EOF marker (heredoc pattern)
+				const hasEOF = (bashContent && /<<\s*['"]?EOF['"]?/.test(bashContent));
+				if (hasEOF) {
+					// show the command line up to EOL
+					const firstLineEnd = bashContent.indexOf('\n');
+					if (firstLineEnd > 0) {
+						const firstLine = bashContent.substring(0, firstLineEnd);
+						const remainingChars = bashContent.length - firstLineEnd - 1;
+						displayContent = firstLine + `\n... [${remainingChars} characters of heredoc content]`;
+					} else {
+						displayContent = bashContent;
+					}
+				} else {
+					displayContent = bashContent.substring(0, MAX_CONTENT_LENGTH) + `\n... [${bashContent.length - MAX_CONTENT_LENGTH} more characters]`;
+				}
+			}
+
 			const details: ParsedToolCallDetails = { toolName: 'Run Bash command', invocationMessage: bashContent || 'Run Bash command' };
-			if (bashArgs.command) { details.toolSpecificData = { commandLine: { original: bashArgs.command }, language: 'bash' }; }
+			if (bashArgs.command) { details.toolSpecificData = { commandLine: { original: displayContent ?? '' }, language: 'bash' }; }
 			return details;
 		};
 
@@ -546,7 +573,7 @@ export class ChatSessionContentBuilder {
 						toolSpecificData: { command: 'view', filePath: fp, fileLabel: fl, viewRange: plainRange }
 					};
 				}
-				return buildEditDetails(args.path, args.command || 'edit', this.parseRange(args.view_range));
+				return buildEditDetails(args.path, args.command, this.parseRange(args.view_range));
 			}
 			case 'str_replace':
 				return buildStrReplaceDetails(args.path);
@@ -569,6 +596,8 @@ export class ChatSessionContentBuilder {
 				return { toolName: 'read_bash', invocationMessage: 'Read logs from Bash session' };
 			case 'stop_bash':
 				return { toolName: 'stop_bash', invocationMessage: 'Stop Bash session' };
+			case 'edit':
+				return buildEditDetails(args.path, args.command, undefined);
 			default:
 				return { toolName: name || 'unknown', invocationMessage: content || name || 'unknown' };
 		}

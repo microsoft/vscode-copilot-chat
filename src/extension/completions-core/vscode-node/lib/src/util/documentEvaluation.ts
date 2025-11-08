@@ -4,14 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CopilotContentExclusionManager } from '../contentExclusion/contentExclusionManager';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { TextDocumentIdentifier } from '../textDocument';
 
 /**
  * Evaluate document uri to see if it's valid for copilot to process
  */
 export async function isDocumentValid(
-	ctx: Context,
+	ctx: ICompletionsContextService,
 	document: TextDocumentIdentifier,
 	text: string
 ): Promise<{ status: 'valid' } | { status: 'invalid'; reason: string }> {

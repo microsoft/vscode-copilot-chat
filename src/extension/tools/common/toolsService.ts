@@ -6,6 +6,7 @@
 import Ajv, { ValidateFunction } from 'ajv';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { LRUCache } from '../../../util/common/cache';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -23,6 +24,14 @@ export interface IValidatedToolInput {
 
 export interface IToolValidationError {
 	error: string;
+}
+
+export function isValidatedToolInput(result: IToolValidationResult): result is IValidatedToolInput {
+	return 'inputObj' in result;
+}
+
+export function isToolValidationError(result: IToolValidationResult): result is IToolValidationError {
+	return 'error' in result;
 }
 
 export class ToolCallCancelledError extends Error {
@@ -67,7 +76,7 @@ export interface IToolsService {
 	 * pass `filter` function that can explicitl enable (true) or disable (false)
 	 * a tool, or use the default logic (undefined).
 	 */
-	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
+	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
 }
 
 /**
@@ -160,7 +169,7 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	abstract invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
 	abstract getTool(name: string): vscode.LanguageModelToolInformation | undefined;
 	abstract getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined;
-	abstract getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
+	abstract getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
 
 	constructor(
 		@ILogService private readonly logService: ILogService

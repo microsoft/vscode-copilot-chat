@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert';
-import { suite } from 'mocha';
 import dedent from 'ts-dedent';
 import { DocumentInfoWithOffset, SimilarFileInfo } from '../prompt';
 import { FixedWindowSizeJaccardMatcher, computeScore } from '../snippetInclusion/jaccardMatching';

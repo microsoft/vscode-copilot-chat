@@ -5,29 +5,27 @@
 
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
+import { Uri } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
-import { IOctoKitService, JobInfo, RemoteAgentJobPayload } from '../../../platform/github/common/githubService';
+import { IOctoKitService, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 
-type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata | UncommittedChangesMetadata };
+export type ConfirmationResult = { step: string; accepted: boolean; metadata?: ConfirmationMetadata };
 
-interface CreatePromptMetadata {
+interface ConfirmationMetadata {
 	prompt: string;
 	history?: string;
-	references?: vscode.ChatPromptReference[];
-}
-
-interface UncommittedChangesMetadata {
-	prompt: string;
-	problemContext?: string;
-	customAgentName?: string;
+	references?: readonly vscode.ChatPromptReference[];
+	chatContext: vscode.ChatContext;
 }
 
 export interface PullRequestInfo {
@@ -36,22 +34,7 @@ export interface PullRequestInfo {
 	description: string;
 	author: string;
 	linkTag: string;
-}
-
-export interface PullRequestInfo {
-	uri: string;
-	title: string;
-	description: string;
-	author: string;
-	linkTag: string;
-}
-
-export interface PullRequestInfo {
-	uri: string;
-	title: string;
-	description: string;
-	author: string;
-	linkTag: string;
+	number: number;
 }
 
 export interface ICommentResult {
@@ -75,20 +58,22 @@ export interface ICommentResult {
 
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
+const BACKGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-export class CopilotChatSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
+export class CopilotCloudSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
 	public static readonly TYPE = 'copilot-cloud-agent';
-	private readonly DELEGATE_MODAL_DETAILS = vscode.l10n.t('The agent will work asynchronously to create a pull request with your requested changes.');
+	private readonly DELEGATE_MODAL_DETAILS = vscode.l10n.t('The agent will work asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
 	private readonly _onDidChangeChatSessionItems = this._register(new vscode.EventEmitter<void>());
 	public readonly onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
 	private readonly _onDidCommitChatSessionItem = this._register(new vscode.EventEmitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
 	public readonly onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
 	private chatSessions: Map<number, PullRequestSearchItem> = new Map();
 	private chatSessionItemsPromise: Promise<vscode.ChatSessionItem[]> | undefined;
-	private sessionAgentMap: Map<string, string> = new Map();
-	public chatParticipant = vscode.chat.createChatParticipant(CopilotChatSessionsProvider.TYPE, async (request, context, stream, token) =>
+	private sessionAgentMap: Map<Uri, string> = new Map();
+	public chatParticipant = vscode.chat.createChatParticipant(CopilotCloudSessionsProvider.TYPE, async (request, context, stream, token) =>
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
+	private cachedSessionsSize: number = 0;
 
 	constructor(
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
@@ -97,8 +82,27 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		@ILogService private readonly logService: ILogService,
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 	) {
 		super();
+		const interval = setInterval(async () => {
+			const repoId = await getRepoId(this._gitService);
+			if (repoId) {
+				// TODO: handle no auth token case more gracefully
+				if (!this._authenticationService.permissiveGitHubSession) {
+					return;
+				}
+				const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
+				if (this.cachedSessionsSize !== sessions.length) {
+					this.refresh();
+				}
+			}
+		}, BACKGROUND_REFRESH_INTERVAL_MS);
+		this._register(toDisposable(() => clearInterval(interval)));
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			this.refresh();
+		}));
 	}
 
 	public refresh(): void {
@@ -111,6 +115,10 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			return { optionGroups: [] };
 		}
 
+		// TODO: handle no auth token case more gracefully
+		if (!this._authenticationService.permissiveGitHubSession) {
+			return { optionGroups: [] };
+		}
 		try {
 			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo);
 			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
@@ -136,15 +144,15 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		}
 	}
 
-	provideHandleOptionsChange(sessionId: string, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
+	provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
 		for (const update of updates) {
 			if (update.optionId === AGENTS_OPTION_GROUP_ID) {
 				if (update.value) {
-					this.sessionAgentMap.set(sessionId, update.value);
-					this.logService.info(`Agent changed for session ${sessionId}: ${update.value}`);
+					this.sessionAgentMap.set(resource, update.value);
+					this.logService.info(`Agent changed for session ${resource}: ${update.value}`);
 				} else {
-					this.sessionAgentMap.delete(sessionId);
-					this.logService.info(`Agent cleared for session ${sessionId}`);
+					this.sessionAgentMap.delete(resource);
+					this.logService.info(`Agent cleared for session ${resource}`);
 				}
 			}
 		}
@@ -160,7 +168,12 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				return [];
 			}
 
+			// TODO: handle no auth token case more gracefully
+			if (!this._authenticationService.permissiveGitHubSession) {
+				return [];
+			}
 			const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
+			this.cachedSessionsSize = sessions.length;
 
 			// Group sessions by resource_id and keep only the latest per resource_id
 			const latestSessionsMap = new Map<number, SessionInfo>();
@@ -192,8 +205,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				const description = new vscode.MarkdownString(`[#${pr.number}](${uri.toString()} "${prLinkTitle}")`);
 
 				const session = {
-					id: pr.number.toString(),
-					resource: undefined,
+					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status: this.getSessionStatusFromSession(sessionItem),
 					description,
@@ -210,7 +222,18 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				this.chatSessions.set(pr.number, pr);
 				return session;
 			}));
-			return sessionItems.filter(item => item !== undefined);
+			const filteredSessions = sessionItems
+				// Remove any undefined sessions
+				.filter(item => item !== undefined)
+				// Only keep sessions with attached PRs not CLOSED or MERGED
+				.filter(item => {
+					const pr = item.pullRequestDetails;
+					const state = pr.state.toUpperCase();
+					return state !== 'CLOSED' && state !== 'MERGED';
+				});
+
+			vscode.commands.executeCommand('setContext', 'github.copilot.chat.cloudSessionsEmpty', filteredSessions.length === 0);
+			return filteredSessions;
 		})().finally(() => {
 			this.chatSessionItemsPromise = undefined;
 		});
@@ -226,17 +249,17 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return newDate > existingDate;
 	}
 
-	async provideChatSessionContent(sessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const indexedSessionId = SessionIdForPr.parse(sessionId);
+	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+		const indexedSessionId = SessionIdForPr.parse(resource);
 		let pullRequestNumber: number | undefined;
 		if (indexedSessionId) {
 			pullRequestNumber = indexedSessionId.prNumber;
 		}
 		if (typeof pullRequestNumber === 'undefined') {
-			pullRequestNumber = parseInt(sessionId);
+			pullRequestNumber = SessionIdForPr.parsePullRequestNumber(resource);
 			if (isNaN(pullRequestNumber)) {
-				this.logService.error(`Invalid pull request number: ${sessionId}`);
-				return this.createEmptySession(sessionId);
+				this.logService.error(`Invalid pull request number: ${resource}`);
+				return this.createEmptySession(resource);
 			}
 		}
 
@@ -250,12 +273,12 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				return undefined;
 			}
 			const jobInfo = await this._octoKitService.getJobBySessionId(repoId.org, repoId.repo, sessions[0].id, 'vscode-copilot-chat');
-			let prompt = jobInfo.problem_statement;
-			const titleMatch = jobInfo.problem_statement.match(/TITLE: \s*(.*)/i);
+			let prompt = jobInfo?.problem_statement || 'Initial Implementation';
+			const titleMatch = prompt.match(/TITLE: \s*(.*)/i);
 			if (titleMatch && titleMatch[1]) {
 				prompt = titleMatch[1].trim();
 			} else {
-				const split = jobInfo.problem_statement.split('\n');
+				const split = prompt.split('\n');
 				if (split.length > 0) {
 					prompt = split[0].trim();
 				}
@@ -263,8 +286,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			return prompt.replace(/@copilot\s*/gi, '').trim();
 		};
 		if (!pr) {
-			this.logService.error(`Session not found for ID: ${sessionId}`);
-			return this.createEmptySession();
+			this.logService.error(`Session not found for ID: ${resource}`);
+			return this.createEmptySession(resource);
 		}
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
 		const sortedSessions = sessions
@@ -274,12 +297,12 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			.slice().sort((a, b) =>
 				new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
 			);
-		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
+		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
 		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
 
 		const selectedAgent =
 			// Local cache of session -> custom agent
-			this.sessionAgentMap.get(sessionId)
+			this.sessionAgentMap.get(resource)
 			// Query for the sub-agent that the remote reports for this session
 			|| undefined; /* TODO: Needs API to support this. */
 
@@ -292,11 +315,15 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	}
 
 	async openSessionsInBrowser(chatSessionItem: vscode.ChatSessionItem): Promise<void> {
-		const prNumber = parseInt(chatSessionItem.id, 10);
-		if (isNaN(prNumber)) {
-			vscode.window.showErrorMessage(vscode.l10n.t('Invalid pull request number: {0}', chatSessionItem.id));
-			this.logService.error(`Invalid pull request number: ${chatSessionItem.id}`);
-			return;
+		const session = SessionIdForPr.parse(chatSessionItem.resource);
+		let prNumber = session?.prNumber;
+		if (typeof prNumber === 'undefined' || isNaN(prNumber)) {
+			prNumber = SessionIdForPr.parsePullRequestNumber(chatSessionItem.resource);
+			if (isNaN(prNumber)) {
+				vscode.window.showErrorMessage(vscode.l10n.t('Invalid pull request number: {0}', chatSessionItem.resource));
+				this.logService.error(`Invalid pull request number: ${chatSessionItem.resource}`);
+				return;
+			}
 		}
 
 		const pr = await this.findPR(prNumber);
@@ -315,32 +342,34 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		pr: PullRequestSearchItem
 	): ((stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => Thenable<void>) | undefined {
 		// Only the latest in-progress session gets activeResponseCallback
-		const inProgressSession = sessions
+		const pendingSession = sessions
 			.slice()
 			.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-			.find(session => session.state === 'in_progress');
+			.find(session => session.state === 'in_progress' || session.state === 'queued');
 
-		if (inProgressSession) {
-			return this.createActiveResponseCallback(pr, inProgressSession.id);
+		if (pendingSession) {
+			return this.createActiveResponseCallback(pr, pendingSession.id);
 		}
 		return undefined;
 	}
 
 	private createActiveResponseCallback(pr: PullRequestSearchItem, sessionId: string): (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => Thenable<void> {
 		return async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
+			await this.waitForQueuedToInProgress(sessionId, token);
 			return this.streamSessionLogs(stream, pr, sessionId, token);
 		};
 	}
 
-	private createEmptySession(sessionId?: string): vscode.ChatSession {
+	private createEmptySession(resource: Uri): vscode.ChatSession {
+		const sessionId = resource ? resource.path.slice(1) : undefined;
 		return {
 			history: [],
 			...(sessionId && sessionId.startsWith('untitled-')
 				? {
 					options: {
 						[AGENTS_OPTION_GROUP_ID]:
-							this.sessionAgentMap.get(sessionId)
-							?? (this.sessionAgentMap.set(sessionId, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID)
+							this.sessionAgentMap.get(resource)
+							?? (this.sessionAgentMap.set(resource, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID)
 					}
 				}
 				: {}),
@@ -400,7 +429,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		const result = await this.invokeRemoteAgent(
 			prompt,
 			[
-				this.extractFileReferences(references),
+				await this.extractFileReferences(references),
 				history
 			].join('\n\n').trim(),
 			token,
@@ -419,36 +448,39 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return result.number;
 	}
 
-	private async handleConfirmationData(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+
+	private async handleConfirmationData(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, context: vscode.ChatContext, token: vscode.CancellationToken) {
 		const results: ConfirmationResult[] = [];
-		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
+		results.push(...(request.acceptedConfirmationData?.filter(data => !data?.authPermissionPrompted).map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
 		for (const data of results) {
 			switch (data.step) {
 				case 'create':
 					{
-						if (!data.accepted) {
+						if (!data.accepted || !data.metadata) {
 							stream.markdown(vscode.l10n.t('Cloud agent request cancelled.'));
 							return {};
 						}
-						await this.createDelegatedChatSession(data.metadata as CreatePromptMetadata, stream, token);
+						if (!await this.tryHandleUncommittedChanges(data.metadata, stream, token)) {
+							// We are NOT handling an uncommitted changes case, so no confirmation was pushed.
+							// This means we (the caller) should continue processing the request.
+							await this.createDelegatedChatSession(data.metadata, stream, token);
+						}
 						break;
 					}
 				case 'uncommitted-changes':
 					{
-						if (!data.accepted) {
+						if (!data.accepted || !data.metadata) {
 							stream.markdown(vscode.l10n.t('Cloud agent request cancelled due to uncommitted changes.'));
 							return {};
 						}
-						const { prompt, problemContext, customAgentName } = data.metadata as UncommittedChangesMetadata;
-						// Continue with the agent invocation, skipping the uncommitted changes
-						const result = await this.invokeRemoteAgentWithoutChangesCheck(prompt, problemContext, undefined, true, stream, customAgentName);
-						if (result && result.state !== 'success') {
-							stream.warning(result.error);
-							return {};
+
+						if (data.metadata.chatContext?.chatSessionContext?.isUntitled) {
+							await this.doUntitledCreation(data.metadata, stream, token);
+						} else {
+							await this.createDelegatedChatSession(data.metadata, stream, token);
 						}
-						stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request, ignoring uncommitted changes.'));
-						return {};
+						break;
 					}
 				default:
 					stream.warning(`Unknown confirmation step: ${data.step}\n\n`);
@@ -458,7 +490,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return {};
 	}
 
-	async createDelegatedChatSession(metadata: CreatePromptMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<PullRequestInfo | undefined> {
+	async createDelegatedChatSession(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<PullRequestInfo | undefined> {
 		const { prompt, history, references } = metadata;
 		const number = await this.startSession(stream, token, 'chat', prompt, history, references);
 		if (!number) {
@@ -474,47 +506,157 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
 		stream.push(card);
 		stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
-		vscode.window.showChatSession(CopilotChatSessionsProvider.TYPE, String(number), { viewColumn: vscode.ViewColumn.Active });
-
+		await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number }));
 		// Return PR info for embedding in session history
 		return {
 			uri: uri.toString(),
 			title: pullRequest.title,
 			description: pullRequest.body,
 			author: getAuthorDisplayName(pullRequest.author),
-			linkTag: `#${pullRequest.number}`
+			linkTag: `#${pullRequest.number}`,
+			number,
 		};
+	}
+
+	/**
+	 * Checks for uncommitted changes in the current repository and prompts the user for confirmation if any are found.
+	 * @returns 'true' if handling was performed.  This will push a chat confirmation and initiate a new chat request (handled in handleConfirmationData())
+	 * otherwise 'false', meaning the caller should continue handling the request
+	 */
+	async tryHandleUncommittedChanges(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+		try {
+			const repoId = await getRepoId(this._gitService);
+			if (!repoId) {
+				throw new Error('Repository information is not available.');
+			}
+			const currentRepository = this._gitService.activeRepository.get();
+			if (!currentRepository) {
+				throw new Error('No active repository found.');
+			}
+			const git = this._gitExtensionService.getExtensionApi();
+			const repo = git?.getRepository(currentRepository?.rootUri);
+			if (!repo) {
+				throw new Error(
+					vscode.l10n.t(
+						'Unable to access {0}. Please check your permissions and try again.',
+						`${repoId.org}/${repoId.repo}`
+					)
+				);
+			}
+
+			// Check for uncommitted changes and prompt user if checking is enabled
+			const hasChanges = repo.state.workingTreeChanges.length > 0 || repo.state.indexChanges.length > 0;
+			if (hasChanges) {
+				this.logService.warn('Uncommitted changes detected, prompting user for confirmation.');
+				stream.confirmation(
+					vscode.l10n.t('Uncommitted changes detected'),
+					vscode.l10n.t('You have uncommitted changes in your workspace. Consider committing them if you would like to include them in the cloud agent\'s work.'),
+					{
+						step: 'uncommitted-changes',
+						metadata: metadata satisfies ConfirmationMetadata, // Forward metadata
+					},
+					['Proceed', 'Cancel']
+				);
+				return true; // A confirmation was pushed, meaning a new request will be sent to handleConfirmationData(). The caller should STOP processing.
+			}
+		} catch (error) {
+			this.logService.warn(`Skipping detection of uncommitted changes due to error: ${error}`);
+		}
+		return false; // No chat confirmation was pushed, meaning the caller should CONTINUE processing.
+	}
+
+
+	private async doUntitledCreation(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+		if (!metadata.chatContext?.chatSessionContext?.isUntitled) {
+			return {};
+		}
+		const selectedAgent = this.sessionAgentMap.get(metadata.chatContext.chatSessionContext.chatSessionItem.resource);
+		const number = await this.startSession(
+			stream,
+			token,
+			'untitledChatSession',
+			metadata.prompt,
+			metadata.history,
+			metadata.references,
+			selectedAgent,
+		);
+		if (!number) {
+			return {};
+		}
+		// Tell UI to the new chat session
+		this._onDidCommitChatSessionItem.fire({
+			original: metadata.chatContext.chatSessionContext.chatSessionItem,
+			modified: {
+				resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number }),
+				label: `Pull Request ${number}`
+			}
+		});
 	}
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
-			return await this.handleConfirmationData(request, stream, token);
+			const findAuthConfirmRequest = request.acceptedConfirmationData?.find(ref => ref?.authPermissionPrompted);
+			const findAuthRejectRequest = request.rejectedConfirmationData?.find(ref => ref?.authPermissionPrompted);
+			if (findAuthRejectRequest) {
+				stream.markdown(vscode.l10n.t('Cloud agent authentication requirements not met. Please allow access to proceed.'));
+				return {};
+			}
+			if (findAuthConfirmRequest) {
+				const result = await this._authenticationUpgradeService.handleConfirmationRequestWithContext(stream, request, context.history);
+				request = result.request;
+				context = result.context ?? context;
+			} else {
+				return await this.handleConfirmationData(request, stream, context, token);
+			}
 		}
+
+		const accessToken = this._authenticationService.permissiveGitHubSession;
+		if (!accessToken) {
+			// Otherwise, show the permissive session upgrade prompt because it's required
+			this._authenticationUpgradeService.showPermissiveSessionUpgradeInChat(
+				stream,
+				request,
+				vscode.l10n.t('GitHub Copilot Cloud Agent requires access to your repositories on GitHub for handling requests.'),
+				context
+			);
+			return {};
+		}
+
+		/* __GDPR__
+			"copilotcloud.chat.invoke" : {
+				"owner": "joshspicer",
+				"comment": "Event sent when a Copilot Cloud chat request is made.",
+				"hasChatSessionItem": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Invoked with a chat session item." },
+				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." }
+			}
+		*/
+		this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.invoke', {
+			hasChatSessionItem: String(!!context.chatSessionContext?.chatSessionItem),
+			isUntitled: String(context.chatSessionContext?.isUntitled)
+		});
 
 		if (context.chatSessionContext?.isUntitled) {
 			/* Generate new cloud agent session from an 'untitled' session */
-			const selectedAgent = this.sessionAgentMap.get(context.chatSessionContext.chatSessionItem.id);
-			const number = await this.startSession(
-				stream,
-				token,
-				'untitledChatSession',
-				context.chatSummary?.prompt ?? request.prompt,
-				context.chatSummary?.history,
-				request.references,
-				selectedAgent
-			);
-			if (!number) {
+
+			const handledUncommittedChanges = await this.tryHandleUncommittedChanges({
+				prompt: context.chatSummary?.prompt ?? request.prompt,
+				history: context.chatSummary?.history,
+				chatContext: context
+			}, stream, token);
+
+			// If uncommitted changes were detected and a confirmation was shown,
+			// don't proceed with creation yet - wait for user response
+			if (handledUncommittedChanges) {
 				return {};
 			}
-			// Tell UI to the new chat session
-			this._onDidCommitChatSessionItem.fire({
-				original: context.chatSessionContext.chatSessionItem,
-				modified: {
-					id: String(number),
-					resource: undefined,
-					label: `Pull Request ${number}`
-				}
-			});
+
+			await this.doUntitledCreation({
+				prompt: context.chatSummary?.prompt ?? request.prompt,
+				history: context.chatSummary?.history,
+				references: request.references,
+				chatContext: context,
+			}, stream, token);
+
 		} else if (context.chatSessionContext) {
 			/* Follow up to an existing cloud agent session */
 			try {
@@ -530,10 +672,17 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				}
 
 				stream.progress(vscode.l10n.t('Preparing'));
-
-				const pullRequest = await this.findPR(parseInt(context.chatSessionContext.chatSessionItem.id, 10));
+				const session = SessionIdForPr.parse(context.chatSessionContext.chatSessionItem.resource);
+				let prNumber = session?.prNumber;
+				if (!prNumber) {
+					prNumber = SessionIdForPr.parsePullRequestNumber(context.chatSessionContext.chatSessionItem.resource);
+					if (!prNumber) {
+						return {};
+					}
+				}
+				const pullRequest = await this.findPR(prNumber);
 				if (!pullRequest) {
-					stream.warning(vscode.l10n.t('Could not find the associated pull request {0} for this chat session.', context.chatSessionContext.chatSessionItem.id));
+					stream.warning(vscode.l10n.t('Could not find the associated pull request {0} for this chat session.', context.chatSessionContext.chatSessionItem.resource));
 					return {};
 				}
 
@@ -580,35 +729,65 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 						prompt: context.chatSummary?.prompt ?? request.prompt,
 						history: context.chatSummary?.history,
 						references: request.references,
-					}
+						chatContext: context,
+					} satisfies ConfirmationMetadata
 				},
 				['Delegate', 'Cancel']
 			);
 		}
 	}
 
-	private extractFileReferences(references: readonly vscode.ChatPromptReference[] | undefined): string | undefined {
+	private async extractFileReferences(references: readonly vscode.ChatPromptReference[] | undefined): Promise<string | undefined> {
 		if (!references || references.length === 0) {
 			return;
 		}
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
-		const parts: string[] = [];
+		const fileRefs: string[] = [];
+		const fullFileParts: string[] = [];
+		const git = this._gitExtensionService.getExtensionApi();
 		for (const ref of references) {
 			if (ref.value instanceof vscode.Uri && ref.value.scheme === 'file') { // TODO: Add support for more kinds of references
-				const git = this._gitExtensionService.getExtensionApi();
-				const repositoryForFile = git?.getRepository(ref.value);
+				const fileUri = ref.value;
+				const repositoryForFile = git?.getRepository(fileUri);
 				if (repositoryForFile) {
-					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, ref.value.fsPath);
-					parts.push(` - ${relativePath}`);
+					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, fileUri.fsPath);
+					if (repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath)) {
+						try {
+							// TODO: Consider just showing the file diffs
+							const document = await vscode.workspace.openTextDocument(fileUri);
+							const content = document.getText();
+							fullFileParts.push(`<file-start>${relativePath}</file-start>`);
+							fullFileParts.push(content);
+							fullFileParts.push(`<file-end>${relativePath}</file-end>`);
+						} catch (error) {
+							this.logService.error(`Error reading file content for reference: ${fileUri.toString()}: ${error}`);
+						}
+					} else {
+						fileRefs.push(` - ${relativePath}`);
+					}
+				}
+			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'untitled') {
+				// Get full content of untitled file
+				try {
+					const document = await vscode.workspace.openTextDocument(ref.value);
+					const content = document.getText();
+					fullFileParts.push(`<file-start>${ref.value.path}</file-start>`);
+					fullFileParts.push(content);
+					fullFileParts.push(`<file-end>${ref.value.path}</file-end>`);
+				} catch (error) {
+					this.logService.error(`Error reading untitled file content for reference: ${ref.value.toString()}: ${error}`);
 				}
 			}
 		}
 
+		const parts: string[] = [
+			...(fullFileParts.length ? ['The user has attached the following uncommitted or modified files as relevant context:', ...fullFileParts] : []),
+			...(fileRefs.length ? ['The user has attached the following file paths as relevant context:', ...fileRefs] : [])
+		];
+
 		if (!parts.length) {
 			return;
 		}
-
-		parts.unshift('The user has attached the following files as relevant context:');
 		return parts.join('\n');
 	}
 
@@ -720,7 +899,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 
 			// Parse the new log content
-			const contentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
+			const contentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
 
 			const logChunks = contentBuilder.parseSessionLogs(newLogContent);
 			let hasStreamedContent = false;
@@ -747,6 +926,9 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 								if (toolPart) {
 									stream.push(toolPart);
 									hasStreamedContent = true;
+									if (toolPart instanceof vscode.ChatResponseThinkingProgressPart) {
+										stream.push(new vscode.ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+									}
 								}
 							} else {
 								// Running setup step - just track progress
@@ -767,6 +949,9 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 									if (toolPart) {
 										stream.push(toolPart);
 										hasStreamedContent = true;
+										if (toolPart instanceof vscode.ChatResponseThinkingProgressPart) {
+											stream.push(new vscode.ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+										}
 									}
 								}
 							}
@@ -819,6 +1004,10 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		} while (waitForQueuedCount <= waitForQueuedMaxRetries && (!token || !token.isCancellationRequested));
 
 		if (!sessionInfo || sessionInfo.state !== 'queued') {
+			if (sessionInfo?.state === 'in_progress') {
+				this.logService.trace('Session already in progress');
+				return sessionInfo;
+			}
 			// Failure
 			this.logService.trace('Failed to find queued session');
 			return;
@@ -837,6 +1026,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			}
 			await new Promise(resolve => setTimeout(resolve, pollInterval));
 		}
+		this.logService.error(`Timed out waiting for session ${sessionId} to transition from queued to in_progress.`);
 	}
 
 	private async waitForNewSession(
@@ -887,7 +1077,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				return;
 			}
 			// Add a comment tagging @copilot with the user's prompt
-			const commentBody = `@copilot ${userPrompt} \n\n --- \n\n ${summary ?? ''}`;
+			const commentBody = `@copilot ${userPrompt} ${summary ? '\n\n' + summary : ''}`;
 
 			const commentResult = await this._octoKitService.addPullRequestComment(pr.id, commentBody);
 			if (!commentResult) {
@@ -900,6 +1090,11 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			this.logService.error(`Failed to add follow-up comment to PR #${pullRequestNumber}: ${err}`);
 			return;
 		}
+	}
+
+	// https://github.com/github/sweagentd/blob/main/docs/adr/0001-create-job-api.md
+	private validateRemoteAgentJobResponse(response: unknown): response is RemoteAgentJobResponse {
+		return typeof response === 'object' && response !== null && 'job_id' in response && 'session_id' in response;
 	}
 
 	private async waitForJobWithPullRequest(
@@ -927,15 +1122,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return undefined;
 	}
 
-	async invokeRemoteAgent(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string): Promise<RemoteAgentResult | undefined> {
-		return this.invokeRemoteAgentInternal(prompt, problemContext, token, autoPushAndCommit, chatStream, customAgentName, true);
-	}
-
-	private async invokeRemoteAgentWithoutChangesCheck(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string): Promise<RemoteAgentResult | undefined> {
-		return this.invokeRemoteAgentInternal(prompt, problemContext, token, autoPushAndCommit, chatStream, customAgentName, false);
-	}
-
-	private async invokeRemoteAgentInternal(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string, checkForChanges = true): Promise<RemoteAgentResult | undefined> {
+	private async invokeRemoteAgent(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream, customAgentName?: string): Promise<RemoteAgentResult | undefined> {
 		// TODO: support selecting remote
 		// await this.promptAndUpdatePreferredGitHubRemote(true);
 		const repoId = await getRepoId(this._gitService);
@@ -965,37 +1152,9 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		if (!base_ref) {
 			return { error: vscode.l10n.t('Unable to determine the current branch.'), state: 'error' };
 		}
-		let head_ref: string | undefined; // This is the ref cloud agent starts work from (omitted unless we push local changes)
+		let head_ref: string | undefined; // TODO: UNUSED! This is the ref cloud agent starts work from (omitted unless we push local changes)
 
-		// Check for uncommitted changes and prompt user if checking is enabled
-		const hasChanges =
-			((currentRepository?.changes?.workingTree && currentRepository.changes.workingTree.length > 0) || (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0));
-		if (checkForChanges && hasChanges) {
-			this.logService.warn('Uncommitted changes detected, prompting user for confirmation.');
-			if (chatStream) {
-				chatStream.confirmation(
-					vscode.l10n.t('Uncommitted changes detected'),
-					vscode.l10n.t('You have uncommitted changes in your workspace. Consider committing them if you would like to include them in the cloud agent\'s work.'),
-					{
-						step: 'uncommitted-changes',
-						metadata: {
-							prompt,
-							problemContext,
-							customAgentName
-						}
-					},
-					['Proceed', 'Cancel']
-				);
-				return;
-			} else {
-				// Fallback for cases where chatStream is not available
-				return {
-					error: vscode.l10n.t('Uncommitted changes detected. Please commit, stash, or discard your changes before delegating work to the cloud agent.'),
-					state: 'error'
-				};
-			}
-		}
-
+		// TODO: Make this automatic instead of a fatal error.
 		const remoteName =
 			repo?.state.HEAD?.upstream?.remote ??
 			currentRepository?.upstreamRemote ??
@@ -1003,7 +1162,9 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 		if (repo && remoteName && base_ref) {
 			try {
-				const remoteBranches = await repo.getBranches({ remote: true });
+				const remoteBranches =
+					(await repo.getBranches({ remote: true }))
+						.filter(b => b.remote); // Has an associated remote
 				const expectedRemoteBranch = `${remoteName}/${base_ref}`;
 				const alternateNames = new Set<string>([
 					expectedRemoteBranch,
@@ -1017,7 +1178,10 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 					if (branch.remote && branch.remote !== remoteName) {
 						return false;
 					}
-					const candidateName = branch.remote ? `${branch.remote}/${branch.name}` : branch.name;
+					const candidateName =
+						(branch.remote && branch.name.startsWith(branch.remote + '/'))
+							? branch.name
+							: `${branch.remote}/${branch.name}`;
 					return alternateNames.has(candidateName);
 				});
 
@@ -1076,7 +1240,25 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			chatStream?.progress(vscode.l10n.t('Delegating to cloud agent'));
 			this.logService.trace(`Invoking cloud agent job with payload: ${JSON.stringify(payload)}`);
 			const response = await this._octoKitService.postCopilotAgentJob(repoId.org, repoId.repo, JOBS_API_VERSION, payload);
-
+			if (!this.validateRemoteAgentJobResponse(response)) {
+				const statusCode = response?.status;
+				switch (statusCode) {
+					case 422:
+						// NOTE: Although earlier checks should prevent this, ensure that if we end up
+						//       with a 422 from the API, we give a useful error message
+						return {
+							error: vscode.l10n.t('The cloud agent was unable to create a pull request with the specified base branch \'{0}\'. Please push branch to the remote and try again.', base_ref),
+							innerError: `Status code 422 received from cloud agent.`,
+							state: 'error',
+						};
+					default:
+						return {
+							error: vscode.l10n.t('Received invalid response {0}from cloud agent.', statusCode ? statusCode + ' ' : ''),
+							innerError: `Response ${JSON.stringify(response)}`,
+							state: 'error',
+						};
+				}
+			}
 			// For v1 API, we need to fetch the job details to get the PR info
 			// Since the PR might not be created immediately, we need to poll for it
 			chatStream?.progress(vscode.l10n.t('Creating pull request'));
@@ -1096,9 +1278,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 			const webviewUri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: number });
 			const prLlmString = `The remote agent has begun work and has created a pull request. Details about the pull request are being shown to the user. If the user wants to track progress or iterate on the agent's work, they should use the pull request.`;
-
-			chatStream?.progress(vscode.l10n.t('Attaching to session'));
-			await this.waitForQueuedToInProgress(response.session_id, token);
 			return {
 				state: 'success',
 				number,

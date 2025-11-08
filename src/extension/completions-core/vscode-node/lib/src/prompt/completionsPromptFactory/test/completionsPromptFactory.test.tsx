@@ -18,7 +18,7 @@ import { getTokenizer, TokenizerName } from '../../../../../prompt/src/tokenizat
 import { CodeSnippet, ContextProvider, SupportedContextItem, Trait } from '../../../../../types/src';
 import { createCompletionState } from '../../../completionState';
 import { ConfigKey, InMemoryConfigProvider } from '../../../config';
-import { Context } from '../../../context';
+import { ICompletionsContextService } from '../../../context';
 import { Features } from '../../../experiments/features';
 import { TelemetryWithExp } from '../../../telemetry';
 import { createLibTestingContext } from '../../../test/context';
@@ -43,10 +43,11 @@ import {
 	isCompletionRequestData,
 	PromptOrdering,
 } from '../componentsCompletionsPromptFactory';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('Completions Prompt Factory', function () {
 	let telemetryData: TelemetryWithExp;
-	let ctx: Context;
+	let accessor: ServicesAccessor;
 	let clock: sinon.SinonFakeTimers | undefined;
 	let cts: CancellationTokenSource;
 	const longPrefix = Array.from({ length: 60 }, (_, i) => `const a${i} = ${i};`).join('\n');
@@ -75,6 +76,7 @@ suite('Completions Prompt Factory', function () {
 		const completionState = createCompletionState(textDocument, position);
 		const separateContext = opts.separateContext ?? false;
 		const completionId = opts.completionId ?? 'completion_id';
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(ContextProviderBridge).schedule(completionState, completionId, 'opId', telemetryData);
 		return promptFactory.prompt(
 			{ completionId, completionState, telemetryData, promptOpts: { separateContext } },
@@ -83,10 +85,10 @@ suite('Completions Prompt Factory', function () {
 	}
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext();
 		telemetryData = TelemetryWithExp.createEmptyConfigForTesting();
 		cts = new CancellationTokenSource();
-		promptFactory = createCompletionsPromptFactory(ctx);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService));
 	});
 
 	teardown(function () {
@@ -106,6 +108,7 @@ suite('Completions Prompt Factory', function () {
 	});
 
 	test('prompt should include neighboring files', async function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
 		tdm.setTextDocument('file:///something.ts', 'typescript', '// match function f\nfunction foo() {}');
 
@@ -129,10 +132,11 @@ suite('Completions Prompt Factory', function () {
 	});
 
 	test('prompt should include recent edits', async function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.set(ObservableWorkspace, new MutableObservableWorkspace());
 
 		// TODO: figure out how to simulate real document update events
-		const rep = new MockRecentEditsProvider(ctx);
+		const rep = ctx.instantiationService.createInstance(MockRecentEditsProvider, undefined);
 		ctx.forceSet(RecentEditsProvider, rep);
 
 		// Ensure the document is open
@@ -174,10 +178,11 @@ suite('Completions Prompt Factory', function () {
 	});
 
 	test('recent edits are removed as a chunk', async function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.set(ObservableWorkspace, new MutableObservableWorkspace());
 
 		// TODO: figure out how to simulate real document update events
-		const rep = new MockRecentEditsProvider(ctx);
+		const rep = ctx.instantiationService.createInstance(MockRecentEditsProvider, undefined);
 		ctx.forceSet(RecentEditsProvider, rep);
 
 		// Ensure the document is open
@@ -266,7 +271,7 @@ suite('Completions Prompt Factory', function () {
 				</>
 			)
 		);
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt);
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result.type, 'promptTimeout');
@@ -315,6 +320,7 @@ suite('Completions Prompt Factory', function () {
 	});
 
 	test('produces valid prompts with sequential context provider calls', async function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(Features).contextProviders = () => ['traitsProvider'];
 
 		let id = 0;
@@ -376,7 +382,7 @@ suite('Completions Prompt Factory', function () {
 				</>
 			)
 		);
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt);
 
 		const promises = [];
 		for (let i = 0; i < 2; i++) {
@@ -431,7 +437,7 @@ suite('Completions Prompt Factory', function () {
 	test('errors when hitting fault barrier', async function () {
 		const virtualPrompt = new VirtualPrompt(<></>);
 		virtualPrompt.snapshot = sinon.stub().throws(new Error('Intentional snapshot error'));
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt);
 
 		const result = await invokePromptFactory();
 
@@ -441,7 +447,7 @@ suite('Completions Prompt Factory', function () {
 	test('recovers from error when hitting fault barrier', async function () {
 		const virtualPrompt = new VirtualPrompt(<></>);
 		virtualPrompt.snapshot = sinon.stub().throws(new Error('Intentional snapshot error'));
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt);
 
 		let result = await invokePromptFactory();
 		assert.deepStrictEqual(result, _promptError);
@@ -455,7 +461,7 @@ suite('Completions Prompt Factory', function () {
 		virtualPrompt.snapshot = sinon
 			.stub()
 			.returns({ snapshot: undefined, status: 'error', error: new Error('Intentional snapshot error') });
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt);
 
 		const result = await invokePromptFactory();
 
@@ -467,7 +473,7 @@ suite('Completions Prompt Factory', function () {
 		virtualPrompt.snapshot = sinon
 			.stub()
 			.returns({ snapshot: undefined, status: 'error', error: new Error('Intentional snapshot error') });
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt);
 
 		let result = await invokePromptFactory();
 		assert.deepStrictEqual(result, _promptError);
@@ -498,7 +504,7 @@ suite('Completions Prompt Factory', function () {
 				</>
 			)
 		);
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt);
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result, _promptCancelled);
@@ -516,7 +522,7 @@ suite('Completions Prompt Factory', function () {
 			return <></>;
 		};
 		const virtualPrompt = new VirtualPrompt(<ErrorThrowingComponent />);
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt);
 
 		outerSetShouldThrowError(true);
 		const result = await invokePromptFactory();
@@ -525,6 +531,7 @@ suite('Completions Prompt Factory', function () {
 	});
 
 	test('prompt should not include context provider info if the context provider API is not enabled', async function () {
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviders, []);
 
 		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = '';
@@ -551,6 +558,7 @@ suite('Completions Prompt Factory', function () {
 				resolve: () => Promise.resolve([{ uri: 'file:///something.ts', value: 'function foo() { return 1; }' }]),
 			},
 		};
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(ContextProviderRegistry).registerContextProvider(traitsProvider);
 		ctx.get(ContextProviderRegistry).registerContextProvider(codeSnippetsProvider);
 
@@ -589,6 +597,7 @@ suite('Completions Prompt Factory', function () {
 				resolve: () => Promise.resolve([{ uri: 'file:///something.ts', value: 'function foo() { return 1; }' }]),
 			},
 		};
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(ContextProviderRegistry).registerContextProvider(errorProvider);
 		ctx.get(ContextProviderRegistry).registerContextProvider(codeSnippetsProvider);
 
@@ -646,7 +655,7 @@ suite('Completions Prompt Factory', function () {
 
 		const virtualPrompt = new VirtualPrompt(splitContextPrompt());
 
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt, PromptOrdering.SplitContext);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt, PromptOrdering.SplitContext);
 		const result = await invokePromptFactory({ separateContext: true });
 
 		assert.deepStrictEqual(result.type, 'prompt');
@@ -670,7 +679,7 @@ suite('Completions Prompt Factory', function () {
 
 		const virtualPrompt = new VirtualPrompt(splitContextPrompt());
 
-		promptFactory = createCompletionsPromptFactory(ctx, virtualPrompt, PromptOrdering.SplitContext);
+		promptFactory = createCompletionsPromptFactory(accessor.get(IInstantiationService), virtualPrompt, PromptOrdering.SplitContext);
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result.type, 'prompt');
@@ -784,6 +793,7 @@ suite('Completions Prompt Factory', function () {
 			},
 		};
 		// Register the documents for content exclusion
+		const ctx = accessor.get(ICompletionsContextService);
 		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
 		tdm.setTextDocument('file:///something.ts', 'typescript', 'does not matter');
 
@@ -846,9 +856,10 @@ suite('Completions Prompt Factory', function () {
 					]),
 			},
 		};
+		const ctx = accessor.get(ICompletionsContextService);
 		ctx.get(ContextProviderRegistry).registerContextProvider(traitsProvider);
 
-		const { reporter } = await withInMemoryTelemetry(ctx, async _ => {
+		const { reporter } = await withInMemoryTelemetry(accessor, async _ => {
 			const response = await invokePromptFactory();
 			assert.deepStrictEqual(response.type, 'prompt');
 			assert.deepStrictEqual(
@@ -864,7 +875,7 @@ suite('Completions Prompt Factory', function () {
 			);
 		});
 
-		// the event should only contains sanctioned trait with expected roperty names.
+		// the event should only contains sanctioned trait with expected property names.
 		assert.strictEqual(reporter.hasEvent, true);
 		assert.strictEqual(reporter.events.length, 1);
 

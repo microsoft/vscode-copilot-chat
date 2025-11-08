@@ -131,7 +131,7 @@ class GithubAccountFilterProvider implements IExperimentationFilterProvider {
 		const filters = new Map<string, any>();
 		filters.set('X-GitHub-Copilot-SKU', this._userInfoStore.sku);
 		filters.set('X-Microsoft-Internal-Org', this._userInfoStore.internalOrg);
-		filters.set('X-GitHub-Copilot-IsFcv1', this._userInfoStore.isFcv1);
+		filters.set('X-GitHub-Copilot-IsFcv1', this._userInfoStore.isFcv1 ? '1' : '0');
 		return filters;
 	}
 

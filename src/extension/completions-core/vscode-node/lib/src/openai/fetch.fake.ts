@@ -3,9 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { CancellationToken } from 'vscode';
+import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { getTokenizer } from '../../../prompt/src/tokenization';
 import { CopilotTokenManager } from '../auth/copilotTokenManager';
-import { Context } from '../context';
 import { Response } from '../networking';
+import { TelemetryData, TelemetryWithExp } from '../telemetry';
 import {
 	CompletionError,
 	CompletionParams,
@@ -19,10 +22,9 @@ import {
 	SpeculationFetchParams
 } from './fetch';
 import { APIChoice } from './openai';
-import { TelemetryData, TelemetryWithExp } from '../telemetry';
-import { getTokenizer } from '../../../prompt/src/tokenization';
-import type { CancellationToken } from 'vscode';
-import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
+import { ICompletionsContextService } from '../context';
 
 /**
  * This module supports fake implementations of the completions returned by OpenAI, as well
@@ -120,12 +122,14 @@ function fakeResponse(
 export class SyntheticCompletions extends OpenAIFetcher {
 	private _wasCalled = false;
 
-	constructor(private readonly _completions: string[]) {
+	constructor(
+		private readonly _completions: string[],
+		@ICompletionsContextService private readonly completionsContextService: ICompletionsContextService,
+	) {
 		super();
 	}
 
 	async fetchAndStreamCompletions(
-		ctx: Context,
 		params: CompletionParams,
 		baseTelemetryData: TelemetryWithExp,
 		finishedCb: FinishedCallback,
@@ -133,7 +137,7 @@ export class SyntheticCompletions extends OpenAIFetcher {
 		teletryProperties?: { [key: string]: string }
 	): Promise<CompletionResults | CompletionError> {
 		// check we have a valid token - ignore the result
-		void ctx.get(CopilotTokenManager).getToken();
+		void this.completionsContextService.get(CopilotTokenManager).getToken();
 		if (cancel?.isCancellationRequested) {
 			return { type: 'canceled', reason: 'canceled during test' };
 		}
@@ -155,12 +159,16 @@ export class SyntheticCompletions extends OpenAIFetcher {
 export class ErrorReturningFetcher extends LiveOpenAIFetcher {
 	lastSpeculationParams?: CompletionParams | SpeculationFetchParams;
 
-	constructor(private readonly response: Response) {
-		super();
+	constructor(
+		private readonly response: Response,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@ICompletionsContextService completionsContextService: ICompletionsContextService,
+		@ICompletionsRuntimeModeService runtimeModeService: ICompletionsRuntimeModeService,
+	) {
+		super(instantiationService, completionsContextService, runtimeModeService);
 	}
 
 	override fetchWithParameters(
-		ctx: Context,
 		endpoint: string,
 		params: CompletionParams,
 		_copilotToken: unknown,

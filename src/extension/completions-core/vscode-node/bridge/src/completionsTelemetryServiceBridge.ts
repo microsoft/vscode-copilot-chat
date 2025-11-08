@@ -5,10 +5,23 @@
 
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../../../platform/telemetry/common/telemetry';
 import { wrapEventNameForPrefixRemoval } from '../../../../../platform/telemetry/node/azureInsightsReporter';
-import { TelemetryStore } from '../../lib/src/telemetry';
+import { createDecorator } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { TelemetryMeasurements, TelemetryProperties, TelemetryStore } from '../../lib/src/telemetry';
 import type { TelemetrySpy } from '../../lib/src/test/telemetrySpy';
 
-export class CompletionsTelemetryServiceBridge {
+export const ICompletionsTelemetryService = createDecorator<ICompletionsTelemetryService>('completionsTelemetryService');
+export interface ICompletionsTelemetryService {
+	_serviceBrand: undefined;
+
+	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void;
+	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void;
+	sendGHTelemetryException(maybeError: unknown, origin: string, store?: TelemetryStore): void;
+	setSpyReporters(reporter: TelemetrySpy, enhancedReporter: TelemetrySpy): void;
+	clearSpyReporters(): void;
+}
+
+export class CompletionsTelemetryServiceBridge implements ICompletionsTelemetryService {
+	_serviceBrand: undefined;
 
 	private reporter: TelemetrySpy | undefined;
 	private enhancedReporter: TelemetrySpy | undefined;
@@ -20,16 +33,21 @@ export class CompletionsTelemetryServiceBridge {
 		this.enhancedReporter = undefined;
 	}
 
-	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void {
 		this.telemetryService.sendGHTelemetryEvent(wrapEventNameForPrefixRemoval(`copilot/${eventName}`), properties, measurements);
+		this.getSpyReporters(store ?? TelemetryStore.Standard)?.sendTelemetryEvent(eventName, properties as TelemetryProperties, measurements as TelemetryMeasurements);
 	}
 
-	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void {
 		this.telemetryService.sendGHTelemetryErrorEvent(wrapEventNameForPrefixRemoval(`copilot/${eventName}`), properties, measurements);
+		this.getSpyReporters(store ?? TelemetryStore.Enhanced)?.sendTelemetryErrorEvent(eventName, properties as TelemetryProperties, measurements as TelemetryMeasurements);
 	}
 
-	sendGHTelemetryException(maybeError: unknown, origin: string): void {
+	sendGHTelemetryException(maybeError: unknown, origin: string, store?: TelemetryStore): void {
 		this.telemetryService.sendGHTelemetryException(maybeError, origin);
+		if (maybeError instanceof Error) {
+			this.getSpyReporters(store ?? TelemetryStore.Enhanced)?.sendTelemetryException(maybeError as Error, undefined, undefined);
+		}
 	}
 
 	setSpyReporters(reporter: TelemetrySpy, enhancedReporter: TelemetrySpy) {
@@ -42,7 +60,7 @@ export class CompletionsTelemetryServiceBridge {
 		this.enhancedReporter = undefined;
 	}
 
-	getSpyReporters(store: TelemetryStore): TelemetrySpy | undefined {
+	private getSpyReporters(store: TelemetryStore): TelemetrySpy | undefined {
 		if (TelemetryStore.isEnhanced(store)) {
 			return this.enhancedReporter;
 		} else {

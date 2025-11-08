@@ -3,27 +3,49 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ILogService } from '../../../../../../platform/log/common/logService';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
-import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
-import { BlockMode } from '../config';
-import { Context } from '../context';
-import { ExpConfig, ExpTreatmentVariables, ExpTreatmentVariableValue } from './expConfig';
-import { Filter, FilterSettings } from './filters';
-import { TelemetryData, TelemetryWithExp } from '../telemetry';
 import {
 	DEFAULT_MAX_COMPLETION_LENGTH,
 	DEFAULT_MAX_PROMPT_LENGTH,
 	DEFAULT_PROMPT_ALLOCATION_PERCENT,
 	DEFAULT_SUFFIX_MATCH_THRESHOLD
 } from '../../../prompt/src/prompt';
+import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
+import { BlockMode } from '../config';
+import { ICompletionsContextService } from '../context';
+import { TelemetryData, TelemetryWithExp } from '../telemetry';
 import { createCompletionsFilters } from './defaultExpFilters';
+import { ExpConfig, ExpTreatmentVariables, ExpTreatmentVariableValue } from './expConfig';
+import { Filter, FilterSettings } from './filters';
 
 type CompletionsFiltersInfo = { uri: string; languageId: string };
+
+export type ContextProviderExpSettings = {
+	ids: string[];
+	includeNeighboringFiles: boolean;
+	excludeRelatedFiles: boolean;
+	timeBudget: number;
+	params?: Record<string, string | boolean | number>;
+}
+
+type InternalContextProviderExpSettings = {
+	id?: string;
+	ids?: string[];
+	includeNeighboringFiles?: boolean;
+	excludeRelatedFiles?: boolean;
+	timeBudget?: number;
+	params?: Record<string, string | boolean | number>;
+};
 
 /** General-purpose API for accessing ExP variable values. */
 export class Features {
 
-	constructor(private readonly ctx: Context) { }
+	constructor(
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) { }
 
 	/**
 	 * Central logic for obtaining the assignments of treatment groups
@@ -71,6 +93,17 @@ export class Features {
 		});
 	}
 
+	/**
+	 * Request a Copilot token and use that token to call updateExPValuesAndAssignments. Do NOT call this at startup.
+	 * Instead, register a onCopilotToken handler and use that token with updateExPValuesAndAssignments directly.
+	 */
+	async fetchTokenAndUpdateExPValuesAndAssignments(
+		filtersInfo?: CompletionsFiltersInfo,
+		telemetryData?: TelemetryData
+	) {
+		return await this.updateExPValuesAndAssignments(filtersInfo, telemetryData);
+	}
+
 	private createExpConfigAndFilters(token: CopilotToken) {
 		const expService = this.ctx.get(CompletionsExperimentationServiceBridge).experimentationService;
 
@@ -87,7 +120,7 @@ export class Features {
 			return name + (value ? '' : 'cf');
 		});
 		const exp = new ExpConfig(exp2, features.join(';'));
-		const filterMap = createCompletionsFilters(this.ctx, token);
+		const filterMap = this.instantiationService.invokeFunction(createCompletionsFilters, token);
 		const filterRecord: Partial<Record<Filter, string>> = {};
 		for (const [key, value] of filterMap.entries()) {
 			filterRecord[key] = value;
@@ -186,25 +219,77 @@ export class Features {
 		return providers.split(',').map(provider => provider.trim());
 	}
 
-	contextProviderTimeBudget(telemetryWithExp: TelemetryWithExp): number {
-		return (
+	contextProviderTimeBudget(languageId: string, telemetryWithExp: TelemetryWithExp): number {
+		const client = (
 			(telemetryWithExp.filtersAndExp.exp.variables[ExpTreatmentVariables.ContextProviderTimeBudget] as number) ??
 			150
 		);
+		if (client) {
+			return client;
+		}
+		const chat = this.getContextProviderExpSettings(languageId);
+		return chat?.timeBudget ?? 150;
 	}
 
-	includeNeighboringFiles(telemetryWithExp: TelemetryWithExp): boolean {
-		return (
+	includeNeighboringFiles(languageId: string, telemetryWithExp: TelemetryWithExp): boolean {
+		const client = (
 			(telemetryWithExp.filtersAndExp.exp.variables[ExpTreatmentVariables.IncludeNeighboringFiles] as boolean) ??
 			false
 		);
+		if (client) {
+			return true;
+		}
+		const chat = this.getContextProviderExpSettings(languageId);
+		return chat?.includeNeighboringFiles ?? false;
 	}
 
-	excludeRelatedFiles(telemetryWithExp: TelemetryWithExp): boolean {
-		return (
+	excludeRelatedFiles(languageId: string, telemetryWithExp: TelemetryWithExp): boolean {
+		const client = (
 			(telemetryWithExp.filtersAndExp.exp.variables[ExpTreatmentVariables.ExcludeRelatedFiles] as boolean) ??
 			false
 		);
+		if (client) {
+			return true;
+		}
+		const chat = this.getContextProviderExpSettings(languageId);
+		return chat?.excludeRelatedFiles ?? false;
+	}
+
+	getContextProviderExpSettings(languageId: string): ContextProviderExpSettings | undefined {
+		const expService = this.ctx.get(CompletionsExperimentationServiceBridge).experimentationService;
+		const value = expService.getTreatmentVariable<string>(`config.github.copilot.chat.contextprovider.${languageId}`);
+		if (typeof value === 'string') {
+			try {
+				const parsed: Partial<InternalContextProviderExpSettings> = JSON.parse(value);
+				const ids = this.getProviderIDs(parsed);
+				delete parsed.id;
+				delete parsed.ids;
+				return Object.assign({ ids }, { includeNeighboringFiles: false, excludeRelatedFiles: false, timeBudget: 150 }, parsed as Omit<InternalContextProviderExpSettings, 'id' | 'ids'>);
+			} catch (err) {
+				this.instantiationService.invokeFunction((accessor) => {
+					const logService = accessor.get(ILogService);
+					logService.error(`Failed to parse context provider exp settings for language ${languageId}`);
+				});
+				return undefined;
+			}
+		} else {
+			return undefined;
+		}
+	}
+
+	private getProviderIDs(json: InternalContextProviderExpSettings): string[] {
+		const result: string[] = [];
+		if (typeof json.id === 'string' && json.id.length > 0) {
+			result.push(json.id);
+		}
+		if (Array.isArray(json.ids)) {
+			for (const id of json.ids) {
+				if (typeof id === 'string' && id.length > 0) {
+					result.push(id);
+				}
+			}
+		}
+		return result;
 	}
 
 	/** @returns the maximal number of tokens of prompt AND completion */
@@ -289,11 +374,7 @@ export class Features {
 	}
 
 	enablePromptContextProxyField(telemetryWithExp: TelemetryWithExp): boolean {
-		return (
-			(telemetryWithExp.filtersAndExp.exp.variables[
-				ExpTreatmentVariables.EnablePromptContextProxyField
-			] as boolean) ?? true // Exp is set to true to 100%
-		);
+		return true;
 	}
 
 	enableProgressiveReveal(telemetryWithExp: TelemetryWithExp): boolean {

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CopilotContentExclusionManager } from '../contentExclusion/contentExclusionManager';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 
 export class AlwaysBlockingCopilotContentRestrictions extends CopilotContentExclusionManager {
 	override evaluate() {
@@ -20,8 +20,8 @@ export class NeverBlockCopilotContentExclusionManager extends CopilotContentExcl
 
 export class BlockingContentExclusionManager extends CopilotContentExclusionManager {
 	constructor(
-		ctx: Context,
-		private readonly blockedUris: string[] = []
+		private readonly blockedUris: string[] = [],
+		@ICompletionsContextService ctx: ICompletionsContextService,
 	) {
 		super(ctx);
 	}

@@ -6,14 +6,13 @@
 import { LanguageModelChat, type ChatRequest } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndpoint';
-import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
-import { applyExperimentModifications, ExperimentConfig, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -41,11 +40,11 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		@IAutomodeService private readonly _autoModeService: IAutomodeService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@ILogService private readonly _logService: ILogService,
+		@ILogService protected readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IEnvService _envService: IEnvService,
-		@IAuthenticationService _authService: IAuthenticationService,
+		@IAuthenticationService protected readonly _authService: IAuthenticationService,
 		@IRequestLogger _requestLogger: IRequestLogger
 	) {
 
@@ -84,18 +83,8 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		return chatEndpoint;
 	}
 
-	private getOrCreateProxyExperimentEndpointInstance(name: string, id: string, endpoint: IChatEndpoint): IChatEndpoint {
-		let chatEndpoint = this._chatEndpoints.get(id);
-		if (!chatEndpoint) {
-			chatEndpoint = new ProxyExperimentEndpoint(name, id, endpoint, /* isDefault: */ true);
-			this._chatEndpoints.set(id, chatEndpoint);
-		}
-		return chatEndpoint;
-	}
-
 	async getChatEndpoint(requestOrFamilyOrModel: LanguageModelChat | ChatRequest | ChatEndpointFamily): Promise<IChatEndpoint> {
 		this._logService.trace(`Resolving chat model`);
-		const experimentModelConfig = getCustomDefaultModelExperimentConfig(this._expService);
 
 		if (this._overridenChatModel) {
 			// Override, only allowed by internal users. Sets model based on setting
@@ -118,20 +107,14 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		let endpoint: IChatEndpoint;
 		if (typeof requestOrFamilyOrModel === 'string') {
 			// The family case, resolve the chat model for the passed in family
-			let modelMetadata = await this._modelFetcher.getChatModelFromFamily(requestOrFamilyOrModel);
-			modelMetadata = applyExperimentModifications(modelMetadata, experimentModelConfig);
+			const modelMetadata = await this._modelFetcher.getChatModelFromFamily(requestOrFamilyOrModel);
 			endpoint = this.getOrCreateChatEndpointInstance(modelMetadata!);
 		} else {
 			const model = 'model' in requestOrFamilyOrModel ? requestOrFamilyOrModel.model : requestOrFamilyOrModel;
-			if (experimentModelConfig && model && model.id === experimentModelConfig.id) {
-				endpoint = (await this.getAllChatEndpoints()).find(e => e.model === experimentModelConfig.selected) || await this.getChatEndpoint('gpt-4.1');
-			} else if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.id) {
+			if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.pseudoModelId) {
 				return this._autoModeService.resolveAutoModeEndpoint(requestOrFamilyOrModel as ChatRequest, Array.from(this._chatEndpoints.values()));
 			} else if (model && model.vendor === 'copilot') {
-				let modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
-				if (modelMetadata) {
-					modelMetadata = applyExperimentModifications(modelMetadata, experimentModelConfig);
-				}
+				const modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
 				// If we fail to resolve a model since this is panel we give GPT-4.1. This really should never happen as the picker is powered by the same service.
 				endpoint = modelMetadata ? this.getOrCreateChatEndpointInstance(modelMetadata) : await this.getChatEndpoint('gpt-4.1');
 			} else if (model) {
@@ -170,40 +153,6 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
 		const models: IChatModelInformation[] = await this._modelFetcher.getAllChatModels();
-		const chatEndpoints = [];
-
-		const experimentModelConfig = getCustomDefaultModelExperimentConfig(this._expService);
-
-		for (let model of models) {
-
-			if (model.id === experimentModelConfig?.selected) {
-				/* __GDPR__
-					"custommodel.found" : {
-						"owner": "karthiknadig",
-						"comment": "Reports that an experimental model was in the list of models.",
-						"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Model in found list." }
-					}
-				*/
-				this._telemetryService.sendTelemetryEvent('custommodel.found', { microsoft: true, github: false }, {
-					model: model.id,
-				});
-				// The above telemetry is needed for easier filtering.
-			}
-
-			model = this.applyModifications(model, experimentModelConfig);
-			const chatEndpoint = this.getOrCreateChatEndpointInstance(model);
-			chatEndpoints.push(chatEndpoint);
-			if (experimentModelConfig && chatEndpoint.model === experimentModelConfig.selected) {
-				chatEndpoints.push(this.getOrCreateProxyExperimentEndpointInstance(experimentModelConfig.name, experimentModelConfig.id, chatEndpoint));
-			}
-		}
-
-		return chatEndpoints;
-	}
-
-	private applyModifications(modelMetadata: IChatModelInformation, experimentModelConfig: ExperimentConfig | undefined): IChatModelInformation {
-		modelMetadata = applyExperimentModifications(modelMetadata, experimentModelConfig);
-
-		return modelMetadata;
+		return models.map(model => this.getOrCreateChatEndpointInstance(model));
 	}
 }

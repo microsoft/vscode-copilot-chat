@@ -35,6 +35,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../workspace/common/workspaceService';
 import { IGithubAvailableEmbeddingTypesService } from '../common/githubAvailableEmbeddingTypes';
+import { IRerankerService } from '../common/rerankerService';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
 import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearchChunkSearch';
 import { EmbeddingsChunkSearch, LocalEmbeddingsIndexState, LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
@@ -234,6 +235,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ILogService private readonly _logService: ILogService,
+		@IRerankerService private readonly _rerankerService: IRerankerService,
 		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
@@ -414,9 +416,27 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				...searchResult.val,
 				result: {
 					alerts: searchResult.val.result.alerts,
-					chunks: filteredChunks
+					chunks: filteredChunks,
+					isFullWorkspace: searchResult.val.strategy === WorkspaceChunkSearchStrategyId.FullWorkspace
 				}
 			};
+
+			// If explicit rerank is enabled, use the remote reranker
+			if (options.enableRerank && this._rerankerService.isAvailable) {
+				try {
+					const queryString = await query.resolveQuery(token);
+					const reranked = await this._rerankerService.rerank(queryString, filteredResult.result.chunks, token);
+					return {
+						chunks: reranked.slice(0, this.getMaxChunks(sizing)),
+						isFullWorkspace: filteredResult.result.isFullWorkspace,
+						alerts: filteredResult.result.alerts,
+						strategy: filteredResult.strategy,
+					};
+				} catch (e) {
+					this._logService.error(e, 'Reranker service failed; falling back to local rerank');
+				}
+			}
+
 			return this.rerankResultIfNeeded(queryWithEmbeddings, filteredResult, this.getMaxChunks(sizing), telemetryInfo, progress, token);
 		}, (execTime, status) => {
 			/* __GDPR__

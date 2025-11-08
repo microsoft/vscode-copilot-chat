@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as fs from 'fs';
-import type { FileStat, FileSystemWatcher, Uri } from 'vscode';
+import type { FileStat, FileSystemWatcher, RelativePattern, Uri } from 'vscode';
 import { Event } from '../../../util/vs/base/common/event';
 import { dirname, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -82,7 +82,7 @@ export class NodeFileSystemService implements IFileSystemService {
 		return true;
 	}
 
-	createFileSystemWatcher(_glob: string): FileSystemWatcher {
+	createFileSystemWatcher(_glob: string | RelativePattern): FileSystemWatcher {
 		return new class implements FileSystemWatcher {
 			ignoreCreateEvents = false;
 			ignoreChangeEvents = false;

@@ -14,8 +14,16 @@ import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart
  */
 export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
+	Edit = 'edit',
+	Create = 'create',
+	View = 'view',
 	Bash = 'bash',
-	Think = 'think'
+	Think = 'think',
+	/**
+	 * This is meant to be part of thinking, still WIP.
+	 * Plan is to ignore these and support streaming of responses.
+	 */
+	ReportIntent = 'report_intent'
 }
 
 interface StrReplaceEditorArgs {
@@ -28,11 +36,50 @@ interface StrReplaceEditorArgs {
 	file_text?: string;
 }
 
+// @ts-ignore Will be used later.
+interface CreateArgs {
+	path: string;
+	file_text?: string;
+}
+
+// @ts-ignore Will be used later.
+interface ViewArgs {
+	path: string;
+	view_range?: [number, number];
+}
+
+// @ts-ignore Will be used later.
+interface EditArgs {
+	path: string;
+	old_str?: string;
+	new_str?: string;
+}
+
 interface BashArgs {
 	command: string;
 	description?: string;
 	sessionId?: string;
 	async?: boolean;
+}
+
+export function isCopilotCliEditToolCall(toolName: string, toolArgs: unknown): toolArgs is StrReplaceEditorArgs | EditArgs | CreateArgs {
+	if (toolName === CopilotCLIToolNames.StrReplaceEditor && typeof toolArgs === 'object' && toolArgs !== null) {
+		const args = toolArgs as StrReplaceEditorArgs;
+		if (args.command && args.command !== 'view') {
+			return true;
+		}
+	} else if (toolName === CopilotCLIToolNames.Edit || toolName === CopilotCLIToolNames.Create) {
+		return true;
+	}
+	return false;
+}
+
+export function getAffectedUrisForEditTool(toolName: string, toolArgs: unknown): URI[] {
+	if (isCopilotCliEditToolCall(toolName, toolArgs) && toolArgs.path) {
+		return [URI.file(toolArgs.path)];
+	}
+
+	return [];
 }
 
 export function stripReminders(text: string): string {
@@ -86,7 +133,6 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, ChatToolInvocationPart>();
-	const toolNames = new Map<string, string>();
 
 	for (const event of events) {
 		switch (event.type) {
@@ -125,7 +171,7 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 				break;
 			}
 			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, toolNames, pendingToolInvocations);
+				const responsePart = processToolExecutionStart(event, pendingToolInvocations);
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					currentResponseParts.push(responsePart);
 				}
@@ -149,13 +195,12 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 	return turns;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(
 		event.data.toolName,
 		event.data.toolCallId,
 		event.data.arguments
 	);
-	toolNames.set(event.data.toolCallId, event.data.toolName);
 	if (toolInvocation) {
 		// Store pending invocation to update with result later
 		pendingToolInvocations.set(event.data.toolCallId, toolInvocation);
@@ -189,6 +234,9 @@ export function createCopilotCLIToolInvocation(
 	toolCallId: string,
 	args: unknown,
 ): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	if (toolName === CopilotCLIToolNames.ReportIntent) {
+		return undefined; // Ignore these for now
+	}
 	if (toolName === CopilotCLIToolNames.Think) {
 		const thought = (args as { thought?: string })?.thought;
 		if (thought && typeof thought === 'string') {
@@ -206,11 +254,33 @@ export function createCopilotCLIToolInvocation(
 		formatStrReplaceEditorInvocation(invocation, args as StrReplaceEditorArgs);
 	} else if (toolName === CopilotCLIToolNames.Bash) {
 		formatBashInvocation(invocation, args as BashArgs);
+	} else if (toolName === CopilotCLIToolNames.View) {
+		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
+	} else if (toolName === CopilotCLIToolNames.Edit) {
+		formatEditToolInvocation(invocation, args as EditArgs | CreateArgs);
+	} else if (toolName === CopilotCLIToolNames.Create) {
+		formatCreateToolInvocation(invocation, args as EditArgs | CreateArgs);
 	} else {
 		formatGenericInvocation(invocation, toolName, args);
 	}
 
 	return invocation;
+}
+
+function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
+	const path = args.path ?? '';
+	const display = path ? formatUriForMessage(path) : '';
+
+	if (args.view_range && args.view_range[1] >= args.view_range[0]) {
+		const [start, end] = args.view_range;
+		const localizedMessage = start === end
+			? l10n.t("Read {0} (line {1})", display, start)
+			: l10n.t("Read {0} (lines {1}-{2})", display, start, end);
+		invocation.invocationMessage = new MarkdownString(localizedMessage);
+		return;
+	}
+
+	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 }
 
 function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
@@ -220,10 +290,14 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 
 	switch (command) {
 		case 'view':
-			if (args.view_range) {
-				invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0} (lines {1}-{2})", display, args.view_range[0], args.view_range[1]));
+			if (args.view_range && args.view_range[1] >= args.view_range[0]) {
+				const [start, end] = args.view_range;
+				const localizedMessage = start === end
+					? l10n.t("Read {0} (line {1})", display, start)
+					: l10n.t("Read {0} (lines {1}-{2})", display, start, end);
+				invocation.invocationMessage = new MarkdownString(localizedMessage);
 			} else {
-				invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0}", display));
+				invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 			}
 			break;
 		case 'str_replace':
@@ -240,6 +314,25 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 			break;
 		default:
 			invocation.invocationMessage = new MarkdownString(l10n.t("Modified {0}", display));
+	}
+}
+
+function formatEditToolInvocation(invocation: ChatToolInvocationPart, args: EditArgs): void {
+	const display = args.path ? formatUriForMessage(args.path) : '';
+
+	invocation.invocationMessage = display
+		? new MarkdownString(l10n.t("Edited {0}", display))
+		: new MarkdownString(l10n.t("Edited file"));
+}
+
+
+function formatCreateToolInvocation(invocation: ChatToolInvocationPart, args: EditArgs | CreateArgs): void {
+	const display = args.path ? formatUriForMessage(args.path) : '';
+
+	if (display) {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
+	} else {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Created file"));
 	}
 }
 
@@ -268,76 +361,3 @@ function formatGenericInvocation(invocation: ChatToolInvocationPart, toolName: s
 function formatUriForMessage(path: string): string {
 	return `[](${URI.file(path).toString()})`;
 }
-
-// TODO@rebornix: should come from SDK
-
-
-type Command = {
-	readonly identifier: string;
-	readonly readOnly: boolean;
-};
-
-type PossiblePath = string;
-
-export type ShellPermissionRequest = {
-	readonly kind: "shell";
-	/** The full command that the user is being asked to approve, e.g. `echo foo && find -exec ... && git push` */
-	readonly fullCommandText: string;
-	/** A concise summary of the user's intention, e.g. "Echo foo and find a file and then run git push" */
-	readonly intention: string;
-	/**
-	 * The commands that are being invoked in the shell invocation.
-	 *
-	 * As a special case, which might be better represented in the type system, if there were no parsed commands
-	 * e.g. `export VAR=value`, then this will have a single entry with identifier equal to the fullCommandText.
-	 */
-	readonly commands: ReadonlyArray<Command>;
-	/**
-	 * Possible file paths that the command might access.
-	 *
-	 * This is entirely heuristic, so it's pretty untrustworthy.
-	 */
-	readonly possiblePaths: ReadonlyArray<PossiblePath>;
-	/**
-	 * Indicates whether any command in the script has redirection to write to a file.
-	 */
-	readonly hasWriteFileRedirection: boolean;
-	/**
-	 * If there are complicated constructs, then persistent approval is not supported.
-	 * e.g. `cat $(echo "foo")` should not be persistently approvable because it's hard
-	 * for the user to understand the implications.
-	 */
-	readonly canOfferSessionApproval: boolean;
-};
-
-type WritePermissionRequest = {
-	readonly kind: "write";
-	/** The intention of the edit operation, e.g. "Edit file" or "Create file" */
-	readonly intention: string;
-	/** The name of the file being edited */
-	readonly fileName: string;
-	/** The diff of the changes being made */
-	readonly diff: string;
-};
-
-type MCPPermissionRequest = {
-	readonly kind: "mcp";
-	/** The name of the MCP Server being targeted e.g. "github-mcp-server" */
-	readonly serverName: string;
-	/** The name of the tool being targeted e.g. "list_issues" */
-	readonly toolName: string;
-	/** The title of the tool being targeted e.g. "List Issues" */
-	readonly toolTitle: string;
-	/**
-	 * The _hopefully_ JSON arguments that will be passed to the MCP tool.
-	 *
-	 * This should be an object, but it's not parsed before this point so we can't guarantee that.
-	 * */
-	readonly args: unknown;
-	/**
-	 * Whether the tool is read-only (e.g. a `view` operation) or not (e.g. an `edit` operation).
-	 */
-	readonly readOnly: boolean;
-};
-
-export type PermissionRequest = ShellPermissionRequest | WritePermissionRequest | MCPPermissionRequest;

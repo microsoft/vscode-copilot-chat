@@ -25,10 +25,13 @@ export function resolveAzureUrl(modelId: string, url: string): string {
 		url = url.slice(0, -3);
 	}
 
+	// Default to chat completions for base URLs
+	const defaultApiPath = '/chat/completions';
+
 	if (url.includes('models.ai.azure.com') || url.includes('inference.ml.azure.com')) {
-		return `${url}/v1/chat/completions`;
+		return `${url}/v1${defaultApiPath}`;
 	} else if (url.includes('openai.azure.com')) {
-		return `${url}/openai/deployments/${modelId}/chat/completions?api-version=2025-01-01-preview`;
+		return `${url}/openai/deployments/${modelId}${defaultApiPath}?api-version=2025-01-01-preview`;
 	} else {
 		throw new Error(`Unrecognized Azure deployment URL: ${url}`);
 	}

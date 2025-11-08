@@ -17,12 +17,13 @@ import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { LanguageContextEntry, LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
+import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
 import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
+import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ContextKind, SnippetContext } from '../../../platform/languageServer/common/languageContextService';
@@ -38,6 +39,7 @@ import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { createTracer, ITracer } from '../../../util/common/tracing';
+import { assertNever } from '../../../util/vs/base/common/assert';
 import { AsyncIterableObject, DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
@@ -50,29 +52,14 @@ import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRa
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Position as VscodePosition } from '../../../vscodeTypes';
 import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
-import { editWouldDeleteWhatWasJustInserted } from '../../inlineEdits/common/ghNearbyNesProvider';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
+import { countTokensForLines, createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
-import { PromptTags } from '../common/tags';
+import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
-
-namespace ResponseTags {
-	export const NO_CHANGE = {
-		start: '<NO_CHANGE>'
-	};
-	export const EDIT = {
-		start: '<EDIT>',
-		end: '</EDIT>'
-	};
-	export const INSERT = {
-		start: '<INSERT>',
-		end: '</INSERT>'
-	};
-}
 
 const enum RetryState {
 	NotRetrying,
@@ -153,8 +140,20 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			filters.push((edits) => IgnoreWhitespaceOnlyChanges.filterEdit(activeDoc, edits));
 		}
 
-		if (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUndoInsertionFilteringEnabled, this.expService)) {
-			filters.push((edits) => editWouldDeleteWhatWasJustInserted(activeDoc, new LineEdit(edits)) ? [] : edits);
+		const undoInsertionFiltering = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUndoInsertionFiltering, this.expService);
+		if (undoInsertionFiltering !== undefined) {
+			let filter;
+			switch (undoInsertionFiltering) {
+				case 'v1':
+					filter = editWouldDeleteWhatWasJustInserted;
+					break;
+				case 'v2':
+					filter = editWouldDeleteWhatWasJustInserted2;
+					break;
+				default:
+					assertNever(undoInsertionFiltering);
+			}
+			filters.push((edits) => filter(activeDoc, new LineEdit(edits)) ? [] : edits);
 		}
 
 		return filters.reduce((acc, filter) => filter(acc), edits);
@@ -203,6 +202,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			getOrDeduceSelectionFromLastEdit(request.getActiveDocument()),
 			pushEdit,
 			delaySession,
+			{ showLabel: false },
 			logContext,
 			cancellationToken,
 			telemetryBuilder,
@@ -215,6 +215,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		selection: Range | null,
 		pushEdit: PushEdit,
 		delaySession: DelaySession,
+		opts: { showLabel: boolean },
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
@@ -248,13 +249,18 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, retryState);
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, retryState, telemetryBuilder);
 
 		const cursorOriginalLinesOffset = Math.max(0, currentDocument.cursorLineOffset - editWindowLinesRange.start);
 		const editWindowLastLineLength = currentDocument.transformer.getLineLength(editWindowLinesRange.endExclusive);
 		const editWindow = currentDocument.transformer.getOffsetRange(new Range(editWindowLinesRange.start + 1, 1, editWindowLinesRange.endExclusive, editWindowLastLineLength + 1));
 
 		const editWindowLines = currentDocument.lines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+
+		const editWindowTokenLimit = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabEditWindowMaxTokens, this.expService);
+		if (editWindowTokenLimit !== undefined && countTokensForLines(editWindowLines, XtabProvider.computeTokens) > editWindowTokenLimit) {
+			return Result.error(new NoNextEditReason.PromptTooLarge('editWindow'));
+		}
 
 		// Expected: editWindow.substring(activeDocument.documentAfterEdits.value) === editWindowLines.join('\n')
 
@@ -274,9 +280,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.PromptTooLarge('currentFile'));
 		}
 
-		const { taggedCurrentFileR: { taggedCurrentFileContent, nLines: nLinesCurrentFile }, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
+		const { taggedCurrentDocLines, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
-		telemetryBuilder.setNLinesOfCurrentFileInPrompt(nLinesCurrentFile);
+		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
@@ -298,7 +304,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			activeDocument,
 			request.xtabEditHistory,
-			taggedCurrentFileContent,
+			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			langCtx,
 			XtabProvider.computeTokens,
@@ -307,7 +313,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const userPrompt = getUserPrompt(promptPieces);
 
-		const prediction = this.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy);
+		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
+
+		const prediction = this.getPredictedOutput(editWindowLines, responseFormat);
 
 		const messages = constructMessages({
 			systemMsg: this.pickSystemPrompt(promptOptions.promptingStrategy),
@@ -344,8 +352,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptPieces,
 			prediction,
 			{
+				showLabel: opts.showLabel,
 				shouldRemoveCursorTagFromResponse,
-				promptingStrategy: promptOptions.promptingStrategy,
+				responseFormat,
 				retryState,
 			},
 			delaySession,
@@ -416,8 +425,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions.currentFile,
 		);
 
-		return taggedCurrentFileContentResult.map(taggedCurrentFileR => ({
-			taggedCurrentFileR,
+		return taggedCurrentFileContentResult.map(taggedCurrentDocLines => ({
+			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 		}));
 	}
@@ -546,7 +555,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		promptPieces: PromptPieces,
 		prediction: Prediction | undefined,
 		opts: {
-			promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined;
+			showLabel: boolean;
+			responseFormat: xtabPromptOptions.ResponseFormat;
 			shouldRemoveCursorTagFromResponse: boolean;
 			retryState: RetryState;
 		},
@@ -670,13 +680,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		let cleanedLinesStream: AsyncIterableObject<string>;
 
-		if (opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Xtab275) {
+		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			cleanedLinesStream = linesStream;
-		} else if (
-			opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel ||
-			opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Codexv21NesUnified ||
-			opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Nes41Miniv3
-		) {
+		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			const linesIter = linesStream[Symbol.asyncIterator]();
 			const firstLine = await linesIter.next();
 
@@ -748,12 +754,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				pushEdit(Result.error(new NoNextEditReason.Unexpected(new Error(`unexpected tag ${trimmedLines}`))));
 				return;
 			}
-		} else {
+		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.CodeBlock) {
 			cleanedLinesStream = linesWithBackticksRemoved(linesStream);
+		} else {
+			assertNever(opts.responseFormat);
 		}
 
 		const diffOptions: ResponseProcessor.DiffParams = {
-			emitFastCursorLineChange: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService),
+			emitFastCursorLineChange: opts.showLabel
+				? false
+				: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService),
 			nLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNNonSignificantLinesToConverge, this.expService),
 			nSignificantLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNSignificantLinesToConverge, this.expService),
 		};
@@ -807,7 +817,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 							await this.enforceArtificialDelay(delaySession, telemetryBuilder);
 						}
 
-						pushEdit(Result.ok({ edit: singleLineEdit, window: editWindow }));
+						pushEdit(Result.ok({ edit: singleLineEdit, window: editWindow, showLabel: opts.showLabel }));
 						i++;
 					}
 				}
@@ -851,29 +861,63 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return;
 		}
 
-		const nextCursorLinePredictionEnabled = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService);
-		if (nextCursorLinePredictionEnabled && retryState === RetryState.NotRetrying) {
+		let nextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService);
+		nextCursorLinePrediction = (
+			nextCursorLinePrediction === true ? NextCursorLinePrediction.OnlyWithEdit :
+				(nextCursorLinePrediction === false ? undefined : nextCursorLinePrediction)
+		);
+		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying) {
 			const nextCursorLineR = await this.predictNextCursorPosition(promptPieces);
+			if (cancellationToken.isCancellationRequested) {
+				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
+				return;
+			}
+
 			if (nextCursorLineR.isError()) {
 				this.tracer.trace(`Predicted next cursor line error: ${nextCursorLineR.err.message}`);
 				telemetryBuilder.setNextCursorLineError(nextCursorLineR.err.message);
 			} else {
-				const nextCursorLine = nextCursorLineR.val;
+				const nextCursorLineZeroBased = nextCursorLineR.val;
 
-				const lineDistanceFromCursorLine = nextCursorLine - promptPieces.currentDocument.cursorLineOffset;
+				const lineDistanceFromCursorLine = nextCursorLineZeroBased - promptPieces.currentDocument.cursorLineOffset;
 				telemetryBuilder.setNextCursorLineDistance(lineDistanceFromCursorLine);
 
-				this.tracer.trace(`Predicted next cursor line: ${nextCursorLine}`);
+				this.tracer.trace(`Predicted next cursor line: ${nextCursorLineZeroBased}`);
 
-				if (nextCursorLine >= promptPieces.currentDocument.lines.length) { // >= because the line index is zero-based
+				if (nextCursorLineZeroBased >= promptPieces.currentDocument.lines.length) { // >= because the line index is zero-based
 					this.tracer.trace(`Predicted next cursor line error: exceedsDocumentLines`);
 					telemetryBuilder.setNextCursorLineError('exceedsDocumentLines');
-				} else if (promptPieces.editWindowLinesRange.contains(nextCursorLine)) {
+				} else if (promptPieces.editWindowLinesRange.contains(nextCursorLineZeroBased)) {
 					this.tracer.trace(`Predicted next cursor line error: withinEditWindow`);
 					telemetryBuilder.setNextCursorLineError('withinEditWindow');
 				} else {
-					this.doGetNextEditWithSelection(request, new Range(nextCursorLine + 1, 1, nextCursorLine + 1, 1), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
-					return;
+					const nextCursorLineOneBased = nextCursorLineZeroBased + 1;
+					const nextCursorLine = promptPieces.activeDoc.documentAfterEditsLines.at(nextCursorLineZeroBased);
+					const nextCursorColumn = (nextCursorLine?.length ?? 0) + 1;
+					switch (nextCursorLinePrediction) {
+						case NextCursorLinePrediction.Jump: {
+							const nextCursorPosition = new Position(nextCursorLineOneBased, nextCursorColumn);
+							pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow, nextCursorPosition)));
+							return;
+						}
+						case NextCursorLinePrediction.OnlyWithEdit:
+						case NextCursorLinePrediction.LabelOnlyWithEdit: {
+							this.doGetNextEditWithSelection(
+								request,
+								new Range(nextCursorLineOneBased, nextCursorColumn, nextCursorLineOneBased, nextCursorColumn),
+								pushEdit,
+								delaySession,
+								{ showLabel: nextCursorLinePrediction === NextCursorLinePrediction.LabelOnlyWithEdit },
+								logContext,
+								cancellationToken,
+								telemetryBuilder, RetryState.Retrying,
+							);
+							return;
+						}
+						default: {
+							assertNever(nextCursorLinePrediction);
+						}
+					}
 				}
 			}
 		}
@@ -890,7 +934,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
 	}
 
-	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, retryState: RetryState): OffsetRange {
+	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, retryState: RetryState, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {
 		const currentDocLines = currentDocument.lines;
 		const cursorLineOffset = currentDocument.cursorLineOffset;
 
@@ -946,6 +990,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			const mergeConflictRange = findMergeConflictMarkersRange(currentDocLines, tentativeEditWindow, maxMergeConflictLines);
 			if (mergeConflictRange) {
 				const onlyMergeConflictLines = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabOnlyMergeConflictLines, this.expService);
+				telemetry.setMergeConflictExpanded(onlyMergeConflictLines ? 'only' : 'normal');
 				if (onlyMergeConflictLines) {
 					this.tracer.trace(`Expanding edit window to include ONLY merge conflict markers: ${mergeConflictRange.toString()}`);
 					codeToEditStart = mergeConflictRange.start;
@@ -992,13 +1037,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			};
 		}
 
-		const promptingStrategy = this.determinePromptingStrategy();
 		const sourcedModelConfig = {
-			modelName: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderModelName, this.expService),
-			promptingStrategy,
+			modelName: undefined,
+			promptingStrategy: undefined,
 			currentFile: {
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCurrentFileMaxTokens, this.expService),
-				includeTags: promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel /* unified model doesn't use tags in current file */ && this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
+				includeTags: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
 				prioritizeAboveCursor: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPrioritizeAboveCursor, this.expService)
 			},
 			pagedClipping: {
@@ -1088,6 +1132,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const systemMessage = 'Your task is to predict the next line number in the current file where the developer is most likely to make their next edit, using the provided context.';
 
+		const maxTokens = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionCurrentFileMaxTokens, this.expService);
+
 		const currentFileContentR = this.constructTaggedFile(
 			promptPieces.currentDocument,
 			promptPieces.editWindowLinesRange,
@@ -1096,6 +1142,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...promptPieces.opts,
 				currentFile: {
 					...promptPieces.opts.currentFile,
+					maxTokens,
 					includeTags: false,
 				}
 			},
@@ -1108,7 +1155,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.fromString(currentFileContentR.err);
 		}
 
-		const { taggedCurrentFileR: { taggedCurrentFileContent }, areaAroundCodeToEdit } = currentFileContentR.val;
+		const { taggedCurrentDocLines, areaAroundCodeToEdit } = currentFileContentR.val;
 
 		const newPromptPieces = new PromptPieces(
 			promptPieces.currentDocument,
@@ -1116,7 +1163,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptPieces.areaAroundEditWindowLinesRange,
 			promptPieces.activeDoc,
 			promptPieces.xtabHistory,
-			taggedCurrentFileContent,
+			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			promptPieces.langCtx,
 			XtabProvider.computeTokens,
@@ -1200,28 +1247,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private determinePromptingStrategy(): xtabPromptOptions.PromptingStrategy | undefined {
-		const isXtabUnifiedModel = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseUnifiedModel, this.expService);
-		const isCodexV21NesUnified = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCodexV21NesUnified, this.expService);
-		const useSimplifiedPrompt = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseSimplifiedPrompt, this.expService);
-		const useXtab275Prompting = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseXtab275Prompting, this.expService);
-		const useNes41Miniv3Prompting = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseNes41Miniv3Prompting, this.expService);
-
-		if (isXtabUnifiedModel) {
-			return xtabPromptOptions.PromptingStrategy.UnifiedModel;
-		} else if (isCodexV21NesUnified) {
-			return xtabPromptOptions.PromptingStrategy.Codexv21NesUnified;
-		} else if (useSimplifiedPrompt) {
-			return xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt;
-		} else if (useXtab275Prompting) {
-			return xtabPromptOptions.PromptingStrategy.Xtab275;
-		} else if (useNes41Miniv3Prompting) {
-			return xtabPromptOptions.PromptingStrategy.Nes41Miniv3;
-		} else {
-			return undefined;
-		}
-	}
-
 	private pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
 		switch (promptingStrategy) {
 			case xtabPromptOptions.PromptingStrategy.UnifiedModel:
@@ -1259,25 +1284,24 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return createProxyXtabEndpoint(this.instaService, configuredModelName);
 	}
 
-	private getPredictedOutput(editWindowLines: string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): Prediction | undefined {
+	private getPredictedOutput(editWindowLines: string[], responseFormat: xtabPromptOptions.ResponseFormat): Prediction | undefined {
 		return this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderUsePrediction)
 			? {
 				type: 'content',
-				content: XtabProvider.getPredictionContents(editWindowLines, promptingStrategy)
+				content: XtabProvider.getPredictionContents(editWindowLines, responseFormat)
 			}
 			: undefined;
 	}
 
-	private static getPredictionContents(editWindowLines: readonly string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
-		if (promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel ||
-			promptingStrategy === xtabPromptOptions.PromptingStrategy.Codexv21NesUnified ||
-			promptingStrategy === xtabPromptOptions.PromptingStrategy.Nes41Miniv3
-		) {
+	private static getPredictionContents(editWindowLines: readonly string[], responseFormat: xtabPromptOptions.ResponseFormat): string {
+		if (responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
-		} else if (promptingStrategy === xtabPromptOptions.PromptingStrategy.Xtab275) {
+		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			return editWindowLines.join('\n');
-		} else {
+		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CodeBlock) {
 			return ['```', ...editWindowLines, '```'].join('\n');
+		} else {
+			assertNever(responseFormat);
 		}
 	}
 

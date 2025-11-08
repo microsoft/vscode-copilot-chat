@@ -3,15 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsTelemetryService } from '../../../../bridge/src/completionsTelemetryServiceBridge';
+import { ComponentStatistics, PromptMetadata } from '../../../../prompt/src/components/components';
+import { commentBlockAsSingles } from '../../../../prompt/src/languageMarker';
+import { PromptComponentAllocation, PromptComponentId } from '../../../../prompt/src/prompt';
+import { TokenizerName } from '../../../../prompt/src/tokenization';
+import { CancellationToken } from '../../../../types/src';
 import { CompletionState } from '../../completionState';
 import { CopilotContentExclusionManager, StatusBarEvent } from '../../contentExclusion/contentExclusionManager';
-import { Context } from '../../context';
+import { ICompletionsContextService } from '../../context';
 import { Features } from '../../experiments/features';
-import { logger } from '../../logger';
-import {
-	CompletionsPromptFactory,
-	CompletionsPromptOptions,
-} from './completionsPromptFactory';
+import { logger, LogTarget } from '../../logger';
+import { telemetryException, TelemetryWithExp } from '../../telemetry';
+import { TextDocumentContents } from '../../textDocument';
 import { ContextProviderBridge } from '../components/contextProviderBridge';
 import {
 	renderWithMetadata,
@@ -40,13 +45,10 @@ import {
 	PromptResponse,
 	trimLastLine,
 } from '../prompt';
-import { telemetryException, TelemetryWithExp } from '../../telemetry';
-import { TextDocumentContents } from '../../textDocument';
-import { ComponentStatistics, PromptMetadata } from '../../../../prompt/src/components/components';
-import { commentBlockAsSingles } from '../../../../prompt/src/languageMarker';
-import { PromptComponentAllocation, PromptComponentId } from '../../../../prompt/src/prompt';
-import { TokenizerName } from '../../../../prompt/src/tokenization';
-import { CancellationToken } from '../../../../types/src';
+import {
+	CompletionsPromptFactory,
+	CompletionsPromptOptions,
+} from './completionsPromptFactory';
 
 // If the space allocated to the suffix is at least this fraction of the estimated suffix cost,
 // we will render the suffix before the prefix and use any surplus suffix budget to fill the prefix.
@@ -57,8 +59,10 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 	private renderId = 0;
 
 	constructor(
-		protected readonly ctx: Context,
-		protected components: Record<PromptComponentId, VirtualPromptComponent>
+		protected components: Record<PromptComponentId, VirtualPromptComponent>,
+		@ICompletionsContextService protected readonly ctx: ICompletionsContextService,
+		@IInstantiationService protected readonly instantiationService: IInstantiationService,
+		@ICompletionsTelemetryService protected readonly completionsTelemetryService: ICompletionsTelemetryService,
 	) { }
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
@@ -110,9 +114,10 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 			return failFastPrompt;
 		}
 
+		const languageId = completionState.textDocument.detectedLanguageId;
 		const start = performance.now();
 		let contextItems;
-		if (useContextProviderAPI(this.ctx, telemetryData)) {
+		if (this.instantiationService.invokeFunction(useContextProviderAPI, languageId, telemetryData)) {
 			contextItems = await this.resolveContext(completionId, completionState, telemetryData, cancellationToken);
 		}
 		const updateDataTimeMs = performance.now() - start;
@@ -127,8 +132,7 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 			componentStatistics: [],
 		};
 
-		const languageId = completionState.textDocument.detectedLanguageId;
-		const { maxPromptLength } = getPromptOptions(this.ctx, telemetryData, languageId);
+		const { maxPromptLength } = this.instantiationService.invokeFunction(getPromptOptions, telemetryData, languageId);
 		const allocation = this.getComponentAllocation(telemetryData);
 
 		const suffixAllocation = allocation.suffix * maxPromptLength;
@@ -151,7 +155,7 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 		const [prefix, trailingWs] = trimLastLine(renderedComponents.prefix!.text);
 
 		const end = performance.now();
-		const contextProvidersTelemetry = useContextProviderAPI(this.ctx, telemetryData)
+		const contextProvidersTelemetry = this.instantiationService.invokeFunction(useContextProviderAPI, languageId, telemetryData)
 			? this.telemetrizeContext(
 				completionId,
 				aggregatedMetadata.componentStatistics,
@@ -203,18 +207,16 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 		const { textDocument } = completionState;
 		const matchedContextItems = resolvedContextItems.filter(matchContextItems);
 
-		const traits: TraitWithId[] = getTraitsFromContextItems(this.ctx, completionId, matchedContextItems);
-		void ReportTraitsTelemetry(
+		const traits: TraitWithId[] = this.instantiationService.invokeFunction(getTraitsFromContextItems, completionId, matchedContextItems);
+		void this.instantiationService.invokeFunction(ReportTraitsTelemetry,
 			`contextProvider.traits`,
-			this.ctx,
 			traits,
 			textDocument.detectedLanguageId,
 			textDocument.detectedLanguageId, // TextDocumentContext does not have clientLanguageId
 			telemetryData
 		);
 
-		const codeSnippets: CodeSnippetWithId[] = await getCodeSnippetsFromContextItems(
-			this.ctx,
+		const codeSnippets: CodeSnippetWithId[] = await this.instantiationService.invokeFunction(getCodeSnippetsFromContextItems,
 			completionId,
 			matchedContextItems,
 			textDocument.detectedLanguageId
@@ -229,9 +231,10 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 	): ContextProviderTelemetry[] {
 		const promptMatcher = componentStatisticsToPromptMatcher(componentStatistics);
 		this.ctx.get(ContextProviderStatistics).getStatisticsForCompletion(completionId).computeMatch(promptMatcher);
+		const logTarget = this.ctx.get(LogTarget);
 		const contextProvidersTelemetry = telemetrizeContextItems(this.ctx, completionId, resolvedContextItems);
 		// To support generating context provider metrics of completion in COffE.
-		logger.debug(this.ctx, `Context providers telemetry: '${JSON.stringify(contextProvidersTelemetry)}'`);
+		logger.debug(logTarget, `Context providers telemetry: '${JSON.stringify(contextProvidersTelemetry)}'`);
 		return contextProvidersTelemetry;
 	}
 
@@ -256,7 +259,7 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 	}
 
 	private errorPrompt(error: Error): PromptResponse {
-		telemetryException(this.ctx, error, 'WorkspaceContextPromptFactory');
+		telemetryException(this.completionsTelemetryService, error, 'WorkspaceContextPromptFactory');
 		return _promptError;
 	}
 }

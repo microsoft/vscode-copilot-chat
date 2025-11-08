@@ -7,6 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -41,11 +42,15 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ISearchService private readonly searchService: ISearchService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindTextInFilesToolParams>, token: CancellationToken) {
+		const endpoint = options.model && (await this.endpointProvider.getChatEndpoint(options.model));
+		const modelFamily = endpoint?.family;
+
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
-		const patterns = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService) : undefined;
+		const patterns = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService, modelFamily) : undefined;
 
 		checkCancellation(token);
 		const askedForTooManyResults = options.input.maxResults && options.input.maxResults > MaxResultsCap;
@@ -90,14 +95,26 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			return [];
 		}).slice(0, maxResults);
 		const query = this.formatQueryString(options.input);
-		result.toolResultMessage = textMatches.length === 0 ?
-			new MarkdownString(l10n.t`Searched text for ${query}, no results`) :
-			textMatches.length === 1 ?
-				new MarkdownString(l10n.t`Searched text for ${query}, 1 result`) :
-				new MarkdownString(l10n.t`Searched text for ${query}, ${textMatches.length} results`);
+		result.toolResultMessage = this.getResultMessage(isRegExp, query, textMatches.length);
 
 		result.toolResultDetails = textMatches;
 		return result;
+	}
+
+	private getResultMessage(isRegExp: boolean, query: string, count: number): MarkdownString {
+		if (count === 0) {
+			return isRegExp
+				? new MarkdownString(l10n.t`Searched for regex ${query}, no results`)
+				: new MarkdownString(l10n.t`Searched for text ${query}, no results`);
+		} else if (count === 1) {
+			return isRegExp
+				? new MarkdownString(l10n.t`Searched for regex ${query}, 1 result`)
+				: new MarkdownString(l10n.t`Searched for text ${query}, 1 result`);
+		} else {
+			return isRegExp
+				? new MarkdownString(l10n.t`Searched for regex ${query}, ${count} results`)
+				: new MarkdownString(l10n.t`Searched for text ${query}, ${count} results`);
+		}
 	}
 
 	private isValidRegex(pattern: string): boolean {
@@ -133,8 +150,12 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindTextInFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+		const isRegExp = options.input.isRegexp ?? true;
+		const query = this.formatQueryString(options.input);
 		return {
-			invocationMessage: new MarkdownString(l10n.t`Searching text for ${this.formatQueryString(options.input)}`),
+			invocationMessage: isRegExp ?
+				new MarkdownString(l10n.t`Searching for regex ${query}`) :
+				new MarkdownString(l10n.t`Searching for text ${query}`),
 		};
 	}
 
@@ -163,6 +184,10 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 
 	async resolveInput(input: IFindTextInFilesToolParams, _promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IFindTextInFilesToolParams> {
 		let includePattern = input.includePattern;
+		if (includePattern === '**') {
+			includePattern = undefined;
+		}
+
 		if (includePattern && !includePattern.startsWith('**/')) {
 			includePattern = `**/${includePattern}`;
 		}

@@ -3,11 +3,24 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../context';
+import { createDecorator } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 type RuntimeFlag = 'debug' | 'verboseLogging' | 'testMode' | 'simulation';
 
-export class RuntimeMode {
+export const ICompletionsRuntimeModeService = createDecorator<ICompletionsRuntimeModeService>('completionsRuntimeModeService');
+export interface ICompletionsRuntimeModeService {
+	_serviceBrand: undefined;
+
+	readonly flags: Record<RuntimeFlag, boolean>;
+	isRunningInTest(): boolean;
+	shouldFailForDebugPurposes(): boolean;
+	isDebugEnabled(): boolean;
+	isVerboseLoggingEnabled(): boolean;
+	isRunningInSimulation(): boolean;
+}
+
+export class RuntimeMode implements ICompletionsRuntimeModeService {
+	_serviceBrand: undefined;
 	constructor(readonly flags: Record<RuntimeFlag, boolean>) { }
 
 	static fromEnvironment(isRunningInTest: boolean, argv = process.argv, env = process.env): RuntimeMode {
@@ -18,18 +31,26 @@ export class RuntimeMode {
 			simulation: determineSimulationFlag(env),
 		});
 	}
-}
 
-export function isRunningInTest(ctx: Context): boolean {
-	return ctx.get(RuntimeMode).flags.testMode;
-}
+	isRunningInTest(): boolean {
+		return this.flags.testMode;
+	}
 
-export function shouldFailForDebugPurposes(ctx: Context): boolean {
-	return isRunningInTest(ctx);
-}
+	shouldFailForDebugPurposes(): boolean {
+		return this.isRunningInTest();
+	}
 
-export function isDebugEnabled(ctx: Context): boolean {
-	return ctx.get(RuntimeMode).flags.debug;
+	isDebugEnabled(): boolean {
+		return this.flags.debug;
+	}
+
+	isVerboseLoggingEnabled(): boolean {
+		return this.flags.verboseLogging;
+	}
+
+	isRunningInSimulation(): boolean {
+		return this.flags.simulation;
+	}
 }
 
 function determineDebugFlag(argv: string[], env: NodeJS.ProcessEnv): boolean {
@@ -38,10 +59,6 @@ function determineDebugFlag(argv: string[], env: NodeJS.ProcessEnv): boolean {
 
 function determineSimulationFlag(env: NodeJS.ProcessEnv): boolean {
 	return determineEnvFlagEnabled(env, 'SIMULATION');
-}
-
-export function isRunningInSimulation(ctx: Context): boolean {
-	return ctx.get(RuntimeMode).flags.simulation;
 }
 
 function determineVerboseLoggingEnabled(argv: string[], env: NodeJS.ProcessEnv): boolean {

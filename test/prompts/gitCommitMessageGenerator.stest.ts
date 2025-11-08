@@ -46,7 +46,7 @@ index 0877b83..6260896 100644
 		];
 
 		const generator = instantiationService.createInstance(GitCommitMessageGenerator);
-		const message = await generator.generateGitCommitMessage(changes, { repository: [], user: [] }, 0, CancellationToken.None);
+		const message = await generator.generateGitCommitMessage('test-repo', 'main', changes, { repository: [], user: [] }, 0, CancellationToken.None);
 		assert.ok(message !== undefined, 'Failed to generate a commit message');
 	});
 
@@ -91,7 +91,7 @@ index 0877b83..6260896 100644
 		];
 
 		const generator = instantiationService.createInstance(GitCommitMessageGenerator);
-		const message = await generator.generateGitCommitMessage(changes, { repository: repoCommits, user: userCommits }, 0, CancellationToken.None);
+		const message = await generator.generateGitCommitMessage('test-repo', 'main', changes, { repository: repoCommits, user: userCommits }, 0, CancellationToken.None);
 
 		assert.ok(message !== undefined, 'Failed to generate a commit message');
 		assert.ok(!userCommits.some(commit => message.toLowerCase().includes(commit)), 'Commit message contains a user commit');
@@ -143,7 +143,7 @@ index 0877b83..6260896 100644
 		];
 
 		const generator = instantiationService.createInstance(GitCommitMessageGenerator);
-		const message = await generator.generateGitCommitMessage(changes, { repository: repoCommits, user: userCommits }, 0, CancellationToken.None);
+		const message = await generator.generateGitCommitMessage('test-repo', 'main', changes, { repository: repoCommits, user: userCommits }, 0, CancellationToken.None);
 
 		assert.ok(message !== undefined, 'Failed to generate a commit message');
 		assert.ok(!userCommits.some(commit => message.toLowerCase().includes(commit)), 'Commit message contains a user commit');

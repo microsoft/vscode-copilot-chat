@@ -21,6 +21,7 @@ import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
 import { INativeEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
@@ -64,6 +65,7 @@ import { ISetupTestsDetector, SetupTestsDetector } from '../../../platform/testi
 import { ITestDepsResolver, TestDepsResolver } from '../../../platform/testing/node/testDepsResolver';
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { IInstantiationServiceBuilder } from '../../../util/common/services';
@@ -94,6 +96,7 @@ import { GitCommitMessageServiceImpl } from '../../prompt/vscode-node/gitCommitM
 import { GitDiffService } from '../../prompt/vscode-node/gitDiffService';
 import { PromptVariablesServiceImpl } from '../../prompt/vscode-node/promptVariablesService';
 import { RequestLogger } from '../../prompt/vscode-node/requestLoggerImpl';
+import { ScenarioAutomationEndpointProviderImpl } from '../../prompt/vscode-node/scenarioAutomationEndpointProviderImpl';
 import { SettingsEditorSearchServiceImpl } from '../../prompt/vscode-node/settingsEditorSearchServiceImpl';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
@@ -118,6 +121,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	registerCommonServices(builder, extensionContext);
 
+	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	builder.define(IConversationStore, new ConversationStore());
 	builder.define(IDiffService, new DiffServiceImpl());
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
@@ -149,12 +153,14 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	if (isScenarioAutomation) {
 		builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
+		builder.define(IEndpointProvider, new SyncDescriptor(ScenarioAutomationEndpointProviderImpl, [collectFetcherTelemetry]));
+
 	} else {
 		builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
+		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider, [collectFetcherTelemetry]));
 	}
 
 	builder.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage)); // Used for test generation (/tests intent)
-	builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider, [collectFetcherTelemetry]));
 	builder.define(IParserService, new SyncDescriptor(ParserServiceImpl, [/*useWorker*/ true]));
 	builder.define(IIntentService, new SyncDescriptor(IntentService));
 	builder.define(IIgnoreService, new SyncDescriptor(VsCodeIgnoreService));
@@ -197,6 +203,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ICodeSearchAuthenticationService, new SyncDescriptor(VsCodeCodeSearchAuthenticationService));
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
+	builder.define(IRerankerService, new SyncDescriptor(RerankerService));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {

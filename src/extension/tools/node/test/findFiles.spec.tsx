@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, expect, suite, test } from 'vitest';
 import type * as vscode from 'vscode';
+import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { AbstractSearchService, ISearchService } from '../../../../platform/search/common/searchService';
 import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../platform/test/node/services';
@@ -18,6 +19,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { CopilotToolMode } from '../../common/toolsRegistry';
 import { FindFilesTool, IFindFilesToolParams } from '../findFilesTool';
+import { createMockEndpointProvider, mockLanguageModelChat } from './searchToolTestUtils';
 
 suite('FindFiles', () => {
 	let accessor: ITestingServicesAccessor;
@@ -34,36 +36,76 @@ suite('FindFiles', () => {
 		accessor.dispose();
 	});
 
-	function setup(expected: vscode.GlobPattern) {
+	function setup(expected: vscode.GlobPattern, includeExtraPattern = true, modelFamily?: string) {
+		if (modelFamily) {
+			collection.define(IEndpointProvider, createMockEndpointProvider(modelFamily));
+		}
+
 		const patterns: vscode.GlobPattern[] = [expected];
-		if (typeof expected === 'string' && !expected.endsWith('/**')) {
-			patterns.push(expected + '/**');
-		} else if (typeof expected !== 'string' && !expected.pattern.endsWith('/**')) {
-			patterns.push(new RelativePattern(expected.baseUri, expected.pattern + '/**'));
+		if (includeExtraPattern) {
+			if (typeof expected === 'string' && !expected.endsWith('/**')) {
+				patterns.push(expected + '/**');
+			} else if (typeof expected !== 'string' && !expected.pattern.endsWith('/**')) {
+				patterns.push(new RelativePattern(expected.baseUri, expected.pattern + '/**'));
+			}
 		}
 		collection.define(ISearchService, new TestSearchService(patterns));
 		accessor = collection.createTestingAccessor();
 	}
 
 	test('passes through simple query', async () => {
-		setup('test/**/*.ts');
+		setup('test/**/*.ts', false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
 		await tool.invoke({ input: { query: 'test/**/*.ts' }, toolInvocationToken: null!, }, CancellationToken.None);
 	});
 
 	test('handles absolute path with glob', async () => {
-		setup(new RelativePattern(URI.file(workspaceFolder), 'test/**/*.ts'));
+		setup(new RelativePattern(URI.file(workspaceFolder), 'test/**/*.ts'), false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
 		await tool.invoke({ input: { query: `${workspaceFolder}/test/**/*.ts` }, toolInvocationToken: null!, }, CancellationToken.None);
 	});
 
 	test('handles absolute path to folder', async () => {
-		setup(new RelativePattern(URI.file(workspaceFolder), ''));
+		setup(new RelativePattern(URI.file(workspaceFolder), ''), false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
 		await tool.invoke({ input: { query: workspaceFolder }, toolInvocationToken: null!, }, CancellationToken.None);
+	});
+
+	suite('gpt-4.1 model glob pattern', () => {
+		test('adds extra pattern for gpt-4.1 model with simple query', async () => {
+			setup('src', true, 'gpt-4.1');
+
+			const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+			const result = await tool.invoke({ input: { query: 'src' }, toolInvocationToken: null!, model: mockLanguageModelChat }, CancellationToken.None);
+			expect(result).toBeDefined();
+		});
+
+		test('adds extra pattern for gpt-4.1 with string query ending in /**', async () => {
+			setup('src/**', true, 'gpt-4.1');
+
+			const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+			const result = await tool.invoke({ input: { query: 'src/**' }, toolInvocationToken: null!, model: mockLanguageModelChat }, CancellationToken.None);
+			expect(result).toBeDefined();
+		});
+
+		test('adds extra pattern for gpt-4.1 with RelativePattern', async () => {
+			setup(new RelativePattern(URI.file(workspaceFolder), 'src'), true, 'gpt-4.1');
+
+			const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+			const result = await tool.invoke({ input: { query: `${workspaceFolder}/src` }, toolInvocationToken: null!, model: mockLanguageModelChat }, CancellationToken.None);
+			expect(result).toBeDefined();
+		});
+
+		test('does not duplicate extra pattern when RelativePattern already ends with /**', async () => {
+			setup(new RelativePattern(URI.file(workspaceFolder), 'src/**'), true, 'gpt-4.1');
+
+			const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+			const result = await tool.invoke({ input: { query: `${workspaceFolder}/src/**` }, toolInvocationToken: null!, model: mockLanguageModelChat }, CancellationToken.None);
+			expect(result).toBeDefined();
+		});
 	});
 
 	suite('resolveInput', () => {

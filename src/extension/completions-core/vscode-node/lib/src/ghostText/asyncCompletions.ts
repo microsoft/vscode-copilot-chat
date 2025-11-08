@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CancellationTokenSource } from '../../../types/src';
-import { Context } from '../context';
+import { ICompletionsContextService } from '../context';
 import { Features } from '../experiments/features';
 import { LRUCacheMap } from '../helpers/cache';
-import { Logger } from '../logger';
+import { Logger, LogTarget } from '../logger';
 import { APIChoice } from '../openai/openai';
 import { Prompt } from '../prompt/prompt';
 import { TelemetryWithExp } from '../telemetry';
@@ -54,7 +54,13 @@ export class AsyncCompletionManager {
 	 * the most recent request prefix. */
 	private mostRecentRequestId = '';
 
-	constructor(private readonly ctx: Context) { }
+	private readonly logTarget;
+
+	constructor(
+		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+	) {
+		this.logTarget = ctx.get(LogTarget);
+	}
 
 	clear() {
 		this.requests.clear();
@@ -102,8 +108,7 @@ export class AsyncCompletionManager {
 		cancellationTokenSource: CancellationTokenSource,
 		resultPromise: Promise<GetNetworkCompletionsType>
 	) {
-		this.#logger.debug(
-			this.ctx,
+		this.#logger.debug(this.logTarget,
 			`[${headerRequestId}] Queueing async completion request:`,
 			prefix.substring(prefix.lastIndexOf('\n') + 1)
 		);
@@ -120,7 +125,7 @@ export class AsyncCompletionManager {
 			.then(result => {
 				this.requests.delete(headerRequestId);
 				if (result.type !== 'success') {
-					this.#logger.debug(this.ctx, `[${headerRequestId}] Request failed with`, result.reason);
+					this.#logger.debug(this.logTarget, `[${headerRequestId}] Request failed with`, result.reason);
 					subject.error(result.reason);
 					return;
 				}
@@ -140,7 +145,7 @@ export class AsyncCompletionManager {
 				subject.complete();
 			})
 			.catch((e: unknown) => {
-				this.#logger.error(this.ctx, `[${headerRequestId}] Request errored with`, e);
+				this.#logger.error(this.logTarget, `[${headerRequestId}] Request errored with`, e);
 				this.requests.delete(headerRequestId);
 				subject.error(e);
 			});
@@ -156,16 +161,16 @@ export class AsyncCompletionManager {
 	): Promise<[APIChoice, Promise<void>] | undefined> {
 		const timeout = this.ctx.get(Features).asyncCompletionsTimeout(telemetryWithExp);
 		if (timeout < 0) {
-			this.#logger.debug(this.ctx, `[${headerRequestId}] Waiting for completions without timeout`);
+			this.#logger.debug(this.logTarget, `[${headerRequestId}] Waiting for completions without timeout`);
 			return this.getFirstMatchingRequest(headerRequestId, prefix, prompt, isSpeculative);
 		}
-		this.#logger.debug(this.ctx, `[${headerRequestId}] Waiting for completions with timeout of ${timeout}ms`);
+		this.#logger.debug(this.logTarget, `[${headerRequestId}] Waiting for completions with timeout of ${timeout}ms`);
 		return Promise.race([
 			this.getFirstMatchingRequest(headerRequestId, prefix, prompt, isSpeculative),
 			new Promise<null>(r => setTimeout(() => r(null), timeout)),
 		]).then(result => {
 			if (result === null) {
-				this.#logger.debug(this.ctx, `[${headerRequestId}] Timed out waiting for completion`);
+				this.#logger.debug(this.logTarget, `[${headerRequestId}] Timed out waiting for completion`);
 				return undefined;
 			}
 			return result;
@@ -194,7 +199,7 @@ export class AsyncCompletionManager {
 			if (!resolved && subscriptions.size === 0) {
 				// TODO: Check for new candidates before resolving.
 				resolved = true;
-				this.#logger.debug(this.ctx, `[${headerRequestId}] No matching completions found`);
+				this.#logger.debug(this.logTarget, `[${headerRequestId}] No matching completions found`);
 				deferred.resolve(undefined);
 			}
 		};
@@ -212,8 +217,7 @@ export class AsyncCompletionManager {
 					}
 					completionText = completionText.substring(remainingPrefix.length);
 					request.choice.telemetryData.measurements.foundOffset = remainingPrefix.length;
-					this.#logger.debug(
-						this.ctx,
+					this.#logger.debug(this.logTarget,
 						`[${headerRequestId}] Found completion at offset ${remainingPrefix.length}: ${JSON.stringify(completionText)}`
 					);
 					deferred.resolve([{ ...request.choice, completionText }, request.allChoicesPromise]);
@@ -257,7 +261,7 @@ export class AsyncCompletionManager {
 	private cancelRequest(headerRequestId: string, request: AsyncCompletionRequest) {
 		if (headerRequestId !== this.mostRecentRequestId) { return; }
 		if (request.state === AsyncCompletionRequestState.Completed) { return; }
-		this.#logger.debug(this.ctx, `[${headerRequestId}] Cancelling request: ${request.headerRequestId}`);
+		this.#logger.debug(this.logTarget, `[${headerRequestId}] Cancelling request: ${request.headerRequestId}`);
 		request.cancellationTokenSource.cancel();
 		this.requests.delete(request.headerRequestId);
 	}

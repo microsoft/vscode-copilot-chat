@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert';
-import { suite } from 'mocha';
 import dedent from 'ts-dedent';
 import {
 	blankNode,
@@ -68,17 +67,17 @@ suite('Test core parsing elements', function () {
 
 	test('groupBlocks basic cases', function () {
 		const source = dedent`
-			A
+A
 
-			B
-			C
-			D
+B
+C
+D
 
-			E
-			F
+E
+F
 
-			G
-			H`;
+G
+H`;
 		const tree = parseRaw(source);
 		const blockTree = groupBlocks(tree);
 		function assertChildrenAreTheFollowingLines(
@@ -104,24 +103,24 @@ suite('Test core parsing elements', function () {
 		// blank lines after last child, lone blank lines,
 		// consecutive lone blank lines, offside blocks
 		let tree = parseRaw(dedent`
-			A
+A
 
-			  B
-			  C
-				D
+  B
+  C
+    D
 
-			  E
+  E
 
 
-			  F
+  F
 
-			G
-				H
-				I
-			  J
+G
+    H
+    I
+  J
 
-			  K
-			`);
+  K
+`);
 		tree = groupBlocks(tree);
 		compareTreeWithSpec(
 			tree,
@@ -156,13 +155,13 @@ suite('Test core parsing elements', function () {
 
 	test('groupBlocks consecutive blanks as oldest children', function () {
 		let tree = parseRaw(dedent`
-		A
+A
 
 
-			B1
-			B2
-		C
-		`);
+    B1
+    B2
+C
+`);
 		tree = groupBlocks(tree);
 		compareTreeWithSpec(
 			tree,
@@ -200,12 +199,12 @@ suite('Test core parsing elements', function () {
 
 	test('groupBlocks with different delimiter', function () {
 		let tree = parseRaw(dedent`
-			A
-			B
-			C
-			D
-			E
-			`) as IndentationTree<string>;
+A
+B
+C
+D
+E
+`) as IndentationTree<string>;
 		const isDelimiter = (node: IndentationTree<string>) =>
 			isLine(node) && (node.sourceLine.trim() === 'B' || node.sourceLine.trim() === 'D');
 		tree = groupBlocks(tree, isDelimiter);
@@ -224,19 +223,19 @@ suite('Raw parsing', function () {
 	test('parseRaw', function () {
 		compareTreeWithSpec(
 			parseRaw(dedent`
-			A
-			  a
-			B
-			  b1
-			  b2
-			C
-				c1
-				c2
-			  c3
-			D
-			  d1
-				d2
-			`),
+A
+  a
+B
+  b1
+  b2
+C
+    c1
+    c2
+  c3
+D
+  d1
+    d2
+`),
 			topNode([
 				lineNode(0, 0, 'A', [lineNode(2, 1, 'a', [])]),
 				lineNode(0, 2, 'B', [lineNode(2, 3, 'b1', []), lineNode(2, 4, 'b2', [])]),
@@ -249,19 +248,19 @@ suite('Raw parsing', function () {
 	test('parseRaw blanks', function () {
 		compareTreeWithSpec(
 			parseRaw(dedent`
-			E
-			  e1
+E
+  e1
 
-			  e2
-			F
+  e2
+F
 
-			  f1
-			G
-			  g1
+  f1
+G
+  g1
 
-			H
+H
 
-			`),
+`),
 			topNode([
 				lineNode(0, 0, 'E', [lineNode(2, 1, 'e1', []), blankNode(2), lineNode(2, 3, 'e2', [])]),
 				lineNode(0, 4, 'F', [blankNode(5), lineNode(2, 6, 'f1', [])]),
@@ -275,24 +274,24 @@ suite('Raw parsing', function () {
 
 	test('combineBraces', function () {
 		const tree = parseTree(dedent`
-			A {
-			}
-			B
-			  b1 {
-				bb1
-			  }
-			  b2 {
-				bb2
+A {
+}
+B
+  b1 {
+    bb1
+  }
+  b2 {
+    bb2
 
-			  }
-			}
-			C {
-				c1
-				c2
-			  c3
-			  c4
-			}
-			`);
+  }
+}
+C {
+    c1
+    c2
+  c3
+  c4
+}
+`);
 		compareTreeWithSpec(
 			tree,
 			topNode([
@@ -329,10 +328,10 @@ suite('Raw parsing', function () {
 suite('Test bracket indentation spec', function () {
 	test('Opener merged to older sibling', function () {
 		const source = dedent`
-		A
-		(
-			B
-			C`;
+A
+(
+    B
+    C`;
 		const treeRaw = parseRaw(source);
 		const treeCode = parseTree(source, '');
 
@@ -357,9 +356,9 @@ suite('Test bracket indentation spec', function () {
 
 	test('Closer merged, simplest case', function () {
 		const source = dedent`
-		A
-			B
-		)`;
+A
+    B
+)`;
 		const treeRaw = parseRaw(source);
 		const treeCode = parseTree(source, '');
 
@@ -378,13 +377,13 @@ suite('Test bracket indentation spec', function () {
 
 	test('Closer merged, multi-body case', function () {
 		const source = dedent`
-		A
-			B
-			C
-		) + (
-			D
-			E
-		)`;
+A
+    B
+    C
+) + (
+    D
+    E
+)`;
 		const treeRaw = parseRaw(source);
 		const treeCode = parseTree(source, '');
 
@@ -402,20 +401,20 @@ suite('Test bracket indentation spec', function () {
 
 	test('closer starting their next subblock, ifelse', function () {
 		const source = dedent`
-			if (new) {
-				print(â€œhelloâ€)
-				print(â€œworldâ€)
-			} else {
-				print(â€œgoodbyeâ€)
-			}`;
+            if (new) {
+                print(“hello”)
+                print(“world”)
+            } else {
+                print(“goodbye”)
+            }`;
 		const sourceParsedAsIf = dedent`
-			if (new) {
-				-> virtual
-					print(â€œhelloâ€)
-					print(â€œworldâ€)
-				} else {
-					print(â€œgoodbyeâ€)
-				}`;
+            if (new) {
+                -> virtual
+                    print(“hello”)
+                    print(“world”)
+                } else {
+                    print(“goodbye”)
+                }`;
 
 		const treeRaw = parseRaw(source);
 		const treeCode = parseTree(source, '');
@@ -425,10 +424,10 @@ suite('Test bracket indentation spec', function () {
 			treeRaw,
 			topNode([
 				lineNode(0, 0, 'if (new) {', [
-					lineNode(4, 1, 'print(â€œhelloâ€)', []),
-					lineNode(4, 2, 'print(â€œworldâ€)', []),
+					lineNode(4, 1, 'print(“hello”)', []),
+					lineNode(4, 2, 'print(“world”)', []),
 				]),
-				lineNode(0, 3, '} else {', [lineNode(4, 4, 'print(â€œgoodbyeâ€)', [])]),
+				lineNode(0, 3, '} else {', [lineNode(4, 4, 'print(“goodbye”)', [])]),
 				lineNode(0, 5, '}', []),
 			])
 		);
@@ -436,8 +435,8 @@ suite('Test bracket indentation spec', function () {
 			treeCode,
 			topNode([
 				lineNode(0, 0, 'if (new) {', [
-					virtualNode(0, [lineNode(4, 1, 'print(â€œhelloâ€)', []), lineNode(4, 2, 'print(â€œworldâ€)', [])]),
-					lineNode(0, 3, '} else {', [lineNode(4, 4, 'print(â€œgoodbyeâ€)', [])]),
+					virtualNode(0, [lineNode(4, 1, 'print(“hello”)', []), lineNode(4, 2, 'print(“world”)', [])]),
+					lineNode(0, 3, '} else {', [lineNode(4, 4, 'print(“goodbye”)', [])]),
 					lineNode(0, 5, '}', []),
 				]),
 			])
@@ -449,11 +448,11 @@ suite('Test bracket indentation spec', function () {
 suite('Special indentation styles', function () {
 	test('Allman style example (function)', function () {
 		const source = dedent`
-		function test()
-		{
-			print(â€œhelloâ€)
-			print(â€œworldâ€)
-		}`;
+        function test()
+        {
+            print(“hello”)
+            print(“world”)
+        }`;
 
 		const treeRaw = parseRaw(source);
 		const treeCode = parseTree(source, '');
@@ -464,8 +463,8 @@ suite('Special indentation styles', function () {
 			topNode([
 				lineNode(0, 0, 'function test()', [
 					lineNode(0, 1, '{', [], 'opener'),
-					lineNode(4, 2, 'print(â€œhelloâ€)', []),
-					lineNode(4, 3, 'print(â€œworldâ€)', []),
+					lineNode(4, 2, 'print(“hello”)', []),
+					lineNode(4, 3, 'print(“world”)', []),
 					lineNode(0, 4, '}', [], 'closer'),
 				]),
 			])
@@ -476,7 +475,7 @@ suite('Special indentation styles', function () {
 			treeRaw,
 			topNode([
 				lineNode(0, 0, 'function test()', []),
-				lineNode(0, 1, '{', [lineNode(4, 2, 'print(â€œhelloâ€)', []), lineNode(4, 3, 'print(â€œworldâ€)', [])]),
+				lineNode(0, 1, '{', [lineNode(4, 2, 'print(“hello”)', []), lineNode(4, 3, 'print(“world”)', [])]),
 				lineNode(0, 4, '}', []),
 			])
 		);
@@ -485,17 +484,17 @@ suite('Special indentation styles', function () {
 	/** This test is a case where our parsing isn't yet optimal */
 	test('Allman style example (if-then-else)', function () {
 		const source = dedent`
-		if (condition)
-		{
-			print(â€œhelloâ€)
-			print(â€œworldâ€)
-		}
-		else
-		{
-			print(â€œgoodbyeâ€)
-			print(â€œphoneâ€)
-		}
-		`;
+        if (condition)
+        {
+            print(“hello”)
+            print(“world”)
+        }
+        else
+        {
+            print(“goodbye”)
+            print(“phone”)
+        }
+        `;
 
 		const treeCode = parseTree(source, '');
 
@@ -506,14 +505,14 @@ suite('Special indentation styles', function () {
 			topNode([
 				lineNode(0, 0, 'if (condition)', [
 					lineNode(0, 1, '{', [], 'opener'),
-					lineNode(4, 2, 'print(â€œhelloâ€)', []),
-					lineNode(4, 3, 'print(â€œworldâ€)', []),
+					lineNode(4, 2, 'print(“hello”)', []),
+					lineNode(4, 3, 'print(“world”)', []),
 					lineNode(0, 4, '}', [], 'closer'),
 				]),
 				lineNode(0, 5, 'else ', [
 					lineNode(0, 6, '{', [], 'opener'),
-					lineNode(4, 7, 'print(â€œgoodbyeâ€)', []),
-					lineNode(4, 8, 'print(â€œphoneâ€)', []),
+					lineNode(4, 7, 'print(“goodbye”)', []),
+					lineNode(4, 8, 'print(“phone”)', []),
 					lineNode(0, 9, '}', [], 'closer'),
 				]),
 			])
@@ -522,14 +521,14 @@ suite('Special indentation styles', function () {
 
 	test('K&R style example (if-then-else)', function () {
 		const source = dedent`
-		if (condition) {
-			print(â€œhelloâ€)
-			print(â€œworldâ€)
-		} else {
-			print(â€œgoodbyeâ€)
-			print(â€œphoneâ€)
-		}
-		`;
+        if (condition) {
+            print(“hello”)
+            print(“world”)
+        } else {
+            print(“goodbye”)
+            print(“phone”)
+        }
+        `;
 
 		const treeCode = parseTree(source, '');
 
@@ -539,12 +538,12 @@ suite('Special indentation styles', function () {
 			treeCode,
 			topNode([
 				lineNode(0, 0, 'if (condition) {', [
-					virtualNode(0, [lineNode(4, 2, 'print(â€œhelloâ€)', []), lineNode(4, 3, 'print(â€œworldâ€)', [])]),
+					virtualNode(0, [lineNode(4, 2, 'print(“hello”)', []), lineNode(4, 3, 'print(“world”)', [])]),
 					lineNode(
 						0,
 						4,
 						'} else {',
-						[lineNode(4, 5, 'print(â€œgoodbyeâ€)', []), lineNode(4, 6, 'print(â€œphoneâ€)', [])],
+						[lineNode(4, 5, 'print(“goodbye”)', []), lineNode(4, 6, 'print(“phone”)', [])],
 						'closer'
 					),
 					lineNode(0, 7, '}', [], 'closer'),
@@ -555,11 +554,11 @@ suite('Special indentation styles', function () {
 
 	test('combineBraces GNU style indentation 1', function () {
 		let tree: IndentationTree<string> = parseRaw(dedent`
-			A
-			  {
-				stmt
-			  }
-			`);
+A
+  {
+    stmt
+  }
+`);
 		labelLines(tree, buildLabelRules({ opener: /^{$/, closer: /^}$/ }));
 		tree = combineClosersAndOpeners(tree);
 		compareTreeWithSpec(
@@ -574,15 +573,15 @@ suite('Special indentation styles', function () {
 
 	test('combineBraces GNU style indentation 2', function () {
 		let tree: IndentationTree<string> = parseRaw(dedent`
-				B
-				{
-					stmt
+B
+{
+    stmt
 
-				}
+}
 
 
-				end
-				`);
+end
+`);
 		labelLines(tree, buildLabelRules({ opener: /^{$/, closer: /^}$/ }));
 		tree = combineClosersAndOpeners(tree);
 		tree = flattenVirtual(tree);
@@ -604,11 +603,11 @@ suite('Special indentation styles', function () {
 
 	test('combineBraces GNU style indentation 3', function () {
 		let tree: IndentationTree<string> = parseRaw(dedent`
-				C
-				{
+C
+{
 
-				}
-				`);
+}
+`);
 		labelLines(tree, buildLabelRules({ opener: /^{$/, closer: /^}$/ }));
 		tree = combineClosersAndOpeners(tree);
 		tree = flattenVirtual(tree);
@@ -626,15 +625,15 @@ suite('Special indentation styles', function () {
 
 	test('combineBraces GNU style indentation 4', function () {
 		let tree: IndentationTree<string> = parseRaw(dedent`
-				D
-				{
-					d
-					{
-						stmt
+D
+{
+    d
+    {
+        stmt
 
-					}
-				}
-				`);
+    }
+}
+`);
 		labelLines(tree, buildLabelRules({ opener: /^{$/, closer: /^}$/ }));
 		tree = combineClosersAndOpeners(tree);
 		tree = flattenVirtual(tree);

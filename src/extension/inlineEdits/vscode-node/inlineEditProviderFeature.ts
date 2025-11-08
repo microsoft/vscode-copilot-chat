@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as vscode from 'vscode';
 import { commands, languages, window } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -19,10 +20,12 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, derived, derivedDisposable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { join } from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
+import { Position } from '../../../util/vs/editor/common/core/position';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
+import { jumpToPositionCommandId } from '../common/jumpToCursorPosition';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
@@ -63,7 +66,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		return !!this._copilotToken.read(reader)?.isInternal && !this._hideInternalInterface.read(reader);
 	});
 
-	public readonly inlineEditsLogFileEnabled = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
+	public readonly isInlineEditsLogFileEnabledObservable = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
 
 	private readonly _workspace = derivedDisposable(this, _reader => {
 		return this._instantiationService.createInstance(VSCodeWorkspace);
@@ -131,7 +134,15 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider, completionsProvider));
 
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
-			const logContextRecorder = this.inlineEditsLogFileEnabled ? reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger)) : undefined;
+
+			const isInlineEditLogFileEnabled = this.isInlineEditsLogFileEnabledObservable.read(reader);
+
+			let logContextRecorder: LogContextRecorder | undefined;
+			if (isInlineEditLogFileEnabled) {
+				logContextRecorder = reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger));
+			} else {
+				void LogContextRecorder.cleanupOldRecordings(recordingDirPath);
+			}
 
 			const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
 
@@ -171,6 +182,19 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 
 			reader.store.add(commands.registerCommand(learnMoreCommandId, () => {
 				this._envService.openExternal(URI.parse(learnMoreLink));
+			}));
+
+			reader.store.add(commands.registerCommand(jumpToPositionCommandId, (position: Position) => {
+				const currentEditor = window.activeTextEditor;
+				if (!currentEditor) {
+					return;
+				}
+				// vscode API uses 0-based line and column numbers
+				const range = new vscode.Range(position.lineNumber - 1, position.column - 1, position.lineNumber - 1, position.column - 1);
+				currentEditor.selection = new vscode.Selection(range.start, range.end);
+				currentEditor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+
+				model.onChange.trigger(undefined);
 			}));
 
 			reader.store.add(commands.registerCommand(clearCacheCommandId, () => {

@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Disposable, window, type OutputChannel } from 'vscode';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotToken } from '../../../lib/src/auth/copilotTokenManager';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
-import { Context } from '../../../lib/src/context';
-import { Disposable, window, type OutputChannel } from 'vscode';
 
 interface GitHubLogger extends Disposable {
 	info(...messages: string[]): void;
@@ -47,12 +47,8 @@ export class GitHubCopilotLogger implements GitHubLogger {
 	private output: CodeReferenceOutputChannel;
 	#event: Disposable;
 
-	static create(ctx: Context) {
-		return new GitHubCopilotLogger(ctx);
-	}
-
-	protected constructor(ctx: Context) {
-		this.#event = onCopilotToken(ctx, t => this.checkCopilotToken(t));
+	constructor(@IInstantiationService instantiationService: IInstantiationService) {
+		this.#event = instantiationService.invokeFunction(onCopilotToken, t => this.checkCopilotToken(t));
 
 		this.output = this.createChannel();
 	}

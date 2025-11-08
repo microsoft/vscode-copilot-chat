@@ -11,6 +11,7 @@ import { UriHandlerPaths, UriHandlers } from './chatSessionsUriHandler';
 export const MAX_PROBLEM_STATEMENT_LENGTH = 30_000 - 50; // 50 character buffer
 export const CONTINUE_TRUNCATION = vscode.l10n.t('Continue with truncation');
 export const body_suffix = vscode.l10n.t('Created from VS Code via the [GitHub Pull Request](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github) extension.');
+// https://github.com/github/sweagentd/blob/main/docs/adr/0001-create-job-api.md
 export const JOBS_API_VERSION = 'v1';
 type RemoteAgentSuccessResult = { link: string; state: 'success'; number: number; webviewUri: vscode.Uri; llmDetails: string; sessionId: string };
 type RemoteAgentErrorResult = { error: string; innerError?: string; state: 'error' };
@@ -96,8 +97,8 @@ export namespace SessionIdForPr {
 		return `${prefix}-${prNumber}-${sessionIndex}`;
 	}
 
-	export function parse(id: string): { prNumber: number; sessionIndex: number } | undefined {
-		const match = id.match(new RegExp(`^${prefix}-(\\d+)-(\\d+)$`));
+	export function parse(resource: vscode.Uri): { prNumber: number; sessionIndex: number } | undefined {
+		const match = resource.path.match(new RegExp(`^/${prefix}-(\\d+)-(\\d+)$`));
 		if (match) {
 			return {
 				prNumber: parseInt(match[1], 10),
@@ -105,6 +106,10 @@ export namespace SessionIdForPr {
 			};
 		}
 		return undefined;
+	}
+
+	export function parsePullRequestNumber(resource: vscode.Uri): number {
+		return parseInt(resource.path.slice(1));
 	}
 }
 

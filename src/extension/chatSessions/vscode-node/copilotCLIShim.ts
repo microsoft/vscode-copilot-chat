@@ -100,7 +100,7 @@ async function ensureInstalled() {
 			if (runNpm(['install', '-g', PACKAGE_NAME], 'Installing')) {
 				return ensureInstalled();
 			}
-			process.exit(1);
+			await pressKeyToExit();
 		} else {
 			process.exit(0);
 		}
@@ -116,11 +116,21 @@ async function validateVersion(version: string) {
 			if (runNpm(['update', '-g', PACKAGE_NAME], 'Update')) {
 				return true;
 			}
-			process.exit(1);
+			await pressKeyToExit();
 		} else {
 			process.exit(0);
 		}
 	}
+}
+
+async function pressKeyToExit(message: string = 'Press Enter to exit...'): Promise<void> {
+	await new Promise<void>((resolve) => {
+		rl.question(`${message}`, () => {
+			resolve();
+		});
+	});
+	process.exit(0);
+
 }
 
 (async function main() {
@@ -130,8 +140,7 @@ async function validateVersion(version: string) {
 	}
 	if (!info) {
 		warn('Error: Could not locate Copilot CLI after update.');
-		warn(`Try manually reinstalling with: npm install -g ${PACKAGE_NAME} (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)`);
-		process.exit(1);
+		await pressKeyToExit(`Try manually reinstalling with: npm install -g ${PACKAGE_NAME} (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)`);
 	}
 	const args = process.argv.slice(2);
 
@@ -142,6 +151,6 @@ async function validateVersion(version: string) {
 		args.shift();
 	}
 
-	const { status } = spawnSync('copilot', args, { stdio: 'inherit', env });
-	process.exit(status);
+	spawnSync('copilot', args, { stdio: 'inherit', env });
+	process.exit(0);
 })();

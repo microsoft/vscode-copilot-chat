@@ -2,7 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Context } from './context';
+import { TextDocumentItem, VersionedTextDocumentIdentifier, WorkspaceFolder } from '../../types/src';
+import { ICompletionsContextService } from './context';
 import { FileSystem } from './fileSystem';
 import {
 	INotebookDocument,
@@ -15,7 +16,6 @@ import {
 import { isDocumentValid } from './util/documentEvaluation';
 import { Event } from './util/event';
 import { basename, normalizeUri } from './util/uri';
-import { TextDocumentItem, VersionedTextDocumentIdentifier, WorkspaceFolder } from '../../types/src';
 
 /**
  * An interface describing an individual change in the text of a document.
@@ -98,7 +98,7 @@ export abstract class TextDocumentManager {
 	 */
 	abstract getTextDocumentsUnsafe(): ITextDocument[];
 
-	constructor(protected ctx: Context) { }
+	constructor(@ICompletionsContextService protected ctx: ICompletionsContextService) { }
 
 	async textDocuments(): Promise<ITextDocument[]> {
 		const documents = this.getTextDocumentsUnsafe();

@@ -3,16 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Context } from '../../../lib/src/context';
-import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { Disposable, TextEditor, window } from 'vscode';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { citationsChannelName } from './outputChannel';
 
-class CodeRefEngagementTracker {
+export class CodeRefEngagementTracker {
 	private activeLog = false;
 	private subscriptions: Disposable[] = [];
 
-	constructor(private ctx: Context) { }
+	constructor(@IInstantiationService private instantiationService: IInstantiationService) { }
 
 	register() {
 		const activeEditorChangeSub = window.onDidChangeActiveTextEditor(this.onActiveEditorChange);
@@ -24,7 +24,7 @@ class CodeRefEngagementTracker {
 
 	onActiveEditorChange = (editor: TextEditor | undefined) => {
 		if (this.isOutputLog(editor)) {
-			copilotOutputLogTelemetry.handleFocus({ context: this.ctx });
+			copilotOutputLogTelemetry.handleFocus({ instantiationService: this.instantiationService });
 		}
 	};
 
@@ -37,7 +37,7 @@ class CodeRefEngagementTracker {
 			}
 		} else if (copilotLog) {
 			this.activeLog = true;
-			copilotOutputLogTelemetry.handleOpen({ context: this.ctx });
+			copilotOutputLogTelemetry.handleOpen({ instantiationService: this.instantiationService });
 		}
 	};
 
@@ -59,8 +59,8 @@ class CodeRefEngagementTracker {
 	};
 }
 
-export function registerCodeRefEngagementTracker(ctx: Context) {
-	const engagementTracker = new CodeRefEngagementTracker(ctx);
+export function registerCodeRefEngagementTracker(instantiationService: IInstantiationService) {
+	const engagementTracker = instantiationService.createInstance(CodeRefEngagementTracker);
 	engagementTracker.register();
 
 	return engagementTracker;

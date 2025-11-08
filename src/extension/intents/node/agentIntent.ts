@@ -51,6 +51,7 @@ import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
+import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 
 export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
@@ -76,7 +77,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
 			allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model)) {
+			if (allowTools[ToolName.ApplyPatch] && await modelCanUseApplyPatchExclusively(model)) {
 				allowTools[ToolName.EditFile] = false;
 			}
 
@@ -93,7 +94,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
 		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
-		if (model.family === 'gpt-5-codex') {
+		if (model.family === 'gpt-5-codex' || model.family.includes('grok-code')) {
 			allowTools[ToolName.CoreManageTodoList] = false;
 		}
 
@@ -105,7 +106,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			allowTools[ToolName.MultiReplaceString] = false;
 		}
 
-		const tools = toolsService.getEnabledTools(request, tool => {
+		const tools = toolsService.getEnabledTools(request, model, tool => {
 			if (typeof allowTools[tool.name] === 'boolean') {
 				return allowTools[tool.name];
 			}
@@ -114,7 +115,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			return undefined;
 		});
 
-		if (modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, experimentationService)) {
+		if (await modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, experimentationService)) {
 			const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
 			if (ap !== -1) {
 				tools[ap] = { ...tools[ap], description: applyPatch5Description };
@@ -197,7 +198,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 	public override readonly codeblocksRepresentEdits = false;
 
-	protected prompt: typeof AgentPrompt | typeof EditCodePrompt2 = AgentPrompt;
+	protected prompt: typeof AgentPrompt | typeof EditCodePrompt2 | typeof NotebookInlinePrompt = AgentPrompt;
 
 	protected extraPromptProps: Partial<AgentPromptProps> | undefined;
 

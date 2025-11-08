@@ -9,6 +9,7 @@ import { homedir } from 'os';
 import type { LanguageModelChat, PreparedToolInvocation } from 'vscode';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
+import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -16,6 +17,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { findNotebook } from '../../../util/common/notebooks';
 import * as glob from '../../../util/vs/base/common/glob';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
@@ -25,6 +27,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
+import { IBuildPromptContext } from '../../prompt/common/intents';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -701,4 +704,23 @@ export function logEditToolResult(logService: ILogService, requestId: string | u
 	healed?: unknown | undefined;
 }[]) {
 	logService.debug(`[edit-tool:${requestId}] ${JSON.stringify(opts)}`);
+}
+
+export async function openDocumentAndSnapshot(accessor: ServicesAccessor, promptContext: IBuildPromptContext | undefined, uri: URI): Promise<NotebookDocumentSnapshot | TextDocumentSnapshot> {
+	const notebookService = accessor.get(INotebookService);
+	const workspaceService = accessor.get(IWorkspaceService);
+	const alternativeNotebookContent = accessor.get(IAlternativeNotebookContentService);
+
+	const previouslyEdited = promptContext?.turnEditedDocuments?.get(uri);
+	if (previouslyEdited) {
+		return previouslyEdited;
+	}
+
+	const isNotebook = notebookService.hasSupportedNotebooks(uri);
+	if (isNotebook) {
+		uri = findNotebook(uri, workspaceService.notebookDocuments)?.uri || uri;
+	}
+	return isNotebook ?
+		await workspaceService.openNotebookDocumentAndSnapshot(uri, alternativeNotebookContent.getFormat(promptContext?.request?.model)) :
+		await workspaceService.openTextDocumentAndSnapshot(uri);
 }

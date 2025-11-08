@@ -41,7 +41,11 @@ export enum ChatLocation {
 	/**
 	 * The chat is an agent mode edit session.
 	 */
-	Agent = 7
+	Agent = 7,
+	/**
+	 * A request coming through the OpenAILanguageModelServer
+	 */
+	ResponsesProxy = 8
 }
 
 export namespace ChatLocation {
@@ -108,69 +112,69 @@ export type ChatFetchError =
 	/**
 	 * We requested conversation, but the message was deemed off topic by the intent classifier.
 	 */
-	{ type: ChatFetchResponseType.OffTopic; reason: string; requestId: string; serverRequestId: string | undefined }
+	{ type: ChatFetchResponseType.OffTopic; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined }
 	/**
 	 * Communication with a third party agent failed.
 	 * The error message provides further details, usually indicating either an invocation timeout or an improper response.
 	 */
-	| { type: ChatFetchResponseType.AgentFailedDependency; reason: string; requestId: string; serverRequestId: string | undefined }
+	| { type: ChatFetchResponseType.AgentFailedDependency; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined }
 	/**
 	 * User authorization is required to proceed.
 	 */
-	| { type: ChatFetchResponseType.AgentUnauthorized; reason: string; authorizationUrl: string; requestId: string; serverRequestId: string | undefined }
+	| { type: ChatFetchResponseType.AgentUnauthorized; reason: string; reasonDetail?: string; authorizationUrl: string; requestId: string; serverRequestId: string | undefined }
 	/**
 	 * We requested conversation, but we decided to cancel mid-way, for example because the
 	 * user requested cancelation.
 	 */
-	| { type: ChatFetchResponseType.Canceled; reason: string; requestId: string; serverRequestId: string | undefined }
+	| { type: ChatFetchResponseType.Canceled; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined }
 	/**
 	 * We requested conversation, but the response was filtered by RAI.
 	 */
-	| { type: ChatFetchResponseType.Filtered; reason: string; category: FilterReason; requestId: string; serverRequestId: string | undefined }
+	| { type: ChatFetchResponseType.Filtered; reason: string; reasonDetail?: string; category: FilterReason; requestId: string; serverRequestId: string | undefined }
 	/**
 	 * We requested conversation, but the prompt was filtered by RAI.
 	 */
-	| { type: ChatFetchResponseType.PromptFiltered; reason: string; category: FilterReason; requestId: string; serverRequestId: string | undefined }
+	| { type: ChatFetchResponseType.PromptFiltered; reason: string; reasonDetail?: string; category: FilterReason; requestId: string; serverRequestId: string | undefined }
 	/**
 	 * We requested conversation, but the response was too long.
 	 */
-	| { type: ChatFetchResponseType.Length; reason: string; requestId: string; serverRequestId: string | undefined; truncatedValue: string }
+	| { type: ChatFetchResponseType.Length; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; truncatedValue: string }
 	/**
 	 * We requested conversation, but didn't come up with any results because the rate limit was exceeded.
 	 */
-	| { type: ChatFetchResponseType.RateLimited; reason: string; requestId: string; serverRequestId: string | undefined; retryAfter: number | undefined; rateLimitKey: string; capiError?: { code?: string; message?: string } }
+	| { type: ChatFetchResponseType.RateLimited; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; retryAfter: number | undefined; rateLimitKey: string; capiError?: { code?: string; message?: string } }
 	/**
 	 * We requested conversation, but didn't come up with any results because the free tier quota was exceeded.
 	 */
-	| { type: ChatFetchResponseType.QuotaExceeded; reason: string; requestId: string; serverRequestId: string | undefined; retryAfter: Date; capiError?: { code?: string; message?: string } }
+	| { type: ChatFetchResponseType.QuotaExceeded; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; retryAfter: Date; capiError?: { code?: string; message?: string } }
 	/**
 	 * We requested conversation, but the extension is blocked
 	 */
-	| { type: ChatFetchResponseType.ExtensionBlocked; reason: string; requestId: string; serverRequestId: string | undefined; retryAfter: number; learnMoreLink: string }
+	| { type: ChatFetchResponseType.ExtensionBlocked; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; retryAfter: number; learnMoreLink: string }
 	/**
 	 * We requested conversation, but didn't come up with any results because of a bad request
 	 */
-	| { type: ChatFetchResponseType.BadRequest; reason: string; requestId: string; serverRequestId: string | undefined }
-	| { type: ChatFetchResponseType.NotFound; reason: string; requestId: string; serverRequestId: string | undefined }
+	| { type: ChatFetchResponseType.BadRequest; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined }
+	| { type: ChatFetchResponseType.NotFound; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined }
 	/**
 	 * We requested conversation, but didn't come up with any results because something
 	 * unexpected went wrong.
 	 */
-	| { type: ChatFetchResponseType.Failed; reason: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
+	| { type: ChatFetchResponseType.Failed; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
 	/**
 	 * We requested conversation, but didn't come up with any results because of a network error
 	 */
-	| { type: ChatFetchResponseType.NetworkError; reason: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
+	| { type: ChatFetchResponseType.NetworkError; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
 	/**
 	 * We requested conversation, but didn't come up with any results for some "unknown"
 	 * reason, such as slur redaction or snippy.
 	 */
-	| { type: ChatFetchResponseType.Unknown; reason: string; requestId: string; serverRequestId: string | undefined }
+	| { type: ChatFetchResponseType.Unknown; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined }
 	/**
 	 * The `statefulMarker` present in the request was invalid or expired. The
 	 * request may be retried without that marker to resubmit it anew.
 	 */
-	| { type: ChatFetchResponseType.InvalidStatefulMarker; reason: string; requestId: string; serverRequestId: string | undefined };
+	| { type: ChatFetchResponseType.InvalidStatefulMarker; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined };
 
 export type ChatFetchRetriableError<T> =
 	/**

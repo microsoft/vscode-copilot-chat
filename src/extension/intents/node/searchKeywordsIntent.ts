@@ -55,7 +55,7 @@ export class SearchKeywordsIntent implements IIntent {
 
 	async invoke(invocationContext: IIntentInvocationContext): Promise<IIntentInvocation> {
 		const location = invocationContext.location;
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		return this.instantiationService.createInstance(SearchKeywordsIntentInvocation, this, location, endpoint);
 	}
 }
