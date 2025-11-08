@@ -15,6 +15,7 @@ import { CancellationTokenSource } from '../../../util/vs/base/common/cancellati
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LanguageModelError } from '../../../vscodeTypes';
 import { AnthropicAdapterFactory } from './adapters/anthropicAdapter';
+import { OpenAIAdapterFactory } from './adapters/openaiAdapter';
 import { IAgentStreamBlock, IProtocolAdapter, IProtocolAdapterFactory, IStreamingContext } from './adapters/types';
 
 export interface ILanguageModelServerConfig {
@@ -47,6 +48,7 @@ export class LanguageModelServer implements ILanguageModelServer {
 		};
 		this.adapterFactories = new Map();
 		this.adapterFactories.set('/v1/messages', new AnthropicAdapterFactory());
+		this.adapterFactories.set('/v1/chat/completions', new OpenAIAdapterFactory());
 
 		this.server = this.createServer();
 	}
@@ -112,7 +114,15 @@ export class LanguageModelServer implements ILanguageModelServer {
 
 	private getAdapterFactoryForPath(url: string): IProtocolAdapterFactory | undefined {
 		const pathname = this.parseUrlPathname(url);
-		return this.adapterFactories.get(pathname);
+		// Try exact match first
+		let adapterFactory = this.adapterFactories.get(pathname);
+
+		// If no exact match, try to match OpenAI endpoints
+		if (!adapterFactory && (pathname === '/v1/chat/completions' || pathname === '/chat/completions' || pathname === '//chat/completions')) {
+			adapterFactory = this.adapterFactories.get('/v1/chat/completions');
+		}
+
+		return adapterFactory;
 	}
 
 	private async readRequestBody(req: http.IncomingMessage): Promise<string> {
