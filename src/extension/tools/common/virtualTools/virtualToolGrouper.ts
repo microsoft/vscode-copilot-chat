@@ -185,7 +185,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		if (idx >= 0) {
 			root.contents[idx] = newGroup;
 		} else {
-			root.contents.unshift(newGroup);
+			root.contents.push(newGroup);
 		}
 	}
 

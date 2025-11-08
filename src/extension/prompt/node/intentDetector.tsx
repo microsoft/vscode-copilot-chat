@@ -17,6 +17,7 @@ import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEdi
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
+import { isFalsyOrEmpty } from '../../../util/vs/base/common/arrays';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Position, Range } from '../../../vscodeTypes';
 import { getAgentForIntent, GITHUB_PLATFORM_AGENT, Intent } from '../../common/constants';
@@ -180,6 +181,11 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 	): Promise<IIntent | ChatParticipantDetectionResult | undefined> {
 
 		this.logService.trace('Building intent detector');
+
+		if (builtinParticipants.length === 0 && (isFalsyOrEmpty(thirdPartyParticipants))) {
+			this.logService.trace('No participants available for intent detection');
+			return undefined;
+		}
 
 		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 

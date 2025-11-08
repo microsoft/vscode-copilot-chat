@@ -31,3 +31,17 @@ export namespace PromptTags {
 	export const RECENT_FILE = createTag("recently_viewed_code_snippet");
 }
 
+export namespace ResponseTags {
+	export const NO_CHANGE = {
+		start: '<NO_CHANGE>'
+	};
+	export const EDIT = {
+		start: '<EDIT>',
+		end: '</EDIT>'
+	};
+	export const INSERT = {
+		start: '<INSERT>',
+		end: '</INSERT>'
+	};
+}
+

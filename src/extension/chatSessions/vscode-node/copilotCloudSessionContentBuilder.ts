@@ -245,6 +245,9 @@ export class ChatSessionContentBuilder {
 					const toolPart = this.createToolInvocationPart(pullRequest, toolCall, args.name || delta.content);
 					if (toolPart) {
 						responseParts.push(toolPart);
+						if (toolPart instanceof ChatResponseThinkingProgressPart) {
+							responseParts.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+						}
 					}
 				}
 				// Skip if content is empty (running state)
@@ -267,6 +270,9 @@ export class ChatSessionContentBuilder {
 						const toolPart = this.createToolInvocationPart(pullRequest, toolCall, delta.content || '');
 						if (toolPart) {
 							responseParts.push(toolPart);
+							if (toolPart instanceof ChatResponseThinkingProgressPart) {
+								responseParts.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+							}
 						}
 					}
 
@@ -449,7 +455,7 @@ export class ChatSessionContentBuilder {
 			};
 		};
 
-		const buildEditDetails = (filePath: string | undefined, command: string, parsedRange: { start: number; end: number } | undefined, opts?: { defaultName?: string }): ParsedToolCallDetails => {
+		const buildEditDetails = (filePath: string | undefined, command: string = 'edit', parsedRange: { start: number; end: number } | undefined, opts?: { defaultName?: string }): ParsedToolCallDetails => {
 			const fileLabel = filePath && this.toFileLabel(filePath);
 			const rangeSuffix = parsedRange ? `, lines ${parsedRange.start} to ${parsedRange.end}` : '';
 			let invocationMessage: string;
@@ -567,7 +573,7 @@ export class ChatSessionContentBuilder {
 						toolSpecificData: { command: 'view', filePath: fp, fileLabel: fl, viewRange: plainRange }
 					};
 				}
-				return buildEditDetails(args.path, args.command || 'edit', this.parseRange(args.view_range));
+				return buildEditDetails(args.path, args.command, this.parseRange(args.view_range));
 			}
 			case 'str_replace':
 				return buildStrReplaceDetails(args.path);
@@ -590,6 +596,8 @@ export class ChatSessionContentBuilder {
 				return { toolName: 'read_bash', invocationMessage: 'Read logs from Bash session' };
 			case 'stop_bash':
 				return { toolName: 'stop_bash', invocationMessage: 'Stop Bash session' };
+			case 'edit':
+				return buildEditDetails(args.path, args.command, undefined);
 			default:
 				return { toolName: name || 'unknown', invocationMessage: content || name || 'unknown' };
 		}

@@ -28,6 +28,7 @@
 	"github.copilot.command.generateDocs": "Generate Docs",
 	"github.copilot.command.generateTests": "Generate Tests",
 	"github.copilot.command.openUserPreferences": "Open User Preferences",
+	"github.copilot.command.openMemoryFolder": "Open Memory Folder",
 	"github.copilot.command.sendChatFeedback": "Send Chat Feedback",
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
@@ -99,6 +100,13 @@
 			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}"
 		]
 	},
+	"github.copilot.viewsWelcome.noPermissiveToken.contents": {
+		"message": "Additional GitHub permissions required to use GitHub Copilot Cloud Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
+		"comment": [
+			"{Locked='['}",
+			"{Locked='](command:github.copilot.chat.triggerPermissiveSignIn)'}"
+		]
+	},
 	"github.copilot.viewsWelcome.noFolder.contents": {
 		"message": "You have not yet opened a folder.\n[Open Folder](command:workbench.action.files.openFolder)",
 		"comment": [
@@ -130,6 +138,7 @@
 	"github.copilot.command.applySuggestionWithCopilot": "Apply Suggestion",
 	"github.copilot.command.explainTerminalLastCommand": "Explain Last Terminal Command",
 	"github.copilot.command.collectWorkspaceIndexDiagnostics": "Collect Workspace Index Diagnostics",
+	"github.copilot.command.triggerPermissiveSignIn": "Login to GitHub with Full Permissions",
 	"github.copilot.git.generateCommitMessage": "Generate Commit Message",
 	"github.copilot.git.resolveMergeConflicts": "Resolve Conflicts with AI",
 	"github.copilot.devcontainer.generateDevContainerConfig": "Generate Dev Container Configuration",
@@ -359,7 +368,5 @@
 	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume Agent Session in Terminal",
 	"github.copilot.cli.sessions.newTerminalSession": "New Agent Session in Terminal",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
-	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
-	"copilot.tools.runSubagent.name": "Run Subagent",
-	"copilot.tools.runSubagent.description": "Runs a task within an isolated subagent context. Enables efficient organization of tasks and context window management."
+	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request"
 }

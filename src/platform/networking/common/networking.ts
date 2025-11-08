@@ -101,6 +101,9 @@ export interface IEndpointBody {
 	truncation?: 'auto' | 'disabled';
 	include?: ['reasoning.encrypted_content'];
 	store?: boolean;
+	text?: {
+		verbosity?: 'low' | 'medium' | 'high';
+	};
 }
 
 export interface IEndpointFetchOptions {

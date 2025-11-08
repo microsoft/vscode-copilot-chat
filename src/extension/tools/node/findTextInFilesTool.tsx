@@ -184,6 +184,10 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 
 	async resolveInput(input: IFindTextInFilesToolParams, _promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IFindTextInFilesToolParams> {
 		let includePattern = input.includePattern;
+		if (includePattern === '**') {
+			includePattern = undefined;
+		}
+
 		if (includePattern && !includePattern.startsWith('**/')) {
 			includePattern = `**/${includePattern}`;
 		}
