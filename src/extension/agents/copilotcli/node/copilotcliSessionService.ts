@@ -237,7 +237,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				workingDirectory
 			}), token);
 
-			const sdkSession = await sessionManager.getSession({ ...options, sessionId }, !readonly);
+			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
 			if (!sdkSession) {
 				this.logService.error(`[CopilotCLIAgentManager] CopilotCLI failed to get session ${sessionId}.`);
 				sessionDisposables.dispose();
