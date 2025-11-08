@@ -213,11 +213,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						startTime: new Date(sessionItem.last_updated_at).getTime(),
 					},
 					statistics: {
+						files: pr.files.totalCount,
 						insertions: pr.additions,
 						deletions: pr.deletions
 					},
 					fullDatabaseId: pr.fullDatabaseId.toString(),
 					pullRequestDetails: pr,
+				} satisfies vscode.ChatSessionItem & {
+					fullDatabaseId: string;
+					pullRequestDetails: PullRequestSearchItem;
 				};
 				this.chatSessions.set(pr.number, pr);
 				return session;
