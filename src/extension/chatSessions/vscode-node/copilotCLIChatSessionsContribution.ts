@@ -42,17 +42,19 @@ export class CopilotCLIWorktreeManager {
 			return undefined;
 		}
 
-		try {
-			const worktreePath = await vscode.commands.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
-			if (worktreePath) {
-				stream.progress(vscode.l10n.t('Created isolated worktree at {0}', worktreePath));
-				return worktreePath;
-			} else {
-				stream.warning(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory'));
+		await stream.progress(vscode.l10n.t('Creating isolated worktree for session...'), async (progress) => {
+			try {
+				const worktreePath = await vscode.commands.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
+				if (worktreePath) {
+					return vscode.l10n.t('Created isolated worktree at {0}', worktreePath);
+				} else {
+					progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+				}
+			} catch (error) {
+				progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
 			}
-		} catch (error) {
-			stream.warning(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error)));
-		}
+		});
+
 		return undefined;
 	}
 
