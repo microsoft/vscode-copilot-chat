@@ -136,6 +136,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		private readonly worktreeManager: CopilotCLIWorktreeManager,
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
 		@ICopilotCLITerminalIntegration private readonly terminalIntegration: ICopilotCLITerminalIntegration,
+		@IGitService private readonly gitService: IGitService
 	) {
 		super();
 		this._register(this.terminalIntegration);
@@ -154,7 +155,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.copilotcliSessionService.getAllSessions(token);
-		const diskSessions = sessions.map(session => this._toChatSessionItem(session));
+		const diskSessions: vscode.ChatSessionItem[] = [];
+		for (const session of sessions) {
+			diskSessions.push(await this._toChatSessionItem(session));
+		}
 
 		const count = diskSessions.length;
 		vscode.commands.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
@@ -162,28 +166,39 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		return diskSessions;
 	}
 
-	private _toChatSessionItem(session: { id: string; label: string; timestamp: Date; status?: vscode.ChatSessionStatus }): vscode.ChatSessionItem {
+	private async _toChatSessionItem(session: { id: string; label: string; timestamp: Date; status?: vscode.ChatSessionStatus }): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(session.id);
-		const label = session.label || 'Copilot CLI';
-		const worktreePath = this.worktreeManager.getWorktreeRelativePath(session.id);
-		let description: vscode.MarkdownString | undefined;
-		if (worktreePath) {
-			description = new vscode.MarkdownString(`$(git-merge) ${worktreePath}`);
-			description.supportThemeIcons = true;
-		}
+		const worktreePath = this.worktreeManager.getWorktreePath(session.id);
+		const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.id);
+
+		const label = session.label ?? 'Copilot CLI';
 		const tooltipLines = [`Copilot CLI session: ${label}`];
-		if (worktreePath) {
-			tooltipLines.push(`Worktree: ${worktreePath}`);
+		let description: vscode.MarkdownString | undefined;
+		let statistics: { files: number; insertions: number; deletions: number } | undefined;
+
+		if (worktreePath && worktreeRelativePath) {
+			// Description
+			description = new vscode.MarkdownString(`$(list-tree) ${worktreeRelativePath}`);
+			description.supportThemeIcons = true;
+
+			// Tooltip
+			tooltipLines.push(`Worktree: ${worktreeRelativePath}`);
+
+			// Statistics
+			statistics = await this.gitService.diffWithHEADShortStats(Uri.file(worktreePath));
 		}
+
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
+
 		return {
 			resource,
 			label,
 			description,
 			tooltip: tooltipLines.join('\n'),
 			timing: { startTime: session.timestamp.getTime() },
+			statistics,
 			status
-		};
+		} satisfies vscode.ChatSessionItem;
 	}
 
 	public async createCopilotCLITerminal(): Promise<void> {

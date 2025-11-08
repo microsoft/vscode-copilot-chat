@@ -82,6 +82,7 @@ suite('RepoInfoTelemetry', () => {
 			log: vi.fn(),
 			diffBetween: vi.fn(),
 			diffWith: vi.fn(),
+			diffWithHEADShortStats: vi.fn(),
 			fetch: vi.fn(),
 			getMergeBase: vi.fn(),
 			dispose: vi.fn()
