@@ -133,7 +133,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						if (noUserMessages) {
 							return undefined;
 						}
-						const label = await this._generateSessionLabel(session.sessionId, chatMessages, undefined);
+						const label = this._generateSessionLabel(session.sessionId, chatMessages, undefined);
 
 						// Get timestamp from last SDK event, or fallback to metadata.startTime
 						const sdkEvents = session.getEvents();
@@ -195,7 +195,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sdkSession = await sessionManager.createSession(options.toSessionOptions());
 			const chatMessages = await sdkSession.getChatContextMessages();
-			const label = this._generateSessionLabel(sdkSession.sessionId, chatMessages, prompt) || prompt;
+			const label = this._generateSessionLabel(sdkSession.sessionId, chatMessages, prompt);
 			const newSession: ICopilotCLISessionItem = {
 				id: sdkSession.sessionId,
 				label,
