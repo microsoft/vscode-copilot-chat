@@ -18,6 +18,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { isUri } from '../../../util/common/types';
+import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore, IDisposable, combinedDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -61,6 +62,7 @@ export class ConversationFeature implements IExtensionContribution {
 	private _settingsSearchProviderRegistered = false;
 
 	readonly id = 'conversationFeature';
+	readonly activationBlocker?: Promise<any>;
 
 	constructor(
 		@IInstantiationService private instantiationService: IInstantiationService,
@@ -85,7 +87,25 @@ export class ConversationFeature implements IExtensionContribution {
 		// Register Copilot token listener
 		this.registerCopilotTokenListener();
 
-		this.activated = true;
+		const activationBlockerDeferred = new DeferredPromise<void>();
+		this.activationBlocker = activationBlockerDeferred.p;
+		if (authenticationService.copilotToken) {
+			this.logService.debug(`ConversationFeature: Copilot token already available`);
+			this.activated = true;
+			activationBlockerDeferred.complete();
+		}
+
+		this._disposables.add(authenticationService.onDidAuthenticationChange(async () => {
+			const hasSession = !!authenticationService.copilotToken;
+			this.logService.debug(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
+			if (hasSession) {
+				this.activated = true;
+			} else {
+				this.activated = false;
+			}
+
+			activationBlockerDeferred.complete();
+		}));
 	}
 
 	get enabled() {
