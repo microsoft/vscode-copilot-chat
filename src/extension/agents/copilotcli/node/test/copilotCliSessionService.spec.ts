@@ -110,7 +110,7 @@ describe('CopilotCLISessionService', () => {
 					addUserAssistantMessage: vi.fn(),
 					getSelectedModelId: vi.fn(async () => 'gpt-test'),
 					getChatHistory: vi.fn(async () => []),
-					addPermissiongHandler: vi.fn(() => ({ dispose() { } })),
+					attachPermissionHandler: vi.fn(() => ({ dispose() { } })),
 					get isDisposed() { return disposables.isDisposed; },
 					dispose: () => { disposables.dispose(); },
 					add: (d: IDisposable) => disposables.add(d)
