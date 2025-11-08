@@ -14,6 +14,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { OutputChannelName } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { assertNever } from '../../../util/vs/base/common/assert';
+import { RunOnceScheduler } from '../../../util/vs/base/common/async';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { LRUCache } from '../../../util/vs/base/common/map';
 import { isDefined } from '../../../util/vs/base/common/types';
@@ -32,6 +33,7 @@ const showRawRequestBodyCommand = 'github.copilot.chat.debug.showRawRequestBody'
 export class RequestLogTree extends Disposable implements IExtensionContribution {
 	readonly id = 'requestLogTree';
 	private readonly chatRequestProvider: ChatRequestProvider;
+	private readonly treeView: vscode.TreeView<TreeItem>;
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -39,7 +41,9 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 	) {
 		super();
 		this.chatRequestProvider = this._register(instantiationService.createInstance(ChatRequestProvider));
-		this._register(vscode.window.registerTreeDataProvider('copilot-chat', this.chatRequestProvider));
+		this.treeView = this._register(vscode.window.createTreeView('copilot-chat', { treeDataProvider: this.chatRequestProvider }));
+		this.chatRequestProvider.setVisible(this.treeView.visible);
+		this._register(this.treeView.onDidChangeVisibility(e => this.chatRequestProvider.setVisible(e.visible)));
 
 		let server: RequestServer | undefined;
 
@@ -559,6 +563,16 @@ type TreeItem = ChatPromptItem | ChatRequestItem | ChatElementItem | ToolCallIte
 
 class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<TreeItem> {
 	private readonly filters: LogTreeFilters;
+	private rootItems: (ChatPromptItem | TreeChildItem)[] = [];
+	private seenChatRequests = new WeakSet<ChatRequest>();
+	private processedCount = 0;
+	private currentPrompt: ChatPromptItem | undefined;
+	private readonly refreshScheduler: RunOnceScheduler;
+	private pendingRootRefresh = false;
+	private readonly pendingPromptRefresh = new Set<ChatPromptItem>();
+	private readonly refreshDelay = 50;
+	private isVisible = false;
+	private needsRefreshWhenVisible = false;
 
 	constructor(
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
@@ -567,8 +581,10 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 		super();
 		this.filters = this._register(instantiationService.createInstance(LogTreeFilters));
 		this._register(new LogTreeFilterCommands(this.filters));
-		this._register(this.requestLogger.onDidChangeRequests(() => this._onDidChangeTreeData.fire()));
-		this._register(this.filters.onDidChangeFilters(() => this._onDidChangeTreeData.fire()));
+		this._register(this.requestLogger.onDidChangeRequests(() => this.handleRequestChange()));
+		this._register(this.filters.onDidChangeFilters(() => this.handleFilterChange()));
+		this.refreshScheduler = this._register(new RunOnceScheduler(() => this.flushRefreshQueue(), 0));
+		this.rebuildFromScratch();
 	}
 
 	private readonly _onDidChangeTreeData = new vscode.EventEmitter<TreeItem | undefined | void>();
@@ -580,48 +596,104 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 
 	getChildren(element?: TreeItem | undefined): vscode.ProviderResult<TreeItem[]> {
 		if (element instanceof ChatPromptItem) {
-			return element.children;
-		} else if (element) {
+			return element.children.filter(child => this.filters.itemIncluded(child));
+		}
+
+		if (element) {
 			return [];
+		}
+
+		return this.rootItems.filter(item => this.filters.itemIncluded(item));
+	}
+
+	private rebuildFromScratch(): void {
+		this.rootItems = [];
+		this.seenChatRequests = new WeakSet<ChatRequest>();
+		this.processedCount = 0;
+		this.currentPrompt = undefined;
+		this.appendNewEntries();
+	}
+
+	private handleRequestChange(): void {
+		this.appendNewEntries();
+	}
+
+	private handleFilterChange(): void {
+		if (this.isVisible) {
+			this._onDidChangeTreeData.fire(undefined);
 		} else {
-			let lastPrompt: ChatPromptItem | undefined;
-			const result: (ChatPromptItem | TreeChildItem)[] = [];
-			const seen = new Set<ChatRequest | undefined>();
+			this.pendingRootRefresh = true;
+			this.needsRefreshWhenVisible = true;
+		}
+	}
 
-			for (const r of this.requestLogger.getRequests()) {
-				const item = this.logToTreeItem(r);
-				if (r.chatRequest !== lastPrompt?.request) {
-					if (lastPrompt) {
-						result.push(lastPrompt);
-					}
-					lastPrompt = r.chatRequest ? ChatPromptItem.create(r, r.chatRequest, seen.has(r.chatRequest)) : undefined;
-					seen.add(r.chatRequest);
-				}
-
-				if (lastPrompt) {
-					if (!lastPrompt.children.find(c => c.id === item.id)) {
-						lastPrompt.children.push(item);
-					}
-					if (!lastPrompt.children.find(c => c.id === item.id)) {
-						lastPrompt.children.push(item);
-					}
-				} else {
-					result.push(item);
-				}
+	setVisible(visible: boolean): void {
+		this.isVisible = visible;
+		if (visible) {
+			if (this.pendingRootRefresh || this.pendingPromptRefresh.size || this.needsRefreshWhenVisible) {
+				this.refreshScheduler.schedule(0);
 			}
+		}
+	}
 
-			if (lastPrompt) {
-				result.push(lastPrompt);
-			}
+	private appendNewEntries(): void {
+		const requests = this.requestLogger.getRequests();
+		let rootChanged = false;
+		const promptsToRefresh = new Set<ChatPromptItem>();
+		const newPrompts = new Set<ChatPromptItem>();
 
-			return result.map(r => {
-				if (r instanceof ChatPromptItem) {
-					return r.withFilteredChildren(child => this.filters.itemIncluded(child));
+		if (requests.length < this.processedCount) {
+			this.rootItems = [];
+			this.seenChatRequests = new WeakSet<ChatRequest>();
+			this.processedCount = 0;
+			this.currentPrompt = undefined;
+			rootChanged = true;
+		}
+
+		for (let i = this.processedCount; i < requests.length; i++) {
+			const info = requests[i];
+			const child = this.logToTreeItem(info);
+			const request = info.chatRequest;
+
+			if (request) {
+				const hasSeen = this.seenChatRequests.has(request);
+				if (!this.currentPrompt || this.currentPrompt.request !== request) {
+					this.currentPrompt = ChatPromptItem.create(info, request, hasSeen);
+					this.currentPrompt.children.length = 0;
+					this.rootItems.push(this.currentPrompt);
+					this.seenChatRequests.add(request);
+					rootChanged = true;
+					newPrompts.add(this.currentPrompt);
 				}
 
-				return r;
-			})
-				.filter(r => this.filters.itemIncluded(r));
+				if (!this.currentPrompt.children.some(c => c.id === child.id)) {
+					this.currentPrompt.children.push(child);
+					promptsToRefresh.add(this.currentPrompt);
+				}
+			} else {
+				this.currentPrompt = undefined;
+				this.rootItems.push(child);
+				rootChanged = true;
+			}
+		}
+
+		this.processedCount = requests.length;
+
+		if (rootChanged) {
+			this.pendingRootRefresh = true;
+		}
+
+		for (const prompt of promptsToRefresh) {
+			if (rootChanged && newPrompts.has(prompt)) {
+				continue;
+			}
+			this.pendingPromptRefresh.add(prompt);
+		}
+
+		if (this.isVisible) {
+			this.refreshScheduler.schedule(this.refreshDelay);
+		} else {
+			this.needsRefreshWhenVisible = true;
 		}
 	}
 
@@ -636,6 +708,24 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 			default:
 				assertNever(r);
 		}
+	}
+
+	private flushRefreshQueue(): void {
+		if (!this.isVisible) {
+			return;
+		}
+
+		if (this.pendingRootRefresh) {
+			this._onDidChangeTreeData.fire(undefined);
+		} else {
+			for (const prompt of this.pendingPromptRefresh) {
+				this._onDidChangeTreeData.fire(prompt);
+			}
+		}
+
+		this.pendingRootRefresh = false;
+		this.pendingPromptRefresh.clear();
+		this.needsRefreshWhenVisible = false;
 	}
 }
 

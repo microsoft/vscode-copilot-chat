@@ -5,7 +5,7 @@
 
 import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
-import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
+import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, MarkdownString, Progress } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
@@ -21,7 +21,7 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
+import { ChatResponseStreamImpl, FinalizableChatResponseStream, tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Event } from '../../../util/vs/base/common/event';
@@ -31,7 +31,7 @@ import { mixin } from '../../../util/vs/base/common/objects';
 import { assertType, Mutable } from '../../../util/vs/base/common/types';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import { ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { PauseController } from '../../intents/node/pauseController';
@@ -50,6 +50,7 @@ import { IntentInvocationMetadata } from './conversation';
 import { IDocumentContext } from './documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation, IResponseProcessor } from './intents';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, sendModelMessageTelemetry } from './telemetry';
+import { RunOnceScheduler } from '../../../util/vs/base/common/async';
 
 export interface IDefaultIntentRequestHandlerOptions {
 	maxToolCallIterations: number;
@@ -244,6 +245,9 @@ export class DefaultIntentRequestHandler {
 				});
 			});
 		}
+
+		// 5. Throttle markdown emissions so the renderer doesn't repaint on every token
+		participants.push(stream => new ThrottledMarkdownStream(stream));
 
 		// 5. General telemetry on emitted components
 		participants.push(stream => ChatResponseStreamImpl.spy(stream, (part) => {
@@ -486,6 +490,177 @@ export class DefaultIntentRequestHandler {
 			case ChatFetchResponseType.InvalidStatefulMarker:
 				throw new Error('unreachable'); // retried within the endpoint
 		}
+	}
+}
+
+class ThrottledMarkdownStream implements FinalizableChatResponseStream {
+	private readonly flushScheduler: RunOnceScheduler;
+	private pendingText = '';
+	private readonly maxBufferLength = 4000;
+
+	constructor(
+		private readonly target: ChatResponseStream,
+		private readonly flushDelay = 80
+	) {
+		this.flushScheduler = new RunOnceScheduler(() => this.flush(), flushDelay);
+	}
+
+	async finalize(): Promise<void> {
+		this.flush();
+		this.flushScheduler.dispose();
+		await tryFinalizeResponseStream(this.target);
+	}
+
+	clearToPreviousToolInvocation(reason: any): void {
+		this.flush();
+		this.target.clearToPreviousToolInvocation(reason);
+	}
+
+	markdown(value: string | MarkdownString): ChatResponseStream {
+		if (typeof value === 'string') {
+			this.enqueueText(value);
+		} else {
+			this.flush();
+			this.target.markdown(value);
+		}
+		return this;
+	}
+
+	markdownWithVulnerabilities(value: string | MarkdownString, vulnerabilities: any): ChatResponseStream {
+		this.flush();
+		this.target.markdownWithVulnerabilities(value, vulnerabilities);
+		return this;
+	}
+
+	anchor(value: any, title?: string): ChatResponseStream {
+		this.flush();
+		this.target.anchor(value, title);
+		return this;
+	}
+
+	button(command: any): ChatResponseStream {
+		this.flush();
+		this.target.button(command);
+		return this;
+	}
+
+	filetree(value: any, baseUri: any): ChatResponseStream {
+		this.flush();
+		this.target.filetree(value, baseUri);
+		return this;
+	}
+
+	progress(value: string): ChatResponseStream {
+		this.flush();
+		this.target.progress(value);
+		return this;
+	}
+
+	thinkingProgress(thinkingDelta: any): ChatResponseStream {
+		this.flush();
+		this.target.thinkingProgress(thinkingDelta);
+		return this;
+	}
+
+	warning(value: string | MarkdownString): ChatResponseStream {
+		this.flush();
+		this.target.warning(value);
+		return this;
+	}
+
+	reference(value: any, title?: any): ChatResponseStream {
+		this.flush();
+		this.target.reference(value, title);
+		return this;
+	}
+
+	reference2(value: any, title?: any, options?: any): ChatResponseStream {
+		this.flush();
+		if ('reference2' in this.target) {
+			(this.target as any).reference2(value, title, options);
+		} else {
+			this.target.reference(value, title);
+		}
+		return this;
+	}
+
+	codeCitation(value: any, license: any, snippet: any): ChatResponseStream {
+		this.flush();
+		this.target.codeCitation(value, license, snippet);
+		return this;
+	}
+
+	push(part: any): ChatResponseStream {
+		if (part instanceof ChatResponseMarkdownPart) {
+			this.markdown(part.value);
+		} else if (part instanceof ChatResponseMarkdownWithVulnerabilitiesPart) {
+			this.markdownWithVulnerabilities(part.value, part.vulnerabilities);
+		} else {
+			this.flush();
+			this.target.push(part);
+		}
+		return this;
+	}
+
+	textEdit(target: any, editsOrDone: any): ChatResponseStream {
+		this.flush();
+		this.target.textEdit(target, editsOrDone);
+		return this;
+	}
+
+	notebookEdit(target: any, editsOrDone: any): ChatResponseStream {
+		this.flush();
+		if ('notebookEdit' in this.target) {
+			(this.target as any).notebookEdit(target, editsOrDone);
+		}
+		return this;
+	}
+
+	codeblockUri(value: any, isEdit?: boolean): void {
+		this.flush();
+		if ('codeblockUri' in this.target) {
+			(this.target as any).codeblockUri(value, isEdit);
+		}
+	}
+
+	confirmation(title: string, message: string, data: any, buttons?: string[]): ChatResponseStream {
+		this.flush();
+		if ('confirmation' in this.target) {
+			(this.target as any).confirmation(title, message, data, buttons);
+		}
+		return this;
+	}
+
+	prepareToolInvocation(toolName: string): ChatResponseStream {
+		this.flush();
+		if ('prepareToolInvocation' in this.target) {
+			(this.target as any).prepareToolInvocation(toolName);
+		}
+		return this;
+	}
+
+	private enqueueText(text: string) {
+		if (!text) {
+			return;
+		}
+
+		this.pendingText += text;
+		if (this.pendingText.length >= this.maxBufferLength) {
+			this.flush();
+		} else {
+			this.flushScheduler.schedule(this.flushDelay);
+		}
+	}
+
+	private flush() {
+		if (!this.pendingText) {
+			return;
+		}
+
+		const buffered = this.pendingText;
+		this.pendingText = '';
+		this.target.markdown(buffered);
+		this.flushScheduler.cancel();
 	}
 }
 
