@@ -162,7 +162,9 @@ export class CopilotCLISessionOptionsService implements ICopilotCLISessionOption
 			addPermissionHandler: (handler: NonNullable<SessionOptions['requestPermission']>) => {
 				permissionHandler.requestPermission = handler;
 				return toDisposable(() => {
-					permissionHandler.requestPermission = requestPermissionRejected;
+					if (permissionHandler.requestPermission === handler) {
+						permissionHandler.requestPermission = requestPermissionRejected;
+					}
 				});
 			},
 			toSessionOptions: () => allOptions

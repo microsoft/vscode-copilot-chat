@@ -337,6 +337,10 @@ export class CopilotCLIChatSessionParticipant {
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
 			if (!chatSessionContext) {
+				if (confirmationResults.length) {
+					stream.warning(vscode.l10n.t('No chat session context available for confirmation data handling.'));
+					return {};
+				}
 				/* Invoked from a 'normal' chat or 'cloud button' without CLI session context */
 				// Handle confirmation data
 				return await this.handlePushConfirmationData(request, context, token);
@@ -359,7 +363,7 @@ export class CopilotCLIChatSessionParticipant {
 				return await this.handleConfirmationData(session, request.prompt, confirmationResults, context, stream, token);
 			}
 
-			if (request.prompt.startsWith('/delegate')) {
+			if (!isUntitled && request.prompt.startsWith('/delegate')) {
 				await this.handleDelegateCommand(session, request, context, stream, token);
 			} else {
 				await session.handleRequest(prompt, attachments, modelId, token);
@@ -462,7 +466,6 @@ export class CopilotCLIChatSessionParticipant {
 			history: uncommittedChangesData.metadata.history,
 			chatContext: context
 		}, stream, token);
-
 		if (prInfo) {
 			await this.recordPushToSession(session, prompt, prInfo);
 		}

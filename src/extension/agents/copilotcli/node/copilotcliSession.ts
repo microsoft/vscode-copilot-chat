@@ -131,11 +131,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}));
 
 		try {
-			const [currentModel, sessionOptions] = await Promise.all([
+			const [currentModel, options] = await Promise.all([
 				modelId ? this._sdkSession.getSelectedModel() : undefined,
 				this.cliSessionOptions.createOptions({})
 			]);
-			const autoInfo = sessionOptions.toSessionOptions().authInfo;
+			const autoInfo = options.toSessionOptions().authInfo;
 			if (autoInfo) {
 				this._sdkSession.setAuthInfo(autoInfo);
 			}

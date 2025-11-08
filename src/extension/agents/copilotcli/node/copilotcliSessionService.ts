@@ -130,10 +130,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						}
 						const chatMessages = await raceCancellationError(session.getChatContextMessages(), token);
 						const noUserMessages = !chatMessages.find(message => message.role === 'user');
-						const label = await this._generateSessionLabel(session.sessionId, chatMessages, undefined);
-						if (noUserMessages || !label) {
+						if (noUserMessages) {
 							return undefined;
 						}
+						const label = await this._generateSessionLabel(session.sessionId, chatMessages, undefined);
 
 						// Get timestamp from last SDK event, or fallback to metadata.startTime
 						const sdkEvents = session.getEvents();
