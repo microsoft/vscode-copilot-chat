@@ -13,11 +13,10 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
-import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
-import { ImageStorage } from './copilotCLIImageSupport';
+import { CopilotCLIPromptResolver } from './copilotCLIPromptResolver';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { ConfirmationResult, CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
@@ -293,7 +292,6 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 }
 
 export class CopilotCLIChatSessionParticipant {
-	private readonly imageStore: ImageStorage;
 	constructor(
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
@@ -304,25 +302,14 @@ export class CopilotCLIChatSessionParticipant {
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-		@IVSCodeExtensionContext context: IVSCodeExtensionContext,
-	) {
-		this.imageStore = new ImageStorage(context);
-	}
+	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
 		return this.handleRequest.bind(this);
 	}
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
-		const imageAttachmentPaths = await Promise.all(request.references.filter(ref => ref.value instanceof vscode.ChatReferenceBinaryData).map(ref => {
-			const binaryData = ref.value as vscode.ChatReferenceBinaryData;
-			return binaryData.data().then(buffer => {
-				return this.imageStore.storeImage(buffer, binaryData.mimeType).then(uri => uri.fsPath);
-			});
-		}));
-
 		const { chatSessionContext } = context;
-
 
 		/* __GDPR__
 			"copilotcli.chat.invoke" : {

@@ -5,19 +5,26 @@
 
 import type { Attachment } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
-import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
-import { ILogService } from '../../../../platform/log/common/logService';
-import { isLocation } from '../../../../util/common/types';
-import { raceCancellationError } from '../../../../util/vs/base/common/async';
-import * as path from '../../../../util/vs/base/common/path';
-import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatReferenceDiagnostic, FileType } from '../../../../vscodeTypes';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { ILogService } from '../../../platform/log/common/logService';
+import { isLocation } from '../../../util/common/types';
+import { raceCancellationError } from '../../../util/vs/base/common/async';
+import * as path from '../../../util/vs/base/common/path';
+import { URI } from '../../../util/vs/base/common/uri';
+import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType } from '../../../vscodeTypes';
+import { ImageStorage } from './copilotCLIImageSupport';
 
 export class CopilotCLIPromptResolver {
+	private readonly imageStorage: ImageStorage;
+
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
-	) { }
+		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
+	) {
+		this.imageStorage = new ImageStorage(extensionContext);
+	}
 
 	public async resolvePrompt(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
 		if (request.prompt.startsWith('/')) {
@@ -28,9 +35,27 @@ export class CopilotCLIPromptResolver {
 		const allRefsTexts: string[] = [];
 		const diagnosticTexts: string[] = [];
 		const files: { path: string; name: string }[] = [];
+		const imageAttachmentPaths: string[] = [];
+
+		// Handle image attachments
+		const imageRefs = request.references.filter(ref => ref.value instanceof ChatReferenceBinaryData);
+		await Promise.all(imageRefs.map(async ref => {
+			const binaryData = ref.value as ChatReferenceBinaryData;
+			try {
+				const buffer = await binaryData.data();
+				const uri = await this.imageStorage.storeImage(buffer, binaryData.mimeType);
+				imageAttachmentPaths.push(uri.fsPath);
+			} catch (error) {
+				this.logService.error(`[CopilotCLIPromptResolver] Failed to store image: ${error}`);
+			}
+		}));
+
 		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
 		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
-			if (ref.value instanceof ChatReferenceDiagnostic) {
+			if (ref.value instanceof ChatReferenceBinaryData) {
+				// Already handled above
+				return;
+			} else if (ref.value instanceof ChatReferenceDiagnostic) {
 				// Handle diagnostic reference
 				for (const [uri, diagnostics] of ref.value.diagnostics) {
 					if (uri.scheme !== 'file') {
@@ -95,6 +120,15 @@ export class CopilotCLIPromptResolver {
 		}
 		if (diagnosticTexts.length > 0) {
 			reminderParts.push(`The user provided the following diagnostics:\n${diagnosticTexts.join('\n')}`);
+		}
+		if (imageAttachmentPaths.length > 0) {
+			const imageAttachmentsText = imageAttachmentPaths.map(p => `- ${p}`).join('\n');
+			reminderParts.push(`The user provided the following image attachments:\n${imageAttachmentsText}`);
+			attachments.push(...imageAttachmentPaths.map(p => ({
+				type: 'file' as const,
+				displayName: path.basename(p),
+				path: p
+			})));
 		}
 
 		let prompt = request.prompt;
