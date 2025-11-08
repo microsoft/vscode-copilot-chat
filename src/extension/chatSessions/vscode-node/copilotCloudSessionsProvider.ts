@@ -18,6 +18,7 @@ import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 
 export type ConfirmationResult = { step: string; accepted: boolean; metadata?: ConfirmationMetadata };
+export const UncommittedChangesStep = 'uncommitted-changes';
 
 interface ConfirmationMetadata {
 	prompt: string;
@@ -449,7 +450,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						}
 						break;
 					}
-				case 'uncommitted-changes':
+				case UncommittedChangesStep:
 					{
 						if (!data.accepted || !data.metadata) {
 							stream.markdown(vscode.l10n.t('Cloud agent request cancelled due to uncommitted changes.'));
@@ -533,7 +534,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					vscode.l10n.t('Uncommitted changes detected'),
 					vscode.l10n.t('You have uncommitted changes in your workspace. Consider committing them if you would like to include them in the cloud agent\'s work.'),
 					{
-						step: 'uncommitted-changes',
+						step: UncommittedChangesStep,
 						metadata: metadata satisfies ConfirmationMetadata, // Forward metadata
 					},
 					['Proceed', 'Cancel']
