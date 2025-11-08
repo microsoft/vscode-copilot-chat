@@ -81,7 +81,12 @@ describe('CopilotCLISessionService', () => {
 		vi.useRealTimers();
 		optionsService = {
 			_serviceBrand: undefined,
-			createOptions: vi.fn(async (opts: any) => opts),
+			createOptions: vi.fn(async (opts: any) => {
+				return {
+					addPermissionHandler: () => ({ dispose() { /* noop */ } }),
+					toSessionOptions: () => ({ ...opts, requestPermission: async () => ({ kind: 'denied-interactively-by-user' }) })
+				};
+			}),
 		};
 		const sdk = {
 			getPackage: vi.fn(async () => ({ internal: { CLISessionManager: FakeCLISessionManager } }))
@@ -92,18 +97,20 @@ describe('CopilotCLISessionService', () => {
 		const accessor = services.createTestingAccessor();
 		logService = accessor.get(ILogService);
 		instantiationService = {
-			createInstance: (_: unknown, { sessionId }: { sessionId: string }) => {
+			createInstance: (_ctor: unknown, _options: any, sdkSession: { sessionId: string }) => {
 				const disposables = new DisposableStore();
 				const _onDidChangeStatus = disposables.add(new EventEmitter<ChatSessionStatus>());
 				const cliSession: (ICopilotCLISession & DisposableStore) = {
-					sessionId,
+					sessionId: sdkSession.sessionId,
 					status: undefined,
 					onDidChangeStatus: _onDidChangeStatus.event,
+					permissionRequested: undefined,
 					handleRequest: vi.fn(async () => { }),
 					addUserMessage: vi.fn(),
 					addUserAssistantMessage: vi.fn(),
 					getSelectedModelId: vi.fn(async () => 'gpt-test'),
 					getChatHistory: vi.fn(async () => []),
+					attachPermissionHandler: vi.fn(() => ({ dispose() { } })),
 					get isDisposed() { return disposables.isDisposed; },
 					dispose: () => { disposables.dispose(); },
 					add: (d: IDisposable) => disposables.add(d)
@@ -131,7 +138,7 @@ describe('CopilotCLISessionService', () => {
 	describe('CopilotCLISessionService.createSession', () => {
 		it('get session will return the same session created using createSession', async () => {
 			const session = await service.createSession('   ', 'gpt-test', '/tmp', createToken().token);
-			expect(optionsService.createOptions).toHaveBeenCalledWith({ model: 'gpt-test', workingDirectory: '/tmp' }, expect.anything());
+			expect(optionsService.createOptions).toHaveBeenCalledWith({ model: 'gpt-test', workingDirectory: '/tmp' });
 
 			const existingSession = await service.getSession(session.sessionId, undefined, undefined, false, createToken().token);
 
@@ -139,7 +146,7 @@ describe('CopilotCLISessionService', () => {
 		});
 		it('get session will return new once previous session is disposed', async () => {
 			const session = await service.createSession('   ', 'gpt-test', '/tmp', createToken().token);
-			expect(optionsService.createOptions).toHaveBeenCalledWith({ model: 'gpt-test', workingDirectory: '/tmp' }, expect.anything());
+			expect(optionsService.createOptions).toHaveBeenCalledWith({ model: 'gpt-test', workingDirectory: '/tmp' });
 
 			session.dispose();
 			await new Promise(resolve => setTimeout(resolve, 0)); // allow dispose async cleanup to run
