@@ -1122,6 +1122,29 @@
 				}
 			},
 			{
+				"name": "run_agent_script",
+				"toolReferenceName": "runAgentScript",
+				"displayName": "Run Agent Script",
+				"icon": "$(code)",
+				"userDescription": "Execute Python scripts for complex data processing and filtering tasks",
+				"modelDescription": "Execute a Python script to perform complex data processing and filtering tasks. This tool should be preferred for any non-trivial operations that require:\n- Filtering, transforming, or analyzing data from other tools\n- Complex logic with conditionals and loops\n- Processing collections or iterating over results\n- Combining results from multiple tool calls\n\nTools with structured output are available as async Python functions that must be called with 'await'.\n\nExample:\n```python\n# Get files and filter them\nfiles = await find_files(pattern=\"**/*.ts\")\n# Process and return relevant files\nreturn [f for f in files if \"test\" not in f]\n```",
+				"when": "config.github.copilot.chat.runAgentScript.enabled",
+				"canBeReferencedInPrompt": true,
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"script": {
+							"type": "string",
+							"description": "Python script to execute. The script can call other tools using await. The last expression or return value will be the result."
+						}
+					},
+					"required": [
+						"script"
+					]
+				}
+			},
+			{
 				"name": "copilot_editFiles",
 				"modelDescription": "This is a placeholder tool, do not use",
 				"userDescription": "Edit files",
@@ -2572,6 +2595,14 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.byok.ollamaEndpoint%"
+					},
+					"github.copilot.chat.runAgentScript.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"preview"
+						],
+						"markdownDescription": "Enable the run_agent_script tool that allows executing Python scripts for complex data processing tasks. When enabled, the agent can write Python code that calls other tools and performs filtering/transformation logic."
 					}
 				}
 			},
@@ -4508,8 +4539,8 @@
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
 		"@types/vscode": "^1.102.0",
-		"@types/yargs": "^17.0.24",
 		"@types/vscode-webview": "^1.57.4",
+		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
 		"@typescript-eslint/parser": "^8.32.0",
 		"@typescript-eslint/typescript-estree": "^8.26.1",
@@ -4587,6 +4618,7 @@
 		"@vscode/copilot-api": "^0.1.13",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
+		"@vscode/micropython-wasm": "file:vscode-micropython-wasm-0.0.1.tgz",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
 		"@vscode/webview-ui-toolkit": "^1.3.1",
@@ -4594,6 +4626,7 @@
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
 		"diff": "^8.0.2",
+		"dompurify": "^3.3.0",
 		"ignore": "^7.0.5",
 		"isbinaryfile": "^5.0.4",
 		"jsonc-parser": "^3.3.1",
@@ -4602,8 +4635,7 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0",
-		"dompurify": "^3.3.0"
+		"web-tree-sitter": "^0.23.0"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",

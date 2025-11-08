@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IBuildPromptContext } from '../../prompt/common/intents';
@@ -27,6 +28,12 @@ export enum CopilotToolMode {
 }
 
 export interface ICopilotToolExtension<T> {
+	/**
+	 * Optional structured output schema. When defined, the tool should output
+	 * a LanguageModelDataPart with type 'application/vnd.code.tool.output'
+	 * containing a JSON-stringified object matching this schema.
+	 */
+	structuredOutput?: ObjectJsonSchema;
 	/**
 	 * Called when edits are made in a tool call response. The tool can return
 	 * a confirmation that will be shown to the user before edits are applied.

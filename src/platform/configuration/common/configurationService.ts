@@ -830,6 +830,7 @@ export namespace ConfigKey {
 
 	export const CompletionsFetcher = defineExpSetting<FetcherId | undefined>('chat.completionsFetcher', undefined);
 	export const NextEditSuggestionsFetcher = defineExpSetting<FetcherId | undefined>('chat.nesFetcher', undefined);
+	export const RunAgentScriptEnabled = defineSetting<boolean>('chat.runAgentScript.enabled', false);
 }
 
 export function getAllConfigKeys(): string[] {

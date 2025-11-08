@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import { CellOrNotebookEdit } from '../../prompts/node/codeMapper/codeMapper';
@@ -20,6 +21,24 @@ export interface IMultiReplaceStringToolParams {
 
 export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiReplaceStringToolParams> {
 	public static toolName = ToolName.MultiReplaceString;
+
+	public readonly structuredOutput: ObjectJsonSchema = {
+		type: 'object',
+		properties: {
+			files: {
+				type: 'array',
+				description: 'Array of file paths that were modified',
+				items: {
+					type: 'string'
+				}
+			},
+			success: {
+				type: 'boolean',
+				description: 'Whether all replacements were successful'
+			}
+		},
+		required: ['files', 'success']
+	};
 
 	protected override urisForInput(input: IMultiReplaceStringToolParams): readonly URI[] {
 		return input.replacements.map(r => resolveToolInputPath(r.filePath, this.promptPathRepresentationService));

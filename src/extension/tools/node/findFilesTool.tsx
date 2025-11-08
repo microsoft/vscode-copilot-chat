@@ -5,6 +5,7 @@
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { URI } from '../../../util/vs/base/common/uri';
 
@@ -15,7 +16,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../common/toolNames';
@@ -29,6 +30,25 @@ export interface IFindFilesToolParams {
 
 export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 	public static readonly toolName = ToolName.FindFiles;
+
+	// Define structured output schema
+	public readonly structuredOutput: ObjectJsonSchema = {
+		type: 'object',
+		properties: {
+			files: {
+				type: 'array',
+				description: 'Array of file paths that match the search pattern',
+				items: {
+					type: 'string'
+				}
+			},
+			totalResults: {
+				type: 'number',
+				description: 'Total number of matching files found'
+			}
+		},
+		required: ['files', 'totalResults']
+	};
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -62,7 +82,14 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		const resultsToShow = results.slice(0, maxResults);
 		// Render the prompt element with a timeout
 		const prompt = await renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token);
-		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
+		const result = new ExtendedLanguageModelToolResult([
+			new LanguageModelPromptTsxPart(prompt),
+			// Also add structured output for tools that can consume it
+			LanguageModelDataPart.json({
+				files: resultsToShow.map(uri => uri.toString()),
+				totalResults: results.length
+			}, 'application/vnd.code.tool.output')
+		]);
 		const query = `\`${options.input.query}\``;
 		result.toolResultMessage = resultsToShow.length === 0 ?
 			new MarkdownString(l10n.t`Searched for files matching ${query}, no matches`) :

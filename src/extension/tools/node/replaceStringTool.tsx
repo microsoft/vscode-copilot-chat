@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
@@ -19,6 +20,21 @@ export interface IReplaceStringToolParams {
 
 export class ReplaceStringTool extends AbstractReplaceStringTool<IReplaceStringToolParams> {
 	public static toolName = ToolName.ReplaceString;
+
+	public readonly structuredOutput: ObjectJsonSchema = {
+		type: 'object',
+		properties: {
+			filePath: {
+				type: 'string',
+				description: 'The absolute path of the modified file'
+			},
+			success: {
+				type: 'boolean',
+				description: 'Whether the replacement was successful'
+			}
+		},
+		required: ['filePath', 'success']
+	};
 
 	protected override urisForInput(input: IReplaceStringToolParams): readonly URI[] {
 		return [resolveToolInputPath(input.filePath, this.promptPathRepresentationService)];

@@ -123,10 +123,10 @@ const sanityTestBundlePlugin: esbuild.Plugin = {
 };
 
 const importMetaPlugin: esbuild.Plugin = {
-	name: 'claudeCodeImportMetaPlugin',
+	name: 'importMetaPlugin',
 	setup(build) {
-		// Handle import.meta.url in @anthropic-ai/claude-code package
-		build.onLoad({ filter: /node_modules[\/\\]@anthropic-ai[\/\\]claude-code[\/\\].*\.mjs$/ }, async (args) => {
+		// Handle import.meta.url in .mjs files that get bundled
+		build.onLoad({ filter: /node_modules[\/\\](@anthropic-ai[\/\\]claude-code|@vscode[\/\\]micropython-wasm)[\/\\].*\.m?js$/ }, async (args) => {
 			const contents = await fs.promises.readFile(args.path, 'utf8');
 			return {
 				contents: contents.replace(
@@ -182,6 +182,7 @@ const nodeExtHostBuildOptions = {
 		{ in: './src/platform/tfidf/node/tfidfWorker.ts', out: 'tfidfWorker' },
 		{ in: './src/extension/onboardDebug/node/copilotDebugWorker/index.ts', out: 'copilotDebugCommand' },
 		{ in: './src/extension/chatSessions/vscode-node/copilotCLIShim.ts', out: 'copilotCLIShim' },
+		{ in: './src/extension/tools/node/scriptRunner/micropythonRunner.ts', out: 'scriptRunner/micropythonRunner' },
 		{ in: './src/test-extension.ts', out: 'test-extension' },
 		{ in: './src/sanity-test-extension.ts', out: 'sanity-test-extension' },
 	],
@@ -261,6 +262,21 @@ async function typeScriptServerPluginPackageJsonInstall(): Promise<void> {
 	}
 }
 
+async function copyMicroPythonWasmFiles(): Promise<void> {
+	await mkdir('./dist/scriptRunner', { recursive: true });
+	const wasmFiles = ['micropython.mjs', 'micropython.wasm'];
+	const sourceDir = path.join(__dirname, './node_modules/@vscode/micropython-wasm/dist');
+	const destDir = path.join(__dirname, './dist/scriptRunner');
+
+	for (const file of wasmFiles) {
+		try {
+			await copyFile(path.join(sourceDir, file), path.join(destDir, file));
+		} catch (error) {
+			console.error(`Error copying ${file}:`, error);
+		}
+	}
+}
+
 const typeScriptServerPluginBuildOptions = {
 	bundle: true,
 	format: 'cjs',
@@ -287,6 +303,7 @@ async function main() {
 	}
 
 	await typeScriptServerPluginPackageJsonInstall();
+	await copyMicroPythonWasmFiles();
 
 	if (isWatch) {
 

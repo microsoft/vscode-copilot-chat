@@ -5,6 +5,7 @@
 
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -20,7 +21,7 @@ import { removeLeadingFilepathComment } from '../../../util/common/markdown';
 import { extname } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { CodeBlockProcessor } from '../../codeBlocks/node/codeBlockProcessor';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -41,6 +42,21 @@ export interface ICreateFileParams {
 
 export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 	public static toolName = ToolName.CreateFile;
+
+	public readonly structuredOutput: ObjectJsonSchema = {
+		type: 'object',
+		properties: {
+			filePath: {
+				type: 'string',
+				description: 'The absolute path of the created file'
+			},
+			success: {
+				type: 'boolean',
+				description: 'Whether the file was created successfully'
+			}
+		},
+		required: ['filePath', 'success']
+	};
 
 	private _promptContext: IBuildPromptContext | undefined;
 
@@ -128,14 +144,22 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 						},
 						token,
 					),
-				)
+				),
+				LanguageModelDataPart.json({
+					filePath: this.promptPathRepresentationService.getFilePath(uri),
+					success: true
+				}, 'application/vnd.code.tool.output')
 			]);
 		}
 
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(
 				`File created at ${this.promptPathRepresentationService.getFilePath(uri)}`,
-			)
+			),
+			LanguageModelDataPart.json({
+				filePath: this.promptPathRepresentationService.getFilePath(uri),
+				success: true
+			}, 'application/vnd.code.tool.output')
 		]);
 	}
 

@@ -29,6 +29,7 @@ import './notebookSummaryTool';
 import './readFileTool';
 import './readProjectStructureTool';
 import './replaceStringTool';
+import './runAgentScriptTool';
 import './runNotebookCellTool';
 import './scmChangesTool';
 import './searchWorkspaceSymbolsTool';
@@ -39,3 +40,4 @@ import './usagesTool';
 import './userPreferencesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
+

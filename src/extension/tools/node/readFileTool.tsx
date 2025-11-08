@@ -19,7 +19,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
+import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
@@ -105,6 +105,33 @@ const getParamRanges = (params: ReadFileParams, snapshot: NotebookDocumentSnapsh
 
 export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	public static toolName = ToolName.ReadFile;
+
+	public readonly structuredOutput: ObjectJsonSchema = {
+		type: 'object',
+		properties: {
+			content: {
+				type: 'string',
+				description: 'The content of the file'
+			},
+			filePath: {
+				type: 'string',
+				description: 'The absolute path of the file'
+			},
+			lineCount: {
+				type: 'number',
+				description: 'Total number of lines in the file'
+			},
+			start: {
+				type: 'number',
+				description: 'Starting line number (1-indexed)'
+			},
+			end: {
+				type: 'number',
+				description: 'Ending line number (1-indexed)'
+			}
+		},
+		required: ['content', 'filePath', 'lineCount', 'start', 'end']
+	};
 	private _promptContext: IBuildPromptContext | undefined;
 
 	constructor(
@@ -127,6 +154,9 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			ranges = getParamRanges(options.input, documentSnapshot);
 
 			void this.sendReadFileTelemetry('success', options, ranges);
+
+			const content = documentSnapshot.getText(new Range(ranges.start - 1, 0, ranges.end, 0));
+
 			return new LanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(
@@ -141,7 +171,15 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 						},
 						token,
 					),
-				)
+				),
+				// Also add structured output for tools that can consume it
+				LanguageModelDataPart.json({
+					content,
+					filePath: uri.toString(),
+					lineCount: documentSnapshot.lineCount,
+					start: ranges.start,
+					end: ranges.end
+				}, 'application/vnd.code.tool.output')
 			]);
 		} catch (err) {
 			void this.sendReadFileTelemetry('error', options, ranges || { start: 0, end: 0, truncated: false });
