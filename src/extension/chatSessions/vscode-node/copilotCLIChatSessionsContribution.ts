@@ -13,10 +13,10 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
-import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
+import { CopilotCLIPromptResolver } from './copilotCLIPromptResolver';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { ConfirmationResult, CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
@@ -308,7 +308,6 @@ export class CopilotCLIChatSessionParticipant {
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
-
 
 		/* __GDPR__
 			"copilotcli.chat.invoke" : {

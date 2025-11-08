@@ -15,7 +15,6 @@ import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 import { CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptionsService, ICopilotCLIModels, ICopilotCLISDK, ICopilotCLISessionOptionsService } from '../../agents/copilotcli/node/copilotCli';
-import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
@@ -24,6 +23,7 @@ import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProv
 import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLIWorktreeManager, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
+import { CopilotCLIPromptResolver } from './copilotCLIPromptResolver';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { PRContentProvider } from './prContentProvider';

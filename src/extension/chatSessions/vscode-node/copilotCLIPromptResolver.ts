@@ -5,19 +5,26 @@
 
 import type { Attachment } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
-import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
-import { ILogService } from '../../../../platform/log/common/logService';
-import { isLocation } from '../../../../util/common/types';
-import { raceCancellationError } from '../../../../util/vs/base/common/async';
-import * as path from '../../../../util/vs/base/common/path';
-import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatReferenceDiagnostic, FileType } from '../../../../vscodeTypes';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { ILogService } from '../../../platform/log/common/logService';
+import { isLocation } from '../../../util/common/types';
+import { raceCancellationError } from '../../../util/vs/base/common/async';
+import * as path from '../../../util/vs/base/common/path';
+import { URI } from '../../../util/vs/base/common/uri';
+import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType } from '../../../vscodeTypes';
+import { ImageStorage } from './copilotCLIImageSupport';
 
 export class CopilotCLIPromptResolver {
+	private readonly imageStorage: ImageStorage;
+
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
-	) { }
+		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
+	) {
+		this.imageStorage = new ImageStorage(extensionContext);
+	}
 
 	public async resolvePrompt(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
 		if (request.prompt.startsWith('/')) {
@@ -27,10 +34,26 @@ export class CopilotCLIPromptResolver {
 		const attachments: Attachment[] = [];
 		const allRefsTexts: string[] = [];
 		const diagnosticTexts: string[] = [];
-		const files: { path: string; name: string }[] = [];
+
 		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
-		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
-			if (ref.value instanceof ChatReferenceDiagnostic) {
+		const relevantRefs = request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions'));
+
+		// Process all references in parallel
+		await Promise.all(relevantRefs.map(async ref => {
+			if (ref.value instanceof ChatReferenceBinaryData) {
+				// Handle image attachments
+				try {
+					const buffer = await ref.value.data();
+					const uri = await this.imageStorage.storeImage(buffer, ref.value.mimeType);
+					attachments.push({
+						type: 'file',
+						displayName: path.basename(uri.fsPath),
+						path: uri.fsPath
+					});
+				} catch (error) {
+					this.logService.error(`[CopilotCLIPromptResolver] Failed to store image: ${error}`);
+				}
+			} else if (ref.value instanceof ChatReferenceDiagnostic) {
 				// Handle diagnostic reference
 				for (const [uri, diagnostics] of ref.value.diagnostics) {
 					if (uri.scheme !== 'file') {
@@ -48,7 +71,21 @@ export class CopilotCLIPromptResolver {
 						const codeStr = code ? ` [${code}]` : '';
 						const line = diagnostic.range.start.line + 1;
 						diagnosticTexts.push(`- ${severity}${codeStr} at ${uri.fsPath}:${line}: ${diagnostic.message}`);
-						files.push({ path: uri.fsPath, name: path.basename(uri.fsPath) });
+
+						// Add the file from diagnostic
+						try {
+							const stat = await raceCancellationError(this.fileSystemService.stat(uri), token);
+							const type = stat.type === FileType.Directory ? 'directory' : stat.type === FileType.File ? 'file' : undefined;
+							if (type) {
+								attachments.push({
+									type,
+									displayName: path.basename(uri.fsPath),
+									path: uri.fsPath
+								});
+							}
+						} catch (error) {
+							this.logService.error(`[CopilotCLIPromptResolver] Failed to attach ${uri.fsPath}: ${error}`);
+						}
 					}
 				}
 			} else {
@@ -57,7 +94,6 @@ export class CopilotCLIPromptResolver {
 					return;
 				}
 				const filePath = uri.fsPath;
-				files.push({ path: filePath, name: ref.name || path.basename(filePath) });
 				const valueText = URI.isUri(ref.value) ?
 					ref.value.fsPath :
 					isLocation(ref.value) ?
@@ -68,24 +104,21 @@ export class CopilotCLIPromptResolver {
 					const variableText = request.prompt.substring(ref.range[0], ref.range[1]);
 					allRefsTexts.push(`- ${variableText} → ${valueText}`);
 				}
-			}
-		});
 
-		await Promise.all(files.map(async (file) => {
-			try {
-				const stat = await raceCancellationError(this.fileSystemService.stat(URI.file(file.path)), token);
-				const type = stat.type === FileType.Directory ? 'directory' : stat.type === FileType.File ? 'file' : undefined;
-				if (!type) {
-					this.logService.error(`[CopilotCLIAgentManager] Ignoring attachment as its not a file/directory (${file.path})`);
-					return;
+				// Add the file reference
+				try {
+					const stat = await raceCancellationError(this.fileSystemService.stat(uri), token);
+					const type = stat.type === FileType.Directory ? 'directory' : stat.type === FileType.File ? 'file' : undefined;
+					if (type) {
+						attachments.push({
+							type,
+							displayName: ref.name || path.basename(filePath),
+							path: filePath
+						});
+					}
+				} catch (error) {
+					this.logService.error(`[CopilotCLIPromptResolver] Failed to attach ${filePath}: ${error}`);
 				}
-				attachments.push({
-					type,
-					displayName: file.name,
-					path: file.path
-				});
-			} catch (error) {
-				this.logService.error(`[CopilotCLIAgentManager] Failed to attach ${file.path}: ${error}`);
 			}
 		}));
 
