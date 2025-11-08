@@ -462,7 +462,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: iterationNumber === 0 && !isContinuation
+			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.isSubagent
 		}, token);
 
 		fetchStreamSource?.resolve();
