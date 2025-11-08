@@ -5,6 +5,7 @@
 
 import type { Attachment, Session, SessionOptions } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
+import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -53,6 +54,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		private readonly _sdkSession: Session,
 		private readonly _options: SessionOptions,
 		private readonly _permissionHandler: CopilotCLIPermissionsHandler,
+		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IToolsService private readonly toolsService: IToolsService,
@@ -168,6 +170,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			await this._sdkSession.send({ prompt, attachments, abortController });
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
+
+			if (this._options.workingDirectory) {
+				// Stage all changes in the working directory when the session is completed
+				await this.gitService.add(Uri.file(this._options.workingDirectory), []);
+				this.logService.trace(`[CopilotCLISession] Staged all changes in working directory ${this._options.workingDirectory}`);
+			}
 
 			this._status = ChatSessionStatus.Completed;
 			this._statusChange.fire(this._status);

@@ -178,6 +178,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		}
 	}
 
+	async add(uri: URI, paths: string[]): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		await repository?.add(paths);
+	}
+
 	async log(uri: vscode.Uri, options?: LogOptions): Promise<Commit[] | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		if (!gitAPI) {
@@ -202,35 +208,10 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return repository?.diffWith(ref);
 	}
 
-	async diffWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined> {
+	async diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
-		if (!repository) {
-			return undefined;
-		}
-
-		let statistics = await repository.diffWithHEADShortStats();
-
-		// Untracked files are not included in the diff stats
-		const untrackedChanges = repository.state.untrackedChanges
-			.concat(repository.state.workingTreeChanges
-				.filter(change => change.status === 7 /* Status.UNTRACKED */));
-
-		if (untrackedChanges.length > 0) {
-			let insertions = 0;
-			for (const change of untrackedChanges) {
-				const document = await vscode.workspace.openTextDocument(change.uri);
-				insertions += document.lineCount;
-			}
-
-			statistics = {
-				files: (statistics?.files ?? 0) + untrackedChanges.length,
-				insertions: (statistics?.insertions ?? 0) + insertions,
-				deletions: statistics?.deletions ?? 0
-			};
-		}
-
-		return statistics;
+		return await repository?.diffIndexWithHEADShortStats();
 	}
 
 	async fetch(uri: vscode.Uri, remote?: string, ref?: string, depth?: number): Promise<void> {

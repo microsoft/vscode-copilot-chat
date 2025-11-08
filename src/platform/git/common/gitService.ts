@@ -52,10 +52,11 @@ export interface IGitService extends IDisposable {
 	getRepository(uri: URI): Promise<RepoContext | undefined>;
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined>;
 	initialize(): Promise<void>;
+	add(uri: URI, paths: string[]): Promise<void>;
 	log(uri: URI, options?: LogOptions): Promise<Commit[] | undefined>;
 	diffBetween(uri: URI, ref1: string, ref2: string): Promise<Change[] | undefined>;
 	diffWith(uri: URI, ref: string): Promise<Change[] | undefined>;
-	diffWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined>;
+	diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;
 	getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined>;
 }

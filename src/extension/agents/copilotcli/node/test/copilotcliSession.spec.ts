@@ -20,6 +20,8 @@ import { ExternalEditTracker } from '../../../common/externalEditTracker';
 import { CopilotCLIPermissionsHandler, ICopilotCLISessionOptionsService } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { CopilotCLIToolNames } from '../copilotcliToolInvocationFormatter';
+import { IGitService } from '../../../../../platform/git/common/gitService';
+import { TestingGitService } from '../../../../../platform/test/node/simulationWorkspaceServices';
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
@@ -108,6 +110,7 @@ describe('CopilotCLISession', () => {
 	let workspaceService: IWorkspaceService;
 	let toolsService: IToolsService;
 	let logger: ILogService;
+	let gitService: IGitService;
 	let sessionOptionsService: ICopilotCLISessionOptionsService;
 
 	beforeEach(() => {

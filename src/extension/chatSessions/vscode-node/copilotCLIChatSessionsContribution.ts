@@ -185,7 +185,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			tooltipLines.push(`Worktree: ${worktreeRelativePath}`);
 
 			// Statistics
-			statistics = await this.gitService.diffWithHEADShortStats(Uri.file(worktreePath));
+			statistics = await this.gitService.diffIndexWithHEADShortStats(Uri.file(worktreePath));
 		}
 
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;

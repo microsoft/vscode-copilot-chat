@@ -741,7 +741,7 @@ export class TestingGitService implements IGitService {
 		return undefined;
 	}
 
-	async diffWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined> {
+	async diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined> {
 		return undefined;
 	}
 
@@ -751,6 +751,10 @@ export class TestingGitService implements IGitService {
 
 	async getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined> {
 		return undefined;
+	}
+
+	async add(uri: URI, paths: string[]): Promise<void> {
+		return;
 	}
 }
 
