@@ -31,7 +31,7 @@ export interface ICopilotCLISession extends IDisposable {
 	readonly onPermissionRequested: vscode.Event<PermissionRequest>;
 
 	attachPermissionHandler(handler: PermissionHandler): IDisposable;
-	attchStream(stream: vscode.ChatResponseStream): IDisposable;
+	attachStream(stream: vscode.ChatResponseStream): IDisposable;
 	handleRequest(
 		prompt: string,
 		attachments: Attachment[],
@@ -41,7 +41,7 @@ export interface ICopilotCLISession extends IDisposable {
 	addUserMessage(content: string): void;
 	addUserAssistantMessage(content: string): void;
 	getSelectedModelId(): Promise<string | undefined>;
-	getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]>;
+	getChatHistory(): (ChatRequestTurn2 | ChatResponseTurn2)[];
 }
 
 export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
@@ -75,7 +75,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this.sessionId = _sdkSession.sessionId;
 	}
 
-	attchStream(stream: vscode.ChatResponseStream): IDisposable {
+	attachStream(stream: vscode.ChatResponseStream): IDisposable {
 		this._stream = stream;
 		return toDisposable(() => {
 			if (this._stream === stream) {
@@ -131,13 +131,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}));
 
 		try {
-			const [currentModel, options] = await Promise.all([
+			const [currentModel, authInfo] = await Promise.all([
 				modelId ? this._sdkSession.getSelectedModel() : undefined,
-				this.cliSessionOptions.createOptions({})
+				this.cliSessionOptions.createOptions({}).then(opts => opts.toSessionOptions().authInfo)
 			]);
-			const autoInfo = options.toSessionOptions().authInfo;
-			if (autoInfo) {
-				this._sdkSession.setAuthInfo(autoInfo);
+			if (authInfo) {
+				this._sdkSession.setAuthInfo(authInfo);
 			}
 			if (modelId && modelId !== currentModel) {
 				await this._sdkSession.setSelectedModel(modelId);
@@ -226,7 +225,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return this._sdkSession.getSelectedModel();
 	}
 
-	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
+	public getChatHistory(): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 		const events = this._sdkSession.getEvents();
 		return buildChatHistoryFromEvents(events);
 	}

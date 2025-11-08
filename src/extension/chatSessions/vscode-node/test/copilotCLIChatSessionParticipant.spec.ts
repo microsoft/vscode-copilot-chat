@@ -71,12 +71,12 @@ class FakeCopilotCLISession implements ICopilotCLISession {
 	public onDidChangeStatus: any = () => ({ dispose() { } });
 	public attachPermissionHandler = vi.fn(() => ({ dispose() { } }));
 	// Implementation uses the (typo'd) method name `attchStream`.
-	public attchStream = vi.fn(() => ({ dispose() { } }));
+	public attachStream = vi.fn(() => ({ dispose() { } }));
 	public handleRequest = vi.fn(async () => { });
 	public addUserMessage = vi.fn();
 	public addUserAssistantMessage = vi.fn();
 	public getSelectedModelId = vi.fn(async () => 'model-default');
-	public getChatHistory = vi.fn(async () => []);
+	public getChatHistory = vi.fn(() => []);
 	constructor(id: string) { this.sessionId = id; }
 	onPermissionRequested: vscode.Event<PermissionRequest> = () => ({ dispose() { } });
 	dispose(): void {

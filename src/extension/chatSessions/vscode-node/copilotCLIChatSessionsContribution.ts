@@ -236,7 +236,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
-		const history = await existingSession?.getChatHistory() || [];
+		const history = existingSession?.getChatHistory() || [];
 
 		if (!_sessionModel.get(copilotcliSessionId)) {
 			_sessionModel.set(copilotcliSessionId, selectedModel ?? preferredModel);
@@ -395,7 +395,7 @@ export class CopilotCLIChatSessionParticipant {
 			stream.warning(vscode.l10n.t('Chat session not found.'));
 			return undefined;
 		}
-		disposables.add(session.attchStream(stream));
+		disposables.add(session.attachStream(stream));
 		disposables.add(session.attachPermissionHandler(async (permissionRequest: PermissionRequest) => requestPermission(permissionRequest, this.toolsService, request.toolInvocationToken, token)));
 
 

@@ -139,7 +139,7 @@ describe('CopilotCLISession', () => {
 		const stream = new MockChatResponseStream();
 
 		// Attach stream first, then invoke with new signature (no stream param)
-		session.attchStream(stream);
+		session.attachStream(stream);
 		await session.handleRequest('Hello', [], undefined, CancellationToken.None);
 
 		expect(session.status).toBe(ChatSessionStatus.Completed);
@@ -150,7 +150,7 @@ describe('CopilotCLISession', () => {
 	it('switches model when different modelId provided', async () => {
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		await session.handleRequest('Hi', [], 'modelB', CancellationToken.None);
 
 		expect(sdkSession._selectedModel).toBe('modelB');
@@ -161,7 +161,7 @@ describe('CopilotCLISession', () => {
 		sdkSession.send = async () => { throw new Error('network'); };
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		await session.handleRequest('Boom', [], undefined, CancellationToken.None);
 
 		expect(session.status).toBe(ChatSessionStatus.Failed);
@@ -173,7 +173,7 @@ describe('CopilotCLISession', () => {
 		const statuses: (ChatSessionStatus | undefined)[] = [];
 		const listener = disposables.add(session.onDidChangeStatus(s => statuses.push(s)));
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		await session.handleRequest('Status OK', [], 'modelA', CancellationToken.None);
 		listener.dispose?.();
 
@@ -188,7 +188,7 @@ describe('CopilotCLISession', () => {
 		const statuses: (ChatSessionStatus | undefined)[] = [];
 		const listener = disposables.add(session.onDidChangeStatus(s => statuses.push(s)));
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		await session.handleRequest('Will Fail', [], undefined, CancellationToken.None);
 		listener.dispose?.();
 
@@ -207,7 +207,7 @@ describe('CopilotCLISession', () => {
 		});
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		const handlePromise = session.handleRequest('Test', [], undefined, CancellationToken.None);
 
 		// Path must be absolute within workspace, should auto-approve
@@ -228,7 +228,7 @@ describe('CopilotCLISession', () => {
 		});
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		const handlePromise = session.handleRequest('Test', [], undefined, CancellationToken.None);
 
 		// Path must be absolute within workspace, should auto-approve
@@ -249,7 +249,7 @@ describe('CopilotCLISession', () => {
 		});
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 
 		disposables.add(session.attachPermissionHandler((permission) => {
 			askedForPermission = permission;
@@ -279,7 +279,7 @@ describe('CopilotCLISession', () => {
 			sdkSession.emit('assistant.turn_end', {});
 		});
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		const handlePromise = session.handleRequest('Write', [], undefined, CancellationToken.None);
 
 		const result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'a.ts', intention: 'Update file', diff: '' });
@@ -298,7 +298,7 @@ describe('CopilotCLISession', () => {
 			sdkSession.emit('assistant.turn_end', {});
 		});
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		const handlePromise = session.handleRequest('Write', [], undefined, CancellationToken.None);
 
 		const result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'b.ts', intention: 'Update file', diff: '' });
@@ -317,7 +317,7 @@ describe('CopilotCLISession', () => {
 			sdkSession.emit('assistant.turn_end', {});
 		});
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		const handlePromise = session.handleRequest('Write', [], undefined, CancellationToken.None);
 
 		const result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'err.ts', intention: 'Update file', diff: '' });
@@ -333,7 +333,7 @@ describe('CopilotCLISession', () => {
 		const session = await createSession();
 		session.attachPermissionHandler(async () => true);
 		const stream = new MockChatResponseStream();
-		session.attchStream(stream);
+		session.attachStream(stream);
 		// Spy on trackEdit to capture ordering (we don't want to depend on externalEdit mechanics here)
 		const trackedOrder: string[] = [];
 		const trackSpy = vi.spyOn(ExternalEditTracker.prototype, 'trackEdit').mockImplementation(async function (this: any, editKey: string) {
