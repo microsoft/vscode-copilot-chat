@@ -119,6 +119,16 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						// This is a new session not yet persisted to disk by SDK
 						return undefined;
 					}
+					const timestamp = metadata.startTime;
+					const id = metadata.sessionId;
+					const label = metadata.summary ? labelFromPrompt(metadata.summary) : undefined;
+					if (label) {
+						return {
+							id,
+							label,
+							timestamp,
+						} satisfies ICopilotCLISessionItem;
+					}
 					let dispose: (() => Promise<void>) | undefined = undefined;
 					let session: Session | undefined = undefined;
 					try {
@@ -134,20 +144,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							return undefined;
 						}
 						const label = this._generateSessionLabel(session.sessionId, chatMessages, undefined);
-
-						// Get timestamp from last SDK event, or fallback to metadata.startTime
-						const sdkEvents = session.getEvents();
-						const lastEventWithTimestamp = [...sdkEvents].reverse().find(event =>
-							event.type !== 'session.import_legacy'
-							&& event.type !== 'session.start'
-							&& 'timestamp' in event
-						);
-						const timestamp = lastEventWithTimestamp && 'timestamp' in lastEventWithTimestamp
-							? new Date(lastEventWithTimestamp.timestamp)
-							: metadata.startTime;
-
 						return {
-							id: metadata.sessionId,
+							id,
 							label,
 							timestamp,
 						} satisfies ICopilotCLISessionItem;
@@ -333,13 +331,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						: '';
 
 				if (content) {
-					// Strip system reminders and return first line or first 50 characters, whichever is shorter
-					const cleanContent = stripReminders(content);
-					const firstLine = cleanContent.split('\n').find((l: string) => l.trim().length > 0) ?? '';
-					return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
+					return labelFromPrompt(content);
 				}
 			} else if (prompt && prompt.trim().length > 0) {
-				return prompt.trim().length > 50 ? prompt.trim().substring(0, 47) + '...' : prompt.trim();
+				return labelFromPrompt(prompt);
+
 			}
 		} catch (error) {
 			this.logService.warn(`Failed to generate session label for ${sessionId}: ${error}`);
@@ -348,4 +344,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		// Fallback to session ID
 		return `Session ${sessionId.slice(0, 8)}`;
 	}
+}
+
+function labelFromPrompt(prompt: string): string {
+	// Strip system reminders and return first line or first 50 characters, whichever is shorter
+	const cleanContent = stripReminders(prompt);
+	const firstLine = cleanContent.split('\n').find((l: string) => l.trim().length > 0) ?? '';
+	return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
 }
