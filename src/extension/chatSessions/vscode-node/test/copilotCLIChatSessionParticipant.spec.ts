@@ -248,6 +248,30 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(assistantArg).toMatch(/<pr_metadata uri="pr:\/\/1"/);
 	});
 
+	it('handles /delegate command for new session', async () => {
+		const newSession = new FakeCopilotCLISession('push-session-id');
+		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }] } }) } as unknown as IGitService['activeRepository'];
+		const request = new TestChatRequest('/delegate Build feature');
+		const context = createChatContext('existing-delegate', true);
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+		sessionService.createSession.mockResolvedValue(newSession);
+
+		await participant.createHandler()(request, context, stream, token);
+
+		expect(sessionService.createSession).toHaveBeenCalled();
+		expect(cloudProvider.tryHandleUncommittedChanges).toHaveBeenCalled();
+		expect(cloudProvider.createDelegatedChatSession).toHaveBeenCalled();
+		// PR metadata recorded
+		expect(newSession.addUserMessage).toHaveBeenCalledWith('/delegate Build feature');
+		const assistantArg = newSession.addUserAssistantMessage.mock.calls[0][0];
+		expect(assistantArg).toContain('pr://1');
+		// Uncommitted changes warning surfaced
+		// Warning should appear (we emitted stream.warning). The mock stream only records markdown.
+		// Delegate path adds assistant PR metadata; ensure output contains PR metadata tag instead of relying on warning capture.
+		expect(assistantArg).toMatch(/<pr_metadata uri="pr:\/\/1"/);
+	});
+
 	it('invokes handlePushConfirmationData without existing chatSessionContext (summary via summarizer)', async () => {
 		const request = new TestChatRequest('Push this');
 		const context = { chatSessionContext: undefined, chatSummary: undefined } as unknown as vscode.ChatContext;
