@@ -63,7 +63,7 @@ class FakeWorktreeManager extends mock<CopilotCLIWorktreeManager>() {
 	override getIsolationPreference = vi.fn((_id: string) => false);
 }
 
-interface CreateSessionArgs { prompt: string | undefined; modelId: string | undefined; workingDirectory: string | undefined }
+interface CreateSessionArgs { prompt: string | undefined; modelId: string | undefined; workingDirectory: string | undefined; isolationEnabled: boolean | undefined }
 
 class FakeCopilotCLISession implements ICopilotCLISession {
 	public sessionId: string;
@@ -88,8 +88,8 @@ class FakeCopilotCLISession implements ICopilotCLISession {
 class FakeSessionService extends DisposableStore implements ICopilotCLISessionService {
 	_serviceBrand: undefined;
 	public createdArgs: CreateSessionArgs | undefined;
-	public createSession = vi.fn(async (prompt: string | undefined, modelId: string | undefined, workingDirectory: string | undefined) => {
-		this.createdArgs = { prompt, modelId, workingDirectory };
+	public createSession = vi.fn(async (prompt: string | undefined, modelId: string | undefined, workingDirectory: string | undefined, isolationEnabled: boolean | undefined) => {
+		this.createdArgs = { prompt, modelId, workingDirectory, isolationEnabled };
 		const s = new FakeCopilotCLISession('new-session-id');
 		return s as unknown as ICopilotCLISession;
 	});
@@ -285,7 +285,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		await participant.createHandler()(request, context, stream, token);
 
 		const expectedPrompt = 'Push this\n**Summary**\nsummary text';
-		expect(sessionService.createSession).toHaveBeenCalledWith(expectedPrompt, undefined, undefined, token);
+		expect(sessionService.createSession).toHaveBeenCalledWith(expectedPrompt, undefined, undefined, undefined, token);
 		expect(summarySpy).toHaveBeenCalledTimes(1);
 		expect(execSpy).toHaveBeenCalledTimes(2);
 		expect(execSpy.mock.calls[0]).toEqual(['vscode.open', expect.any(Object)]);
@@ -304,7 +304,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		await participant.createHandler()(request, context, stream, token);
 
 		const expectedPrompt = 'Push that\n**Summary**\nprecomputed history';
-		expect(sessionService.createSession).toHaveBeenCalledWith(expectedPrompt, undefined, undefined, token);
+		expect(sessionService.createSession).toHaveBeenCalledWith(expectedPrompt, undefined, undefined, undefined, token);
 		expect(summarySpy).not.toHaveBeenCalled();
 		expect(execSpy).toHaveBeenCalledTimes(2);
 		expect(execSpy.mock.calls[0].at(0)).toBe('vscode.open');
