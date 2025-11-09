@@ -258,10 +258,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			// TODO:@rebornix @lszomoru
 			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
 			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
-			const data = Uri.file(permissionRequest.fileName);
+			const editFile = Uri.file(permissionRequest.fileName);
 
-			if (!this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(data, Uri.file(workingDirectory))) {
+			if (!this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory))) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in working directory ${permissionRequest.fileName}`);
+				const editKey = getEditKeyForFile(editFile);
+
+				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
+				if (editKey && this._stream) {
+					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${editKey} & file ${editFile.fsPath}`);
+					await editTracker.trackEdit(editKey, [editFile], this._stream);
+				}
+
 				return { kind: 'approved' };
 			}
 		}
@@ -273,10 +281,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				return { kind: 'denied-interactively-by-user' };
 			}
 
+			// Check if we're editinga file.
+			const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
+			const editKey = editFile ? getEditKeyForFile(editFile) : undefined;
+
 			if (await permissionHandler(permissionRequest, token)) {
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
-				const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
-				const editKey = editFile ? getEditKeyForFile(editFile) : undefined;
 				if (editFile && editKey && this._stream) {
 					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${editKey} & file ${editFile.fsPath}`);
 					await editTracker.trackEdit(editKey, [editFile], this._stream);
