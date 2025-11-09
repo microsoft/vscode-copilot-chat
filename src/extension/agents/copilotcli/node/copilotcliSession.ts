@@ -166,6 +166,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					const responsePart = processToolExecutionStart(event, this._pendingToolInvocations);
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
+						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
 					}
 				}
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
