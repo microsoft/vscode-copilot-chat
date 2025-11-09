@@ -257,18 +257,28 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	 * @returns A chat session item for display in the UI
 	 */
 	private _toChatSessionItem(session: { id: string; label: string; timestamp: Date; status?: vscode.ChatSessionStatus }): vscode.ChatSessionItem {
+		// Create a URI resource for this session using the 'copilotcli' scheme
 		const resource = SessionIdForCLI.getResource(session.id);
+		
+		// Use provided label or default to 'Copilot CLI'
 		const label = session.label || 'Copilot CLI';
+		
+		// Check if this session has an associated worktree for isolation
 		const worktreePath = this.worktreeManager.getWorktreeRelativePath(session.id);
 		let description: vscode.MarkdownString | undefined;
 		if (worktreePath) {
+			// Display worktree name with git icon in the description
 			description = new vscode.MarkdownString(`$(git-merge) ${worktreePath}`);
 			description.supportThemeIcons = true;
 		}
+		
+		// Build tooltip with session details
 		const tooltipLines = [`Copilot CLI session: ${label}`];
 		if (worktreePath) {
 			tooltipLines.push(`Worktree: ${worktreePath}`);
 		}
+		
+		// Default to Completed status if not specified
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 		return {
 			resource,
@@ -323,28 +333,44 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	 * @returns A chat session object with history and options
 	 */
 	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+		// Fetch available models and default model in parallel for efficiency
 		const [models, defaultModel] = await Promise.all([
 			this.copilotCLIModels.getAvailableModels(),
 			this.copilotCLIModels.getDefaultModel()
 		]);
+		
+		// Extract session ID from the resource URI
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
+		
+		// Determine the preferred model for this session
 		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
 		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
 
+		// Check if session has an associated worktree
 		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
+		
+		// Try to load existing session from disk
 		const existingSession = await this.sessionService.getSession(copilotcliSessionId, undefined, workingDirectory, false, token);
+		
+		// Get the model selected in the existing session (if any)
 		const selectedModelId = await existingSession?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
+		
+		// Build options for the session UI
 		const options: Record<string, string> = {
 			[MODELS_OPTION_ID]: _sessionModel.get(copilotcliSessionId)?.id ?? defaultModel.id,
 		};
 
+		// For new sessions, add isolation option if the feature is enabled
 		if (!existingSession && this.configurationService.getConfig(ConfigKey.Internal.CLIIsolationEnabled)) {
 			const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
+		
+		// Load chat history from existing session, or use empty array for new sessions
 		const history = await existingSession?.getChatHistory() || [];
 
+		// Cache the selected model for this session if not already set
 		if (!_sessionModel.get(copilotcliSessionId)) {
 			_sessionModel.set(copilotcliSessionId, selectedModel ?? preferredModel);
 		}
@@ -393,20 +419,26 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	async provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): Promise<void> {
 		const sessionId = SessionIdForCLI.parse(resource);
 		const models = await this.copilotCLIModels.getAvailableModels();
+		
+		// Process each option update
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
+				// Handle model selection changes
 				if (typeof update.value === 'undefined') {
+					// Clear model selection if value is undefined
 					_sessionModel.set(sessionId, undefined);
 				} else {
+					// Find and store the selected model
 					const model = models.find(m => m.id === update.value);
 					_sessionModel.set(sessionId, model);
-					// Persist the user's choice to global state
+					
+					// Persist the user's choice to global state for future sessions
 					if (model) {
 						this.copilotCLIModels.setDefaultModel(model);
 					}
 				}
 			} else if (update.optionId === ISOLATION_OPTION_ID) {
-				// Handle isolation option changes
+				// Handle isolation (worktree) option changes
 				await this.worktreeManager.setIsolationPreference(sessionId, update.value === 'enabled');
 			}
 		}
@@ -460,19 +492,21 @@ export class CopilotCLIChatSessionParticipant {
 				"hasDelegatePrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the prompt is a /delegate command." }
 			}
 		*/
+		// Send telemetry about the chat request
 		this.telemetryService.sendMSFTTelemetryEvent('copilotcli.chat.invoke', {
 			hasChatSessionItem: String(!!chatSessionContext?.chatSessionItem),
 			isUntitled: String(chatSessionContext?.isUntitled),
 			hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
 		});
 
+		// Handle requests without session context (invoked from normal chat or cloud button)
 		if (!chatSessionContext) {
 			if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
 				stream.warning(vscode.l10n.t('No chat session context available for confirmation data handling.'));
 				return {};
 			}
 
-			// Invoked from a 'normal' chat or 'cloud button' without CLI session context
+			// Create a new CLI session and push chat content to it
 			return await this.handlePushConfirmationData(request, context, stream, token);
 		}
 
@@ -483,16 +517,21 @@ export class CopilotCLIChatSessionParticipant {
 		const preferredModel = _sessionModel.get(id);
 		// For existing sessions we cannot fall back, as the model info would be updated in _sessionModel
 		const modelId = this.copilotCLIModels.toModelProvider(preferredModel?.id || defaultModel.id);
+		
+		// Resolve the prompt and any attachments from the request
 		const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, token);
 
-		// Handle new (untitled) sessions
+		// Handle new (untitled) sessions - create session and optional worktree
 		if (chatSessionContext.isUntitled) {
 			const workingDirectory = await this.worktreeManager.createWorktreeIfNeeded(id, stream);
 			const session = await this.sessionService.createSession(prompt, modelId, workingDirectory, token);
+			
+			// Store worktree path if one was created
 			if (workingDirectory) {
 				await this.worktreeManager.storeWorktreePath(session.sessionId, workingDirectory);
 			}
 
+			// Process the request with the CLI session
 			await session.handleRequest(prompt, attachments, modelId, stream, request.toolInvocationToken, token);
 
 			// Update the session item with the actual session ID and user's prompt as the label
@@ -502,6 +541,7 @@ export class CopilotCLIChatSessionParticipant {
 			return {};
 		}
 
+		// Handle existing sessions - retrieve session from storage
 		const workingDirectory = this.worktreeManager.getWorktreePath(id);
 		const session = await this.sessionService.getSession(id, undefined, workingDirectory, false, token);
 		if (!session) {
@@ -509,15 +549,18 @@ export class CopilotCLIChatSessionParticipant {
 			return {};
 		}
 
+		// Handle confirmation responses (e.g., user accepted/rejected delegation with uncommitted changes)
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
 			return await this.handleConfirmationData(session, request, context, stream, token);
 		}
 
+		// Handle /delegate command to delegate work to cloud agent
 		if (request.prompt.startsWith('/delegate')) {
 			await this.handleDelegateCommand(session, request, context, stream, token);
 			return {};
 		}
 
+		// Process normal chat request with the CLI session
 		await session.handleRequest(prompt, attachments, modelId, stream, request.toolInvocationToken, token);
 		return {};
 	}
@@ -532,31 +575,41 @@ export class CopilotCLIChatSessionParticipant {
 	 * @param token - Cancellation token
 	 */
 	private async handleDelegateCommand(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+		// Verify cloud agent is available
 		if (!this.cloudSessionProvider) {
 			stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
 			return {};
 		}
 
-		// Check for uncommitted changes
+		// Check for uncommitted changes in the workspace
 		const currentRepository = this.gitService.activeRepository.get();
 		const hasChanges = (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0);
 
+		// Warn user if there are uncommitted changes
 		if (hasChanges) {
 			stream.warning(localize('copilotcli.uncommittedChanges', "You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them."));
 		}
 
+		// Summarize the conversation history to provide context to the cloud agent
 		const history = await this.summarizer.provideChatSummary(context, token);
+		
+		// Extract the actual prompt by removing the '/delegate' prefix
 		const prompt = request.prompt.substring('/delegate'.length).trim();
+		
+		// Try to handle uncommitted changes scenario, or create delegated session
 		if (!await this.cloudSessionProvider.tryHandleUncommittedChanges({
 			prompt: prompt,
 			history: history,
 			chatContext: context
 		}, stream, token)) {
+			// Create a new cloud agent session (which creates a PR)
 			const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
 				prompt,
 				history,
 				chatContext: context
 			}, stream, token);
+			
+			// Record the delegation in the CLI session history
 			if (prInfo) {
 				await this.recordPushToSession(session, request.prompt, prInfo, token);
 			}
@@ -573,29 +626,41 @@ export class CopilotCLIChatSessionParticipant {
 	 * @returns A chat result
 	 */
 	private async handleConfirmationData(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+		// Collect all confirmation results (both accepted and rejected)
 		const results: ConfirmationResult[] = [];
+		
+		// Add accepted confirmations
 		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
+		
+		// Add rejected confirmations (excluding duplicates already in accepted)
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
 
+		// Process each confirmation result
 		for (const data of results) {
 			switch (data.step) {
 				case 'uncommitted-changes':
 					{
+						// Handle response to uncommitted changes confirmation
 						if (!data.accepted || !data.metadata) {
 							stream.markdown(vscode.l10n.t('Cloud agent delegation request cancelled.'));
 							return {};
 						}
+						
+						// User accepted - proceed with delegation
 						const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession({
 							prompt: data.metadata.prompt,
 							history: data.metadata.history,
 							chatContext: context
 						}, stream, token);
+						
+						// Record the delegation in session history
 						if (prInfo) {
 							await this.recordPushToSession(session, request.prompt, prInfo, token);
 						}
 						return {};
 					}
 				default:
+					// Warn about unknown confirmation steps
 					stream.warning(`Unknown confirmation step: ${data.step}\n\n`);
 					break;
 			}
@@ -619,12 +684,20 @@ export class CopilotCLIChatSessionParticipant {
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult | void> {
 		const prompt = request.prompt;
+		
+		// Get conversation history if available, or summarize the context
 		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
 
+		// Combine prompt with history summary for context
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
+		
+		// Create a new CLI session with the combined prompt
 		const session = await this.sessionService.createSession(requestPrompt, undefined, undefined, token);
 
+		// Open the new CLI session in the UI
 		await vscode.commands.executeCommand('vscode.open', SessionIdForCLI.getResource(session.sessionId));
+		
+		// Submit the prompt to the newly opened session
 		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 		return {};
 	}
@@ -661,21 +734,30 @@ export class CopilotCLIChatSessionParticipant {
  */
 export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService): IDisposable {
 	const disposableStore = new DisposableStore();
+	
+	// Register refresh command (legacy namespace)
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.copilotcli.sessions.refresh', () => {
 		copilotcliSessionItemProvider.refresh();
 	}));
+	
+	// Register refresh command (current namespace)
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.refresh', () => {
 		copilotcliSessionItemProvider.refresh();
 	}));
+	
+	// Register delete session command with confirmation dialog
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
 			const deleteLabel = l10n.t('Delete');
+			
+			// Show confirmation dialog before deleting
 			const result = await vscode.window.showWarningMessage(
 				l10n.t('Are you sure you want to delete the session?'),
 				{ modal: true },
 				deleteLabel
 			);
 
+			// Proceed with deletion if user confirmed
 			if (result === deleteLabel) {
 				const id = SessionIdForCLI.parse(sessionItem.resource);
 				await copilotCLISessionService.deleteSession(id);
@@ -683,14 +765,18 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			}
 		}
 	}));
+	
+	// Register command to resume session in terminal
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.resumeInTerminal', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
 		}
 	}));
 
+	// Register command to create a new terminal session
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.newTerminalSession', async () => {
 		await copilotcliSessionItemProvider.createCopilotCLITerminal();
 	}));
+	
 	return disposableStore;
 }
