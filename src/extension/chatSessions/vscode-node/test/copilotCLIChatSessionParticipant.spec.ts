@@ -60,6 +60,7 @@ class FakeWorktreeManager extends mock<CopilotCLIWorktreeManager>() {
 	override createWorktreeIfNeeded = vi.fn(async () => undefined);
 	override storeWorktreePath = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
+	override getIsolationPreference = vi.fn((_id: string) => false);
 }
 
 interface CreateSessionArgs { prompt: string | undefined; modelId: string | undefined; workingDirectory: string | undefined }
