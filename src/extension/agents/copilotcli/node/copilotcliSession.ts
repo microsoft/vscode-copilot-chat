@@ -288,12 +288,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				return { kind: 'denied-interactively-by-user' };
 			}
 
-			// Check if we're editinga file.
-			const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
-			const editKey = editFile ? getEditKeyForFile(editFile) : undefined;
-
 			if (await permissionHandler(permissionRequest, token)) {
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
+				const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
+				const editKey = editFile ? getEditKeyForFile(editFile) : undefined;
 				if (editFile && editKey && this._stream) {
 					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${editKey} & file ${editFile.fsPath}`);
 					await editTracker.trackEdit(editKey, [editFile], this._stream);
