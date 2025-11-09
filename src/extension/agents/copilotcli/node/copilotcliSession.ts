@@ -260,8 +260,15 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
 			const editFile = Uri.file(permissionRequest.fileName);
 
-			if (!this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory))) {
-				this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in working directory ${permissionRequest.fileName}`);
+			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
+			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
+
+			if (isWorkspaceFile || isWorkingDirectoryFile) {
+				if (isWorkspaceFile) {
+					this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in workspace ${permissionRequest.fileName}`);
+				} else {
+					this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in working directory ${permissionRequest.fileName}`);
+				}
 				const editKey = getEditKeyForFile(editFile);
 
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
