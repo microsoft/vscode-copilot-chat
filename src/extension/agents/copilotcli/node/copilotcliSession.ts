@@ -68,6 +68,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	constructor(
 		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
+		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICopilotCLISessionOptionsService private readonly cliSessionOptions: ICopilotCLISessionOptionsService,
@@ -200,10 +201,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			await this._sdkSession.send({ prompt, attachments, abortController });
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
-			if (this._options.workingDirectory) {
-				// Stage all changes in the working directory when the session is completed
-				await this.gitService.add(Uri.file(this._options.workingDirectory), []);
-				this.logService.trace(`[CopilotCLISession] Staged all changes in working directory ${this._options.workingDirectory}`);
+			if (this._options.isolationEnabled) {
+				// When isolation is enabled and we are using a git workspace, stage
+				// all changes in the working directory when the session is completed
+				const workingDirectory = this._options.toSessionOptions().workingDirectory;
+				if (workingDirectory) {
+					await this.gitService.add(Uri.file(workingDirectory), []);
+					this.logService.trace(`[CopilotCLISession] Staged all changes in working directory ${workingDirectory}`);
+				}
 			}
 
 			this._status = ChatSessionStatus.Completed;

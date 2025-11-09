@@ -19,6 +19,7 @@ import { CopilotCLISessionOptions, ICopilotCLISessionOptionsService } from '../c
 import { CopilotCLISession } from '../copilotcliSession';
 import { CopilotCLIToolNames } from '../copilotcliToolInvocationFormatter';
 import { PermissionRequest } from '../permissionHelpers';
+import { IGitService } from '../../../../../platform/git/common/gitService';
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
@@ -77,7 +78,8 @@ function createSessionOptionsService() {
 					permissionHandler = h;
 					return { dispose: () => { permissionHandler = undefined; } };
 				},
-				toSessionOptions: () => allOptions
+				toSessionOptions: () => allOptions,
+				isolationEnabled: false
 			} satisfies CopilotCLISessionOptions;
 		}
 	};
@@ -130,6 +132,7 @@ describe('CopilotCLISession', () => {
 		return disposables.add(new CopilotCLISession(
 			sessionOptions,
 			sdkSession as unknown as Session,
+			gitService,
 			logger,
 			workspaceService,
 			sessionOptionsService,

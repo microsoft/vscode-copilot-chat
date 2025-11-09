@@ -12,7 +12,7 @@ import { DisposableStore, IDisposable } from '../../../../../util/vs/base/common
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationTokenSource, ChatSessionStatus, EventEmitter } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { ICopilotCLISDK, ICopilotCLISessionOptionsService } from '../copilotCli';
+import { CopilotCLISessionOptions, ICopilotCLISDK, ICopilotCLISessionOptionsService } from '../copilotCli';
 import { ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService } from '../copilotcliSessionService';
 
@@ -84,8 +84,9 @@ describe('CopilotCLISessionService', () => {
 			createOptions: vi.fn(async (opts: any) => {
 				return {
 					addPermissionHandler: () => ({ dispose() { /* noop */ } }),
-					toSessionOptions: () => ({ ...opts, requestPermission: async () => ({ kind: 'denied-interactively-by-user' }) })
-				};
+					toSessionOptions: () => ({ ...opts, requestPermission: async () => ({ kind: 'denied-interactively-by-user' }) }),
+					isolationEnabled: false
+				} satisfies CopilotCLISessionOptions;
 			}),
 		};
 		const sdk = {
@@ -137,7 +138,7 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.createSession', () => {
 		it('get session will return the same session created using createSession', async () => {
-			const session = await service.createSession('   ', 'gpt-test', '/tmp', createToken().token);
+			const session = await service.createSession('   ', 'gpt-test', '/tmp', false, createToken().token);
 			expect(optionsService.createOptions).toHaveBeenCalledWith({ model: 'gpt-test', workingDirectory: '/tmp' });
 
 			const existingSession = await service.getSession(session.sessionId, undefined, undefined, false, createToken().token);
@@ -145,7 +146,7 @@ describe('CopilotCLISessionService', () => {
 			expect(existingSession).toBe(session);
 		});
 		it('get session will return new once previous session is disposed', async () => {
-			const session = await service.createSession('   ', 'gpt-test', '/tmp', createToken().token);
+			const session = await service.createSession('   ', 'gpt-test', '/tmp', false, createToken().token);
 			expect(optionsService.createOptions).toHaveBeenCalledWith({ model: 'gpt-test', workingDirectory: '/tmp' });
 
 			session.dispose();
@@ -166,7 +167,7 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.getAllSessions', () => {
 		it('will not list created sessions', async () => {
-			await service.createSession('   ', 'gpt-test', '/tmp', createToken().token);
+			await service.createSession('   ', 'gpt-test', '/tmp', false, createToken().token);
 
 			const s1 = new FakeSdkSession('s1', new Date(0));
 			s1.messages.push({ role: 'user', content: 'a'.repeat(100) });
@@ -186,7 +187,7 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.deleteSession', () => {
 		it('disposes active wrapper, removes from manager and fires change event', async () => {
-			const session = await service.createSession('to delete', undefined, undefined, createToken().token);
+			const session = await service.createSession('to delete', undefined, undefined, undefined, createToken().token);
 			const id = session!.sessionId;
 			let fired = false;
 			disposables.add(service.onDidChangeSessions(() => { fired = true; }));
@@ -214,7 +215,7 @@ describe('CopilotCLISessionService', () => {
 	describe('CopilotCLISessionService.auto disposal timeout', () => {
 		it.skip('disposes session after completion timeout and aborts underlying sdk session', async () => {
 			vi.useFakeTimers();
-			const session = await service.createSession('will timeout', undefined, undefined, createToken().token);
+			const session = await service.createSession('will timeout', undefined, undefined, undefined, createToken().token);
 
 			vi.advanceTimersByTime(31000);
 			await Promise.resolve(); // allow any pending promises to run

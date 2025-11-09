@@ -23,6 +23,7 @@ const DEFAULT_CLI_MODEL = 'claude-sonnet-4';
 export interface CopilotCLISessionOptions {
 	addPermissionHandler(handler: SessionOptions['requestPermission']): IDisposable;
 	toSessionOptions(): SessionOptions;
+	isolationEnabled: boolean;
 }
 
 export interface ICopilotCLIModels {
@@ -167,7 +168,8 @@ export class CopilotCLISessionOptionsService implements ICopilotCLISessionOption
 					}
 				});
 			},
-			toSessionOptions: () => allOptions
+			toSessionOptions: () => allOptions,
+			isolationEnabled: false
 		} satisfies CopilotCLISessionOptions;
 	}
 	private async getWorkspaceFolderPath() {

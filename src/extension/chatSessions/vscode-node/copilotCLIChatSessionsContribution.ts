@@ -160,10 +160,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.copilotcliSessionService.getAllSessions(token);
-		const diskSessions: vscode.ChatSessionItem[] = [];
-		for (const session of sessions) {
-			diskSessions.push(await this._toChatSessionItem(session));
-		}
+		const diskSessions = await Promise.all(sessions.map(session => this._toChatSessionItem(session)));
 
 		const count = diskSessions.length;
 		this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
@@ -400,8 +397,10 @@ export class CopilotCLIChatSessionParticipant {
 			await this.worktreeManager.createWorktreeIfNeeded(id, stream) :
 			this.worktreeManager.getWorktreePath(id);
 
+		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
+
 		const session = chatSessionContext.isUntitled ?
-			await this.sessionService.createSession(prompt, modelId, workingDirectory, token) :
+			await this.sessionService.createSession(prompt, modelId, workingDirectory, isolationEnabled, token) :
 			await this.sessionService.getSession(id, undefined, workingDirectory, false, token);
 
 		if (!session) {
@@ -494,7 +493,7 @@ export class CopilotCLIChatSessionParticipant {
 		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
-		const session = await this.sessionService.createSession(requestPrompt, undefined, undefined, token);
+		const session = await this.sessionService.createSession(requestPrompt, undefined, undefined, undefined, token);
 
 		await this.commandExecutionService.executeCommand('vscode.open', SessionIdForCLI.getResource(session.sessionId));
 		await this.commandExecutionService.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });

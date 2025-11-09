@@ -46,7 +46,7 @@ export interface ICopilotCLISessionService {
 
 	// Session wrapper tracking
 	getSession(sessionId: string, model: string | undefined, workingDirectory: string | undefined, readonly: boolean, token: CancellationToken): Promise<ICopilotCLISession | undefined>;
-	createSession(prompt: string, model: string | undefined, workingDirectory: string | undefined, token: CancellationToken): Promise<ICopilotCLISession>;
+	createSession(prompt: string, model: string | undefined, workingDirectory: string | undefined, isolationEnabled: boolean | undefined, token: CancellationToken): Promise<ICopilotCLISession>;
 }
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
@@ -183,13 +183,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return { session, dispose: () => Promise.resolve() };
 	}
 
-	public async createSession(prompt: string, model: string | undefined, workingDirectory: string | undefined, token: CancellationToken): Promise<CopilotCLISession> {
+	public async createSession(prompt: string, model: string | undefined, workingDirectory: string | undefined, isolationEnabled: boolean | undefined, token: CancellationToken): Promise<CopilotCLISession> {
 		const sessionDisposables = this._register(new DisposableStore());
 		try {
 			const options = await raceCancellationError(this.optionsService.createOptions({
 				model: model as unknown as ModelMetadata['model'],
 				workingDirectory
 			}), token);
+			options.isolationEnabled = isolationEnabled === true;
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sdkSession = await sessionManager.createSession(options.toSessionOptions());
 			const chatMessages = await sdkSession.getChatContextMessages();
