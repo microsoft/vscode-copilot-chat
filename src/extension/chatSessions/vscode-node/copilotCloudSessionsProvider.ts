@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import MarkdownIt from 'markdown-it';
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
@@ -20,6 +21,7 @@ import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 
 export type ConfirmationResult = { step: string; accepted: boolean; metadata?: ConfirmationMetadata };
+export const UncommittedChangesStep = 'uncommitted-changes';
 
 interface ConfirmationMetadata {
 	prompt: string;
@@ -60,6 +62,72 @@ const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
 const BACKGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+/**
+ * Custom renderer for markdown-it that converts markdown to plain text
+ */
+class PlainTextRenderer {
+	private md: MarkdownIt;
+
+	constructor() {
+		this.md = new MarkdownIt();
+	}
+
+	/**
+	 * Renders markdown text as plain text by extracting text content from all tokens
+	 */
+	render(markdown: string): string {
+		const tokens = this.md.parse(markdown, {});
+		return this.renderTokens(tokens).trim();
+	}
+
+	private renderTokens(tokens: MarkdownIt.Token[]): string {
+		let result = '';
+		for (const token of tokens) {
+			// Process child tokens recursively
+			if (token.children) {
+				result += this.renderTokens(token.children);
+			}
+
+			// Handle different token types
+			switch (token.type) {
+				case 'text':
+				case 'code_inline':
+					// Only add content if no children were processed
+					if (!token.children) {
+						result += token.content;
+					}
+					break;
+
+				case 'softbreak':
+				case 'hardbreak':
+					result += ' '; // Space instead of newline to match original
+					break;
+
+				case 'paragraph_close':
+					result += '\n'; // Newline after paragraphs for separation
+					break;
+
+				case 'heading_close':
+					result += '\n'; // Newline after headings
+					break;
+
+				case 'list_item_close':
+					result += '\n'; // Newline after list items
+					break;
+
+				case 'fence':
+				case 'code_block':
+				case 'hr':
+					// Skip these entirely
+					break;
+
+				// Don't add default case - only explicitly handle what we want
+			}
+		}
+		return result;
+	}
+}
+
 export class CopilotCloudSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
 	public static readonly TYPE = 'copilot-cloud-agent';
 	private readonly DELEGATE_MODAL_DETAILS = vscode.l10n.t('The agent will work asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
@@ -74,6 +142,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
 	private cachedSessionsSize: number = 0;
+	private readonly plainTextRenderer = new PlainTextRenderer();
 
 	constructor(
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
@@ -203,12 +272,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const uri = await toOpenPullRequestWebviewUri({ owner: repoId.org, repo: repoId.repo, pullRequestNumber: pr.number });
 				const prLinkTitle = vscode.l10n.t('Open pull request in VS Code');
 				const description = new vscode.MarkdownString(`[#${pr.number}](${uri.toString()} "${prLinkTitle}")`);
+				const tooltip = this.createPullRequestTooltip(pr);
 
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status: this.getSessionStatusFromSession(sessionItem),
 					description,
+					tooltip,
 					timing: {
 						startTime: new Date(sessionItem.last_updated_at).getTime(),
 					},
@@ -415,6 +486,46 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
+	private createPullRequestTooltip(pr: PullRequestSearchItem): vscode.MarkdownString {
+		const markdown = new vscode.MarkdownString(undefined, true);
+		markdown.supportHtml = true;
+
+		// Repository and date
+		const date = new Date(pr.createdAt);
+		const ownerName = `${pr.repository.owner.login}/${pr.repository.name}`;
+		markdown.appendMarkdown(
+			`[${ownerName}](https://github.com/${ownerName}) on ${date.toLocaleString('default', {
+				day: 'numeric',
+				month: 'short',
+				year: 'numeric',
+			})}  \n`
+		);
+
+		// Icon, title, and PR number
+		const icon = this.getIconMarkdown(pr);
+		// Strip markdown from title for plain text display
+		const title = this.plainTextRenderer.render(pr.title);
+		markdown.appendMarkdown(
+			`${icon} **${title}** [#${pr.number}](${pr.url})  \n`
+		);
+
+		// Body/Description (truncated if too long)
+		markdown.appendMarkdown('  \n');
+		const maxBodyLength = 200;
+		let body = this.plainTextRenderer.render(pr.body || '');
+		// Convert plain text newlines to markdown line breaks (two spaces + newline)
+		body = body.replace(/\n/g, '  \n');
+		body = body.length > maxBodyLength ? body.substring(0, maxBodyLength) + '...' : body;
+		markdown.appendMarkdown(body + '  \n');
+
+		return markdown;
+	}
+
+	private getIconMarkdown(pr: PullRequestSearchItem): string {
+		const state = pr.state.toUpperCase();
+		return state === 'MERGED' ? '$(git-merge)' : '$(git-pull-request)';
+	}
+
 	private async startSession(stream: vscode.ChatResponseStream, token: vscode.CancellationToken, source: string, prompt: string, history?: string, references?: readonly vscode.ChatPromptReference[], customAgentName?: string) {
 		/* __GDPR__
 			"copilot.codingAgent.editor.invoke" : {
@@ -472,7 +583,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						}
 						break;
 					}
-				case 'uncommitted-changes':
+				case UncommittedChangesStep:
 					{
 						if (!data.accepted || !data.metadata) {
 							stream.markdown(vscode.l10n.t('Cloud agent request cancelled due to uncommitted changes.'));
@@ -556,7 +667,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					vscode.l10n.t('Uncommitted changes detected'),
 					vscode.l10n.t('You have uncommitted changes in your workspace. Consider committing them if you would like to include them in the cloud agent\'s work.'),
 					{
-						step: 'uncommitted-changes',
+						step: UncommittedChangesStep,
 						metadata: metadata satisfies ConfirmationMetadata, // Forward metadata
 					},
 					['Proceed', 'Cancel']

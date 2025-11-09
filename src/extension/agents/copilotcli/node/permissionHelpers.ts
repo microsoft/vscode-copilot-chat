@@ -4,7 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { SessionOptions } from '@github/copilot/sdk';
+import type { CancellationToken, ChatParticipantToolToken } from 'vscode';
+import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
+import { IToolsService } from '../../../tools/common/toolsService';
 
 type CoreTerminalConfirmationToolParams = {
 	tool: ToolName.CoreTerminalConfirmationTool;
@@ -22,6 +25,20 @@ type CoreConfirmationToolParams = {
 		message: string;
 		confirmationType: 'basic';
 	};
+}
+
+export async function requestPermission(
+	permissionRequest: PermissionRequest,
+	toolsService: IToolsService,
+	toolInvocationToken: ChatParticipantToolToken,
+	token: CancellationToken,
+): Promise<boolean> {
+
+	const { tool, input } = getConfirmationToolParams(permissionRequest);
+	const result = await toolsService.invokeTool(tool, { input, toolInvocationToken }, token);
+
+	const firstResultPart = result.content.at(0);
+	return (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes');
 }
 
 /**
