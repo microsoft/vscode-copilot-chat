@@ -361,7 +361,7 @@ export class CopilotCLIChatSessionParticipant {
 				return await this.handleConfirmationData(session, request.prompt, confirmationResults, context, stream, token);
 			}
 
-			if (!isUntitled && request.prompt.startsWith('/delegate')) {
+			if (request.prompt.startsWith('/delegate')) {
 				await this.handleDelegateCommand(session, request, context, stream, token);
 			} else {
 				await session.handleRequest(prompt, attachments, modelId, token);

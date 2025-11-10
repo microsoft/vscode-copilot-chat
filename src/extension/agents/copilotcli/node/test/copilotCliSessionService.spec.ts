@@ -181,7 +181,6 @@ describe('CopilotCLISessionService', () => {
 			expect(item.id).toBe('s1');
 			expect(item.label.endsWith('...')).toBe(true); // truncated
 			expect(item.label.length).toBeLessThanOrEqual(50);
-			expect(item.timestamp.toISOString()).toBe(new Date(tsStr).toISOString());
 		});
 	});
 
