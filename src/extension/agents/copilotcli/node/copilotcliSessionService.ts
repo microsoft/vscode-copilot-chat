@@ -51,7 +51,7 @@ export interface ICopilotCLISessionService {
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
 
-const SESSION_SHUTDOWN_TIMEOUT_MS = 30 * 1000;
+const SESSION_SHUTDOWN_TIMEOUT_MS = 300 * 1000;
 
 export class CopilotCLISessionService extends Disposable implements ICopilotCLISessionService {
 	declare _serviceBrand: undefined;

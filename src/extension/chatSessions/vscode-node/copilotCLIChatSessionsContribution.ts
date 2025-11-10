@@ -245,7 +245,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
 		const history = existingSession?.getChatHistory() || [];
-
+		existingSession?.dispose();
 		if (!_sessionModel.get(copilotcliSessionId)) {
 			_sessionModel.set(copilotcliSessionId, selectedModel ?? preferredModel);
 		}
@@ -566,10 +566,12 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		const sessionId = SessionIdForCLI.parse(sessionItemResource);
 		const session = await copilotCLISessionService.getSession(sessionId, { readonly: true }, CancellationToken.None);
+		const sessionExists = !!session;
+		session?.dispose();
 		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
 		const sessionWorktreeName = copilotcliSessionItemProvider.worktreeManager.getWorktreeRelativePath(sessionId);
 
-		if (!session || !sessionWorktree || !sessionWorktreeName) {
+		if (!sessionExists || !sessionWorktree || !sessionWorktreeName) {
 			return;
 		}
 
