@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -103,6 +104,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider, copilotCLIWorktreeManager);
 		const summarizer = copilotcliAgentInstaService.createInstance(ChatSummarizerProvider);
+		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 
 		const copilotcliChatSessionParticipant = copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
@@ -115,7 +117,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
-		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService));
+		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, gitService));
 	}
 
 	private registerCopilotCloudAgent() {

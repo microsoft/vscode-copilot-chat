@@ -9,7 +9,9 @@ import { IRunCommandExecutionService } from '../../../platform/commands/common/r
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
+import { toGitUri } from '../../../platform/git/common/utils';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
@@ -132,7 +134,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 	constructor(
-		private readonly worktreeManager: CopilotCLIWorktreeManager,
+		readonly worktreeManager: CopilotCLIWorktreeManager,
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
 		@ICopilotCLITerminalIntegration private readonly terminalIntegration: ICopilotCLITerminalIntegration,
 		@IGitService private readonly gitService: IGitService,
@@ -513,7 +515,7 @@ export class CopilotCLIChatSessionParticipant {
 	}
 }
 
-export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService): IDisposable {
+export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService, gitService: IGitService): IDisposable {
 	const disposableStore = new DisposableStore();
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.copilotcli.sessions.refresh', () => {
 		copilotcliSessionItemProvider.refresh();
@@ -542,9 +544,51 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
 		}
 	}));
-
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.newTerminalSession', async () => {
 		await copilotcliSessionItemProvider.createCopilotCLITerminal();
+	}));
+	disposableStore.add(vscode.commands.registerCommand('agentSession.copilotcli.openChanges', async (sessionItemResource?: vscode.Uri) => {
+		if (!sessionItemResource) {
+			return;
+		}
+
+		const sessionId = SessionIdForCLI.parse(sessionItemResource);
+		const session = await copilotCLISessionService.getSession(sessionId, undefined, undefined, false, CancellationToken.None);
+		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
+		const sessionWorktreeName = copilotcliSessionItemProvider.worktreeManager.getWorktreeRelativePath(sessionId);
+
+		if (!session || !sessionWorktree || !sessionWorktreeName) {
+			return;
+		}
+
+		const repository = await gitService.getRepository(Uri.file(sessionWorktree));
+		if (!repository) {
+			return;
+		}
+
+		const title = `Copilot CLI (${sessionWorktreeName})`;
+		const multiDiffSourceUri = Uri.parse(`copilotcli-worktree-changes:/${sessionId}`);
+		const resources = repository.changes?.indexChanges.map(change => {
+			switch (change.status) {
+				case 1 /* Status.INDEX_ADDED */:
+					return {
+						originalUri: undefined,
+						modifiedUri: change.uri
+					};
+				case 2 /* Status.INDEX_DELETED */:
+					return {
+						originalUri: toGitUri(change.uri, 'HEAD'),
+						modifiedUri: undefined
+					};
+				default:
+					return {
+						originalUri: toGitUri(change.uri, 'HEAD'),
+						modifiedUri: change.uri
+					};
+			}
+		});
+
+		await vscode.commands.executeCommand('_workbench.openMultiDiffEditor', { multiDiffSourceUri, title, resources });
 	}));
 	return disposableStore;
 }
