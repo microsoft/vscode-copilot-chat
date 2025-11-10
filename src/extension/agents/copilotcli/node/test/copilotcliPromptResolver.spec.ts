@@ -10,6 +10,7 @@ import { MockFileSystemService } from '../../../../../platform/filesystem/node/t
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
+import * as path from '../../../../../util/vs/base/common/path';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { ChatReferenceDiagnostic, Diagnostic, DiagnosticSeverity, FileType, Range } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
@@ -63,8 +64,8 @@ describe('CopilotCLIPromptResolver', () => {
 		// Spy on stat to simulate file type
 		const statSpy = vi.spyOn(fileSystemService, 'stat').mockResolvedValue({ type: FileType.File, size: 10 } as any);
 
-		const fileA = URI.file('/tmp/a.ts');
-		const fileB = URI.file('/tmp/b.ts');
+		const fileA = URI.file(path.join('tmp', 'a.ts'));
+		const fileB = URI.file(path.join('tmp', 'b.ts'));
 
 		const req = withReferences(new TestChatRequest('Explain a and b'), [
 			{ id: 'file-a', value: fileA, name: 'a.ts', range: [8, 9] }, // 'a'
@@ -76,8 +77,8 @@ describe('CopilotCLIPromptResolver', () => {
 		// Should have reminder block
 		expect(prompt).toMatch(/<reminder>/);
 		expect(prompt).toMatch(/The user provided the following references:/);
-		expect(prompt).toContain('- a → /tmp/a.ts');
-		expect(prompt).toContain('- b → /tmp/b.ts');
+		expect(prompt).toContain(`- a → ${fileA.fsPath}`);
+		expect(prompt).toContain(`- b → ${fileB.fsPath}`);
 
 		// Attachments reflect both files
 		expect(attachments.map(a => a.displayName).sort()).toEqual(['a.ts', 'b.ts']);
@@ -88,7 +89,7 @@ describe('CopilotCLIPromptResolver', () => {
 
 	it('includes diagnostics in reminder block with severity and line', async () => {
 		const statSpy = vi.spyOn(fileSystemService, 'stat').mockResolvedValue({ type: FileType.File, size: 10 } as any);
-		const fileUri = URI.file('/workspace/src/index.ts');
+		const fileUri = URI.file(path.join('workspace', 'src', 'index.ts'));
 
 		const diagnostics = [
 			makeDiagnostic(4, 'Unexpected any', 0, 'TS7005'),
@@ -109,7 +110,7 @@ describe('CopilotCLIPromptResolver', () => {
 		expect(prompt).toContain('- warning at /workspace/src/index.ts:10: Possible undefined');
 		// File should be attached once
 		expect(attachments).toHaveLength(1);
-		expect(attachments[0].path).toBe('/workspace/src/index.ts');
+		expect(attachments[0].path).toBe(fileUri.fsPath);
 		expect(statSpy).toHaveBeenCalledTimes(1);
 	});
 
