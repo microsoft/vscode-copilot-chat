@@ -170,7 +170,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 				const uri = await toOpenPullRequestWebviewUri({ owner: repoId.org, repo: repoId.repo, pullRequestNumber: pr.number });
 				const prLinkTitle = vscode.l10n.t('Open pull request in VS Code');
-				const description = new vscode.MarkdownString(`[#${pr.number}](${uri.toString()} "${prLinkTitle}")`);
+				const description = new vscode.MarkdownString(`[Finished in #${pr.number}](${uri.toString()} "${prLinkTitle}")`);
 
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + pr.number }),
