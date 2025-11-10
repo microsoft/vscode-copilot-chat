@@ -170,5 +170,3 @@ function isDiagnosticCollection(value: unknown): value is vscode.DiagnosticColle
 
 	return false;
 }
-
-
