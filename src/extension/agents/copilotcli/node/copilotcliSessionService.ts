@@ -170,7 +170,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 			// Merge with cached sessions (new sessions not yet persisted by SDK)
 			const allSessions = diskSessions
-				.filter(session => !this._newActiveSessions.has(session.id))
 				.map(session => {
 					return {
 						...session,
