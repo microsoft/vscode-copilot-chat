@@ -562,13 +562,13 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		}
 
 		const repository = await gitService.getRepository(Uri.file(sessionWorktree));
-		if (!repository) {
+		if (!repository?.changes) {
 			return;
 		}
 
 		const title = `Copilot CLI (${sessionWorktreeName})`;
 		const multiDiffSourceUri = Uri.parse(`copilotcli-worktree-changes:/${sessionId}`);
-		const resources = repository.changes?.indexChanges.map(change => {
+		const resources = repository.changes.indexChanges.map(change => {
 			switch (change.status) {
 				case 1 /* Status.INDEX_ADDED */:
 					return {
