@@ -100,7 +100,7 @@ function shouldExcludeReference(ref: vscode.ChatPromptReference): boolean {
 
 function collectDiagnosticContent(value: unknown, diagnosticTexts: string[], files: { path: string; name: string }[]): boolean {
 	const attachedFiles = new ResourceSet();
-	const diagnosticCollection = getChatRefenceDiagnostics(value);
+	const diagnosticCollection = getChatReferenceDiagnostics(value);
 	if (!diagnosticCollection.length) {
 		return false;
 	}
@@ -133,7 +133,7 @@ function collectDiagnosticContent(value: unknown, diagnosticTexts: string[], fil
 	return hasDiagnostics;
 }
 
-function getChatRefenceDiagnostics(value: unknown): [vscode.Uri, readonly vscode.Diagnostic[]][] {
+function getChatReferenceDiagnostics(value: unknown): [vscode.Uri, readonly vscode.Diagnostic[]][] {
 	if (isChatReferenceDiagnostic(value)) {
 		return Array.from(value.diagnostics.values());
 	}
