@@ -138,6 +138,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private chatSessions: Map<number, PullRequestSearchItem> = new Map();
 	private chatSessionItemsPromise: Promise<vscode.ChatSessionItem[]> | undefined;
 	private sessionAgentMap: Map<Uri, string> = new Map();
+	private sessionReferencesMap: Map<Uri, readonly vscode.ChatPromptReference[]> = new Map();
 	public chatParticipant = vscode.chat.createChatParticipant(CopilotCloudSessionsProvider.TYPE, async (request, context, stream, token) =>
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
@@ -372,8 +373,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			.slice().sort((a, b) =>
 				new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
 			);
+
+		// Get stored references for this session
+		const storedReferences = this.sessionReferencesMap.get(resource);
+
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
-		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
+		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId), storedReferences);
 
 		const selectedAgent =
 			// Local cache of session -> custom agent
@@ -617,11 +622,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return undefined;
 		}
 
+		// Store references for this session
+		const sessionUri = vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number });
+		if (references && references.length > 0) {
+			this.sessionReferencesMap.set(sessionUri, references);
+		}
+
 		const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
 		const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
 		stream.push(card);
 		stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
-		await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number }));
+		await vscode.commands.executeCommand('vscode.open', sessionUri);
 		// Return PR info for embedding in session history
 		return {
 			uri: uri.toString(),
@@ -698,11 +709,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (!number) {
 			return {};
 		}
+
+		// Store references for this session
+		const sessionUri = vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number });
+		if (metadata.references && metadata.references.length > 0) {
+			this.sessionReferencesMap.set(sessionUri, metadata.references);
+		}
+
 		// Tell UI to the new chat session
 		this._onDidCommitChatSessionItem.fire({
 			original: metadata.chatContext.chatSessionContext.chatSessionItem,
 			modified: {
-				resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number }),
+				resource: sessionUri,
 				label: `Pull Request ${number}`
 			}
 		});
