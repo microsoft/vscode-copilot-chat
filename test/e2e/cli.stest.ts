@@ -6,7 +6,7 @@
 import assert from 'assert';
 import * as path from 'path';
 import type { ChatPromptReference } from 'vscode';
-import { CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptionsService, ICopilotCLIModels, ICopilotCLISDK, ICopilotCLISessionOptionsService } from '../../src/extension/agents/copilotcli/node/copilotCli';
+import { CopilotCLIModels, CopilotCLISDK, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../src/extension/agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/agents/copilotcli/node/copilotcliSessionService';
@@ -35,7 +35,6 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	}
 
 	testingServiceCollection.define(ICopilotCLISessionService, new SyncDescriptor(TestCopilotCLISessionService));
-	testingServiceCollection.define(ICopilotCLISessionOptionsService, new SyncDescriptor(CopilotCLISessionOptionsService));
 	testingServiceCollection.define(ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels));
 	testingServiceCollection.define(ICopilotCLISDK, new SyncDescriptor(TestCopilotCLISDK));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(LanguageModelServer));
@@ -67,7 +66,7 @@ const scenariosPath = path.join(__dirname, '..', 'test/scenarios/test-cli');
 ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	stest({ description: 'can start a session' },
 		testRunner(async ({ sessionService }, stream, disposables) => {
-			const session = await sessionService.createSession('What is 1+8?', undefined, undefined, undefined, CancellationToken.None);
+			const session = await sessionService.createSession('What is 1+8?', {}, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.attachStream(stream));
 
@@ -90,7 +89,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 		testRunner(async ({ sessionService }, stream, disposables) => {
 			let sessionId = '';
 			{
-				const session = await sessionService.createSession('What is 1+8?', undefined, undefined, undefined, CancellationToken.None);
+				const session = await sessionService.createSession('What is 1+8?', {}, CancellationToken.None);
 				sessionId = session.sessionId;
 				disposables.add(session);
 
@@ -102,7 +101,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				const session = await new Promise<ICopilotCLISession>((resolve, reject) => {
 					const interval = disposables.add(new IntervalTimer());
 					interval.cancelAndSet(async () => {
-						const session = await sessionService.getSession(sessionId, undefined, undefined, false, CancellationToken.None);
+						const session = await sessionService.getSession(sessionId, { readonly: false }, CancellationToken.None);
 						if (session) {
 							interval.dispose();
 							resolve(session);
@@ -126,7 +125,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			const workingDirectory = path.join(scenariosPath, 'wkspc1');
 			const file = path.join(workingDirectory, 'sample.js');
 			const prompt = `Explain the contents of the file '${path.basename(file)}'. There is no need to check for contents in the directory. This file exists on disc.`;
-			const session = await sessionService.createSession(prompt, undefined, workingDirectory, undefined, CancellationToken.None);
+			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.attachStream(stream));
 
@@ -141,7 +140,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			const workingDirectory = path.join(scenariosPath, 'wkspc1');
 			const externalFile = path.join(scenariosPath, 'wkspc2', 'foobar.js');
 			const prompt = `Explain the contents of the file '${path.basename(externalFile)}'. This file exists on disc but not in the current working directory.`;
-			const session = await sessionService.createSession(prompt, undefined, workingDirectory, undefined, CancellationToken.None);
+			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.attachStream(stream));
 			let permissionRequested = false;
@@ -174,7 +173,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, undefined, workingDirectory, undefined, CancellationToken.None);
+			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.attachStream(stream));
 

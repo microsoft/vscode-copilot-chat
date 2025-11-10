@@ -32,7 +32,7 @@ export class CopilotCLISessionOptions {
 		this.model = options.model;
 		this.logger = getCopilotLogger(logger);
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
-			logger.info(`[CopilotCLISessionOptionsService] Permission request denied for permission as no handler was set: ${permission.kind}`);
+			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
 			return {
 				kind: "denied-interactively-by-user"
 			};
@@ -147,7 +147,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 			await this.ensureNodePtyShim();
 			return await import('@github/copilot/sdk');
 		} catch (error) {
-			this.logService.error(`[CopilotCLISDK] Failed to load @github/copilot/sdk: ${error}`);
+			this.logService.error(`[CopilotCLISession] Failed to load @github/copilot/sdk: ${error}`);
 			throw error;
 		}
 	}
