@@ -339,7 +339,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		const pr = await this.findPR(pullRequestNumber);
-		const getProblemStatement = async (sessions: SessionInfo[]) => {
+		// Get full problem statement including attachments/references
+		const getFullProblemStatement = async (sessions: SessionInfo[]) => {
 			if (sessions.length === 0) {
 				return undefined;
 			}
@@ -348,17 +349,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				return undefined;
 			}
 			const jobInfo = await this._octoKitService.getJobBySessionId(repoId.org, repoId.repo, sessions[0].id, 'vscode-copilot-chat');
-			let prompt = jobInfo?.problem_statement || 'Initial Implementation';
-			const titleMatch = prompt.match(/TITLE: \s*(.*)/i);
-			if (titleMatch && titleMatch[1]) {
-				prompt = titleMatch[1].trim();
-			} else {
-				const split = prompt.split('\n');
-				if (split.length > 0) {
-					prompt = split[0].trim();
-				}
-			}
-			return prompt.replace(/@copilot\s*/gi, '').trim();
+			return jobInfo?.problem_statement;
 		};
 		if (!pr) {
 			this.logService.error(`Session not found for ID: ${resource}`);
@@ -373,7 +364,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
 			);
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
-		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
+		const history = await sessionContentBuilder.buildSessionHistory(getFullProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
 
 		const selectedAgent =
 			// Local cache of session -> custom agent
