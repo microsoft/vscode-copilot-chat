@@ -43,7 +43,7 @@ vi.mock('../copilotCLITerminalIntegration', () => {
 // Minimal fake implementations for dependencies used by the participant
 
 class FakePromptResolver extends mock<CopilotCLIPromptResolver>() {
-	override resolvePrompt(request: vscode.ChatRequest) {
+	override resolvePrompt(request: vscode.ChatRequest, token: vscode.CancellationToken) {
 		return Promise.resolve({ prompt: request.prompt, attachments: [] });
 	}
 }
