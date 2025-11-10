@@ -28,6 +28,8 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 
 export interface IMadeChatRequestEvent {
 	readonly messages: Raw.ChatMessage[];
@@ -81,6 +83,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@ILogService private readonly _logService: ILogService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConversationOptions options: IConversationOptions,
 	) {
@@ -710,11 +713,12 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
 		this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
 		const errorDetail = fetcher.getUserMessageForFetcherError(err);
+		const scrubbedErrorDetail = this.scrubErrorDetail(errorDetail);
 		if (fetcher.isInternetDisconnectedError(err)) {
 			return {
 				type: ChatFetchResponseType.NetworkError,
 				reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
-				reasonDetail: errorDetail,
+				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
@@ -722,7 +726,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			return {
 				type: ChatFetchResponseType.NetworkError,
 				reason: errorDetail,
-				reasonDetail: errorDetail,
+				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
@@ -730,11 +734,20 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			return {
 				type: ChatFetchResponseType.Failed,
 				reason: 'Error on conversation request. Check the log for more details.',
-				reasonDetail: errorDetail,
+				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
 		}
+	}
+
+	private scrubErrorDetail(errorDetail: string) {
+		const username = this._authenticationService.copilotToken?.username;
+		if (!username) {
+			return errorDetail;
+		}
+		const regex = new RegExp(escapeRegExpCharacters(username), 'ig');
+		return errorDetail.replaceAll(regex, '<login>');
 	}
 }
 
