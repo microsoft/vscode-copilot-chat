@@ -55,11 +55,6 @@ export class PromptFileContextContribution extends Disposable {
 	private async register(): Promise<IDisposable> {
 		const disposables = new DisposableStore();
 		try {
-			const copilotAPI = await this.getCopilotApi();
-			if (copilotAPI === undefined) {
-				this.logService.warn('Copilot API is undefined, unable to register context provider.');
-				return disposables;
-			}
 			const self = this;
 			const resolver: Copilot.ContextResolver<Copilot.SupportedContextItem> = {
 				async resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): Promise<Copilot.SupportedContextItem[]> {
@@ -90,7 +85,10 @@ export class PromptFileContextContribution extends Disposable {
 				selector: promptFileSelector,
 				resolver: resolver
 			};
-			disposables.add(copilotAPI.registerContextProvider(provider));
+			const copilotAPI = await this.getCopilotApi();
+			if (copilotAPI) {
+				disposables.add(copilotAPI.registerContextProvider(provider));
+			}
 			disposables.add(this.languageContextProviderService.registerContextProvider(provider));
 		} catch (error) {
 			this.logService.error('Error regsistering prompt file context provider:', error);
