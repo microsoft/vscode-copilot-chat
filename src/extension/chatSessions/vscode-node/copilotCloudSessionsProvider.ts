@@ -143,6 +143,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	);
 	private cachedSessionsSize: number = 0;
 	private readonly plainTextRenderer = new PlainTextRenderer();
+	private retryContextMap: Map<string, { pullRequest: PullRequestSearchItem; waitForTransitionToInProgress: boolean }> = new Map();
 
 	constructor(
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
@@ -709,6 +710,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+		// Check if this is a retry polling request
+		const retryMatch = request.prompt.match(/^__retry_polling_(\d+)__$/);
+		if (retryMatch) {
+			const prNumber = parseInt(retryMatch[1], 10);
+			await this.handleRetryPolling(prNumber, stream, token);
+			return {};
+		}
+
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
 			const findAuthConfirmRequest = request.acceptedConfirmationData?.find(ref => ref?.authPermissionPrompted);
 			const findAuthRejectRequest = request.rejectedConfirmationData?.find(ref => ref?.authPermissionPrompted);
@@ -1180,7 +1189,20 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			await new Promise(resolve => setTimeout(resolve, pollInterval));
 		}
 
+		// Store retry context before showing timeout message
+		const retryKey = `pr-${pullRequest.number}`;
+		this.retryContextMap.set(retryKey, { pullRequest, waitForTransitionToInProgress });
+
 		stream.markdown(vscode.l10n.t('Timed out waiting for the cloud agent to respond. The agent may still be processing your request.'));
+		stream.markdown('\n\n');
+
+		// Add a retry button that sends a special retry command to chat
+		stream.button({
+			command: 'github.copilot.cloud.sessions.retryPolling',
+			title: vscode.l10n.t('Reload'),
+			arguments: [pullRequest.number]
+		});
+
 		return;
 	}
 
@@ -1404,5 +1426,35 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		} catch (error) {
 			return { error: vscode.l10n.t('Failed delegating to cloud agent. Please try again later.'), innerError: error.message, state: 'error' };
 		}
+	}
+
+	/**
+	 * Handle retry polling request from the chat participant.
+	 * This is called when the user sends a retry message after a timeout.
+	 */
+	async handleRetryPolling(prNumber: number, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<void> {
+		const retryKey = `pr-${prNumber}`;
+		const retryContext = this.retryContextMap.get(retryKey);
+		if (!retryContext) {
+			stream.markdown(vscode.l10n.t('Unable to retry - context not found. Please try submitting your request again.'));
+			return;
+		}
+
+		stream.markdown(vscode.l10n.t('Retrying connection to cloud agent...'));
+		stream.markdown('\n\n');
+
+		const newSession = await this.waitForNewSession(retryContext.pullRequest, stream, token, retryContext.waitForTransitionToInProgress);
+		if (!newSession) {
+			return;
+		}
+
+		// Clean up retry context after successful retry
+		this.retryContextMap.delete(retryKey);
+
+		// Stream the new session logs
+		stream.markdown(vscode.l10n.t('Cloud agent has begun work on your request'));
+		stream.markdown('\n\n');
+
+		await this.streamSessionLogs(stream, retryContext.pullRequest, newSession.id, token);
 	}
 }
