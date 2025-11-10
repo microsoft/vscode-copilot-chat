@@ -220,7 +220,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(sessionService.getSession).toHaveBeenCalledWith('existing-123', {
-			model: 'base', workingDirectory: undefined, readonly: false
+			model: 'base', workingDirectory: undefined, isolationEnabled: false, readonly: false
 		}, token);
 		expect(sessionService.createSession).not.toHaveBeenCalled();
 		expect(existing.handleRequest).toHaveBeenCalledWith('Continue', [], 'base', token);

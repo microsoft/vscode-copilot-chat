@@ -232,10 +232,9 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
 		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
 
-		// TODO @DonJayamanne This isn't correct for existing sessinos, we should either use empty or default workspace.
-		// We cannot use this worktree path, as this can change anytime in the session, hence its not possible for working directory to change on the fly.
 		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, readonly: true }, token);
+		const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
+		const existingSession = await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
 		const selectedModelId = await existingSession?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
 		const options: Record<string, string> = {
@@ -243,7 +242,6 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		};
 
 		if (!existingSession && this.configurationService.getConfig(ConfigKey.Internal.CLIIsolationEnabled)) {
-			const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
 		const history = existingSession?.getChatHistory() || [];
@@ -394,13 +392,10 @@ export class CopilotCLIChatSessionParticipant {
 		const { resource } = chatSessionContext.chatSessionItem;
 		const id = SessionIdForCLI.parse(resource);
 
-		// TODO @DonJayamanne This isn't correct for existing sessinos, we should either use empty or default workspace.
-		// We cannot use this worktree path, as this can change anytime in the session, hence its not possible for working directory to change on the fly.
 		const workingDirectory = chatSessionContext.isUntitled ?
 			(this.worktreeManager.getIsolationPreference(id) ? await this.worktreeManager.createWorktree(stream) : await this.getDefaultWorkingDirectory()) :
 			this.worktreeManager.getWorktreePath(id);
 
-		// TODO: @DonJayamanne We need to determine if we can determine whether isoluation was enabled for existing sessions
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
 
 		const session = chatSessionContext.isUntitled ?
