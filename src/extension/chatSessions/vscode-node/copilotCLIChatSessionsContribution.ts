@@ -396,12 +396,12 @@ export class CopilotCLIChatSessionParticipant {
 
 		// TODO @DonJayamanne This isn't correct for existing sessinos, we should either use empty or default workspace.
 		// We cannot use this worktree path, as this can change anytime in the session, hence its not possible for working directory to change on the fly.
-		const workingDirectory = (chatSessionContext.isUntitled ?
-			(this.worktreeManager.getIsolationPreference(id) ? await this.worktreeManager.createWorktree(stream) : undefined) :
-			this.worktreeManager.getWorktreePath(id)) ?? await this.getDefaultWorkingDirectory();
+		const workingDirectory = chatSessionContext.isUntitled ?
+			(this.worktreeManager.getIsolationPreference(id) ? await this.worktreeManager.createWorktree(stream) : await this.getDefaultWorkingDirectory()) :
+			this.worktreeManager.getWorktreePath(id);
 
 		// TODO: @DonJayamanne We need to determine if we can determine whether isoluation was enabled for existing sessions
-		const isolationEnabled = chatSessionContext.isUntitled ? this.worktreeManager.getIsolationPreference(id) : undefined;
+		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
 
 		const session = chatSessionContext.isUntitled ?
 			await this.sessionService.createSession(prompt, { model, workingDirectory, isolationEnabled }, token) :

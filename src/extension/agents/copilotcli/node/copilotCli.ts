@@ -157,7 +157,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 }
 
-export async function getAuthInfo(authentService: IAuthenticationService): Promise<NonNullable<SessionOptions['authInfo']>> {
+export async function getAuthInfo(authentService: IAuthenticationService): Promise<SessionOptions['authInfo']> {
 	const copilotToken = await authentService.getAnyGitHubSession();
 	return {
 		type: 'token',

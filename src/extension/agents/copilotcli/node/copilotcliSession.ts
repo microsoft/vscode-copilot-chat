@@ -138,7 +138,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				modelId ? this._sdkSession.getSelectedModel() : undefined,
 				getAuthInfo(this.authenticationService)
 			]);
-			this._sdkSession.setAuthInfo(authInfo);
+			if (authInfo) {
+				this._sdkSession.setAuthInfo(authInfo);
+			}
 			if (modelId && modelId !== currentModel) {
 				await this._sdkSession.setSelectedModel(modelId);
 			}
