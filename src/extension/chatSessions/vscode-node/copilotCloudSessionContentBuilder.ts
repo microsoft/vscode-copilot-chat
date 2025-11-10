@@ -5,7 +5,7 @@
 
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
-import { ChatPromptReference, ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
+import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { getAuthorDisplayName, toOpenPullRequestWebviewUri } from '../vscode/copilotCodingAgentUtils';
@@ -119,14 +119,11 @@ export class ChatSessionContentBuilder {
 
 				const turns: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
-				// Extract references from problem statement and create a clean prompt
-				const { prompt, references } = this.extractReferencesFromProblemStatement(problemStatement || session.name);
-
 				// Create request turn
 				turns.push(new ChatRequestTurn2(
-					prompt,
+					problemStatement || session.name,
 					undefined, // command
-					references, // references
+					[], // references
 					this.type,
 					[], // toolReferences
 					[]
@@ -157,88 +154,6 @@ export class ChatSessionContentBuilder {
 			.forEach(result => history.push(...result.turns));
 
 		return history;
-	}
-
-	/**
-	 * Extracts file references from a problem statement and returns clean prompt with references
-	 * @param problemStatement The full problem statement that may contain embedded file references
-	 * @returns Object with clean prompt and array of ChatPromptReference objects
-	 */
-	private extractReferencesFromProblemStatement(problemStatement: string): { prompt: string; references: ChatPromptReference[] } {
-		const references: ChatPromptReference[] = [];
-		let cleanPrompt = problemStatement;
-
-		// Pattern 1: Extract file paths from "The user has attached the following file paths as relevant context:" section
-		const filePathsPattern = /The user has attached the following file paths as relevant context:\s*((?:\s*-\s+[^\n]+\n?)+)/i;
-		const filePathsMatch = problemStatement.match(filePathsPattern);
-		if (filePathsMatch) {
-			const filePathsSection = filePathsMatch[1];
-			const filePaths = filePathsSection.match(/\s*-\s+([^\n]+)/g);
-			if (filePaths) {
-				for (const filePathLine of filePaths) {
-					const path = filePathLine.replace(/^\s*-\s+/, '').trim();
-					if (path) {
-						const currentRepository = this._gitService.activeRepository.get();
-						const fileUri = currentRepository?.rootUri
-							? Uri.file(pathLib.join(currentRepository.rootUri.fsPath, path))
-							: Uri.file(path);
-						references.push({
-							id: fileUri.toString(),
-							value: fileUri,
-							modelDescription: `File: ${path}`
-						});
-					}
-				}
-			}
-			// Remove this section from the clean prompt
-			cleanPrompt = cleanPrompt.replace(filePathsPattern, '');
-		}
-
-		// Pattern 2: Extract full file content from "The user has attached the following uncommitted or modified files as relevant context:" section
-		const fullFilesPattern = /The user has attached the following uncommitted or modified files as relevant context:\s*((?:<file-start>[^<]+<\/file-start>[\s\S]*?<file-end>[^<]+<\/file-end>\s*)+)/i;
-		const fullFilesMatch = problemStatement.match(fullFilesPattern);
-		if (fullFilesMatch) {
-			const fullFilesSection = fullFilesMatch[1];
-			// Extract individual file blocks
-			const fileBlockPattern = /<file-start>([^<]+)<\/file-start>[\s\S]*?<file-end>\1<\/file-end>/g;
-			let fileBlockMatch;
-			while ((fileBlockMatch = fileBlockPattern.exec(fullFilesSection)) !== null) {
-				const path = fileBlockMatch[1];
-				if (path) {
-					const currentRepository = this._gitService.activeRepository.get();
-					const fileUri = currentRepository?.rootUri
-						? Uri.file(pathLib.join(currentRepository.rootUri.fsPath, path))
-						: Uri.file(path);
-					references.push({
-						id: fileUri.toString(),
-						value: fileUri,
-						modelDescription: `File: ${path} (modified)`
-					});
-				}
-			}
-			// Remove this section from the clean prompt
-			cleanPrompt = cleanPrompt.replace(fullFilesPattern, '');
-		}
-
-		// Clean up any extra whitespace and extract the display title
-		cleanPrompt = cleanPrompt.trim();
-
-		// Extract title if present
-		const titleMatch = cleanPrompt.match(/TITLE:\s*(.*)/i);
-		if (titleMatch && titleMatch[1]) {
-			cleanPrompt = titleMatch[1].trim();
-		} else {
-			// Use first line as title
-			const split = cleanPrompt.split('\n');
-			if (split.length > 0) {
-				cleanPrompt = split[0].trim();
-			}
-		}
-
-		// Remove @copilot mentions
-		cleanPrompt = cleanPrompt.replace(/@copilot\s*/gi, '').trim();
-
-		return { prompt: cleanPrompt, references };
 	}
 
 	private async createResponseTurn(pullRequest: PullRequestSearchItem, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
