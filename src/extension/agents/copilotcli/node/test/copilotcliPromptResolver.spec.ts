@@ -106,8 +106,8 @@ describe('CopilotCLIPromptResolver', () => {
 
 		expect(prompt).toMatch(/Fix issues/);
 		expect(prompt).toMatch(/The user provided the following diagnostics:/);
-		expect(prompt).toContain('- error [TS7005] at /workspace/src/index.ts:5: Unexpected any');
-		expect(prompt).toContain('- warning at /workspace/src/index.ts:10: Possible undefined');
+		expect(prompt).toContain(`- error [TS7005] at ${fileUri.fsPath}:5: Unexpected any`);
+		expect(prompt).toContain(`- warning at ${fileUri.fsPath}:10: Possible undefined`);
 		// File should be attached once
 		expect(attachments).toHaveLength(1);
 		expect(attachments[0].path).toBe(fileUri.fsPath);
