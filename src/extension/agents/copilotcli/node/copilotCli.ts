@@ -98,12 +98,16 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	public async getPackage(): Promise<typeof import('@github/copilot/sdk')> {
 		try {
 			// Ensure the node-pty shim exists before importing the SDK (required for CLI sessions)
-			await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService);
+			await this.ensureNodePtyShim();
 			return await import('@github/copilot/sdk');
 		} catch (error) {
 			this.logService.error(`[CopilotCLISDK] Failed to load @github/copilot/sdk: ${error}`);
 			throw error;
 		}
+	}
+
+	protected async ensureNodePtyShim(): Promise<void> {
+		await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService);
 	}
 }
 
