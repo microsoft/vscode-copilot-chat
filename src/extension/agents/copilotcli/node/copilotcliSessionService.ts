@@ -84,7 +84,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		});
 	}
 
-	private monitorSessionFiles() {
+	protected monitorSessionFiles() {
 		try {
 			const sessionDir = joinPath(this.nativeEnv.userHome, '.copilot', 'session-state');
 			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '*.jsonl')));

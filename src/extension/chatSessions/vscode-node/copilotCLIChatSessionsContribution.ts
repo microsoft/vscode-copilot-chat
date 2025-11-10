@@ -40,12 +40,7 @@ export class CopilotCLIWorktreeManager {
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService) { }
 
-	async createWorktreeIfNeeded(sessionId: string, stream: vscode.ChatResponseStream): Promise<string | undefined> {
-		const isolationEnabled = this._sessionIsolation.get(sessionId) ?? false;
-		if (!isolationEnabled) {
-			return undefined;
-		}
-
+	async createWorktree(stream: vscode.ChatResponseStream): Promise<string | undefined> {
 		try {
 			const worktreePath = await this.commandExecutionService.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
 			if (worktreePath) {
@@ -394,7 +389,7 @@ export class CopilotCLIChatSessionParticipant {
 		const id = SessionIdForCLI.parse(resource);
 
 		const workingDirectory = chatSessionContext.isUntitled ?
-			await this.worktreeManager.createWorktreeIfNeeded(id, stream) :
+			(this.worktreeManager.getIsolationPreference(id) ? await this.worktreeManager.createWorktree(stream) : undefined) :
 			this.worktreeManager.getWorktreePath(id);
 
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
@@ -406,6 +401,10 @@ export class CopilotCLIChatSessionParticipant {
 		if (!session) {
 			stream.warning(vscode.l10n.t('Chat session not found.'));
 			return undefined;
+		}
+
+		if (chatSessionContext.isUntitled && workingDirectory) {
+			await this.worktreeManager.storeWorktreePath(session.sessionId, workingDirectory);
 		}
 		disposables.add(session.attachStream(stream));
 		disposables.add(session.attachPermissionHandler(async (permissionRequest: PermissionRequest) => requestPermission(permissionRequest, this.toolsService, request.toolInvocationToken, token)));
