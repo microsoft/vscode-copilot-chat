@@ -128,6 +128,27 @@ class PlainTextRenderer {
 	}
 }
 
+class UriKeyedMap<T> {
+	private readonly storage = new Map<string, T>();
+
+	private getKey(resource: Uri): string {
+		return resource.toString();
+	}
+
+	public get(resource: Uri): T | undefined {
+		return this.storage.get(this.getKey(resource));
+	}
+
+	public set(resource: Uri, value: T): this {
+		this.storage.set(this.getKey(resource), value);
+		return this;
+	}
+
+	public delete(resource: Uri): boolean {
+		return this.storage.delete(this.getKey(resource));
+	}
+}
+
 export class CopilotCloudSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
 	public static readonly TYPE = 'copilot-cloud-agent';
 	private readonly DELEGATE_MODAL_DETAILS = vscode.l10n.t('The agent will work asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
@@ -137,8 +158,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	public readonly onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
 	private chatSessions: Map<number, PullRequestSearchItem> = new Map();
 	private chatSessionItemsPromise: Promise<vscode.ChatSessionItem[]> | undefined;
-	private sessionAgentMap: Map<Uri, string> = new Map();
-	private sessionReferencesMap: Map<Uri, readonly vscode.ChatPromptReference[]> = new Map();
+	private readonly sessionAgentMap = new UriKeyedMap<string>();
+	private readonly sessionReferencesMap = new UriKeyedMap<readonly vscode.ChatPromptReference[]>();
 	public chatParticipant = vscode.chat.createChatParticipant(CopilotCloudSessionsProvider.TYPE, async (request, context, stream, token) =>
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
