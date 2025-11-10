@@ -98,7 +98,7 @@ function escapeRegex(str: string): string {
  * Context lines (unchanged) are prefixed with a space.
  * This outputs the entire file with all changes marked.
  */
-export async function formatDiffAsUnified(accessor: ServicesAccessor, uri: URI, oldContent: string, newContent: string, contextLines: number = 3): Promise<string> {
+export async function formatDiffAsUnified(accessor: ServicesAccessor, uri: URI, oldContent: string, newContent: string): Promise<string> {
 	const diffService = accessor.get(IDiffService);
 	const diff = await diffService.computeDiff(oldContent, newContent, {
 		ignoreTrimWhitespace: false,

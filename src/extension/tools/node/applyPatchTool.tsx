@@ -597,13 +597,14 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			uris,
-			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation)
+			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token)
 		);
 	}
 
 	private async generatePatchConfirmationDetails(
 		options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>,
-		urisNeedingConfirmation: readonly URI[]
+		urisNeedingConfirmation: readonly URI[],
+		token: CancellationToken
 	): Promise<string> {
 		const instantiationService = this.instantiationService;
 		const promptPathRepresentationService = this.promptPathRepresentationService;
@@ -616,7 +617,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				options.input.input,
 				docTexts,
 				options.input.explanation,
-				CancellationToken.None
+				token
 			);
 			return { commit, docTexts, healed };
 		})();
@@ -629,15 +630,9 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		// Create a set of URIs needing confirmation for quick lookup
 		const urisNeedingConfirmationSet = new ResourceSet(urisNeedingConfirmation);
 
-		// Filter file changes to only those needing confirmation
-		const filesNeedingConfirmation = Object.entries(commit.changes).filter(([file]) => {
-			const uri = resolveToolInputPath(file, promptPathRepresentationService);
-			return urisNeedingConfirmationSet.has(uri);
-		});
-
 		// Generate diffs for all file changes in parallel
 		const diffResults = await Promise.all(
-			filesNeedingConfirmation.map(async ([file, changes]) => {
+			Object.entries(commit.changes).map(async ([file, changes]) => {
 				const uri = resolveToolInputPath(file, promptPathRepresentationService);
 				if (!urisNeedingConfirmationSet.has(uri)) {
 					return;

@@ -535,8 +535,6 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			})
 		);
 
-		const diffParts = diffResults.filter(isDefined);
-
-		return diffParts.length > 0 ? diffParts.join('\n\n') : '\`\`\`json\n' + JSON.stringify(options.input, null, 2) + '\n\`\`\`';
+		return diffResults.filter(isDefined).join('\n\n');
 	}
 }
