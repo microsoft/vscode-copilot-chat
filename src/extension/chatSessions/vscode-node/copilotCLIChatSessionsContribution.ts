@@ -11,6 +11,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -231,8 +232,10 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
 		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
 
+		// TODO @DonJayamanne This isn't correct for existing sessinos, we should either use empty or default workspace.
+		// We cannot use this worktree path, as this can change anytime in the session, hence its not possible for working directory to change on the fly.
 		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, undefined, workingDirectory, false, token);
+		const existingSession = await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, readonly: true }, token);
 		const selectedModelId = await existingSession?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
 		const options: Record<string, string> = {
@@ -316,6 +319,7 @@ export class CopilotCLIChatSessionParticipant {
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -386,19 +390,22 @@ export class CopilotCLIChatSessionParticipant {
 		}
 	}
 
-	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, prompt: string, modelId: string | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<ICopilotCLISession | undefined> {
+	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, prompt: string, model: string | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<ICopilotCLISession | undefined> {
 		const { resource } = chatSessionContext.chatSessionItem;
 		const id = SessionIdForCLI.parse(resource);
 
-		const workingDirectory = chatSessionContext.isUntitled ?
+		// TODO @DonJayamanne This isn't correct for existing sessinos, we should either use empty or default workspace.
+		// We cannot use this worktree path, as this can change anytime in the session, hence its not possible for working directory to change on the fly.
+		const workingDirectory = (chatSessionContext.isUntitled ?
 			(this.worktreeManager.getIsolationPreference(id) ? await this.worktreeManager.createWorktree(stream) : undefined) :
-			this.worktreeManager.getWorktreePath(id);
+			this.worktreeManager.getWorktreePath(id)) ?? await this.getDefaultWorkingDirectory();
 
-		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
+		// TODO: @DonJayamanne We need to determine if we can determine whether isoluation was enabled for existing sessions
+		const isolationEnabled = chatSessionContext.isUntitled ? this.worktreeManager.getIsolationPreference(id) : undefined;
 
 		const session = chatSessionContext.isUntitled ?
-			await this.sessionService.createSession(prompt, modelId, workingDirectory, isolationEnabled, token) :
-			await this.sessionService.getSession(id, undefined, workingDirectory, false, token);
+			await this.sessionService.createSession(prompt, { model, workingDirectory, isolationEnabled }, token) :
+			await this.sessionService.getSession(id, { model, workingDirectory, isolationEnabled, readonly: false }, token);
 
 		if (!session) {
 			stream.warning(vscode.l10n.t('Chat session not found.'));
@@ -413,6 +420,16 @@ export class CopilotCLIChatSessionParticipant {
 
 
 		return session;
+	}
+	private async getDefaultWorkingDirectory() {
+		if (this.workspaceService.getWorkspaceFolders().length === 0) {
+			return undefined;
+		}
+		if (this.workspaceService.getWorkspaceFolders().length === 1) {
+			return this.workspaceService.getWorkspaceFolders()[0].fsPath;
+		}
+		const folder = await this.workspaceService.showWorkspaceFolderPicker();
+		return folder?.uri?.fsPath;
 	}
 
 	private async getModelId(sessionId: string): Promise<string | undefined> {
@@ -494,7 +511,7 @@ export class CopilotCLIChatSessionParticipant {
 		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
-		const session = await this.sessionService.createSession(requestPrompt, undefined, undefined, undefined, token);
+		const session = await this.sessionService.createSession(requestPrompt, {}, token);
 
 		await this.commandExecutionService.executeCommand('vscode.open', SessionIdForCLI.getResource(session.sessionId));
 		await this.commandExecutionService.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
@@ -553,7 +570,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		}
 
 		const sessionId = SessionIdForCLI.parse(sessionItemResource);
-		const session = await copilotCLISessionService.getSession(sessionId, undefined, undefined, false, CancellationToken.None);
+		const session = await copilotCLISessionService.getSession(sessionId, { readonly: true }, CancellationToken.None);
 		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
 		const sessionWorktreeName = copilotcliSessionItemProvider.worktreeManager.getWorktreeRelativePath(sessionId);
 

@@ -9,7 +9,6 @@ import { IAuthenticationService } from '../../../../platform/authentication/comm
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -20,10 +19,56 @@ import { PermissionRequest } from './permissionHelpers';
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const DEFAULT_CLI_MODEL = 'claude-sonnet-4';
 
-export interface CopilotCLISessionOptions {
-	addPermissionHandler(handler: SessionOptions['requestPermission']): IDisposable;
-	toSessionOptions(): SessionOptions;
-	isolationEnabled: boolean;
+export class CopilotCLISessionOptions {
+	public readonly isolationEnabled: boolean;
+	public readonly workingDirectory?: string;
+	private readonly model?: string;
+	private readonly logger: ReturnType<typeof getCopilotLogger>;
+	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
+	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
+	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string }, logger: ILogService) {
+		this.isolationEnabled = !!options.isolationEnabled;
+		this.workingDirectory = options.workingDirectory;
+		this.model = options.model;
+		this.logger = getCopilotLogger(logger);
+		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
+			logger.info(`[CopilotCLISessionOptionsService] Permission request denied for permission as no handler was set: ${permission.kind}`);
+			return {
+				kind: "denied-interactively-by-user"
+			};
+		};
+		this.requestPermissionHandler = this.requestPermissionRejected;
+	}
+
+	public addPermissionHandler(handler: NonNullable<SessionOptions['requestPermission']>): IDisposable {
+		this.requestPermissionHandler = handler;
+		return toDisposable(() => {
+			if (this.requestPermissionHandler === handler) {
+				this.requestPermissionHandler = this.requestPermissionRejected;
+			}
+		});
+	}
+
+	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
+		const allOptions: SessionOptions = {
+			env: {
+				...process.env,
+				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
+			},
+			logger: this.logger,
+			requestPermission: async (request: PermissionRequest) => {
+				return await this.requestPermissionHandler(request);
+			}
+		};
+
+		if (this.workingDirectory) {
+			allOptions.workingDirectory = this.workingDirectory;
+		}
+		if (this.model) {
+			allOptions.model = this.model as unknown as SessionOptions['model'];
+		}
+		return allOptions as Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }>;
+	}
 }
 
 export interface ICopilotCLIModels {
@@ -112,78 +157,11 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 }
 
-export interface ICopilotCLISessionOptionsService {
-	readonly _serviceBrand: undefined;
-	createOptions(
-		options: SessionOptions
-	): Promise<CopilotCLISessionOptions>;
-}
-export const ICopilotCLISessionOptionsService = createServiceIdentifier<ICopilotCLISessionOptionsService>('ICopilotCLISessionOptionsService');
-
-export class CopilotCLISessionOptionsService implements ICopilotCLISessionOptionsService {
-	declare _serviceBrand: undefined;
-	constructor(
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@ILogService private readonly logService: ILogService,
-	) { }
-
-	public async createOptions(options: SessionOptions) {
-		const copilotToken = await this._authenticationService.getAnyGitHubSession();
-		const workingDirectory = options.workingDirectory ?? await this.getWorkspaceFolderPath();
-		const logger = this.logService;
-		const requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
-			logger.info(`[CopilotCLISessionOptionsService] Permission request denied for permission as no handler was set: ${permission.kind}`);
-			return {
-				kind: "denied-interactively-by-user"
-			};
-		};
-		const permissionHandler: Required<Pick<SessionOptions, 'requestPermission'>> = {
-			requestPermission: requestPermissionRejected
-		};
-
-		const allOptions: SessionOptions = {
-			env: {
-				...process.env,
-				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
-			},
-			logger: getCopilotLogger(this.logService),
-			requestPermission: async (request: PermissionRequest) => {
-				return await permissionHandler.requestPermission(request);
-			},
-			authInfo: {
-				type: 'token',
-				token: copilotToken?.accessToken ?? '',
-				host: 'https://github.com'
-			},
-			...options,
-		};
-
-		if (workingDirectory) {
-			allOptions.workingDirectory = workingDirectory;
-		}
-
-		return {
-			addPermissionHandler: (handler: NonNullable<SessionOptions['requestPermission']>) => {
-				permissionHandler.requestPermission = handler;
-				return toDisposable(() => {
-					if (permissionHandler.requestPermission === handler) {
-						permissionHandler.requestPermission = requestPermissionRejected;
-					}
-				});
-			},
-			toSessionOptions: () => allOptions,
-			isolationEnabled: false
-		} satisfies CopilotCLISessionOptions;
-	}
-	private async getWorkspaceFolderPath() {
-		if (this.workspaceService.getWorkspaceFolders().length === 0) {
-			return undefined;
-		}
-		if (this.workspaceService.getWorkspaceFolders().length === 1) {
-			return this.workspaceService.getWorkspaceFolders()[0].fsPath;
-		}
-		const folder = await this.workspaceService.showWorkspaceFolderPicker();
-		return folder?.uri?.fsPath;
-	}
+export async function getAuthInfo(authentService: IAuthenticationService): Promise<NonNullable<SessionOptions['authInfo']>> {
+	const copilotToken = await authentService.getAnyGitHubSession();
+	return {
+		type: 'token',
+		token: copilotToken?.accessToken ?? '',
+		host: 'https://github.com'
+	};
 }

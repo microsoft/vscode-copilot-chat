@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
 import type { IGitService } from '../../../../platform/git/common/gitService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../../util/vs/base/common/event';
@@ -63,7 +64,7 @@ class FakeWorktreeManager extends mock<CopilotCLIWorktreeManager>() {
 	override getIsolationPreference = vi.fn(() => false);
 }
 
-interface CreateSessionArgs { prompt: string | undefined; modelId: string | undefined; workingDirectory: string | undefined; isolationEnabled: boolean | undefined }
+interface CreateSessionArgs { prompt: string | undefined; options: { modelId?: string; workingDirectory?: string; isolationEnabled?: boolean } }
 
 class FakeCopilotCLISession implements ICopilotCLISession {
 	public sessionId: string;
@@ -88,8 +89,8 @@ class FakeCopilotCLISession implements ICopilotCLISession {
 class FakeSessionService extends DisposableStore implements ICopilotCLISessionService {
 	_serviceBrand: undefined;
 	public createdArgs: CreateSessionArgs | undefined;
-	public createSession = vi.fn(async (prompt: string | undefined, modelId: string | undefined, workingDirectory: string | undefined, isolationEnabled: boolean | undefined) => {
-		this.createdArgs = { prompt, modelId, workingDirectory, isolationEnabled };
+	public createSession = vi.fn(async (prompt: string | undefined, options: { modelId?: string; workingDirectory?: string; isolationEnabled?: boolean }) => {
+		this.createdArgs = { prompt, options };
 		const s = new FakeCopilotCLISession('new-session-id');
 		return s as unknown as ICopilotCLISession;
 	});
@@ -154,7 +155,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let tools: FakeToolsService;
 	let participant: CopilotCLIChatSessionParticipant;
 	let commandExecutionService: FakeCommandExecutionService;
-
+	let workspaceService: IWorkspaceService;
 	beforeEach(() => {
 		promptResolver = new FakePromptResolver();
 		itemProvider = new FakeSessionItemProvider();
@@ -166,6 +167,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		sessionService = disposables.add(new FakeSessionService());
 		telemetry = new FakeTelemetry();
 		tools = new FakeToolsService();
+		workspaceService = new NullWorkspaceService();
 		commandExecutionService = new FakeCommandExecutionService();
 		participant = new CopilotCLIChatSessionParticipant(
 			promptResolver,
@@ -178,7 +180,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			sessionService,
 			telemetry,
 			tools,
-			commandExecutionService
+			commandExecutionService,
+			workspaceService
 		);
 	});
 
@@ -216,7 +219,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		await participant.createHandler()(request, context, stream, token);
 
-		expect(sessionService.getSession).toHaveBeenCalledWith('existing-123', undefined, undefined, false, token);
+		expect(sessionService.getSession).toHaveBeenCalledWith('existing-123', {
+			model: 'base', workingDirectory: undefined, readonly: false
+		}, token);
 		expect(sessionService.createSession).not.toHaveBeenCalled();
 		expect(existing.handleRequest).toHaveBeenCalledWith('Continue', [], 'base', token);
 		// No swap for existing session
@@ -285,7 +290,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		await participant.createHandler()(request, context, stream, token);
 
 		const expectedPrompt = 'Push this\n**Summary**\nsummary text';
-		expect(sessionService.createSession).toHaveBeenCalledWith(expectedPrompt, undefined, undefined, undefined, token);
+		expect(sessionService.createSession).toHaveBeenCalledWith(expectedPrompt, {}, token);
 		expect(summarySpy).toHaveBeenCalledTimes(1);
 		expect(execSpy).toHaveBeenCalledTimes(2);
 		expect(execSpy.mock.calls[0]).toEqual(['vscode.open', expect.any(Object)]);
@@ -304,7 +309,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		await participant.createHandler()(request, context, stream, token);
 
 		const expectedPrompt = 'Push that\n**Summary**\nprecomputed history';
-		expect(sessionService.createSession).toHaveBeenCalledWith(expectedPrompt, undefined, undefined, undefined, token);
+		expect(sessionService.createSession).toHaveBeenCalledWith(expectedPrompt, {}, token);
 		expect(summarySpy).not.toHaveBeenCalled();
 		expect(execSpy).toHaveBeenCalledTimes(2);
 		expect(execSpy.mock.calls[0].at(0)).toBe('vscode.open');

@@ -3,11 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Session, SessionOptions } from '@github/copilot/sdk';
+import type { Session } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AuthenticationSession } from 'vscode';
+import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
+import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
+import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
@@ -15,11 +19,10 @@ import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
-import { CopilotCLISessionOptions, ICopilotCLISessionOptionsService } from '../copilotCli';
+import { CopilotCLISessionOptions } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { CopilotCLIToolNames } from '../copilotcliToolInvocationFormatter';
 import { PermissionRequest } from '../permissionHelpers';
-import { IGitService } from '../../../../../platform/git/common/gitService';
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
@@ -56,36 +59,6 @@ class MockSdkSession {
 	async getEvents() { return []; }
 }
 
-// Mocks for services
-function createSessionOptionsService() {
-	const svc: Partial<ICopilotCLISessionOptionsService> = {
-		createOptions: async (_options: SessionOptions) => {
-			let permissionHandler: SessionOptions['requestPermission'] | undefined;
-			const requestPermission: SessionOptions['requestPermission'] = async (req) => {
-				if (!permissionHandler) {
-					return { kind: 'denied-interactively-by-user' } as const;
-				}
-				return await permissionHandler(req);
-			};
-			const allOptions: SessionOptions = {
-				env: {},
-				logger: { trace() { }, error() { }, info() { }, warn() { } } as unknown as SessionOptions['logger'],
-				authInfo: { type: 'token', token: 'copilot-token', host: 'https://github.com' },
-				requestPermission
-			};
-			return {
-				addPermissionHandler: (h: SessionOptions['requestPermission']) => {
-					permissionHandler = h;
-					return { dispose: () => { permissionHandler = undefined; } };
-				},
-				toSessionOptions: () => allOptions,
-				isolationEnabled: false
-			} satisfies CopilotCLISessionOptions;
-		}
-	};
-	return svc as ICopilotCLISessionOptionsService;
-}
-
 function createWorkspaceService(root: string): IWorkspaceService {
 	const rootUri = Uri.file(root);
 	return new class extends TestWorkspaceService {
@@ -107,18 +80,23 @@ describe('CopilotCLISession', () => {
 	let workspaceService: IWorkspaceService;
 	let logger: ILogService;
 	let gitService: IGitService;
-	let sessionOptionsService: ICopilotCLISessionOptionsService;
 	let sessionOptions: CopilotCLISessionOptions;
+	let authService: IAuthenticationService;
 
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logger = accessor.get(ILogService);
 		gitService = accessor.get(IGitService);
-
+		authService = new class extends mock<IAuthenticationService>() {
+			override async getAnyGitHubSession() {
+				return {
+					accessToken: '',
+				} satisfies Partial<AuthenticationSession> as AuthenticationSession;
+			}
+		}();
 		sdkSession = new MockSdkSession();
-		sessionOptionsService = createSessionOptionsService();
-		sessionOptions = await sessionOptionsService.createOptions({} as SessionOptions);
+		sessionOptions = new CopilotCLISessionOptions({}, logger);
 		workspaceService = createWorkspaceService('/workspace');
 	});
 
@@ -128,14 +106,14 @@ describe('CopilotCLISession', () => {
 	});
 
 
-	async function createSession() {
+	async function createSession(): Promise<CopilotCLISession> {
 		return disposables.add(new CopilotCLISession(
 			sessionOptions,
 			sdkSession as unknown as Session,
 			gitService,
 			logger,
 			workspaceService,
-			sessionOptionsService,
+			authService,
 		));
 	}
 
@@ -225,7 +203,7 @@ describe('CopilotCLISession', () => {
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		// Keep session active while requesting permission
 		let resolveSend: () => void;
-		sessionOptions.toSessionOptions().workingDirectory = '/workingDirectory';
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: '/workingDirectory' }, logger);
 		sdkSession.send = async ({ prompt }: any) => new Promise<void>(r => { resolveSend = r; }).then(() => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });

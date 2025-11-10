@@ -5,6 +5,7 @@
 
 import type { Attachment, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -15,7 +16,7 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { CopilotCLISessionOptions, ICopilotCLISessionOptionsService } from './copilotCli';
+import { CopilotCLISessionOptions, getAuthInfo } from './copilotCli';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { PermissionRequest } from './permissionHelpers';
 
@@ -71,7 +72,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@ICopilotCLISessionOptionsService private readonly cliSessionOptions: ICopilotCLISessionOptionsService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -135,11 +136,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		try {
 			const [currentModel, authInfo] = await Promise.all([
 				modelId ? this._sdkSession.getSelectedModel() : undefined,
-				this.cliSessionOptions.createOptions({}).then(opts => opts.toSessionOptions().authInfo)
+				getAuthInfo(this.authenticationService)
 			]);
-			if (authInfo) {
-				this._sdkSession.setAuthInfo(authInfo);
-			}
+			this._sdkSession.setAuthInfo(authInfo);
 			if (modelId && modelId !== currentModel) {
 				await this._sdkSession.setSelectedModel(modelId);
 			}

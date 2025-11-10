@@ -8,11 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CancellationTokenSource, ChatSessionStatus, EventEmitter } from '../../../../../vscodeTypes';
+import { ChatSessionStatus, EventEmitter } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { CopilotCLISessionOptions, ICopilotCLISDK, ICopilotCLISessionOptionsService } from '../copilotCli';
+import { ICopilotCLISDK } from '../copilotCli';
 import { ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService } from '../copilotcliSessionService';
 
@@ -73,28 +74,16 @@ describe('CopilotCLISessionService', () => {
 	const disposables = new DisposableStore();
 	let logService: ILogService;
 	let instantiationService: IInstantiationService;
-	let optionsService: ICopilotCLISessionOptionsService;
 	let service: CopilotCLISessionService;
 	let manager: FakeCLISessionManager;
 
 	beforeEach(async () => {
 		vi.useRealTimers();
-		optionsService = {
-			_serviceBrand: undefined,
-			createOptions: vi.fn(async (opts: any) => {
-				return {
-					addPermissionHandler: () => ({ dispose() { /* noop */ } }),
-					toSessionOptions: () => ({ ...opts, requestPermission: async () => ({ kind: 'denied-interactively-by-user' }) }),
-					isolationEnabled: false
-				} satisfies CopilotCLISessionOptions;
-			}),
-		};
 		const sdk = {
 			getPackage: vi.fn(async () => ({ internal: { CLISessionManager: FakeCLISessionManager } }))
 		} as unknown as ICopilotCLISDK;
 
 		const services = disposables.add(createExtensionUnitTestingServices());
-		services.set(ICopilotCLISessionOptionsService, optionsService);
 		const accessor = services.createTestingAccessor();
 		logService = accessor.get(ILogService);
 		instantiationService = {
@@ -120,7 +109,7 @@ describe('CopilotCLISessionService', () => {
 			}
 		} as unknown as IInstantiationService;
 
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, optionsService, new NullNativeEnvService(), new MockFileSystemService()));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService()));
 		manager = await service.getSessionManager() as unknown as FakeCLISessionManager;
 	});
 
@@ -130,28 +119,22 @@ describe('CopilotCLISessionService', () => {
 		disposables.clear();
 	});
 
-	function createToken() {
-		return disposables.add(new CancellationTokenSource());
-	}
-
 	// --- Tests ----------------------------------------------------------------------------------
 
 	describe('CopilotCLISessionService.createSession', () => {
 		it('get session will return the same session created using createSession', async () => {
-			const session = await service.createSession('   ', 'gpt-test', '/tmp', false, createToken().token);
-			expect(optionsService.createOptions).toHaveBeenCalledWith({ model: 'gpt-test', workingDirectory: '/tmp' });
+			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
 
-			const existingSession = await service.getSession(session.sessionId, undefined, undefined, false, createToken().token);
+			const existingSession = await service.getSession(session.sessionId, { readonly: false }, CancellationToken.None);
 
 			expect(existingSession).toBe(session);
 		});
 		it('get session will return new once previous session is disposed', async () => {
-			const session = await service.createSession('   ', 'gpt-test', '/tmp', false, createToken().token);
-			expect(optionsService.createOptions).toHaveBeenCalledWith({ model: 'gpt-test', workingDirectory: '/tmp' });
+			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
 
 			session.dispose();
 			await new Promise(resolve => setTimeout(resolve, 0)); // allow dispose async cleanup to run
-			const existingSession = await service.getSession(session.sessionId, undefined, undefined, false, createToken().token);
+			const existingSession = await service.getSession(session.sessionId, { readonly: false }, CancellationToken.None);
 
 			expect(existingSession).not.toBe(session);
 		});
@@ -159,7 +142,7 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.getSession missing', () => {
 		it('returns undefined when underlying manager has no session', async () => {
-			const result = await service.getSession('does-not-exist', undefined, undefined, true, createToken().token);
+			const result = await service.getSession('does-not-exist', { readonly: true }, CancellationToken.None);
 
 			expect(result).toBeUndefined();
 		});
@@ -167,7 +150,7 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.getAllSessions', () => {
 		it('will not list created sessions', async () => {
-			await service.createSession('   ', 'gpt-test', '/tmp', false, createToken().token);
+			await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
 
 			const s1 = new FakeSdkSession('s1', new Date(0));
 			s1.messages.push({ role: 'user', content: 'a'.repeat(100) });
@@ -175,7 +158,7 @@ describe('CopilotCLISessionService', () => {
 			s1.events.push({ type: 'assistant.message', timestamp: tsStr });
 			manager.sessions.set(s1.sessionId, s1);
 
-			const result = await service.getAllSessions(createToken().token);
+			const result = await service.getAllSessions(CancellationToken.None);
 
 			expect(result.length).toBe(1);
 			const item = result[0];
@@ -187,7 +170,7 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.deleteSession', () => {
 		it('disposes active wrapper, removes from manager and fires change event', async () => {
-			const session = await service.createSession('to delete', undefined, undefined, undefined, createToken().token);
+			const session = await service.createSession('to delete', {}, CancellationToken.None);
 			const id = session!.sessionId;
 			let fired = false;
 			disposables.add(service.onDidChangeSessions(() => { fired = true; }));
@@ -196,7 +179,7 @@ describe('CopilotCLISessionService', () => {
 			expect(manager.sessions.has(id)).toBe(false);
 			expect(fired).toBe(true);
 
-			expect(await service.getSession(id, undefined, undefined, false, createToken().token)).toBeUndefined();
+			expect(await service.getSession(id, { readonly: false }, CancellationToken.None)).toBeUndefined();
 		});
 	});
 
@@ -206,7 +189,7 @@ describe('CopilotCLISessionService', () => {
 			s.messages.push({ role: 'user', content: 'Line1\nLine2' });
 			manager.sessions.set(s.sessionId, s);
 
-			const sessions = await service.getAllSessions(createToken().token);
+			const sessions = await service.getAllSessions(CancellationToken.None);
 			const item = sessions.find(i => i.id === 'lab1');
 			expect(item?.label).toBe('Line1');
 		});
@@ -215,7 +198,7 @@ describe('CopilotCLISessionService', () => {
 	describe('CopilotCLISessionService.auto disposal timeout', () => {
 		it.skip('disposes session after completion timeout and aborts underlying sdk session', async () => {
 			vi.useFakeTimers();
-			const session = await service.createSession('will timeout', undefined, undefined, undefined, createToken().token);
+			const session = await service.createSession('will timeout', {}, CancellationToken.None);
 
 			vi.advanceTimersByTime(31000);
 			await Promise.resolve(); // allow any pending promises to run
