@@ -118,16 +118,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						// This is a new session not yet persisted to disk by SDK
 						return undefined;
 					}
-					const timestamp = metadata.startTime;
 					const id = metadata.sessionId;
-					const label = metadata.summary ? labelFromPrompt(metadata.summary) : undefined;
-					if (label) {
-						return {
-							id,
-							label,
-							timestamp,
-						} satisfies ICopilotCLISessionItem;
-					}
 					let dispose: (() => Promise<void>) | undefined = undefined;
 					let session: Session | undefined = undefined;
 					try {
@@ -143,6 +134,18 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							return undefined;
 						}
 						const label = this._generateSessionLabel(session.sessionId, chatMessages, undefined);
+
+						// Get timestamp from last SDK event, or fallback to metadata.startTime
+						const sdkEvents = session.getEvents();
+						const lastEventWithTimestamp = [...sdkEvents].reverse().find(event =>
+							event.type !== 'session.import_legacy'
+							&& event.type !== 'session.start'
+							&& 'timestamp' in event
+						);
+						const timestamp = lastEventWithTimestamp && 'timestamp' in lastEventWithTimestamp
+							? new Date(lastEventWithTimestamp.timestamp)
+							: metadata.startTime;
+
 						return {
 							id,
 							label,
