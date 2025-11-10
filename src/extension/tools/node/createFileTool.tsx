@@ -30,7 +30,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
-import { createEditConfirmation } from './editFileToolUtils';
+import { createEditConfirmation, formatDiffAsUnified } from './editFileToolUtils';
 import { assertFileNotContentExcluded, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
 
 export interface ICreateFileParams {
@@ -158,13 +158,21 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ICreateFileParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
 		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
+		const content = options.input.content || '';
+
+		const confirmation = await this.instantiationService.invokeFunction(
+			createEditConfirmation,
+			[uri],
+			async () => this.instantiationService.invokeFunction(
+				formatDiffAsUnified,
+				uri,
+				'', // Empty initial content
+				content
+			),
+		);
 
 		return {
-			...await this.instantiationService.invokeFunction(
-				createEditConfirmation,
-				[uri],
-				() => 'Contents:\n\n```\n' + options.input.content || '<empty>' + '\n```',
-			),
+			...confirmation,
 			presentation: undefined,
 			invocationMessage: new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Created ${formatUriForFileWidget(uri)}`)
