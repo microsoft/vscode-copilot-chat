@@ -13,7 +13,7 @@ import { CancellationTokenSource } from '../../../../util/vs/base/common/cancell
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import type { ICopilotCLIModels } from '../../../agents/copilotcli/node/copilotCli';
-import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
+import { CopilotCLIPromptResolver } from '../copilotCLIPromptResolver';
 import type { ICopilotCLISession } from '../../../agents/copilotcli/node/copilotcliSession';
 import type { ICopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
 import { PermissionRequest } from '../../../agents/copilotcli/node/permissionHelpers';
