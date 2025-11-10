@@ -149,6 +149,33 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		]);
 	});
 
+	test('getDiagnostics - folder path excludes files with only Info and Hint diagnostics', () => {
+		// Create a file with only Info and Hint diagnostics
+		const infoHintOnlyFile = URI.file('/test/workspace/src/infoHintOnly.ts');
+		diagnosticsService.setDiagnostics(infoHintOnlyFile, [
+			{
+				message: 'This is just informational',
+				range: new Range(0, 0, 0, 5),
+				severity: DiagnosticSeverity.Information
+			},
+			{
+				message: 'This is a hint',
+				range: new Range(1, 0, 1, 5),
+				severity: DiagnosticSeverity.Hint
+			}
+		]);
+
+		// Request diagnostics for the src folder
+		const srcFolder = URI.file('/test/workspace/src');
+		const results = tool.getDiagnostics([{ uri: srcFolder, range: undefined }]);
+
+		// Should only include tsFile1 and tsFile2, not infoHintOnlyFile (which has no Warning/Error)
+		expect(results).toEqual([
+			{ uri: tsFile1, diagnostics: diagnosticsService.getDiagnostics(tsFile1).filter(d => d.severity <= DiagnosticSeverity.Warning) },
+			{ uri: tsFile2, diagnostics: diagnosticsService.getDiagnostics(tsFile2).filter(d => d.severity <= DiagnosticSeverity.Warning) }
+		]);
+	});
+
 	// Tool invocation tests
 	test('Tool invocation - with no filePaths aggregates all diagnostics and formats workspace message', async () => {
 		const result = await tool.invoke({ input: {}, toolInvocationToken: null! }, CancellationToken.None);

@@ -2,13 +2,15 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { env, UIKind } from 'vscode';
+import { commands, env, UIKind } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { ILogService } from '../../../platform/log/common/logService';
+import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -22,13 +24,18 @@ import { CompletionsIgnoreServiceBridge } from './bridge/src/completionsIgnoreSe
 import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from './bridge/src/completionsTelemetryServiceBridge';
 import { CodeReference } from './extension/src/codeReferencing';
 import { LoggingCitationManager } from './extension/src/codeReferencing/citationManager';
-import { VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
+import { disableCompletions, enableCompletions, toggleCompletions, VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
+import { CMDDisableCompletionsChat, CMDDisableCompletionsClient, CMDEnableCompletionsChat, CMDEnableCompletionsClient, CMDOpenDocumentationClient, CMDOpenLogsClient, CMDOpenModelPickerChat, CMDOpenModelPickerClient, CMDToggleCompletionsChat, CMDToggleCompletionsClient, CMDToggleStatusMenuChat, CMDToggleStatusMenuClient } from './extension/src/constants';
 import { contextProviderMatch } from './extension/src/contextProviderMatch';
+import { registerPanelSupport } from './extension/src/copilotPanel/common';
 import { Extension } from './extension/src/extensionContext';
 import { CopilotExtensionStatus } from './extension/src/extensionStatus';
 import { extensionFileSystem } from './extension/src/fileSystem';
 import { registerGhostTextDependencies } from './extension/src/ghostText/ghostText';
+import { exception } from './extension/src/inlineCompletion';
+import { ModelPickerManager } from './extension/src/modelPicker';
 import { CopilotStatusBar } from './extension/src/statusBar';
+import { CopilotStatusBarPickMenu } from './extension/src/statusBarPicker';
 import { ExtensionTextDocumentManager } from './extension/src/textDocumentManager';
 import { CopilotTokenManager, CopilotTokenManagerImpl } from './lib/src/auth/copilotTokenManager';
 import { CitationManager } from './lib/src/citationManager';
@@ -77,7 +84,6 @@ import { TextDocumentManager } from './lib/src/textDocumentManager';
 import { UrlOpener } from './lib/src/util/opener';
 import { ICompletionsPromiseQueueService, PromiseQueue } from './lib/src/util/promiseQueue';
 import { ICompletionsRuntimeModeService, RuntimeMode } from './lib/src/util/runtimeMode';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 
 const bridges: any[] = [];
 
@@ -227,6 +233,113 @@ export function setup(serviceAccessor: ServicesAccessor): IDisposable {
 	return disposables;
 }
 
+export function registerUnificationCommands(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+
+	disposables.add(registerEnablementCommands(accessor));
+	disposables.add(registerStatusBar(accessor));
+	disposables.add(registerDiagnosticCommands(accessor));
+	disposables.add(registerPanelSupport(accessor));
+	disposables.add(registerModelPickerCommands(accessor));
+
+	return disposables;
+}
+
+function registerEnablementCommands(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+	const instantiationService = accessor.get(IInstantiationService);
+
+	// Enable/Disable/Toggle completions commands [with Command Palette support]
+	function enable(id: string): IDisposable {
+		return registerCommandWrapper(accessor, id, async () => {
+			await instantiationService.invokeFunction(enableCompletions);
+		});
+	}
+	function disable(id: string): IDisposable {
+		return registerCommandWrapper(accessor, id, async () => {
+			await instantiationService.invokeFunction(disableCompletions);
+		});
+	}
+	function toggle(id: string): IDisposable {
+		return registerCommandWrapper(accessor, id, async () => {
+			await instantiationService.invokeFunction(toggleCompletions);
+		});
+	}
+
+	// To support command palette
+	disposables.add(enable(CMDEnableCompletionsChat));
+	disposables.add(disable(CMDDisableCompletionsChat));
+	disposables.add(toggle(CMDToggleCompletionsChat));
+
+	// To support keybindings/main functionality
+	disposables.add(enable(CMDEnableCompletionsClient));
+	disposables.add(disable(CMDDisableCompletionsClient));
+	disposables.add(toggle(CMDToggleCompletionsClient));
+
+	return disposables;
+}
+
+function registerModelPickerCommands(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+
+	const instantiationService = accessor.get(IInstantiationService);
+
+	const modelsPicker = instantiationService.createInstance(ModelPickerManager);
+
+	function registerModelPicker(commandId: string): IDisposable {
+		return registerCommandWrapper(accessor, commandId, async () => {
+			await modelsPicker.showModelPicker();
+		});
+	}
+
+	// Model picker command [with Command Palette support]
+	disposables.add(registerModelPicker(CMDOpenModelPickerClient));
+	disposables.add(registerModelPicker(CMDOpenModelPickerChat));
+
+	return disposables;
+}
+
+function registerStatusBar(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+
+	const instantiationService = accessor.get(IInstantiationService);
+	const copilotTokenManagerService = accessor.get(ICompletionsContextService).get(CopilotTokenManager);
+	const extensionStatusService = accessor.get(ICompletionsContextService).get(CopilotExtensionStatus);
+
+	// Status menu command [with Command Palette support]
+	function registerStatusMenu(menuId: string): IDisposable {
+		return registerCommandWrapper(accessor, menuId, async () => {
+			if (extensionStatusService.kind === 'Error') {
+				// Try for a fresh token to clear up the error, but don't block the UI for too long.
+				await Promise.race([
+					copilotTokenManagerService.primeToken(),
+					new Promise(resolve => setTimeout(resolve, 100)),
+				]);
+			}
+			instantiationService.createInstance(CopilotStatusBarPickMenu).showStatusMenu();
+		});
+	}
+	disposables.add(registerStatusMenu(CMDToggleStatusMenuClient));
+	disposables.add(registerStatusMenu(CMDToggleStatusMenuChat));
+
+	return disposables;
+}
+
+function registerDiagnosticCommands(accessor: ServicesAccessor): IDisposable {
+	const disposables = new DisposableStore();
+
+	disposables.add(registerCommandWrapper(accessor, CMDOpenDocumentationClient, () => {
+		return env.openExternal(
+			URI.parse('https://docs.github.com/en/copilot/getting-started-with-github-copilot?tool=vscode')
+		);
+	}));
+	disposables.add(registerCommandWrapper(accessor, CMDOpenLogsClient, () => {
+		outputChannel.show();
+	}));
+
+	return disposables;
+}
+
 function uiKindToString(uiKind: UIKind): 'desktop' | 'web' {
 	switch (uiKind) {
 		case UIKind.Desktop:
@@ -234,4 +347,15 @@ function uiKindToString(uiKind: UIKind): 'desktop' | 'web' {
 		case UIKind.Web:
 			return 'web';
 	}
+}
+
+export function registerCommandWrapper(accessor: ServicesAccessor, command: string, fn: (...args: unknown[]) => unknown): IDisposable {
+	const instantiationService = accessor.get(IInstantiationService);
+	return commands.registerCommand(command, async (...args: unknown[]) => {
+		try {
+			await fn(...args);
+		} catch (error) {
+			instantiationService.invokeFunction(exception, error, command);
+		}
+	});
 }

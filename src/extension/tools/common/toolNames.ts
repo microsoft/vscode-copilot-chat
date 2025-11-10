@@ -46,6 +46,7 @@ export enum ToolName {
 	ReadCellOutput = 'read_notebook_cell_output',
 	InstallExtension = 'install_extension',
 	FetchWebPage = 'fetch_webpage',
+	Memory = 'memory',
 	FindTestFiles = 'test_search',
 	GetProjectSetupInfo = 'get_project_setup_info',
 	SearchViewResults = 'get_search_view_results',
@@ -65,7 +66,7 @@ export enum ToolName {
 	CoreRunTest = 'runTests',
 	ToolReplay = 'tool_replay',
 	EditFilesPlaceholder = 'edit_files',
-	RunSubagent = 'runSubagent',
+	CoreRunSubagent = 'runSubagent',
 	CoreConfirmationTool = 'vscode_get_confirmation',
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation'
 }
@@ -100,6 +101,7 @@ export enum ContributedToolName {
 	ReadCellOutput = 'copilot_readNotebookCellOutput',
 	InstallExtension = 'copilot_installExtension',
 	FetchWebPage = 'copilot_fetchWebPage',
+	Memory = 'copilot_memory',
 	FindTestFiles = 'copilot_findTestFiles',
 	GetProjectSetupInfo = 'copilot_getProjectSetupInfo',
 	SearchViewResults = 'copilot_getSearchResults',
@@ -171,7 +173,8 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.FindFiles]: ToolCategory.Core,
 	[ToolName.CreateDirectory]: ToolCategory.Core,
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
-	[ToolName.RunSubagent]: ToolCategory.Core,
+	[ToolName.CoreRunSubagent]: ToolCategory.Core,
+	[ToolName.Memory]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
 	[ToolName.CoreRunTask]: ToolCategory.Core,

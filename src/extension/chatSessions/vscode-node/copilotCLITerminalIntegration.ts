@@ -70,7 +70,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		}
 
 		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli');
-		this.terminalService.contributePath('copilot-cli', storageLocation, 'Enables use of the `copilot` command in the terminal.', true);
+		this.terminalService.contributePath('copilot-cli', storageLocation, { command: COPILOT_CLI_COMMAND }, true);
 
 		await fs.mkdir(storageLocation, { recursive: true });
 
@@ -308,7 +308,10 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 	const session = await authenticationService.getAnyGitHubSession();
 	if (session) {
 		options.env = {
-			GH_TOKEN: session.accessToken
+			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)
+			GH_TOKEN: session.accessToken,
+			// New Token name for Copilot
+			COPILOT_GITHUB_TOKEN: session.accessToken
 		};
 	}
 	return options;

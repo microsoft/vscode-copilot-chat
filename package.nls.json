@@ -28,6 +28,7 @@
 	"github.copilot.command.generateDocs": "Generate Docs",
 	"github.copilot.command.generateTests": "Generate Tests",
 	"github.copilot.command.openUserPreferences": "Open User Preferences",
+	"github.copilot.command.openMemoryFolder": "Open Memory Folder",
 	"github.copilot.command.sendChatFeedback": "Send Chat Feedback",
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
@@ -99,6 +100,13 @@
 			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}"
 		]
 	},
+	"github.copilot.viewsWelcome.noPermissiveToken.contents": {
+		"message": "Additional GitHub permissions required to use GitHub Copilot Cloud Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
+		"comment": [
+			"{Locked='['}",
+			"{Locked='](command:github.copilot.chat.triggerPermissiveSignIn)'}"
+		]
+	},
 	"github.copilot.viewsWelcome.noFolder.contents": {
 		"message": "You have not yet opened a folder.\n[Open Folder](command:workbench.action.files.openFolder)",
 		"comment": [
@@ -130,6 +138,7 @@
 	"github.copilot.command.applySuggestionWithCopilot": "Apply Suggestion",
 	"github.copilot.command.explainTerminalLastCommand": "Explain Last Terminal Command",
 	"github.copilot.command.collectWorkspaceIndexDiagnostics": "Collect Workspace Index Diagnostics",
+	"github.copilot.command.triggerPermissiveSignIn": "Login to GitHub with Full Permissions",
 	"github.copilot.git.generateCommitMessage": "Generate Commit Message",
 	"github.copilot.git.resolveMergeConflicts": "Resolve Conflicts with AI",
 	"github.copilot.devcontainer.generateDevContainerConfig": "Generate Dev Container Configuration",
@@ -181,7 +190,6 @@
 	"github.copilot.config.byok.ollamaEndpoint": "The endpoint to use for the Ollama when accessed via bring your own key. Defaults to localhost.",
 	"github.copilot.config.virtualTools.threshold": "This setting defines the tool count over which virtual tools should be used. Virtual tools group similar sets of tools together and they allow the model to activate them on-demand. Certain tool groups will optimistically be pre-activated. We are actively developing this feature and you experience degraded tool calling once the threshold is hit.\n\nMay be set to `0` to disable virtual tools.",
 	"github.copilot.config.alternateGptPrompt.enabled": "Enables an experimental alternate prompt for GPT models instead of the default prompt.",
-	"github.copilot.config.gpt5AlternatePrompt": "Specifies an experimental alternate prompt to use for GPT-5 models.",
 	"github.copilot.config.gpt5CodexAlternatePrompt": "Specifies an experimental alternate prompt to use for the GPT-5-Codex model.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
 	"copilot.description": "Ask or edit in context",
@@ -328,6 +336,8 @@
 	"copilot.tools.runNotebookCell.name": "Run Notebook Cell",
 	"copilot.tools.getNotebookCellOutput.name": "Get Notebook Cell Output",
 	"copilot.tools.fetchWebPage.name": "Fetch Web Page",
+	"copilot.tools.memory.name": "Memory",
+	"copilot.tools.memory.description": "Manage persistent memory across conversations. Create, view, update, and delete memory files that remember important information between chat sessions. Only available with BYOK Anthropic Claude models.",
 	"copilot.tools.findTestFiles.name": "Find Test Files",
 	"copilot.tools.getDocInfo.name": "Doc Info",
 	"copilot.tools.createDirectory.name": "Create Directory",
@@ -345,7 +355,12 @@
 	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
 	"github.copilot.config.anthropic.thinking.enabled": "Enable extended thinking for Anthropic models that support it. \n\n **Note**: This is an experimental feature only supported in BYOK Anthropic models.",
 	"github.copilot.config.anthropic.thinking.maxTokens": "Maximum number of tokens to allocate for extended thinking in Anthropic models. Valid range is 1,024 to 32,000 tokens. Always capped at (max output tokens - 1).\n\n**Note**: This is an experimental feature only supported in BYOK Anthropic models.",
-	"github.copilot.config.anthropic.webSearchTool.enabled": "Enable Anthropic's native web search tool for BYOK Claude models. When enabled, allows Claude to search the web for current information. \n\n**Note**: This is an experimental feature only available for BYOK Anthropic Claude models.",
+	"github.copilot.config.anthropic.tools.websearch.enabled": "Enable Anthropic's native web search tool for BYOK Claude models. When enabled, allows Claude to search the web for current information. \n\n**Note**: This is an experimental feature only available for BYOK Anthropic Claude models.",
+	"github.copilot.config.anthropic.tools.websearch.maxUses": "Maximum number of web searches allowed per request. Valid range is 1 to 20. Prevents excessive API calls within a single interaction. If Claude exceeds this limit, the response returns an error.",
+	"github.copilot.config.anthropic.tools.websearch.allowedDomains": "List of domains to restrict web search results to (e.g., `[\"example.com\", \"docs.example.com\"]`). Domains should not include the HTTP/HTTPS scheme. Subdomains are automatically included. Cannot be used together with blocked domains.",
+	"github.copilot.config.anthropic.tools.websearch.blockedDomains": "List of domains to exclude from web search results (e.g., `[\"untrustedsource.com\"]`). Domains should not include the HTTP/HTTPS scheme. Subdomains are automatically excluded. Cannot be used together with allowed domains.",
+	"github.copilot.config.anthropic.tools.websearch.userLocation": "User location for personalizing web search results based on geographic context. All fields (city, region, country, timezone) are optional. Example: `{\"city\": \"San Francisco\", \"region\": \"California\", \"country\": \"US\", \"timezone\": \"America/Los_Angeles\"}`",
+	"github.copilot.config.tools.memory.enabled": "Enable memory tool to allow models to store and retrieve information across conversations. \n\n**Note**: This is an experimental feature.",
 	"github.copilot.config.completionsFetcher": "Sets the fetcher used for the inline completions.",
 	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions.",
 	"github.copilot.config.debug.overrideChatEngine": "Override the chat model. This allows you to test with different models.\n\n**Note**: This is an advanced debugging setting and should not be used while self-hosting as it may lead to a different experience compared to end-users.",
@@ -398,8 +413,7 @@
 	"github.copilot.command.deleteAgentSession": "Delete Agent Session",
 	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume Agent Session in Terminal",
 	"github.copilot.cli.sessions.newTerminalSession": "New Agent Session in Terminal",
-	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in browser",
+	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
-	"copilot.tools.runSubagent.name": "Run Subagent",
-	"copilot.tools.runSubagent.description": "Runs a task within an isolated subagent context. Enables efficient organization of tasks and context window management."
+	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes"
 }

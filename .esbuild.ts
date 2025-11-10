@@ -50,6 +50,15 @@ const baseNodeBuildOptions = {
 	},
 } satisfies esbuild.BuildOptions;
 
+const webviewBuildOptions = {
+	...baseBuildOptions,
+	platform: 'browser',
+	target: 'es2024', // Electron 34 -> Chrome 132 -> ES2024
+	entryPoints: [
+		{ in: 'src/extension/completions-core/vscode-node/extension/src/copilotPanel/webView/suggestionsPanelWebview.ts', out: 'suggestionsPanelWebview' },
+	],
+} satisfies esbuild.BuildOptions;
+
 const nodeExtHostTestGlobs = [
 	'src/**/vscode/**/*.test.{ts,tsx}',
 	'src/**/vscode-node/**/*.test.{ts,tsx}',
@@ -355,6 +364,7 @@ async function main() {
 			esbuild.build(nodeSimulationWorkbenchUIBuildOptions),
 			esbuild.build(nodeExtHostSimulationTestOptions),
 			esbuild.build(typeScriptServerPluginBuildOptions),
+			esbuild.build(webviewBuildOptions),
 		]);
 	}
 }

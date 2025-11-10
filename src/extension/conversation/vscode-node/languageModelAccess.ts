@@ -14,9 +14,10 @@ import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { ModelAliasRegistry } from '../../../platform/endpoint/common/modelAliasRegistry';
 import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
-import { AutoChatEndpoint } from '../../../platform/endpoint/vscode-node/autoChatEndpoint';
-import { IAutomodeService } from '../../../platform/endpoint/vscode-node/automodeService';
+import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -28,7 +29,7 @@ import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thin
 import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokenizer';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { Emitter } from '../../../util/vs/base/common/event';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -42,6 +43,8 @@ import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
 export class LanguageModelAccess extends Disposable implements IExtensionContribution {
 
 	readonly id = 'languageModelAccess';
+
+	readonly activationBlocker?: Promise<any>;
 
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	private _currentModels: vscode.LanguageModelChatInformation[] = []; // Store current models for reference
@@ -70,8 +73,10 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 
 		// initial
-		this._registerChatProvider();
-		this._registerEmbeddings();
+		this.activationBlocker = Promise.all([
+			this._registerChatProvider(),
+			this._registerEmbeddings(),
+		]);
 	}
 
 	override dispose(): void {
@@ -82,7 +87,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		return this._currentModels;
 	}
 
-	private _registerChatProvider(): void {
+	private async _registerChatProvider(): Promise<void> {
 		const provider: vscode.LanguageModelChatProvider = {
 			onDidChangeLanguageModelChatInformation: this._onDidChange.event,
 			provideLanguageModelChatInformation: this._provideLanguageModelChatInfo.bind(this),
@@ -111,6 +116,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
 		if (this._authenticationService.copilotToken?.isNoAuthUser) {
 			// No Auth users always get Auto as the default model
+			defaultChatEndpoint = autoEndpoint;
+		} else if (defaultExpModel === AutoChatEndpoint.pseudoModelId) {
+			// Auto is a fake model id so force map it
 			defaultChatEndpoint = autoEndpoint;
 		} else if (defaultExpModel) {
 			// Find exp default
@@ -201,6 +209,17 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			};
 
 			models.push(model);
+
+			// Register aliases for this model
+			const aliases = ModelAliasRegistry.getAliases(model.id);
+			for (const alias of aliases) {
+				models.push({
+					...model,
+					id: alias,
+					family: alias,
+					isUserSelectable: false,
+				});
+			}
 		}
 
 		this._currentModels = models;
@@ -215,7 +234,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
 		token: vscode.CancellationToken
 	): Promise<any> {
-		const endpoint = this._chatEndpoints.find(e => e.model === model.id);
+		const endpoint = this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
 		if (!endpoint) {
 			throw new Error(`Endpoint not found for model ${model.id}`);
 		}
@@ -231,7 +250,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		text: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2,
 		token: vscode.CancellationToken
 	): Promise<number> {
-		const endpoint = this._chatEndpoints.find(e => e.model === model.id);
+		const endpoint = this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
 		if (!endpoint) {
 			throw new Error(`Endpoint not found for model ${model.id}`);
 		}
@@ -241,22 +260,34 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 	private async _registerEmbeddings(): Promise<void> {
 
-		const embeddingsComputer = this._embeddingsComputer;
-		const embeddingType = EmbeddingType.text3small_512;
-		const model = getWellKnownEmbeddingTypeInfo(embeddingType)?.model;
-		if (!model) {
-			throw new Error(`No model found for embedding type ${embeddingType.id}`);
-		}
+		const dispo = this._register(new MutableDisposable());
 
-		const that = this;
-		this._register(vscode.lm.registerEmbeddingsProvider(`copilot.${model}`, new class implements vscode.EmbeddingsProvider {
-			async provideEmbeddings(input: string[], token: vscode.CancellationToken): Promise<vscode.Embedding[]> {
-				await that._getToken();
 
-				const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, {}, new TelemetryCorrelationId('EmbeddingsProvider::provideEmbeddings'), token);
-				return result.values.map(embedding => ({ values: embedding.value.slice(0) }));
+		const update = async () => {
+
+			if (!await this._getToken()) {
+				dispo.clear();
+				return;
 			}
-		}));
+
+			const embeddingsComputer = this._embeddingsComputer;
+			const embeddingType = EmbeddingType.text3small_512;
+			const model = getWellKnownEmbeddingTypeInfo(embeddingType)?.model;
+			if (!model) {
+				throw new Error(`No model found for embedding type ${embeddingType.id}`);
+			}
+
+			dispo.clear();
+			dispo.value = vscode.lm.registerEmbeddingsProvider(`copilot.${model}`, new class implements vscode.EmbeddingsProvider {
+				async provideEmbeddings(input: string[], token: vscode.CancellationToken): Promise<vscode.Embedding[]> {
+					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, {}, new TelemetryCorrelationId('EmbeddingsProvider::provideEmbeddings'), token);
+					return result.values.map(embedding => ({ values: embedding.value.slice(0) }));
+				}
+			});
+		};
+
+		this._register(this._authenticationService.onDidAuthenticationChange(() => update()));
+		await update();
 	}
 
 	private async _getToken(): Promise<CopilotToken | undefined> {

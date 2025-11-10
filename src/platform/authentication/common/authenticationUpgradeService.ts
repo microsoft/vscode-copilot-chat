@@ -83,8 +83,8 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		}
 	}
 
-	async showPermissiveSessionModal(): Promise<boolean> {
-		if (this.hasRequestedPermissiveSessionUpgrade) {
+	async showPermissiveSessionModal(skipRepeatCheck = false): Promise<boolean> {
+		if (this.hasRequestedPermissiveSessionUpgrade && !skipRepeatCheck) {
 			this.logService.trace('Already requested permissive session upgrade');
 			return false;
 		}
@@ -109,20 +109,33 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 	showPermissiveSessionUpgradeInChat(
 		stream: ChatResponseStream,
 		data: ChatRequest,
-		detail?: string
+		detail?: string,
+		context?: ChatContext
 	): void {
 		this.logService.trace('Requesting permissive session upgrade in chat');
 		this.hasRequestedPermissiveSessionUpgrade = true;
 		stream.confirmation(
 			this._permissionRequest,
 			detail || l10n.t('To get more relevant Chat results, we need permission to read the contents of your repository on GitHub.'),
-			{ authPermissionPrompted: true, ...data },
+			// TODO: Change this shape to include request via a dedicated field
+			{ authPermissionPrompted: true, ...data, context },
 			[
 				this._permissionRequestGrant,
 				this._permissionRequestNotNow,
 				this._permissionRequestNeverAskAgain
 			]
 		);
+	}
+
+	async handleConfirmationRequestWithContext(stream: ChatResponseStream, request: ChatRequest, history: ChatContext['history']): Promise<{ request: ChatRequest; context?: ChatContext }> {
+		const findConfirmationRequested: (ChatRequest & { context?: ChatContext }) | undefined = request.acceptedConfirmationData?.find(ref => ref?.authPermissionPrompted);
+		if (!findConfirmationRequested) {
+			return { request, context: undefined };
+		}
+		const context = findConfirmationRequested.context;
+
+		const updatedRequest = await this.handleConfirmationRequest(stream, request, history);
+		return { request: updatedRequest, context };
 	}
 
 	async handleConfirmationRequest(stream: ChatResponseStream, request: ChatRequest, history: ChatContext['history']): Promise<ChatRequest> {

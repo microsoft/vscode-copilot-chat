@@ -9,7 +9,7 @@ import { Event } from '../../../util/vs/base/common/event';
 import { IObservable } from '../../../util/vs/base/common/observableInternal';
 import { equalsIgnoreCase } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
-import { Change, Commit, LogOptions } from '../vscode/git';
+import { Change, Commit, CommitShortStat, LogOptions } from '../vscode/git';
 
 export interface RepoContext {
 	readonly rootUri: URI;
@@ -52,9 +52,11 @@ export interface IGitService extends IDisposable {
 	getRepository(uri: URI): Promise<RepoContext | undefined>;
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined>;
 	initialize(): Promise<void>;
+	add(uri: URI, paths: string[]): Promise<void>;
 	log(uri: URI, options?: LogOptions): Promise<Commit[] | undefined>;
 	diffBetween(uri: URI, ref1: string, ref2: string): Promise<Change[] | undefined>;
 	diffWith(uri: URI, ref: string): Promise<Change[] | undefined>;
+	diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;
 	getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined>;
 }

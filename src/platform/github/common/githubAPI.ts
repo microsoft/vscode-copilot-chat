@@ -26,8 +26,12 @@ export interface PullRequestSearchItem {
 	};
 	additions: number;
 	deletions: number;
+	files: {
+		totalCount: number;
+	};
 	fullDatabaseId: number;
-	headRefOid: number;
+	headRefOid: string;
+	baseRefOid?: string;
 	body: string;
 }
 
@@ -85,7 +89,8 @@ export async function makeGitHubAPIRequest(
 	body?: { [key: string]: any },
 	version?: string,
 	type: 'json' | 'text' = 'json',
-	userAgent?: string) {
+	userAgent?: string,
+	returnStatusCodeOnError: boolean = false) {
 	const headers: any = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -105,6 +110,10 @@ export async function makeGitHubAPIRequest(
 		body: body ? JSON.stringify(body) : undefined
 	});
 	if (!response.ok) {
+		logService.error(`[GitHubAPI] ${method} ${host}/${routeSlug} - Status: ${response?.status}`);
+		if (returnStatusCodeOnError) {
+			return { status: response.status };
+		}
 		return undefined;
 	}
 
@@ -184,6 +193,7 @@ export async function makeSearchGraphQLRequest(
 						id
 						fullDatabaseId
 						headRefOid
+						baseRefOid
 						title
 						state
 						url
@@ -191,6 +201,9 @@ export async function makeSearchGraphQLRequest(
 						updatedAt
 						additions
 						deletions
+						files {
+							totalCount
+						}
 						author {
 							login
 						}
@@ -240,6 +253,7 @@ export async function getPullRequestFromGlobalId(
 					id
 					fullDatabaseId
 					headRefOid
+					baseRefOid
 					title
 					state
 					url
@@ -247,6 +261,9 @@ export async function getPullRequestFromGlobalId(
 					updatedAt
 					additions
 					deletions
+					files {
+						totalCount
+					}
 					author {
 						login
 					}

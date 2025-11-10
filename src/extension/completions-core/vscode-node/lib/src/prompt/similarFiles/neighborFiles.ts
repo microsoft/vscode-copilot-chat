@@ -105,7 +105,7 @@ export class NeighborSource {
 			traits: [] as RelatedFileTrait[],
 		};
 
-		if (ctx.get(Features).excludeRelatedFiles(telemetryData)) { return result; }
+		if (ctx.get(Features).excludeRelatedFiles(fileType, telemetryData)) { return result; }
 
 		const doc = await docManager.getTextDocument({ uri });
 		if (!doc) {
@@ -187,7 +187,7 @@ export class NeighborSource {
 	}
 }
 
-export function isIncludeNeighborFilesActive(accessor: ServicesAccessor, telemetryData: TelemetryWithExp): boolean {
+export function isIncludeNeighborFilesActive(accessor: ServicesAccessor, languageId: string, telemetryData: TelemetryWithExp): boolean {
 	const ctx = accessor.get(ICompletionsContextService);
-	return ctx.get(Features).includeNeighboringFiles(telemetryData);
+	return ctx.get(Features).includeNeighboringFiles(languageId, telemetryData);
 }

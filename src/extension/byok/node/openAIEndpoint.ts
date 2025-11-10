@@ -43,6 +43,18 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 	return response;
 }
 
+/**
+ * Checks to see if a given endpoint is a BYOK model.
+ * @param endpoint The endpoint to check if it's a BYOK model
+ * @returns 1 if client side byok, 2 if server side byok, -1 if not a byok model
+ */
+export function isBYOKModel(endpoint: IChatEndpoint | undefined): number {
+	if (!endpoint) {
+		return -1;
+	}
+	return endpoint instanceof OpenAIEndpoint ? 1 : (endpoint.customModel ? 2 : -1);
+}
+
 export class OpenAIEndpoint extends ChatEndpoint {
 	// Reserved headers that cannot be overridden for security and functionality reasons
 	// Including forbidden request headers: https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header
@@ -284,7 +296,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;
-			if (!this.useResponsesApi) {
+			if (!this.useResponsesApi && body.stream) {
 				body['stream_options'] = { 'include_usage': true };
 			}
 		}

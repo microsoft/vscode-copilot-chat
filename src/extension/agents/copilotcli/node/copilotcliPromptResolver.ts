@@ -9,6 +9,7 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { ILogService } from '../../../../platform/log/common/logService';
 import { isLocation } from '../../../../util/common/types';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
 import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatReferenceDiagnostic, FileType } from '../../../../vscodeTypes';
@@ -28,46 +29,33 @@ export class CopilotCLIPromptResolver {
 		const allRefsTexts: string[] = [];
 		const diagnosticTexts: string[] = [];
 		const files: { path: string; name: string }[] = [];
+		const attachedFiles = new ResourceSet();
 		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
-		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
-			if (ref.value instanceof ChatReferenceDiagnostic) {
-				// Handle diagnostic reference
-				for (const [uri, diagnostics] of ref.value.diagnostics) {
-					if (uri.scheme !== 'file') {
-						continue;
-					}
-					for (const diagnostic of diagnostics) {
-						const severityMap: { [key: number]: string } = {
-							0: 'error',
-							1: 'warning',
-							2: 'info',
-							3: 'hint'
-						};
-						const severity = severityMap[diagnostic.severity] ?? 'error';
-						const code = (typeof diagnostic.code === 'object' && diagnostic.code !== null) ? diagnostic.code.value : diagnostic.code;
-						const codeStr = code ? ` [${code}]` : '';
-						const line = diagnostic.range.start.line + 1;
-						diagnosticTexts.push(`- ${severity}${codeStr} at ${uri.fsPath}:${line}: ${diagnostic.message}`);
-						files.push({ path: uri.fsPath, name: path.basename(uri.fsPath) });
-					}
-				}
-			} else {
-				const uri = URI.isUri(ref.value) ? ref.value : isLocation(ref.value) ? ref.value.uri : undefined;
-				if (!uri || uri.scheme !== 'file') {
-					return;
-				}
-				const filePath = uri.fsPath;
+		request.references.forEach(ref => {
+			if (shouldExcludeReference(ref)) {
+				return;
+			}
+			if (collectDiagnosticContent(ref.value, diagnosticTexts, files)) {
+				return;
+			}
+			const uri = URI.isUri(ref.value) ? ref.value : isLocation(ref.value) ? ref.value.uri : undefined;
+			if (!uri || uri.scheme !== 'file') {
+				return;
+			}
+			const filePath = uri.fsPath;
+			if (!attachedFiles.has(uri)) {
+				attachedFiles.add(uri);
 				files.push({ path: filePath, name: ref.name || path.basename(filePath) });
-				const valueText = URI.isUri(ref.value) ?
-					ref.value.fsPath :
-					isLocation(ref.value) ?
-						`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
-						undefined;
-				if (valueText && ref.range) {
-					// Keep the original prompt untouched, just collect resolved paths
-					const variableText = request.prompt.substring(ref.range[0], ref.range[1]);
-					allRefsTexts.push(`- ${variableText} → ${valueText}`);
-				}
+			}
+			const valueText = URI.isUri(ref.value) ?
+				ref.value.fsPath :
+				isLocation(ref.value) ?
+					`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
+					undefined;
+			if (valueText && ref.range) {
+				// Keep the original prompt untouched, just collect resolved paths
+				const variableText = request.prompt.substring(ref.range[0], ref.range[1]);
+				allRefsTexts.push(`- ${variableText} → ${valueText}`);
 			}
 		});
 
@@ -104,4 +92,81 @@ export class CopilotCLIPromptResolver {
 
 		return { prompt, attachments };
 	}
+}
+
+function shouldExcludeReference(ref: vscode.ChatPromptReference): boolean {
+	return ref.id.startsWith('vscode.prompt.instructions');
+}
+
+function collectDiagnosticContent(value: unknown, diagnosticTexts: string[], files: { path: string; name: string }[]): boolean {
+	const attachedFiles = new ResourceSet();
+	const diagnosticCollection = getChatReferenceDiagnostics(value);
+	if (!diagnosticCollection.length) {
+		return false;
+	}
+
+	let hasDiagnostics = false;
+	// Handle diagnostic reference
+	for (const [uri, diagnostics] of diagnosticCollection) {
+		if (uri.scheme !== 'file') {
+			continue;
+		}
+		for (const diagnostic of diagnostics) {
+			const severityMap: { [key: number]: string } = {
+				0: 'error',
+				1: 'warning',
+				2: 'info',
+				3: 'hint'
+			};
+			const severity = severityMap[diagnostic.severity] ?? 'error';
+			const code = (typeof diagnostic.code === 'object' && diagnostic.code !== null) ? diagnostic.code.value : diagnostic.code;
+			const codeStr = code ? ` [${code}]` : '';
+			const line = diagnostic.range.start.line + 1;
+			diagnosticTexts.push(`- ${severity}${codeStr} at ${uri.fsPath}:${line}: ${diagnostic.message}`);
+			hasDiagnostics = true;
+			if (!attachedFiles.has(uri)) {
+				attachedFiles.add(uri);
+				files.push({ path: uri.fsPath, name: path.basename(uri.fsPath) });
+			}
+		}
+	}
+	return hasDiagnostics;
+}
+
+function getChatReferenceDiagnostics(value: unknown): [vscode.Uri, readonly vscode.Diagnostic[]][] {
+	if (isChatReferenceDiagnostic(value)) {
+		return Array.from(value.diagnostics.values());
+	}
+	if (isDiagnosticCollection(value)) {
+		const result: [vscode.Uri, readonly vscode.Diagnostic[]][] = [];
+		value.forEach((uri, diagnostics) => {
+			result.push([uri, diagnostics]);
+		});
+		return result;
+	}
+	return [];
+}
+function isChatReferenceDiagnostic(value: unknown): value is ChatReferenceDiagnostic {
+	if (value instanceof ChatReferenceDiagnostic) {
+		return true;
+	}
+
+	const possibleDiag = value as ChatReferenceDiagnostic;
+	if (possibleDiag.diagnostics && Array.isArray(possibleDiag.diagnostics)) {
+		return true;
+	}
+	return false;
+}
+
+function isDiagnosticCollection(value: unknown): value is vscode.DiagnosticCollection {
+	const possibleDiag = value as vscode.DiagnosticCollection;
+	if (possibleDiag.clear && typeof possibleDiag.clear === 'function' &&
+		possibleDiag.delete && typeof possibleDiag.delete === 'function' &&
+		possibleDiag.get && typeof possibleDiag.get === 'function' &&
+		possibleDiag.set && typeof possibleDiag.set === 'function' &&
+		possibleDiag.forEach && typeof possibleDiag.forEach === 'function') {
+		return true;
+	}
+
+	return false;
 }

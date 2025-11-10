@@ -38,7 +38,7 @@ import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { EditError, NoChangeError, NoMatchError, applyEdit, canExistingFileBeEdited, createEditConfirmation, logEditToolResult } from './editFileToolUtils';
+import { EditError, NoChangeError, NoMatchError, applyEdit, canExistingFileBeEdited, createEditConfirmation, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -53,7 +53,9 @@ export interface IPrepareEdit {
 	uri: URI;
 	healed?: IAbstractReplaceStringInput;
 	input: IAbstractReplaceStringInput;
-	generatedEdit: { success: true; textEdits: vscode.TextEdit[]; notebookEdits?: CellOrNotebookEdit[] } | { success: false; errorMessage: string };
+	generatedEdit:
+	| { success: true; textEdits: vscode.TextEdit[]; notebookEdits?: CellOrNotebookEdit[]; updated: NotebookDocumentSnapshot | TextDocumentSnapshot | undefined }
+	| { success: false; errorMessage: string };
 }
 
 
@@ -108,15 +110,13 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				document: undefined,
 				generatedEdit: input.oldString
 					? { success: false, errorMessage: `File does not exist: ${input.filePath}. Use the ${ToolName.CreateFile} tool to create it, or correct your filepath.` }
-					: { success: true, textEdits: [TextEdit.insert(new ExtPosition(0, 0), input.newString)] },
+					: { success: true, textEdits: [TextEdit.insert(new ExtPosition(0, 0), input.newString)], updated: undefined },
 				input,
 			};
 		}
 
 		const isNotebook = this.notebookService.hasSupportedNotebooks(uri);
-		const document = isNotebook ?
-			await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model)) :
-			await this.workspaceService.openTextDocumentAndSnapshot(uri);
+		const document = await this.instantiationService.invokeFunction(openDocumentAndSnapshot, this._promptContext, uri);
 
 		const didHealRef: { healed?: IAbstractReplaceStringInput } = {};
 		try {
@@ -126,6 +126,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 
 			const { updatedFile, edits } = await this.generateEdit(uri, document, options, input, didHealRef, token);
 			let notebookEdits: (vscode.NotebookEdit | [URI, vscode.TextEdit[]])[] | undefined;
+			let updated: NotebookDocumentSnapshot | TextDocumentSnapshot;
 			if (document instanceof NotebookDocumentSnapshot) {
 				const telemetryOptions: NotebookEditGenerationTelemtryOptions = {
 					model: options.model ? this.endpointProvider.getChatEndpoint(options.model).then(m => m.name) : undefined,
@@ -135,10 +136,19 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 
 				notebookEdits = await Iterable.asyncToArray(processFullRewriteNotebookEdits(document.document, updatedFile, this.alternativeNotebookEditGenerator, telemetryOptions, token));
 				sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'stringReplace', document.uri, this._promptContext.requestId, options.model ?? this._promptContext.request?.model);
+				updated = NotebookDocumentSnapshot.fromNewText(updatedFile, document);
+			} else {
+				updated = TextDocumentSnapshot.fromNewText(updatedFile, document);
 			}
 
 			void this.sendReplaceTelemetry('success', options, input, document.getText(), isNotebook, !!didHealRef.healed);
-			return { document, uri, input, healed: didHealRef.healed, generatedEdit: { success: true, textEdits: edits, notebookEdits } };
+			return {
+				document,
+				uri,
+				input,
+				healed: didHealRef.healed,
+				generatedEdit: { success: true, textEdits: edits, notebookEdits, updated }
+			};
 		} catch (error) {
 			// Enhanced error message with more helpful details
 			let errorMessage = 'String replacement failed: ';
@@ -266,6 +276,11 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			}
 
 			this._promptContext.stream.markdown('\n```\n');
+
+			if (generatedEdit.updated) {
+				this._promptContext.turnEditedDocuments ??= new ResourceMap();
+				this._promptContext.turnEditedDocuments.set(uri, generatedEdit.updated);
+			}
 		}
 
 		const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;

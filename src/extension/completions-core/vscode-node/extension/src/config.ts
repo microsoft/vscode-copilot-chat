@@ -5,6 +5,7 @@
 
 import type { WorkspaceConfiguration } from 'vscode';
 import * as vscode from 'vscode';
+import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	ConfigKey,
 	ConfigKeyType,
@@ -18,7 +19,6 @@ import { CopilotConfigPrefix } from '../../lib/src/constants';
 import { ICompletionsContextService } from '../../lib/src/context';
 import { Logger } from '../../lib/src/logger';
 import { transformEvent } from '../../lib/src/util/event';
-import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 
 const logger = new Logger('extensionConfig');
 
@@ -179,7 +179,7 @@ function getConfigurationTargetForEnabledConfig(): vscode.ConfigurationTarget {
 /**
  * Enable completions by every means possible.
  */
-async function enableCompletions(accessor: ServicesAccessor) {
+export async function enableCompletions(accessor: ServicesAccessor) {
 	const instantiationService = accessor.get(IInstantiationService);
 	const scope = vscode.window.activeTextEditor?.document;
 	// Make sure both of these settings are enabled, because that's a precondition for the user seeing inline completions.
@@ -220,7 +220,7 @@ async function enableCompletions(accessor: ServicesAccessor) {
 /**
  * Disable completions using the github.copilot.enable setting.
  */
-async function disableCompletions(accessor: ServicesAccessor) {
+export async function disableCompletions(accessor: ServicesAccessor) {
 	const instantiationService = accessor.get(IInstantiationService);
 	const languageId = vscode.window.activeTextEditor?.document.languageId;
 	if (!languageId) { return; }
@@ -239,7 +239,6 @@ async function disableCompletions(accessor: ServicesAccessor) {
 	}
 }
 
-/** @public KEEPING AS USEFUL */
 export async function toggleCompletions(accessor: ServicesAccessor) {
 	if (isCompletionEnabled(accessor) && isInlineSuggestEnabled()) {
 		await disableCompletions(accessor);

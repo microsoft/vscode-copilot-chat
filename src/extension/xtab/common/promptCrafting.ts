@@ -26,7 +26,7 @@ export class PromptPieces {
 		public readonly areaAroundEditWindowLinesRange: OffsetRange,
 		public readonly activeDoc: StatelessNextEditDocument,
 		public readonly xtabHistory: readonly IXtabHistoryEntry[],
-		public readonly currentFileContent: string,
+		public readonly taggedCurrentDocLines: readonly string[],
 		public readonly areaAroundCodeToEdit: string,
 		public readonly langCtx: LanguageContextResponse | undefined,
 		public readonly computeTokens: (s: string) => number,
@@ -37,7 +37,8 @@ export class PromptPieces {
 
 export function getUserPrompt(promptPieces: PromptPieces): string {
 
-	const { activeDoc, xtabHistory, currentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, opts } = promptPieces;
+	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, computeTokens, opts } = promptPieces;
+	const currentFileContent = taggedCurrentDocLines.join('\n');
 
 	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
 
@@ -408,7 +409,7 @@ export function buildCodeSnippetsUsingPagedClipping(
 	return { snippets: snippets.reverse(), docsInPrompt };
 }
 
-function countTokensForLines(page: string[], computeTokens: (s: string) => number): number {
+export function countTokensForLines(page: string[], computeTokens: (s: string) => number): number {
 	return page.reduce((sum, line) => sum + computeTokens(line) + 1 /* \n */, 0);
 }
 
@@ -578,7 +579,7 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	computeTokens: (s: string) => number,
 	pageSize: number,
 	opts: CurrentFileOptions
-): Result<{ taggedCurrentFileContent: string; nLines: number }, 'outOfBudget'> {
+): Result<readonly string[], 'outOfBudget'> {
 
 	const r = clipPreservingRange(
 		currentDocLines,
@@ -600,5 +601,5 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, clippedRange.endExclusive),
 	];
 
-	return Result.ok({ taggedCurrentFileContent: taggedCurrentFileContent.join('\n'), nLines: taggedCurrentFileContent.length });
+	return Result.ok(taggedCurrentFileContent);
 }

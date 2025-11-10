@@ -16,7 +16,7 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
-import { ChatEndpoint } from '../node/chatEndpoint';
+import { ChatEndpoint } from './chatEndpoint';
 
 /**
  * This endpoint represents the "Auto" model in the model picker.
@@ -100,6 +100,9 @@ function calculateAutoModelInfo(endpoint: IChatEndpoint, sessionToken: string, d
 	const newMultiplier = Math.round((endpoint.multiplier ?? 0) * (1 - discountPercent) * 100) / 100;
 	const newModelInfo: IChatModelInformation = {
 		...originalModelInfo,
+		warning_messages: undefined,
+		model_picker_enabled: true,
+		info_messages: undefined,
 		billing: {
 			is_premium: originalModelInfo.billing?.is_premium ?? false,
 			multiplier: newMultiplier,
@@ -111,4 +114,11 @@ function calculateAutoModelInfo(endpoint: IChatEndpoint, sessionToken: string, d
 		}
 	};
 	return newModelInfo;
+}
+
+export function isAutoModel(endpoint: IChatEndpoint | undefined): number {
+	if (!endpoint) {
+		return -1;
+	}
+	return endpoint.model === AutoChatEndpoint.pseudoModelId || (endpoint instanceof AutoChatEndpoint) ? 1 : -1;
 }

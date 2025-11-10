@@ -22,16 +22,5 @@ export function nesOptionsToConfigurations(options: SimulationOptions): Configur
 		});
 	}
 
-	if (options.nesUnifiedModel) {
-		configs.push({
-			key: ConfigKey.Internal.InlineEditsXtabUseUnifiedModel,
-			value: options.nesUnifiedModel,
-		});
-		configs.push({
-			key: ConfigKey.Internal.InlineEditsXtabProviderModelName,
-			value: 'xtab-unified-v2',
-		});
-	}
-
 	return configs;
 }
