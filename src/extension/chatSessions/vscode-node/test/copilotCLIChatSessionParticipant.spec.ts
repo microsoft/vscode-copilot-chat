@@ -57,7 +57,7 @@ class FakeSummarizerProvider extends mock<ChatSummarizerProvider>() {
 }
 
 class FakeWorktreeManager extends mock<CopilotCLIWorktreeManager>() {
-	override createWorktreeIfNeeded = vi.fn(async () => undefined);
+	override createWorktree = vi.fn(async () => undefined);
 	override storeWorktreePath = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
 }
