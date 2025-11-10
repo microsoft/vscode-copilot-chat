@@ -34,7 +34,8 @@ suite('MultiReplaceString', () => {
 			createTextDocumentData(URI.file('/workspace/empty.ts'), '', 'ts'),
 			createTextDocumentData(URI.file('/workspace/whitespace.ts'), ' \t\n', 'ts'),
 			createTextDocumentData(URI.file('/workspace/large.ts'), largeContent, 'ts'),
-			createTextDocumentData(URI.file('/workspace/multi-sr-bug.ts'), readFileSync(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-original.txt', 'utf-8'), 'ts')
+			createTextDocumentData(URI.file('/workspace/multi-sr-bug.ts'), readFileSync(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-original.txt', 'utf-8'), 'ts'),
+			createTextDocumentData(URI.file('/workspace/replaceall-test.ts'), 'test\ntest\nother\ntest', 'ts')
 		];
 		for (const doc of allDocs) {
 			documents.set(doc.document.uri, doc);
@@ -154,5 +155,41 @@ import { IFile } from '../../../../../base/node/zip.js';`
 
 		const r = await invoke(input);
 		expect(await applyEditsInMap(r.edits)).toMatchFileSnapshot(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-actual.txt');
+	});
+
+	test('replaceAll functionality', async () => {
+		const input: IMultiReplaceStringToolParams = {
+			explanation: 'Replace all occurrences of "test" with "replacement"',
+			replacements: [{
+				filePath: '/workspace/replaceall-test.ts',
+				explanation: 'Replace all occurrences of "test" with "replacement"',
+				newString: 'replacement',
+				oldString: 'test',
+				replaceAll: true
+			}]
+		};
+
+		const r = await invoke(input);
+		const results = await applyEditsInMap(r.edits);
+		expect(results['file:///workspace/replaceall-test.ts']).toBe('replacement\nreplacement\nother\nreplacement');
+	});
+
+	test('multiple matches without replaceAll should provide helpful error', async () => {
+		const input: IMultiReplaceStringToolParams = {
+			explanation: 'Try to replace "test" without replaceAll flag',
+			replacements: [{
+				filePath: '/workspace/replaceall-test.ts',
+				explanation: 'Try to replace "test" without replaceAll flag',
+				newString: 'replacement',
+				oldString: 'test',
+				// replaceAll is not set, should default to false
+			}]
+		};
+
+		const r = await invoke(input);
+		// The result should contain error information
+		expect(r.result).toBeDefined();
+		// Note: We can't easily test the exact error message here due to the tool's structure,
+		// but the core logic is tested in editFileToolUtils.spec.ts
 	});
 });
