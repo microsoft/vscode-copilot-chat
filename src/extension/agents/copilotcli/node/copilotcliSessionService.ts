@@ -119,6 +119,15 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return undefined;
 					}
 					const id = metadata.sessionId;
+					const timestamp = metadata.modifiedTime;
+					const label = metadata.summary ? labelFromPrompt(metadata.summary) : undefined;
+					if (label) {
+						return {
+							id,
+							label,
+							timestamp,
+						} satisfies ICopilotCLISessionItem;
+					}
 					let dispose: (() => Promise<void>) | undefined = undefined;
 					let session: Session | undefined = undefined;
 					try {
