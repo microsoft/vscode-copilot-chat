@@ -604,5 +604,29 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		await vscode.commands.executeCommand('_workbench.openMultiDiffEditor', { multiDiffSourceUri, title, resources });
 	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', async (sessionItemResource?: vscode.Uri) => {
+		if (!sessionItemResource) {
+			return;
+		}
+
+		const sessionId = SessionIdForCLI.parse(sessionItemResource);
+		const session = await copilotCLISessionService.getSession(sessionId, { readonly: true }, CancellationToken.None);
+		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
+
+		if (!session || !sessionWorktree) {
+			return;
+		}
+
+		const sessionWorktreeUri = Uri.file(sessionWorktree);
+		const activeRepository = gitService.activeRepository.get();
+		if (!activeRepository) {
+			return;
+		}
+
+		// Migrate the changes, delete the worktree, and delete the session
+		await vscode.commands.executeCommand('git.migrateWorktreeChanges', activeRepository.rootUri, sessionWorktreeUri);
+		await vscode.commands.executeCommand('git.deleteWorktree', sessionWorktreeUri);
+		await copilotCLISessionService.deleteSession(sessionId);
+	}));
 	return disposableStore;
 }
