@@ -13,7 +13,6 @@ import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
@@ -575,13 +574,10 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		}
 
 		const sessionId = SessionIdForCLI.parse(sessionItemResource);
-		const session = await copilotCLISessionService.getSession(sessionId, { readonly: true }, CancellationToken.None);
-		const sessionExists = !!session;
-		session?.dispose();
 		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
 		const sessionWorktreeName = copilotcliSessionItemProvider.worktreeManager.getWorktreeRelativePath(sessionId);
 
-		if (!sessionExists || !sessionWorktree || !sessionWorktreeName) {
+		if (!sessionWorktree || !sessionWorktreeName) {
 			return;
 		}
 
@@ -620,12 +616,9 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		}
 
 		const sessionId = SessionIdForCLI.parse(sessionItemResource);
-		const session = await copilotCLISessionService.getSession(sessionId, { readonly: true }, CancellationToken.None);
-		const sessionExists = !!session;
-		session?.dispose();
 		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
 
-		if (!sessionExists || !sessionWorktree) {
+		if (!sessionWorktree) {
 			return;
 		}
 
