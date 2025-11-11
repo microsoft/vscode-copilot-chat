@@ -227,9 +227,20 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 
 	private async addBuiltInGitHubServer(config: Record<string, MCPServerConfig>): Promise<void> {
 		try {
-			// Don't override if user has configured their own github-mcp-server
-			if (config['github-mcp-server']) {
+			// Don't override if user has configured their own github mcp server
+			if (config['github']) {
 				return;
+			}
+
+			// Check if any existing server already uses the GitHub MCP URL
+			const githubMcpUrlPrefix = 'https://api.githubcopilot.com/mcp/';
+			for (const [serverName, serverConfig] of Object.entries(config)) {
+				if (serverConfig.type === 'http' || serverConfig.type === 'sse') {
+					if (serverConfig.url.startsWith(githubMcpUrlPrefix)) {
+						this.logService.trace(`[CopilotCLIMCPHandler] Skipping built-in GitHub MCP server as "${serverName}" already uses the same URL.`);
+						return;
+					}
+				}
 			}
 
 			const session = await this.authenticationService.getAnyGitHubSession();
@@ -238,7 +249,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 				return;
 			}
 
-			config['github-mcp-server'] = {
+			config['github'] = {
 				type: 'http',
 				url: 'https://api.githubcopilot.com/mcp/readonly',
 				tools: ['*'],
