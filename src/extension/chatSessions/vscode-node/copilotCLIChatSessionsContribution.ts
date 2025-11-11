@@ -10,7 +10,6 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
-import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -141,7 +140,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@ICopilotCLITerminalIntegration private readonly terminalIntegration: ICopilotCLITerminalIntegration,
 		@IGitService private readonly gitService: IGitService,
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
-		@ILogService private readonly logService: ILogService
 	) {
 		super();
 		this._register(this.terminalIntegration);
