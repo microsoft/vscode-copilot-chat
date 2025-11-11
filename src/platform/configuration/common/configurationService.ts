@@ -787,6 +787,7 @@ export namespace ConfigKey {
 		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false);
 		export const CopilotCLIEnabled = defineSetting<boolean | undefined>('chat.advanced.copilotCLI.enabled', true);
 		export const CLIIsolationEnabled = defineSetting<boolean | undefined>('chat.advanced.cli.isolation.enabled', false);
+		export const CLIMCPServerEnabled = defineSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', false);
 		export const Gpt5AlternativePatch = defineExpSetting<boolean>('chat.advanced.gpt5AlternativePatch', false);
 	}
 

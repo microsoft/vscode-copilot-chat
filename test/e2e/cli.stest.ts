@@ -16,7 +16,7 @@ import { MockChatResponseStream, TestChatRequest } from '../../src/extension/tes
 import { TestingServiceCollection } from '../../src/platform/test/node/services';
 import { disposableTimeout, IntervalTimer } from '../../src/util/vs/base/common/async';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
-import { DisposableStore } from '../../src/util/vs/base/common/lifecycle';
+import { DisposableStore, IReference } from '../../src/util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest, ChatSessionStatus, Uri } from '../../src/vscodeTypes';
@@ -68,19 +68,18 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 		testRunner(async ({ sessionService }, stream, disposables) => {
 			const session = await sessionService.createSession('What is 1+8?', {}, CancellationToken.None);
 			disposables.add(session);
-			disposables.add(session.attachStream(stream));
+			disposables.add(session.object.attachStream(stream));
 
-			await session.handleRequest('What is 1+8?', [], undefined, CancellationToken.None);
+			await session.object.handleRequest('What is 1+8?', [], undefined, CancellationToken.None);
 
 			// Verify we have a response of 9.
-			assert.strictEqual(session.status, ChatSessionStatus.Completed);
+			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assert.ok(stream.output.join('\n').includes('9'), 'Expected response to include "9"');
 
 			// Can send a subsequent request.
-			await session.handleRequest('What is 11+25?', [], undefined, CancellationToken.None);
-
+			await session.object.handleRequest('What is 11+25?', [], undefined, CancellationToken.None);
 			// Verify we have a response of 36.
-			assert.strictEqual(session.status, ChatSessionStatus.Completed);
+			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assert.ok(stream.output.join('\n').includes('36'), 'Expected response to include "36"');
 		})
 	);
@@ -90,15 +89,14 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			let sessionId = '';
 			{
 				const session = await sessionService.createSession('What is 1+8?', {}, CancellationToken.None);
-				sessionId = session.sessionId;
-				disposables.add(session);
+				sessionId = session.object.sessionId;
 
-				await session.handleRequest('What is 1+8?', [], undefined, CancellationToken.None);
+				await session.object.handleRequest('What is 1+8?', [], undefined, CancellationToken.None);
 				session.dispose();
 			}
 
 			{
-				const session = await new Promise<ICopilotCLISession>((resolve, reject) => {
+				const session = await new Promise<IReference<ICopilotCLISession>>((resolve, reject) => {
 					const interval = disposables.add(new IntervalTimer());
 					interval.cancelAndSet(async () => {
 						const session = await sessionService.getSession(sessionId, { readonly: false }, CancellationToken.None);
@@ -110,12 +108,12 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 					disposables.add(disposableTimeout(() => reject(new Error('Timed out waiting for session')), 5_000));
 				});
 				disposables.add(session);
-				disposables.add(session.attachStream(stream));
+				disposables.add(session.object.attachStream(stream));
 
-				await session.handleRequest('What was my previous question?', [], undefined, CancellationToken.None);
+				await session.object.handleRequest('What was my previous question?', [], undefined, CancellationToken.None);
 
 				// Verify we have a response of 9.
-				assert.strictEqual(session.status, ChatSessionStatus.Completed);
+				assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 				assert.ok(stream.output.join('\n').includes('8'), 'Expected response to include "8"');
 			}
 		})
@@ -127,11 +125,11 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			const prompt = `Explain the contents of the file '${path.basename(file)}'. There is no need to check for contents in the directory. This file exists on disc.`;
 			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
 			disposables.add(session);
-			disposables.add(session.attachStream(stream));
+			disposables.add(session.object.attachStream(stream));
 
-			await session.handleRequest(prompt, [], undefined, CancellationToken.None);
+			await session.object.handleRequest(prompt, [], undefined, CancellationToken.None);
 
-			assert.strictEqual(session.status, ChatSessionStatus.Completed);
+			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assert.ok(stream.output.join('\n').includes('add'), 'Expected response to include "add"');
 		})
 	);
@@ -142,10 +140,10 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			const prompt = `Explain the contents of the file '${path.basename(externalFile)}'. This file exists on disc but not in the current working directory.`;
 			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
 			disposables.add(session);
-			disposables.add(session.attachStream(stream));
+			disposables.add(session.object.attachStream(stream));
 			let permissionRequested = false;
 
-			session.attachPermissionHandler(async (permission: PermissionRequest) => {
+			session.object.attachPermissionHandler(async (permission: PermissionRequest) => {
 				if (permission.kind === 'read' && permission.path.toLowerCase() === externalFile.toLowerCase()) {
 					permissionRequested = true;
 					return true;
@@ -157,9 +155,9 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				}
 			});
 
-			await session.handleRequest(prompt, [], undefined, CancellationToken.None);
+			await session.object.handleRequest(prompt, [], undefined, CancellationToken.None);
 
-			assert.strictEqual(session.status, ChatSessionStatus.Completed);
+			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assert.ok(permissionRequested, 'Expected permission to be requested for external file');
 		})
 	);
@@ -175,11 +173,11 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 
 			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
 			disposables.add(session);
-			disposables.add(session.attachStream(stream));
+			disposables.add(session.object.attachStream(stream));
 
-			await session.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
 
-			assert.strictEqual(session.status, ChatSessionStatus.Completed);
+			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assert.ok(stream.output.join('\n').includes('add'), 'Expected response to include "add"');
 		})
 	);
