@@ -120,7 +120,7 @@
 					"beginsPattern": "^build starting at .*$",
 					"endsPattern": "^build finished in .*$"
 			}
-		}],
+			}],
 			"isBackground": true,
 			"label": "npm: watch:tsc-simulation-workbench",
 			"presentation": {
