@@ -5,9 +5,12 @@
 
 import type { SessionOptions } from '@github/copilot/sdk';
 import type { CancellationToken, ChatParticipantToolToken } from 'vscode';
+import { URI } from '../../../../util/vs/base/common/uri';
+import { ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { createEditConfirmation } from '../../../tools/node/editFileToolUtils';
 
 type CoreTerminalConfirmationToolParams = {
 	tool: ToolName.CoreTerminalConfirmationTool;
@@ -28,24 +31,58 @@ type CoreConfirmationToolParams = {
 }
 
 export async function requestPermission(
+	accessor: ServicesAccessor,
 	permissionRequest: PermissionRequest,
 	toolsService: IToolsService,
 	toolInvocationToken: ChatParticipantToolToken,
 	token: CancellationToken,
 ): Promise<boolean> {
 
-	const { tool, input } = getConfirmationToolParams(permissionRequest);
+	const toolParams = await getConfirmationToolParams(accessor, permissionRequest);
+	if (!toolParams) {
+		return true;
+	}
+	const { tool, input } = toolParams;
 	const result = await toolsService.invokeTool(tool, { input, toolInvocationToken }, token);
 
 	const firstResultPart = result.content.at(0);
 	return (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes');
 }
 
+export async function requiresFileEditconfirmation(accessor: ServicesAccessor, permissionRequest: PermissionRequest): Promise<boolean> {
+	const confirmationInfo = await getFileEditConfirmationToolParams(accessor, permissionRequest);
+	return confirmationInfo !== undefined;
+}
+
+async function getFileEditConfirmationToolParams(accessor: ServicesAccessor, permissionRequest: PermissionRequest): Promise<CoreConfirmationToolParams | undefined> {
+	if (permissionRequest.kind !== 'write') {
+		return;
+	}
+	const file = permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined;
+	if (!file) {
+		return;
+	}
+	const suffix = permissionRequest.intention ? () => Promise.resolve(permissionRequest.intention || '') : undefined;
+	const confirmationInfo = await createEditConfirmation(accessor, [file], suffix);
+	const confirmationMessage = confirmationInfo.confirmationMessages;
+	if (!confirmationMessage) {
+		return;
+	}
+
+	return {
+		tool: ToolName.CoreConfirmationTool,
+		input: {
+			title: confirmationMessage.title,
+			message: typeof confirmationMessage.message === 'string' ? confirmationMessage.message : confirmationMessage.message.value,
+			confirmationType: 'basic'
+		}
+	};
+}
 /**
  * Pure function mapping a Copilot CLI permission request -> tool invocation params.
  * Keeps logic out of session class for easier unit testing.
  */
-export function getConfirmationToolParams(permissionRequest: PermissionRequest): CoreTerminalConfirmationToolParams | CoreConfirmationToolParams {
+export async function getConfirmationToolParams(accessor: ServicesAccessor, permissionRequest: PermissionRequest): Promise<CoreTerminalConfirmationToolParams | CoreConfirmationToolParams | undefined> {
 	if (permissionRequest.kind === 'shell') {
 		return {
 			tool: ToolName.CoreTerminalConfirmationTool,
@@ -58,14 +95,7 @@ export function getConfirmationToolParams(permissionRequest: PermissionRequest):
 	}
 
 	if (permissionRequest.kind === 'write') {
-		return {
-			tool: ToolName.CoreConfirmationTool,
-			input: {
-				title: permissionRequest.intention || 'Copilot CLI Permission Request',
-				message: permissionRequest.fileName ? `Edit ${permissionRequest.fileName}` : codeBlock(permissionRequest),
-				confirmationType: 'basic'
-			}
-		};
+		return getFileEditConfirmationToolParams(accessor, permissionRequest);
 	}
 
 	if (permissionRequest.kind === 'mcp') {

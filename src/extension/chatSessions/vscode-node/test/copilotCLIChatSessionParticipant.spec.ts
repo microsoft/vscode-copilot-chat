@@ -19,11 +19,12 @@ import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/wo
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import type { ICopilotCLIModels, ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISession } from '../../../agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
+import { ICopilotCLIMCPHandler } from '../../../agents/copilotcli/node/mcpHandler';
 import { MockCliSdkSession, MockCliSdkSessionManager } from '../../../agents/copilotcli/node/test/copilotCliSessionService.spec';
 import { ChatSummarizerProvider } from '../../../prompt/node/summarizer';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
@@ -31,7 +32,6 @@ import { MockChatResponseStream, TestChatRequest } from '../../../test/node/test
 import type { IToolsService } from '../../../tools/common/toolsService';
 import { CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLIWorktreeManager } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
-import { ICopilotCLIMCPHandler } from '../../../agents/copilotcli/node/mcpHandler';
 // Mock terminal integration to avoid importing PowerShell asset (.ps1) which Vite cannot parse during tests
 vi.mock('../copilotCLITerminalIntegration', () => {
 	// Minimal stand-in for createServiceIdentifier
@@ -150,8 +150,11 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}
 		}();
 		instantiationService = {
+			invokeFunction<R, TS extends any[] = []>(fn: (accessor: ServicesAccessor, ...args: TS) => R, ...args: TS): R {
+				return fn(accessor, ...args);
+			},
 			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
-				const session = new TestCopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService);
+				const session = new TestCopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService, instantiationService);
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
@@ -172,7 +175,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			telemetry,
 			tools,
 			commandExecutionService,
-			workspaceService
+			workspaceService,
+			instantiationService
 		);
 	});
 

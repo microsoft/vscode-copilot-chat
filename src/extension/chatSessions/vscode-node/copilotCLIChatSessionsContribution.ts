@@ -17,6 +17,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
@@ -323,6 +324,7 @@ export class CopilotCLIChatSessionParticipant {
 		@IToolsService private readonly toolsService: IToolsService,
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -417,7 +419,7 @@ export class CopilotCLIChatSessionParticipant {
 			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory);
 		}
 		disposables.add(session.object.attachStream(stream));
-		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest) => requestPermission(permissionRequest, this.toolsService, request.toolInvocationToken, token)));
+		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest) => this.instantiationService.invokeFunction(requestPermission, permissionRequest, this.toolsService, request.toolInvocationToken, token)));
 
 
 		return session;

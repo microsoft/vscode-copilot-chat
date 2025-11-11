@@ -23,6 +23,7 @@ import { CopilotCLISessionOptions } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { CopilotCLIToolNames } from '../copilotcliToolInvocationFormatter';
 import { PermissionRequest } from '../permissionHelpers';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
@@ -82,7 +83,7 @@ describe('CopilotCLISession', () => {
 	let gitService: IGitService;
 	let sessionOptions: CopilotCLISessionOptions;
 	let authService: IAuthenticationService;
-
+	let instaService: IInstantiationService;
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
@@ -98,6 +99,7 @@ describe('CopilotCLISession', () => {
 		sdkSession = new MockSdkSession();
 		sessionOptions = new CopilotCLISessionOptions({}, logger);
 		workspaceService = createWorkspaceService('/workspace');
+		instaService = services.seal();
 	});
 
 	afterEach(() => {
@@ -114,6 +116,7 @@ describe('CopilotCLISession', () => {
 			logger,
 			workspaceService,
 			authService,
+			instaService
 		));
 	}
 

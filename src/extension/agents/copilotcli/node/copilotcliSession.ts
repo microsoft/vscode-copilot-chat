@@ -18,7 +18,8 @@ import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, 
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { CopilotCLISessionOptions, getAuthInfo } from './copilotCli';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
-import { PermissionRequest } from './permissionHelpers';
+import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
 type PermissionHandler = (
 	permissionRequest: PermissionRequest,
@@ -75,7 +76,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IAuthenticationService private readonly authenticationService: IAuthenticationService
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -280,7 +282,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
 
-			if (isWorkspaceFile || isWorkingDirectoryFile) {
+			// Check if we need confirmation for file edits (possible these are protected files).
+			const requiresConfirmation = await this.instantiationService.invokeFunction(requiresFileEditconfirmation, permissionRequest);
+			if (!requiresConfirmation && (isWorkspaceFile || isWorkingDirectoryFile)) {
 				if (isWorkspaceFile) {
 					this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in workspace ${permissionRequest.fileName}`);
 				} else {
