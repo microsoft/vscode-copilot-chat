@@ -282,14 +282,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
 
-			// Check if we need confirmation for file edits (possible these are protected files).
-			await this.instantiationService.invokeFunction(requiresFileEditconfirmation, permissionRequest);
-			if (isWorkspaceFile || isWorkingDirectoryFile) {
-				if (isWorkspaceFile) {
-					this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in workspace ${permissionRequest.fileName}`);
-				} else {
-					this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in working directory ${permissionRequest.fileName}`);
-				}
+			let autoApprove = false;
+			// If isolation is enabled, we only auto-approve writes within the working directory.
+			if (this._options.isolationEnabled && isWorkingDirectoryFile) {
+				autoApprove = true;
+			}
+			// If its a workspace file, and not editing protected files, we auto-approve.
+			if (isWorkspaceFile && !(await this.instantiationService.invokeFunction(requiresFileEditconfirmation, permissionRequest))) {
+				autoApprove = true;
+			}
+
+			if (autoApprove) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request  ${permissionRequest.fileName}`);
 				const editKey = getEditKeyForFile(editFile);
 
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.

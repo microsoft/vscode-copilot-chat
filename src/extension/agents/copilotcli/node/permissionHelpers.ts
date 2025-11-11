@@ -62,8 +62,7 @@ async function getFileEditConfirmationToolParams(accessor: ServicesAccessor, per
 	if (!file) {
 		return;
 	}
-	const suffix = permissionRequest.intention ? () => Promise.resolve(permissionRequest.intention || '') : undefined;
-	const confirmationInfo = await createEditConfirmation(accessor, [file], suffix);
+	const confirmationInfo = await createEditConfirmation(accessor, [file]);
 	const confirmationMessage = confirmationInfo.confirmationMessages;
 	if (!confirmationMessage) {
 		return;
