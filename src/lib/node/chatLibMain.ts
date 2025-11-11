@@ -358,11 +358,7 @@ export class SimpleExperimentationService implements IExperimentationService {
 		for (const [key, value] of Object.entries(variables)) {
 			const existing = this.variables[key];
 			if (existing !== value) {
-				if (value === undefined) {
-					delete this.variables[key];
-				} else {
-					this.variables[key] = value;
-				}
+				this.variables[key] = value;
 				changedVariables.push(key);
 			}
 		}
