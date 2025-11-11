@@ -293,7 +293,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 
 			if (autoApprove) {
-				this.logService.trace(`[CopilotCLISession] Auto Approving request  ${permissionRequest.fileName}`);
+				this.logService.trace(`[CopilotCLISession] Auto Approving request ${permissionRequest.fileName}`);
 				const editKey = getEditKeyForFile(editFile);
 
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
