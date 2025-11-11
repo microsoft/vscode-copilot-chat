@@ -4,10 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { parse, ParseError, printParseErrorCode } from 'jsonc-parser';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { joinPath } from '../../../../util/vs/base/common/resources';
+import { URI } from '../../../../util/vs/base/common/uri';
 
 declare const TextDecoder: {
 	decode(input: Uint8Array): string;
@@ -80,114 +82,176 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	declare _serviceBrand: undefined;
 	constructor(
 		@ILogService private readonly logService: ILogService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) { }
 
 	public async loadMcpConfig(_workingDirectory: string | undefined): Promise<Record<string, MCPServerConfig> | undefined> {
+		const processedConfig: Record<string, MCPServerConfig> = {};
+
+		const workspaceFolder = this.getFirstWorkspaceFolder();
+		if (workspaceFolder) {
+			await this.loadConfigFromWorkspace(workspaceFolder, processedConfig);
+		}
+
+		// Always try to add built-in GitHub MCP server, even if config loading failed
+		await this.addBuiltInGitHubServer(processedConfig);
+
+		return Object.keys(processedConfig).length > 0 ? processedConfig : undefined;
+	}
+
+	private getFirstWorkspaceFolder() {
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		if (workspaceFolders.length === 0) {
+			this.logService.trace('[CopilotCLIMCPHandler] No workspace folders found.');
+			return undefined;
+		}
+		return workspaceFolders[0];
+	}
+
+	private async loadConfigFromWorkspace(workspaceFolder: URI, processedConfig: Record<string, MCPServerConfig>): Promise<void> {
+		const mcpConfigPath = joinPath(workspaceFolder, '.vscode', 'mcp.json');
+
 		try {
-			const workspaceFolders = this.workspaceService.getWorkspaceFolders();
-			if (workspaceFolders.length === 0) {
-				return undefined;
-			}
-
-			const workspaceFolder = workspaceFolders[0];
-			const mcpConfigPath = joinPath(workspaceFolder, '.vscode', 'mcp.json');
-
 			const fileContent = await this.workspaceService.fs.readFile(mcpConfigPath);
 			const configText = new TextDecoder().decode(fileContent);
-
-			const parseErrors: ParseError[] = [];
-			const mcpConfig = parse(configText, parseErrors, { allowTrailingComma: true, disallowComments: false }) as unknown;
-			if (parseErrors.length > 0) {
-				const { error: parseErrorCode } = parseErrors[0];
-				const message = printParseErrorCode(parseErrorCode);
-				this.logService.warn(`[CopilotCLIMCPHandler] Failed to parse MCP config ${message}.`);
-				return undefined;
-			}
-
-			const processedConfig: Record<string, MCPServerConfig> = {};
-
-			let servers: Record<string, unknown> | undefined;
-			if (isRecord(mcpConfig)) {
-				const maybeServers = mcpConfig['servers'];
-				if (isRecord(maybeServers)) {
-					servers = maybeServers;
-				}
-
-				if (!servers) {
-					const maybeMcpWrapper = isRecord(mcpConfig['mcp']) ? mcpConfig['mcp'] : undefined;
-					if (maybeMcpWrapper) {
-						const wrappedServers = maybeMcpWrapper['servers'];
-						if (isRecord(wrappedServers)) {
-							servers = wrappedServers;
-						}
-					}
-				}
-
-				if (!servers) {
-					const maybeMcpServers = mcpConfig['mcpServers'];
-					if (isRecord(maybeMcpServers)) {
-						servers = maybeMcpServers;
-					}
-				}
-			}
-
-			if (servers) {
-				for (const [serverName, serverConfig] of Object.entries(servers)) {
-					if (!isRecord(serverConfig)) {
-						this.logService.warn(`[CopilotCLIMCPHandler] Ignoring invalid MCP server definition "${serverName}".`);
-						continue;
-					}
-
-					const rawConfig = serverConfig as RawServerConfig;
-					const type = typeof rawConfig.type === 'string' ? rawConfig.type : undefined;
-					const toolsArray = toStringArray(rawConfig.tools);
-					const tools = toolsArray && toolsArray.length > 0 ? toolsArray : ['*'];
-					const args = toStringArray(rawConfig.args) ?? [];
-					const env = toStringRecord(rawConfig.env);
-					const headers = toStringRecord(rawConfig.headers);
-					const cwd = typeof rawConfig.cwd === 'string' ? rawConfig.cwd.replace('${workspaceFolder}', workspaceFolder.fsPath) : undefined;
-
-					if (!type || type === 'local' || type === 'stdio') {
-						const command = typeof rawConfig.command === 'string' ? rawConfig.command : undefined;
-						if (!command) {
-							this.logService.warn(`[CopilotCLIMCPHandler] Skipping MCP local server "${serverName}" due to missing command.`);
-							continue;
-						}
-
-						const localConfig: MCPLocalServerConfig = {
-							type: type === 'stdio' ? 'stdio' : 'local',
-							command,
-							args,
-							tools,
-							env: env ?? {},
-						};
-						if (cwd) {
-							localConfig.cwd = cwd;
-						}
-						processedConfig[serverName] = localConfig;
-					} else if (type === 'http' || type === 'sse') {
-						const url = typeof rawConfig.url === 'string' ? rawConfig.url : undefined;
-						if (!url) {
-							this.logService.warn(`[CopilotCLIMCPHandler] Skipping MCP remote server "${serverName}" due to missing url.`);
-							continue;
-						}
-						processedConfig[serverName] = {
-							type,
-							url,
-							headers: headers ?? {},
-							tools,
-						};
-					} else {
-						this.logService.warn(`[CopilotCLIMCPHandler] Unsupported MCP server type "${type}" for "${serverName}".`);
-					}
-				}
-			}
-
-			return processedConfig;
+			await this.parseAndProcessConfig(configText, workspaceFolder.fsPath, processedConfig);
 		} catch (error) {
-			this.logService.warn(`[CopilotCLIMCPHandler] Failed to load MCP config: ${error}`);
+			this.logService.trace(`[CopilotCLIMCPHandler] Failed to load MCP config file: ${error}`);
+		}
+	}
+
+	private async parseAndProcessConfig(configText: string, workspacePath: string, processedConfig: Record<string, MCPServerConfig>): Promise<void> {
+		const parseErrors: ParseError[] = [];
+		const mcpConfig = parse(configText, parseErrors, { allowTrailingComma: true, disallowComments: false }) as unknown;
+
+		if (parseErrors.length > 0) {
+			const { error: parseErrorCode } = parseErrors[0];
+			const message = printParseErrorCode(parseErrorCode);
+			this.logService.warn(`[CopilotCLIMCPHandler] Failed to parse MCP config ${message}.`);
+			return;
+		}
+
+		const servers = this.extractServersFromConfig(mcpConfig);
+		if (!servers) {
+			return;
+		}
+
+		this.processServerConfigs(servers, workspacePath, processedConfig);
+	}
+
+	private extractServersFromConfig(mcpConfig: unknown): Record<string, unknown> | undefined {
+		if (!isRecord(mcpConfig)) {
 			return undefined;
+		}
+
+		// Try direct 'servers' property
+		if (isRecord(mcpConfig['servers'])) {
+			return mcpConfig['servers'];
+		}
+
+		// Try nested 'mcp.servers' property
+		const mcpWrapper = mcpConfig['mcp'];
+		if (isRecord(mcpWrapper) && isRecord(mcpWrapper['servers'])) {
+			return mcpWrapper['servers'];
+		}
+
+		// Try 'mcpServers' property
+		if (isRecord(mcpConfig['mcpServers'])) {
+			return mcpConfig['mcpServers'];
+		}
+
+		return undefined;
+	}
+
+	private processServerConfigs(servers: Record<string, unknown>, workspacePath: string, processedConfig: Record<string, MCPServerConfig>): void {
+		for (const [serverName, serverConfig] of Object.entries(servers)) {
+			if (!isRecord(serverConfig)) {
+				this.logService.warn(`[CopilotCLIMCPHandler] Ignoring invalid MCP server definition "${serverName}".`);
+				continue;
+			}
+
+			const processedServer = this.processServerConfig(serverConfig as RawServerConfig, serverName, workspacePath);
+			if (processedServer) {
+				processedConfig[serverName] = processedServer;
+			}
+		}
+	}
+
+	private processServerConfig(rawConfig: RawServerConfig, serverName: string, workspacePath: string): MCPServerConfig | undefined {
+		const type = typeof rawConfig.type === 'string' ? rawConfig.type : undefined;
+		const toolsArray = toStringArray(rawConfig.tools);
+		const tools = toolsArray && toolsArray.length > 0 ? toolsArray : ['*'];
+
+		if (!type || type === 'local' || type === 'stdio') {
+			return this.processLocalServerConfig(rawConfig, serverName, tools, workspacePath);
+		}
+
+		if (type === 'http' || type === 'sse') {
+			return this.processRemoteServerConfig(rawConfig, serverName, type, tools);
+		}
+
+		this.logService.warn(`[CopilotCLIMCPHandler] Unsupported MCP server type "${type}" for "${serverName}".`);
+		return undefined;
+	}
+
+	private processLocalServerConfig(rawConfig: RawServerConfig, serverName: string, tools: string[], workspacePath: string): MCPLocalServerConfig | undefined {
+		const command = typeof rawConfig.command === 'string' ? rawConfig.command : undefined;
+		if (!command) {
+			this.logService.warn(`[CopilotCLIMCPHandler] Skipping MCP local server "${serverName}" due to missing command.`);
+			return undefined;
+		}
+
+		const type = typeof rawConfig.type === 'string' && rawConfig.type === 'stdio' ? 'stdio' : 'local';
+		const args = toStringArray(rawConfig.args) ?? [];
+		const env = toStringRecord(rawConfig.env) ?? {};
+		const cwd = typeof rawConfig.cwd === 'string' ? rawConfig.cwd.replace('${workspaceFolder}', workspacePath) : undefined;
+
+		const localConfig: MCPLocalServerConfig = { type, command, args, tools, env };
+		if (cwd) {
+			localConfig.cwd = cwd;
+		}
+		return localConfig;
+	}
+
+	private processRemoteServerConfig(rawConfig: RawServerConfig, serverName: string, type: 'http' | 'sse', tools: string[]): MCPRemoteServerConfig | undefined {
+		const url = typeof rawConfig.url === 'string' ? rawConfig.url : undefined;
+		if (!url) {
+			this.logService.warn(`[CopilotCLIMCPHandler] Skipping MCP remote server "${serverName}" due to missing url.`);
+			return undefined;
+		}
+
+		const headers = toStringRecord(rawConfig.headers) ?? {};
+		return { type, url, headers, tools };
+	}
+
+	private async addBuiltInGitHubServer(config: Record<string, MCPServerConfig>): Promise<void> {
+		try {
+			// Don't override if user has configured their own github-mcp-server
+			if (config['github-mcp-server']) {
+				return;
+			}
+
+			const session = await this.authenticationService.getAnyGitHubSession();
+			if (!session) {
+				this.logService.trace('[CopilotCLIMCPHandler] Skipping built-in GitHub MCP server due to missing Copilot token.');
+				return;
+			}
+
+			config['github-mcp-server'] = {
+				type: 'http',
+				url: 'https://api.githubcopilot.com/mcp/readonly',
+				tools: ['*'],
+				isDefaultServer: true,
+				headers: {
+					'Authorization': `Bearer ${session.accessToken}`,
+					'X-MCP-Toolsets': 'repos,issues,users,pull_requests,code_security,secret_protection,actions,web_search',
+					'X-MCP-Host': 'copilot-sdk',
+				},
+			};
+			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server.');
+		} catch (error) {
+			this.logService.warn(`[CopilotCLIMCPHandler] Failed to add built-in GitHub MCP server: ${error}`);
 		}
 	}
 }

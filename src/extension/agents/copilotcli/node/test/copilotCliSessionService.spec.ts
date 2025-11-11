@@ -5,6 +5,7 @@
 
 import type { SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILogService } from '../../../../../platform/log/common/logService';
@@ -111,7 +112,11 @@ describe('CopilotCLISessionService', () => {
 			}
 		} as unknown as IInstantiationService;
 
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService())));
+		const mockAuthService = {
+			getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
+		} as unknown as IAuthenticationService;
+
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), mockAuthService)));
 		manager = await service.getSessionManager() as unknown as FakeCLISessionManager;
 	});
 

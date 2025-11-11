@@ -211,6 +211,9 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	async diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
+		if (!repository?.diffIndexWithHEADShortStats) {
+			return undefined;
+		}
 		return await repository?.diffIndexWithHEADShortStats();
 	}
 

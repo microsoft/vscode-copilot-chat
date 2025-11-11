@@ -240,7 +240,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		const sessionDisposables = this._register(new DisposableStore());
 		try {
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-			const options = new CopilotCLISessionOptions({ model, workingDirectory, isolationEnabled }, this.logService);
+			const mcpServers = await this.mcpHandler.loadMcpConfig(workingDirectory);
+			const options = new CopilotCLISessionOptions({ model, workingDirectory, isolationEnabled, mcpServers }, this.logService);
 
 			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
 			if (!sdkSession) {
