@@ -18,6 +18,7 @@ import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agent
 import { CopilotCLIModels, CopilotCLISDK, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
+import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../agents/copilotcli/node/mcpHandler';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
@@ -95,6 +96,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[ICopilotCLISDK, new SyncDescriptor(CopilotCLISDK)],
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
 				[ICopilotCLITerminalIntegration, new SyncDescriptor(CopilotCLITerminalIntegration)],
+				[ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler)],
 			));
 
 		const copilotCLIWorktreeManager = copilotcliAgentInstaService.createInstance(CopilotCLIWorktreeManager);

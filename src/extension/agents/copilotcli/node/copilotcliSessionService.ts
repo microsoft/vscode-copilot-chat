@@ -23,6 +23,7 @@ import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { stripReminders } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
+import { ICopilotCLIMCPHandler } from './mcpHandler';
 
 export interface ICopilotCLISessionItem {
 	readonly id: string;
@@ -72,6 +73,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@INativeEnvService private readonly nativeEnv: INativeEnvService,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
+		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -196,7 +198,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	public async createSession(prompt: string, { model, workingDirectory, isolationEnabled }: { model?: string; workingDirectory?: string; isolationEnabled?: boolean }, token: CancellationToken): Promise<CopilotCLISession> {
 		const sessionDisposables = this._register(new DisposableStore());
 		try {
-			const options = new CopilotCLISessionOptions({ model, workingDirectory, isolationEnabled }, this.logService);
+			const mcpServers = await this.mcpHandler.loadMcpConfig(workingDirectory);
+			const options = new CopilotCLISessionOptions({ model, workingDirectory, isolationEnabled, mcpServers }, this.logService);
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sdkSession = await sessionManager.createSession(options.toSessionOptions());
 			const chatMessages = await sdkSession.getChatContextMessages();
