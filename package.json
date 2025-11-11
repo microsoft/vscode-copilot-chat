@@ -2304,6 +2304,12 @@
 				"title": "Change Completions Model",
 				"category": "GitHub Copilot",
 				"enablement": "github.copilot.extensionUnification.activated && !isWeb"
+			},
+			{
+				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+				"title": "%github.copilot.command.applyCopilotCLIAgentSessionChanges%",
+				"icon": "$(git-stash-pop)",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -3378,6 +3384,11 @@
 					"command": "github.copilot.chat.replay",
 					"group": "navigation@9",
 					"when": "resourceLangId == chatReplay"
+				},
+				{
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+					"group": "navigation@1",
+					"when": "resourceScheme == copilotcli-worktree-changes"
 				}
 			],
 			"editor/context": [
@@ -3634,6 +3645,10 @@
 				},
 				{
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 					"when": "false"
 				}
 			],
@@ -4447,10 +4462,10 @@
 		"compile": "tsx .esbuild.ts --dev",
 		"watch": "npm-run-all -p watch:*",
 		"watch:esbuild": "tsx .esbuild.ts --watch --dev",
-		"watch:tsc-extension": "tsc --noEmit --watch --project tsconfig.json",
-		"watch:tsc-extension-web": "tsc --noEmit --watch --project tsconfig.worker.json",
-		"watch:tsc-simulation-workbench": "tsc --noEmit --watch --project test/simulation/workbench/tsconfig.json",
-		"typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project test/simulation/workbench/tsconfig.json && tsc --noEmit --project tsconfig.worker.json && tsc --noEmit --project src/extension/completions-core/vscode-node/extension/src/copilotPanel/webView/tsconfig.json",
+		"watch:tsc-extension": "tsgo --noEmit --watch --project tsconfig.json",
+		"watch:tsc-extension-web": "tsgo --noEmit --watch --project tsconfig.worker.json",
+		"watch:tsc-simulation-workbench": "tsgo --noEmit --watch --project test/simulation/workbench/tsconfig.json",
+		"typecheck": "tsgo --noEmit --project tsconfig.json && tsgo --noEmit --project test/simulation/workbench/tsconfig.json && tsgo --noEmit --project tsconfig.worker.json && tsgo --noEmit --project src/extension/completions-core/vscode-node/extension/src/copilotPanel/webView/tsconfig.json",
 		"lint": "eslint . --max-warnings=0",
 		"lint-staged": "eslint --max-warnings=0",
 		"tsfmt": "npx tsfmt -r --verify",
@@ -4508,11 +4523,12 @@
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
 		"@types/vscode": "^1.102.0",
-		"@types/yargs": "^17.0.24",
 		"@types/vscode-webview": "^1.57.4",
+		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
 		"@typescript-eslint/parser": "^8.32.0",
 		"@typescript-eslint/typescript-estree": "^8.26.1",
+		"@typescript/native-preview": "^7.0.0-dev.20251110.1",
 		"@vitest/coverage-v8": "^3.2.4",
 		"@vitest/snapshot": "^1.5.0",
 		"@vscode/debugadapter": "^1.68.0",
@@ -4594,6 +4610,7 @@
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
 		"diff": "^8.0.2",
+		"dompurify": "^3.3.0",
 		"ignore": "^7.0.5",
 		"isbinaryfile": "^5.0.4",
 		"jsonc-parser": "^3.3.1",
@@ -4602,8 +4619,7 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0",
-		"dompurify": "^3.3.0"
+		"web-tree-sitter": "^0.23.0"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",
