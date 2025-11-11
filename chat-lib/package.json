@@ -18,6 +18,7 @@
 		"@vscode/copilot-api": "^0.2.2",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
+		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
 		"jsonc-parser": "^3.3.1",
 		"openai": "^6.7.0",
 		"web-tree-sitter": "^0.23.0",
@@ -56,6 +57,7 @@
 		"compile": "tsc",
 		"copy": "copyfiles src/package.json \"src/**/*.tiktoken\" dist",
 		"package": "npm pack",
+		"postinstall": "tsx script/postinstall.js",
 		"publish": "npm publish",
 		"test": "vitest run",
 		"test:watch": "vitest"
