@@ -20,7 +20,7 @@ export function wrapEventNameForPrefixRemoval(eventName: string): string {
 function isWrappedEventName(eventName: string): boolean {
 	return eventName.includes('wrapped-telemetry-event-name-') && eventName.endsWith('-wrapped-telemetry-event-name');
 }
-function unwrapEventNameFromPrefix(eventName: string): string {
+export function unwrapEventNameFromPrefix(eventName: string): string {
 	const match = eventName.match(/wrapped-telemetry-event-name-(.*?)-wrapped-telemetry-event-name/);
 	return match ? match[1] : eventName;
 }
