@@ -75,7 +75,14 @@
 			"type": "npm",
 			"script": "watch:tsc-extension",
 			"group": "build",
-			"problemMatcher": "$tsc-watch",
+			"problemMatcher": [{
+			"base": "$tsc",
+			"background": {
+				"activeOnStart": true,
+				"beginsPattern": "^build starting at .*$",
+				"endsPattern": "^build (?:finished|failed|errored|succeeded|cancelle?d|skipped).*$"
+			}
+		}],
 			"isBackground": true,
 			"label": "npm: watch:tsc-extension",
 			"presentation": {
@@ -87,7 +94,14 @@
 			"type": "npm",
 			"script": "watch:tsc-extension-web",
 			"group": "build",
-			"problemMatcher": "$tsc-watch",
+			"problemMatcher": [{
+			"base": "$tsc",
+			"background": {
+				"activeOnStart": true,
+				"beginsPattern": "^build starting at .*$",
+				"endsPattern": "^build (?:finished|failed|errored|succeeded|cancelle?d|skipped).*$"
+			}
+		}],
 			"isBackground": true,
 			"label": "npm: watch:tsc-extension-web",
 			"presentation": {
@@ -99,7 +113,14 @@
 			"type": "npm",
 			"script": "watch:tsc-simulation-workbench",
 			"group": "build",
-			"problemMatcher": "$tsc-watch",
+			"problemMatcher": [{
+				"base": "$tsc",
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": "^build starting at .*$",
+					"endsPattern": "^build (?:finished|failed|errored|succeeded|cancelle?d|skipped).*$"
+			}
+		}],
 			"isBackground": true,
 			"label": "npm: watch:tsc-simulation-workbench",
 			"presentation": {
