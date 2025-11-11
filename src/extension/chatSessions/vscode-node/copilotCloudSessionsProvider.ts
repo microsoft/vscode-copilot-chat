@@ -273,7 +273,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 				const uri = await toOpenPullRequestWebviewUri({ owner: repoId.org, repo: repoId.repo, pullRequestNumber: pr.number });
 				const prLinkTitle = vscode.l10n.t('Open pull request in VS Code');
-				const finishedInText = vscode.l10n.t('Finished in #{0}', pr.number);
+				const finishedInText = vscode.l10n.t('Finished in {0}', `#${pr.number}`);
 				const description = new vscode.MarkdownString(`[${finishedInText}](${uri.toString()} "${prLinkTitle}")`);
 				const tooltip = this.createPullRequestTooltip(pr);
 
