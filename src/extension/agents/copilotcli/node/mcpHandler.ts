@@ -5,6 +5,7 @@
 
 import { parse, ParseError, printParseErrorCode } from 'jsonc-parser';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
@@ -84,9 +85,14 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
 
 	public async loadMcpConfig(_workingDirectory: string | undefined): Promise<Record<string, MCPServerConfig> | undefined> {
+		if (!this.configurationService.getConfig(ConfigKey.Internal.CLIMCPServerEnabled)) {
+			return undefined;
+		}
+
 		const processedConfig: Record<string, MCPServerConfig> = {};
 
 		const workspaceFolder = this.getFirstWorkspaceFolder();
