@@ -25,6 +25,7 @@ import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { ConfirmationResult, CopilotCloudSessionsProvider, UncommittedChangesStep } from './copilotCloudSessionsProvider';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 const MODELS_OPTION_ID = 'model';
 const ISOLATION_OPTION_ID = 'isolation';
@@ -318,6 +319,7 @@ export class CopilotCLIChatSessionParticipant {
 		@IToolsService private readonly toolsService: IToolsService,
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -411,7 +413,7 @@ export class CopilotCLIChatSessionParticipant {
 			await this.worktreeManager.storeWorktreePath(session.sessionId, workingDirectory);
 		}
 		disposables.add(session.attachStream(stream));
-		disposables.add(session.attachPermissionHandler(async (permissionRequest: PermissionRequest) => requestPermission(permissionRequest, this.toolsService, request.toolInvocationToken, token)));
+		disposables.add(session.attachPermissionHandler(async (permissionRequest: PermissionRequest) => this.instantiationService.invokeFunction(accessor => requestPermission(accessor, permissionRequest, this.toolsService, request.toolInvocationToken, token))));
 
 
 		return session;
