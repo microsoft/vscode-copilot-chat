@@ -178,20 +178,16 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		let description: vscode.MarkdownString | undefined;
 		let statistics: { files: number; insertions: number; deletions: number } | undefined;
 
-		try {
-			if (worktreePath && worktreeRelativePath) {
-				// Description
-				description = new vscode.MarkdownString(`$(list-tree) ${worktreeRelativePath}`);
-				description.supportThemeIcons = true;
+		if (worktreePath && worktreeRelativePath) {
+			// Description
+			description = new vscode.MarkdownString(`$(list-tree) ${worktreeRelativePath}`);
+			description.supportThemeIcons = true;
 
-				// Tooltip
-				tooltipLines.push(`Worktree: ${worktreeRelativePath}`);
+			// Tooltip
+			tooltipLines.push(`Worktree: ${worktreeRelativePath}`);
 
-				// Statistics
-				statistics = await this.gitService.diffIndexWithHEADShortStats(Uri.file(worktreePath));
-			}
-		} catch (error) {
-			this.logService.error(`Failed to get worktree info for CLI session ${session.id}`, error);
+			// Statistics
+			statistics = await this.gitService.diffIndexWithHEADShortStats(Uri.file(worktreePath));
 		}
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
