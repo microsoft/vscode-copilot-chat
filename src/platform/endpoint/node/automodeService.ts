@@ -39,7 +39,6 @@ class AutoModeTokenBank extends Disposable {
 		super();
 		this._refreshTimer = this._register(new TimeoutTimer());
 		this._fetchTokenPromise = this._fetchToken();
-
 	}
 
 	async getToken(): Promise<AutoModeAPIResponse> {
