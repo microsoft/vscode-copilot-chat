@@ -127,7 +127,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
 					// So if we see a `<` in the label, we need to load the session to get the first user message.
-					if (label && label.indexOf('<') === -1) {
+					if (label && !label.includes('<')) {
 						return {
 							id,
 							label,
