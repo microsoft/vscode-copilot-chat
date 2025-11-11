@@ -5,7 +5,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../../prompt/jsx-runtime/ */
 
-import { ICompletionsContextService } from '../../../context';
 import { CompletionRequestData } from '../../completionsPromptFactory/componentsCompletionsPromptFactory';
 import { CodeSnippetWithId } from '../../contextProviders/contextItemSchemas';
 import { CodeSnippets } from '../codeSnippets';
@@ -13,6 +12,7 @@ import { CodeSnippets } from '../codeSnippets';
 import * as assert from 'assert';
 import dedent from 'ts-dedent';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { PromptSnapshotNode } from '../../../../../prompt/src/components/components';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { extractNodesWitPath } from '../../../../../prompt/src/test/components/testHelpers';
@@ -20,14 +20,13 @@ import { TelemetryWithExp } from '../../../telemetry';
 import { createLibTestingContext } from '../../../test/context';
 import { querySnapshot } from '../../../test/snapshot';
 import { createTextDocument, TestTextDocumentManager } from '../../../test/textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
-import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsTextDocumentManagerService } from '../../../textDocumentManager';
 
 suite('Code Snippets Component', function () {
 	let accessor: ServicesAccessor;
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 	});
 
 	test('Renders nothing if there are no code snippets', async function () {
@@ -105,8 +104,7 @@ suite('Code Snippets Component', function () {
 			},
 		];
 
-		const ctx = accessor.get(ICompletionsContextService);
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.init([{ uri: 'file:///c:/root' }]);
 
 		const snapshot = await renderCodeSnippets(accessor, codeSnippets);
@@ -279,8 +277,8 @@ async function renderCodeSnippets(accessor: ServicesAccessor, codeSnippets?: Cod
 	);
 	const position = document.positionAt(document.getText().indexOf('|'));
 
-	const ctx = accessor.get(ICompletionsContextService);
-	const virtualPrompt = new VirtualPrompt(<CodeSnippets ctx={ctx} />);
+	const tdms = accessor.get(ICompletionsTextDocumentManagerService);
+	const virtualPrompt = new VirtualPrompt(<CodeSnippets tdms={tdms} />);
 	const pipe = virtualPrompt.createPipe();
 
 	const completionRequestData: CompletionRequestData = {

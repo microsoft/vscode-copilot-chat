@@ -3,8 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken } from '../../types/src';
-import { apiVersion, EditorSession, editorVersionHeaders } from './config';
-import { ICompletionsContextService } from './context';
+import { apiVersion, editorVersionHeaders, ICompletionsEditorSessionService } from './config';
 import { telemetry, TelemetryData } from './telemetry';
 
 /**
@@ -38,8 +37,42 @@ import { telemetry, TelemetryData } from './telemetry';
 export * from './networkingTypes';
 
 // Import what we need locally for this module's implementation
-import { FetchOptions, ReqHeaders, Response } from './networkingTypes';
+import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
+import { IFetcherService } from '../../../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
+import { createServiceIdentifier } from '../../../../../util/common/services';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { FetchOptions, ReqHeaders, Response } from './networkingTypes';
+
+export const ICompletionsFetcherService = createServiceIdentifier<ICompletionsFetcherService>('ICompletionsFetcherService');
+export interface ICompletionsFetcherService {
+	readonly _serviceBrand: undefined;
+	getImplementation(): ICompletionsFetcherService | Promise<ICompletionsFetcherService>;
+	fetch(url: string, options: FetchOptions): Promise<Response>;
+	disconnectAll(): Promise<unknown>;
+}
+
+export class CompletionsFetcher implements ICompletionsFetcherService {
+	declare _serviceBrand: undefined;
+
+	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IFetcherService private readonly fetcherService: IFetcherService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService
+	) { }
+
+	getImplementation(): ICompletionsFetcherService | Promise<ICompletionsFetcherService> {
+		return this;
+	}
+
+	fetch(url: string, options: FetchOptions): Promise<Response> {
+		const useFetcher = this.configurationService.getExperimentBasedConfig(ConfigKey.CompletionsFetcher, this.experimentationService) || undefined;
+		return this.fetcherService.fetch(url, useFetcher ? { ...options, useFetcher } : options);
+	}
+	disconnectAll(): Promise<unknown> {
+		return this.fetcherService.disconnectAll();
+	}
+}
 
 /**
  * Encapsulates all the functionality related to making GET/POST/DELETE requests using
@@ -71,7 +104,7 @@ export function postRequest(
 	timeout?: number,
 	modelProviderName?: string
 ): Promise<Response> {
-	const ctx = accessor.get(ICompletionsContextService);
+	const fetcher = accessor.get(ICompletionsFetcherService);
 	const instantiationService = accessor.get(IInstantiationService);
 
 	const headers: ReqHeaders = {
@@ -84,8 +117,8 @@ export function postRequest(
 	if (modelProviderName === undefined) {
 		headers['Openai-Organization'] = 'github-copilot';
 		headers['X-Request-Id'] = requestId;
-		headers['VScode-SessionId'] = ctx.get(EditorSession).sessionId;
-		headers['VScode-MachineId'] = ctx.get(EditorSession).machineId;
+		headers['VScode-SessionId'] = accessor.get(ICompletionsEditorSessionService).sessionId;
+		headers['VScode-MachineId'] = accessor.get(ICompletionsEditorSessionService).machineId;
 		headers['X-GitHub-Api-Version'] = apiVersion;
 	}
 
@@ -100,7 +133,6 @@ export function postRequest(
 		timeout,
 	};
 
-	const fetcher = ctx.get(Fetcher);
 	if (cancelToken) {
 		const abort = new AbortController();
 		cancelToken.onCancellationRequested(() => {

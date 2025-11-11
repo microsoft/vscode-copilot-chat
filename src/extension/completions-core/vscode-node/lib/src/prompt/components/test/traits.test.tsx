@@ -12,7 +12,6 @@ import { ServicesAccessor } from '../../../../../../../../util/vs/platform/insta
 import { PromptSnapshotNode } from '../../../../../prompt/src/components/components';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { extractNodesWitPath } from '../../../../../prompt/src/test/components/testHelpers';
-import { ICompletionsContextService } from '../../../context';
 import { CompletionRequestData } from '../../../prompt/completionsPromptFactory/componentsCompletionsPromptFactory';
 import { Traits } from '../../../prompt/components/traits';
 import { TraitWithId } from '../../../prompt/contextProviders/contextItemSchemas';
@@ -40,7 +39,7 @@ suite('Traits component', function () {
 	};
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 	});
 
 	test('Renders nothing if there are no traits', async function () {
@@ -108,8 +107,7 @@ async function renderTrait(accessor: ServicesAccessor, traits?: TraitWithId[]) {
 	);
 	const position = document.positionAt(document.getText().indexOf('|'));
 
-	const ctx = accessor.get(ICompletionsContextService);
-	const virtualPrompt = new VirtualPrompt(<Traits ctx={ctx} />);
+	const virtualPrompt = new VirtualPrompt(<Traits />);
 	const pipe = virtualPrompt.createPipe();
 
 	const completionRequestData: CompletionRequestData = {

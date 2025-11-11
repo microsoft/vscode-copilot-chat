@@ -3,10 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { FileIdentifier, FileStat, FileSystem } from '../../lib/src/fileSystem';
 import { FileType, Uri, workspace } from 'vscode';
+import { FileIdentifier, FileStat, ICompletionsFileSystemService } from '../../lib/src/fileSystem';
 
-class ExtensionFileSystem extends FileSystem {
+class ExtensionFileSystem implements ICompletionsFileSystemService {
+	declare _serviceBrand: undefined;
+
 	async readFileString(uri: FileIdentifier): Promise<string> {
 		if (typeof uri !== 'string') {
 			uri = uri.uri;

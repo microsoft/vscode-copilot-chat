@@ -38,7 +38,7 @@ export function getModelProvider(modelId: string): ModelProvider {
 }
 
 export interface ICopilotCLIModels {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 	toModelProvider(modelId: string): ModelProvider;
 	getDefaultModel(): Promise<ChatSessionProviderOptionItem>;
 	setDefaultModel(model: ChatSessionProviderOptionItem): Promise<void>;

@@ -6,6 +6,8 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import dedent from 'ts-dedent';
+import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	DEFAULT_MAX_COMPLETION_LENGTH,
 	DEFAULT_MAX_PROMPT_LENGTH,
@@ -15,18 +17,16 @@ import {
 	PromptOptions,
 } from '../../../../prompt/src/prompt';
 import { defaultSimilarFilesOptions } from '../../../../prompt/src/snippetInclusion/similarFiles';
-import { CopilotContentExclusionManager } from '../../contentExclusion/contentExclusionManager';
-import { ICompletionsContextService } from '../../context';
 import { ExpTreatmentVariables } from '../../experiments/expConfig';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
+import { MockIgnoreService } from '../../test/testContentExclusion';
 import { createTextDocument, InMemoryNotebookDocument, TestTextDocumentManager } from '../../test/textDocument';
 import { INotebookCell, IPosition } from '../../textDocument';
-import { TextDocumentManager } from '../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import { CompletionsPromptRenderer } from '../components/completionsPromptRenderer';
 import { _copilotContentExclusion, _promptError, getPromptOptions } from '../prompt';
 import { extractPromptInternal } from './prompt';
-import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('Prompt unit tests', function () {
 	let accessor: ServicesAccessor;
@@ -34,7 +34,9 @@ suite('Prompt unit tests', function () {
 
 	setup(function () {
 		sandbox = sinon.createSandbox();
-		accessor = createLibTestingContext();
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(IIgnoreService, new MockIgnoreService());
+		accessor = serviceCollection.createTestingAccessor();
 	});
 
 	teardown(function () {
@@ -122,10 +124,7 @@ suite('Prompt unit tests', function () {
 	});
 
 	test('should return without a prompt if the file blocked by repository control', async function () {
-		const evaluateStub = sandbox.stub(CopilotContentExclusionManager.prototype, 'evaluate');
-		evaluateStub.callsFake(_ => {
-			return Promise.resolve({ isBlocked: true });
-		});
+		(accessor.get(IIgnoreService) as MockIgnoreService).setAlwaysIgnore();
 
 		const content = 'function add()\n';
 		const sourceDoc = createTextDocument('file:///foo.js', 'javascript', 0, content);
@@ -183,7 +182,7 @@ def product(c, d):`
 				return Promise.reject(new Error('test error'));
 			}
 		}
-		const tdm = ctx.instantiationService.createInstance(TestExceptionTextDocumentManager);
+		const tdm = accessor.get(IInstantiationService).createInstance(TestExceptionTextDocumentManager);
 		tdm.setTextDocument('file:///a/1.py', 'python', 'import torch');
 		ctx.forceSet(TextDocumentManager, tdm);
 		NeighborSource.reset();
@@ -219,9 +218,8 @@ def product(c, d):`
 async function assertPromptForCell(accessor: ServicesAccessor, sourceCell: INotebookCell, expectedPrefix: string, expectedContext?: string[]) {
 	const notebook = new InMemoryNotebookDocument(cells);
 	const sourceDoc = sourceCell.document;
-	const ctx = accessor.get(ICompletionsContextService);
 
-	(ctx.get(TextDocumentManager) as TestTextDocumentManager).setNotebookDocument(sourceDoc, notebook);
+	(accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager).setNotebookDocument(sourceDoc, notebook);
 
 	const cursorPosition: IPosition = {
 		line: 0,

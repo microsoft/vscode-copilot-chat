@@ -4,28 +4,27 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CodeSnippet, ContextProvider, ContextResolver, SupportedContextItem, Trait } from '../../../../../types/src';
 import { createCompletionState } from '../../../completionState';
-import { ICompletionsContextService } from '../../../context';
-import { Features } from '../../../experiments/features';
+import { ICompletionsFeaturesService } from '../../../experiments/featuresService';
 import { TelemetryWithExp } from '../../../telemetry';
 import { createLibTestingContext } from '../../../test/context';
 import { createTextDocument } from '../../../test/textDocument';
 import { LocationFactory } from '../../../textDocument';
-import { ContextProviderRegistry } from '../../contextProviderRegistry';
+import { ICompletionsContextProviderRegistryService } from '../../contextProviderRegistry';
 import { ContextProviderBridge } from './../contextProviderBridge';
-import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('Context Provider Bridge', function () {
 	let accessor: ServicesAccessor;
 	let bridge: ContextProviderBridge;
 
 	setup(function () {
-		accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.get(ContextProviderRegistry).registerContextProvider(new TestContextProvider());
-		ctx.get(Features).contextProviders = () => ['testContextProvider'];
-		bridge = ctx.instantiationService.createInstance(ContextProviderBridge);
+		accessor = createLibTestingContext().createTestingAccessor();
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		accessor.get(ICompletionsContextProviderRegistryService).registerContextProvider(new TestContextProvider());
+		featuresService.contextProviders = () => ['testContextProvider'];
+		bridge = accessor.get(IInstantiationService).createInstance(ContextProviderBridge);
 	});
 
 	test('await context resolution by id', async function () {
@@ -61,12 +60,12 @@ suite('Context Provider Bridge', function () {
 	});
 
 	test('error in context resolution', async function () {
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.get(ContextProviderRegistry).registerContextProvider(
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		accessor.get(ICompletionsContextProviderRegistryService).registerContextProvider(
 			new TestContextProvider({ shouldThrow: true, id: 'errorProvider' })
 		);
-		ctx.get(Features).contextProviders = () => ['errorProvider'];
-		const errorBridge = ctx.instantiationService.createInstance(ContextProviderBridge);
+		featuresService.contextProviders = () => ['errorProvider'];
+		const errorBridge = accessor.get(IInstantiationService).createInstance(ContextProviderBridge);
 		const state = testCompletionState();
 
 		errorBridge.schedule(state, 'err-id', 'opId', TelemetryWithExp.createEmptyConfigForTesting());
@@ -91,9 +90,10 @@ suite('Context Provider Bridge', function () {
 	});
 
 	test('empty provider list returns empty array', async function () {
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.get(Features).contextProviders = () => [];
-		bridge = new ContextProviderBridge(createLibTestingContext().get(ICompletionsContextService));
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		featuresService.contextProviders = () => [];
+		const instantiationService = createLibTestingContext().createTestingAccessor().get(IInstantiationService);
+		bridge = instantiationService.createInstance(ContextProviderBridge);
 		const state = testCompletionState();
 
 		bridge.schedule(state, 'empty-id', 'opId', TelemetryWithExp.createEmptyConfigForTesting());

@@ -5,10 +5,9 @@
 
 import assert from 'assert';
 import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../../context';
 import { createLibTestingContext } from '../../../test/context';
 import { ResolvedContextItem } from '../../contextProviderRegistry';
-import { ContextProviderStatistics } from '../../contextProviderStatistics';
+import { ContextProviderStatistics, ICompletionsContextProviderService } from '../../contextProviderStatistics';
 import { TestContextProviderStatistics } from '../../test/contextProviderStatistics';
 import { TraitWithId } from './../contextItemSchemas';
 import { getTraitsFromContextItems } from './../traits';
@@ -49,7 +48,12 @@ suite('traitsContextProvider', function () {
 	];
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(
+			ICompletionsContextProviderService,
+			new ContextProviderStatistics(() => new TestContextProviderStatistics())
+		);
+		accessor = serviceCollection.createTestingAccessor();
 	});
 
 	test('can get traits from context text providers and flattens them', function () {
@@ -62,16 +66,11 @@ suite('traitsContextProvider', function () {
 	});
 
 	test('set expectations for contextProviderStatistics', function () {
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.forceSet(
-			ContextProviderStatistics,
-			new ContextProviderStatistics(() => new TestContextProviderStatistics())
-		);
 
 		getTraitsFromContextItems(accessor, 'COMPLETION_ID', resolvedContextItems);
 
-		const statistics = ctx
-			.get(ContextProviderStatistics)
+		const statistics = accessor
+			.get(ICompletionsContextProviderService)
 			.getStatisticsForCompletion('COMPLETION_ID') as TestContextProviderStatistics;
 		// Prompt components expectations
 		assert.deepStrictEqual(statistics.expectations.size, 2);

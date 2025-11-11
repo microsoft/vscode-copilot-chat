@@ -3,8 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { EditorAndPluginInfo, ICompletionsBuildInfoService } from './config';
-import { ICompletionsContextService } from './context';
+import { ICompletionsBuildInfoService, ICompletionsEditorAndPluginInfo } from './config';
 import { TelemetryData } from './telemetry';
 
 const os = {
@@ -75,6 +74,6 @@ function formatSectionAsMarkdown(s: Section) {
 }
 
 function getEditorDisplayVersion(accessor: ServicesAccessor): string {
-	const info = accessor.get(ICompletionsContextService).get(EditorAndPluginInfo).getEditorInfo();
+	const info = accessor.get(ICompletionsEditorAndPluginInfo).getEditorInfo();
 	return `${info.name} ${info.version}`;
 }

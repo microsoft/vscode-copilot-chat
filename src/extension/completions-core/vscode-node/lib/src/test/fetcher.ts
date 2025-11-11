@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { FetchOptions, Fetcher, IAbortController, IHeaders, Response } from '../networking';
-import { CopilotNamedAnnotationList } from '../openai/stream';
 import { Readable } from 'stream';
+import { FetchOptions, IAbortController, ICompletionsFetcherService, IHeaders, Response } from '../networking';
+import { CopilotNamedAnnotationList } from '../openai/stream';
 
 type HeadersParameter = { [key: string]: string };
 
@@ -97,8 +97,13 @@ export function fakeCodeReference(
 	};
 }
 
-export abstract class FakeFetcher extends Fetcher {
-	override readonly name: string = 'FakeFetcher';
+export abstract class FakeFetcher implements ICompletionsFetcherService {
+	declare _serviceBrand: undefined;
+
+	abstract fetch(url: string, options: FetchOptions): Promise<Response>;
+	getImplementation(): ICompletionsFetcherService | Promise<ICompletionsFetcherService> {
+		return this;
+	}
 	disconnectAll(): Promise<unknown> {
 		throw new Error('Method not implemented.');
 	}

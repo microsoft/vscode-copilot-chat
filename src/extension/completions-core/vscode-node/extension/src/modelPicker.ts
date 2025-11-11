@@ -6,11 +6,10 @@ import { env, QuickPick, QuickPickItem, QuickPickItemKind, Uri, window, workspac
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey, getConfig } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
-import { ICompletionsContextService } from '../../lib/src/context';
-import { AsyncCompletionManager } from '../../lib/src/ghostText/asyncCompletions';
-import { CompletionsCache } from '../../lib/src/ghostText/completionsCache';
-import { Logger, LogTarget } from '../../lib/src/logger';
-import { AvailableModelsManager, ModelItem } from '../../lib/src/openai/model';
+import { AsyncCompletionManager, ICompletionsAsyncManagerService } from '../../lib/src/ghostText/asyncCompletions';
+import { CompletionsCache, ICompletionsCacheService } from '../../lib/src/ghostText/completionsCache';
+import { ICompletionsLogTargetService, Logger } from '../../lib/src/logger';
+import { AvailableModelsManager, ICompletionsModelManagerService, ModelItem } from '../../lib/src/openai/model';
 import { telemetry, TelemetryData } from '../../lib/src/telemetry';
 const logger = new Logger('modelPicker');
 
@@ -44,16 +43,19 @@ export class ModelPickerManager {
 	private readonly MODELS_INFO_URL = 'https://aka.ms/CopilotCompletionsModelPickerLearnMore';
 
 	get models(): ModelItem[] {
-		return this._ctx.get(AvailableModelsManager).getGenericCompletionModels();
+		return this._modelManager.getGenericCompletionModels();
 	}
 
 	private getDefaultModelId(): string {
-		return this._ctx.get(AvailableModelsManager).getDefaultModelId();
+		return this._modelManager.getDefaultModelId();
 	}
 
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@ICompletionsContextService private readonly _ctx: ICompletionsContextService
+		@ICompletionsAsyncManagerService private readonly _asyncCompletionManager: AsyncCompletionManager,
+		@ICompletionsModelManagerService private readonly _modelManager: AvailableModelsManager,
+		@ICompletionsLogTargetService private readonly _logTarget: ICompletionsLogTargetService,
+		@ICompletionsCacheService private readonly _completionsCache: CompletionsCache
 	) { }
 
 	async setUserSelectedCompletionModel(modelId: string | null) {
@@ -83,17 +85,16 @@ export class ModelPickerManager {
 		const currentModel = this._instantiationService.invokeFunction(getUserSelectedModelConfiguration);
 
 		if (currentModel !== model.modelId) {
-			this._ctx.get(CompletionsCache).clear();
-			this._ctx.get(AsyncCompletionManager).clear();
+			this._completionsCache.clear();
+			this._asyncCompletionManager.clear();
 		}
 
 		const modelSelection = model.modelId === this.getDefaultModelId() ? null : model.modelId;
 		await this.setUserSelectedCompletionModel(modelSelection);
-		const logTarget = this._ctx.get(LogTarget);
 		if (modelSelection === null) {
-			logger.info(logTarget, `User selected default model; setting null`);
+			logger.info(this._logTarget, `User selected default model; setting null`);
 		} else {
-			logger.info(logTarget, `Selected model: ${model.modelId}`);
+			logger.info(this._logTarget, `Selected model: ${model.modelId}`);
 		}
 
 		this._instantiationService.invokeFunction(

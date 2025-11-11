@@ -3,23 +3,24 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { RecentEditsProvider } from './recentEditsProvider';
+import { ICompletionsRecentEditsProviderService } from './recentEditsProvider';
 import { RecentEdit } from './recentEditsReducer';
 
-export class EmptyRecentEditsProvider extends RecentEditsProvider {
-	override isEnabled(): boolean {
+export class EmptyRecentEditsProvider implements ICompletionsRecentEditsProviderService {
+	declare _serviceBrand: undefined;
+	isEnabled(): boolean {
 		return false;
 	}
 
-	override start(): void {
+	start(): void {
 		return;
 	}
 
-	override getRecentEdits(): RecentEdit[] {
+	getRecentEdits(): RecentEdit[] {
 		return [];
 	}
 
-	override getEditSummary(edit: RecentEdit): string | null {
+	getEditSummary(edit: RecentEdit): string | null {
 		return null;
 	}
 }

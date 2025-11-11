@@ -18,17 +18,16 @@ import {
 } from 'vscode';
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CompletionsTelemetryServiceBridge } from '../../bridge/src/completionsTelemetryServiceBridge';
+import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
 import { ICompletionsBuildInfoService } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
-import { ICompletionsContextService } from '../../lib/src/context';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
 import { telemetry, TelemetryData } from '../../lib/src/telemetry';
 import { Deferred } from '../../lib/src/util/async';
 import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
-import { CopilotExtensionStatus } from './extensionStatus';
+import { ICompletionsExtensionStatus } from './extensionStatus';
 import { GhostTextProvider } from './ghostText/ghostText';
 
 const logger = new Logger('inlineCompletionItemProvider');
@@ -47,8 +46,8 @@ export function exception(accessor: ServicesAccessor, error: unknown, origin: st
 		// expected errors from VS Code
 		return;
 	}
-	const ctx = accessor.get(ICompletionsContextService);
-	ctx.get(CompletionsTelemetryServiceBridge).sendGHTelemetryException(error, 'codeUnification.completions.exception');
+	const telemetryService = accessor.get(ICompletionsTelemetryService);
+	telemetryService.sendGHTelemetryException(error, 'codeUnification.completions.exception');
 	handleException(accessor, error, origin, logger);
 }
 
@@ -60,9 +59,10 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 	pendingRequests: Set<Promise<unknown>> = new Set();
 
 	constructor(
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ICompletionsBuildInfoService private readonly buildInfoService: ICompletionsBuildInfoService,
+		@ICompletionsTelemetryService private readonly telemetryService: ICompletionsTelemetryService,
+		@ICompletionsExtensionStatus private readonly extensionStatusService: ICompletionsExtensionStatus,
 	) {
 		super();
 		this.copilotCompletionFeedbackTracker = this._register(this.instantiationService.createInstance(CopilotCompletionFeedbackTracker));
@@ -96,7 +96,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		try {
 			return await this._provideInlineCompletionItems(doc, position, context, token);
 		} catch (e) {
-			this.ctx.get(CompletionsTelemetryServiceBridge).sendGHTelemetryException(e, 'codeUnification.completions.exception');
+			this.telemetryService.sendGHTelemetryException(e, 'codeUnification.completions.exception');
 		} finally {
 			this.instantiationService.invokeFunction(telemetry, 'codeUnification.completions.returned', TelemetryData.createAndMarkAsIssued());
 		}
@@ -115,7 +115,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 			if (!this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {
 				return;
 			}
-			if (this.ctx.get(CopilotExtensionStatus).kind === 'Error') {
+			if (this.extensionStatusService.kind === 'Error') {
 				return;
 			}
 		}

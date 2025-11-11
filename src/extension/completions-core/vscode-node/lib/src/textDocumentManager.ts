@@ -2,9 +2,10 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { createServiceIdentifier } from '../../../../../util/common/services';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { TextDocumentItem, VersionedTextDocumentIdentifier, WorkspaceFolder } from '../../types/src';
-import { ICompletionsContextService } from './context';
-import { FileSystem } from './fileSystem';
+import { ICompletionsFileSystemService } from './fileSystem';
 import {
 	INotebookDocument,
 	IRange,
@@ -85,7 +86,63 @@ export interface WorkspaceFoldersChangeEvent {
 	readonly removed: WorkspaceFolder[];
 }
 
-export abstract class TextDocumentManager {
+export const ICompletionsTextDocumentManagerService = createServiceIdentifier<ICompletionsTextDocumentManagerService>('ICompletionsTextDocumentManagerService');
+
+export interface ICompletionsTextDocumentManagerService {
+	readonly _serviceBrand: undefined;
+	onDidChangeTextDocument: Event<TextDocumentChangeEvent>;
+	onDidOpenTextDocument: Event<TextDocumentOpenEvent>;
+	onDidCloseTextDocument: Event<TextDocumentCloseEvent>;
+	onDidFocusTextDocument: Event<TextDocumentFocusedEvent>;
+	onDidChangeWorkspaceFolders: Event<WorkspaceFoldersChangeEvent>;
+
+	textDocuments(): Promise<ITextDocument[]>;
+
+	/**
+	 * Get all open text documents, skipping content exclusions and other validations.
+	 */
+	getTextDocumentsUnsafe(): ITextDocument[];
+
+	/**
+	 * Get the text document for the given URI, skipping content exclusions and other validations.
+	 */
+	getTextDocumentUnsafe(docId: TextDocumentIdentifier): ITextDocument | undefined;
+
+	/**
+	 * Get the text document for the given URI, checking content exclusions and other validations.
+	 */
+	getTextDocument(docId: TextDocumentIdentifier): Promise<ITextDocument | undefined>;
+
+	/**
+	 * Get a TextDocumentValidation for the given document URI.  Unlike other methods, this supports reading the
+	 * document from disk.
+	 */
+	getTextDocumentValidation(docId: TextDocumentIdentifier): Promise<TextDocumentValidation>;
+
+	/**
+	 * Get a TextDocumentResult for the given document URI.
+	 */
+	getTextDocumentWithValidation(docId: TextDocumentIdentifier): Promise<TextDocumentResult<ITextDocument>>;
+
+	/**
+	 * If `TextDocument` represents notebook returns `INotebookDocument` instance, otherwise returns `undefined`
+	 */
+	findNotebook(doc: TextDocumentIdentifier): INotebookDocument | undefined;
+
+	getWorkspaceFolders(): WorkspaceFolder[];
+
+	getWorkspaceFolder(doc: TextDocumentIdentifier): WorkspaceFolder | undefined;
+
+	/**
+	 * Get the path of the given document relative to one of the workspace folders,
+	 * or its basename if it is not under any of the workspace folders.
+	 * Returns `undefined` if the file is untitled.
+	 */
+	getRelativePath(doc: TextDocumentIdentifier): string | undefined;
+}
+
+export abstract class TextDocumentManager implements ICompletionsTextDocumentManagerService {
+	declare _serviceBrand: undefined;
 	abstract onDidChangeTextDocument: Event<TextDocumentChangeEvent>;
 	abstract onDidOpenTextDocument: Event<TextDocumentOpenEvent>;
 	abstract onDidCloseTextDocument: Event<TextDocumentCloseEvent>;
@@ -98,13 +155,16 @@ export abstract class TextDocumentManager {
 	 */
 	abstract getTextDocumentsUnsafe(): ITextDocument[];
 
-	constructor(@ICompletionsContextService protected ctx: ICompletionsContextService) { }
+	constructor(
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICompletionsFileSystemService private readonly fileSystem: ICompletionsFileSystemService,
+	) { }
 
 	async textDocuments(): Promise<ITextDocument[]> {
 		const documents = this.getTextDocumentsUnsafe();
 		const filteredDocuments: ITextDocument[] = [];
 		for (const doc of documents) {
-			const result = await isDocumentValid(this.ctx, doc, doc.getText());
+			const result = await this.instantiationService.invokeFunction(isDocumentValid, doc);
 			// Only return valid documents
 			if (result.status === 'valid') {
 				filteredDocuments.push(doc);
@@ -133,8 +193,8 @@ export abstract class TextDocumentManager {
 		});
 	}
 
-	private validateTextDocument(docId: TextDocumentIdentifier, text: string) {
-		return isDocumentValid(this.ctx, docId, text);
+	private async validateTextDocument(docId: TextDocumentIdentifier) {
+		return await this.instantiationService.invokeFunction(isDocumentValid, docId);
 	}
 
 	/**
@@ -143,10 +203,7 @@ export abstract class TextDocumentManager {
 	 */
 	async getTextDocumentValidation(docId: TextDocumentIdentifier): Promise<TextDocumentValidation> {
 		try {
-			const text =
-				this.getTextDocumentUnsafe(docId)?.getText() ?? (await this.readTextDocumentFromDisk(docId.uri));
-			if (text === undefined) { return this.notFoundResult(docId); }
-			return this.validateTextDocument(docId, text);
+			return await this.validateTextDocument(docId);
 		} catch (err) {
 			return this.notFoundResult(docId);
 		}
@@ -158,7 +215,7 @@ export abstract class TextDocumentManager {
 	async getTextDocumentWithValidation(docId: TextDocumentIdentifier): Promise<TextDocumentResult<ITextDocument>> {
 		const document = this.getTextDocumentUnsafe(docId);
 		if (!document) { return this.notFoundResult(docId); }
-		const result = await this.validateTextDocument(docId, document.getText());
+		const result = await this.validateTextDocument(docId);
 		return result.status === 'valid' ? { status: 'valid', document } : result;
 	}
 
@@ -177,7 +234,7 @@ export abstract class TextDocumentManager {
 	 */
 	protected async readTextDocumentFromDisk(uri: string): Promise<string | undefined> {
 		try {
-			const fileStat = await this.ctx.get(FileSystem).stat(uri);
+			const fileStat = await this.fileSystem.stat(uri);
 			if (fileStat.size > 5 * 1024 * 1024) {
 				return undefined;
 			}
@@ -185,7 +242,7 @@ export abstract class TextDocumentManager {
 			// ignore if file does not exist
 			return undefined;
 		}
-		return await this.ctx.get(FileSystem).readFileString(uri);
+		return await this.fileSystem.readFileString(uri);
 	}
 
 	/**

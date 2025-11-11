@@ -109,7 +109,7 @@ suite('SSEProcessor', function () {
 	let accessor: ServicesAccessor;
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 	});
 
 	interface SimpleResult {
