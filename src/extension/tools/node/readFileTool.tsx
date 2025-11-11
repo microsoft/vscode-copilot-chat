@@ -182,10 +182,12 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		};
 	}
 
-	public alternativeDefinition(): vscode.LanguageModelToolInformation | undefined {
+	public alternativeDefinition(originTool: vscode.LanguageModelToolInformation): vscode.LanguageModelToolInformation {
 		if (this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.EnableReadFileV2, this.experimentationService)) {
 			return readFileV2Description;
 		}
+
+		return originTool;
 	}
 
 	private async getSnapshot(uri: URI) {

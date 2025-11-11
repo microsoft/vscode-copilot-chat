@@ -83,8 +83,8 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		}
 	}
 
-	async showPermissiveSessionModal(): Promise<boolean> {
-		if (this.hasRequestedPermissiveSessionUpgrade) {
+	async showPermissiveSessionModal(skipRepeatCheck = false): Promise<boolean> {
+		if (this.hasRequestedPermissiveSessionUpgrade && !skipRepeatCheck) {
 			this.logService.trace('Already requested permissive session upgrade');
 			return false;
 		}

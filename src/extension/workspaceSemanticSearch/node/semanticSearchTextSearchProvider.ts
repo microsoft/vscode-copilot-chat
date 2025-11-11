@@ -413,6 +413,23 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				llmBestInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank,
 				llmWorstInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank,
 			});
+
+			if (SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank !== undefined
+				&& SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank !== undefined
+				&& (
+					SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank > SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank
+					|| SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank > SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestRank
+				)
+			) {
+				this._telemetryService.sendInternalMSFTTelemetryEvent('semanticSearch.rerankImprovement', {
+					keyword: SemanticSearchTextSearchProvider.latestQuery || '',
+				}, {
+					llmBestRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestRank,
+					llmWorstRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank,
+					llmBestInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank,
+					llmWorstInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank,
+				});
+			}
 		}
 	}
 

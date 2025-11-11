@@ -9,9 +9,8 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { CellOrNotebookEdit } from '../../prompts/node/codeMapper/codeMapper';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
-import { AbstractReplaceStringTool } from './abstractReplaceStringTool';
+import { AbstractReplaceStringTool, IAbstractReplaceStringInput } from './abstractReplaceStringTool';
 import { IReplaceStringToolParams } from './replaceStringTool';
-import { resolveToolInputPath } from './toolUtils';
 
 export interface IMultiReplaceStringToolParams {
 	explanation: string;
@@ -21,8 +20,12 @@ export interface IMultiReplaceStringToolParams {
 export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiReplaceStringToolParams> {
 	public static toolName = ToolName.MultiReplaceString;
 
-	protected override urisForInput(input: IMultiReplaceStringToolParams): readonly URI[] {
-		return input.replacements.map(r => resolveToolInputPath(r.filePath, this.promptPathRepresentationService));
+	protected extractReplaceInputs(input: IMultiReplaceStringToolParams): IAbstractReplaceStringInput[] {
+		return input.replacements.map(r => ({
+			filePath: r.filePath,
+			oldString: r.oldString,
+			newString: r.newString,
+		}));
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IMultiReplaceStringToolParams>, token: vscode.CancellationToken) {
@@ -30,7 +33,7 @@ export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiRepl
 			throw new Error('Invalid input, no replacements array');
 		}
 
-		const prepared = await Promise.all(options.input.replacements.map(r => this.prepareEditsForFile(options, r, token)));
+		const prepared = await this.prepareEdits(options, token);
 
 		let successes = 0;
 		let failures = 0;

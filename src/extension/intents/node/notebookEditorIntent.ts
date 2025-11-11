@@ -38,6 +38,8 @@ import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
 	instaService.invokeFunction(async accessor => {
 		const toolsService = accessor.get<IToolsService>(IToolsService);
+		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
+		const model = await endpointProvider.getChatEndpoint(request);
 		const lookForTools = new Set<string>([ToolName.EditFile]);
 
 		lookForTools.add(ToolName.EditNotebook);
@@ -45,7 +47,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		lookForTools.add(ToolName.RunNotebookCell);
 		lookForTools.add(ToolName.ReadCellOutput);
 
-		return toolsService.getEnabledTools(request, tool => lookForTools.has(tool.name) || tool.tags.includes('notebooks'));
+		return toolsService.getEnabledTools(request, model, tool => lookForTools.has(tool.name) || tool.tags.includes('notebooks'));
 	});
 
 export class NotebookEditorIntent extends EditCodeIntent {

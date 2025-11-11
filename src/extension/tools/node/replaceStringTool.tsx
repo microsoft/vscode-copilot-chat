@@ -4,11 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { URI } from '../../../util/vs/base/common/uri';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
-import { AbstractReplaceStringTool } from './abstractReplaceStringTool';
-import { resolveToolInputPath } from './toolUtils';
+import { AbstractReplaceStringTool, IAbstractReplaceStringInput } from './abstractReplaceStringTool';
 
 export interface IReplaceStringToolParams {
 	explanation: string;
@@ -20,13 +18,18 @@ export interface IReplaceStringToolParams {
 export class ReplaceStringTool extends AbstractReplaceStringTool<IReplaceStringToolParams> {
 	public static toolName = ToolName.ReplaceString;
 
-	protected override urisForInput(input: IReplaceStringToolParams): readonly URI[] {
-		return [resolveToolInputPath(input.filePath, this.promptPathRepresentationService)];
+	protected extractReplaceInputs(input: IReplaceStringToolParams): IAbstractReplaceStringInput[] {
+		return [{
+			filePath: input.filePath,
+			oldString: input.oldString,
+			newString: input.newString,
+		}];
 	}
 
+
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IReplaceStringToolParams>, token: vscode.CancellationToken) {
-		const prepared = await this.prepareEditsForFile(options, options.input, token);
-		return this.applyAllEdits(options, [prepared], token);
+		const prepared = await this.prepareEdits(options, token);
+		return this.applyAllEdits(options, prepared, token);
 	}
 
 	protected override toolName(): ToolName {
