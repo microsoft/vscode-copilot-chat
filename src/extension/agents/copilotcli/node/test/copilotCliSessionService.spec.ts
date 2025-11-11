@@ -83,8 +83,11 @@ describe('CopilotCLISessionService', () => {
 			getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
 		} as unknown as IAuthenticationService;
 		instantiationService = {
+			invokeFunction(fn: (accessor: unknown, ...args: any[]) => any, ...args: any[]): any {
+				return fn(accessor, ...args);
+			},
 			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
-				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService));
+				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService, instantiationService));
 			}
 		} as unknown as IInstantiationService;
 
