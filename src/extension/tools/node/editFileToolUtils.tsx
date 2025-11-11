@@ -559,6 +559,68 @@ const platformConfirmationRequiredPaths = (
 		: [homedir() + '/.*', homedir() + '/.*/**']
 ).map(p => glob.parse(p));
 
+/**
+ * Validates that a path doesn't contain suspicious characters that could be used
+ * to bypass security checks on Windows (e.g., NTFS Alternate Data Streams, invalid chars).
+ * Throws an error if the path is suspicious.
+ */
+export function assertPathIsSafe(fsPath: string, _isWindows = isWindows): void {
+	if (fsPath.includes('\0')) {
+		throw new Error(`Path contains null bytes: ${fsPath}`);
+	}
+
+	if (!_isWindows) {
+		return;
+	}
+
+	// Check for NTFS Alternate Data Streams (ADS)
+	const colonIndex = fsPath.indexOf(':', 2);
+	if (colonIndex !== -1) {
+		throw new Error(`Path contains invalid characters (alternate data stream): ${fsPath}`);
+	}
+
+	// Check for invalid Windows filename characters
+	const invalidChars = /[<>"|?*]/;
+	const pathAfterDrive = fsPath.length > 2 ? fsPath.substring(2) : fsPath;
+	if (invalidChars.test(pathAfterDrive)) {
+		throw new Error(`Path contains invalid characters: ${fsPath}`);
+	}
+
+	// Check for named pipes or device paths
+	if (fsPath.startsWith('\\\\.') || fsPath.startsWith('\\\\?')) {
+		throw new Error(`Path is a reserved device path: ${fsPath}`);
+	}
+
+	const reserved = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)/i;
+
+	// Check for trailing dots and spaces on path components (Windows quirk)
+	const parts = fsPath.split('\\');
+	for (const part of parts) {
+		if (part.length === 0) {
+			continue;
+		}
+
+		// Reserved device names. Would error on edit, but fail explicitly
+		if (reserved.test(part)) {
+			throw new Error(`Reserved device name in path: ${fsPath}`);
+		}
+
+		// Check for trailing dots or spaces
+		if (part.endsWith('.') || part.endsWith(' ')) {
+			throw new Error(`Path contains invalid trailing characters: ${fsPath}`);
+		}
+
+		// Check for 8.3 short filename pattern
+		const tildeIndex = part.indexOf('~');
+		if (tildeIndex !== -1) {
+			const afterTilde = part.substring(tildeIndex + 1);
+			if (afterTilde.length > 0 && /^\d/.test(afterTilde)) {
+				throw new Error(`Path appears to use short filename format (8.3 names): ${fsPath}. Please use the full path.`);
+			}
+		}
+	}
+}
+
 const enum ConfirmationCheckResult {
 	NoConfirmation,
 	NoPermissions,
@@ -604,6 +666,8 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 		let ok = true;
 		let fsPath = uri.fsPath;
 
+		assertPathIsSafe(fsPath);
+
 		if (platformConfirmationRequiredPaths.some(p => p(fsPath))) {
 			return ConfirmationCheckResult.SystemFile;
 		}
@@ -627,6 +691,8 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 		if (uri.scheme === Schemas.file) {
 			try {
 				const linked = await realpath(uri.fsPath);
+				assertPathIsSafe(linked);
+
 				if (linked !== uri.fsPath) {
 					toCheck.push(URI.file(linked));
 				}
