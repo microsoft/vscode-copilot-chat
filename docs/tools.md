@@ -71,6 +71,42 @@ If the tool has a potentially dangerous side-effect (e.g. the terminal tool), it
 
 Consider writing a unit test for your tool. One example to copy is [`readFile.spec.tsx`](https://github.com/microsoft/vscode-copilot/blob/a2b8af8b8e7286d4da77ff4108b6bcdeb1441d79/src/extension/tools/node/test/readFile.spec.tsx#L40-L59). This test invokes the tool with some hardcoded arguments and checks the result against a snapshot.
 
+### Search Subagent Tool
+
+The `search_subagent` tool launches a focused iterative search loop that can internally call other search tools (`semantic_search`, `file_search`, `grep_search`) multiple times to gather and refine relevant workspace context for a natural language query.
+
+Key behaviors:
+- Starts a subagent loop (15–20 tool call rounds default) seeded with your query and a search strategy.
+- Prioritizes `semantic_search` for broad conceptual discovery, then glob expansion via `file_search`, then confirmation/detail via `grep_search`.
+- De-duplicates and refines queries, avoiding redundant tool calls.
+- Produces a ranked summary of relevant files/snippets plus suggested refined queries when coverage is partial.
+
+Input schema:
+```
+{
+  "query": string,          // Natural language description of what to find
+  "description": string,    // User-facing invocation message
+  "maxRounds"?: number      // Optional cap on internal tool call rounds
+}
+```
+
+When to use it:
+- You have a fuzzy or multi-concept question ("Where is auth token refreshed?").
+- You want a consolidated search result instead of manually orchestrating multiple search tool calls.
+
+When NOT to use it:
+- You already have an exact symbol or file path—`grep_search` or `file_search` alone may be faster.
+- You need to read file contents directly—follow up with `read_file` after getting candidates.
+
+Returned result:
+- Plain text summary with ranked list and reasoning (each entry: file path or snippet origin + short justification).
+- Suggested next queries if coverage is incomplete.
+
+Implementation notes:
+- Internally uses `SubagentToolCallingLoop` so the normal agent tool exclusion rules apply (cannot nest subagents).
+- Categorized under Core tools; registered in `toolNames.ts` and imported via `allTools.ts`.
+- Unit test (`searchSubagentTool.spec.ts`) asserts registration and categorization.
+
 ### Read the prompt
 
 Read the prompt. There is no replacement for just using your tool a lot, and reading the prompt. Read the whole thing top to bottom. What story does it tell? Get familiar with the prompt as a whole, don't get tunnel vision for one message. Does your new tool result make sense to you as a human? Is it formatted in a way that's consistent with other tool results and context in the user message?

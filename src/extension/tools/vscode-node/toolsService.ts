@@ -20,7 +20,6 @@ export class ToolsService extends BaseToolsService {
 
 	// Extensions to override definitions for existing tools.
 	private readonly _toolExtensions: Lazy<Map<ToolName, ICopilotToolExtension<unknown>>>;
-
 	private readonly _contributedToolCache: {
 		input: readonly vscode.LanguageModelToolInformation[];
 		output: readonly vscode.LanguageModelToolInformation[];
