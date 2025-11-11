@@ -102,6 +102,10 @@ export interface RemoteAgentJobResponse {
 	updated_at: string;
 }
 
+export interface ErrorResponseWithStatusCode {
+	status: number;
+}
+
 export interface RemoteAgentJobPayload {
 	problem_statement: string;
 	event_type: string;
@@ -166,12 +170,6 @@ export interface IOctoKitService {
 	getCurrentAuthedUser(): Promise<IOctoKitUser | undefined>;
 
 	/**
-	 * Queries for team membership of the currently authenticated user against the team id.
-	 * @returns The team membership or undefined if the user is not a member of the team
-	 */
-	getTeamMembership(teamId: number): Promise<any | undefined>;
-
-	/**
 	 * Returns the list of Copilot pull requests for a given user on a specific repo.
 	 */
 	getCopilotPullRequestsForUser(owner: string, repo: string): Promise<PullRequestSearchItem[]>;
@@ -199,7 +197,7 @@ export interface IOctoKitService {
 		name: string,
 		apiVersion: string,
 		payload: RemoteAgentJobPayload,
-	): Promise<RemoteAgentJobResponse>;
+	): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode>;
 
 	/**
 	 * Gets a job by its job ID.
@@ -234,16 +232,6 @@ export interface IOctoKitService {
 	 * @returns An array of custom agent list items with basic metadata
 	 */
 	getCustomAgents(owner: string, repo: string): Promise<CustomAgentListItem[]>;
-
-	/**
-	 * Gets the full details of a specific custom agent, including its prompt.
-	 * @param owner The repository owner
-	 * @param repo The repository name
-	 * @param agentName The name of the custom agent
-	 * @param version Optional git ref (branch, tag, or commit SHA) to fetch from. Defaults to the default branch.
-	 * @returns The custom agent details or undefined if not found
-	 */
-	getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined>;
 
 	/**
 	 * Gets the list of files changed in a pull request.
@@ -317,8 +305,8 @@ export class BaseOctoKitService {
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}`, 'GET', token, undefined, undefined, 'text');
 	}
 
-	protected async postCopilotAgentJobWithToken(owner: string, name: string, apiVersion: string, userAgent: string, payload: RemoteAgentJobPayload, token: string): Promise<RemoteAgentJobResponse> {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent);
+	protected async postCopilotAgentJobWithToken(owner: string, name: string, apiVersion: string, userAgent: string, payload: RemoteAgentJobPayload, token: string) {
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent, true);
 	}
 
 	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo> {
@@ -344,11 +332,6 @@ export class BaseOctoKitService {
 	protected async getCustomAgentsWithToken(owner: string, repo: string, token: string): Promise<GetCustomAgentsResponse> {
 		const queryParams = '?exclude_invalid_config=true';
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
-	}
-
-	protected async getCustomAgentDetailsWithToken(owner: string, repo: string, agentName: string, token: string, version?: string): Promise<CustomAgentDetails | undefined> {
-		const queryParams = version ? `?version=${encodeURIComponent(version)}` : '';
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}/${agentName}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
 	}
 
 	protected async getPullRequestFilesWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<PullRequestFile[]> {

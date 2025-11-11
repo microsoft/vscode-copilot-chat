@@ -79,6 +79,9 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 		// for non-notebooks, we get all diagnostics and filter down
 		for (const [resource, entries] of this.languageDiagnosticsService.getAllDiagnostics()) {
 			const pendingDiagnostics = entries.filter(d => d.severity <= DiagnosticSeverity.Warning);
+			if (pendingDiagnostics.length === 0) {
+				continue;
+			}
 
 			// find all path&range pairs and collect the ranges to further filter diagnostics
 			// if any path matches the resource without a range, take all diagnostics for that file

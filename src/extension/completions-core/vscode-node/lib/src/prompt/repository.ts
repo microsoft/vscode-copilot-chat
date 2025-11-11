@@ -5,8 +5,7 @@
 
 import { AdoRepoId, getAdoRepoIdFromFetchUrl, getGithubRepoIdFromFetchUrl, GithubRepoId, parseRemoteUrl } from '../../../../../../platform/git/common/gitService';
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { FileIdentifier, FileSystem } from '../fileSystem';
+import { FileIdentifier, ICompletionsFileSystemService } from '../fileSystem';
 import { LRUCacheMap } from '../helpers/cache';
 import { dirname, getFsUri, joinPath } from '../util/uri';
 
@@ -78,8 +77,7 @@ const backgroundRepoInfo = computeInBackgroundAndMemoize<RepoInfo | undefined, [
  * it returns a RepoInfo object with hostname, user and repo set to "".
  */
 export async function extractRepoInfo(accessor: ServicesAccessor, uri: FileIdentifier): Promise<RepoInfo | undefined> {
-	const ctx = accessor.get(ICompletionsContextService);
-	const fs = ctx.get(FileSystem);
+	const fs = accessor.get(ICompletionsFileSystemService);
 
 	const fsUri = getFsUri(uri);
 	if (!fsUri) { return undefined; }
@@ -121,7 +119,7 @@ function parseRepoUrl(
  * Returns the base folder of the git repository containing the file, or undefined if none is found.
  * Will search recursively for a .git folder containing a config file.
  */
-async function getRepoBaseUri(fileSystemService: FileSystem, uri: string): Promise<string | undefined> {
+async function getRepoBaseUri(fileSystemService: ICompletionsFileSystemService, uri: string): Promise<string | undefined> {
 	// to make sure the while loop terminates, we make sure the path variable decreases in length
 	let previousUri = uri + '_add_to_make_longer';
 	while (uri !== 'file:///' && uri.length < previousUri.length) {

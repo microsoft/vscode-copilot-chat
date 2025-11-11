@@ -28,6 +28,11 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 		@ILogService private readonly logService: ILogService,
 	) { }
 
+	private isPullRequestExtensionInstalled(): boolean {
+		return vscode.extensions
+			.getExtension('GitHub.vscode-pull-request-github') !== undefined;
+	}
+
 	async getFileChangesMultiDiffPart(pullRequest: PullRequestSearchItem): Promise<vscode.ChatResponseMultiDiffPart | undefined> {
 		try {
 			this.logService.trace(`Getting file changes for PR #${pullRequest.number}`);
@@ -93,7 +98,7 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 			}
 
 			const title = `Changes in Pull Request #${pullRequest.number}`;
-			return new vscode.ChatResponseMultiDiffPart(diffEntries, title, false);
+			return new vscode.ChatResponseMultiDiffPart(diffEntries, title, !this.isPullRequestExtensionInstalled());
 		} catch (error) {
 			this.logService.error(`Failed to get file changes multi diff part: ${error}`);
 			return undefined;

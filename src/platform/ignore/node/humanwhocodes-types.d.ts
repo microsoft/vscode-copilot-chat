@@ -3,10 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
+// Workaround for https://github.com/microsoft/typescript-go/issues/2050
 
-export class CompletionsAuthenticationServiceBridge {
-	constructor(
-		@IAuthenticationService public readonly authenticationService: IAuthenticationService
-	) { }
+declare module '@humanwhocodes/gitignore-to-minimatch' {
+	export function gitignoreToMinimatch(pattern: string): string;
 }

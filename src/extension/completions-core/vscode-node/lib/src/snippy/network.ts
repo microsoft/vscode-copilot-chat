@@ -3,12 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
+import { CopilotToken, ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
 import { editorVersionHeaders } from '../config';
-import { ICompletionsContextService } from '../context';
-import { LogTarget } from '../logger';
+import { ICompletionsLogTargetService } from '../logger';
 import { getEndpointUrl } from '../networkConfiguration';
-import { Fetcher, type IAbortSignal, type Response } from '../networking';
+import { ICompletionsFetcherService, type IAbortSignal, type Response } from '../networking';
 import { ConnectionState } from './connectionState';
 import {
 	createErrorResponse,
@@ -30,17 +29,17 @@ export async function call<Res, Req = unknown>(
 	signal?: IAbortSignal
 ): Promise<SnippyResponse<Res>> {
 	let token: CopilotToken;
-	const ctx = accessor.get(ICompletionsContextService);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 	const instantiationService = accessor.get(IInstantiationService);
+	const tokenManager = accessor.get(ICompletionsCopilotTokenManager);
 	try {
-		const tokenManager = ctx.get(CopilotTokenManager);
 		token = tokenManager.token ?? await tokenManager.getToken();
 	} catch (e) {
 		ConnectionState.setDisconnected();
 		return createErrorResponse(401, ErrorMessages[ErrorReasons.Unauthorized]);
 	}
 
-	codeReferenceLogger.info(ctx.get(LogTarget), `Calling ${endpoint}`);
+	codeReferenceLogger.info(logTarget, `Calling ${endpoint}`);
 
 	if (ConnectionState.isRetrying()) {
 		return createErrorResponse(600, 'Attempting to reconnect to the public code matching service.');
@@ -52,7 +51,7 @@ export async function call<Res, Req = unknown>(
 
 	let res: InstanceType<typeof Response>;
 	try {
-		res = await instantiationService.invokeFunction(acc => ctx.get(Fetcher).fetch(getEndpointUrl(acc, token, 'origin-tracker', endpoint), {
+		res = await instantiationService.invokeFunction(acc => acc.get(ICompletionsFetcherService).fetch(getEndpointUrl(acc, token, 'origin-tracker', endpoint), {
 			method: config.method,
 			body: config.method === 'POST' ? JSON.stringify(config.body) : undefined,
 			headers: {

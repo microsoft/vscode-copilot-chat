@@ -5,23 +5,23 @@
 
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../../../../platform/authentication/common/copilotToken';
+import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { ThrottledDelayer } from '../../../../../../util/vs/base/common/async';
 import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
-import { CompletionsAuthenticationServiceBridge } from '../../../bridge/src/completionsAuthenticationServiceBridge';
-import { ICompletionsContextService } from '../context';
 export { CopilotToken } from '../../../../../../platform/authentication/common/copilotToken';
 
-export abstract class CopilotTokenManager extends Disposable {
-	public abstract get token(): CopilotToken | undefined;
-	public abstract primeToken(): Promise<boolean>;
-	public abstract getToken(): Promise<CopilotToken>;
-	public abstract resetToken(httpError?: number): void;
-	public abstract getLastToken(): Omit<CopilotToken, "token"> | undefined;
+export const ICompletionsCopilotTokenManager = createServiceIdentifier<ICompletionsCopilotTokenManager>('ICompletionsCopilotTokenManager');
+export interface ICompletionsCopilotTokenManager {
+	readonly _serviceBrand: undefined;
+	get token(): CopilotToken | undefined;
+	primeToken(): Promise<boolean>;
+	getToken(): Promise<CopilotToken>;
+	resetToken(httpError?: number): void;
+	getLastToken(): Omit<CopilotToken, "token"> | undefined;
 }
 
-export class CopilotTokenManagerImpl extends CopilotTokenManager {
-
-	private readonly authenticationService: IAuthenticationService;
+export class CopilotTokenManagerImpl extends Disposable implements ICompletionsCopilotTokenManager {
+	declare _serviceBrand: undefined;
 	private tokenRefetcher = new ThrottledDelayer(5_000);
 	private _token: CopilotToken | undefined;
 	get token() {
@@ -31,11 +31,10 @@ export class CopilotTokenManagerImpl extends CopilotTokenManager {
 
 	constructor(
 		protected primed = false,
-		@ICompletionsContextService protected ctx: ICompletionsContextService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService
 	) {
 		super();
 
-		this.authenticationService = ctx.get(CompletionsAuthenticationServiceBridge).authenticationService;
 		this.updateCachedToken();
 		this._register(this.authenticationService.onDidAuthenticationChange(() => this.updateCachedToken()));
 	}

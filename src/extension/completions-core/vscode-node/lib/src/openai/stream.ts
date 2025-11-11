@@ -6,8 +6,7 @@
 import { ClientHttp2Stream } from 'http2';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
-import { ICompletionsContextService } from '../context';
-import { Logger, LogTarget } from '../logger';
+import { ICompletionsLogTargetService, Logger } from '../logger';
 import { Response } from '../networking';
 import { TelemetryWithExp } from '../telemetry';
 import { getEngineRequestInfo } from './config';
@@ -269,8 +268,6 @@ export class SSEProcessor {
 	 */
 	private readonly solutions: Record<number, APIJsonDataStreaming | null> = {};
 
-	private logTarget: LogTarget;
-
 	private constructor(
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
@@ -279,10 +276,8 @@ export class SSEProcessor {
 		private readonly dropCompletionReasons: string[],
 		private readonly cancellationToken: ICancellationToken | undefined = undefined,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@ICompletionsContextService private readonly completionsContextService: ICompletionsContextService,
-	) {
-		this.logTarget = this.completionsContextService.get(LogTarget);
-	}
+		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
+	) { }
 
 	/**
 	 * Creates a new instance of SSEProcessor.
@@ -299,7 +294,7 @@ export class SSEProcessor {
 		cancellationToken?: ICancellationToken
 	) {
 		const instantiationService = accessor.get(IInstantiationService);
-		const completionsContextService = accessor.get(ICompletionsContextService);
+		const logTargetService = accessor.get(ICompletionsLogTargetService);
 
 		// Handle both NodeJS.ReadableStream and ReadableStream for web.  Once
 		// helix fetcher is removed, the NodeJS.ReadableStream support can be
@@ -331,7 +326,7 @@ export class SSEProcessor {
 			dropCompletionReasons ?? [],
 			cancellationToken,
 			instantiationService,
-			completionsContextService,
+			logTargetService,
 		);
 	}
 
@@ -710,7 +705,7 @@ export function prepareSolutionForReturn(
 	c: FinishedCompletion,
 	telemetryData: TelemetryWithExp
 ): APIChoice {
-	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 	let completionText = c.solution.text.join('');
 
 	let blockFinished = false;

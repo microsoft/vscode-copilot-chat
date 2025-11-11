@@ -3,10 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ActionItem, NotificationSender } from '../notificationSender';
+import { ActionItem, ICompletionsNotificationSender } from '../notificationSender';
 import { IPosition, IRange } from '../textDocument';
-import { Deferred } from '../util/async';
-import { UrlOpener } from '../util/opener';
 
 export function positionToString(p: IPosition) {
 	return `${p.line}:${p.character}`;
@@ -33,26 +31,13 @@ export function restoreEnvAfterTest() {
 	});
 }
 
-export class TestUrlOpener extends UrlOpener {
-	readonly openedUrls: string[] = [];
-	readonly opened = new Deferred<void>();
+export class TestNotificationSender implements ICompletionsNotificationSender {
+	declare _serviceBrand: undefined;
 
-	open(target: string) {
-		this.openedUrls.push(target);
-		this.opened.resolve();
-		return Promise.resolve();
-	}
-}
-
-export class TestNotificationSender extends NotificationSender {
 	readonly sentMessages: string[] = [];
 	protected warningPromises: Promise<ActionItem | undefined>[] = [];
 	protected informationPromises: Promise<ActionItem | undefined>[] = [];
 	protected actionToPerform: string | undefined;
-
-	constructor() {
-		super();
-	}
 
 	performDismiss() {
 		this.actionToPerform = 'DISMISS';

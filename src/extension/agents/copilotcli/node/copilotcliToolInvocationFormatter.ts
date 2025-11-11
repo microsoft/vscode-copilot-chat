@@ -256,6 +256,10 @@ export function createCopilotCLIToolInvocation(
 		formatBashInvocation(invocation, args as BashArgs);
 	} else if (toolName === CopilotCLIToolNames.View) {
 		formatViewToolInvocation(invocation, args as StrReplaceEditorArgs);
+	} else if (toolName === CopilotCLIToolNames.Edit) {
+		formatEditToolInvocation(invocation, args as EditArgs | CreateArgs);
+	} else if (toolName === CopilotCLIToolNames.Create) {
+		formatCreateToolInvocation(invocation, args as EditArgs | CreateArgs);
 	} else {
 		formatGenericInvocation(invocation, toolName, args);
 	}
@@ -267,7 +271,16 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: StrR
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 
-	invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0}", display));
+	if (args.view_range && args.view_range[1] >= args.view_range[0]) {
+		const [start, end] = args.view_range;
+		const localizedMessage = start === end
+			? l10n.t("Read {0} (line {1})", display, start)
+			: l10n.t("Read {0} (lines {1}-{2})", display, start, end);
+		invocation.invocationMessage = new MarkdownString(localizedMessage);
+		return;
+	}
+
+	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 }
 
 function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, args: StrReplaceEditorArgs): void {
@@ -277,10 +290,14 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 
 	switch (command) {
 		case 'view':
-			if (args.view_range) {
-				invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0} (lines {1}-{2})", display, args.view_range[0], args.view_range[1]));
+			if (args.view_range && args.view_range[1] >= args.view_range[0]) {
+				const [start, end] = args.view_range;
+				const localizedMessage = start === end
+					? l10n.t("Read {0} (line {1})", display, start)
+					: l10n.t("Read {0} (lines {1}-{2})", display, start, end);
+				invocation.invocationMessage = new MarkdownString(localizedMessage);
 			} else {
-				invocation.invocationMessage = new MarkdownString(l10n.t("Viewed {0}", display));
+				invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 			}
 			break;
 		case 'str_replace':
@@ -297,6 +314,25 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, ar
 			break;
 		default:
 			invocation.invocationMessage = new MarkdownString(l10n.t("Modified {0}", display));
+	}
+}
+
+function formatEditToolInvocation(invocation: ChatToolInvocationPart, args: EditArgs): void {
+	const display = args.path ? formatUriForMessage(args.path) : '';
+
+	invocation.invocationMessage = display
+		? new MarkdownString(l10n.t("Edited {0}", display))
+		: new MarkdownString(l10n.t("Edited file"));
+}
+
+
+function formatCreateToolInvocation(invocation: ChatToolInvocationPart, args: EditArgs | CreateArgs): void {
+	const display = args.path ? formatUriForMessage(args.path) : '';
+
+	if (display) {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
+	} else {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Created file"));
 	}
 }
 

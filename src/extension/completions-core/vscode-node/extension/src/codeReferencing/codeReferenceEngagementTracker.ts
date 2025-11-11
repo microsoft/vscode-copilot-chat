@@ -3,23 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, TextEditor, window } from 'vscode';
+import { TextEditor, window } from 'vscode';
+import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { citationsChannelName } from './outputChannel';
 
-export class CodeRefEngagementTracker {
+export class CodeRefEngagementTracker extends Disposable {
 	private activeLog = false;
-	private subscriptions: Disposable[] = [];
 
-	constructor(@IInstantiationService private instantiationService: IInstantiationService) { }
-
-	register() {
-		const activeEditorChangeSub = window.onDidChangeActiveTextEditor(this.onActiveEditorChange);
-		const visibleEditorsSub = window.onDidChangeVisibleTextEditors(this.onVisibleEditorsChange);
-
-		this.subscriptions.push(visibleEditorsSub);
-		this.subscriptions.push(activeEditorChangeSub);
+	constructor(@IInstantiationService private instantiationService: IInstantiationService) {
+		super();
+		this._register(window.onDidChangeActiveTextEditor((e) => this.onActiveEditorChange(e)));
+		this._register(window.onDidChangeVisibleTextEditors((e) => this.onVisibleEditorsChange(e)));
 	}
 
 	onActiveEditorChange = (editor: TextEditor | undefined) => {
@@ -29,7 +25,7 @@ export class CodeRefEngagementTracker {
 	};
 
 	onVisibleEditorsChange = (currEditors: readonly TextEditor[]) => {
-		const copilotLog = currEditors.find(this.isOutputLog);
+		const copilotLog = currEditors.find(e => this.isOutputLog(e));
 
 		if (this.activeLog) {
 			if (!copilotLog) {
@@ -41,13 +37,6 @@ export class CodeRefEngagementTracker {
 		}
 	};
 
-	dispose() {
-		for (const sub of this.subscriptions) {
-			sub.dispose();
-		}
-		this.subscriptions = [];
-	}
-
 	get logVisible() {
 		return this.activeLog;
 	}
@@ -57,11 +46,4 @@ export class CodeRefEngagementTracker {
 			editor && editor.document.uri.scheme === 'output' && editor.document.uri.path.includes(citationsChannelName)
 		);
 	};
-}
-
-export function registerCodeRefEngagementTracker(instantiationService: IInstantiationService) {
-	const engagementTracker = instantiationService.createInstance(CodeRefEngagementTracker);
-	engagementTracker.register();
-
-	return engagementTracker;
 }

@@ -13,9 +13,8 @@ import {
 	SupportedContextItemType,
 	Trait,
 } from '../../../../types/src';
-import { logger, LogTarget } from '../../logger';
+import { ICompletionsLogTargetService, logger } from '../../logger';
 import { ResolvedContextItem } from '../contextProviderRegistry';
-import { ICompletionsContextService } from '../../context';
 
 /**
  * Redefine all the types from contextProviderV1 as typebox schema and verify equality.
@@ -129,7 +128,7 @@ export function addOrValidateContextItemsIDs(
 	contextItems: SupportedContextItemWithType[]
 ): SupportedContextItemWithId[] {
 	const seenIds = new Set<string>();
-	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 
 	const contextItemsWithId: SupportedContextItemWithId[] = [];
 	for (const item of contextItems) {

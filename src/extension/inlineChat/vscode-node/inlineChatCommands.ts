@@ -332,6 +332,9 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 	const instantiationService = accessor.get(IInstantiationService);
 	const comment = reviewService.findReviewComment(thread);
 	if (!comment || comment.suggestion || comment.skipSuggestion) {
+		if (comment?.suggestion && 'edits' in comment.suggestion && comment.suggestion.edits.length && thread.contextValue?.includes('hasNoSuggestion')) {
+			thread.contextValue = updateContextValue(thread.contextValue, 'hasSuggestion', 'hasNoSuggestion');
+		}
 		return;
 	}
 	comment.suggestion = (async () => {

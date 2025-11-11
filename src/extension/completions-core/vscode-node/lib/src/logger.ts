@@ -9,8 +9,10 @@
  *
  * Do not add any concrete dependencies here.
  */
+import { createServiceIdentifier } from '../../../../../util/common/services';
 import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from './context';
+import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
+import { telemetryException } from './telemetry';
 
 export enum LogLevel {
 	DEBUG = 4,
@@ -19,30 +21,28 @@ export enum LogLevel {
 	ERROR = 1,
 }
 
-export abstract class LogTarget {
-	abstract logIt(level: LogLevel, category: string, ...extra: unknown[]): void;
-}
-
-export abstract class TelemetryLogSender {
-	abstract sendException(accessor: ServicesAccessor, error: unknown, origin: string): void;
+export const ICompletionsLogTargetService = createServiceIdentifier<ICompletionsLogTargetService>('ICompletionsLogTargetService');
+export interface ICompletionsLogTargetService {
+	readonly _serviceBrand: undefined;
+	logIt(level: LogLevel, category: string, ...extra: unknown[]): void;
 }
 
 export class Logger {
 	constructor(private readonly category: string) { }
 
-	private log(logTarget: LogTarget, level: LogLevel, ...extra: unknown[]) {
+	private log(logTarget: ICompletionsLogTargetService, level: LogLevel, ...extra: unknown[]) {
 		logTarget.logIt(level, this.category, ...extra);
 	}
 
-	debug(logTarget: LogTarget, ...extra: unknown[]) {
+	debug(logTarget: ICompletionsLogTargetService, ...extra: unknown[]) {
 		this.log(logTarget, LogLevel.DEBUG, ...extra);
 	}
 
-	info(logTarget: LogTarget, ...extra: unknown[]) {
+	info(logTarget: ICompletionsLogTargetService, ...extra: unknown[]) {
 		this.log(logTarget, LogLevel.INFO, ...extra);
 	}
 
-	warn(logTarget: LogTarget, ...extra: unknown[]) {
+	warn(logTarget: ICompletionsLogTargetService, ...extra: unknown[]) {
 		this.log(logTarget, LogLevel.WARN, ...extra);
 	}
 
@@ -51,7 +51,7 @@ export class Logger {
 	 * error logging, which might not be associated with an exception. Prefer `exception()` when
 	 * logging exception details.
 	 */
-	error(logTarget: LogTarget, ...extra: unknown[]) {
+	error(logTarget: ICompletionsLogTargetService, ...extra: unknown[]) {
 		this.log(logTarget, LogLevel.ERROR, ...extra);
 	}
 
@@ -73,10 +73,10 @@ export class Logger {
 			origin = `${this.category}${origin}`;
 		}
 
-		accessor.get(ICompletionsContextService).get(TelemetryLogSender).sendException(accessor, error, origin);
+		telemetryException(accessor.get(ICompletionsTelemetryService), error, origin);
 
 		const safeError: Error = error instanceof Error ? error : new Error(`Non-error thrown: ${String(error)}`);
-		this.log(accessor.get(ICompletionsContextService).get(LogTarget), LogLevel.ERROR, `${message}:`, safeError);
+		this.log(accessor.get(ICompletionsLogTargetService), LogLevel.ERROR, `${message}:`, safeError);
 	}
 }
 

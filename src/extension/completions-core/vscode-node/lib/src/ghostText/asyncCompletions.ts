@@ -2,11 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { CancellationTokenSource } from '../../../types/src';
-import { ICompletionsContextService } from '../context';
-import { Features } from '../experiments/features';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
 import { LRUCacheMap } from '../helpers/cache';
-import { Logger, LogTarget } from '../logger';
+import { ICompletionsLogTargetService, Logger } from '../logger';
 import { APIChoice } from '../openai/openai';
 import { Prompt } from '../prompt/prompt';
 import { TelemetryWithExp } from '../telemetry';
@@ -42,7 +42,37 @@ interface CompletedAsyncCompletionRequest extends BaseAsyncCompletionRequest {
 
 type AsyncCompletionRequest = PendingAsyncCompletionRequest | CompletedAsyncCompletionRequest;
 
-export class AsyncCompletionManager {
+export const ICompletionsAsyncManagerService = createServiceIdentifier<ICompletionsAsyncManagerService>('ICompletionsAsyncManagerService');
+export interface ICompletionsAsyncManagerService {
+	readonly _serviceBrand: undefined;
+	clear(): void;
+	shouldWaitForAsyncCompletions(prefix: string, prompt: Prompt): boolean;
+	updateCompletion(headerRequestId: string, text: string): void;
+	queueCompletionRequest(
+		headerRequestId: string,
+		prefix: string,
+		prompt: Prompt,
+		cancellationTokenSource: CancellationTokenSource,
+		resultPromise: Promise<GetNetworkCompletionsType>
+	): Promise<void>;
+	getFirstMatchingRequestWithTimeout(
+		headerRequestId: string,
+		prefix: string,
+		prompt: Prompt,
+		isSpeculative: boolean,
+		telemetryWithExp: TelemetryWithExp
+	): Promise<[APIChoice, Promise<void>] | undefined>;
+	getFirstMatchingRequest(
+		headerRequestId: string,
+		prefix: string,
+		prompt: Prompt,
+		isSpeculative: boolean
+	): Promise<[APIChoice, Promise<void>] | undefined>;
+}
+
+export class AsyncCompletionManager implements ICompletionsAsyncManagerService {
+	declare _serviceBrand: undefined;
+
 	#logger = new Logger('AsyncCompletionManager');
 
 	/** Mapping of headerRequestId to completion request */
@@ -54,13 +84,10 @@ export class AsyncCompletionManager {
 	 * the most recent request prefix. */
 	private mostRecentRequestId = '';
 
-	private readonly logTarget;
-
 	constructor(
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
-	) {
-		this.logTarget = ctx.get(LogTarget);
-	}
+		@ICompletionsFeaturesService private readonly featuresService: ICompletionsFeaturesService,
+		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
+	) { }
 
 	clear() {
 		this.requests.clear();
@@ -159,7 +186,7 @@ export class AsyncCompletionManager {
 		isSpeculative: boolean,
 		telemetryWithExp: TelemetryWithExp
 	): Promise<[APIChoice, Promise<void>] | undefined> {
-		const timeout = this.ctx.get(Features).asyncCompletionsTimeout(telemetryWithExp);
+		const timeout = this.featuresService.asyncCompletionsTimeout(telemetryWithExp);
 		if (timeout < 0) {
 			this.#logger.debug(this.logTarget, `[${headerRequestId}] Waiting for completions without timeout`);
 			return this.getFirstMatchingRequest(headerRequestId, prefix, prompt, isSpeculative);

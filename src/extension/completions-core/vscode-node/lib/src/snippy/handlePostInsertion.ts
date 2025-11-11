@@ -4,15 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 import { Value } from '@sinclair/typebox/value';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CitationManager } from '../citationManager';
-import { ICompletionsContextService } from '../context';
-import { TextDocumentManager } from '../textDocumentManager';
+import { ICompletionsCitationManager } from '../citationManager';
+import { ICompletionsLogTargetService } from '../logger';
+import { ICompletionsTextDocumentManagerService } from '../textDocumentManager';
 import * as Snippy from './';
 import * as SnippyCompute from './compute';
 import { codeReferenceLogger } from './logger';
 import { MatchError } from './snippy.proto';
 import { snippyTelemetry } from './telemetryHandlers';
-import { LogTarget } from '../logger';
 
 function isError(payload: unknown): payload is MatchError {
 	return Value.Check(MatchError, payload);
@@ -41,10 +40,10 @@ function isMatchError<T extends object>(response: T | MatchError): response is M
 }
 
 export async function fetchCitations(accessor: ServicesAccessor, uri: string, completionText: string, insertionOffset: number) {
-	const ctx = accessor.get(ICompletionsContextService);
 	const instantiationService = accessor.get(IInstantiationService);
-	const logTarget = ctx.get(LogTarget);
-	const documentManager = ctx.get(TextDocumentManager);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const documentManager = accessor.get(ICompletionsTextDocumentManagerService);
+	const citationManager = accessor.get(ICompletionsCitationManager);
 	const insertionDoc = await documentManager.getTextDocument({ uri });
 
 	// If the match occurred in a file that no longer exists, bail.
@@ -138,7 +137,7 @@ export async function fetchCitations(accessor: ServicesAccessor, uri: string, co
 
 		const start = insertionDoc.positionAt(offsetStart);
 		const end = insertionDoc.positionAt(offsetEnd);
-		await ctx.get(CitationManager).handleIPCodeCitation({
+		await citationManager.handleIPCodeCitation({
 			inDocumentUri: uri,
 			offsetStart,
 			offsetEnd,

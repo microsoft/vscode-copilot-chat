@@ -7,6 +7,7 @@ import { Readable } from 'stream';
 import { IEnvService } from '../../env/common/envService';
 import { FetchOptions, IAbortController, Response } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
+import { collectSingleLineErrorMessage } from '../../log/common/logService';
 
 export abstract class BaseFetchFetcher implements IFetcher {
 
@@ -78,6 +79,6 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	abstract isInternetDisconnectedError(e: any): boolean;
 	abstract isFetcherError(e: any): boolean;
 	getUserMessageForFetcherError(err: any): string {
-		return `Please check your firewall rules and network connection then try again. Error Code: ${err.message}.`;
+		return `Please check your firewall rules and network connection then try again. Error Code: ${collectSingleLineErrorMessage(err)}.`;
 	}
 }

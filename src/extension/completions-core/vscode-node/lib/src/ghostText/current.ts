@@ -2,15 +2,30 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { APIChoice } from '../openai/openai';
 import { ResultType } from './ghostText';
+
+export const ICompletionsCurrentGhostText = createServiceIdentifier<ICompletionsCurrentGhostText>('ICompletionsCurrentGhostText');
+export interface ICompletionsCurrentGhostText {
+	readonly _serviceBrand: undefined;
+
+	readonly clientCompletionId: string | undefined;
+
+	currentRequestId: string | undefined;
+
+	setGhostText(prefix: string, suffix: string, choices: APIChoice[], resultType: ResultType): void;
+	getCompletionsForUserTyping(prefix: string, suffix: string): APIChoice[] | undefined;
+	hasAcceptedCurrentCompletion(prefix: string, suffix: string): boolean;
+}
 
 /**
  * Stores the internal concept of the currently shown completion, as inferred by
  * the output of getGhostText. Used to check if a subsequent call to
  * getGhostText is typing-as-suggested.
  */
-export class CurrentGhostText {
+export class CurrentGhostText implements ICompletionsCurrentGhostText {
+	declare _serviceBrand: undefined;
 	/** The document prefix at the start of the typing-as-suggested flow. This
 	 * does not use the prompt prefix since the ellision means that prefix is a
 	 * sliding window over long documents. */

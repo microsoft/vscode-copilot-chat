@@ -6,8 +6,7 @@
 import { commands, env, Uri } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../../../../platform/extContext/common/extensionContext';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../../lib/src/context';
-import { NotificationSender } from '../../../lib/src/notificationSender';
+import { ICompletionsNotificationSender } from '../../../lib/src/notificationSender';
 import { OutputPaneShowCommand } from '../../../lib/src/snippy/constants';
 import { matchNotificationTelemetry, TelemetryActor } from '../../../lib/src/snippy/telemetryHandlers';
 
@@ -31,7 +30,7 @@ export function notify(accessor: ServicesAccessor) {
 		return;
 	}
 
-	const notificationSender = accessor.get(ICompletionsContextService).get(NotificationSender);
+	const notificationSender = accessor.get(ICompletionsNotificationSender);
 
 	const messageItems = [{ title: MatchAction }, { title: SettingAction }];
 

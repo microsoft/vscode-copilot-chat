@@ -3,44 +3,53 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { Logger, LogTarget } from '../logger';
-import { NotificationSender } from '../notificationSender';
-import { UrlOpener } from '../util/opener';
+import { env } from 'vscode';
+import { createServiceIdentifier } from '../../../../../../util/common/services';
+import { URI } from '../../../../../../util/vs/base/common/uri';
+import { ICompletionsLogTargetService, Logger } from '../logger';
+import { ICompletionsNotificationSender } from '../notificationSender';
 
 const CERTIFICATE_ERRORS = ['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'CERT_SIGNATURE_FAILURE'];
 const errorMsg =
 	'Your proxy connection requires a trusted certificate. Please make sure the proxy certificate and any issuers are configured correctly and trusted by your operating system.';
 const learnMoreLink = 'https://gh.io/copilot-network-errors';
 
-export class UserErrorNotifier {
+export const ICompletionsUserErrorNotifierService = createServiceIdentifier<ICompletionsUserErrorNotifierService>('ICompletionsUserErrorNotifierService');
+export interface ICompletionsUserErrorNotifierService {
+	readonly _serviceBrand: undefined;
+	notifyUser(e: unknown): void;
+}
+
+export class UserErrorNotifier implements ICompletionsUserErrorNotifierService {
+	declare _serviceBrand: undefined;
 	private readonly notifiedErrorCodes: string[] = [];
 
-	notifyUser(accessor: ServicesAccessor, e: unknown) {
+	constructor(
+		@ICompletionsLogTargetService private readonly _logTarget: ICompletionsLogTargetService,
+		@ICompletionsNotificationSender private readonly _notificationSender: ICompletionsNotificationSender,
+	) { }
+
+	notifyUser(e: unknown) {
 		if (!(e instanceof Error)) { return; }
 		const error: NodeJS.ErrnoException = e;
 		if (error.code && CERTIFICATE_ERRORS.includes(error.code) && !this.didNotifyBefore(error.code)) {
 			this.notifiedErrorCodes.push(error.code);
-			void this.displayCertificateErrorNotification(accessor, error);
+			void this.displayCertificateErrorNotification(error);
 		}
 	}
 
-	private async displayCertificateErrorNotification(accessor: ServicesAccessor, err: NodeJS.ErrnoException) {
-		const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	private async displayCertificateErrorNotification(err: NodeJS.ErrnoException) {
 		new Logger('certificates').error(
-			logTarget,
+			this._logTarget,
 			`${errorMsg} Please visit ${learnMoreLink} to learn more. Original cause:`,
 			err
 		);
 		const learnMoreAction = { title: 'Learn more' };
-		const ctx = accessor.get(ICompletionsContextService);
-		return ctx
-			.get(NotificationSender)
+		return this._notificationSender
 			.showWarningMessage(errorMsg, learnMoreAction)
 			.then(userResponse => {
 				if (userResponse?.title === learnMoreAction.title) {
-					return ctx.get(UrlOpener).open(learnMoreLink);
+					return env.openExternal(URI.parse(learnMoreLink));
 				}
 			});
 	}

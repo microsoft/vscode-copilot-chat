@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { packageJson } from '../../../../../platform/env/common/packagejson';
-import { createDecorator, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { createServiceIdentifier } from '../../../../../util/common/services';
+import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotConfigPrefix } from './constants';
-import { ICompletionsContextService } from './context';
 import { Filter } from './experiments/filters';
 import { Emitter, Event } from './util/event';
 
@@ -115,7 +115,18 @@ export enum BuildType {
 	NIGHTLY = 'nightly',
 }
 
-export abstract class ConfigProvider {
+export const ICompletionsConfigProvider = createServiceIdentifier<ICompletionsConfigProvider>('ICompletionsConfigProvider');
+export interface ICompletionsConfigProvider {
+	readonly _serviceBrand: undefined;
+
+	getConfig<T>(key: ConfigKeyType): T;
+	getOptionalConfig<T>(key: ConfigKeyType): T | undefined;
+	dumpForTelemetry(): { [key: string]: string };
+	onDidChangeCopilotSettings: Event<ConfigProvider>;
+}
+
+export abstract class ConfigProvider implements ICompletionsConfigProvider {
+	declare _serviceBrand: undefined;
 	abstract getConfig<T>(key: ConfigKeyType): T;
 	abstract getOptionalConfig<T>(key: ConfigKeyType): T | undefined;
 	abstract dumpForTelemetry(): { [key: string]: string };
@@ -161,11 +172,20 @@ export class DefaultsOnlyConfigProvider extends ConfigProvider {
 export class InMemoryConfigProvider extends ConfigProvider {
 	protected readonly copilotEmitter = new Emitter<this>();
 	readonly onDidChangeCopilotSettings = this.copilotEmitter.event;
+	private overrides: Map<ConfigKeyType, unknown> = new Map();
+
 	constructor(
 		private readonly baseConfigProvider: ConfigProvider,
-		private readonly overrides: Map<ConfigKeyType, unknown>
 	) {
 		super();
+	}
+
+	setOverrides(overrides: Map<ConfigKeyType, unknown>): void {
+		this.overrides = overrides;
+	}
+
+	clearOverrides(): void {
+		this.overrides.clear();
 	}
 
 	protected getOptionalOverride<T>(key: ConfigKeyType): T | undefined {
@@ -211,6 +231,8 @@ export class InMemoryConfigProvider extends ConfigProvider {
 		}
 		return config;
 	}
+
+
 }
 
 export function getConfigKeyRecursively<T>(config: Record<string, unknown>, key: string): T | undefined {
@@ -287,21 +309,21 @@ const configDefaults = new Map<ConfigKeyType, unknown>([
 ]);
 
 export function getConfig<T>(accessor: ServicesAccessor, key: ConfigKeyType): T {
-	return accessor.get(ICompletionsContextService).get(ConfigProvider).getConfig(key);
+	return accessor.get(ICompletionsConfigProvider).getConfig(key);
 }
 
 export function dumpForTelemetry(accessor: ServicesAccessor) {
 	try {
-		return accessor.get(ICompletionsContextService).get(ConfigProvider).dumpForTelemetry();
+		return accessor.get(ICompletionsConfigProvider).dumpForTelemetry();
 	} catch (e) {
 		console.error(`Error dumping config for telemetry: ${e}`);
 		return {};
 	}
 }
 
-export const ICompletionsBuildInfoService = createDecorator<ICompletionsBuildInfoService>('completionsBuildInfoService');
+export const ICompletionsBuildInfoService = createServiceIdentifier<ICompletionsBuildInfoService>('completionsBuildInfoService');
 export interface ICompletionsBuildInfoService {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	isPreRelease(): boolean;
 	isProduction(): boolean;
@@ -313,7 +335,7 @@ export interface ICompletionsBuildInfoService {
 }
 
 export class BuildInfo implements ICompletionsBuildInfoService {
-	_serviceBrand: undefined;
+	declare _serviceBrand: undefined;
 
 	// TODO for now this is just initialised from `packageJson` which is the same across agent/extension.
 	// Consider reworking this.
@@ -362,9 +384,9 @@ export class BuildInfo implements ICompletionsBuildInfoService {
 	}
 }
 
-export const ICompletionsEditorSessionService = createDecorator<ICompletionsEditorSessionService>('completionsEditorSessionService');
+export const ICompletionsEditorSessionService = createServiceIdentifier<ICompletionsEditorSessionService>('completionsEditorSessionService');
 export interface ICompletionsEditorSessionService {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	readonly sessionId: string;
 	readonly machineId: string;
@@ -373,7 +395,7 @@ export interface ICompletionsEditorSessionService {
 }
 
 export class EditorSession implements ICompletionsEditorSessionService {
-	_serviceBrand: undefined;
+	declare _serviceBrand: undefined;
 
 	constructor(
 		readonly sessionId: string,
@@ -403,16 +425,13 @@ export function formatNameAndVersion({ name, version }: NameAndVersion): string 
 	return `${name}/${version}`;
 }
 
-export abstract class EditorAndPluginInfo {
-	abstract getEditorInfo(): EditorInfo;
-	abstract getEditorPluginInfo(): EditorPluginInfo;
-	abstract getRelatedPluginInfo(): EditorPluginInfo[];
-	getCopilotIntegrationId(): string | undefined {
-		return undefined;
-	}
-	getEditorPluginSpecificFilters(): EditorPluginFilter[] {
-		return [];
-	}
+export const ICompletionsEditorAndPluginInfo = createServiceIdentifier<ICompletionsEditorAndPluginInfo>('ICompletionsEditorAndPluginInfo');
+export interface ICompletionsEditorAndPluginInfo {
+	readonly _serviceBrand: undefined;
+
+	getEditorInfo(): EditorInfo;
+	getEditorPluginInfo(): EditorPluginInfo;
+	getRelatedPluginInfo(): EditorPluginInfo[];
 }
 
 /**
@@ -423,8 +442,7 @@ export abstract class EditorAndPluginInfo {
 export const apiVersion = '2025-05-01';
 
 export function editorVersionHeaders(accessor: ServicesAccessor): { [key: string]: string } {
-	const ctx = accessor.get(ICompletionsContextService);
-	const info = ctx.get(EditorAndPluginInfo);
+	const info = accessor.get(ICompletionsEditorAndPluginInfo);
 	const buildInfo = accessor.get(ICompletionsBuildInfoService);
 	return {
 		'Editor-Version': formatNameAndVersion(info.getEditorInfo()),

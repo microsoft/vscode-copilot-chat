@@ -6,6 +6,9 @@
 import assert from 'assert';
 import Sinon from 'sinon';
 import { CancellationToken, CancellationTokenSource } from 'vscode-languageserver-protocol';
+import { TestingServiceCollection } from '../../../../../../../platform/test/node/services';
+import { SyncDescriptor } from '../../../../../../../util/vs/platform/instantiation/common/descriptors';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	ContextProvider,
 	ContextUsageStatistics,
@@ -14,24 +17,23 @@ import {
 	SupportedContextItem,
 	Trait,
 } from '../../../../types/src/index';
-import { ConfigKey, InMemoryConfigProvider } from '../../config';
-import { ICompletionsContextService } from '../../context';
-import { Features } from '../../experiments/features';
-import { LogLevel, LogTarget } from '../../logger';
+import { ConfigKey, ICompletionsConfigProvider, InMemoryConfigProvider } from '../../config';
+import { ICompletionsLogTargetService, LogLevel } from '../../logger';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { TestLogTarget } from '../../test/loggerHelpers';
 import { delay } from '../../util/async';
-import { RuntimeMode } from '../../util/runtimeMode';
-import { ContextProviderRegistry, ResolvedContextItem } from '../contextProviderRegistry';
+import { ICompletionsRuntimeModeService, RuntimeMode } from '../../util/runtimeMode';
+import { ICompletionsContextProviderRegistryService, ResolvedContextItem } from '../contextProviderRegistry';
 import { TraitWithId } from '../contextProviders/contextItemSchemas';
-import { ContextProviderStatistics } from '../contextProviderStatistics';
+import { ContextProviderStatistics, ICompletionsContextProviderService } from '../contextProviderStatistics';
 import { TestContextProviderStatistics } from '../test/contextProviderStatistics';
-import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsFeaturesService } from '../../experiments/featuresService';
 
 suite('ContextProviderRegistry', function () {
 	let accessor: ServicesAccessor;
-	let registry: ContextProviderRegistry;
+	let serviceCollection: TestingServiceCollection;
+	let registry: ICompletionsContextProviderRegistryService;
 	let statistics: TestContextProviderStatistics;
 	let testLogTarget: TestLogTarget;
 	let telemetryData: TelemetryWithExp;
@@ -62,14 +64,15 @@ suite('ContextProviderRegistry', function () {
 	};
 
 	setup(function () {
-		accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
+		serviceCollection = createLibTestingContext();
 		testLogTarget = new TestLogTarget();
-		ctx.forceSet(LogTarget, testLogTarget);
-		registry = ctx.get(ContextProviderRegistry);
+		serviceCollection.define(ICompletionsLogTargetService, testLogTarget);
 		statistics = new TestContextProviderStatistics();
-		ctx.forceSet(ContextProviderStatistics, new ContextProviderStatistics(() => statistics));
+		serviceCollection.define(ICompletionsContextProviderService, new ContextProviderStatistics(() => statistics));
+		accessor = serviceCollection.createTestingAccessor();
+
 		telemetryData = TelemetryWithExp.createEmptyConfigForTesting();
+		registry = accessor.get(ICompletionsContextProviderRegistryService);
 
 		// Enable all context providers for the suite.
 		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = '*';
@@ -160,8 +163,8 @@ suite('ContextProviderRegistry', function () {
 					telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = provider;
 				} else {
 					telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = '';
-					const ctx = accessor.get(ICompletionsContextService);
-					ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviders, [provider]);
+					const configProvider = accessor.get(ICompletionsConfigProvider) as InMemoryConfigProvider;
+					configProvider.setConfig(ConfigKey.ContextProviders, [provider]);
 				}
 
 				const notEnabledProvider: ContextProvider<Trait> = {
@@ -536,10 +539,13 @@ suite('ContextProviderRegistry', function () {
 	});
 
 	test('all providers are enabled in debug mode', async function () {
+		const serviceCollectionClone = serviceCollection.clone();
+
 		// Feature flag doesn't matter in debug mode
 		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = '';
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.forceSet(RuntimeMode, RuntimeMode.fromEnvironment(false, [], { GITHUB_COPILOT_DEBUG: 'true' }));
+		serviceCollectionClone.define(ICompletionsRuntimeModeService, RuntimeMode.fromEnvironment(false, [], { GITHUB_COPILOT_DEBUG: 'true' }));
+		const accessor = serviceCollectionClone.createTestingAccessor();
+		const registry = accessor.get(ICompletionsContextProviderRegistryService);
 
 		const anotherTraitProvider: ContextProvider<Trait> = {
 			id: 'anotherTraitProvider',
@@ -620,8 +626,10 @@ suite('ContextProviderRegistry', function () {
 
 	test('provider rejects', async function () {
 		testLogTarget = new TestLogTarget();
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.forceSet(LogTarget, testLogTarget);
+		const serviceCollectionClone = serviceCollection.clone();
+		serviceCollectionClone.define(ICompletionsLogTargetService, testLogTarget);
+		const accessor = serviceCollectionClone.createTestingAccessor();
+		const registry = accessor.get(ICompletionsContextProviderRegistryService);
 
 		const errorProvider: ContextProvider<SupportedContextItem> = {
 			id: 'errorProvider',
@@ -657,8 +665,10 @@ suite('ContextProviderRegistry', function () {
 
 	test('provider cancels', async function () {
 		testLogTarget = new TestLogTarget();
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.forceSet(LogTarget, testLogTarget);
+		const serviceCollectionClone = serviceCollection.clone();
+		serviceCollectionClone.define(ICompletionsLogTargetService, testLogTarget);
+		const accessor = serviceCollectionClone.createTestingAccessor();
+		const registry = accessor.get(ICompletionsContextProviderRegistryService);
 
 		const errorProvider: ContextProvider<SupportedContextItem> = {
 			id: 'errorProvider',
@@ -805,8 +815,8 @@ suite('ContextProviderRegistry', function () {
 
 	test('timeout is passed correctly', async function () {
 		clock.tick(1000);
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviderTimeBudget, 100);
+		const configProvider = accessor.get(ICompletionsConfigProvider) as InMemoryConfigProvider;
+		configProvider.setConfig(ConfigKey.ContextProviderTimeBudget, 100);
 
 		let providerRequest: ResolveRequest | undefined;
 		const logOnlyProvider: ContextProvider<Trait> = {
@@ -829,8 +839,8 @@ suite('ContextProviderRegistry', function () {
 
 	test('infinite timeout is passed correctly', async function () {
 		clock.tick(1000);
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviderTimeBudget, 0);
+		const configProvider = accessor.get(ICompletionsConfigProvider) as InMemoryConfigProvider;
+		configProvider.setConfig(ConfigKey.ContextProviderTimeBudget, 0);
 
 		let providerRequest: ResolveRequest | undefined;
 		const logOnlyProvider: ContextProvider<Trait> = {
@@ -852,8 +862,7 @@ suite('ContextProviderRegistry', function () {
 	});
 
 	test('does not timeout when time budget set to 0', async function () {
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviderTimeBudget, 0);
+		const serviceCollectionClone = serviceCollection.clone();
 
 		const slowProvider: ContextProvider<Trait> = {
 			id: 'slowProvider',
@@ -862,9 +871,15 @@ suite('ContextProviderRegistry', function () {
 				resolve: () => Promise.resolve([{ name: 'trait1', value: 'value1', id: 'id' }]),
 			},
 		};
-		registry.registerContextProvider(slowProvider);
 
-		ctx.forceSet(RuntimeMode, RuntimeMode.fromEnvironment(false, [], { GITHUB_COPILOT_DEBUG: 'true' }));
+		serviceCollectionClone.define(ICompletionsRuntimeModeService, RuntimeMode.fromEnvironment(false, [], { GITHUB_COPILOT_DEBUG: 'true' }));
+		const accessor = serviceCollectionClone.createTestingAccessor();
+
+		const configProvider = accessor.get(ICompletionsConfigProvider) as InMemoryConfigProvider;
+		configProvider.setConfig(ConfigKey.ContextProviderTimeBudget, 0);
+		const registry = accessor.get(ICompletionsContextProviderRegistryService);
+
+		registry.registerContextProvider(slowProvider);
 
 		const resolvedContextItems = await registry.resolveAllProviders(
 			'1234',
@@ -915,8 +930,8 @@ suite('ContextProviderRegistry', function () {
 		let interceptedCancellation: CancellationToken;
 		let interceptedRequest: ResolveRequest | undefined;
 
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.get(Features).contextProviderTimeBudget = () => 10;
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		featuresService.contextProviderTimeBudget = () => 10;
 
 		const slowProvider: ContextProvider<Trait> = {
 			id: 'slowProvider',
@@ -947,9 +962,10 @@ suite('ContextProviderRegistry', function () {
 	test('config timeout is preferred to EXP', async function () {
 		let interceptedCancellation: CancellationToken;
 		let interceptedRequest: ResolveRequest | undefined;
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.get(Features).contextProviderTimeBudget = () => 10;
-		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.ContextProviderTimeBudget, 20);
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		featuresService.contextProviderTimeBudget = () => 10;
+		const configProvider = accessor.get(ICompletionsConfigProvider) as InMemoryConfigProvider;
+		configProvider.setConfig(ConfigKey.ContextProviderTimeBudget, 20);
 
 		const slowProvider: ContextProvider<Trait> = {
 			id: 'slowProvider',
@@ -1480,12 +1496,15 @@ suite('ContextProviderRegistry', function () {
 	});
 
 	test('augments provider context with statistics from last round', async function () {
-		registry.registerContextProvider(traitProvider);
+		const serviceCollectionClone = serviceCollection.clone();
 		const resolverSpy = Sinon.spy(traitProvider.resolver, 'resolve');
-		const statistics = new ContextProviderStatistics(() => new TestContextProviderStatistics());
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.forceSet(ContextProviderStatistics, statistics);
+		serviceCollectionClone.define(ICompletionsContextProviderService, new SyncDescriptor(ContextProviderStatistics, [() => new TestContextProviderStatistics()]));
+		const accessor = serviceCollectionClone.createTestingAccessor();
 
+		const registry = accessor.get(ICompletionsContextProviderRegistryService);
+		registry.registerContextProvider(traitProvider);
+
+		const statistics = accessor.get(ICompletionsContextProviderService);
 		const previousStatistics: ContextUsageStatistics = { usage: 'partial', resolution: 'full' };
 		(statistics.getStatisticsForCompletion('previous_id') as TestContextProviderStatistics).statistics.set(
 			traitProvider.id,

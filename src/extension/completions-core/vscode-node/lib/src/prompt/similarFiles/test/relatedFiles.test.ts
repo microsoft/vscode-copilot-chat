@@ -7,25 +7,23 @@ import * as assert from 'assert';
 import Sinon from 'sinon';
 import type { CancellationToken } from 'vscode';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
-import { ICompletionsContextService } from '../../../context';
+import { SyncDescriptor } from '../../../../../../../../util/vs/platform/instantiation/common/descriptors';
 import { accessTimes } from '../../../documentTracker';
 import { ExpTreatmentVariables } from '../../../experiments/expConfig';
 import { TelemetryWithExp } from '../../../telemetry';
 import { createLibTestingContext } from '../../../test/context';
 import { TestTextDocumentManager } from '../../../test/textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../../textDocumentManager';
 import { getFsPath } from '../../../util/uri';
 import { CompositeRelatedFilesProvider, ProviderCallback } from '../compositeRelatedFilesProvider';
 import { NeighborSource, NeighboringFileType } from '../neighborFiles';
 import {
+	ICompletionsRelatedFilesProviderService,
 	PromiseExpirationCacheMap,
-	RelatedFilesDocumentInfo,
-	RelatedFilesProvider,
-	RelatedFilesResponse,
+	RelatedFilesDocumentInfo, RelatedFilesResponse,
 	RelatedFilesType,
-	getRelatedFilesAndTraits,
+	getRelatedFilesAndTraits
 } from '../relatedFiles';
-import { IInstantiationService, ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('PromiseExpirationCacheMap', function () {
 	const r: RelatedFilesType = new Map<NeighboringFileType, Map<string, string>>();
@@ -151,10 +149,6 @@ suite('relatedFiles tests', function () {
 		const DEFAULT_FILE_LANGUAGE = 'cpp';
 
 		class MockedCppRelatedFilesProvider extends CompositeRelatedFilesProvider {
-			constructor(accessor: ServicesAccessor) {
-				super(accessor.get(ICompletionsContextService), accessor.get(IInstantiationService));
-			}
-
 			override getRelatedFilesResponse(
 				docInfo: RelatedFilesDocumentInfo,
 				telemetryData: TelemetryWithExp
@@ -168,11 +162,12 @@ suite('relatedFiles tests', function () {
 			}
 		}
 
-		const accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.forceSet(RelatedFilesProvider, new MockedCppRelatedFilesProvider(accessor));
-		ctx.forceSet(TextDocumentManager, ctx.instantiationService.createInstance(TestTextDocumentManager));
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(ICompletionsRelatedFilesProviderService, new SyncDescriptor(MockedCppRelatedFilesProvider));
+		serviceCollection.define(ICompletionsTextDocumentManagerService, new SyncDescriptor(TestTextDocumentManager));
+		const accessor = serviceCollection.createTestingAccessor();
+
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		NeighborSource.reset();
 
 		// Mock up the workspace folders.
@@ -217,10 +212,6 @@ suite('relatedFiles tests', function () {
 		}
 
 		class MockedCppRelatedFilesProvider extends CompositeRelatedFilesProvider {
-			constructor(accessor: ServicesAccessor) {
-				super(accessor.get(ICompletionsContextService), accessor.get(IInstantiationService));
-			}
-
 			override getRelatedFilesResponse(
 				_docInfo: RelatedFilesDocumentInfo,
 				_telemetryData: TelemetryWithExp,
@@ -249,16 +240,15 @@ suite('relatedFiles tests', function () {
 			private _failureType: FailureType = FailureType.NoFailure;
 		}
 
-		const accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
-		const instantiationService = accessor.get(IInstantiationService);
-		const cppProvider = new MockedCppRelatedFilesProvider(accessor);
-		ctx.forceSet(RelatedFilesProvider, cppProvider);
-		ctx.forceSet(TextDocumentManager, instantiationService.createInstance(TestTextDocumentManager));
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(ICompletionsRelatedFilesProviderService, new SyncDescriptor(MockedCppRelatedFilesProvider));
+		serviceCollection.define(ICompletionsTextDocumentManagerService, new SyncDescriptor(TestTextDocumentManager));
+		const accessor = serviceCollection.createTestingAccessor();
 
+		const cppProvider = accessor.get(ICompletionsRelatedFilesProviderService) as MockedCppRelatedFilesProvider;
 		const telemetry = TelemetryWithExp.createEmptyConfigForTesting();
 		const cppProviderGetMock = Sinon.spy(cppProvider, 'getRelatedFilesResponse');
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.init([{ uri: WKS_ROOTFOLDER }]);
 		const DUMMY_CPP = 'file:///test/relative/dummy.cpp';
 		accessTimes.set(DUMMY_CPP, CURRENT_TIME_STAMP);
@@ -345,15 +335,15 @@ suite('relatedFiles tests', function () {
 			filetype: 'csharp' | 'javascript' | 'python' = 'javascript',
 			cancel = false
 		) {
-			const accessor = createLibTestingContext();
-			const ctx = accessor.get(ICompletionsContextService);
-			const instantiationService = accessor.get(IInstantiationService);
-			const tdm = instantiationService.createInstance(TestTextDocumentManager);
+			const serviceCollection = createLibTestingContext();
+			serviceCollection.define(ICompletionsTextDocumentManagerService, new SyncDescriptor(TestTextDocumentManager));
+			serviceCollection.define(ICompletionsRelatedFilesProviderService, new SyncDescriptor(TestCompositeRelatedFilesProvider));
+			const accessor = serviceCollection.createTestingAccessor();
+
+			const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 			// Mock up the workspace folders.
 			tdm.init([{ uri: WKS_ROOTFOLDER }]);
-			ctx.forceSet(TextDocumentManager, tdm);
-			const composite = instantiationService.createInstance(TestCompositeRelatedFilesProvider);
-			ctx.forceSet(RelatedFilesProvider, composite);
+			const composite = accessor.get(ICompletionsRelatedFilesProviderService) as TestCompositeRelatedFilesProvider;
 			for (const { extensionId, languageId, callback } of providers) {
 				composite.registerRelatedFilesProvider(extensionId, languageId, callback);
 			}

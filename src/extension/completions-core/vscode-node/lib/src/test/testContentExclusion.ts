@@ -3,37 +3,44 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CopilotContentExclusionManager } from '../contentExclusion/contentExclusionManager';
-import { ICompletionsContextService } from '../context';
+import { IIgnoreService } from '../../../../../../platform/ignore/common/ignoreService';
+import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
+import { URI } from '../../../../../../util/vs/base/common/uri';
 
-export class AlwaysBlockingCopilotContentRestrictions extends CopilotContentExclusionManager {
-	override evaluate() {
-		return Promise.resolve({ isBlocked: true });
-	}
-}
+export class MockIgnoreService implements IIgnoreService {
+	declare _serviceBrand: undefined;
 
-export class NeverBlockCopilotContentExclusionManager extends CopilotContentExclusionManager {
-	override evaluate() {
-		return Promise.resolve({ isBlocked: false });
-	}
-}
+	isEnabled = true;
+	isRegexExclusionsEnabled = true;
+	dispose(): void { }
 
-export class BlockingContentExclusionManager extends CopilotContentExclusionManager {
-	constructor(
-		private readonly blockedUris: string[] = [],
-		@ICompletionsContextService ctx: ICompletionsContextService,
-	) {
-		super(ctx);
+	init(): Promise<void> {
+		this._alwaysIgnore = true;
+		this.setBlockList = [];
+		return Promise.resolve();
 	}
 
-	override evaluate(uri: string) {
-		if (this.blockedUris.includes(uri)) {
-			return Promise.resolve({
-				isBlocked: true,
-			});
+	isCopilotIgnored(file: URI, token?: CancellationToken): Promise<boolean> {
+		if (this._alwaysIgnore) {
+			return Promise.resolve(true);
 		}
-		return Promise.resolve({
-			isBlocked: false,
-		});
+		if (this.setBlockList.includes(file.toString())) {
+			return Promise.resolve(true);
+		}
+		return Promise.resolve(false);
+	}
+
+	asMinimatchPattern(): Promise<string | undefined> {
+		return Promise.resolve(undefined);
+	}
+
+	private _alwaysIgnore = false;
+	setAlwaysIgnore() {
+		this._alwaysIgnore = true;
+	}
+
+	private setBlockList: string[] = [];
+	setBlockListUris(uris: string[]) {
+		this.setBlockList = uris;
 	}
 }

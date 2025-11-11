@@ -2,26 +2,23 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { createServiceIdentifier } from '../../../../../util/common/services';
 import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
+import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
 import {
-	BuildInfo,
-	EditorAndPluginInfo,
-	EditorSession,
 	dumpForTelemetry,
 	formatNameAndVersion,
+	ICompletionsBuildInfoService, ICompletionsEditorAndPluginInfo, ICompletionsEditorSessionService
 } from './config';
-import { ICompletionsContextService } from './context';
 import { ExpConfig } from './experiments/expConfig';
-import { Features } from './experiments/features';
+import { ICompletionsFeaturesService } from './experiments/featuresService';
 import { FilterSettings } from './experiments/filters';
 import { ExpServiceTelemetryNames } from './experiments/telemetryNames';
-import { Fetcher } from './networking';
 import { APIJsonData, RequestId } from './openai/openai';
 import { Prompt } from './prompt/prompt';
-import { TelemetryUserConfig } from './telemetry/userConfig';
-import { ICompletionsPromiseQueueService, PromiseQueue } from './util/promiseQueue';
+import { ICompletionsTelemetryUserConfigService } from './telemetry/userConfig';
+import { ICompletionsPromiseQueueService } from './util/promiseQueue';
 
 export enum TelemetryStore {
 	Standard,
@@ -48,9 +45,6 @@ const ftTelemetryEvents = [
 const MAX_PROPERTY_LENGTH = 8192;
 // The largest context size we have today is 168k which can fit in 21 properties of 8k each.
 const MAX_CONCATENATED_PROPERTIES = 21;
-
-
-export { TelemetryUserConfig } from './telemetry/userConfig';
 
 export type TelemetryProperties = { [key: string]: string };
 export type TelemetryMeasurements = { [key: string]: number };
@@ -129,33 +123,30 @@ export class TelemetryData {
 	 * assignment list is necessary.
 	 */
 	async extendWithExpTelemetry(accessor: ServicesAccessor): Promise<void> {
-		const ctx = accessor.get(ICompletionsContextService);
-		const { filters, exp } = await ctx.get(Features).getFallbackExpAndFilters();
+		const { filters, exp } = await accessor.get(ICompletionsFeaturesService).getFallbackExpAndFilters();
 		exp.addToTelemetry(this);
 		filters.addToTelemetry(this);
 	}
 
 	extendWithEditorAgnosticFields(accessor: ServicesAccessor): void {
-		const ctx = accessor.get(ICompletionsContextService);
-		this.properties['editor_version'] = formatNameAndVersion(ctx.get(EditorAndPluginInfo).getEditorInfo());
+		const editorSession = accessor.get(ICompletionsEditorSessionService);
+		const buildInfo = accessor.get(ICompletionsBuildInfoService);
+		const editorAndPluginInfo = accessor.get(ICompletionsEditorAndPluginInfo);
+
+		this.properties['editor_version'] = formatNameAndVersion(editorAndPluginInfo.getEditorInfo());
 		this.properties['editor_plugin_version'] = formatNameAndVersion(
-			ctx.get(EditorAndPluginInfo).getEditorPluginInfo()
+			editorAndPluginInfo.getEditorPluginInfo()
 		);
-		const editorSession = ctx.get(EditorSession);
 		this.properties['client_machineid'] = editorSession.machineId;
 		this.properties['client_sessionid'] = editorSession.sessionId;
-		this.properties['copilot_version'] = `copilot/${ctx.get(BuildInfo).getVersion()}`;
+		this.properties['copilot_version'] = `copilot/${buildInfo.getVersion()}`;
 		if (typeof process !== 'undefined') {
 			this.properties['runtime_version'] = `node/${process.versions.node}`;
 		}
 
-		const editorInfo = ctx.get(EditorAndPluginInfo);
-		this.properties['common_extname'] = editorInfo.getEditorPluginInfo().name;
-		this.properties['common_extversion'] = editorInfo.getEditorPluginInfo().version;
-		this.properties['common_vscodeversion'] = formatNameAndVersion(editorInfo.getEditorInfo());
-
-		const fetcher = ctx.get(Fetcher);
-		this.properties['fetcher'] = fetcher.name;
+		this.properties['common_extname'] = editorAndPluginInfo.getEditorPluginInfo().name;
+		this.properties['common_extversion'] = editorAndPluginInfo.getEditorPluginInfo().version;
+		this.properties['common_vscodeversion'] = formatNameAndVersion(editorAndPluginInfo.getEditorInfo());
 	}
 
 	/**
@@ -165,10 +156,10 @@ export class TelemetryData {
 	 * e.g. { 'copilot.autocompletion.count': 3 }
 	 */
 	extendWithConfigProperties(accessor: ServicesAccessor): void {
-		const ctx = accessor.get(ICompletionsContextService);
+		const buildInfo = accessor.get(ICompletionsBuildInfoService);
 		const configProperties: { [key: string]: string } = dumpForTelemetry(accessor);
-		configProperties['copilot.build'] = ctx.get(BuildInfo).getBuild();
-		configProperties['copilot.buildType'] = ctx.get(BuildInfo).getBuildType();
+		configProperties['copilot.build'] = buildInfo.getBuild();
+		configProperties['copilot.buildType'] = buildInfo.getBuildType();
 
 		// By being the second argument, configProperties will always override
 		this.properties = { ...this.properties, ...configProperties };
@@ -388,10 +379,9 @@ function sendTelemetryErrorEvent(
 	name: string,
 	data: { properties: TelemetryProperties; measurements: TelemetryMeasurements }
 ): void {
-	const ctx = accessor.get(ICompletionsContextService);
-	const service = ctx.get(CompletionsTelemetryServiceBridge);
+	const telemetryService = accessor.get(ICompletionsTelemetryService);
 	const properties = TelemetryData.maybeRemoveRepoInfoFromProperties(store, data.properties);
-	service.sendGHTelemetryErrorEvent(
+	telemetryService.sendGHTelemetryErrorEvent(
 		name,
 		properties,
 		data.measurements
@@ -439,13 +429,11 @@ function nowSeconds(now: number): number {
 type AdditionalTelemetryProperties = { [key: string]: string };
 
 function shouldSendEnhanced(accessor: ServicesAccessor): boolean {
-	const ctx = accessor.get(ICompletionsContextService);
-	return ctx.get(TelemetryUserConfig).optedIn;
+	return accessor.get(ICompletionsTelemetryUserConfigService).optedIn;
 }
 
 function shouldSendFinetuningTelemetry(accessor: ServicesAccessor): boolean {
-	const ctx = accessor.get(ICompletionsContextService);
-	return ctx.get(TelemetryUserConfig).ftFlag !== '';
+	return accessor.get(ICompletionsTelemetryUserConfigService).ftFlag !== '';
 }
 
 export function telemetry(accessor: ServicesAccessor, name: string, telemetryData?: TelemetryData, store?: TelemetryStore) {
@@ -474,8 +462,8 @@ async function _telemetry(
 }
 
 export function telemetryExpProblem(accessor: ServicesAccessor, telemetryProperties: { reason: string }) {
-	const ctx = accessor.get(ICompletionsContextService);
-	return ctx.get(PromiseQueue).register(_telemetryExpProblem(accessor, telemetryProperties, now()));
+	const promiseQueueService = accessor.get(ICompletionsPromiseQueueService);
+	return promiseQueueService.register(_telemetryExpProblem(accessor, telemetryProperties, now()));
 }
 
 async function _telemetryExpProblem(accessor: ServicesAccessor, telemetryProperties: { reason: string }, now: number) {
@@ -505,15 +493,14 @@ export function telemetryRaw(
 }
 
 function createRequiredProperties(accessor: ServicesAccessor) {
-	const ctx = accessor.get(ICompletionsContextService);
-	const editorInfo = ctx.get(EditorAndPluginInfo);
+	const editorAndPluginInfo = accessor.get(ICompletionsEditorAndPluginInfo);
 	const properties: TelemetryProperties = {
 		unique_id: generateUuid(), // add a unique id to the telemetry event so copilot-foundations can correlate with duplicate events
-		common_extname: editorInfo.getEditorPluginInfo().name,
-		common_extversion: editorInfo.getEditorPluginInfo().version,
-		common_vscodeversion: formatNameAndVersion(editorInfo.getEditorInfo()),
+		common_extname: editorAndPluginInfo.getEditorPluginInfo().name,
+		common_extversion: editorAndPluginInfo.getEditorPluginInfo().version,
+		common_vscodeversion: formatNameAndVersion(editorAndPluginInfo.getEditorInfo()),
 	};
-	const telemetryConfig = ctx.get(TelemetryUserConfig);
+	const telemetryConfig = accessor.get(ICompletionsTelemetryUserConfigService);
 	return { ...telemetryConfig.getProperties(), ...properties };
 }
 
@@ -631,8 +618,21 @@ export abstract class CopilotTelemetryReporter {
 	abstract dispose(): Promise<void>;
 }
 
-// Dummy class to be used as a key for Context
-export class TelemetryReporters {
+export const ICompletionsTelemetryReporters = createServiceIdentifier<ICompletionsTelemetryReporters>('ICompletionsTelemetryReporters');
+export interface ICompletionsTelemetryReporters {
+	readonly _serviceBrand: undefined;
+	getReporter(accessor: ServicesAccessor, store?: TelemetryStore): CopilotTelemetryReporter | undefined;
+	getEnhancedReporter(accessor: ServicesAccessor): CopilotTelemetryReporter | undefined;
+	getFTReporter(accessor: ServicesAccessor): CopilotTelemetryReporter | undefined;
+	setReporter(reporter: CopilotTelemetryReporter): void;
+	setEnhancedReporter(reporter: CopilotTelemetryReporter): void;
+	setFTReporter(reporter: CopilotTelemetryReporter): void;
+	deactivate(): Promise<void>;
+}
+
+export class TelemetryReporters implements ICompletionsTelemetryReporters {
+	declare _serviceBrand: undefined;
+
 	private reporter: CopilotTelemetryReporter | undefined;
 	private reporterEnhanced: CopilotTelemetryReporter | undefined;
 	private reporterFT: CopilotTelemetryReporter | undefined;

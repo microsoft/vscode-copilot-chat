@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
+import { URI } from '../../../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsTelemetryService } from '../../../../bridge/src/completionsTelemetryServiceBridge';
 import { ComponentStatistics, PromptMetadata } from '../../../../prompt/src/components/components';
@@ -11,13 +13,11 @@ import { PromptComponentAllocation, PromptComponentId } from '../../../../prompt
 import { TokenizerName } from '../../../../prompt/src/tokenization';
 import { CancellationToken } from '../../../../types/src';
 import { CompletionState } from '../../completionState';
-import { CopilotContentExclusionManager, StatusBarEvent } from '../../contentExclusion/contentExclusionManager';
-import { ICompletionsContextService } from '../../context';
-import { Features } from '../../experiments/features';
-import { logger, LogTarget } from '../../logger';
+import { ICompletionsFeaturesService } from '../../experiments/featuresService';
+import { ICompletionsLogTargetService, logger } from '../../logger';
 import { telemetryException, TelemetryWithExp } from '../../telemetry';
 import { TextDocumentContents } from '../../textDocument';
-import { ContextProviderBridge } from '../components/contextProviderBridge';
+import { ICompletionsContextProviderBridgeService } from '../components/contextProviderBridge';
 import {
 	renderWithMetadata,
 	type RenderedComponent,
@@ -34,7 +34,7 @@ import {
 import { getCodeSnippetsFromContextItems } from '../contextProviders/codeSnippets';
 import { CodeSnippetWithId, TraitWithId } from '../contextProviders/contextItemSchemas';
 import { getTraitsFromContextItems, ReportTraitsTelemetry } from '../contextProviders/traits';
-import { componentStatisticsToPromptMatcher, ContextProviderStatistics } from '../contextProviderStatistics';
+import { componentStatisticsToPromptMatcher, ICompletionsContextProviderService } from '../contextProviderStatistics';
 import {
 	_contextTooShort,
 	_copilotContentExclusion,
@@ -46,8 +46,8 @@ import {
 	trimLastLine,
 } from '../prompt';
 import {
-	CompletionsPromptFactory,
 	CompletionsPromptOptions,
+	ICompletionsPromptFactoryService
 } from './completionsPromptFactory';
 
 // If the space allocated to the suffix is at least this fraction of the estimated suffix cost,
@@ -55,14 +55,19 @@ import {
 // Otherwise, we render the prefix first and use any surplus prefix budget to fill the suffix.
 const SMALL_SUFFIX_THRESHOLD = 0.8;
 
-export abstract class CascadingPromptFactory implements CompletionsPromptFactory {
+export abstract class CascadingPromptFactory implements ICompletionsPromptFactoryService {
+	declare _serviceBrand: undefined;
 	private renderId = 0;
 
 	constructor(
 		protected components: Record<PromptComponentId, VirtualPromptComponent>,
-		@ICompletionsContextService protected readonly ctx: ICompletionsContextService,
+		@IIgnoreService protected readonly ignoreService: IIgnoreService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
+		@ICompletionsFeaturesService protected readonly featuresService: ICompletionsFeaturesService,
 		@ICompletionsTelemetryService protected readonly completionsTelemetryService: ICompletionsTelemetryService,
+		@ICompletionsContextProviderBridgeService protected readonly contextProviderBridge: ICompletionsContextProviderBridgeService,
+		@ICompletionsLogTargetService protected readonly logTargetService: ICompletionsLogTargetService,
+		@ICompletionsContextProviderService protected readonly contextProviderStatistics: ICompletionsContextProviderService,
 	) { }
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
@@ -74,9 +79,9 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 	}
 
 	getComponentAllocation(telemetryData: TelemetryWithExp): PromptComponentAllocation {
-		const suffixPercent = this.ctx.get(Features).suffixPercent(telemetryData);
-		const stableContextPercent = this.ctx.get(Features).stableContextPercent(telemetryData);
-		const volatileContextPercent = this.ctx.get(Features).volatileContextPercent(telemetryData);
+		const suffixPercent = this.featuresService.suffixPercent(telemetryData);
+		const stableContextPercent = this.featuresService.stableContextPercent(telemetryData);
+		const volatileContextPercent = this.featuresService.volatileContextPercent(telemetryData);
 
 		if (suffixPercent < 0 || suffixPercent > 100) {
 			throw new Error(`suffixPercent must be between 0 and 100, but was ${suffixPercent}`);
@@ -201,9 +206,7 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 		telemetryData: TelemetryWithExp,
 		cancellationToken?: CancellationToken
 	): Promise<ValidatedContextItems & { resolvedContextItems: ResolvedContextItem[] }> {
-		const resolvedContextItems: ResolvedContextItem[] = await this.ctx
-			.get(ContextProviderBridge)
-			.resolution(completionId);
+		const resolvedContextItems: ResolvedContextItem[] = await this.contextProviderBridge.resolution(completionId);
 		const { textDocument } = completionState;
 		const matchedContextItems = resolvedContextItems.filter(matchContextItems);
 
@@ -230,11 +233,10 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 		resolvedContextItems: ResolvedContextItem[]
 	): ContextProviderTelemetry[] {
 		const promptMatcher = componentStatisticsToPromptMatcher(componentStatistics);
-		this.ctx.get(ContextProviderStatistics).getStatisticsForCompletion(completionId).computeMatch(promptMatcher);
-		const logTarget = this.ctx.get(LogTarget);
-		const contextProvidersTelemetry = telemetrizeContextItems(this.ctx, completionId, resolvedContextItems);
+		this.contextProviderStatistics.getStatisticsForCompletion(completionId).computeMatch(promptMatcher);
+		const contextProvidersTelemetry = telemetrizeContextItems(this.contextProviderStatistics, completionId, resolvedContextItems);
 		// To support generating context provider metrics of completion in COffE.
-		logger.debug(logTarget, `Context providers telemetry: '${JSON.stringify(contextProvidersTelemetry)}'`);
+		logger.debug(this.logTargetService, `Context providers telemetry: '${JSON.stringify(contextProvidersTelemetry)}'`);
 		return contextProvidersTelemetry;
 	}
 
@@ -242,13 +244,7 @@ export abstract class CascadingPromptFactory implements CompletionsPromptFactory
 		if (cancellationToken?.isCancellationRequested) {
 			return _promptCancelled;
 		}
-		if (
-			(
-				await this.ctx
-					.get(CopilotContentExclusionManager)
-					.evaluate(textDocument.uri, textDocument.getText(), StatusBarEvent.UPDATE)
-			).isBlocked
-		) {
+		if (await this.ignoreService.isCopilotIgnored(URI.parse(textDocument.uri))) {
 			return _copilotContentExclusion;
 		}
 

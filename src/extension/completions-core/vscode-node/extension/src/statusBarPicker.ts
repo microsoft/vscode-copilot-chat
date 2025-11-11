@@ -5,26 +5,22 @@
 import { QuickPick, QuickPickItem, QuickPickItemKind, commands, window } from 'vscode';
 import { isWeb } from '../../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../lib/src/context';
 import { isCompletionEnabled, isInlineSuggestEnabled } from './config';
-import { CMDCollectDiagnosticsChat, CMDDisableCompletionsChat, CMDEnableCompletionsChat, CMDOpenDocumentationClient, CMDOpenLogsClient } from './constants';
-import { CopilotExtensionStatus } from './extensionStatus';
+import { CMDCollectDiagnosticsChat, CMDDisableCompletionsChat, CMDEnableCompletionsChat, CMDOpenDocumentationClient, CMDOpenLogsClient, CMDOpenModelPickerClient, CMDOpenPanelClient } from './constants';
+import { ICompletionsExtensionStatus } from './extensionStatus';
 import { Icon } from './icon';
 
 export class CopilotStatusBarPickMenu {
-	private state: CopilotExtensionStatus;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@ICompletionsContextService private readonly contextService: ICompletionsContextService
-	) {
-		this.state = this.contextService.get(CopilotExtensionStatus);
-	}
+		@ICompletionsExtensionStatus private readonly extensionStatusService: ICompletionsExtensionStatus,
+	) { }
 
 	showStatusMenu() {
 		const quickpickList = window.createQuickPick();
 		quickpickList.placeholder = 'Select an option';
-		quickpickList.title = 'Configure Copilot Completions';
+		quickpickList.title = 'Configure Inline Suggestions';
 		quickpickList.items = this.collectQuickPickItems();
 		quickpickList.onDidAccept(() => this.handleItemSelection(quickpickList));
 		quickpickList.show();
@@ -64,11 +60,9 @@ export class CopilotStatusBarPickMenu {
 		if (!this.hasActiveStatus()) { return items; }
 
 		const editor = window.activeTextEditor;
-		//if (!isWeb && editor) { items.push(this.newPanelItem()); }
+		if (!isWeb && editor) { items.push(this.newPanelItem()); }
 		// Always show the model picker even if only one model is available
-		// Except on web where the model picker is not available pending CORS
-		// support from CAPI https://github.com/github/copilot-api/pull/12233
-		//if (!isWeb) { items.push(this.newChangeModelItem()); }
+		if (!isWeb) { items.push(this.newChangeModelItem()); }
 		if (editor) { items.push(...this.newEnableLanguageItem()); }
 		if (items.length) { items.push(this.newSeparator()); }
 
@@ -76,7 +70,7 @@ export class CopilotStatusBarPickMenu {
 	}
 
 	private hasActiveStatus() {
-		return ['Normal'].includes(this.state.kind);
+		return ['Normal'].includes(this.extensionStatusService.kind);
 	}
 
 	private isCompletionEnabled() {
@@ -86,9 +80,9 @@ export class CopilotStatusBarPickMenu {
 	private newEnableLanguageItem() {
 		const isEnabled = this.isCompletionEnabled();
 		if (isEnabled) {
-			return [this.newCommandItem('Disable Completions', CMDDisableCompletionsChat)];
+			return [this.newCommandItem('Disable Inline Suggestions', CMDDisableCompletionsChat)];
 		} else if (isEnabled === false) {
-			return [this.newCommandItem('Enable Completions', CMDEnableCompletionsChat)];
+			return [this.newCommandItem('Enable Inline Suggestions', CMDEnableCompletionsChat)];
 		} else {
 			return [];
 		}
@@ -97,7 +91,7 @@ export class CopilotStatusBarPickMenu {
 	private newStatusItem() {
 		let statusText;
 		let statusIcon = Icon.Logo;
-		switch (this.state.kind) {
+		switch (this.extensionStatusService.kind) {
 			case 'Normal':
 				statusText = 'Ready';
 				if (isInlineSuggestEnabled() === false) {
@@ -107,11 +101,11 @@ export class CopilotStatusBarPickMenu {
 				}
 				break;
 			case 'Inactive':
-				statusText = this.state.message || 'Copilot is currently inactive';
+				statusText = this.extensionStatusService.message || 'Copilot is currently inactive';
 				statusIcon = Icon.Blocked;
 				break;
 			default:
-				statusText = this.state.message || 'Copilot has encountered an error';
+				statusText = this.extensionStatusService.message || 'Copilot has encountered an error';
 				statusIcon = Icon.NotConnected;
 				break;
 		}
@@ -138,18 +132,14 @@ export class CopilotStatusBarPickMenu {
 			'GitHub Copilot',
 		]);
 	}
-	/* 	private newPanelItem() {
+
 	private newPanelItem() {
-		return this.newCommandItem('Open Completions Panel...', CMDOpenPanel);
+		return this.newCommandItem('Open Completions Panel...', CMDOpenPanelClient);
 	}
 
 	private newChangeModelItem() {
-		return this.newCommandItem('Change Completions Model...', CMDOpenModelPicker);
+		return this.newCommandItem('Change Completions Model...', CMDOpenModelPickerClient);
 	}
-
-	private newForumItem() {
-		return this.newCommandItem('$(comments-view-icon) View Copilot Forum...', CMDSendFeedback);
-	} */
 
 	private newDocsItem() {
 		return this.newCommandItem(
