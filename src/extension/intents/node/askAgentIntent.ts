@@ -29,7 +29,7 @@ import { AgentPrompt } from '../../prompts/node/agent/agentPrompt';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { AgentIntentInvocation } from './agentIntent';
-import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
+import { getRequestedToolCallIterationLimit } from '../../prompt/common/specialRequestTypes';
 
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
