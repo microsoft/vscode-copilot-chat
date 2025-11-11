@@ -54,7 +54,7 @@ const toStringArray = (value: unknown): string[] | undefined => {
 		return undefined;
 	}
 	const strings = value.filter((entry): entry is string => typeof entry === 'string');
-	return strings.length ? strings : [];
+	return strings.length ? strings : undefined;
 };
 
 const toStringRecord = (value: unknown): Record<string, string> | undefined => {
@@ -88,25 +88,36 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
 
-	public async loadMcpConfig(_workingDirectory: string | undefined): Promise<Record<string, MCPServerConfig> | undefined> {
+	public async loadMcpConfig(workingDirectory: string | undefined): Promise<Record<string, MCPServerConfig> | undefined> {
 		if (!this.configurationService.getConfig(ConfigKey.Internal.CLIMCPServerEnabled)) {
 			return undefined;
 		}
 
 		const processedConfig: Record<string, MCPServerConfig> = {};
 
-		const workspaceFolder = this.getFirstWorkspaceFolder();
+		const workspaceFolder = this.getWorkspaceFolder(workingDirectory);
 		if (workspaceFolder) {
 			await this.loadConfigFromWorkspace(workspaceFolder, processedConfig);
 		}
 
-		// Always try to add built-in GitHub MCP server, even if config loading failed
 		await this.addBuiltInGitHubServer(processedConfig);
 
 		return Object.keys(processedConfig).length > 0 ? processedConfig : undefined;
 	}
 
-	private getFirstWorkspaceFolder() {
+	private getWorkspaceFolder(workingDirectory: string | undefined): URI | undefined {
+		// If a working directory is provided, try to find the matching workspace folder
+		if (workingDirectory) {
+			const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+			const matchingFolder = workspaceFolders.find(folder => workingDirectory.startsWith(folder.fsPath));
+			if (matchingFolder) {
+				return matchingFolder;
+			}
+			// If no matching workspace folder, use the working directory as a URI
+			return URI.file(workingDirectory);
+		}
+
+		// Fall back to the first workspace folder
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 		if (workspaceFolders.length === 0) {
 			this.logService.trace('[CopilotCLIMCPHandler] No workspace folders found.');
