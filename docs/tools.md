@@ -85,8 +85,7 @@ Input schema:
 ```
 {
   "query": string,          // Natural language description of what to find
-  "description": string,    // User-facing invocation message
-  "maxRounds"?: number      // Optional cap on internal tool call rounds
+  "description": string     // User-facing invocation message
 }
 ```
 
