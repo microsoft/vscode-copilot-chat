@@ -14,12 +14,12 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { CopilotCLISessionOptions, getAuthInfo } from './copilotCli';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
 type PermissionHandler = (
 	permissionRequest: PermissionRequest,
@@ -283,8 +283,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
 
 			// Check if we need confirmation for file edits (possible these are protected files).
-			const requiresConfirmation = await this.instantiationService.invokeFunction(requiresFileEditconfirmation, permissionRequest);
-			if (!requiresConfirmation && (isWorkspaceFile || isWorkingDirectoryFile)) {
+			await this.instantiationService.invokeFunction(requiresFileEditconfirmation, permissionRequest);
+			if (isWorkspaceFile || isWorkingDirectoryFile) {
 				if (isWorkspaceFile) {
 					this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in workspace ${permissionRequest.fileName}`);
 				} else {
