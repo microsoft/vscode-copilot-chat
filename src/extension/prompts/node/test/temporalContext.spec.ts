@@ -122,7 +122,7 @@ suite('summarizeTemporalContext', () => {
 
 	test('prefer same lang', async () => {
 
-		configService.setConfig(ConfigKey.Internal.TemporalContextPreferSameLang as any, true);
+		configService.setConfig(ConfigKey.AdvancedExperimentalExperiments.TemporalContextPreferSameLang as any, true);
 
 		const docActions = await makeSampleDoc('tempo-actions.ts');
 		const docActions2 = await makeSampleDoc('tempo-actions.html', 'html');
@@ -143,7 +143,7 @@ suite('summarizeTemporalContext', () => {
 		await expect(result.get(docActions.uri.toString())?.projectedDoc?.text).toMatchFileSnapshot(docActions.uri.fsPath + '.3.tempo-summarized');
 		await expect(result.get(docActions2.uri.toString())?.projectedDoc?.text).toMatchFileSnapshot(docActions2.uri.fsPath + '.3.tempo-summarized');
 
-		configService.setConfig(ConfigKey.Internal.TemporalContextPreferSameLang as any, false);
+		configService.setConfig(ConfigKey.AdvancedExperimentalExperiments.TemporalContextPreferSameLang as any, false);
 	});
 
 

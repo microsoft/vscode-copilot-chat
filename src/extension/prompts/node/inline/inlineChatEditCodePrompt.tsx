@@ -61,7 +61,7 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 		}
 		const { query, history, chatVariables, } = this.props.promptContext;
 
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.ProjectLabelsInline, this._experimentationService);
+		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.ProjectLabelsInline, this._experimentationService);
 
 		const data = await SummarizedDocumentData.create(this._parserService, document, context.fileIndentInfo, context.wholeRange, SelectionSplitKind.Adjusted);
 

@@ -3340,7 +3340,7 @@
 				}
 			},
 			{
-				"id": "experimental",
+				"id": "advanced",
 				"properties": {
 					"github.copilot.chat.debug.overrideChatEngine": {
 						"type": [
@@ -3349,7 +3349,8 @@
 						],
 						"markdownDescription": "%github.copilot.config.debug.overrideChatEngine%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.projectLabels.expanded": {
@@ -3358,7 +3359,8 @@
 						"markdownDescription": "%github.copilot.config.projectLabels.expanded%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.projectLabels.chat": {
@@ -3367,7 +3369,8 @@
 						"markdownDescription": "%github.copilot.config.projectLabels.chat%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.projectLabels.inline": {
@@ -3376,7 +3379,8 @@
 						"markdownDescription": "%github.copilot.config.projectLabels.inline%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.workspace.maxLocalIndexSize": {
@@ -3385,7 +3389,8 @@
 						"markdownDescription": "%github.copilot.config.workspace.maxLocalIndexSize%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.workspace.enableFullWorkspace": {
@@ -3394,7 +3399,8 @@
 						"markdownDescription": "%github.copilot.config.workspace.enableFullWorkspace%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.workspace.enableCodeSearch": {
@@ -3403,7 +3409,8 @@
 						"markdownDescription": "%github.copilot.config.workspace.enableCodeSearch%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.workspace.enableEmbeddingsSearch": {
@@ -3412,7 +3419,8 @@
 						"markdownDescription": "%github.copilot.config.workspace.enableEmbeddingsSearch%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.workspace.preferredEmbeddingsModel": {
@@ -3421,7 +3429,8 @@
 						"markdownDescription": "%github.copilot.config.workspace.preferredEmbeddingsModel%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.workspace.prototypeAdoCodeSearchEndpointOverride": {
@@ -3429,7 +3438,8 @@
 						"default": "",
 						"markdownDescription": "%github.copilot.config.workspace.prototypeAdoCodeSearchEndpointOverride%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.feedback.onChange": {
@@ -3437,7 +3447,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.feedback.onChange%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.review.intent": {
@@ -3445,7 +3456,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.review.intent%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.notebook.summaryExperimentEnabled": {
@@ -3453,7 +3465,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.notebook.summaryExperimentEnabled%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.notebook.variableFilteringEnabled": {
@@ -3461,7 +3474,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.notebook.variableFilteringEnabled%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.notebook.alternativeFormat": {
@@ -3471,7 +3485,8 @@
 						"markdownDescription": "%github.copilot.config.notebook.alternativeFormat%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.notebook.alternativeNESFormat.enabled": {
@@ -3480,7 +3495,8 @@
 						"markdownDescription": "%github.copilot.config.notebook.alternativeNESFormat.enabled%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.debugTerminalCommandPatterns": {
@@ -3491,7 +3507,8 @@
 						},
 						"markdownDescription": "%github.copilot.config.debugTerminalCommandPatterns%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.editSourceTracking.showDecorations": {
@@ -3499,7 +3516,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.editSourceTracking.showDecorations%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.editSourceTracking.showStatusBar": {
@@ -3507,7 +3525,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.editSourceTracking.showStatusBar%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.localWorkspaceRecording.enabled": {
@@ -3515,7 +3534,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.localWorkspaceRecording.enabled%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.editRecording.enabled": {
@@ -3523,7 +3543,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.editRecording.enabled%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.temporalContext.maxAge": {
@@ -3532,7 +3553,8 @@
 						"markdownDescription": "%github.copilot.config.temporalContext.maxAge%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.temporalContext.preferSameLang": {
@@ -3541,7 +3563,8 @@
 						"markdownDescription": "%github.copilot.config.temporalContext.preferSameLang%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.codesearch.agent.enabled": {
@@ -3549,14 +3572,16 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.codesearch.agent.enabled%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.agent.temperature": {
 						"type": ["number", "null"],
 						"markdownDescription": "%github.copilot.config.agent.temperature%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.instantApply.shortContextModelName": {
@@ -3565,7 +3590,8 @@
 						"markdownDescription": "%github.copilot.config.instantApply.shortContextModelName%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.instantApply.shortContextLimit": {
@@ -3574,7 +3600,8 @@
 						"markdownDescription": "%github.copilot.config.instantApply.shortContextLimit%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.enableUserPreferences": {
@@ -3582,21 +3609,24 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.enableUserPreferences%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.summarizeAgentConversationHistoryThreshold": {
 						"type": ["number", "null"],
 						"markdownDescription": "%github.copilot.config.summarizeAgentConversationHistoryThreshold%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.agentHistorySummarizationMode": {
 						"type": ["string", "null"],
 						"markdownDescription": "%github.copilot.config.agentHistorySummarizationMode%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.agentHistorySummarizationWithPromptCache": {
@@ -3605,7 +3635,8 @@
 						"markdownDescription": "%github.copilot.config.agentHistorySummarizationWithPromptCache%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.agentHistorySummarizationForceGpt41": {
@@ -3614,30 +3645,14 @@
 						"markdownDescription": "%github.copilot.config.agentHistorySummarizationForceGpt41%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.useResponsesApiTruncation": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.useResponsesApiTruncation%",
-						"tags": [
-							"advanced"
-						]
-					},
-					"github.copilot.chat.enableReadFileV2": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.enableReadFileV2%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.enableAskAgent": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.enableAskAgent%",
 						"tags": [
 							"advanced",
 							"experimental"
@@ -3648,7 +3663,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.omitBaseAgentInstructions%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.promptFileContextProvider.enabled": {
@@ -3657,7 +3673,8 @@
 						"markdownDescription": "%github.copilot.config.promptFileContextProvider.enabled%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.tools.defaultToolsGrouped": {
@@ -3666,7 +3683,8 @@
 						"markdownDescription": "%github.copilot.config.tools.defaultToolsGrouped%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.virtualTools.embeddingRanking": {
@@ -3675,7 +3693,8 @@
 						"markdownDescription": "%github.copilot.config.virtualTools.embeddingRanking%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.multiReplaceStringGrok.enabled": {
@@ -3684,7 +3703,8 @@
 						"markdownDescription": "%github.copilot.config.multiReplaceStringGrok.enabled%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.claudeCode.enabled": {
@@ -3692,7 +3712,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.claudeCode.enabled%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.claudeCode.debug": {
@@ -3700,7 +3721,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.claudeCode.debug%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.copilotCLI.enabled": {
@@ -3708,15 +3730,8 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.copilotCLI.enabled%",
 						"tags": [
-							"advanced"
-						]
-					},
-					"github.copilot.chat.copilotCodingAgent.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.copilotCodingAgent.enabled%",
-						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.gpt5AlternativePatch": {
@@ -3725,7 +3740,8 @@
 						"markdownDescription": "%github.copilot.config.gpt5AlternativePatch%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.inlineEdits.triggerOnEditorChangeAfterSeconds": {
@@ -3733,7 +3749,8 @@
 						"markdownDescription": "%github.copilot.config.inlineEdits.triggerOnEditorChangeAfterSeconds%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.inlineEdits.nextCursorPrediction.displayLine": {
@@ -3742,13 +3759,42 @@
 						"markdownDescription": "%github.copilot.config.inlineEdits.nextCursorPrediction.displayLine%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.inlineEdits.nextCursorPrediction.currentFileMaxTokens": {
 						"type": "number",
 						"default": 2000,
 						"markdownDescription": "%github.copilot.config.inlineEdits.nextCursorPrediction.currentFileMaxTokens%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.suggestRelatedFilesFromGitHistory.useEmbeddings": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.suggestRelatedFilesFromGitHistory.useEmbeddings%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.cli.isolation.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.isolation.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.cli.mcp.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.mcp.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"

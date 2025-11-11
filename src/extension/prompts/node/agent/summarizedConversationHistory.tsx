@@ -416,7 +416,7 @@ class ConversationHistorySummarizer {
 	}
 
 	private async getSummaryWithFallback(propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
-		const forceMode = this.configurationService.getConfig<string | undefined>(ConfigKey.Internal.AgentHistorySummarizationMode);
+		const forceMode = this.configurationService.getConfig<string | undefined>(ConfigKey.AdvancedExperimental.AgentHistorySummarizationMode);
 		if (forceMode === SummaryMode.Simple) {
 			return await this.getSummary(SummaryMode.Simple, propsInfo);
 		} else {
@@ -438,7 +438,7 @@ class ConversationHistorySummarizer {
 
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
 		const stopwatch = new StopWatch(false);
-		const forceGpt41 = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.AgentHistorySummarizationForceGpt41, this.experimentationService);
+		const forceGpt41 = this.configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.AgentHistorySummarizationForceGpt41, this.experimentationService);
 		const gpt41Endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
 		const endpoint = forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens) ?
 			gpt41Endpoint :
@@ -446,7 +446,7 @@ class ConversationHistorySummarizer {
 
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
-		const promptCacheMode = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.AgentHistorySummarizationWithPromptCache, this.experimentationService);
+		const promptCacheMode = this.configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.AgentHistorySummarizationWithPromptCache, this.experimentationService);
 		try {
 			if (mode === SummaryMode.Full && promptCacheMode) {
 				const props: AgentPromptProps = {

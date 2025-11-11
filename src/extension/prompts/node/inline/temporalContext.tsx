@@ -41,7 +41,7 @@ export async function summarizeTemporalContext(accessor: ServicesAccessor, token
 
 	const now = Date.now();
 	const maxAgeMillis = 1000 * clamp(
-		configService.getExperimentBasedConfig(ConfigKey.Internal.TemporalContextMaxAge, expService),
+		configService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.TemporalContextMaxAge, expService),
 		0,
 		Number.MAX_SAFE_INTEGER
 	);
@@ -88,7 +88,7 @@ export async function summarizeTemporalContext(accessor: ServicesAccessor, token
 		return new Map();
 	}
 
-	const preferSameLang = configService.getExperimentBasedConfig(ConfigKey.Internal.TemporalContextPreferSameLang, expService);
+	const preferSameLang = configService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.TemporalContextPreferSameLang, expService);
 
 	// summarize
 	const documents = await summarizeDocuments(parserService, input, tokenBudget, {

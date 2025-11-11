@@ -41,6 +41,7 @@ import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
+import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 import { ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
 import { IEditToolLearningService } from '../../tools/common/editToolLearningService';
 import { ContributedToolName, ToolName } from '../../tools/common/toolNames';
@@ -51,7 +52,6 @@ import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
-import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 
 export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
@@ -115,7 +115,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			return undefined;
 		});
 
-		if (await modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, experimentationService)) {
+		if (await modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.Gpt5AlternativePatch, experimentationService)) {
 			const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
 			if (ap !== -1) {
 				tools[ap] = { ...tools[ap], description: applyPatch5Description };
@@ -187,7 +187,7 @@ export class AgentIntent extends EditCodeIntent {
 			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ??
 				this.configurationService.getNonExtensionConfig('chat.agent.maxRequests') ??
 				200, // Fallback for simulation tests
-			temperature: this.configurationService.getConfig(ConfigKey.Internal.AgentTemperature) ?? 0,
+			temperature: this.configurationService.getConfig(ConfigKey.AdvancedExperimental.AgentTemperature) ?? 0,
 			overrideRequestLocation: ChatLocation.Agent,
 			hideRateLimitTimeEstimate: true
 		};
@@ -249,10 +249,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 		// Reserve extra space when tools are involved due to token counting issues
 		const baseBudget = Math.min(
-			this.configurationService.getConfig<number | undefined>(ConfigKey.Internal.SummarizeAgentConversationHistoryThreshold) ?? this.endpoint.modelMaxPromptTokens,
+			this.configurationService.getConfig<number | undefined>(ConfigKey.AdvancedExperimental.SummarizeAgentConversationHistoryThreshold) ?? this.endpoint.modelMaxPromptTokens,
 			this.endpoint.modelMaxPromptTokens
 		);
-		const useTruncation = this.configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation);
+		const useTruncation = this.configurationService.getConfig(ConfigKey.AdvancedExperimental.UseResponsesApiTruncation);
 		const safeBudget = useTruncation ?
 			Number.MAX_SAFE_INTEGER :
 			Math.floor((baseBudget - toolTokens) * 0.85);
