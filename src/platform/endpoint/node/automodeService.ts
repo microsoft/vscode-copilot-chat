@@ -50,7 +50,10 @@ class AutoModeTokenBank extends Disposable {
 				await this._fetchTokenPromise;
 			}
 		}
-		return this._token!;
+		if (!this._token) {
+			throw new Error(`[${this.debugName}] Failed to fetch AutoMode token: token is undefined after fetch attempt.`);
+		}
+		return this._token;
 	}
 
 	private async _fetchToken(): Promise<void> {
