@@ -742,6 +742,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	}
 
 	private scrubErrorDetail(errorDetail: string) {
+		errorDetail = errorDetail.replaceAll(/(logged in as )([^\s]+)/ig, '$1<login>');
 		const username = this._authenticationService.copilotToken?.username;
 		if (!username) {
 			return errorDetail;
