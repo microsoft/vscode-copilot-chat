@@ -288,7 +288,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				autoApprove = true;
 			}
 			// If its a workspace file, and not editing protected files, we auto-approve.
-			if (isWorkspaceFile && !(await this.instantiationService.invokeFunction(requiresFileEditconfirmation, permissionRequest))) {
+			if (!autoApprove && isWorkspaceFile && !(await this.instantiationService.invokeFunction(requiresFileEditconfirmation, permissionRequest))) {
 				autoApprove = true;
 			}
 
