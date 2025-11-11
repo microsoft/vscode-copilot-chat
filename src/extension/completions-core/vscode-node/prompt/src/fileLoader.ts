@@ -19,9 +19,13 @@ export function locateFile(filename: string): string {
 }
 
 function locationInPath(filePath: string, directoryName: string): string {
-	while (path.dirname(filePath) !== filePath && path.basename(filePath) !== directoryName) {
-		filePath = path.dirname(filePath);
+	let p = filePath;
+	while (path.basename(p) !== directoryName) {
+		if (path.dirname(p) === p) {
+			return filePath;
+		}
+		p = path.dirname(p);
 	}
-	return filePath;
+	return p;
 }
 
