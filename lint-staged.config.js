@@ -20,6 +20,7 @@ module.exports = {
 	'!({.esbuild.ts,test/simulation/fixtures/**,test/scenarios/**,.vscode/extensions/**,**/vscode.proposed.*})*{.ts,.js,.tsx}': async (files) => {
 		const filesToLint = await removeIgnoredFiles(files);
 		return [
+			`npm run tsfmt -- ${filesToLint}`,
 			`eslint --max-warnings=0 ${filesToLint}`
 		];
 	},
