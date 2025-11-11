@@ -12,6 +12,8 @@ describe('SimpleExperimentationService', () => {
 		await service.hasTreatments();
 
 		expect(service.getTreatmentVariable('nonexistent')).toBeUndefined();
+
+		service.dispose();
 	});
 
 	it('should update multiple treatment variables at once', () => {
@@ -29,6 +31,8 @@ describe('SimpleExperimentationService', () => {
 		expect(service.getTreatmentVariable<boolean>('feature-b')).toBe(false);
 		expect(service.getTreatmentVariable<number>('max-count')).toBe(100);
 		expect(service.getTreatmentVariable<string>('experiment-id')).toBe('exp-123');
+
+		service.dispose();
 	});
 
 	it('should fire onDidTreatmentsChange event with all changed variables', () => {
@@ -51,6 +55,8 @@ describe('SimpleExperimentationService', () => {
 		expect(events[0]).toContain('feature-a');
 		expect(events[0]).toContain('feature-b');
 		expect(events[0]).toContain('feature-c');
+
+		service.dispose();
 	});
 
 	it('should not fire onDidTreatmentsChange event when no variables change', () => {
@@ -74,6 +80,8 @@ describe('SimpleExperimentationService', () => {
 		service.updateTreatmentVariables(variables2);
 
 		expect(events).toHaveLength(0);
+
+		service.dispose();
 	});
 
 	it('should fire onDidTreatmentsChange event only for changed variables', () => {
@@ -100,6 +108,8 @@ describe('SimpleExperimentationService', () => {
 
 		expect(events).toHaveLength(1);
 		expect(events[0]).toEqual(['feature-b']);
+
+		service.dispose();
 	});
 
 	it('should overwrite existing treatment variables', () => {
@@ -118,6 +128,8 @@ describe('SimpleExperimentationService', () => {
 		service.updateTreatmentVariables(variables2);
 
 		expect(service.getTreatmentVariable<boolean>('feature-flag')).toBe(false);
+
+		service.dispose();
 	});
 
 	it('should wait for treatment variables when waitForTreatmentVariables = true', async () => {
@@ -143,6 +155,8 @@ describe('SimpleExperimentationService', () => {
 		await hasTreatmentsPromise;
 		expect(hasTreatmentsResolved).toBe(true);
 		expect(service.getTreatmentVariable<boolean>('test-feature')).toBe(true);
+
+		service.dispose();
 	});
 
 	it('should remove treatment variable when omitted from update', () => {
@@ -178,5 +192,7 @@ describe('SimpleExperimentationService', () => {
 
 		expect(events).toHaveLength(1);
 		expect(events[0]).toEqual(['feature-b']);
+
+		service.dispose();
 	});
 });

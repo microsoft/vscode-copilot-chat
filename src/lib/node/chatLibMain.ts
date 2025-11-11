@@ -317,12 +317,12 @@ function setupServices(options: INESProviderOptions) {
 	return builder.seal();
 }
 
-export class SimpleExperimentationService implements IExperimentationService {
+export class SimpleExperimentationService extends Disposable implements IExperimentationService {
 
 	declare readonly _serviceBrand: undefined;
 
 	private readonly variables: Record<string, boolean | number | string> = {};
-	private readonly _onDidTreatmentsChange = new Emitter<TreatmentsChangeEvent>();
+	private readonly _onDidTreatmentsChange = this._register(new Emitter<TreatmentsChangeEvent>());
 	readonly onDidTreatmentsChange = this._onDidTreatmentsChange.event;
 
 	private readonly waitFor: Promise<void>;
@@ -331,6 +331,7 @@ export class SimpleExperimentationService implements IExperimentationService {
 	constructor(
 		waitForTreatmentVariables: boolean | undefined,
 	) {
+		super();
 		if (waitForTreatmentVariables) {
 			let resolveWaitFor: () => void;
 			this.waitFor = new Promise<void>(resolve => {
