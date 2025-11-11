@@ -17,6 +17,7 @@ import { isLocation } from '../../../util/common/types';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqualOrParent } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -189,13 +190,13 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 
 		// For display message, use inputUri if available (indicating file was found via folder input), otherwise use the file uri
 		// Deduplicate URIs since multiple files may have the same inputUri
-		const displayUriSet = new Set<string>();
+		const displayUriSet = new ResourceSet();
 		for (const d of diagnostics) {
 			const displayUri = d.inputUri ?? d.uri;
-			displayUriSet.add(displayUri.toString());
+			displayUriSet.add(displayUri);
 		}
-		const displayUris = Array.from(displayUriSet).map(uriStr => URI.parse(uriStr));
-		const formattedURIs = this.formatURIs(displayUris);
+
+		const formattedURIs = this.formatURIs(Array.from(displayUriSet));
 
 		if (options.input.filePaths?.length) {
 			result.toolResultMessage = numDiagnostics === 0 ?
@@ -303,7 +304,7 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 ToolRegistry.registerTool(GetErrorsTool);
 
 interface IDiagnosticToolOutputProps extends BasePromptElementProps {
-	diagnosticsGroups: { context: DiagnosticContext; uri: URI; diagnostics: vscode.Diagnostic[]; inputUri?: URI }[];
+	diagnosticsGroups: { context: DiagnosticContext; uri: URI; diagnostics: vscode.Diagnostic[] }[];
 	maxDiagnostics?: number;
 }
 
