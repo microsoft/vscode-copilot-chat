@@ -5,39 +5,25 @@
 
 import type { SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
+import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
+import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
-import { DisposableStore, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
+import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatSessionStatus, EventEmitter } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ICopilotCLISDK } from '../copilotCli';
-import { ICopilotCLISession } from '../copilotcliSession';
+import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService } from '../copilotcliSessionService';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
 
-interface TestSdkSession {
-	readonly sessionId: string;
-	readonly startTime: Date;
-	messages: {}[];
-	events: {}[];
-	aborted: boolean;
-	getChatContextMessages(): Promise<{}[]>;
-	getEvents(): {}[];
-	abort(): void;
-	// Methods used by real wrapper but not all tests exercise them; provide no-op/throwing impls
-	setAuthInfo?: (..._args: {}[]) => void;
-	getSelectedModel?: () => Promise<string | undefined>;
-	setSelectedModel?: (_model: string) => Promise<void>;
-	send?: (_opts: {}) => Promise<void>;
-	emit?: (..._args: {}[]) => void;
-	on?: (..._args: {}[]) => void;
-}
-
-class FakeSdkSession implements TestSdkSession {
+export class MockCliSdkSession {
+	public emittedEvents: { event: string; content: string | undefined }[] = [];
 	public aborted = false;
 	public messages: {}[] = [];
 	public events: {}[] = [];
@@ -45,14 +31,17 @@ class FakeSdkSession implements TestSdkSession {
 	getChatContextMessages(): Promise<{}[]> { return Promise.resolve(this.messages); }
 	getEvents(): {}[] { return this.events; }
 	abort(): void { this.aborted = true; }
+	emit(event: string, args: { content: string | undefined }): void {
+		this.emittedEvents.push({ event, content: args.content });
+	}
 }
 
-class FakeCLISessionManager {
-	public sessions = new Map<string, FakeSdkSession>();
+export class MockCliSdkSessionManager {
+	public sessions = new Map<string, MockCliSdkSession>();
 	constructor(_opts: {}) { }
 	createSession(_options: SessionOptions) {
 		const id = `sess_${Math.random().toString(36).slice(2, 10)}`;
-		const s = new FakeSdkSession(id, new Date());
+		const s = new MockCliSdkSession(id, new Date());
 		this.sessions.set(id, s);
 		return Promise.resolve(s);
 	}
@@ -75,42 +64,28 @@ describe('CopilotCLISessionService', () => {
 	let logService: ILogService;
 	let instantiationService: IInstantiationService;
 	let service: CopilotCLISessionService;
-	let manager: FakeCLISessionManager;
+	let manager: MockCliSdkSessionManager;
 
 	beforeEach(async () => {
 		vi.useRealTimers();
 		const sdk = {
-			getPackage: vi.fn(async () => ({ internal: { CLISessionManager: FakeCLISessionManager } }))
+			getPackage: vi.fn(async () => ({ internal: { CLISessionManager: MockCliSdkSessionManager } }))
 		} as unknown as ICopilotCLISDK;
 
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logService = accessor.get(ILogService);
+		const gitService = accessor.get(IGitService);
+		const workspaceService = new NullWorkspaceService();
+		const authService = new class extends mock<IAuthenticationService>() { }();
 		instantiationService = {
-			createInstance: (_ctor: unknown, _options: any, sdkSession: { sessionId: string }) => {
-				const disposables = new DisposableStore();
-				const _onDidChangeStatus = disposables.add(new EventEmitter<ChatSessionStatus>());
-				const cliSession: (ICopilotCLISession & DisposableStore) = {
-					sessionId: sdkSession.sessionId,
-					status: undefined,
-					onDidChangeStatus: _onDidChangeStatus.event,
-					permissionRequested: undefined,
-					handleRequest: vi.fn(async () => { }),
-					addUserMessage: vi.fn(),
-					addUserAssistantMessage: vi.fn(),
-					getSelectedModelId: vi.fn(async () => 'gpt-test'),
-					getChatHistory: vi.fn(async () => []),
-					attachPermissionHandler: vi.fn(() => ({ dispose() { } })),
-					get isDisposed() { return disposables.isDisposed; },
-					dispose: () => { disposables.dispose(); },
-					add: (d: IDisposable) => disposables.add(d)
-				} as unknown as ICopilotCLISession & DisposableStore;
-				return cliSession;
+			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
+				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService));
 			}
 		} as unknown as IInstantiationService;
 
 		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService()));
-		manager = await service.getSessionManager() as unknown as FakeCLISessionManager;
+		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
 	afterEach(() => {
@@ -125,7 +100,7 @@ describe('CopilotCLISessionService', () => {
 		it('get session will return the same session created using createSession', async () => {
 			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
 
-			const existingSession = await service.getSession(session.sessionId, { readonly: false }, CancellationToken.None);
+			const existingSession = await service.getSession(session.object.sessionId, { readonly: false }, CancellationToken.None);
 
 			expect(existingSession).toBe(session);
 		});
@@ -134,28 +109,110 @@ describe('CopilotCLISessionService', () => {
 
 			session.dispose();
 			await new Promise(resolve => setTimeout(resolve, 0)); // allow dispose async cleanup to run
-			const existingSession = await service.getSession(session.sessionId, { readonly: false }, CancellationToken.None);
+			const existingSession = await service.getSession(session.object.sessionId, { readonly: false }, CancellationToken.None);
 
-			expect(existingSession).not.toBe(session);
+			expect(existingSession?.object).toBeDefined();
+			expect(existingSession?.object).not.toBe(session);
+			expect(existingSession?.object.sessionId).toBe(session.object.sessionId);
+		});
+	});
+
+	describe('CopilotCLISessionService.getSession concurrency & locking', () => {
+		it('concurrent getSession calls for same id create only one wrapper', async () => {
+			const targetId = 'concurrent';
+			const sdkSession = new MockCliSdkSession(targetId, new Date());
+			manager.sessions.set(targetId, sdkSession);
+			const originalGetSession = manager.getSession.bind(manager);
+			const getSessionSpy = vi.fn((opts: SessionOptions & { sessionId: string }, writable: boolean) => {
+				// Introduce delay to force overlapping acquire attempts
+				return new Promise(resolve => setTimeout(() => resolve(originalGetSession(opts, writable)), 20));
+			});
+			manager.getSession = getSessionSpy as unknown as typeof manager.getSession;
+
+			const promises: Promise<IReference<ICopilotCLISession> | undefined>[] = [];
+			for (let i = 0; i < 10; i++) {
+				promises.push(service.getSession(targetId, { readonly: false }, CancellationToken.None));
+			}
+			const results = await Promise.all(promises);
+			// All results refer to same instance
+			const first = results.shift()!;
+			for (const r of results) {
+				expect(r).toBe(first);
+			}
+			expect(getSessionSpy).toHaveBeenCalledTimes(1);
+
+			// Verify ref-count like disposal only disposes when all callers release
+			let sentinelDisposed = false;
+			(first.object as CopilotCLISession).add(toDisposable(() => { sentinelDisposed = true; }));
+
+			results.forEach(r => r?.dispose());
+			expect(sentinelDisposed).toBe(false);
+
+			// Only after disposing the last reference is the session disposed.
+			first.dispose();
+			expect(sentinelDisposed).toBe(true);
+		});
+
+		it('getSession for different ids does not block on mutex for another id', async () => {
+			const slowId = 'slow';
+			const fastId = 'fast';
+			manager.sessions.set(slowId, new MockCliSdkSession(slowId, new Date()));
+			manager.sessions.set(fastId, new MockCliSdkSession(fastId, new Date()));
+
+			const originalGetSession = manager.getSession.bind(manager);
+			manager.getSession = vi.fn((opts: SessionOptions & { sessionId: string }, writable: boolean) => {
+				if (opts.sessionId === slowId) {
+					return new Promise(resolve => setTimeout(() => resolve(originalGetSession(opts, writable)), 40));
+				}
+				return originalGetSession(opts, writable);
+			}) as unknown as typeof manager.getSession;
+
+			const slowPromise = service.getSession(slowId, { readonly: false }, CancellationToken.None).then(() => 'slow');
+			const fastPromise = service.getSession(fastId, { readonly: false }, CancellationToken.None).then(() => 'fast');
+			const firstResolved = await Promise.race([slowPromise, fastPromise]);
+			expect(firstResolved).toBe('fast');
+		});
+
+		it('session only fully disposes after all acquired references dispose', async () => {
+			const id = 'refcount';
+			manager.sessions.set(id, new MockCliSdkSession(id, new Date()));
+			// Acquire 5 times sequentially
+			const sessions: IReference<ICopilotCLISession>[] = [];
+			for (let i = 0; i < 5; i++) {
+				sessions.push((await service.getSession(id, { readonly: false }, CancellationToken.None))!);
+			}
+			const base = sessions[0];
+			for (const s of sessions) {
+				expect(s).toBe(base);
+			}
+			let sentinelDisposed = false;
+			const lastSession = sessions.pop()!;
+			(lastSession.object as CopilotCLISession).add(toDisposable(() => { sentinelDisposed = true; }));
+			// Dispose all other session refs, session should not yet be disposed
+			sessions.forEach(s => s.dispose());
+			expect(sentinelDisposed).toBe(false);
+			// Final dispose triggers actual disposal
+			lastSession.dispose();
+			expect(sentinelDisposed).toBe(true);
 		});
 	});
 
 	describe('CopilotCLISessionService.getSession missing', () => {
 		it('returns undefined when underlying manager has no session', async () => {
-			const result = await service.getSession('does-not-exist', { readonly: true }, CancellationToken.None);
-
-			expect(result).toBeUndefined();
+			const session = await service.getSession('does-not-exist', { readonly: true }, CancellationToken.None);
+			disposables.add(session!);
+			expect(session).toBeUndefined();
 		});
 	});
 
 	describe('CopilotCLISessionService.getAllSessions', () => {
 		it('will not list created sessions', async () => {
-			await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
+			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
+			disposables.add(session);
 
-			const s1 = new FakeSdkSession('s1', new Date(0));
+			const s1 = new MockCliSdkSession('s1', new Date(0));
 			s1.messages.push({ role: 'user', content: 'a'.repeat(100) });
-			const tsStr = '2024-01-01T00:00:00.000Z';
-			s1.events.push({ type: 'assistant.message', timestamp: tsStr });
+			s1.events.push({ type: 'user.message', data: { content: 'a'.repeat(100) }, timestamp: '2024-01-01T00:00:00.000Z' });
 			manager.sessions.set(s1.sessionId, s1);
 
 			const result = await service.getAllSessions(CancellationToken.None);
@@ -171,8 +228,9 @@ describe('CopilotCLISessionService', () => {
 	describe('CopilotCLISessionService.deleteSession', () => {
 		it('disposes active wrapper, removes from manager and fires change event', async () => {
 			const session = await service.createSession('to delete', {}, CancellationToken.None);
-			const id = session!.sessionId;
+			const id = session!.object.sessionId;
 			let fired = false;
+			disposables.add(session);
 			disposables.add(service.onDidChangeSessions(() => { fired = true; }));
 			await service.deleteSession(id);
 
@@ -185,8 +243,9 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.label generation', () => {
 		it('uses first user message line when present', async () => {
-			const s = new FakeSdkSession('lab1', new Date());
+			const s = new MockCliSdkSession('lab1', new Date());
 			s.messages.push({ role: 'user', content: 'Line1\nLine2' });
+			s.events.push({ type: 'user.message', data: { content: 'Line1\nLine2' }, timestamp: Date.now().toString() });
 			manager.sessions.set(s.sessionId, s);
 
 			const sessions = await service.getAllSessions(CancellationToken.None);
@@ -204,7 +263,7 @@ describe('CopilotCLISessionService', () => {
 			await Promise.resolve(); // allow any pending promises to run
 
 			// dispose should have been called by timeout
-			expect(session.isDisposed).toBe(true);
+			expect(session.object.isDisposed).toBe(true);
 		});
 	});
 });

@@ -10,11 +10,12 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
+import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
-import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
@@ -139,7 +140,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
 		@ICopilotCLITerminalIntegration private readonly terminalIntegration: ICopilotCLITerminalIntegration,
 		@IGitService private readonly gitService: IGitService,
-		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService
+		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
+		@ILogService private readonly logService: ILogService
 	) {
 		super();
 		this._register(this.terminalIntegration);
@@ -158,7 +160,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.copilotcliSessionService.getAllSessions(token);
-		const diskSessions = await Promise.all(sessions.map(session => this._toChatSessionItem(session)));
+		const diskSessions = await Promise.all(sessions.map(async session => this._toChatSessionItem(session)));
 
 		const count = diskSessions.length;
 		this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
@@ -176,18 +178,21 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		let description: vscode.MarkdownString | undefined;
 		let statistics: { files: number; insertions: number; deletions: number } | undefined;
 
-		if (worktreePath && worktreeRelativePath) {
-			// Description
-			description = new vscode.MarkdownString(`$(list-tree) ${worktreeRelativePath}`);
-			description.supportThemeIcons = true;
+		try {
+			if (worktreePath && worktreeRelativePath) {
+				// Description
+				description = new vscode.MarkdownString(`$(list-tree) ${worktreeRelativePath}`);
+				description.supportThemeIcons = true;
 
-			// Tooltip
-			tooltipLines.push(`Worktree: ${worktreeRelativePath}`);
+				// Tooltip
+				tooltipLines.push(`Worktree: ${worktreeRelativePath}`);
 
-			// Statistics
-			statistics = await this.gitService.diffIndexWithHEADShortStats(Uri.file(worktreePath));
+				// Statistics
+				statistics = await this.gitService.diffIndexWithHEADShortStats(Uri.file(worktreePath));
+			}
+		} catch (error) {
+			this.logService.error(`Failed to get worktree info for CLI session ${session.id}`, error);
 		}
-
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
 		return {
@@ -235,7 +240,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
 		const existingSession = await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
-		const selectedModelId = await existingSession?.getSelectedModelId();
+		const selectedModelId = await existingSession?.object?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
 		const options: Record<string, string> = {
 			[MODELS_OPTION_ID]: _sessionModel.get(copilotcliSessionId)?.id ?? defaultModel.id,
@@ -244,7 +249,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		if (!existingSession && this.configurationService.getConfig(ConfigKey.Internal.CLIIsolationEnabled)) {
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
-		const history = existingSession?.getChatHistory() || [];
+		const history = existingSession?.object?.getChatHistory() || [];
 		existingSession?.dispose();
 		if (!_sessionModel.get(copilotcliSessionId)) {
 			_sessionModel.set(copilotcliSessionId, selectedModel ?? preferredModel);
@@ -367,19 +372,20 @@ export class CopilotCLIChatSessionParticipant {
 			if (!session) {
 				return {};
 			}
+			disposables.add(session);
 
 			if (!isUntitled && confirmationResults.length) {
-				return await this.handleConfirmationData(session, request.prompt, confirmationResults, context, stream, token);
+				return await this.handleConfirmationData(session.object, request.prompt, confirmationResults, context, stream, token);
 			}
 
 			if (request.prompt.startsWith('/delegate')) {
-				await this.handleDelegateCommand(session, request, context, stream, token);
+				await this.handleDelegateCommand(session.object, request, context, stream, token);
 			} else {
-				await session.handleRequest(prompt, attachments, modelId, token);
+				await session.object.handleRequest(prompt, attachments, modelId, token);
 			}
 
 			if (isUntitled) {
-				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.sessionId), label: request.prompt ?? 'CopilotCLI' });
+				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt ?? 'CopilotCLI' });
 			}
 			return {};
 		}
@@ -388,7 +394,7 @@ export class CopilotCLIChatSessionParticipant {
 		}
 	}
 
-	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, prompt: string, model: string | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<ICopilotCLISession | undefined> {
+	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, prompt: string, model: string | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
 		const { resource } = chatSessionContext.chatSessionItem;
 		const id = SessionIdForCLI.parse(resource);
 
@@ -408,10 +414,10 @@ export class CopilotCLIChatSessionParticipant {
 		}
 
 		if (chatSessionContext.isUntitled && workingDirectory) {
-			await this.worktreeManager.storeWorktreePath(session.sessionId, workingDirectory);
+			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory);
 		}
-		disposables.add(session.attachStream(stream));
-		disposables.add(session.attachPermissionHandler(async (permissionRequest: PermissionRequest) => requestPermission(permissionRequest, this.toolsService, request.toolInvocationToken, token)));
+		disposables.add(session.object.attachStream(stream));
+		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest) => requestPermission(permissionRequest, this.toolsService, request.toolInvocationToken, token)));
 
 
 		return session;
@@ -507,10 +513,14 @@ export class CopilotCLIChatSessionParticipant {
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
 		const session = await this.sessionService.createSession(requestPrompt, {}, token);
-
-		await this.commandExecutionService.executeCommand('vscode.open', SessionIdForCLI.getResource(session.sessionId));
-		await this.commandExecutionService.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
-		return {};
+		try {
+			await this.commandExecutionService.executeCommand('vscode.open', SessionIdForCLI.getResource(session.object.sessionId));
+			await this.commandExecutionService.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
+			return {};
+		}
+		finally {
+			session.dispose();
+		}
 	}
 
 	private async recordPushToSession(
@@ -611,9 +621,11 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		const sessionId = SessionIdForCLI.parse(sessionItemResource);
 		const session = await copilotCLISessionService.getSession(sessionId, { readonly: true }, CancellationToken.None);
+		const sessionExists = !!session;
+		session?.dispose();
 		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
 
-		if (!session || !sessionWorktree) {
+		if (!sessionExists || !sessionWorktree) {
 			return;
 		}
 

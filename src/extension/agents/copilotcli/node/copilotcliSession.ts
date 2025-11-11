@@ -66,6 +66,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private _permissionHandler?: PermissionHandler;
 	private readonly _permissionHandlerSet = this.add(new Emitter<void>());
 	private _stream?: vscode.ChatResponseStream;
+	public get sdkSession() {
+		return this._sdkSession;
+	}
 	constructor(
 		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
