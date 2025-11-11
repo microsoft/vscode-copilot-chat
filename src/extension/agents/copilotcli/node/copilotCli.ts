@@ -23,13 +23,15 @@ export class CopilotCLISessionOptions {
 	public readonly isolationEnabled: boolean;
 	public readonly workingDirectory?: string;
 	private readonly model?: string;
+	private readonly mcpServers?: SessionOptions['mcpServers'];
 	private readonly logger: ReturnType<typeof getCopilotLogger>;
 	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
-	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string }, logger: ILogService) {
+	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService) {
 		this.isolationEnabled = !!options.isolationEnabled;
 		this.workingDirectory = options.workingDirectory;
 		this.model = options.model;
+		this.mcpServers = options.mcpServers;
 		this.logger = getCopilotLogger(logger);
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
 			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
@@ -66,6 +68,9 @@ export class CopilotCLISessionOptions {
 		}
 		if (this.model) {
 			allOptions.model = this.model as unknown as SessionOptions['model'];
+		}
+		if (this.mcpServers && Object.keys(this.mcpServers).length > 0) {
+			allOptions.mcpServers = this.mcpServers;
 		}
 		return allOptions as Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }>;
 	}

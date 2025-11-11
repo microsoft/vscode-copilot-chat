@@ -5,20 +5,22 @@
 
 import type { SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { mock } from '../../../../../util/common/test/simpleMock';
-import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService } from '../copilotcliSessionService';
+import { CopilotCLIMCPHandler } from '../mcpHandler';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
 
@@ -77,14 +79,17 @@ describe('CopilotCLISessionService', () => {
 		logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
 		const workspaceService = new NullWorkspaceService();
-		const authService = new class extends mock<IAuthenticationService>() { }();
+		const authService = {
+			getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
+		} as unknown as IAuthenticationService;
 		instantiationService = {
 			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
 				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService));
 			}
 		} as unknown as IInstantiationService;
 
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService()));
+		const configurationService = accessor.get(IConfigurationService);
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService)));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 

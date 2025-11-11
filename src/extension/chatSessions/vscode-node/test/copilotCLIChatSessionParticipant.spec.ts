@@ -31,6 +31,7 @@ import { MockChatResponseStream, TestChatRequest } from '../../../test/node/test
 import type { IToolsService } from '../../../tools/common/toolsService';
 import { CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLIWorktreeManager } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
+import { ICopilotCLIMCPHandler } from '../../../agents/copilotcli/node/mcpHandler';
 // Mock terminal integration to avoid importing PowerShell asset (.ps1) which Vite cannot parse during tests
 vi.mock('../copilotCLITerminalIntegration', () => {
 	// Minimal stand-in for createServiceIdentifier
@@ -111,6 +112,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let workspaceService: IWorkspaceService;
 	let instantiationService: IInstantiationService;
 	let manager: MockCliSdkSessionManager;
+	let mcpHandler: ICopilotCLIMCPHandler;
 	const cliSessions: TestCopilotCLISession[] = [];
 
 	beforeEach(async () => {
@@ -142,6 +144,11 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const authService = new class extends mock<IAuthenticationService>() { }();
 		const logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
+		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
+			override async loadMcpConfig(_workingDirectory: string | undefined) {
+				return undefined;
+			}
+		}();
 		instantiationService = {
 			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
 				const session = new TestCopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService);
@@ -149,7 +156,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				return disposables.add(session);
 			}
 		} as unknown as IInstantiationService;
-		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService()));
+		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), mcpHandler));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
 
