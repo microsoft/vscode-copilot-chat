@@ -80,7 +80,7 @@
 			"background": {
 				"activeOnStart": true,
 				"beginsPattern": "^build starting at .*$",
-				"endsPattern": "^build (?:finished|failed|errored|succeeded|cancelle?d|skipped).*$"
+				"endsPattern": "^build (?:finished|failed|errored|succeeded|cancelled|skipped).*$"
 			}
 		}],
 			"isBackground": true,
@@ -99,7 +99,7 @@
 			"background": {
 				"activeOnStart": true,
 				"beginsPattern": "^build starting at .*$",
-				"endsPattern": "^build (?:finished|failed|errored|succeeded|cancelle?d|skipped).*$"
+				"endsPattern": "^build (?:finished|failed|errored|succeeded|cancelled|skipped).*$"
 			}
 		}],
 			"isBackground": true,
@@ -118,7 +118,7 @@
 				"background": {
 					"activeOnStart": true,
 					"beginsPattern": "^build starting at .*$",
-					"endsPattern": "^build (?:finished|failed|errored|succeeded|cancelle?d|skipped).*$"
+					"endsPattern": "^build (?:finished|failed|errored|succeeded|cancelled|skipped).*$"
 			}
 		}],
 			"isBackground": true,
