@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ILogService } from '../../../platform/log/common/logService';
 
 
 export namespace LineCheck {
@@ -94,7 +93,7 @@ export namespace LineCheck {
 		return result;
 	}
 
-	export function isNaturalLanguageDominated(document: vscode.TextDocument, position: vscode.Position, logService?: ILogService): boolean {
+	export function isNaturalLanguageDominated(document: vscode.TextDocument, position: vscode.Position): boolean {
 
 		// LOGIC: tokenize the line into words (as defined by the language), whitespace, and other
 		// characters (which can be a mix of whitespace and non-word characters).
@@ -127,8 +126,6 @@ export namespace LineCheck {
 					break;
 			}
 		}
-
-		logService?.trace('[ChatTrigger] ' + JSON.stringify({ wordCount, keywordCount, spaceCount, otherCount, tokenCount: tokens.length }));
 
 		if (tokens.length < 4 || spaceCount < 2) {
 			// too little content
