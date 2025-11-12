@@ -36,7 +36,6 @@ const baseNodeBuildOptions = {
 		'applicationinsights-native-metrics',
 		'@opentelemetry/instrumentation',
 		'@azure/opentelemetry-instrumentation-azure-sdk',
-		'zeromq',
 		'electron', // this is for simulation workbench,
 		'sqlite3',
 		'node-pty', // Required by @github/copilot
