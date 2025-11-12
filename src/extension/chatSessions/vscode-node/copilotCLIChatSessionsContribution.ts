@@ -547,16 +547,31 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
+			const id = SessionIdForCLI.parse(sessionItem.resource);
+			const worktreePath = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(id);
+
+			const confirmMessage = worktreePath
+				? l10n.t('Are you sure you want to delete the session and its associated worktree?')
+				: l10n.t('Are you sure you want to delete the session?');
+
 			const deleteLabel = l10n.t('Delete');
 			const result = await vscode.window.showWarningMessage(
-				l10n.t('Are you sure you want to delete the session?'),
+				confirmMessage,
 				{ modal: true },
 				deleteLabel
 			);
 
 			if (result === deleteLabel) {
-				const id = SessionIdForCLI.parse(sessionItem.resource);
 				await copilotCLISessionService.deleteSession(id);
+
+				if (worktreePath) {
+					try {
+						await vscode.commands.executeCommand('git.deleteWorktree', Uri.file(worktreePath));
+					} catch (error) {
+						vscode.window.showErrorMessage(l10n.t('Failed to delete worktree: {0}', error instanceof Error ? error.message : String(error)));
+					}
+				}
+
 				copilotcliSessionItemProvider.refresh();
 			}
 		}
