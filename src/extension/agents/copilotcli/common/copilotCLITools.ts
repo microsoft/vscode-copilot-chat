@@ -330,7 +330,7 @@ export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolN
 		return undefined; // Ignore these for now
 	}
 	if (toolCall.toolName === 'think') {
-		if (typeof toolCall.arguments.thought === 'string') {
+		if (toolCall.arguments && typeof toolCall.arguments.thought === 'string') {
 			return new ChatResponseThinkingProgressPart(toolCall.arguments.thought);
 		}
 		return undefined;
