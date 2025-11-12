@@ -65,7 +65,7 @@ function parsePrompt(prompt: { [key: string]: any }, steps: ChatStep[]) {
 				id: log.id,
 				line: 0,
 				prompt: log.messages,
-				result: log.response.message
+				result: Array.isArray(log.response.message) ? log.response.message.join('\n') : log.response.message
 			});
 		}
 	}

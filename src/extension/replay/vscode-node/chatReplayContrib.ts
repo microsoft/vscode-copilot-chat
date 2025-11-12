@@ -2,17 +2,32 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { CancellationToken, commands, debug, DebugAdapterDescriptor, DebugAdapterDescriptorFactory, DebugAdapterInlineImplementation, DebugConfiguration, DebugConfigurationProvider, DebugSession, ProviderResult, window, WorkspaceFolder } from 'vscode';
+import { CancellationToken, chat, commands, debug, DebugAdapterDescriptor, DebugAdapterDescriptorFactory, DebugAdapterInlineImplementation, DebugConfiguration, DebugConfigurationProvider, DebugSession, ProviderResult, Uri, window, WorkspaceFolder } from 'vscode';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatReplaySessionProvider } from './chatReplaySessionProvider';
 import { ChatReplayDebugSession } from './replayDebugSession';
 
 export class ChatReplayContribution extends Disposable {
+
+	private _sessionProvider: ChatReplaySessionProvider;
+
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super();
+
+		this._sessionProvider = this._register(new ChatReplaySessionProvider());
+
+		// might not need the item provider?
+		// this._register(chat.registerChatSessionItemProvider('chat-replay', this._sessionProvider));
+		const chatParticipant = chat.createChatParticipant('chat-replay', async (request, context, response, token) => {
+			// Chat replay participant - replays are read-only, so this handler is mostly a stub
+			// The actual replay content is provided via the ChatSessionContentProvider
+			return {};
+		});
+		this._register(chat.registerChatSessionContentProvider('chat-replay', this._sessionProvider, chatParticipant));
 
 		const provider = new ChatReplayConfigProvider();
 		this._register(debug.registerDebugConfigurationProvider('vscode-chat-replay', provider));
@@ -24,6 +39,15 @@ export class ChatReplayContribution extends Disposable {
 		this.registerDisableWorkspaceEditTracingCommand();
 
 		commands.executeCommand('setContext', 'github.copilot.chat.replay.workspaceEditTracing', false);
+
+		this.registerDisplayChatFromLogCommand();
+	}
+
+	private registerDisplayChatFromLogCommand() {
+		this._register(commands.registerCommand('github.copilot.chat.showAsChatSession', async (logFilePath: Uri) => {
+			const replayUri = logFilePath.with({ scheme: 'chat-replay' });
+			await commands.executeCommand('vscode.open', replayUri);
+		}));
 	}
 
 	private registerStartReplayCommand() {

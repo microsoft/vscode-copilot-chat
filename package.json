@@ -2213,6 +2213,11 @@
 				"icon": "$(export)"
 			},
 			{
+				"command": "github.copilot.chat.showAsChatSession",
+				"title": "Show as chat session",
+				"icon": "$(chat-sparkle)"
+			},
+			{
 				"command": "github.copilot.debug.collectWorkspaceIndexDiagnostics",
 				"title": "%github.copilot.command.collectWorkspaceIndexDiagnostics%",
 				"category": "Developer"
@@ -3368,9 +3373,21 @@
 					"when": "resourceLangId == chatReplay"
 				},
 				{
+					"command": "github.copilot.chat.showAsChatSession",
+					"group": "navigation@9",
+					"when": "resourceLangId == chatReplay"
+				},
+				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 					"group": "navigation@1",
 					"when": "resourceScheme == copilotcli-worktree-changes"
+				}
+			],
+			"explorer/context": [
+				{
+					"command": "github.copilot.chat.showAsChatSession",
+					"when": "resourcePath =~ /.json$/",
+					"group": "2_copilot@1"
 				}
 			],
 			"editor/context": [
