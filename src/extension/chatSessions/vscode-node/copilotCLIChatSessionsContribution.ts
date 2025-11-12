@@ -331,7 +331,6 @@ export class CopilotCLIChatSessionParticipant {
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
 		const disposables = new DisposableStore();
-		stream.markdown("Started");
 		try {
 
 			/* __GDPR__
