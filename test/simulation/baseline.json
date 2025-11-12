@@ -7459,13 +7459,6 @@
     "score": 1
   },
   {
-    "name": "multifile-edit [panel] [html] - Edits keeps editing files that are NOT attached due to temporal context #9130",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "multifile-edit [panel] [typescript] - add a command and dependency to a VS Code extension",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -7558,13 +7551,6 @@
   },
   {
     "name": "multifile-edit-claude [panel] - work with untitled files - (claude-3.5-sonnet)",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "multifile-edit-claude [panel] [html] - Edits keeps editing files that are NOT attached due to temporal context #9130 - (claude-3.5-sonnet)",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
