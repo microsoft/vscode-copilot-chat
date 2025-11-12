@@ -393,7 +393,7 @@ function friendlyToolName(toolName: ToolCall['toolName']): string {
 }
 
 function formatProgressToolInvocation(invocation: ChatToolInvocationPart, args: ReportProgressTool['arguments']): void {
-	invocation.invocationMessage = `${args.prDescription}` || 'Progress Update';
+	invocation.invocationMessage = args.prDescription?.trim() || 'Progress Update';
 	if (args.commitMessage) {
 		invocation.originMessage = `Commit: ${args.commitMessage}`;
 	}
