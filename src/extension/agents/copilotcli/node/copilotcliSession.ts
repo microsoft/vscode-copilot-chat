@@ -70,6 +70,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	public get sdkSession() {
 		return this._sdkSession;
 	}
+	private _lastUsedModel: string | undefined;
+
 	constructor(
 		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
@@ -139,14 +141,16 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}));
 
 		try {
+			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
 			const [currentModel, authInfo] = await Promise.all([
-				modelId ? this._sdkSession.getSelectedModel() : undefined,
+				modelId ? (this._lastUsedModel ?? this._sdkSession.getSelectedModel()) : undefined,
 				getAuthInfo(this.authenticationService)
 			]);
 			if (authInfo) {
 				this._sdkSession.setAuthInfo(authInfo);
 			}
 			if (modelId && modelId !== currentModel) {
+				this._lastUsedModel = modelId;
 				await this._sdkSession.setSelectedModel(modelId);
 			}
 

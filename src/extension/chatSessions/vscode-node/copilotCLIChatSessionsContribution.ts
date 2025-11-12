@@ -238,7 +238,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 
 		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
+		const existingSession = await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: false }, token);
 		const selectedModelId = await existingSession?.object?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
 		const options: Record<string, string> = {
@@ -249,7 +249,6 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
 		const history = existingSession?.object?.getChatHistory() || [];
-		existingSession?.dispose();
 		if (!_sessionModel.get(copilotcliSessionId)) {
 			_sessionModel.set(copilotcliSessionId, selectedModel ?? preferredModel);
 		}
@@ -332,6 +331,7 @@ export class CopilotCLIChatSessionParticipant {
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
 		const disposables = new DisposableStore();
+		stream.markdown("Started");
 		try {
 
 			/* __GDPR__
