@@ -86,12 +86,12 @@ export async function makeGitHubAPIRequest(
 	routeSlug: string,
 	method: 'GET' | 'POST',
 	token: string | undefined,
-	body?: { [key: string]: any },
+	body?: unknown,
 	version?: string,
 	type: 'json' | 'text' = 'json',
 	userAgent?: string,
 	returnStatusCodeOnError: boolean = false) {
-	const headers: any = {
+	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
 	if (token) {
@@ -134,8 +134,8 @@ export async function makeGitHubAPIRequest(
 	}
 }
 
-export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: { [key: string]: any }) {
-	const headers: any = {
+export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown) {
+	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 		'Content-Type': 'application/json',
 	};
