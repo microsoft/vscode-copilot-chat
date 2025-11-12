@@ -378,7 +378,7 @@ export class CachedContextProviderRegistry implements ICompletionsContextProvide
 	private readonly delegate: CoreContextProviderRegistry;
 
 	constructor(
-		registry: new (...args: any[]) => CoreContextProviderRegistry,
+		registry: new (match: ContextProviderMatchFunction) => CoreContextProviderRegistry,
 		match: ContextProviderMatchFunction,
 		@IInstantiationService instantiationService: IInstantiationService,
 	) {

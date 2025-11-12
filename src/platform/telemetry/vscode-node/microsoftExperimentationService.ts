@@ -72,9 +72,9 @@ class RelatedExtensionsFilterProvider implements IExperimentationFilterProvider 
 			.filter(plugin => plugin !== undefined);
 	}
 
-	getFilters(): Map<string, any> {
+	getFilters(): Map<string, string> {
 		this._logService.trace(`[RelatedExtensionsFilterProvider]::getFilters looking up related extensions`);
-		const filters = new Map<string, any>();
+		const filters = new Map<string, string>();
 
 		for (const extension of this._getRelatedExtensions()) {
 			const filterName = CopilotRelatedPluginVersionPrefix + extension.name.replace(/[^A-Za-z]/g, '').toLowerCase();
@@ -94,13 +94,13 @@ class RelatedExtensionsFilterProvider implements IExperimentationFilterProvider 
 class CopilotExtensionsFilterProvider implements IExperimentationFilterProvider {
 	constructor(private _logService: ILogService) { }
 
-	getFilters(): Map<string, any> {
+	getFilters(): Map<string, string> {
 		const copilotExtensionversion = vscode.extensions.getExtension('github.copilot')?.packageJSON.version;
 		const copilotChatExtensionVersion = packageJson.version;
 		const completionsCoreVersion = packageJson.completionsCoreVersion;
 
 		this._logService.trace(`[CopilotExtensionsFilterProvider]::getFilters Copilot Extension Version: ${copilotExtensionversion}, Copilot Chat Extension Version: ${copilotChatExtensionVersion}, Completions Core Version: ${completionsCoreVersion}`);
-		const filters = new Map<string, any>();
+		const filters = new Map<string, string>();
 		filters.set(RelatedExtensionsFilter.CopilotRelatedPluginVersionCopilot, copilotExtensionversion);
 		filters.set(RelatedExtensionsFilter.CopilotRelatedPluginVersionCopilotChat, copilotChatExtensionVersion);
 		filters.set('X-VSCode-CompletionsInChatExtensionVersion', completionsCoreVersion);
@@ -111,8 +111,8 @@ class CopilotExtensionsFilterProvider implements IExperimentationFilterProvider 
 class CopilotCompletionsFilterProvider implements IExperimentationFilterProvider {
 	constructor(private _getCompletionsFilters: () => Map<string, string>, private _logService: ILogService) { }
 
-	getFilters(): Map<string, any> {
-		const filters = new Map<string, any>();
+	getFilters(): Map<string, string> {
+		const filters = new Map<string, string>();
 		for (const [key, value] of this._getCompletionsFilters()) {
 			if (value !== "") {
 				filters.set(key, value);
@@ -126,9 +126,9 @@ class CopilotCompletionsFilterProvider implements IExperimentationFilterProvider
 class GithubAccountFilterProvider implements IExperimentationFilterProvider {
 	constructor(private _userInfoStore: UserInfoStore, private _logService: ILogService) { }
 
-	getFilters(): Map<string, any> {
+	getFilters(): Map<string, string | undefined> {
 		this._logService.trace(`[GithubAccountFilterProvider]::getFilters SKU: ${this._userInfoStore.sku}, Internal Org: ${this._userInfoStore.internalOrg}, IsFcv1: ${this._userInfoStore.isFcv1}`);
-		const filters = new Map<string, any>();
+		const filters = new Map<string, string | undefined>();
 		filters.set('X-GitHub-Copilot-SKU', this._userInfoStore.sku);
 		filters.set('X-Microsoft-Internal-Org', this._userInfoStore.internalOrg);
 		filters.set('X-GitHub-Copilot-IsFcv1', this._userInfoStore.isFcv1 ? '1' : '0');
@@ -140,8 +140,8 @@ class GithubAccountFilterProvider implements IExperimentationFilterProvider {
 class DevDeviceIdFilterProvider implements IExperimentationFilterProvider {
 	constructor(private _devDeviceId: string) { }
 
-	getFilters(): Map<string, any> {
-		const filters = new Map<string, any>();
+	getFilters(): Map<string, string> {
+		const filters = new Map<string, string>();
 		filters.set('X-VSCode-DevDeviceId', this._devDeviceId);
 		return filters;
 	}
@@ -221,6 +221,7 @@ class ExpMementoWrapper implements vscode.Memento {
 		return value.value as T;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	update(key: string, value: any): Thenable<void> {
 		const wrapped: IWrappedExpValue = {
 			$$$isWrappedExpValue: true,
@@ -240,5 +241,6 @@ interface IWrappedExpValue {
 	$$$isWrappedExpValue: true;
 	savedDateTime: string;
 	extensionVersion: string;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	value: any;
 }

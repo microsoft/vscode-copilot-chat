@@ -426,8 +426,6 @@ function nowSeconds(now: number): number {
 	return Math.floor(now / 1000);
 }
 
-type AdditionalTelemetryProperties = { [key: string]: string };
-
 function shouldSendEnhanced(accessor: ServicesAccessor): boolean {
 	return accessor.get(ICompletionsTelemetryUserConfigService).optedIn;
 }
@@ -508,8 +506,6 @@ export function telemetryException(
 	telemetryService: ICompletionsTelemetryService,
 	maybeError: unknown,
 	transaction: string,
-	properties?: AdditionalTelemetryProperties,
-	failbotPayload?: any//failbot.Payload
 ) {
 	return telemetryService.sendGHTelemetryException(maybeError, transaction || '');
 }
@@ -521,13 +517,12 @@ export function telemetryCatch<F extends TelemetryCatcher>(
 	completionsPromiseQueueService: ICompletionsPromiseQueueService,
 	fn: F,
 	transaction: string,
-	properties?: AdditionalTelemetryProperties
 ): (...args: Parameters<F>) => void {
 	const wrapped = async (...args: Parameters<F>) => {
 		try {
 			await fn(...args);
 		} catch (error) {
-			telemetryException(completionsTelemetryService, error, transaction, properties);
+			telemetryException(completionsTelemetryService, error, transaction);
 		}
 	};
 	return (...args) => completionsPromiseQueueService.register(wrapped(...args));
