@@ -409,7 +409,6 @@ export default tseslint.config(
 			'./src/extension/inlineChat/node/rendererVisualization.ts',
 			'./src/extension/inlineChat/vscode-node/inlineChatCommands.ts',
 			'./src/extension/inlineEdits/common/observableWorkspaceRecordingReplayer.ts',
-			'./src/extension/inlineEdits/node/nextEditProvider.ts',
 			'./src/extension/inlineEdits/vscode-node/parts/vscodeWorkspace.ts',
 			'./src/extension/intents/node/editCodeIntent.ts',
 			'./src/extension/intents/node/editCodeStep.ts',
