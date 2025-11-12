@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
-import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../../platform/networking/common/networking';
 
 /**
  * Creates a mock endpoint provider for search tool tests
@@ -24,7 +24,7 @@ export function createMockEndpointProvider(modelFamily: string): IEndpointProvid
 		} as IChatEndpoint),
 		getAllChatEndpoints: async () => [],
 		getAllCompletionModels: async () => [],
-		getEmbeddingsEndpoint: async () => ({} as any),
+		getEmbeddingsEndpoint: async () => ({} as IEmbeddingsEndpoint),
 	} as IEndpointProvider;
 }
 

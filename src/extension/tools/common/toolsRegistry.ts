@@ -68,14 +68,14 @@ export interface ICopilotTool<T> extends vscode.LanguageModelTool<T>, ICopilotTo
 }
 
 
-export interface ICopilotToolCtor {
+export interface ICopilotToolCtor<T = unknown> {
 	readonly toolName: ToolName;
-	new(...args: any[]): ICopilotTool<any>;
+	new(...args: any[]): ICopilotTool<T>;
 }
 
-export interface ICopilotToolExtensionCtor {
+export interface ICopilotToolExtensionCtor<T = unknown> {
 	readonly toolName: ToolName;
-	new(...args: any[]): ICopilotToolExtension<any>;
+	new(...args: any[]): ICopilotToolExtension<T>;
 }
 
 export const ToolRegistry = new class {
