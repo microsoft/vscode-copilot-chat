@@ -446,10 +446,12 @@ function anchorPartToMarkdown(workspaceService: IWorkspaceService, anchor: ChatR
 
 	if (URI.isUri(anchor.value)) {
 		path = getWorkspaceFileDisplayPath(workspaceService, anchor.value);
-		text = `\`${path}\``;
+		const label = anchor.title ?? path;
+		text = `\`${label}\``;
 	} else if (isLocation(anchor.value)) {
 		path = getWorkspaceFileDisplayPath(workspaceService, anchor.value.uri);
-		text = `\`${path}\``;
+		const label = anchor.title ?? `${path}#L${anchor.value.range.start.line + 1}${anchor.value.range.start.line === anchor.value.range.end.line ? '' : `-${anchor.value.range.end.line + 1}`}`;
+		text = `\`${label}\``;
 	} else if (isSymbolInformation(anchor.value)) {
 		path = getWorkspaceFileDisplayPath(workspaceService, anchor.value.location.uri);
 		text = `\`${anchor.value.name}\``;

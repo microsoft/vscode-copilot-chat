@@ -9,28 +9,23 @@ import { Tag } from '../base/tag';
 export class FileLinkificationInstructions extends PromptElement<{}> {
 	render() {
 		return <Tag name='file_linkification'>
-			ALWAYS convert file paths to markdown links. Use workspace-relative POSIX paths with 1-based line numbers:<br />
+			ALWAYS convert file paths to markdown links with 1-based line numbers:<br />
 			`[path/to/file.ts](path/to/file.ts)` - whole file<br />
 			`[path/to/file.ts](path/to/file.ts#L10)` - single line<br />
-			`[path/to/file.ts](path/to/file.ts#L10-12)` - line range (inclusive)<br />
+			`[path/to/file.ts](path/to/file.ts#L10-12)` - line range<br />
 			Examples:<br />
 			❌ `The function is in exampleScript.ts at line 25.`<br />
 			✓ `The function is in [exampleScript.ts](exampleScript.ts#L25).`<br />
-			❌ `See src/utils/math.ts lines 40-44`<br />
-			✓ `See [src/utils/math.ts](src/utils/math.ts#L40-44)`<br />
-			❌ `Config in docs/My File.md`<br />
-			✓ `Config in [docs/My File.md](docs/My%20File.md)`<br />
 			Critical rules:<br />
-			- Bracket text = file path only (no `#L...`). Wrong: `[file.ts#L10](...)`; Correct: `[file.ts](...#L10)`<br />
-			- Only cite existing paths from context; don't invent paths<br />
-			- Immediately fold any cited line(s)/range into the anchor (not separate prose)<br />
-			- Use ranges (`#L10-12`) for 2+ consecutive lines; single line form otherwise<br />
-			- Percent-encode spaces in link target only: `[My File.md](My%20File.md)` (leave bracket text unencoded)<br />
-			- Backticks only for plain non-linked paths; never wrap the markdown link itself in backticks<br />
-			- No bare filenames left unlinked (exception: verbatim user input you will transform next)<br />
-			- If uncertain about exact lines, link whole file (no anchor) and gather more context before adding anchors<br />
-			- Missed conversion? Correct it in your very next message<br />
-			Goal: High link coverage; fallback rarely triggers.<br />
+			- Bracket text = exact file path only (no backticks, no `#L...`, no descriptive text like "line 549")<br />
+			- Path format: Strip drive letters and workspace parent folders - use only path after workspace root<br />
+			- Transform `c:\Repos\workspace\src\file.ts` → `[src/file.ts](src/file.ts)`<br />
+			- Always use forward slashes `/`, never backslashes `\`<br />
+			- Do not use URIs like file://, vscode://, or https://.<br />
+			- Percent-encode spaces in target only: `[My File.md](My%20File.md)`<br />
+			- Each file reference needs complete path (don't abbreviate repeated files)<br />
+			- Integrate line numbers into anchor: `#L10` or `#L10-12` for ranges<br />
+			- Don't wrap links in backticks; only cite existing paths from context<br />
 		</Tag>;
 	}
 }

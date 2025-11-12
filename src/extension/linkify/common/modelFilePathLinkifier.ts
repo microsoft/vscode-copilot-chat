@@ -5,7 +5,7 @@
 
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Location, Position, Range, Uri } from '../../../vscodeTypes';
 import { coalesceParts, LinkifiedPart, LinkifiedText, LinkifyLocationAnchor } from './linkifiedText';
@@ -23,74 +23,217 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 
 	async linkify(text: string, context: LinkifierContext, token: CancellationToken): Promise<LinkifiedText | undefined> {
 		let lastIndex = 0;
-		const out: Array<LinkifiedPart | Promise<LinkifiedPart>> = [];
+		const parts: Array<LinkifiedPart | Promise<LinkifiedPart>> = [];
 
 		for (const match of text.matchAll(modelLinkRe)) {
+			const original = match[0];
 			const prefix = text.slice(lastIndex, match.index);
 			if (prefix) {
-				out.push(prefix);
+				parts.push(prefix);
 			}
-			lastIndex = match.index + match[0].length;
+			lastIndex = match.index + original.length;
 
-			const rawText = match.groups?.['text'] ?? '';
-			const rawTarget = match.groups?.['target'] ?? '';
-
-			const hashIndex = rawTarget.indexOf('#');
-			const baseTarget = hashIndex === -1 ? rawTarget : rawTarget.slice(0, hashIndex);
-			const anchor = hashIndex === -1 ? undefined : rawTarget.slice(hashIndex + 1);
-
-			let decodedBase = baseTarget;
-			try { decodedBase = decodeURIComponent(baseTarget); } catch { }
-
-			if (decodedBase !== rawText) {
-				out.push(match[0]);
+			const parsed = this.parseModelLinkMatch(match);
+			if (!parsed) {
+				parts.push(original);
 				continue;
 			}
 
 			const workspaceFolders = this.workspaceService.getWorkspaceFolders();
-			let resolved: Uri | undefined;
-			for (const folder of workspaceFolders) {
-				const candidate = Uri.joinPath(folder, decodedBase);
-				const stat = await this.tryStat(candidate);
-				if (stat) { resolved = stat; break; }
-			}
-			if (!resolved) {
-				out.push(match[0]);
+			if (!this.canLinkify(parsed, workspaceFolders)) {
+				parts.push(original);
 				continue;
 			}
 
-			if (anchor && /^L\d+(?:-\d+)?$/.test(anchor)) {
-				const m = /^L(\d+)(?:-(\d+))?$/.exec(anchor);
-				if (m) {
-					const start = parseInt(m[1], 10) - 1;
-					const end = (m[2] ? parseInt(m[2], 10) : parseInt(m[1], 10)) - 1;
-					if (start >= 0 && end >= start) {
-						try { console.log('[linkify][model] linkified range', { path: decodedBase, anchor, requestId: context.requestId }); } catch { }
-						out.push(new LinkifyLocationAnchor(new Location(resolved, new Range(new Position(start, 0), new Position(end, 0)))));
-						continue;
-					}
-				}
+			const resolved = await this.resolveTarget(parsed.targetPath, workspaceFolders, parsed.preserveDirectorySlash);
+			if (!resolved) {
+				parts.push(original);
+				continue;
 			}
-			try { console.log('[linkify][model] linkified file', { path: decodedBase, requestId: context.requestId }); } catch { }
-			out.push(new LinkifyLocationAnchor(resolved));
+
+			const basePath = getWorkspaceFileDisplayPath(this.workspaceService, resolved);
+			const anchorRange = this.parseAnchor(parsed.anchor);
+			if (parsed.anchor && !anchorRange) {
+				parts.push(original);
+				continue;
+			}
+
+			if (anchorRange) {
+				const { range, startLine, endLine } = anchorRange;
+				const displayPath = endLine && startLine !== endLine
+					? `${basePath}#${startLine}-${endLine}`
+					: `${basePath}#${startLine}`;
+				parts.push(new LinkifyLocationAnchor(new Location(resolved, range), displayPath));
+				continue;
+			}
+
+			parts.push(new LinkifyLocationAnchor(resolved, basePath));
 		}
 
 		const suffix = text.slice(lastIndex);
-		if (suffix) { out.push(suffix); }
+		if (suffix) {
+			parts.push(suffix);
+		}
 
-		if (!out.length) {
+		if (!parts.length) {
 			return undefined;
 		}
-		return { parts: coalesceParts(await Promise.all(out)) };
+
+		return { parts: coalesceParts(await Promise.all(parts)) };
 	}
 
-	private async tryStat(uri: Uri): Promise<Uri | undefined> {
+	private parseModelLinkMatch(match: RegExpMatchArray): { readonly text: string; readonly targetPath: string; readonly anchor: string | undefined; readonly preserveDirectorySlash: boolean } | undefined {
+		const rawText = match.groups?.['text'];
+		const rawTarget = match.groups?.['target'];
+		if (!rawText || !rawTarget) {
+			return undefined;
+		}
+
+		const hashIndex = rawTarget.indexOf('#');
+		const baseTarget = hashIndex === -1 ? rawTarget : rawTarget.slice(0, hashIndex);
+		const anchor = hashIndex === -1 ? undefined : rawTarget.slice(hashIndex + 1);
+
+		let decodedBase = baseTarget;
+		try {
+			decodedBase = decodeURIComponent(baseTarget);
+		} catch {
+			// noop
+		}
+
+		const preserveDirectorySlash = decodedBase.endsWith('/') && decodedBase.length > 1;
+		const normalizedTarget = this.normalizeSlashes(decodedBase);
+		const normalizedText = this.normalizeLinkText(rawText);
+		return { text: normalizedText, targetPath: normalizedTarget, anchor, preserveDirectorySlash };
+	}
+
+	private normalizeSlashes(value: string): string {
+		// Collapse one or more backslashes into a single forward slash so mixed separators normalize consistently.
+		return value.replace(/\\+/g, '/');
+	}
+
+	private normalizeLinkText(rawText: string): string {
+		let text = this.normalizeSlashes(rawText);
+		// Remove a leading or trailing backtick that sometimes wraps the visible link label.
+		text = text.replace(/^`|`$/g, '');
+
+		// Look for a trailing #L anchor segment so it can be stripped before we compare names.
+		const anchorMatch = /^(.+?)(#L\d+(?:-\d+)?)$/.exec(text);
+		return anchorMatch ? anchorMatch[1] : text;
+	}
+
+	private canLinkify(parsed: { readonly text: string; readonly targetPath: string; readonly anchor: string | undefined }, workspaceFolders: readonly Uri[]): boolean {
+		const { text, targetPath, anchor } = parsed;
+		const textMatchesBase = targetPath === text;
+		const textIsFilename = !text.includes('/') && targetPath.endsWith(`/${text}`);
+		const descriptiveAbsolute = this.isAbsolutePath(targetPath) && !!anchor;
+
+		return Boolean(workspaceFolders.length) && (textMatchesBase || textIsFilename || descriptiveAbsolute);
+	}
+
+	private async resolveTarget(targetPath: string, workspaceFolders: readonly Uri[], preserveDirectorySlash: boolean): Promise<Uri | undefined> {
+		if (!workspaceFolders.length) {
+			return undefined;
+		}
+
+		const folderUris = workspaceFolders.map(folder => this.toVsUri(folder));
+
+		if (this.isAbsolutePath(targetPath)) {
+			const absoluteUri = this.tryCreateFileUri(targetPath);
+			if (!absoluteUri) {
+				return undefined;
+			}
+
+			for (const folderUri of folderUris) {
+				if (this.isEqualOrParentFs(absoluteUri, folderUri)) {
+					return this.tryStat(absoluteUri, preserveDirectorySlash);
+				}
+			}
+			return undefined;
+		}
+
+		const segments = targetPath.split('/').filter(Boolean);
+		for (const folderUri of folderUris) {
+			const candidate = Uri.joinPath(folderUri, ...segments);
+			const stat = await this.tryStat(candidate, preserveDirectorySlash);
+			if (stat) {
+				return stat;
+			}
+		}
+
+		return undefined;
+	}
+
+	private tryCreateFileUri(path: string): Uri | undefined {
+		try {
+			return Uri.file(path);
+		} catch {
+			return undefined;
+		}
+	}
+
+	private toVsUri(folder: Uri): Uri {
+		return Uri.parse(folder.toString());
+	}
+
+	private isEqualOrParentFs(target: Uri, folder: Uri): boolean {
+		const targetFs = this.normalizeFsPath(target);
+		const folderFs = this.normalizeFsPath(folder);
+		return targetFs === folderFs || targetFs.startsWith(folderFs.endsWith('/') ? folderFs : `${folderFs}/`);
+	}
+
+	private normalizeFsPath(resource: Uri): string {
+		// Convert Windows backslashes to forward slashes and remove duplicate separators for stable comparisons.
+		return resource.fsPath.replace(/\\/g, '/').replace(/\/+/g, '/').toLowerCase();
+	}
+
+	private parseAnchor(anchor: string | undefined): { readonly range: Range; readonly startLine: string; readonly endLine: string | undefined } | undefined {
+		// Ensure the anchor follows the #L123 or #L123-456 format before parsing it.
+		if (!anchor || !/^L\d+(?:-\d+)?$/.test(anchor)) {
+			return undefined;
+		}
+
+		// Capture the start (and optional end) line numbers from the anchor.
+		const match = /^L(\d+)(?:-(\d+))?$/.exec(anchor);
+		if (!match) {
+			return undefined;
+		}
+
+		const startLine = match[1];
+		const endLineRaw = match[2];
+		const normalizedEndLine = endLineRaw === startLine ? undefined : endLineRaw;
+		const start = parseInt(startLine, 10) - 1;
+		const end = parseInt(normalizedEndLine ?? startLine, 10) - 1;
+		if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || end < start) {
+			return undefined;
+		}
+
+		return {
+			range: new Range(new Position(start, 0), new Position(end, 0)),
+			startLine,
+			endLine: normalizedEndLine,
+		};
+	}
+
+	private isAbsolutePath(path: string): boolean {
+		// Treat drive-letter prefixes (e.g. C:) or leading slashes as absolute paths.
+		return /^[a-z]:/i.test(path) || path.startsWith('/');
+	}
+
+	private async tryStat(uri: Uri, preserveDirectorySlash: boolean): Promise<Uri | undefined> {
 		try {
 			const stat = await this.fileSystem.stat(uri);
 			if (stat.type === FileType.Directory) {
-				return uri.path.endsWith('/') ? uri : uri.with({ path: uri.path + '/' });
+				if (preserveDirectorySlash) {
+					return uri.path.endsWith('/') ? uri : uri.with({ path: `${uri.path}/` });
+				}
+				if (uri.path.endsWith('/') && uri.path !== '/') {
+					return uri.with({ path: uri.path.slice(0, -1) });
+				}
+				return uri;
 			}
 			return uri;
-		} catch { return undefined; }
+		} catch {
+			return undefined;
+		}
 	}
 }
