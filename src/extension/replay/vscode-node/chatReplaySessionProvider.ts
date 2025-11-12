@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as fs from 'node:fs';
-import { CancellationToken, ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSession, ChatSessionContentProvider, ChatSessionItem, ChatSessionItemProvider, Event, EventEmitter, ProviderResult, Uri } from 'vscode';
+import { CancellationToken, ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSession, ChatSessionContentProvider, ChatSessionItem, ChatSessionItemProvider, ChatToolInvocationPart, Event, EventEmitter, ProviderResult, Uri } from 'vscode';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { ChatStep, ModelRequest, ToolStep } from '../common/chatReplayResponses';
+import { ChatStep } from '../common/chatReplayResponses';
 import { parseReplay } from '../node/replayParser';
 
 export class ChatReplaySessionProvider extends Disposable implements ChatSessionContentProvider, ChatSessionItemProvider {
@@ -37,24 +37,23 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 
 	private convertStepsToHistory(chatSteps: ChatStep[]): ReadonlyArray<ChatRequestTurn | ChatResponseTurn2> {
 		const history: (ChatRequestTurn | ChatResponseTurn2)[] = [];
-		let currentResponseSteps: (ModelRequest | ToolStep)[] = [];
+		let lastQuery = '';
 
 		for (const step of chatSteps) {
 			if (step.kind === 'userQuery') {
-				if (currentResponseSteps.length > 0) {
-					history.push(this.createResponseTurn(currentResponseSteps));
-					currentResponseSteps = [];
+				if (step.query !== lastQuery) {
+					lastQuery = step.query;
+					history.push(this.createRequestTurn(step));
 				}
-
-				history.push(this.createRequestTurn(step));
-			} else if (step.kind === 'request' || step.kind === 'toolCall') {
-				currentResponseSteps.push(step);
+			} else if (step.kind === 'request' && step.result) {
+				history.push(
+					new ChatResponseTurn2([new ChatResponseMarkdownPart(step.result)], {}, 'copilot')
+				);
+			} else if (step.kind === 'toolCall') {
+				history.push(
+					new ChatResponseTurn2([new ChatToolInvocationPart(step.toolName, '', false)], {}, 'copilot')
+				);
 			}
-		}
-
-		// Complete any remaining response turn (only in non-debug mode)
-		if (currentResponseSteps.length > 0) {
-			history.push(this.createResponseTurn(currentResponseSteps));
 		}
 
 		return history;
@@ -62,18 +61,6 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 
 	private createRequestTurn(step: ChatStep & { kind: 'userQuery' }): ChatRequestTurn2 {
 		return new ChatRequestTurn2(step.query, undefined, [], 'copilot', [], undefined);
-	}
-
-	private createResponseTurn(steps: (ModelRequest | ToolStep)[]) {
-		const responseParts: ChatResponseMarkdownPart[] = [];
-		for (const step of steps) {
-			if (step.kind === 'request' && step.result) {
-				responseParts.push(new ChatResponseMarkdownPart(step.result));
-			} else if (step.kind === 'toolCall') {
-				responseParts.push(new ChatResponseMarkdownPart(`called ${step.toolName}`));
-			}
-		}
-		return new ChatResponseTurn2(responseParts, {}, 'copilot');
 	}
 
 	fireSessionsChanged(): void {

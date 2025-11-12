@@ -3386,7 +3386,7 @@
 			"explorer/context": [
 				{
 					"command": "github.copilot.chat.showAsChatSession",
-					"when": "resourcePath =~ /.json$/",
+					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'",
 					"group": "2_copilot@1"
 				}
 			],
