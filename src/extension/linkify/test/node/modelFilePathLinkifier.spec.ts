@@ -51,6 +51,12 @@ suite('Model File Path Linkifier', () => {
 		assertPartsEqual(result.parts, ['other']);
 	});
 
+	test('Should return label when text omits path', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[line 54](src/file.ts#L54)');
+		assertPartsEqual(result.parts, ['line 54']);
+	});
+
 	test('Should fallback for invalid anchor syntax', async () => {
 		const service = createTestLinkifierService('src/file.ts');
 		const result = await linkify(service, '[src/file.ts](src/file.ts#Lines10-12)');
