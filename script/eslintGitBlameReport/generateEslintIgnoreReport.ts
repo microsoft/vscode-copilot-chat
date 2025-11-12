@@ -74,7 +74,7 @@ async function main(): Promise<void> {
 			const onlyHandle = resolvedMessages[0].username;
 			reportLines.push(`- [ ] ${file} @${onlyHandle}`);
 		} else {
-			reportLines.push(file);
+			reportLines.push(`- [ ] ${file}`);
 			for (const { message, username } of resolvedMessages) {
 				reportLines.push(formatReportLine(message, username));
 			}
