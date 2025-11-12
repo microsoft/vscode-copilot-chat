@@ -154,7 +154,7 @@ export type ToolInfo = {
 	GrepTool | GLobTool |
 	ReportIntentTool | ThinkTool | ReportProgressTool;
 
-type ToolCall = ToolInfo & { toolCallId: string };
+export type ToolCall = ToolInfo & { toolCallId: string };
 type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
 
 export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: unknown }): boolean {
@@ -326,6 +326,8 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
  */
 export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolName: string; arguments?: unknown }): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolCall = data as ToolCall;
+	// Ensures arguments is at least an empty object
+	toolCall.arguments = toolCall.arguments ?? {};
 	if (toolCall.toolName === 'report_intent') {
 		return undefined; // Ignore these for now
 	}
