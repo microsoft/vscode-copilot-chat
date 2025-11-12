@@ -495,7 +495,6 @@ export default tseslint.config(
 			'./src/platform/env/common/packagejson.ts',
 			'./src/platform/extensions/common/extensionsService.ts',
 			'./src/platform/filesystem/common/fileSystemService.ts',
-			'./src/platform/github/common/githubAPI.ts',
 			'./src/platform/github/common/githubService.ts',
 			'./src/platform/github/common/nullOctokitServiceImpl.ts',
 			'./src/platform/inlineEdits/common/dataTypes/edit.ts',
