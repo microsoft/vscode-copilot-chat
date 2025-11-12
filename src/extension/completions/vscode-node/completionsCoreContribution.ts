@@ -7,7 +7,7 @@ import { commands, languages } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { autorun, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { createContext, registerUnificationCommands, setup } from '../../completions-core/vscode-node/completionsServiceBridges';
@@ -57,9 +57,10 @@ export class CompletionsCoreContribution extends Disposable {
 
 	private _getOrCreateProvider() {
 		if (!this._provider) {
-			this._completionsInstantiationService = this._instantiationService.invokeFunction(createContext);
-			this._register(this._completionsInstantiationService.invokeFunction(setup));
-			this._provider = this._register(this._completionsInstantiationService.createInstance(CopilotInlineCompletionItemProvider));
+			const disposables = this._register(new DisposableStore());
+			this._completionsInstantiationService = this._instantiationService.invokeFunction(createContext, disposables);
+			this._completionsInstantiationService.invokeFunction(setup, disposables);
+			this._provider = disposables.add(this._completionsInstantiationService.createInstance(CopilotInlineCompletionItemProvider));
 		}
 		return this._provider;
 	}

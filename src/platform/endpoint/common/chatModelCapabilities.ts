@@ -19,6 +19,7 @@ const VSC_MODEL_HASHES_A = [
 	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
 	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
 	'b576d46942ee2c45ecd979cbbcb62688ae3171a07ac83f53b783787f345e3dd7',
+	'b46570bfd230db11a82d5463c160b9830195def7086519ca319c41037b991820',
 ];
 
 const VSC_MODEL_HASHES_B = [
@@ -26,6 +27,10 @@ const VSC_MODEL_HASHES_B = [
 	'df610ed210bb9266ff8ab812908d5837538cdb1d7436de907fb7e970dab5d289',
 ];
 
+const familyToHash = new Map<string, string>();
+const HIDDEN_MODEL_B_HASHES = [
+	'8f398886c326b5f8f07b20ac250c87de6723e062474465273fe1524f2b9092fa',
+	'40903c59d19feef1d67c455499304c194ebdec82df78790c3ceaac92bd1d84be'];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 	return 'id' in model ? model.id : model.model;
@@ -36,9 +41,18 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	return HIDDEN_MODEL_A_HASHES.includes(h);
 }
 
-export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	const h = await getCachedSha256Hash(model.family);
-	return h === '8f398886c326b5f8f07b20ac250c87de6723e062474465273fe1524f2b9092fa';
+export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint | string | undefined): Promise<boolean> {
+	if (!model) {
+		return false;
+	}
+
+	const family = typeof model === 'string' ? model : model.family;
+	const h = familyToHash.get(family) ?? await getCachedSha256Hash(family);
+	if (HIDDEN_MODEL_B_HASHES.includes(h)) {
+		familyToHash.set(family, h);
+		return true;
+	}
+	return false;
 }
 
 
@@ -146,6 +160,21 @@ export function modelNeedsStrongReplaceStringHint(model: LanguageModelChat | ICh
 /**
  * Model can take the simple, modern apply_patch instructions.
  */
-export function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('gpt-5');
+export async function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	return model.family.startsWith('gpt-5') || await isHiddenModelB(model);
+}
+
+/**
+ * This takes a sync shortcut and should only be called when a model hash would have already been computed while rendering the prompt.
+ */
+export function getVerbosityForModelSync(model: IChatEndpoint): 'low' | 'medium' | 'high' | undefined {
+	const syncHash = familyToHash.get(model.family);
+	if (!syncHash) {
+		return undefined;
+	}
+
+	if (HIDDEN_MODEL_B_HASHES.includes(syncHash)) {
+		return 'low';
+	}
+	return undefined;
 }

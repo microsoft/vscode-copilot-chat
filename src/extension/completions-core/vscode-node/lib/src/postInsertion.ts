@@ -4,14 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
-import { CopilotTokenManager } from './auth/copilotTokenManager';
+import { ICompletionsCopilotTokenManager } from './auth/copilotTokenManager';
 import { ChangeTracker } from './changeTracker';
-import { CitationManager, IPCitationDetail } from './citationManager';
+import { ICompletionsCitationManager, IPCitationDetail } from './citationManager';
 import { createCompletionState } from './completionState';
-import { ICompletionsContextService } from './context';
-import { FileReader } from './fileReader';
+import { ICompletionsFileReaderService } from './fileReader';
 import { PostInsertionCategory, telemetryAccepted, telemetryRejected } from './ghostText/telemetry';
-import { LogTarget, Logger } from './logger';
+import { ICompletionsLogTargetService, Logger } from './logger';
 import { CopilotNamedAnnotationList } from './openai/stream';
 import { contextIndentationFromText, indentationBlockFinished } from './prompt/parseBlock';
 import { Prompt, extractPrompt } from './prompt/prompt';
@@ -19,7 +18,7 @@ import { fetchCitations } from './snippy/handlePostInsertion';
 import { editDistance, lexEditDistance } from './suggestions/editDistance';
 import { SuggestionStatus, computeCompletionText } from './suggestions/partialSuggestions';
 import { TelemetryStore, TelemetryWithExp, telemetry, telemetryCatch } from './telemetry';
-import { TextDocumentManager } from './textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from './textDocumentManager';
 import { ICompletionsPromiseQueueService } from './util/promiseQueue';
 import { ICompletionsRuntimeModeService } from './util/runtimeMode';
 
@@ -70,10 +69,9 @@ async function captureCode(
 	offset: number,
 	suffixOffset?: number
 ): Promise<{ prompt: Prompt; capturedCode: string; terminationOffset: number }> {
-	const ctx = accessor.get(ICompletionsContextService);
 	const instantiationService = accessor.get(IInstantiationService);
-	const logTarget = ctx.get(LogTarget);
-	const result = await ctx.get(FileReader).getOrReadTextDocumentWithFakeClientProperties({ uri });
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const result = await accessor.get(ICompletionsFileReaderService).getOrReadTextDocumentWithFakeClientProperties({ uri });
 	if (result.status !== 'valid') {
 		postInsertionLogger.info(logTarget, `Could not get document for ${uri}. Maybe it was closed by the editor.`);
 		return {
@@ -141,7 +139,7 @@ export function postRejectionTasks(
 	uri: string,
 	completions: { completionText: string; completionTelemetryData: TelemetryWithExp }[]
 ) {
-	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 	const instantiationService = accessor.get(IInstantiationService);
 	const telemetryService = accessor.get(ICompletionsTelemetryService);
 	const promiseQueueService = accessor.get(ICompletionsPromiseQueueService);
@@ -217,7 +215,7 @@ export function postInsertionTasks(
 	suggestionStatus: SuggestionStatus,
 	copilotAnnotations?: CopilotNamedAnnotationList
 ) {
-	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 	const instantiationService = accessor.get(IInstantiationService);
 	const promiseQueueService = accessor.get(ICompletionsPromiseQueueService);
 	const telemetryService = accessor.get(ICompletionsTelemetryService);
@@ -294,10 +292,10 @@ async function citationCheck(
 	insertionOffset: number,
 	copilotAnnotations?: CopilotNamedAnnotationList
 ) {
-	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
-	const textDocumentManagerService = accessor.get(ICompletionsContextService).get(TextDocumentManager);
-	const copilotTokenManager = accessor.get(ICompletionsContextService).get(CopilotTokenManager);
-	const citationManagerService = accessor.get(ICompletionsContextService).get(CitationManager);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const textDocumentManagerService = accessor.get(ICompletionsTextDocumentManagerService);
+	const copilotTokenManager = accessor.get(ICompletionsCopilotTokenManager);
+	const citationManagerService = accessor.get(ICompletionsCitationManager);
 
 	// If there are no citations, request directly from the snippy service
 	if (!copilotAnnotations || (copilotAnnotations.ip_code_citations?.length ?? 0) < 1) {
@@ -404,10 +402,9 @@ async function checkStillInCode(
 	suffixTracker: ChangeTracker
 ) {
 	// Get contents of file from file system
-	const ctx = accessor.get(ICompletionsContextService);
 	const instantiationService = accessor.get(IInstantiationService);
-	const logTarget = ctx.get(LogTarget);
-	const result = await ctx.get(FileReader).getOrReadTextDocument({ uri });
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const result = await accessor.get(ICompletionsFileReaderService).getOrReadTextDocument({ uri });
 	if (result.status === 'valid') {
 		const document = result.document;
 		const documentText = document.getText();

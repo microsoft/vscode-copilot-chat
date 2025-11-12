@@ -3,20 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CopilotContentExclusionManager } from '../contentExclusion/contentExclusionManager';
-import { ICompletionsContextService } from '../context';
+import { IIgnoreService } from '../../../../../../platform/ignore/common/ignoreService';
+import { URI } from '../../../../../../util/vs/base/common/uri';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { TextDocumentIdentifier } from '../textDocument';
 
 /**
  * Evaluate document uri to see if it's valid for copilot to process
  */
 export async function isDocumentValid(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	document: TextDocumentIdentifier,
-	text: string
 ): Promise<{ status: 'valid' } | { status: 'invalid'; reason: string }> {
-	const rcmResult = await ctx.get(CopilotContentExclusionManager).evaluate(document.uri, text);
-	if (rcmResult.isBlocked) {
+	const ignoreService = accessor.get(IIgnoreService);
+	if (await ignoreService.isCopilotIgnored(URI.parse(document.uri))) {
 		return {
 			status: 'invalid',
 			reason: 'Document is blocked by repository policy',

@@ -32,7 +32,7 @@ export class OpenRouterLMProvider extends BaseOpenAICompatibleLMProvider {
 	protected override async getAllModels(): Promise<BYOKKnownModels> {
 		try {
 			const response = await this._fetcherService.fetch('https://openrouter.ai/api/v1/models?supported_parameters=tools', { method: 'GET' });
-			const data: any = await response.json();
+			const data = await response.json();
 			const knownModels: BYOKKnownModels = {};
 			for (const model of data.data) {
 				knownModels[model.id] = {

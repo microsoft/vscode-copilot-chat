@@ -3,10 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { LogTarget } from '../logger';
+import { ICompletionsLogTargetService } from '../logger';
 import { getLastKnownEndpoints } from '../networkConfiguration';
-import { Fetcher } from '../networking';
+import { ICompletionsFetcherService } from '../networking';
 import { codeReferenceLogger } from './logger';
 
 type ConnectionAPI = {
@@ -129,17 +128,16 @@ function registerConnectionState(): ConnectionAPI {
 	}
 
 	async function attemptToPing(accessor: ServicesAccessor, initialTimeout: number) {
-		const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
-		const ctx = accessor.get(ICompletionsContextService);
+		const logTarget = accessor.get(ICompletionsLogTargetService);
+		const fetcher = accessor.get(ICompletionsFetcherService);
 		const instantiationService = accessor.get(IInstantiationService);
-		const fetcher = ctx.get(Fetcher);
 		codeReferenceLogger.info(logTarget, `Attempting to reconnect in ${initialTimeout}ms.`);
 
 		// Initial 3 second delay before attempting to reconnect to Snippy.
 		await timeout(initialTimeout);
 		setInitialWait(false);
 
-		function succeedOrRetry(time: number, ctx: ICompletionsContextService) {
+		function succeedOrRetry(time: number) {
 			if (time > MaxRetryTime) {
 				codeReferenceLogger.info(logTarget, 'Max retry time reached, disabling.');
 				setDisabled();
@@ -162,14 +160,14 @@ function registerConnectionState(): ConnectionAPI {
 					);
 
 					if (response.status !== 200 || !response.ok) {
-						succeedOrRetry(time ** 2, ctx);
+						succeedOrRetry(time ** 2);
 					} else {
 						codeReferenceLogger.info(logTarget, 'Successfully reconnected.');
 						setConnected();
 						return;
 					}
 				} catch (e) {
-					succeedOrRetry(time ** 2, ctx);
+					succeedOrRetry(time ** 2);
 				}
 			};
 			setTimeout(() => void tryAgain(), time * 1000);
@@ -177,7 +175,7 @@ function registerConnectionState(): ConnectionAPI {
 
 		codeReferenceLogger.info(logTarget, 'Attempting to reconnect.');
 
-		succeedOrRetry(BaseRetryTime, ctx);
+		succeedOrRetry(BaseRetryTime);
 	}
 
 	const timeout = (ms: number) => {

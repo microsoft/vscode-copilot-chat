@@ -4,9 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { Features } from '../experiments/features';
-import { logger, LogTarget } from '../logger';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
+import { ICompletionsLogTargetService, logger } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
 import { ActiveExperiments } from './contextProviderRegistry';
 
@@ -72,14 +71,15 @@ function getMultiLanguageContextProviderParamsFromExp(
 ): MultiLanguageContextProviderParams {
 	let params = multiLanguageContextProviderParamsDefault;
 
-	const ctx = accessor.get(ICompletionsContextService);
-	const multiLanguageContextProviderParams = ctx.get(Features).multiLanguageContextProviderParams(telemetryData);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const featuresService = accessor.get(ICompletionsFeaturesService);
+	const multiLanguageContextProviderParams = featuresService.multiLanguageContextProviderParams(telemetryData);
 
 	if (multiLanguageContextProviderParams) {
 		try {
 			params = JSON.parse(multiLanguageContextProviderParams) as MultiLanguageContextProviderParams;
 		} catch (e) {
-			logger.error(ctx.get(LogTarget), 'Failed to parse multiLanguageContextProviderParams', e);
+			logger.error(logTarget, 'Failed to parse multiLanguageContextProviderParams', e);
 		}
 	}
 

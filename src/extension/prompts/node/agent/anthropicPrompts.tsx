@@ -214,9 +214,9 @@ class AnthropicPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['claude', 'Anthropic'];
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
-
-		if (endpoint.model?.startsWith('claude-sonnet-4.5') ||
-			endpoint.model?.startsWith('claude-haiku-4.5')) {
+		const normalizedModel = endpoint.model?.replace(/\./g, '-');
+		if (normalizedModel?.startsWith('claude-sonnet-4-5') ||
+			normalizedModel?.startsWith('claude-haiku-4-5')) {
 			return Claude45DefaultPrompt;
 		}
 		return DefaultAnthropicAgentPrompt;

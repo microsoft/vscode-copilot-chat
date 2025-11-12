@@ -5,13 +5,13 @@
 
 import * as assert from 'assert';
 import * as sinon from 'sinon';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChangeTracker } from '../changeTracker';
 import { createLibTestingContext } from './context';
 import { createTextDocument } from './textDocument';
-import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('ChangeTracker test suite', function () {
-	const accessor = createLibTestingContext();
+	const accessor = createLibTestingContext().createTestingAccessor();
 	let clock: sinon.SinonFakeTimers;
 	setup(function () {
 		clock = sinon.useFakeTimers();

@@ -186,6 +186,26 @@ export function collectErrorMessages(e: any): string {
 		.trim();
 }
 
+export function collectSingleLineErrorMessage(e: any): string {
+	// Collect error messages from nested errors as seen with Node's `fetch`.
+	const seen = new Set<any>();
+	function collect(e: any): string {
+		if (!e || !['object', 'string'].includes(typeof e) || seen.has(e)) {
+			return '';
+		}
+		seen.add(e);
+		const message = typeof e === 'string' ? e : (e.message || e.code || e.toString?.() || '');
+		const messageStr = message.toString?.() as (string | undefined) || '';
+		const messageLine = messageStr.trim().split('\n').join(' ');
+		const details = [
+			...(e.cause ? [collect(e.cause)] : []),
+			...(Array.isArray(e.errors) ? e.errors.map((e: any) => collect(e)) : []),
+		].join(', ');
+		return details ? `${messageLine}: ${details}` : messageLine;
+	}
+	return collect(e);
+}
+
 export class LogMemory {
 	private static _logs: string[] = [];
 	private static _requestIds: string[] = [];

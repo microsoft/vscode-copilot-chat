@@ -5,16 +5,15 @@
 import type { IAbortSignal } from '../networking';
 import { assertShape } from '../util/typebox';
 
-import { CompletionsCapiBridge } from '../../../bridge/src/completionsCapiBridge';
+import { ICAPIClientService } from '../../../../../../platform/endpoint/common/capiClient';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import * as Network from './network';
 import * as Schema from './snippy.proto';
-import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
 
 export async function Match(accessor: ServicesAccessor, source: string, signal?: IAbortSignal) {
 	const result = await Network.call<typeof Schema.MatchResponse>(
 		accessor,
-		accessor.get(ICompletionsContextService).get(CompletionsCapiBridge).capiClientService.snippyMatchPath,
+		accessor.get(ICAPIClientService).snippyMatchPath,
 		{
 			method: 'POST',
 			body: assertShape(Schema.MatchRequest, { source }),
@@ -30,7 +29,7 @@ export async function Match(accessor: ServicesAccessor, source: string, signal?:
 export async function FilesForMatch(accessor: ServicesAccessor, { cursor }: Schema.FileMatchRequest, signal?: IAbortSignal) {
 	const result = await Network.call<typeof Schema.FileMatchResponse>(
 		accessor,
-		accessor.get(ICompletionsContextService).get(CompletionsCapiBridge).capiClientService.snippyFilesForMatchPath,
+		accessor.get(ICAPIClientService).snippyFilesForMatchPath,
 		{
 			method: 'POST',
 			body: assertShape(Schema.FileMatchRequest, { cursor }),

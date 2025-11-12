@@ -3,8 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { Disposable } from '../../types/src';
-import { ICompletionsContextService } from './context';
-import { TextDocumentManager } from './textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from './textDocumentManager';
 
 /**
  * A tracker which can take an arbitrary number of actions to run after a given timeout
@@ -19,9 +18,12 @@ export class ChangeTracker {
 	private _tracker: Disposable;
 	private _isDisposed = false;
 
-	constructor(fileURI: string, insertionOffset: number, @ICompletionsContextService ctx: ICompletionsContextService) {
+	constructor(
+		fileURI: string,
+		insertionOffset: number,
+		@ICompletionsTextDocumentManagerService documentManager: ICompletionsTextDocumentManagerService
+	) {
 		this._offset = insertionOffset;
-		const documentManager = ctx.get(TextDocumentManager);
 
 		this._tracker = documentManager.onDidChangeTextDocument(e => {
 			if (e.document.uri === fileURI) {

@@ -4,31 +4,21 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ILogService } from '../../../../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
 import {
 	DEFAULT_MAX_COMPLETION_LENGTH,
 	DEFAULT_MAX_PROMPT_LENGTH,
 	DEFAULT_PROMPT_ALLOCATION_PERCENT,
 	DEFAULT_SUFFIX_MATCH_THRESHOLD
 } from '../../../prompt/src/prompt';
-import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
+import { CopilotToken, ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
 import { BlockMode } from '../config';
-import { ICompletionsContextService } from '../context';
 import { TelemetryData, TelemetryWithExp } from '../telemetry';
 import { createCompletionsFilters } from './defaultExpFilters';
 import { ExpConfig, ExpTreatmentVariables, ExpTreatmentVariableValue } from './expConfig';
+import { CompletionsFiltersInfo, ContextProviderExpSettings, ICompletionsFeaturesService } from './featuresService';
 import { Filter, FilterSettings } from './filters';
-
-type CompletionsFiltersInfo = { uri: string; languageId: string };
-
-export type ContextProviderExpSettings = {
-	ids: string[];
-	includeNeighboringFiles: boolean;
-	excludeRelatedFiles: boolean;
-	timeBudget: number;
-	params?: Record<string, string | boolean | number>;
-}
 
 type InternalContextProviderExpSettings = {
 	id?: string;
@@ -40,11 +30,12 @@ type InternalContextProviderExpSettings = {
 };
 
 /** General-purpose API for accessing ExP variable values. */
-export class Features {
-
+export class Features implements ICompletionsFeaturesService {
+	declare _serviceBrand: undefined;
 	constructor(
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@ICompletionsCopilotTokenManager private readonly copilotTokenManager: ICompletionsCopilotTokenManager,
 	) { }
 
 	/**
@@ -83,8 +74,7 @@ export class Features {
 			throw new Error('updateExPValuesAndAssignments should not be called with TelemetryWithExp');
 		}
 
-		const tokenManager = this.ctx.get(CopilotTokenManager);
-		const token = tokenManager.token ?? await tokenManager.getToken();
+		const token = this.copilotTokenManager.token ?? await this.copilotTokenManager.getToken();
 		const { filters, exp } = this.createExpConfigAndFilters(token);
 
 		return new TelemetryWithExp(telemetryData.properties, telemetryData.measurements, telemetryData.issuedTime, {
@@ -105,11 +95,10 @@ export class Features {
 	}
 
 	private createExpConfigAndFilters(token: CopilotToken) {
-		const expService = this.ctx.get(CompletionsExperimentationServiceBridge).experimentationService;
 
 		const exp2: Partial<Record<ExpTreatmentVariables, ExpTreatmentVariableValue>> = {};
 		for (const varName of Object.values<ExpTreatmentVariables>(ExpTreatmentVariables)) {
-			const value = expService.getTreatmentVariable(varName);
+			const value = this.experimentationService.getTreatmentVariable(varName);
 			if (value !== undefined) {
 				exp2[varName] = value;
 			}
@@ -132,8 +121,7 @@ export class Features {
 
 	/** Get the entries from this.assignments corresponding to given settings. */
 	async getFallbackExpAndFilters(): Promise<{ filters: FilterSettings; exp: ExpConfig }> {
-		const tokenManager = this.ctx.get(CopilotTokenManager);
-		const token = tokenManager.token ?? await tokenManager.getToken();
+		const token = this.copilotTokenManager.token ?? await this.copilotTokenManager.getToken();
 		return this.createExpConfigAndFilters(token);
 	}
 
@@ -256,8 +244,7 @@ export class Features {
 	}
 
 	getContextProviderExpSettings(languageId: string): ContextProviderExpSettings | undefined {
-		const expService = this.ctx.get(CompletionsExperimentationServiceBridge).experimentationService;
-		const value = expService.getTreatmentVariable<string>(`config.github.copilot.chat.contextprovider.${languageId}`);
+		const value = this.experimentationService.getTreatmentVariable<string>(`config.github.copilot.chat.contextprovider.${languageId}`);
 		if (typeof value === 'string') {
 			try {
 				const parsed: Partial<InternalContextProviderExpSettings> = JSON.parse(value);

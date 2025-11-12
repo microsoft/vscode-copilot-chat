@@ -5,15 +5,15 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
 
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { Chunk, ComponentContext, PromptElementProps, Text } from '../../../../prompt/src/components/components';
 import { DocumentInfoWithOffset, PromptOptions } from '../../../../prompt/src/prompt';
 import { getSimilarSnippets } from '../../../../prompt/src/snippetInclusion/similarFiles';
 import { announceSnippet } from '../../../../prompt/src/snippetInclusion/snippets';
-import { ICompletionsContextService } from '../../context';
 import { getSimilarFilesOptions } from '../../experiments/similarFileOptionsProvider';
 import { TelemetryWithExp } from '../../telemetry';
 import { TextDocumentContents } from '../../textDocument';
-import { TextDocumentManager } from '../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import {
 	CompletionRequestData,
 	CompletionRequestDocument,
@@ -23,7 +23,8 @@ import { getPromptOptions } from '../prompt';
 import { NeighborsCollection, NeighborSource } from '../similarFiles/neighborFiles';
 
 type SimilarFilesProps = {
-	ctx: ICompletionsContextService;
+	instantiationService: IInstantiationService;
+	tdms: ICompletionsTextDocumentManagerService;
 } & PromptElementProps;
 
 type SimilarFileSnippet = {
@@ -44,7 +45,7 @@ export const SimilarFiles = (props: SimilarFilesProps, context: ComponentContext
 
 		let files: { docs: NeighborsCollection } = NeighborSource.defaultEmptyResult();
 		if (!requestData.turnOffSimilarFiles) {
-			files = await props.ctx.instantiationService.invokeFunction(async acc => await NeighborSource.getNeighborFilesAndTraits(
+			files = await props.instantiationService.invokeFunction(async acc => await NeighborSource.getNeighborFilesAndTraits(
 				acc,
 				requestData.document.uri,
 				requestData.document.detectedLanguageId,
@@ -71,7 +72,7 @@ export const SimilarFiles = (props: SimilarFilesProps, context: ComponentContext
 			docs: NeighborsCollection;
 		}
 	): Promise<SimilarFileSnippet[]> {
-		const promptOptions = props.ctx.instantiationService.invokeFunction(getPromptOptions, telemetryData, doc.detectedLanguageId);
+		const promptOptions = props.instantiationService.invokeFunction(getPromptOptions, telemetryData, doc.detectedLanguageId);
 		const similarSnippets = await findSimilarSnippets(promptOptions, telemetryData, doc, requestData, files);
 		return similarSnippets
 			.filter(s => s.snippet.length > 0)
@@ -90,8 +91,8 @@ export const SimilarFiles = (props: SimilarFilesProps, context: ComponentContext
 	) {
 		const similarFilesOptions =
 			promptOptions.similarFilesOptions ||
-			props.ctx.instantiationService.invokeFunction(getSimilarFilesOptions, telemetryData, doc.detectedLanguageId);
-		const tdm = props.ctx.get(TextDocumentManager);
+			props.instantiationService.invokeFunction(getSimilarFilesOptions, telemetryData, doc.detectedLanguageId);
+		const tdm = props.tdms;
 		const relativePath = tdm.getRelativePath(doc);
 		const docInfo: DocumentInfoWithOffset = {
 			uri: doc.uri,

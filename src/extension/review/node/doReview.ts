@@ -181,6 +181,7 @@ async function doReview(
 			const canUseGitHubAgent = copilotToken.isCopilotCodeReviewEnabled;
 			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, customInstructionsService, group, editor, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, typeof group === 'object' && 'group' in group ? group.group : group, editor, progress, tokenSource.token);
 		} catch (err) {
+			logService.error(err, 'Error during code review');
 			result = { type: 'error', reason: err.message, severity: err.severity };
 		} finally {
 			if (tokenSource === inProgress) {

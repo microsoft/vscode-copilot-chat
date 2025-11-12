@@ -8,7 +8,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -31,18 +31,8 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return await this.getCurrentAuthedUserWithToken(authToken);
 	}
 
-	async getTeamMembership(teamId: number): Promise<any | undefined> {
-		const session = (await this._authService.getAnyGitHubSession());
-		const token = session?.accessToken;
-		const username = session?.account.label;
-		if (!token || !username) {
-			return undefined;
-		}
-		return await this.getTeamMembershipWithToken(teamId, token, username);
-	}
-
 	async getCopilotPullRequestsForUser(owner: string, repo: string): Promise<PullRequestSearchItem[]> {
-		const auth = (await this._authService.getAnyGitHubSession());
+		const auth = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }));
 		if (!auth?.accessToken) {
 			return [];
 		}
@@ -56,7 +46,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getCopilotSessionsForPR(prId: string): Promise<SessionInfo[]> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			return [];
 		}
@@ -69,7 +59,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getSessionLogs(sessionId: string): Promise<string> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			return '';
 		}
@@ -81,7 +71,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getSessionInfo(sessionId: string): Promise<SessionInfo> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
@@ -96,7 +86,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async postCopilotAgentJob(owner: string, name: string, apiVersion: string, payload: RemoteAgentJobPayload): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
@@ -104,7 +94,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
@@ -112,7 +102,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string): Promise<JobInfo> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
@@ -120,7 +110,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
@@ -128,7 +118,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getAllOpenSessions(nwo: string): Promise<SessionInfo[]> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			return [];
 		}
@@ -136,7 +126,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
@@ -144,7 +134,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getCustomAgents(owner: string, repo: string): Promise<CustomAgentListItem[]> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			return [];
 		}
@@ -155,16 +145,8 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return agents;
 	}
 
-	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
-			return undefined;
-		}
-		return this.getCustomAgentDetailsWithToken(owner, repo, agentName, authToken, version);
-	}
-
 	async getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<PullRequestFile[]> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			return [];
 		}
@@ -172,7 +154,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async closePullRequest(owner: string, repo: string, pullNumber: number): Promise<boolean> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			return false;
 		}
@@ -180,7 +162,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No GitHub authentication available');
 		}

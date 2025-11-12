@@ -40,7 +40,7 @@ interface FileTreeDataWithContent extends vscode.ChatResponseFileTree {
 
 export const INewWorkspacePreviewContentManager = createServiceIdentifier<INewWorkspacePreviewContentManager>('INewWorkspacePreviewContentManager');
 export interface INewWorkspacePreviewContentManager {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 	set(responseId: string, projectName: string, fileTree: ChatResponseFileTreePart, serviceArgs: any): void;
 	get(uri: Uri): FileTreeDataWithContent | undefined;
 	getFileTree(responseId: string): ChatResponseFileTreePart | undefined;

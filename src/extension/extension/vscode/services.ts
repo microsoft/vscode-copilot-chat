@@ -40,8 +40,6 @@ import { GitExtensionServiceImpl } from '../../../platform/git/vscode/gitExtensi
 import { GitServiceImpl } from '../../../platform/git/vscode/gitServiceImpl';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
-import { IHeatmapService } from '../../../platform/heatmap/common/heatmapService';
-import { HeatmapServiceImpl } from '../../../platform/heatmap/vscode/heatmapServiceImpl';
 import { IInteractiveSessionService } from '../../../platform/interactive/common/interactiveSessionService';
 import { InteractiveSessionServiceImpl } from '../../../platform/interactive/vscode/interactiveSessionServiceImpl';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -64,6 +62,8 @@ import { NotificationService } from '../../../platform/notification/vscode/notif
 import { IUrlOpener, NullUrlOpener } from '../../../platform/open/common/opener';
 import { RealUrlOpener } from '../../../platform/open/vscode/opener';
 import { IProjectTemplatesIndex, ProjectTemplatesIndex } from '../../../platform/projectTemplatesIndex/common/projectTemplatesIndex';
+import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
+import { PromptsServiceImpl } from '../../../platform/promptFiles/common/promptsServiceImpl';
 import { IPromptPathRepresentationService, PromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IReleaseNotesService } from '../../../platform/releaseNotes/common/releaseNotesService';
 import { ReleaseNotesService } from '../../../platform/releaseNotes/vscode/releaseNotesServiceImpl';
@@ -98,8 +98,6 @@ import { IToolEmbeddingsComputer, ToolEmbeddingsComputer } from '../../tools/com
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
-import { PromptsServiceImpl } from '../../../platform/promptFiles/common/promptsServiceImpl';
-import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
 
 // ##########################################################################
 // ###                                                                    ###
@@ -160,7 +158,6 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IMultiFileEditInternalTelemetryService, new SyncDescriptor(MultiFileEditInternalTelemetryService));
 	builder.define(ICustomInstructionsService, new SyncDescriptor(CustomInstructionsService));
 	builder.define(ILaunchConfigService, new SyncDescriptor(LaunchConfigService));
-	builder.define(IHeatmapService, new SyncDescriptor(HeatmapServiceImpl));
 	builder.define(ISurveyService, new SyncDescriptor(SurveyService));
 	builder.define(IEditSurvivalTrackerService, new SyncDescriptor(EditSurvivalTrackerService));
 	builder.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationService));

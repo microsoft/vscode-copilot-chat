@@ -19,7 +19,7 @@ suite('Completions Prompt Renderer', function () {
 	let accessor: ServicesAccessor;
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 	});
 
 	test('uses full before cursor if within limit', async function () {

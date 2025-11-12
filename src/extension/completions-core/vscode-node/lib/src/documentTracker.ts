@@ -3,10 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from './context';
 import { LRUCacheMap } from './helpers/cache';
 import { TextDocumentIdentifier } from './textDocument';
-import { TextDocumentManager } from './textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from './textDocumentManager';
 
 /**
  * A map from the string representation of a document URI to its last access time in ms since the
@@ -30,7 +29,7 @@ export function sortByAccessTimes<T extends TextDocumentIdentifier>(docs: readon
  * access time of the document.
  */
 export const registerDocumentTracker = (accessor: ServicesAccessor) =>
-	accessor.get(ICompletionsContextService).get(TextDocumentManager).onDidFocusTextDocument(e => {
+	accessor.get(ICompletionsTextDocumentManagerService).onDidFocusTextDocument(e => {
 		if (e.document) {
 			accessTimes.set(e.document.uri.toString(), Date.now());
 		}

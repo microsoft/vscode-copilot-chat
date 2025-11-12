@@ -6,8 +6,7 @@
 
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { getBlockCloseToken } from '../../../prompt/src/parse';
-import { ICompletionsContextService } from '../context';
-import { Logger, LogTarget } from '../logger';
+import { ICompletionsLogTargetService, Logger } from '../logger';
 import { APIChoice } from '../openai/openai';
 import { TelemetryData, TelemetryStore, telemetry } from '../telemetry';
 import { IPosition, TextDocumentContents } from '../textDocument';
@@ -169,7 +168,7 @@ export function postProcessChoiceInContext(
 	isMoreMultiline: boolean,
 	logger: Logger
 ): APIChoice | undefined {
-	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 	if (isRepetitive(choice.tokens)) {
 		const telemetryData = TelemetryData.createAndMarkAsIssued();
 		telemetryData.extendWithRequestId(choice.requestId);

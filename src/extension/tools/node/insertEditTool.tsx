@@ -110,7 +110,7 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			uri ? [uri] : [],
-			() => '```\n' + options.input.code + '\n```',
+			async () => '```\n' + options.input.code + '\n```',
 		);
 	}
 

@@ -8,15 +8,14 @@
 import { ComponentContext, PromptElementProps, Text } from '../../../../prompt/src/components/components';
 import { getLanguageMarker, getPathMarker } from '../../../../prompt/src/languageMarker';
 import { DocumentInfo } from '../../../../prompt/src/prompt';
-import { ICompletionsContextService } from '../../context';
-import { TextDocumentManager } from '../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import {
 	CompletionRequestDocument,
 	isCompletionRequestData,
 } from '../completionsPromptFactory/componentsCompletionsPromptFactory';
 
 type DocumentMarkerProps = {
-	ctx: ICompletionsContextService;
+	tdms: ICompletionsTextDocumentManagerService;
 } & PromptElementProps;
 
 export const DocumentMarker = (props: DocumentMarkerProps, context: ComponentContext) => {
@@ -29,15 +28,14 @@ export const DocumentMarker = (props: DocumentMarkerProps, context: ComponentCon
 	});
 
 	if (document) {
-		const tdm = props.ctx.get(TextDocumentManager);
-		const relativePath = tdm.getRelativePath(document);
+		const relativePath = props.tdms.getRelativePath(document);
 		const docInfo: DocumentInfo = {
 			uri: document.uri,
 			source: document.getText(),
 			relativePath,
 			languageId: document.detectedLanguageId,
 		};
-		const notebook = tdm.findNotebook(document);
+		const notebook = props.tdms.findNotebook(document);
 		if (docInfo.relativePath && !notebook) {
 			return <PathMarker docInfo={docInfo} />;
 		}

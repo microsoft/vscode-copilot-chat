@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.33.0",
+	"version": "0.34.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0-20251103",
+		"vscode": "^1.107.0",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -160,33 +160,6 @@
 					},
 					"required": [
 						"query"
-					]
-				}
-			},
-			{
-				"name": "runSubagent",
-				"toolReferenceName": "runSubagent",
-				"displayName": "%copilot.tools.runSubagent.name%",
-				"canBeReferencedInPrompt": true,
-				"userDescription": "%copilot.tools.runSubagent.description%",
-				"modelDescription": "Launch a new agent to handle complex, multi-step tasks autonomously. This tool is good at researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use this agent to perform the search for you.\n\n- Agents do not run async or in the background, you will wait for the agent's result.\n- When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n - Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.\n - The agent's outputs should generally be trusted\n - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent",
-				"tags": [],
-				"when": "!config.chat.experimental.runSubagent2",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"prompt": {
-							"type": "string",
-							"description": "A detailed description of the task for the agent to perform"
-						},
-						"description": {
-							"type": "string",
-							"description": "A short (3-5 word) description of the task"
-						}
-					},
-					"required": [
-						"prompt",
-						"description"
 					]
 				}
 			},
@@ -1099,46 +1072,48 @@
 								"delete",
 								"rename"
 							],
-							"description": "The memory operation to perform: view (list/read), create (new file), str_replace (edit), insert (add content), delete (remove), rename (change filename)"
+							"description": "The memory operation to perform:\n- view: Show directory contents or file contents (optional line ranges)\n- create: Create or overwrite a file\n- str_replace: Replace text in a file\n- insert: Insert text at a specific line\n- delete: Delete a file or directory\n- rename: Rename or move a file or directory"
 						},
 						"path": {
 							"type": "string",
-							"description": "The path to the memory file (must start with /memories, e.g., /memories/notes.md or /memories/project/info.txt)"
+							"description": "Path to the memory file or directory. Must start with /memories.\n- For view: /memories or /memories/file.md\n- For create/str_replace/insert/delete: /memories/file.md\n- Not used for rename (use old_path/new_path instead)"
 						},
 						"view_range": {
 							"type": "array",
 							"items": {
 								"type": "number"
 							},
-							"description": "Optional: view specific line range [start, end] for view command"
+							"minItems": 2,
+							"maxItems": 2,
+							"description": "[view only] Optional line range [start, end] to view specific lines. Example: [1, 10]"
 						},
 						"file_text": {
 							"type": "string",
-							"description": "Content for create operation"
+							"description": "[create only] Content to write to the file. Required for create command."
 						},
 						"old_str": {
 							"type": "string",
-							"description": "String to replace in str_replace operation"
+							"description": "[str_replace only] The exact literal text to find and replace. Must be unique in the file. Required for str_replace command."
 						},
 						"new_str": {
 							"type": "string",
-							"description": "Replacement string in str_replace operation"
+							"description": "[str_replace only] The exact literal text to replace old_str with. Can be empty string. Required for str_replace command."
 						},
 						"insert_line": {
 							"type": "number",
-							"description": "Line number for insert operation"
+							"description": "[insert only] Line number at which to insert text (0-indexed, 0 = before first line). Required for insert command."
 						},
 						"insert_text": {
 							"type": "string",
-							"description": "Text to insert at specified line for insert operation"
+							"description": "[insert only] Text to insert at the specified line. Required for insert command."
 						},
 						"old_path": {
 							"type": "string",
-							"description": "Source path for rename operation"
+							"description": "[rename only] Current path of the file or directory. Must start with /memories. Required for rename command."
 						},
 						"new_path": {
 							"type": "string",
-							"description": "Destination path for rename operation"
+							"description": "[rename only] New path for the file or directory. Must start with /memories. Required for rename command."
 						}
 					},
 					"required": [
@@ -1741,6 +1716,11 @@
 			},
 			{
 				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
+				"when": "github.copilot.auth.missingPermissiveSession",
+				"contents": "%github.copilot.viewsWelcome.noPermissiveToken.contents%"
+			},
+			{
+				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
 				"when": "workspaceFolderCount == 0",
 				"contents": "%github.copilot.viewsWelcome.noFolder.contents%"
 			},
@@ -1810,6 +1790,10 @@
 			}
 		],
 		"commands": [
+			{
+				"command": "github.copilot.chat.triggerPermissiveSignIn",
+				"title": "%github.copilot.command.triggerPermissiveSignIn%"
+			},
 			{
 				"command": "github.copilot.claude.sessions.refresh",
 				"title": "%github.copilot.command.refreshClaudeCodeSessions%",
@@ -1979,6 +1963,12 @@
 				"title": "%github.copilot.command.openUserPreferences%",
 				"category": "Chat",
 				"enablement": "config.github.copilot.chat.enableUserPreferences"
+			},
+			{
+				"command": "github.copilot.chat.tools.memory.openFolder",
+				"title": "%github.copilot.command.openMemoryFolder%",
+				"category": "Chat",
+				"enablement": "config.github.copilot.chat.tools.memory.enabled"
 			},
 			{
 				"command": "github.copilot.chat.review.markUnhelpful",
@@ -2293,20 +2283,32 @@
 			},
 			{
 				"command": "github.copilot.chat.completions.disable",
-				"title": "Disable Completions",
+				"title": "Disable Inline Suggestions",
 				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && config.editor.inlineSuggest.enabled && github.copilot.completions.enabled",
 				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.chat.completions.enable",
-				"title": "Enable Completions",
+				"title": "Enable Inline Suggestions",
 				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated && !(config.editor.inlineSuggest.enabled && github.copilot.completions.enabled)",
 				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.chat.completions.toggle",
-				"title": "Toggle (Enable/Disable) Completions",
+				"title": "Toggle (Enable/Disable) Inline Suggestions",
 				"enablement": "github.copilot.extensionUnification.activated && github.copilot.activated",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.openModelPicker",
+				"title": "Change Completions Model",
+				"category": "GitHub Copilot",
+				"enablement": "github.copilot.extensionUnification.activated && !isWeb"
+			},
+			{
+				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+				"title": "%github.copilot.command.applyCopilotCLIAgentSessionChanges%",
+				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
 			}
 		],
@@ -2455,6 +2457,11 @@
 							"type": "boolean"
 						},
 						"markdownDescription": "Enable or disable auto triggering of Copilot completions for specified [languages](https://code.visualstudio.com/docs/languages/identifiers). You can still trigger suggestions manually using `Alt + \\`"
+					},
+					"github.copilot.selectedCompletionModel": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "The currently selected completion model ID. To select from a list of available models, use the __\"Change Completions Model\"__ command or open the model picker (from the Copilot menu in the VS Code title bar, select __\"Configure Code Completions\"__ then __\"Change Completions Model\"__. The value must be a valid model ID. An empty value indicates that the default model will be used."
 					}
 				}
 			},
@@ -2873,24 +2880,6 @@
 						"description": "%github.copilot.config.generateTests.codeLens%",
 						"tags": [
 							"experimental"
-						]
-					},
-					"github.copilot.chat.edits.temporalContext.enabled": {
-						"type": "boolean",
-						"default": false,
-						"description": "%github.copilot.chat.edits.temporalContext.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.editor.temporalContext.enabled": {
-						"type": "boolean",
-						"default": false,
-						"description": "%github.copilot.chat.editor.temporalContext.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
 						]
 					},
 					"github.copilot.chat.setupTests.enabled": {
@@ -3377,6 +3366,11 @@
 					"command": "github.copilot.chat.replay",
 					"group": "navigation@9",
 					"when": "resourceLangId == chatReplay"
+				},
+				{
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+					"group": "navigation@1",
+					"when": "resourceScheme == copilotcli-worktree-changes"
 				}
 			],
 			"editor/context": [
@@ -3423,6 +3417,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.chat.triggerPermissiveSignIn",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.interactiveSession.feedback",
 					"when": "github.copilot-chat.activated && !github.copilot.interactiveSession.disabled"
@@ -3629,6 +3627,10 @@
 				},
 				{
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 					"when": "false"
 				}
 			],
@@ -3956,6 +3958,11 @@
 				{
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 					"when": "chatSessionType == copilot-cloud-agent",
+					"group": "context"
+				},
+				{
+					"command": "github.copilot.cli.sessions.delete",
+					"when": "chatSessionType == copilotcli && config.chat.agentSessionsViewLocation == 'single-view'",
 					"group": "context"
 				}
 			]
@@ -4349,7 +4356,6 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
 				"description": "The GitHub Copilot CLI Agent works on your local machine",
-				"when": "!chatEntitlementSignedOut && chatIsEnabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
@@ -4378,7 +4384,6 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 1,
 				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
-				"when": "!chatEntitlementSignedOut && chatIsEnabled",
 				"capabilities": {
 					"supportsFileAttachments": true
 				}
@@ -4486,7 +4491,6 @@
 		"@fluentui/react-icons": "^2.0.305",
 		"@hediet/node-reload": "^0.8.0",
 		"@keyv/sqlite": "^4.0.5",
-		"@nteract/messaging": "^7.0.20",
 		"@octokit/types": "^14.1.0",
 		"@parcel/watcher": "^2.5.1",
 		"@stylistic/eslint-plugin": "^3.0.1",
@@ -4520,7 +4524,6 @@
 		"@vscode/test-electron": "^2.5.2",
 		"@vscode/test-web": "^0.0.71",
 		"@vscode/vsce": "3.6.0",
-		"@vscode/zeromq": "0.2.7",
 		"copyfiles": "^2.4.1",
 		"csv-parse": "^6.0.0",
 		"dotenv": "^17.2.0",
@@ -4577,12 +4580,12 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.68.0",
-		"@github/copilot": "^0.0.343",
+		"@github/copilot": "^0.0.354",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@vscode/copilot-api": "^0.1.13",
-		"@vscode/extension-telemetry": "^1.0.0",
+		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",

@@ -11,13 +11,24 @@ import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextP
 
 function apiContentToAnthropicContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart | LanguageModelThinkingPart)[]): ContentBlockParam[] {
 	const convertedContent: ContentBlockParam[] = [];
+
 	for (const part of content) {
 		if (part instanceof LanguageModelThinkingPart) {
-			convertedContent.push({
-				type: 'thinking',
-				thinking: Array.isArray(part.value) ? part.value.join('') : part.value,
-				signature: part.metadata?.signature ?? '',
-			});
+			// Check if this is a redacted thinking block
+			if (part.metadata?.redactedData) {
+				convertedContent.push({
+					type: 'redacted_thinking',
+					data: part.metadata.redactedData,
+				});
+			} else if (part.metadata?._completeThinking) {
+				// Only push thinking block when we have the complete thinking marker
+				convertedContent.push({
+					type: 'thinking',
+					thinking: part.metadata._completeThinking,
+					signature: part.metadata.signature || '',
+				});
+			}
+			// Skip incremental thinking parts - we only care about the complete one
 		} else if (part instanceof LanguageModelToolCallPart) {
 			convertedContent.push({
 				type: 'tool_use',
@@ -75,7 +86,6 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 		}
 	}
 	return convertedContent;
-
 }
 
 export function apiMessageToAnthropicMessage(messages: LanguageModelChatMessage[]): { messages: MessageParam[]; system: TextBlockParam } {
@@ -122,7 +132,6 @@ export function apiMessageToAnthropicMessage(messages: LanguageModelChatMessage[
 			}
 		}
 	}
-
 	return { messages: mergedMessages, system: systemMessage };
 }
 
@@ -221,6 +230,11 @@ export function anthropicMessagesToRawMessages(messages: MessageParam[], system:
 					content.push({
 						type: Raw.ChatCompletionContentPartKind.Text,
 						text: `[THINKING: ${block.thinking}]`
+					});
+				} else if (block.type === 'redacted_thinking') {
+					content.push({
+						type: Raw.ChatCompletionContentPartKind.Text,
+						text: '[REDACTED THINKING]'
 					});
 				} else if (block.type === 'tool_use') {
 					// tool_use appears in assistant messages; represent as toolCalls on assistant message

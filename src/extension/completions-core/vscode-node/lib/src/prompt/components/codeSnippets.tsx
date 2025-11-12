@@ -6,7 +6,7 @@
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
 
 import { Chunk, ComponentContext, PromptElementProps, Text } from '../../../../prompt/src/components/components';
-import { ICompletionsContextService } from '../../context';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import {
 	CompletionRequestDocument,
 	isCompletionRequestData,
@@ -15,7 +15,7 @@ import { addRelativePathToCodeSnippets, CodeSnippetWithRelativePath } from '../c
 import { CodeSnippetWithId } from '../contextProviders/contextItemSchemas';
 
 type CodeSnippetsProps = {
-	ctx: ICompletionsContextService;
+	tdms: ICompletionsTextDocumentManagerService;
 } & PromptElementProps;
 
 export const CodeSnippets = (props: CodeSnippetsProps, context: ComponentContext) => {
@@ -35,7 +35,7 @@ export const CodeSnippets = (props: CodeSnippetsProps, context: ComponentContext
 		return;
 	}
 
-	const codeSnippetsWithRelativePath = addRelativePathToCodeSnippets(props.ctx, snippets);
+	const codeSnippetsWithRelativePath = addRelativePathToCodeSnippets(props.tdms, snippets);
 
 	// Snippets with the same URI should appear together as a single snippet.
 	const snippetsByUri = new Map<string, CodeSnippetWithRelativePath[]>();

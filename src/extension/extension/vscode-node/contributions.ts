@@ -24,7 +24,6 @@ import { LanguageModelProxyContrib } from '../../externalAgents/vscode-node/lmPr
 import { WalkthroughCommandContribution } from '../../getting-started/vscode-node/commands';
 import * as newWorkspaceContribution from '../../getting-started/vscode-node/newWorkspace.contribution';
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
-import { InlineChatHintFeature } from '../../inlineChat/vscode-node/inlineChatHint';
 import { InlineEditProviderFeature } from '../../inlineEdits/vscode-node/inlineEditProviderFeature';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
 import { TestGenLensContribution } from '../../intents/vscode-node/testGenLens';
@@ -98,7 +97,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ConfigurationMigrationContribution),
 	asContributionFactory(TestGenLensContribution),
 	asContributionFactory(RequestLogTree),
-	asContributionFactory(InlineChatHintFeature),
 	asContributionFactory(OnboardTerminalTestsContribution),
 	asContributionFactory(ToolsContribution),
 	asContributionFactory(RemoteAgentContribution),

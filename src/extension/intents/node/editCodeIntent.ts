@@ -49,7 +49,6 @@ import { IBuildPromptResult, IIntent, IIntentInvocation, IIntentInvocationContex
 import { reportCitations } from '../../prompt/node/pseudoStartStopConversationCallback';
 import { PromptRenderer, renderPromptElement } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService, IMapCodeRequest, IMapCodeResult } from '../../prompts/node/codeMapper/codeMapperService';
-import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
 import { ChatToolReferences } from '../../prompts/node/panel/chatVariables';
 import { EXISTING_CODE_MARKER } from '../../prompts/node/panel/codeBlockFormattingRules';
 import { EditCodePrompt } from '../../prompts/node/panel/editCodePrompt';
@@ -409,8 +408,6 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 			this._editCodeStep.setUserMessage(lastMessage);
 		}
 
-		const tempoStats = result.metadata.get(TemporalContextStats);
-
 		return {
 			...result,
 			// The codebase tool is not actually called/referenced in the edit prompt, so we need to
@@ -420,7 +417,6 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 			// Don't report file references that came in via chat variables in an editing session, unless they have warnings,
 			// because they are already displayed as part of the working set
 			references: result.references.filter((ref) => this.shouldKeepReference(editCodeStep, ref, toolReferences, chatVariables)),
-			telemetryData: tempoStats && [tempoStats]
 		};
 	}
 

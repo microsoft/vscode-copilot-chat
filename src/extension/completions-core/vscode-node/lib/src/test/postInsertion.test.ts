@@ -4,19 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Sinon from 'sinon';
-import { CitationManager, IPDocumentCitation } from '../citationManager';
-import { ICompletionsContextService } from '../context';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsCitationManager, IPDocumentCitation } from '../citationManager';
 import { CopilotCompletion } from '../ghostText/copilotCompletion';
 import { ResultType } from '../ghostText/ghostText';
 import { postInsertionTasks } from '../postInsertion';
 import { TelemetryWithExp } from '../telemetry';
 import { IPosition, ITextDocument } from '../textDocument';
-import { TextDocumentManager } from '../textDocumentManager';
-import { PromiseQueue } from '../util/promiseQueue';
+import { ICompletionsTextDocumentManagerService } from '../textDocumentManager';
+import { ICompletionsPromiseQueueService } from '../util/promiseQueue';
 import { createLibTestingContext } from './context';
 import { fakeCodeReference } from './fetcher';
 import { TestTextDocumentManager } from './textDocument';
-import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('postInsertionTasks', function () {
 	let accessor: ServicesAccessor;
@@ -29,10 +28,10 @@ suite('postInsertionTasks', function () {
 	let completion: CopilotCompletion;
 
 	setup(function () {
-		accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
-		handleIPCodeCitation = Sinon.spy(ctx.get(CitationManager), 'handleIPCodeCitation');
-		docMgr = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		accessor = createLibTestingContext().createTestingAccessor();
+		const citationManager = accessor.get(ICompletionsCitationManager);
+		handleIPCodeCitation = Sinon.spy(citationManager, 'handleIPCodeCitation');
+		docMgr = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		doc = docMgr.setTextDocument(uri, 'javascript', 'function main() {\n\n\n}');
 		completion = {
 			uuid: '1234-5678-9abc',
@@ -66,8 +65,8 @@ suite('postInsertionTasks', function () {
 			{ compType: 'full', acceptedLength: completionText.length, acceptedLines: 0 },
 			completion.copilotAnnotations
 		);
-		const ctx = accessor.get(ICompletionsContextService);
-		await ctx.get(PromiseQueue).flush();
+		const promiseQueue = accessor.get(ICompletionsPromiseQueueService);
+		await promiseQueue.flush();
 
 		Sinon.assert.calledOnceWithExactly(handleIPCodeCitation, {
 			inDocumentUri: doc.uri,
@@ -98,8 +97,8 @@ suite('postInsertionTasks', function () {
 			{ compType: 'partial', acceptedLength: partial.length, acceptedLines: 0 },
 			completion.copilotAnnotations
 		);
-		const ctx = accessor.get(ICompletionsContextService);
-		await ctx.get(PromiseQueue).flush();
+		const promiseQueue = accessor.get(ICompletionsPromiseQueueService);
+		await promiseQueue.flush();
 
 		Sinon.assert.calledOnceWithExactly(handleIPCodeCitation, {
 			inDocumentUri: doc.uri,
@@ -127,8 +126,8 @@ suite('postInsertionTasks', function () {
 			{ compType: 'partial', acceptedLength: partial.length, acceptedLines: 0 },
 			completion.copilotAnnotations
 		);
-		const ctx = accessor.get(ICompletionsContextService);
-		await ctx.get(PromiseQueue).flush();
+		const promiseQueue = accessor.get(ICompletionsPromiseQueueService);
+		await promiseQueue.flush();
 
 		Sinon.assert.notCalled(handleIPCodeCitation);
 	});
@@ -153,8 +152,8 @@ suite('postInsertionTasks', function () {
 			{ compType: 'full', acceptedLength: completionText.length, acceptedLines: 3 },
 			completion.copilotAnnotations
 		);
-		const ctx = accessor.get(ICompletionsContextService);
-		await ctx.get(PromiseQueue).flush();
+		const promiseQueue = accessor.get(ICompletionsPromiseQueueService);
+		await promiseQueue.flush();
 
 		Sinon.assert.calledOnceWithExactly(handleIPCodeCitation, {
 			inDocumentUri: doc.uri,
