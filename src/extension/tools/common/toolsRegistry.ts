@@ -67,34 +67,35 @@ export interface ICopilotToolExtension<T> {
 export interface ICopilotTool<T> extends vscode.LanguageModelTool<T>, ICopilotToolExtension<T> {
 }
 
+type ToolParamsBase = {} | void;
 
-export interface ICopilotToolCtor<T = unknown> {
+export interface ICopilotToolCtor<T = ToolParamsBase> {
 	readonly toolName: ToolName;
 	new(...args: unknown[]): ICopilotTool<T>;
 }
 
-export interface ICopilotToolExtensionCtor<T = unknown> {
+export interface ICopilotToolExtensionCtor<T = ToolParamsBase> {
 	readonly toolName: ToolName;
 	new(...args: unknown[]): ICopilotToolExtension<T>;
 }
 
 export const ToolRegistry = new class {
-	private _tools: ICopilotToolCtor[] = [];
-	private _toolExtensions: ICopilotToolExtensionCtor[] = [];
+	private _tools: Array<ICopilotToolCtor<ToolParamsBase>> = [];
+	private _toolExtensions: Array<ICopilotToolExtensionCtor<ToolParamsBase>> = [];
 
-	public registerTool(tool: ICopilotToolCtor) {
+	public registerTool<T extends ToolParamsBase>(tool: { readonly toolName: ToolName; new(...args: any[]): ICopilotTool<T> }) {
 		this._tools.push(tool);
 	}
 
-	public getTools(): readonly ICopilotToolCtor[] {
+	public getTools(): readonly ICopilotToolCtor<ToolParamsBase>[] {
 		return this._tools;
 	}
 
-	public registerToolExtension(tool: ICopilotToolExtensionCtor) {
+	public registerToolExtension<T extends ToolParamsBase>(tool: { readonly toolName: ToolName; new(...args: any[]): ICopilotToolExtension<T> }) {
 		this._toolExtensions.push(tool);
 	}
 
-	public getToolExtensions(): readonly ICopilotToolExtensionCtor[] {
+	public getToolExtensions(): readonly ICopilotToolExtensionCtor<ToolParamsBase>[] {
 		return this._toolExtensions;
 	}
 }();
