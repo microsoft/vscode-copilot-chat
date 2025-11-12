@@ -127,7 +127,7 @@ export class CustomOAIModelConfigurator {
 
 			// Add separator and actions
 			if (items.length > 0) {
-				items.push({ label: '', kind: -1 } as any);
+				items.push({ label: '', kind: -1 });
 			}
 
 			items.push({
