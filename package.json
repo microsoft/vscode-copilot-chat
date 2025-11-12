@@ -3649,6 +3649,10 @@
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.showAsChatSession",
+					"when": "false"
 				}
 			],
 			"view/title": [

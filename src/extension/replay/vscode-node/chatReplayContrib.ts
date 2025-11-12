@@ -20,11 +20,8 @@ export class ChatReplayContribution extends Disposable {
 
 		this._sessionProvider = this._register(new ChatReplaySessionProvider());
 
-		// might not need the item provider?
-		// this._register(chat.registerChatSessionItemProvider('chat-replay', this._sessionProvider));
 		const chatParticipant = chat.createChatParticipant('chat-replay', async (request, context, response, token) => {
-			// Chat replay participant - replays are read-only, so this handler is mostly a stub
-			// The actual replay content is provided via the ChatSessionContentProvider
+			// Chat replays are readonly, so the participant does nothing
 			return {};
 		});
 		this._register(chat.registerChatSessionContentProvider('chat-replay', this._sessionProvider, chatParticipant));
