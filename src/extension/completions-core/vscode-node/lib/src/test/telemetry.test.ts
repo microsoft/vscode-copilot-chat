@@ -91,8 +91,7 @@ suite('Telemetry unit tests', function () {
 				() => {
 					throw new Error('boom!');
 				},
-				'exceptionTest',
-				{ testKey: 'testValue' }
+				'exceptionTest'
 			)();
 		});
 
@@ -104,11 +103,8 @@ suite('Telemetry unit tests', function () {
 		assert.ok(enhancedEvent);
 
 		// assert.deepStrictEqual(standardEvent.properties.message, 'boom!');
-		// assert.deepStrictEqual(standardEvent.properties.testKey, 'testValue');
 
 		assert.deepStrictEqual(enhancedEvent.properties.message, 'boom!');
-		// Chat has no properties when logging exceptions.
-		// assert.deepStrictEqual(enhancedEvent.properties.testKey, 'testValue');
 
 		// assert.ok(standardEvent.properties.restricted_unique_id);
 		// assert.deepStrictEqual(enhancedEvent.properties.unique_id, standardEvent.properties.restricted_unique_id);
