@@ -82,6 +82,29 @@ The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
 You can find the configuration in \`config/app.config.json\`.
 </example>
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 
 </outputFormatting>
 
@@ -217,6 +240,29 @@ The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
 You can find the configuration in \`config/app.config.json\`.
 </example>
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 
 </outputFormatting>
 
@@ -354,6 +400,29 @@ The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
 You can find the configuration in \`config/app.config.json\`.
 </example>
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 
 </outputFormatting>
 
@@ -479,6 +548,29 @@ The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
 You can find the configuration in \`config/app.config.json\`.
 </example>
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 
 </outputFormatting>
 
@@ -611,6 +703,29 @@ The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
 You can find the configuration in \`config/app.config.json\`.
 </example>
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 
 </outputFormatting>
 
@@ -871,6 +986,29 @@ The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
 You can find the configuration in \`config/app.config.json\`.
 </example>
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 
 </outputFormatting>
 
@@ -1116,6 +1254,29 @@ The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
 You can find the configuration in \`config/app.config.json\`.
 </example>
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 
 </outputFormatting>
 
@@ -1248,6 +1409,29 @@ The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
 You can find the configuration in \`config/app.config.json\`.
 </example>
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 
 </outputFormatting>
 
@@ -1370,6 +1554,29 @@ The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
 You can find the configuration in \`config/app.config.json\`.
 </example>
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 
 </outputFormatting>
 
@@ -2759,6 +2966,29 @@ Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -2892,6 +3122,29 @@ Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -3027,6 +3280,29 @@ Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -3121,6 +3397,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -3222,6 +3521,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -3450,6 +3772,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -3662,6 +4007,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -3763,6 +4131,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -3854,6 +4245,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -4022,6 +4436,29 @@ Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -4159,6 +4596,29 @@ Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -4298,6 +4758,29 @@ Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -4396,6 +4879,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -4501,6 +5007,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -4735,6 +5264,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -4955,6 +5507,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -5060,6 +5635,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -5155,6 +5753,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -5479,9 +6100,34 @@ Generally, ensure your final answers adapt their shape and depth to the request.
 
 For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 When referring to a filename or symbol in the user's workspace, wrap it in backticks.
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
+Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).
+
 </example>
 
 </final_answer_formatting>
@@ -5756,9 +6402,34 @@ Generally, ensure your final answers adapt their shape and depth to the request.
 
 For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 When referring to a filename or symbol in the user's workspace, wrap it in backticks.
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
+Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).
+
 </example>
 
 </final_answer_formatting>
@@ -6035,9 +6706,34 @@ Generally, ensure your final answers adapt their shape and depth to the request.
 
 For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 When referring to a filename or symbol in the user's workspace, wrap it in backticks.
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
+Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).
+
 </example>
 
 </final_answer_formatting>
@@ -6314,9 +7010,34 @@ Generally, ensure your final answers adapt their shape and depth to the request.
 
 For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 When referring to a filename or symbol in the user's workspace, wrap it in backticks.
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
+Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).
+
 </example>
 
 </final_answer_formatting>
@@ -6600,9 +7321,34 @@ Generally, ensure your final answers adapt their shape and depth to the request.
 
 For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 When referring to a filename or symbol in the user's workspace, wrap it in backticks.
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
+Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).
+
 </example>
 
 </final_answer_formatting>
@@ -7034,9 +7780,34 @@ Generally, ensure your final answers adapt their shape and depth to the request.
 
 For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 When referring to a filename or symbol in the user's workspace, wrap it in backticks.
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
+Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).
+
 </example>
 
 </final_answer_formatting>
@@ -7473,9 +8244,34 @@ Generally, ensure your final answers adapt their shape and depth to the request.
 
 For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 When referring to a filename or symbol in the user's workspace, wrap it in backticks.
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
+Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).
+
 </example>
 
 </final_answer_formatting>
@@ -7759,9 +8555,34 @@ Generally, ensure your final answers adapt their shape and depth to the request.
 
 For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 When referring to a filename or symbol in the user's workspace, wrap it in backticks.
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
+Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).
+
 </example>
 
 </final_answer_formatting>
@@ -8035,9 +8856,34 @@ Generally, ensure your final answers adapt their shape and depth to the request.
 
 For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 When referring to a filename or symbol in the user's workspace, wrap it in backticks.
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
+Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).
+
 </example>
 
 </final_answer_formatting>
@@ -8194,6 +9040,29 @@ Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -8334,6 +9203,29 @@ Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -8476,6 +9368,29 @@ Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -8577,6 +9492,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -8685,6 +9623,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -8920,6 +9881,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -9139,6 +10123,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -9247,6 +10254,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
@@ -9345,6 +10375,29 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 </toolUseInstructions>
 <outputFormatting>
 Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+<file_linkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations:
+[path/to/file.ts](path/to/file.ts) - whole file
+[path/to/file.ts](path/to/file.ts#L10) - single line
+[path/to/file.ts](path/to/file.ts#L10-12) - line range
+When listing multiple references, start each item with the linked path, for example:
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L142) - awaiting a call to open the chat view
+[path/to/chatQuick.ts](path/to/chatQuick.ts#L321) - awaiting the chat view widget
+Examples:
+❌ \`The function is in exampleScript.ts at line 25.\`
+✓ \`The function is in [exampleScript.ts](exampleScript.ts#L25).\`
+Critical rules:
+- Link text = exact file path only (no backticks, no \`#L\` in the visible text, no extra wording). Keep any \`#L\` anchors in the link target, for example \`[src/file.ts](src/file.ts#L25)\`.
+- Path format: Strip drive letters and workspace parent folders - use only path after workspace root
+- Transform \`c:/Repos/workspace/src/file.ts\` → \`[src/file.ts](src/file.ts)\`
+- Always use forward slashes \`/\`, never backslashes \`/\`
+- Do not use URIs like file://, vscode://, or https://.
+- Percent-encode spaces in target only: \`[My File.md](My%20File.md)\`
+- Each file reference needs complete path (don't abbreviate repeated files)
+- Integrate line numbers into anchor: \`#L10\` or \`#L10-12\` for ranges
+- Don't wrap links in backticks; only cite existing paths from context
+
+</file_linkification>
 <example>
 The class \`Person\` is in \`src/models/person.ts\`.
 The function \`calculateTotal\` is defined in \`lib/utils/math.ts\`.
