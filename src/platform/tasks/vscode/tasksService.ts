@@ -32,7 +32,7 @@ export class TasksService extends DisposableStore implements ITasksService {
 	) {
 		super();
 		this.add(vscode.tasks.onDidStartTask(e => {
-			const terminal: vscode.Terminal | undefined = (e.execution as any).terminal;
+			const terminal: vscode.Terminal | undefined = e.execution.terminal;
 			if (!terminal) {
 				return;
 			}
