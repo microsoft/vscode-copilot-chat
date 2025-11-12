@@ -75,7 +75,7 @@
 			"type": "npm",
 			"script": "watch:tsc-extension",
 			"group": "build",
-			"problemMatcher": "$tsgo-watch",
+			"problemMatcher": "$tsc-watch",
 			"isBackground": true,
 			"label": "npm: watch:tsc-extension",
 			"presentation": {
@@ -87,7 +87,7 @@
 			"type": "npm",
 			"script": "watch:tsc-extension-web",
 			"group": "build",
-			"problemMatcher": "$tsgo-watch",
+			"problemMatcher": "$tsc-watch",
 			"isBackground": true,
 			"label": "npm: watch:tsc-extension-web",
 			"presentation": {
@@ -99,7 +99,7 @@
 			"type": "npm",
 			"script": "watch:tsc-simulation-workbench",
 			"group": "build",
-			"problemMatcher": "$tsgo-watch",
+			"problemMatcher": "$tsc-watch",
 			"isBackground": true,
 			"label": "npm: watch:tsc-simulation-workbench",
 			"presentation": {
