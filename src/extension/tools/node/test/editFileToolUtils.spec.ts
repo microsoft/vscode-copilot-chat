@@ -14,7 +14,7 @@ import { createTextDocumentData, IExtHostDocumentData, setDocText } from '../../
 import { URI } from '../../../../util/vs/base/common/uri';
 import { WorkspaceEdit } from '../../../../vscodeTypes';
 import { applyEdits as applyTextEdits } from '../../../prompt/node/intents';
-import { applyEdit, ContentFormatError, MultipleMatchesError, NoChangeError, NoMatchError } from '../editFileToolUtils';
+import { applyEdit, assertPathIsSafe, ContentFormatError, MultipleMatchesError, NoChangeError, NoMatchError } from '../editFileToolUtils';
 
 describe('replace_string_in_file - applyEdit', () => {
 	let workspaceEdit: WorkspaceEdit;
@@ -351,5 +351,54 @@ describe('replace_string_in_file - applyEdit', () => {
 		expect(
 			applyTextEdits(input.join('\r\n'), workspaceEdit.entries()[0][1])
 		).toBe(output);
+	});
+});
+
+
+describe('assertPathIsSafe (Windows scenarios)', () => {
+	// Force Windows checks by passing true for _isWindows
+	test('accepts normal path', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\project\\file.txt', true)).not.toThrow();
+	});
+
+	test('rejects null byte', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\proje\0ct\\file.txt', true)).toThrow();
+	});
+
+	test('rejects ADS suffix', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\project\\file.txt:$I30:$INDEX_ALLOCATION', true)).toThrow();
+	});
+
+	test('rejects additional colon in component', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\file:name.txt', true)).toThrow();
+	});
+
+	test('rejects invalid characters', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\proj>ect\\file.txt', true)).toThrow();
+	});
+
+	test('rejects device path prefix \\?\\', () => {
+		// This should be treated as reserved device path
+		expect(() => assertPathIsSafe('\\\\?\\C:\\Users\\me\\file.txt', true)).toThrow();
+	});
+
+	test('rejects reserved device name component', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\CON\\file.txt', true)).toThrow();
+	});
+
+	test('rejects trailing dot in component', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\folder.\\file.txt', true)).toThrow();
+	});
+
+	test('rejects trailing space in component', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\folder \\file.txt', true)).toThrow();
+	});
+
+	test('rejects 8.3 short filename pattern', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\VSCODE~1\\settings.json', true)).toThrow();
+	});
+
+	test('allows tilde without digit', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\my~folder\\file.txt', true)).not.toThrow();
 	});
 });

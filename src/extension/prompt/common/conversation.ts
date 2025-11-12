@@ -17,6 +17,7 @@ import { ChatVariablesCollection } from './chatVariablesCollection';
 import { ToolCallRound } from './toolCallRound';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { isContinueOnError, isToolCallLimitAcceptance } from './specialRequestTypes';
 export { PromptReference } from '@vscode/prompt-tsx';
 
 export enum TurnStatus {
@@ -74,7 +75,8 @@ export class Turn {
 			new ChatVariablesCollection(request.references),
 			request.toolReferences.map(InternalToolReference.from),
 			request.editedFileEvents,
-			request.acceptedConfirmationData
+			request.acceptedConfirmationData,
+			isToolCallLimitAcceptance(request) || isContinueOnError(request),
 		);
 	}
 
@@ -84,7 +86,8 @@ export class Turn {
 		private readonly _promptVariables: ChatVariablesCollection | undefined = undefined,
 		private readonly _toolReferences: readonly InternalToolReference[] = [],
 		readonly editedFileEvents?: ChatRequestEditedFileEvent[],
-		readonly acceptedConfirmationData?: any[]
+		readonly acceptedConfirmationData?: any[],
+		readonly isContinuation = false
 	) { }
 
 	get promptVariables(): ChatVariablesCollection | undefined {

@@ -44,18 +44,23 @@ export class CopilotCLIWorktreeManager {
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService) { }
 
 	async createWorktree(stream: vscode.ChatResponseStream): Promise<string | undefined> {
-		try {
-			const worktreePath = await this.commandExecutionService.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
-			if (worktreePath) {
-				stream.progress(vscode.l10n.t('Created isolated worktree at {0}', worktreePath));
-				return worktreePath;
-			} else {
-				stream.warning(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory'));
-			}
-		} catch (error) {
-			stream.warning(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error)));
-		}
-		return undefined;
+		return new Promise<string | undefined>((resolve) => {
+			stream.progress(vscode.l10n.t('Creating isolated worktree for Copilot CLI session...'), async progress => {
+				try {
+					const worktreePath = await this.commandExecutionService.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
+					if (worktreePath) {
+						resolve(worktreePath);
+						return vscode.l10n.t('Created isolated worktree at {0}', worktreePath);
+					} else {
+						progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+					}
+				} catch (error) {
+					progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
+				}
+
+				resolve(undefined);
+			});
+		});
 	}
 
 	async storeWorktreePath(sessionId: string, workingDirectory: string): Promise<void> {
@@ -542,16 +547,31 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
+			const id = SessionIdForCLI.parse(sessionItem.resource);
+			const worktreePath = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(id);
+
+			const confirmMessage = worktreePath
+				? l10n.t('Are you sure you want to delete the session and its associated worktree?')
+				: l10n.t('Are you sure you want to delete the session?');
+
 			const deleteLabel = l10n.t('Delete');
 			const result = await vscode.window.showWarningMessage(
-				l10n.t('Are you sure you want to delete the session?'),
+				confirmMessage,
 				{ modal: true },
 				deleteLabel
 			);
 
 			if (result === deleteLabel) {
-				const id = SessionIdForCLI.parse(sessionItem.resource);
 				await copilotCLISessionService.deleteSession(id);
+
+				if (worktreePath) {
+					try {
+						await vscode.commands.executeCommand('git.deleteWorktree', Uri.file(worktreePath));
+					} catch (error) {
+						vscode.window.showErrorMessage(l10n.t('Failed to delete worktree: {0}', error instanceof Error ? error.message : String(error)));
+					}
+				}
+
 				copilotcliSessionItemProvider.refresh();
 			}
 		}
@@ -624,11 +644,9 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
-		// Migrate the changes, delete the worktree, close the editor, and delete the session
+		// Migrate the changes, and close the active multi-file diff editor
 		await vscode.commands.executeCommand('git.migrateWorktreeChanges', activeRepository.rootUri, sessionWorktreeUri);
-		await vscode.commands.executeCommand('git.deleteWorktree', sessionWorktreeUri);
 		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-		await copilotCLISessionService.deleteSession(sessionId);
 	}));
 	return disposableStore;
 }

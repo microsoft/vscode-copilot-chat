@@ -29,8 +29,8 @@ import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { AgentIntentInvocation } from './agentIntent';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
-import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
 import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
+import { getRequestedToolCallIterationLimit } from '../../prompt/common/specialRequestTypes';
 
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
