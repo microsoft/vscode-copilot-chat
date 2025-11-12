@@ -381,7 +381,7 @@ const FriendlyToolNames: Record<ToolCall['toolName'], string> = {
 	'glob': l10n.t('Glob Tool'),
 	'report_intent': l10n.t('Report Intent'),
 	'think': l10n.t('Thinking'),
-	'report_progress': l10n.t('Proress Update'),
+	'report_progress': l10n.t('Progress Update'),
 	'undo_edit': l10n.t('Undo Edit'),
 	'str_replace_editor': l10n.t('String Replace Editor'),
 	'view': l10n.t('View File'),
