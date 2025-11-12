@@ -61,8 +61,8 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 			if (anchorRange) {
 				const { range, startLine, endLine } = anchorRange;
 				const displayPath = endLine && startLine !== endLine
-					? `${basePath}#${startLine}-${endLine}`
-					: `${basePath}#${startLine}`;
+					? `${basePath}#L${startLine}-${endLine}`
+					: `${basePath}#L${startLine}`;
 				parts.push(new LinkifyLocationAnchor(new Location(resolved, range), displayPath));
 				continue;
 			}
