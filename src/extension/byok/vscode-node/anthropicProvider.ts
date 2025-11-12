@@ -194,14 +194,14 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				},
 			});
 
-		// Check if memory tool is present
-		const hasMemoryTool = (options.tools ?? []).some(tool => tool.name === 'memory');
+		let hasMemoryTool = false;
 
 		// Build tools array, handling both standard tools and native Anthropic tools
 		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
 
 			// Handle native Anthropic memory tool
-			if (hasMemoryTool && this._enableMemory(model.id)) {
+			if (tool.name === 'memory' && this._enableMemory(model.id)) {
+				hasMemoryTool = true;
 				return {
 					name: 'memory',
 					type: 'memory_20250818'
@@ -278,22 +278,18 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			betas.push('context-management-2025-06-27');
 		}
 
-		const baseParams = {
+		const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
 			model: model.id,
 			messages: convertedMessages,
 			max_tokens: model.maxOutputTokens,
 			stream: true,
 			system: [system],
 			tools: tools.length > 0 ? tools : undefined,
-		};
-
-		const params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming = betas.length > 0 ? {
-			...baseParams,
 			thinking: thinkingEnabled ? {
 				type: 'enabled',
 				budget_tokens: this._calculateThinkingBudget(model.maxOutputTokens)
 			} : undefined
-		} as Anthropic.Beta.Messages.MessageCreateParamsStreaming : baseParams as Anthropic.Messages.MessageCreateParamsStreaming;
+		};
 
 		const wrappedProgress = new RecordedProgress(progress);
 
@@ -369,19 +365,17 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
 		if (!this._anthropicAPIClient) {
 			return { ttft: undefined, usage: undefined };
 		}
 		const start = Date.now();
 		let ttft: number | undefined;
 
-		const stream = betas.length > 0
-			? await this._anthropicAPIClient.beta.messages.create({
-				...(params as Anthropic.Beta.Messages.MessageCreateParamsStreaming),
-				betas
-			})
-			: await this._anthropicAPIClient.messages.create(params as Anthropic.Messages.MessageCreateParamsStreaming);
+		const stream = await this._anthropicAPIClient.beta.messages.create({
+			...params,
+			betas
+		});
 
 		let pendingToolCall: {
 			toolId?: string;
