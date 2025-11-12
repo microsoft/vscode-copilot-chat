@@ -17,8 +17,8 @@ import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/reso
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart } from '../common/copilotCLITools';
 import { CopilotCLISessionOptions, getAuthInfo } from './copilotCli';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
 
 type PermissionHandler = (
@@ -162,10 +162,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('tool.execution_start', (event) => {
 				toolNames.set(event.data.toolCallId, event.data.toolName);
-				if (isCopilotCliEditToolCall(event.data.toolName, event.data.arguments)) {
+				if (isCopilotCliEditToolCall(event.data)) {
 					editToolIds.add(event.data.toolCallId);
 					// Track edits for edit tools.
-					const editUris = getAffectedUrisForEditTool(event.data.toolName, event.data.arguments || {});
+					const editUris = getAffectedUrisForEditTool(event.data);
 					if (editUris.length) {
 						editUris.forEach(uri => {
 							const ids = editFilesAndToolCallIds.get(uri) || [];
