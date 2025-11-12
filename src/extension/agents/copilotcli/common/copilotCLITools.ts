@@ -140,6 +140,45 @@ type ReportProgressTool = {
 	};
 };
 
+type SearchTool = {
+	toolName: 'search_bash';
+	arguments: {
+		question: string;
+		reason: string;
+		searchCommand: string;
+	};
+};
+
+type SearchBashTool = {
+	toolName: 'search_bash';
+	arguments: {
+		command: string;
+	};
+};
+
+type SemanticCodeSearchTool = {
+	toolName: 'semantic_code_search';
+	arguments: {
+		question: string;
+	};
+};
+
+type ReplyToCommandTool = {
+	toolName: 'reply_to_comment';
+	arguments: {
+		reply: string;
+		comment_id: string;
+	};
+};
+
+type CodeReviewTool = {
+	toolName: 'code_review';
+	arguments: {
+		prTitle: string;
+		prDescription: string;
+	};
+};
+
 
 type StringReplaceArgumentTypes = CreateTool | ViewTool | StrReplaceTool | EditTool | InsertTool | UndoEditTool;
 type ToStringReplaceEditorArguments<T extends StringReplaceArgumentTypes> = {
@@ -152,9 +191,11 @@ export type ToolInfo = {
 } | EditTool | CreateTool | ViewTool | UndoEditTool | InsertTool |
 	ShellTool | WriteShellTool | ReadShellTool | StopShellTool |
 	GrepTool | GLobTool |
-	ReportIntentTool | ThinkTool | ReportProgressTool;
+	ReportIntentTool | ThinkTool | ReportProgressTool |
+	SearchTool | SearchBashTool | SemanticCodeSearchTool |
+	ReplyToCommandTool | CodeReviewTool;
 
-type ToolCall = ToolInfo & { toolCallId: string };
+export type ToolCall = ToolInfo & { toolCallId: string };
 type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
 
 export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: unknown }): boolean {
@@ -326,6 +367,8 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
  */
 export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolName: string; arguments?: unknown }): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolCall = data as ToolCall;
+	// Ensures arguments is at least an empty object
+	toolCall.arguments = toolCall.arguments ?? {};
 	if (toolCall.toolName === 'report_intent') {
 		return undefined; // Ignore these for now
 	}
@@ -377,15 +420,19 @@ const FriendlyToolNames: Record<ToolCall['toolName'], string> = {
 	'read_powershell': l10n.t('Read Terminal'),
 	'stop_bash': l10n.t('Stop Terminal Session'),
 	'stop_powershell': l10n.t('Stop Terminal Session'),
-	'grep': l10n.t('Grep Tool'),
-	'glob': l10n.t('Glob Tool'),
+	'grep': l10n.t('Search'),
+	'glob': l10n.t('Search'),
+	'search_bash': l10n.t('Search'),
+	'semantic_code_search': l10n.t('Search'),
+	'reply_to_comment': l10n.t('Reply to Comment'),
+	'code_review': l10n.t('Review Code'),
 	'report_intent': l10n.t('Report Intent'),
 	'think': l10n.t('Thinking'),
 	'report_progress': l10n.t('Progress Update'),
-	'undo_edit': l10n.t('Undo Edit'),
+	'undo_edit': l10n.t('Edit'),
 	'str_replace_editor': l10n.t('String Replace Editor'),
-	'view': l10n.t('View File'),
-	'insert': l10n.t('Insert Text')
+	'view': l10n.t('Read File'),
+	'insert': l10n.t('Edit File')
 };
 
 function friendlyToolName(toolName: ToolCall['toolName']): string {
