@@ -15,7 +15,7 @@ import { autorun, IObservable } from '../../../util/vs/base/common/observableInt
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
-import { Range as ExternalRange } from '../../../vscodeTypes';
+import { DiagnosticSeverity, Range as ExternalRange } from '../../../vscodeTypes';
 
 export class DiagnosticsContextContribution extends Disposable {
 
@@ -57,6 +57,7 @@ export class DiagnosticsContextContribution extends Disposable {
 type DiagnosticsContextOptions = {
 	maxDiagnostics: number;
 	includeDiagnosticsRange?: Range;
+	includeWarnings: boolean;
 };
 
 class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContextItem> {
@@ -82,7 +83,8 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 
 		return this.getContext(requestedFileResource, cursor, {
 			maxDiagnostics: 3,
-			includeDiagnosticsRange: new Range(cursor.lineNumber, 1, cursor.lineNumber + 5, 1)
+			includeWarnings: true,
+			includeDiagnosticsRange: new Range(cursor.lineNumber, 1, cursor.lineNumber + 5, 1),
 		});
 	}
 
@@ -93,6 +95,10 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 			diagnostics = diagnostics.filter(d => options.includeDiagnosticsRange!.containsRange(toInternalRange(d.range)));
 		}
 
+		if (!options.includeWarnings) {
+			diagnostics = diagnostics.filter(d => d.severity !== DiagnosticSeverity.Warning);
+		}
+
 		const diagnosticsSortedByDistance = diagnostics.sort((a, b) => {
 			const aDistance = Math.abs(a.range.start.line + 1 - cursor.lineNumber);
 			const bDistance = Math.abs(b.range.start.line + 1 - cursor.lineNumber);
@@ -101,20 +107,20 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 
 		const diagnosticsLimited = diagnosticsSortedByDistance.slice(0, options.maxDiagnostics);
 
-		const errorDiagnostics = diagnosticsLimited.filter(d => d.severity === 0);
-		const warningsDiagnostics = diagnosticsLimited.filter(d => d.severity === 1);
+		const errorDiagnostics = diagnosticsLimited.filter(d => d.severity === DiagnosticSeverity.Error);
+		const warningsDiagnostics = diagnosticsLimited.filter(d => d.severity === DiagnosticSeverity.Warning);
 
 		const traits: Copilot.Trait[] = [];
 		if (errorDiagnostics.length > 0) {
 			traits.push({
-				name: "There are the following errors near the users cursor",
+				name: "Errors near the users cursor",
 				value: errorDiagnostics.map(d => `- ${d.message}`).join('\n'),
 			});
 		}
 
 		if (warningsDiagnostics.length > 0) {
 			traits.push({
-				name: "There are the following warnings near the users cursor",
+				name: "Warnings near the users cursor",
 				value: warningsDiagnostics.map(d => `- ${d.message}`).join('\n'),
 			});
 		}
