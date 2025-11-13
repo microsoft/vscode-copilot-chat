@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -45,6 +46,7 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		@ISearchService private readonly searchService: ISearchService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindTextInFilesToolParams>, token: CancellationToken) {
@@ -59,12 +61,13 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		const maxResults = Math.min(options.input.maxResults ?? 20, MaxResultsCap);
 		const isRegExp = options.input.isRegexp ?? true;
 		const queryIsValidRegex = this.isValidRegex(options.input.query);
+		const includeIgnoredFiles = options.input.includeIgnoredFiles ?? false;
 
 		// try find text with a timeout of 20s
 		const timeoutInMs = 20_000;
 
 		let results = await raceTimeoutAndCancellationError(
-			(searchToken) => this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, options.input.includeIgnoredFiles, searchToken),
+			(searchToken) => this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, includeIgnoredFiles, searchToken),
 			token,
 			timeoutInMs,
 			// embed message to give LLM hint about what to do next
@@ -74,7 +77,7 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		// If we still have no results, we need to try the opposite regex mode
 		if (!results.length && queryIsValidRegex) {
 			results = await raceTimeoutAndCancellationError(
-				(searchToken) => this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, options.input.includeIgnoredFiles, searchToken),
+				(searchToken) => this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, includeIgnoredFiles, searchToken),
 				token,
 				timeoutInMs,
 				// embed message to give LLM hint about what to do next
@@ -82,9 +85,27 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			);
 		}
 
+		let noMatchInstructions: string | undefined = undefined;
+		if (!results.length && !includeIgnoredFiles) {
+			// Get the search.exclude configuration
+			const excludeSettings = this.configurationService.getNonExtensionConfig<Record<string, boolean>>('search.exclude');
+			const excludePaths: string[] = [];
+			if (excludeSettings) {
+				for (const [path, isExcluded] of Object.entries(excludeSettings)) {
+					if (isExcluded) {
+						excludePaths.push(path);
+					}
+				}
+			}
+
+			noMatchInstructions = `Your search pattern might be excluded completedly by either the search.exclude settings or .*ignore files.
+			If you believe that it should have results, you can check into the .*ignore files and the exclude setting (here are some excluded patterns for reference:[${excludePaths.join(';')}] separated by ';').
+			Then if you want to include those files you can call the tool again by setting "includeIgnoredFiles" to true.`;
+		}
+
 		const prompt = await renderPromptElementJSON(this.instantiationService,
 			FindTextInFilesResult,
-			{ textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) },
+			{ textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults), noMatchInstructions },
 			options.tokenizationOptions,
 			token);
 
@@ -129,12 +150,12 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 	}
 
 	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, includeIgnoredFiles: boolean | undefined, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {
-		const findOptions = {
+		const findOptions: vscode.FindTextInFilesOptions2 = {
 			include: patterns ? patterns : undefined,
 			maxResults: maxResults + 1,
 			useExcludeSettings: includeIgnoredFiles ? ExcludeSettingOptions.None : ExcludeSettingOptions.SearchAndFilesExclude,
 			useIgnoreFiles: includeIgnoredFiles ? { local: false, parent: false, global: false } : undefined,
-		} as vscode.FindTextInFilesOptions2;
+		};
 
 		const searchResult = this.searchService.findTextInFiles2(
 			{
@@ -214,6 +235,7 @@ export interface FindTextInFilesResultProps extends BasePromptElementProps {
 	textResults: vscode.TextSearchResult2[];
 	maxResults: number;
 	askedForTooManyResults?: boolean;
+	noMatchInstructions?: string;
 }
 
 /** Max number of characters between matching ranges. */
@@ -226,14 +248,15 @@ export class FindTextInFilesResult extends PromptElement<FindTextInFilesResultPr
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece> {
 		const textMatches = this.props.textResults.filter(isTextSearchMatch);
 		if (textMatches.length === 0) {
-			return <>No matches found</>;
+			const noMatchInstructions = this.props.noMatchInstructions ?? '';
+			return <>No matches found.{noMatchInstructions}</>;
 		}
 
 		const numResults = textMatches.reduce((acc, result) => acc + result.ranges.length, 0);
 		const resultCountToDisplay = Math.min(numResults, this.props.maxResults);
 		const numResultsText = numResults === 1 ? '1 match' : `${resultCountToDisplay} matches`;
-		const maxResultsTooLargeText = this.props.askedForTooManyResults ? ` (maxResults capped at ${MaxResultsCap})` : '';
 		const maxResultsText = numResults > this.props.maxResults ? ` (more results are available)` : '';
+		const maxResultsTooLargeText = this.props.askedForTooManyResults ? ` (maxResults capped at ${MaxResultsCap})` : '';
 		return <>
 			{<TextChunk priority={20}>{numResultsText}{maxResultsText}{maxResultsTooLargeText}</TextChunk>}
 			{textMatches.flatMap(result => {
