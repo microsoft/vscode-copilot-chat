@@ -701,7 +701,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		if (this.props.modelFamily === 'gpt-4.1' || this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily)) {
+		if ((this.props.modelFamily === 'gpt-4.1' || this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily)) && !(await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily))) {
 			if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 				// Extended reminder
 				return <>
