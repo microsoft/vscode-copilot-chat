@@ -407,6 +407,14 @@ suite('AbstractConfigurationService', () => {
 			assert.strictEqual(setting.isPublic, false);
 
 		});
+
+		test('RequestLoggerMaxEntries is correctly configured', () => {
+			const setting = ConfigKey.Internal.RequestLoggerMaxEntries;
+			assert.strictEqual(setting.id, 'chat.advanced.debug.requestLogger.maxEntries');
+			assert.strictEqual(setting.defaultValue, 100);
+			assert.strictEqual(setting.isPublic, false);
+
+		});
 	});
 
 });

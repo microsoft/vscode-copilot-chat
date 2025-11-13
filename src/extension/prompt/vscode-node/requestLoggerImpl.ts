@@ -389,8 +389,9 @@ export class RequestLogger extends AbstractRequestLogger {
 
 
 		this._entries.push(entry);
-		// keep at most 100 entries
-		if (this._entries.length > 100) {
+		// keep at most the configured number of entries
+		const maxEntries = this._configService.getConfig(ConfigKey.Internal.RequestLoggerMaxEntries);
+		if (this._entries.length > maxEntries) {
 			this._entries.shift();
 		}
 		this._onDidChangeRequests.fire();
