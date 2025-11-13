@@ -5,6 +5,7 @@
 
 import { IValidator, vArray, vNumber, vObj, vRequired, vString, vUnion, vUnchecked } from '../../configuration/common/validator';
 import type { SessionInfo, PullRequestFile } from './githubAPI';
+import type { IOctoKitUser, RemoteAgentJobResponse, CustomAgentListItem, ErrorResponseWithStatusCode, JobInfo } from './githubService';
 
 // Validator for SessionInfo
 export const vSessionInfo: IValidator<SessionInfo> = vObj({
@@ -54,4 +55,78 @@ export const vFileContentResponse = vObj({
 // Validator for pull request state response
 export const vPullRequestStateResponse = vObj({
 	state: vRequired(vString()),
+});
+
+// Validator for IOctoKitUser
+export const vIOctoKitUser: IValidator<IOctoKitUser> = vObj({
+	login: vRequired(vString()),
+	name: vUnion(vString(), vUnchecked<null>()),
+	avatar_url: vRequired(vString()),
+});
+
+// Validator for RemoteAgentJobResponse
+export const vRemoteAgentJobResponse: IValidator<RemoteAgentJobResponse> = vObj({
+	job_id: vRequired(vString()),
+	session_id: vRequired(vString()),
+	actor: vRequired(vObj({
+		id: vRequired(vNumber()),
+		login: vRequired(vString()),
+	})),
+	created_at: vRequired(vString()),
+	updated_at: vRequired(vString()),
+});
+
+// Validator for CustomAgentListItem
+export const vCustomAgentListItem: IValidator<CustomAgentListItem> = vObj({
+	name: vRequired(vString()),
+	repo_owner_id: vRequired(vNumber()),
+	repo_owner: vRequired(vString()),
+	repo_id: vRequired(vNumber()),
+	repo_name: vRequired(vString()),
+	display_name: vRequired(vString()),
+	description: vRequired(vString()),
+	tools: vRequired(vArray(vString())),
+	version: vRequired(vString()),
+});
+
+// Validator for GetCustomAgentsResponse
+export const vGetCustomAgentsResponse = vObj({
+	agents: vRequired(vArray(vCustomAgentListItem)),
+});
+
+// Validator for ErrorResponseWithStatusCode
+export const vErrorResponseWithStatusCode: IValidator<ErrorResponseWithStatusCode> = vObj({
+	status: vRequired(vNumber()),
+});
+
+// Validator for job responses that could be either RemoteAgentJobResponse or ErrorResponseWithStatusCode
+export const vRemoteAgentJobOrError = vUnion(vRemoteAgentJobResponse, vErrorResponseWithStatusCode);
+
+// Validator for JobInfo
+export const vJobInfo: IValidator<JobInfo> = vObj({
+	job_id: vRequired(vString()),
+	session_id: vRequired(vString()),
+	problem_statement: vRequired(vString()),
+	content_filter_mode: vString(),
+	status: vRequired(vString()),
+	result: vString(),
+	actor: vRequired(vObj({
+		id: vRequired(vNumber()),
+		login: vRequired(vString()),
+	})),
+	created_at: vRequired(vString()),
+	updated_at: vRequired(vString()),
+	pull_request: vRequired(vObj({
+		id: vRequired(vNumber()),
+		number: vRequired(vNumber()),
+	})),
+	workflow_run: vObj({
+		id: vRequired(vNumber()),
+	}),
+	error: vObj({
+		message: vRequired(vString()),
+	}),
+	event_type: vString(),
+	event_url: vString(),
+	event_identifiers: vArray(vString()),
 });
