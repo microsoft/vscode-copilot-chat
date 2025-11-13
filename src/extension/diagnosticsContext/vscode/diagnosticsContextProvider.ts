@@ -49,7 +49,7 @@ export class DiagnosticsContextContribution extends Disposable {
 			};
 			disposables.add(this.languageContextProviderService.registerContextProvider(provider));
 		} catch (error) {
-			this.logService.error('Error regsistering diagnostics context provider:', error);
+			this.logService.error('Error registering diagnostics context provider:', error);
 		}
 		return disposables;
 	}
@@ -64,7 +64,7 @@ type DiagnosticsContextOptions = {
 class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContextItem> {
 
 	constructor(
-		private readonly diagnostocsService: ILanguageDiagnosticsService,
+		private readonly diagnosticsService: ILanguageDiagnosticsService,
 		private readonly configurationService: IConfigurationService,
 		private readonly experimentationService: IExperimentationService,
 	) { }
@@ -92,7 +92,7 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 	}
 
 	private getContext(resource: URI, cursor: Position, options: DiagnosticsContextOptions): Copilot.SupportedContextItem[] {
-		let diagnostics = this.diagnostocsService.getDiagnostics(resource);
+		let diagnostics = this.diagnosticsService.getDiagnostics(resource);
 
 		if (options.includeDiagnosticsRange) {
 			diagnostics = diagnostics.filter(d => options.includeDiagnosticsRange!.containsRange(toInternalRange(d.range)));
@@ -103,8 +103,8 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 		}
 
 		const diagnosticsSortedByDistance = diagnostics.sort((a, b) => {
-			const aDistance = Math.abs(a.range.start.line + 1 - cursor.lineNumber);
-			const bDistance = Math.abs(b.range.start.line + 1 - cursor.lineNumber);
+			const aDistance = Math.abs(a.range.start.line - cursor.lineNumber);
+			const bDistance = Math.abs(b.range.start.line - cursor.lineNumber);
 			return aDistance - bDistance;
 		});
 
@@ -119,14 +119,14 @@ function diagnosticsToTraits(diagnostics: Diagnostic[]): Copilot.Trait[] {
 	const traits: Copilot.Trait[] = [];
 	if (errorDiagnostics.length > 0) {
 		traits.push({
-			name: "Errors near the users cursor",
+			name: "Errors near the user's cursor",
 			value: errorDiagnostics.map(d => `- ${d.message}`).join('\n'),
 		});
 	}
 
 	if (warningsDiagnostics.length > 0) {
 		traits.push({
-			name: "Warnings near the users cursor",
+			name: "Warnings near the user's cursor",
 			value: warningsDiagnostics.map(d => `- ${d.message}`).join('\n'),
 		});
 	}
