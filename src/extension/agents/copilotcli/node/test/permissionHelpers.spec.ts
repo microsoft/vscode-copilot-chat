@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { assert } from '../../../../../util/vs/base/common/assert';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
-import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { getConfirmationToolParams, PermissionRequest } from '../permissionHelpers';
@@ -14,10 +14,10 @@ import { getConfirmationToolParams, PermissionRequest } from '../permissionHelpe
 
 describe('CopilotCLI permissionHelpers', () => {
 	const disposables = new DisposableStore();
-	let accessor: ServicesAccessor;
+	let instaService: IInstantiationService;
 	beforeEach(() => {
 		const services = disposables.add(createExtensionUnitTestingServices());
-		accessor = services.createTestingAccessor();
+		instaService = services.seal();
 	});
 
 	afterEach(() => {
@@ -27,7 +27,7 @@ describe('CopilotCLI permissionHelpers', () => {
 	describe('getConfirmationToolParams', () => {
 		it('shell: uses intention over command text and sets terminal confirmation tool', async () => {
 			const req: PermissionRequest = { kind: 'shell', intention: 'List workspace files', fullCommandText: 'ls -la' } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
 				expect.fail('Expected CoreTerminalConfirmationTool');
@@ -40,7 +40,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 		it('shell: falls back to fullCommandText when no intention', async () => {
 			const req: PermissionRequest = { kind: 'shell', fullCommandText: 'echo "hi"' } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
 				expect.fail('Expected CoreTerminalConfirmationTool');
@@ -52,7 +52,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 		it('shell: falls back to codeBlock when neither intention nor command text provided', async () => {
 			const req: PermissionRequest = { kind: 'shell' } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
 				expect.fail('Expected CoreTerminalConfirmationTool');
@@ -64,7 +64,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 		it('write: uses intention as title and fileName for message', async () => {
 			const req: PermissionRequest = { kind: 'write', intention: 'Modify configuration', fileName: 'config.json' } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			if (result.tool !== ToolName.CoreConfirmationTool) {
 				expect.fail('Expected CoreConfirmationTool');
@@ -77,13 +77,13 @@ describe('CopilotCLI permissionHelpers', () => {
 
 		it('write: falls back to default title and codeBlock message when no intention and no fileName', async () => {
 			const req: PermissionRequest = { kind: 'write' } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			expect(result).toBeUndefined();
 		});
 
 		it('mcp: formats with serverName, toolTitle and args JSON', async () => {
 			const req: PermissionRequest = { kind: 'mcp', serverName: 'files', toolTitle: 'List Files', toolName: 'list', args: { path: '/tmp' } } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
 			if (result.tool !== ToolName.CoreConfirmationTool) {
@@ -96,7 +96,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 		it('mcp: falls back to generated title and full JSON when no serverName', async () => {
 			const req: PermissionRequest = { kind: 'mcp', toolName: 'info', args: { detail: true } } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			if (result.tool !== ToolName.CoreConfirmationTool) {
 				expect.fail('Expected CoreConfirmationTool');
@@ -108,7 +108,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 		it('mcp: uses Unknown when neither toolTitle nor toolName provided', async () => {
 			const req: PermissionRequest = { kind: 'mcp', args: {} } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			if (result.tool !== ToolName.CoreConfirmationTool) {
 				expect.fail('Expected CoreConfirmationTool');
@@ -118,7 +118,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 		it('read: returns specialized title and intention message', async () => {
 			const req: PermissionRequest = { kind: 'read', intention: 'Read 2 files', path: '/tmp/a' } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
 			if (result.tool !== ToolName.CoreConfirmationTool) {
@@ -130,7 +130,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 		it('read: falls through to default when intention empty string', async () => {
 			const req: PermissionRequest = { kind: 'read', intention: '', path: '/tmp/a' } as any;
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			if (result.tool !== ToolName.CoreConfirmationTool) {
 				expect.fail('Expected CoreConfirmationTool');
@@ -141,7 +141,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 		it('default: unknown kind uses generic confirmation and wraps JSON in code block', async () => {
 			const req: any = { kind: 'some_new_kind', extra: 1 };
-			const result = await getConfirmationToolParams(accessor, req);
+			const result = await getConfirmationToolParams(instaService, req);
 			assert(!!result);
 			if (result.tool !== ToolName.CoreConfirmationTool) {
 				expect.fail('Expected CoreConfirmationTool');
@@ -155,13 +155,13 @@ describe('CopilotCLI permissionHelpers', () => {
 
 	describe('getConfirmationToolParams', () => {
 		it('maps shell requests to terminal confirmation tool', async () => {
-			const result = await getConfirmationToolParams(accessor, { kind: 'shell', fullCommandText: 'rm -rf /tmp/test', canOfferSessionApproval: true, commands: [], hasWriteFileRedirection: true, intention: '', possiblePaths: [] });
+			const result = await getConfirmationToolParams(instaService, { kind: 'shell', fullCommandText: 'rm -rf /tmp/test', canOfferSessionApproval: true, commands: [], hasWriteFileRedirection: true, intention: '', possiblePaths: [] });
 			assert(!!result);
 			expect(result.tool).toBe(ToolName.CoreTerminalConfirmationTool);
 		});
 
 		it('maps write requests with filename', async () => {
-			const result = await getConfirmationToolParams(accessor, { kind: 'write', fileName: 'foo.ts', diff: '', intention: '' });
+			const result = await getConfirmationToolParams(instaService, { kind: 'write', fileName: 'foo.ts', diff: '', intention: '' });
 			assert(!!result);
 			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
 			const input = result.input as any;
@@ -169,7 +169,7 @@ describe('CopilotCLI permissionHelpers', () => {
 		});
 
 		it('maps mcp requests', async () => {
-			const result = await getConfirmationToolParams(accessor, { kind: 'mcp', serverName: 'srv', toolTitle: 'Tool', toolName: 'run', args: { a: 1 }, readOnly: false });
+			const result = await getConfirmationToolParams(instaService, { kind: 'mcp', serverName: 'srv', toolTitle: 'Tool', toolName: 'run', args: { a: 1 }, readOnly: false });
 			assert(!!result);
 			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
 		});

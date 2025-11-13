@@ -5,6 +5,7 @@
 
 import { PromptElement, PromptElementProps, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
+import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ChatRequest, ChatRequestEditorData } from '../../../../vscodeTypes';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
@@ -58,6 +59,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 						The user is interested in code changes grounded in the user's prompt. So, focus on replying with tool calls, avoid wordy explanations, and do not ask back for clarifications.<br />
 						Do not make code changes that are not directly and logically related to the user's prompt, instead invoke the {this.props.exitToolName} tool which can handle this.<br />
 					</Tag>
+					<cacheBreakpoint type={CacheType} />
 				</SystemMessage>
 				<UserMessage>
 					<WorkingSet flexGrow={1} priority={950} workingSet={workingSet} />
@@ -68,9 +70,13 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 						Do not make code changes that are not directly and logically related to the user's prompt.<br />
 						ONLY change the `{filepath}` file and NO other file.
 					</Tag>
+					<cacheBreakpoint type={CacheType} />
+				</UserMessage>
+				<UserMessage>
 					<Tag name='prompt'>
 						<UserQuery flexGrow={7} priority={900} chatVariables={variables} query={this.props.request.prompt} />
 					</Tag>
+					<cacheBreakpoint type={CacheType} />
 				</UserMessage>
 			</>
 		);

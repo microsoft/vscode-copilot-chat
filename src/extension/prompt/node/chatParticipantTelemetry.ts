@@ -19,7 +19,6 @@ import { InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
 import { AgentIntent } from '../../intents/node/agentIntent';
 import { EditCodeIntent } from '../../intents/node/editCodeIntent';
 import { EditCode2Intent } from '../../intents/node/editCodeIntent2';
-import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
 import { getCustomInstructionTelemetry } from '../../prompts/node/panel/customInstructions';
 import { PATCH_PREFIX } from '../../tools/node/applyPatch/parseApplyPatch';
 import { Conversation } from '../common/conversation';
@@ -161,8 +160,6 @@ type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	userPromptCount: number;
 	numToolCalls: number;
 	availableToolCount: number;
-	temporalCtxFileCount: number;
-	temporalCtxTotalCharCount: number;
 	summarizationEnabled: number;
 };
 
@@ -192,8 +189,6 @@ type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & {
 	selectionProblemsCount: number;
 	diagnosticsCount: number;
 	selectionDiagnosticsCount: number;
-	temporalCtxFileCount: number;
-	temporalCtxTotalCharCount: number;
 };
 
 //#endregion
@@ -577,7 +572,6 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
 
-		const temporalContexData = this._getTelemetryData(TemporalContextStats);
 
 		const turn = this._conversation.getLatestTurn();
 		const roundIndex = turn.rounds.length - 1;
@@ -639,8 +633,6 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"toolCounts": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The number of times each tool was used" },
 				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
-				"temporalCtxFileCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many temporal document-parts where included" },
-				"temporalCtxTotalCharCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many characters all temporal document-parts where included" },
 				"summarizationEnabled" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether summarization is enabled (the default) or disabled (via user setting)" }
 			}
 		*/
@@ -674,8 +666,6 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			...getCustomInstructionTelemetry(turn.references),
 			numToolCalls: toolCalls.length,
 			availableToolCount: this._availableToolCount,
-			temporalCtxFileCount: temporalContexData?.documentCount ?? -1,
-			temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1,
 			summarizationEnabled: this._configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) ? 1 : 0
 		} satisfies RequestPanelTelemetryMeasurements);
 
@@ -711,8 +701,6 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				timeToComplete: Date.now() - this._startTime,
 				numToolCalls: toolCalls.length,
 				availableToolCount: this._availableToolCount,
-				temporalCtxFileCount: temporalContexData?.documentCount ?? -1,
-				temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
 			},
 			'panel_request'
 		);
@@ -811,7 +799,6 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome): Promise<void> {
 
-		const temporalContexData = this._getTelemetryData(TemporalContextStats);
 
 		/* __GDPR__
 			"inline.request" : {
@@ -850,8 +837,6 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 				"timeToRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How long it took to start the final request." },
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How long it took to get the first token." },
 				"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How long it took to complete the request." },
-				"temporalCtxFileCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many temporal document-parts where included" },
-				"temporalCtxTotalCharCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many characters all temporal document-parts where included" },
 				"codeGenInstructionsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instructions are in the request." },
 				"codeGenInstructionsLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the code generation instructions that were added to request." },
 				"codeGenInstructionsFilteredCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instructions were filtered." },
@@ -896,8 +881,6 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			timeToFirstToken: this._firstTokenTime ? this._firstTokenTime - this._startTime : -1,
 			timeToComplete: Date.now() - this._startTime,
 			...getCustomInstructionTelemetry(this._references),
-			temporalCtxFileCount: temporalContexData?.documentCount ?? -1,
-			temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
 		} satisfies RequestInlineTelemetryMeasurements);
 	}
 

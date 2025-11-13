@@ -4,11 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ILogService } from '../../../platform/log/common/logService';
-import { DisposableStore, MutableDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { IExtensionContribution } from '../../common/contributions';
 
 
 export namespace LineCheck {
@@ -98,7 +93,7 @@ export namespace LineCheck {
 		return result;
 	}
 
-	export function isNaturalLanguageDominated(document: vscode.TextDocument, position: vscode.Position, logService?: ILogService): boolean {
+	export function isNaturalLanguageDominated(document: vscode.TextDocument, position: vscode.Position): boolean {
 
 		// LOGIC: tokenize the line into words (as defined by the language), whitespace, and other
 		// characters (which can be a mix of whitespace and non-word characters).
@@ -132,8 +127,6 @@ export namespace LineCheck {
 			}
 		}
 
-		logService?.trace('[ChatTrigger] ' + JSON.stringify({ wordCount, keywordCount, spaceCount, otherCount, tokenCount: tokens.length }));
-
 		if (tokens.length < 4 || spaceCount < 2) {
 			// too little content
 			return false;
@@ -154,87 +147,3 @@ export namespace LineCheck {
 		return true;
 	}
 }
-
-class InlineChatCompletionsTriggerDecoration {
-
-	private readonly _store = new DisposableStore();
-	private readonly _sessionStore = new DisposableStore();
-
-	constructor(
-		@ILogService private readonly _logService: ILogService,
-	) {
-		this._store.add(vscode.window.onDidChangeActiveTextEditor(() => this._update()));
-		this._update();
-	}
-
-	dispose() {
-		this._store.dispose();
-	}
-
-	private _update() {
-		this._sessionStore.clear();
-		const editor = vscode.window.activeTextEditor;
-		if (!editor || !editor.viewColumn) {
-			return;
-		}
-
-		if (!vscode.languages.match(LineCheck.languages, editor.document)) {
-			return;
-		}
-
-		this._sessionStore.add(vscode.window.onDidChangeTextEditorSelection(e => {
-			if (e.textEditor !== editor) {
-				return;
-			}
-			const lineRange = editor.document.lineAt(editor.selection.active.line).range;
-			if (e.kind === vscode.TextEditorSelectionChangeKind.Keyboard
-				&& editor.selection.isSingleLine
-				&& lineRange.end.character === editor.selection.active.character // EOL
-				&& LineCheck.isNaturalLanguageDominated(editor.document, editor.selection.active, this._logService) // mostly words
-			) {
-				vscode.commands.executeCommand('inlineChat.showHint', editor.document.uri, editor.selection.active);
-			} else {
-				vscode.commands.executeCommand('inlineChat.hideHint');
-			}
-		}));
-
-		this._sessionStore.add(toDisposable(() => {
-			vscode.commands.executeCommand('inlineChat.hideHint');
-		}));
-	}
-}
-
-
-export class InlineChatHintFeature implements IExtensionContribution {
-
-	private readonly _store = new DisposableStore();
-
-	constructor(
-		@IInstantiationService instaService: IInstantiationService,
-		@IConfigurationService configService: IConfigurationService,
-	) {
-		const d = this._store.add(new MutableDisposable());
-
-		const config = 'inlineChat.lineNaturalLanguageHint';
-
-		const update = () => {
-			if (configService.getNonExtensionConfig(config)) {
-				d.value = instaService.createInstance(InlineChatCompletionsTriggerDecoration);
-			} else {
-				d.clear();
-			}
-		};
-
-		this._store.add(configService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(config)) {
-				update();
-			}
-		}));
-		update();
-	}
-
-	dispose(): void {
-		this._store.dispose();
-	}
-}
-// should disable the sash when bounds are equal

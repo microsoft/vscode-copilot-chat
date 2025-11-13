@@ -26,7 +26,7 @@ import { CancellationTokenSource } from '../../../util/vs/base/common/cancellati
 import { Event } from '../../../util/vs/base/common/event';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LineCheck } from '../../inlineChat/vscode-node/inlineChatHint';
+import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';

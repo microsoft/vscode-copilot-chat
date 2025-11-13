@@ -33,7 +33,6 @@ import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { LegacySafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { DocumentSummarizer, NotebookDocumentSummarizer } from '../inline/summarizedDocument/summarizeDocumentHelpers';
-import { TemporalContext } from '../inline/temporalContext';
 import { ChatToolReferences, ChatVariables, UserQuery } from './chatVariables';
 import { EXISTING_CODE_MARKER } from './codeBlockFormattingRules';
 import { CustomInstructions } from './customInstructions';
@@ -310,7 +309,6 @@ export class EditCodeUserMessage extends PromptElement<EditCodePromptProps> {
 					{useProjectLabels && <ProjectLabels flexGrow={1} priority={600} />}
 					<CustomInstructions flexGrow={6} priority={750} languageId={undefined} chatVariables={chatVariables} />
 					<NotebookFormat flexGrow={5} priority={810} chatVariables={workingSet} query={query} />
-					<TemporalContext flexGrow={5} priority={650} includeFilePaths={true} context={workingSet.map(entry => entry.document)} location={this.props.location} />
 					<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} documentContext={this.props.documentContext} />
 					<ChatVariables flexGrow={3} priority={898} chatVariables={chatVariables} />
 					<WorkingSet flexGrow={3} flexReserve={sizing.tokenBudget * 0.8} priority={810} workingSet={workingSet} /><br />

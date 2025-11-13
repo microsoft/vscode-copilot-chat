@@ -23,7 +23,6 @@ import { InlineChatGenerateCodePrompt } from '../../../prompts/node/inline/inlin
 import { InlineChatGenerateMarkdownPrompt } from '../../../prompts/node/inline/inlineChatGenerateMarkdownPrompt';
 import { InlineChatNotebookEditPrompt } from '../../../prompts/node/inline/inlineChatNotebookEditPrompt';
 import { InlineChatNotebookGeneratePrompt } from '../../../prompts/node/inline/inlineChatNotebookGeneratePrompt';
-import { TemporalContextStats } from '../../../prompts/node/inline/temporalContext';
 
 export interface GenericInlinePromptProps extends BasePromptElementProps {
 	documentContext: IDocumentContext;
@@ -68,12 +67,8 @@ export class GenericInlineIntentInvocation implements IIntentInvocation {
 			this.replyInterpreter = new NoopReplyInterpreter();
 		}
 
-		const tempoStats = result.metadata.get(TemporalContextStats);
 
-		return {
-			...result,
-			telemetryData: tempoStats && [tempoStats]
-		};
+		return result;
 	}
 
 	public processResponse(context: IResponseProcessorContext, inputStream: AsyncIterable<IResponsePart>, outputStream: ChatResponseStream, token: CancellationToken): Promise<void> {
