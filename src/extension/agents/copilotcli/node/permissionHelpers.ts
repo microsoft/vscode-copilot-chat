@@ -111,7 +111,7 @@ async function getDetailsForFileCreatePermissionRequest(accessor: ServicesAccess
 		return formatDiffAsUnified(accessor, URI.file(args.path), '', args.file_text);
 	}
 }
-async function getDetailsForFileEditPermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'edit' }>['arguments']): Promise<string | undefined> {
+async function getDetailsForFileEditPermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'edit' | 'str_replace' }>['arguments']): Promise<string | undefined> {
 	if (args.path && (args.new_str || args.old_str)) {
 		return formatDiffAsUnified(accessor, URI.file(args.path), args.old_str ?? '', args.new_str ?? '');
 	}
