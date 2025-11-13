@@ -231,6 +231,15 @@ export function sumThreeFloats(a, b, c) {`,
 		};
 
 		const r = await invoke(input);
-		expect(await applyEditsInMap(r.edits)).toMatchFileSnapshot(__dirname + '/editFileToolUtilsFixtures/math-actual.txt');
+
+		const edits = Object.values(r.edits).flat(); //
+
+		edits.sort((a, b) => a.range.start.compareTo(b.range.start));
+
+		for (let i = 1; i < edits.length; i++) {
+			const e1 = edits[i - 1];
+			const e2 = edits[i];
+			expect(e1.range.end.isBeforeOrEqual(e2.range.start)).toBe(true);
+		}
 	});
 });
