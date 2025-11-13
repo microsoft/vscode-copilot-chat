@@ -165,11 +165,6 @@ export interface IOctoKitService {
 	_serviceBrand: undefined;
 
 	/**
-	 * @returns The currently authenticated user or undefined if there isn't one
-	 */
-	getCurrentAuthedUser(): Promise<IOctoKitUser | undefined>;
-
-	/**
 	 * Returns the list of Copilot pull requests for a given user on a specific repo.
 	 */
 	getCopilotPullRequestsForUser(owner: string, repo: string): Promise<PullRequestSearchItem[]>;

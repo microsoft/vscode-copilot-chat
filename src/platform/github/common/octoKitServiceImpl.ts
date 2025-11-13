@@ -8,7 +8,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -21,14 +21,6 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		@ITelemetryService telemetryService: ITelemetryService
 	) {
 		super(capiClientService, fetcherService, logService, telemetryService);
-	}
-
-	async getCurrentAuthedUser(): Promise<IOctoKitUser | undefined> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
-			return undefined;
-		}
-		return await this.getCurrentAuthedUserWithToken(authToken);
 	}
 
 	async getCopilotPullRequestsForUser(owner: string, repo: string): Promise<PullRequestSearchItem[]> {
