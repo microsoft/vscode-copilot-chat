@@ -35,31 +35,14 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		@IExperimentationService private readonly _experimentationService: IExperimentationService
 	) { }
 
-	/**
-	 * Checks if a model supports extended thinking based on its model ID.
-	 * Extended thinking is supported by:
-	 * - Claude Sonnet 4.5 (claude-sonnet-4-5-*)
-	 * - Claude Sonnet 4 (claude-sonnet-4-*)
-	 * - Claude Sonnet 3.7 (claude-3-7-sonnet-*)
-	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
-	 * - Claude Opus 4.1 (claude-opus-4-1-*)
-	 * - Claude Opus 4 (claude-opus-4-*)
-	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
-	 */
 	private _enableThinking(modelId: string): boolean {
-
-		const thinkingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingEnabled, this._experimentationService);
-		if (!thinkingEnabled) {
+		const thinkingEnabledInConfig = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingEnabled, this._experimentationService);
+		if (!thinkingEnabledInConfig) {
 			return false;
 		}
 
-		const normalized = modelId.toLowerCase();
-		return normalized.startsWith('claude-sonnet-4-5') ||
-			normalized.startsWith('claude-sonnet-4') ||
-			normalized.startsWith('claude-3-7-sonnet') ||
-			normalized.startsWith('claude-haiku-4-5') ||
-			normalized.startsWith('claude-opus-4-1') ||
-			normalized.startsWith('claude-opus-4');
+		const modelCapabilities = this._knownModels?.[modelId];
+		return modelCapabilities?.thinking ?? false;
 	}
 
 	/**
@@ -104,7 +87,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						maxOutputTokens: 16000,
 						name: model.display_name,
 						toolCalling: true,
-						vision: false
+						vision: false,
+						thinking: false
 					};
 				}
 			}
