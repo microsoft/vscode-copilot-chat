@@ -231,6 +231,6 @@ export function sumThreeFloats(a, b, c) {`,
 		};
 
 		const r = await invoke(input);
-		expect(await applyEditsInMap(r.edits)).toMatchFileSnapshot(__dirname + '/editFileToolUtilsFixtures/multi-actual.txt');
+		expect(await applyEditsInMap(r.edits)).toMatchFileSnapshot(__dirname + '/editFileToolUtilsFixtures/math-actual.txt');
 	});
 });
