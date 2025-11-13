@@ -157,7 +157,20 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					return [];
 				}
 			}
-		} catch {
+		} catch (error) {
+			if (error instanceof Error && error.message.includes('invalid x-api-key')) {
+				if (options.silent) {
+					return [];
+				}
+				await this.updateAPIKey();
+				if (this._apiKey) {
+					try {
+						return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
+					} catch (retryError) {
+						this._logService.error(`Error after re-prompting for API key: ${toErrorMessage(retryError, true)}`);
+					}
+				}
+			}
 			return [];
 		}
 	}
@@ -374,7 +387,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 		const stream = await this._anthropicAPIClient.beta.messages.create({
 			...params,
-			betas
+			...(betas.length > 0 && { betas })
 		});
 
 		let pendingToolCall: {
