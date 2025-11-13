@@ -249,28 +249,9 @@ function registerDiagnosticCommands(accessor: ServicesAccessor): IDisposable {
 	const disposables = new DisposableStore();
 
 	disposables.add(registerCommandWrapper(accessor, CMDOpenDocumentationClient, () => {
-		// Map VS Code locale to GitHub docs locale
-		// VS Code uses language codes like 'es', 'ja', 'zh-cn', 'zh-tw', 'fr', 'de', 'it', 'pt-br', 'ru', 'ko'
-		// GitHub docs supports: es, ja, zh, pt, fr, de, ko, ru (and more)
-		const vscodeLocale = env.language.toLowerCase();
-		let docsLocale = 'en'; // Default to English
-		
-		// Map VS Code locales to GitHub docs locales
-		if (vscodeLocale.startsWith('zh-')) {
-			docsLocale = 'zh'; // Map both zh-cn and zh-tw to zh
-		} else if (vscodeLocale.startsWith('pt-')) {
-			docsLocale = 'pt'; // Map pt-br to pt
-		} else {
-			// For other locales, use the first two characters if they match supported locales
-			const baseLocale = vscodeLocale.split('-')[0];
-			const supportedLocales = ['es', 'ja', 'fr', 'de', 'ko', 'ru', 'it'];
-			if (supportedLocales.includes(baseLocale)) {
-				docsLocale = baseLocale;
-			}
-		}
-		
-		const docUrl = `https://docs.github.com/${docsLocale}/copilot/getting-started-with-github-copilot?tool=vscode`;
-		return env.openExternal(URI.parse(docUrl));
+		return env.openExternal(
+			URI.parse('https://docs.github.com/en/copilot/getting-started-with-github-copilot?tool=vscode')
+		);
 	}));
 	disposables.add(registerCommandWrapper(accessor, CMDOpenLogsClient, () => {
 		outputChannel.show();
