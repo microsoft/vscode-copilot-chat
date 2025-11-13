@@ -78,7 +78,7 @@ export interface PullRequestComment {
 	url: string;
 }
 
-export async function makeGitHubAPIRequest(
+export async function makeGitHubAPIRequest<T = any>(
 	fetcherService: IFetcherService,
 	logService: ILogService,
 	telemetry: ITelemetryService,
@@ -90,7 +90,33 @@ export async function makeGitHubAPIRequest(
 	version?: string,
 	type: 'json' | 'text' = 'json',
 	userAgent?: string,
-	returnStatusCodeOnError: boolean = false) {
+	returnStatusCodeOnError?: false): Promise<T | undefined>;
+export async function makeGitHubAPIRequest<T = any>(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	routeSlug: string,
+	method: 'GET' | 'POST',
+	token: string | undefined,
+	body: unknown,
+	version: string | undefined,
+	type: 'json' | 'text',
+	userAgent: string | undefined,
+	returnStatusCodeOnError: true): Promise<T | { status: number } | undefined>;
+export async function makeGitHubAPIRequest<T = any>(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	routeSlug: string,
+	method: 'GET' | 'POST',
+	token: string | undefined,
+	body?: unknown,
+	version?: string,
+	type: 'json' | 'text' = 'json',
+	userAgent?: string,
+	returnStatusCodeOnError?: boolean): Promise<T | { status: number } | undefined> {
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -134,7 +160,7 @@ export async function makeGitHubAPIRequest(
 	}
 }
 
-export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown) {
+export async function makeGitHubGraphQLRequest<T = any>(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown): Promise<T | undefined> {
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 		'Content-Type': 'application/json',
@@ -232,7 +258,7 @@ export async function makeSearchGraphQLRequest(
 		first
 	};
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+	const result = await makeGitHubGraphQLRequest<{ data: PullRequestSearchResult }>(fetcherService, logService, telemetry, host, query, token, variables);
 
 	return result ? result.data.search.nodes : [];
 }
@@ -285,9 +311,9 @@ export async function getPullRequestFromGlobalId(
 		globalId,
 	};
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+	const result = await makeGitHubGraphQLRequest<{ data: { node: PullRequestSearchItem } }>(fetcherService, logService, telemetry, host, query, token, variables);
 
-	return result?.data?.node;
+	return result?.data?.node ?? null;
 }
 
 export async function addPullRequestCommentGraphQLRequest(
@@ -324,7 +350,7 @@ export async function addPullRequestCommentGraphQLRequest(
 		body: commentBody
 	};
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, mutation, token, variables);
+	const result = await makeGitHubGraphQLRequest<{ data: { addComment: { commentEdge: { node: PullRequestComment } } } }>(fetcherService, logService, telemetry, host, mutation, token, variables);
 
 	return result?.data?.addComment?.commentEdge?.node || null;
 }
@@ -341,7 +367,7 @@ export async function closePullRequest(
 ): Promise<boolean> {
 	logService.debug(`[GitHubAPI] Closing pull request ${owner}/${repo}#${pullNumber}`);
 
-	const result = await makeGitHubAPIRequest(
+	const result = await makeGitHubAPIRequest<{ state: string }>(
 		fetcherService,
 		logService,
 		telemetry,
@@ -353,11 +379,12 @@ export async function closePullRequest(
 		'2022-11-28'
 	);
 
-	const success = result?.state === 'closed';
+	const success = result && 'state' in result && result.state === 'closed';
 	if (success) {
 		logService.debug(`[GitHubAPI] Successfully closed pull request ${owner}/${repo}#${pullNumber}`);
 	} else {
-		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${result?.state}`);
+		const state = result && 'state' in result ? result.state : 'unknown';
+		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${state}`);
 	}
 	return success;
 }

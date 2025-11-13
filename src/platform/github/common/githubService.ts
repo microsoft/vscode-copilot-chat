@@ -277,15 +277,15 @@ export class BaseOctoKitService {
 	) { }
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
-		return this._makeGHAPIRequest('user', 'GET', token);
+		return this._makeGHAPIRequest<IOctoKitUser>('user', 'GET', token);
 	}
 
 	async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
 		return this._makeGHAPIRequest(`teams/${teamId}/memberships/${username}`, 'GET', token);
 	}
 
-	protected async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28');
+	protected async _makeGHAPIRequest<T = any>(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }): Promise<T | undefined> {
+		return makeGitHubAPIRequest<T>(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28');
 	}
 
 	protected async getCopilotPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
@@ -293,28 +293,28 @@ export class BaseOctoKitService {
 		return makeSearchGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, query);
 	}
 
-	protected async getCopilotSessionsForPRWithToken(prId: string, token: string) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/resource/pull/${prId}`, 'GET', token);
+	protected async getCopilotSessionsForPRWithToken(prId: string, token: string): Promise<{ sessions: SessionInfo[] } | undefined> {
+		return makeGitHubAPIRequest<{ sessions: SessionInfo[] }>(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/resource/pull/${prId}`, 'GET', token);
 	}
 
-	protected async getSessionLogsWithToken(sessionId: string, token: string) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}/logs`, 'GET', token, undefined, undefined, 'text');
+	protected async getSessionLogsWithToken(sessionId: string, token: string): Promise<string | undefined> {
+		return makeGitHubAPIRequest<string>(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}/logs`, 'GET', token, undefined, undefined, 'text');
 	}
 
-	protected async getSessionInfoWithToken(sessionId: string, token: string) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}`, 'GET', token, undefined, undefined, 'text');
+	protected async getSessionInfoWithToken(sessionId: string, token: string): Promise<SessionInfo | undefined> {
+		return makeGitHubAPIRequest<SessionInfo>(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}`, 'GET', token, undefined, undefined, 'json');
 	}
 
-	protected async postCopilotAgentJobWithToken(owner: string, name: string, apiVersion: string, userAgent: string, payload: RemoteAgentJobPayload, token: string) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent, true);
+	protected async postCopilotAgentJobWithToken(owner: string, name: string, apiVersion: string, userAgent: string, payload: RemoteAgentJobPayload, token: string): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode | undefined> {
+		return makeGitHubAPIRequest<RemoteAgentJobResponse>(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent, true);
 	}
 
-	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo> {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/${jobId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo | undefined> {
+		return makeGitHubAPIRequest<JobInfo>(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/${jobId}`, 'GET', token, undefined, undefined, undefined, userAgent);
 	}
 
-	protected async getJobBySessionIdWithToken(owner: string, repo: string, sessionId: string, userAgent: string, token: string): Promise<JobInfo> {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/session/${sessionId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+	protected async getJobBySessionIdWithToken(owner: string, repo: string, sessionId: string, userAgent: string, token: string): Promise<JobInfo | undefined> {
+		return makeGitHubAPIRequest<JobInfo>(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/session/${sessionId}`, 'GET', token, undefined, undefined, undefined, userAgent);
 	}
 
 	protected async addPullRequestCommentWithToken(pullRequestId: string, commentBody: string, token: string): Promise<PullRequestComment | null> {
@@ -329,13 +329,13 @@ export class BaseOctoKitService {
 		return getPullRequestFromGlobalId(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, globalId);
 	}
 
-	protected async getCustomAgentsWithToken(owner: string, repo: string, token: string): Promise<GetCustomAgentsResponse> {
+	protected async getCustomAgentsWithToken(owner: string, repo: string, token: string): Promise<GetCustomAgentsResponse | undefined> {
 		const queryParams = '?exclude_invalid_config=true';
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
+		return makeGitHubAPIRequest<GetCustomAgentsResponse>(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
 	}
 
 	protected async getPullRequestFilesWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<PullRequestFile[]> {
-		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, undefined, '2022-11-28');
+		const result = await makeGitHubAPIRequest<PullRequestFile[]>(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, undefined, '2022-11-28');
 		return result || [];
 	}
 
@@ -344,9 +344,9 @@ export class BaseOctoKitService {
 	}
 
 	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
-		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, 'GET', token, undefined);
+		const response = await makeGitHubAPIRequest<{ content?: string; encoding?: string }>(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, 'GET', token, undefined);
 
-		if (response?.content && response.encoding === 'base64') {
+		if (response && 'content' in response && response.content && response.encoding === 'base64') {
 			return decodeBase64(response.content.replace(/\n/g, '')).toString();
 		} else {
 			return '';
