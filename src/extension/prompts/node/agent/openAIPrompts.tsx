@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isHiddenModelB } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelB, isHiddenModelC, isHiddenModelD } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
@@ -674,3 +674,27 @@ class ModelBPromptResolver implements IAgentPrompt {
 
 PromptRegistry.registerPrompt(OpenAIPromptResolver);
 PromptRegistry.registerPrompt(ModelBPromptResolver);
+
+PromptRegistry.registerPrompt(class implements IAgentPrompt {
+	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
+		return isHiddenModelC(endpoint);
+	}
+
+	static readonly familyPrefixes = [];
+
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+		return CodexStyleGPT5CodexPrompt;
+	}
+});
+
+PromptRegistry.registerPrompt(class implements IAgentPrompt {
+	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
+		return isHiddenModelD(endpoint);
+	}
+
+	static readonly familyPrefixes = [];
+
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+		return DefaultGpt5AgentPrompt;
+	}
+});
