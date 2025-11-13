@@ -28,10 +28,10 @@ import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
-import { INextEditResult, NextEditResult } from '../node/nextEditResult';
+import { INextEditCommandResult, INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
-import { DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
+import { DiagnosticsNextEditCommandResult, DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
 import { InlineEditModel } from './inlineEditModel';
 import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
 import { isInlineSuggestion } from './isInlineSuggestion';
@@ -66,7 +66,7 @@ class NesCompletionList extends InlineCompletionList {
 	}
 }
 
-abstract class BaseNesCompletionInfo<T extends INextEditResult> {
+abstract class BaseNesCompletionInfo<T extends (INextEditResult | INextEditCommandResult)> {
 
 	public abstract source: string;
 
@@ -82,7 +82,7 @@ class LlmCompletionInfo extends BaseNesCompletionInfo<NextEditResult> {
 	public readonly source = 'provider';
 }
 
-class DiagnosticsCompletionInfo extends BaseNesCompletionInfo<DiagnosticsNextEditResult> {
+class DiagnosticsCompletionInfo extends BaseNesCompletionInfo<DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult> {
 	public readonly source = 'diagnostics';
 }
 
@@ -232,14 +232,16 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			let isInlineCompletion: boolean = false;
 			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
-			const documents = doc.fromOffsetRange(result.edit.replaceRange);
+			const documents = result.type === 'edit' ? doc.fromOffsetRange(result.edit.replaceRange) : doc.fromRange(toExternalRange(result.displayLocation.range));
 			const [targetDocument, range] = documents.length ? documents[0] : [undefined, undefined];
 
-			addNotebookTelemetry(document, position, result.edit.newText, documents, telemetryBuilder);
+			addNotebookTelemetry(document, position, result.type === 'edit' ? result.edit.newText : '', documents, telemetryBuilder);
 			telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === targetDocument);
 
 			if (!targetDocument) {
 				tracer.trace('no next edit suggestion');
+			} else if (result.type === 'command') {
+				completionItem = this.createCompletionItem(doc, document, position, range, result);
 			} else if (hasNotebookCellMarker(document, result.edit.newText)) {
 				tracer.trace('no next edit suggestion, edits contain Notebook Cell Markers');
 			} else if (targetDocument === document) {
@@ -274,7 +276,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			// telemetry
 			telemetryBuilder.setPickedNESType(suggestionInfo.source === 'diagnostics' ? 'diagnostics' : 'llm');
 			logContext.setPickedNESType(suggestionInfo.source === 'diagnostics' ? 'diagnostics' : 'llm');
-			telemetryBuilder.setPostProcessingOutcome({ edit: result.edit, displayLocation: result.displayLocation, isInlineCompletion });
+			telemetryBuilder.setPostProcessingOutcome({ edit: result.type === 'edit' ? result.edit : undefined, displayLocation: result.displayLocation, isInlineCompletion, commandId: result.type === 'command' ? result.command.command : undefined });
 			telemetryBuilder.setHadLlmNES(suggestionInfo.source === 'provider');
 			telemetryBuilder.setHadDiagnosticsNES(suggestionInfo.source === 'diagnostics');
 			all.then(([llmResult, diagnosticsResult]) => {
@@ -348,12 +350,12 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		doc: IVSCodeObservableDocument,
 		document: TextDocument,
 		position: Position,
-		range: Range,
-		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
+		range: Range | undefined,
+		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult)['result']>,
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
 		// Only show edit when the cursor is max 4 lines away from the edit
-		const showRange = result.showRangePreference === ShowNextEditPreference.AroundEdit
+		const showRange = result.showRangePreference === ShowNextEditPreference.AroundEdit && range !== undefined
 			? new Range(
 				Math.max(range.start.line - 4, 0),
 				0,
@@ -372,10 +374,10 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		return {
 			range,
-			insertText: result.edit.newText,
+			insertText: result.type === 'edit' ? result.edit.newText : undefined!,
 			showRange,
 			displayLocation,
-			command: result.action,
+			command: result.type === 'edit' ? result.action : result.command,
 		};
 	}
 

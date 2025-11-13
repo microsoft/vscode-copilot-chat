@@ -34,11 +34,11 @@ import { StringText } from '../../../../util/vs/editor/common/core/text/abstract
 import { getInformationDelta, InformationDelta } from '../../common/informationDelta';
 import { RejectionCollector } from '../../common/rejectionCollector';
 import { IVSCodeObservableDocument, VSCodeWorkspace } from '../parts/vscodeWorkspace';
+import { toInternalPosition } from '../utils/translations';
 import { AnyDiagnosticCompletionItem, AnyDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/anyDiagnosticsCompletionProvider';
 import { AsyncDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/asyncDiagnosticsCompletionProvider';
 import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, distanceToClosestDiagnostic, IDiagnosticCompletionProvider, log, logList, sortDiagnosticsByDistance } from './diagnosticsBasedCompletions/diagnosticsCompletions';
 import { ImportDiagnosticCompletionItem, ImportDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/importDiagnosticsCompletionProvider';
-import { toInternalPosition } from '../utils/translations';
 
 interface IDiagnosticsCompletionState<T extends DiagnosticCompletionItem = DiagnosticCompletionItem> {
 	completionItem: T | null;
@@ -432,7 +432,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 	}
 
 	private _rejectDiagnosticCompletion(provider: IDiagnosticCompletionProvider, item: DiagnosticCompletionItem): void {
-		this._rejectionCollector.reject(item.documentId, item.toOffsetEdit());
+		this._rejectionCollector.reject(item.documentId, item.result.toRejectionCollectorEdit());
 
 		provider.completionItemRejected?.(item);
 	}
@@ -487,16 +487,19 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 	}
 
 	private _isDiagnosticCompletionRejected(diagnostic: DiagnosticCompletionItem): boolean {
-		return this._rejectionCollector.isRejected(diagnostic.documentId, diagnostic.toOffsetEdit());
+		return this._rejectionCollector.isRejected(diagnostic.documentId, diagnostic.result.toRejectionCollectorEdit());
 	}
 
 	private _hasRecentlyBeenAddedWithoutNES(item: DiagnosticCompletionItem): boolean {
+		if (item.result.type !== 'edit') {
+			return false;
+		}
 		const recentEdits = this._workspaceDocumentEditHistory.getNRecentEdits(item.documentId, 5)?.edits;
 		if (!recentEdits) {
 			return false;
 		}
 
-		const offsetEdit = item.toOffsetEdit();
+		const offsetEdit = item.result.toOffsetEdit();
 		return recentEdits.replacements.some(edit => edit.replaceRange.intersectsOrTouches(offsetEdit.replaceRange));
 	}
 
@@ -531,8 +534,11 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 }
 
 function diagnosticWouldUndoUserEdit(diagnostic: DiagnosticCompletionItem, documentBefore: StringText, documentAfter: StringText, edits: Edits): boolean {
+	if (diagnostic.result.type !== 'edit') {
+		return false;
+	}
 
-	const currentEdit = diagnostic.toOffsetEdit().toEdit();
+	const currentEdit = diagnostic.result.toOffsetEdit().toEdit();
 	const ourInformationDelta = getInformationDelta(documentAfter.value, currentEdit);
 
 	let recentInformationDelta = new InformationDelta();

@@ -21,6 +21,7 @@ import { Position } from '../../../../../util/vs/editor/common/core/position';
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
 import { IVSCodeObservableDocument } from '../../parts/vscodeWorkspace';
 import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, IDiagnosticCompletionProvider, isDiagnosticWithinDistance, log, logList } from './diagnosticsCompletions';
+import { Command } from '../../../../../vscodeTypes';
 
 class ImportCodeAction {
 
@@ -46,7 +47,7 @@ class ImportCodeAction {
 
 	constructor(
 		public readonly codeAction: CodeActionData,
-		public readonly edit: TextReplacement,
+		public readonly edit: TextReplacement | Command,
 		private readonly _importDetails: ImportDetails,
 		public readonly hasExistingSameFileImport: boolean
 	) { }
@@ -235,7 +236,7 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 
 		// fetch code actions for missing import
 		const startTime = Date.now();
-		const availableCodeActions = await workspaceDocument.getCodeActions(importDiagnosticToFix.range, 3, token);
+		const availableCodeActions = await workspaceDocument.getCodeActions(importDiagnosticToFix.range, 0, token);
 		const resolveCodeActionDuration = Date.now() - startTime;
 		if (availableCodeActions === undefined) {
 			log(`Fetching code actions likely timed out for \`${importDiagnosticToFix.message}\``, logContext, this._tracer);
@@ -313,11 +314,9 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 				continue;
 			}
 
-			if (!codeAction.edits) {
+			if (!codeAction.edits && !codeAction.command) {
 				continue;
 			}
-
-			const joinedEdit = TextReplacement.joinReplacements(codeAction.edits, documentContent);
 
 			// The diagnostic might have changed in the meantime to a different range
 			// So we need to get the import name from the referenced diagnostic
@@ -333,9 +332,9 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 
 			const importCodeAction = new ImportCodeAction(
 				codeAction,
-				joinedEdit,
+				codeAction.edits ? TextReplacement.joinReplacements(codeAction.edits, documentContent) : codeAction.command!,
 				importDetails,
-				!joinedEdit.text.includes('import')
+				!codeAction.edits?.some(edit => edit.text.includes('import'))
 			);
 
 			if (codeActionImportName.length < 2 || importHandler.isImportInIgnoreList(importCodeAction)) {

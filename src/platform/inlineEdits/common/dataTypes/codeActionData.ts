@@ -4,13 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TextReplacement } from '../../../../util/vs/editor/common/core/edits/textEdit';
+import { Command } from '../../../../vscodeTypes';
 import { DiagnosticData } from './diagnosticData';
 
 export class CodeActionData {
 	constructor(
 		public readonly title: string,
 		public readonly diagnostics: DiagnosticData[],
-		public readonly edits?: TextReplacement[]
+		public readonly edits?: TextReplacement[],
+		public readonly command?: Command,
 	) { }
 
 	public toString(): string {

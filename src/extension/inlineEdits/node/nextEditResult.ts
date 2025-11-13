@@ -17,9 +17,21 @@ export interface INextEditDisplayLocation {
 	jumpToEdit?: boolean;
 }
 
+export interface INextEditCommandResult {
+	requestId: number;
+	result: {
+		type: 'command';
+		command?: Command;
+		displayLocation: INextEditDisplayLocation;
+		showRangePreference?: ShowNextEditPreference;
+		targetDocumentId?: DocumentId;
+	} | undefined;
+}
+
 export interface INextEditResult {
 	requestId: number;
 	result: {
+		type: 'edit';
 		edit: StringReplacement;
 		showRangePreference?: ShowNextEditPreference;
 		displayLocation?: INextEditDisplayLocation;
@@ -27,17 +39,37 @@ export interface INextEditResult {
 	} | undefined;
 }
 
+type NextEditResultType = {
+	type: 'edit';
+	edit: StringReplacement;
+	showRangePreference?: ShowNextEditPreference;
+	documentBeforeEdits: StringText;
+	displayLocation?: INextEditDisplayLocation;
+	targetDocumentId?: DocumentId;
+	action?: Command;
+};
+
 export class NextEditResult implements INextEditResult {
+	public readonly result: NextEditResultType | undefined;
+	constructor(
+		public readonly requestId: number,
+		public readonly source: NextEditFetchRequest,
+		result: Omit<NextEditResultType, 'type'> | undefined,
+	) {
+		this.result = result === undefined ? undefined : { type: 'edit', ...result };
+	}
+}
+
+export class NextEditCommandResult implements INextEditCommandResult {
 	constructor(
 		public readonly requestId: number,
 		public readonly source: NextEditFetchRequest,
 		public readonly result: {
-			edit: StringReplacement;
+			type: 'command';
+			command?: Command;
+			displayLocation: INextEditDisplayLocation;
 			showRangePreference?: ShowNextEditPreference;
-			documentBeforeEdits: StringText;
-			displayLocation?: INextEditDisplayLocation;
 			targetDocumentId?: DocumentId;
-			action?: Command;
 		} | undefined,
 	) { }
 }

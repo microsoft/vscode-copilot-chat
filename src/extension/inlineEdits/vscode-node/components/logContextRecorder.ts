@@ -12,7 +12,7 @@ import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
 import { Disposable, DisposableMap, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../util/vs/base/common/path';
 import { FlushableJSONFile, FlushableSafeJSONLFile, getFileSize } from '../../../workspaceRecorder/vscode-node/safeFileWriteUtils';
-import { INextEditResult } from '../../node/nextEditResult';
+import { INextEditCommandResult, INextEditResult } from '../../node/nextEditResult';
 import { InlineEditLogger } from '../parts/inlineEditLogger';
 
 export class LogContextRecorder extends Disposable {
@@ -58,7 +58,7 @@ export class LogContextRecorder extends Disposable {
 		);
 	}
 
-	public handleShown(nextEditResult: INextEditResult) {
+	public handleShown(nextEditResult: INextEditResult | INextEditCommandResult) {
 		const requestId = nextEditResult.requestId;
 		// If the user doesn't interact with the suggestion for 10s,
 		//  we'll consider it ignored
@@ -72,7 +72,7 @@ export class LogContextRecorder extends Disposable {
 		this._shownSuggestions.set(requestId, { timeout: timer, dispose: () => clearTimeout(timer) });
 	}
 
-	public handleAcceptance(nextEditResult: INextEditResult) {
+	public handleAcceptance(nextEditResult: INextEditResult | INextEditCommandResult) {
 		const requestId = nextEditResult.requestId;
 		this._shownSuggestions.deleteAndDispose(requestId);
 		const req = this._inlineEditLogger.getRequestById(requestId);
@@ -82,7 +82,7 @@ export class LogContextRecorder extends Disposable {
 		}
 	}
 
-	public handleRejection(nextEditResult: INextEditResult) {
+	public handleRejection(nextEditResult: INextEditResult | INextEditCommandResult) {
 		const requestId = nextEditResult.requestId;
 		this._shownSuggestions.deleteAndDispose(requestId);
 

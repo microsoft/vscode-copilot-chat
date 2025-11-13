@@ -41,15 +41,15 @@ import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
-import { INextEditDisplayLocation, INextEditResult, NextEditResult } from './nextEditResult';
+import { INextEditCommandResult, INextEditDisplayLocation, INextEditResult, NextEditResult } from './nextEditResult';
 
-export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
+export interface INextEditProvider<T extends (INextEditResult | INextEditCommandResult), TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
 	getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: TTelemetry, data?: TData): Promise<T>;
 	handleShown(suggestion: T): void;
 	handleAcceptance(docId: DocumentId, suggestion: T): void;
 	handleRejection(docId: DocumentId, suggestion: T): void;
-	handleIgnored(docId: DocumentId, suggestion: T, supersededByRequestUuid: INextEditResult | undefined): void;
+	handleIgnored(docId: DocumentId, suggestion: T, supersededByRequestUuid: INextEditResult | INextEditCommandResult | undefined): void;
 	lastRejectionTime: number;
 	lastTriggerTime: number;
 }
@@ -810,7 +810,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._statelessNextEditProvider.handleRejection?.();
 	}
 
-	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
+	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | INextEditCommandResult | undefined): void { }
 
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
 		if (suggestion.result === undefined) {
