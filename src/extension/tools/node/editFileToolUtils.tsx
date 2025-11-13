@@ -25,6 +25,7 @@ import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
 import { extUriBiasedIgnorePathCase, normalizePath, relativePath } from '../../../util/vs/base/common/resources';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -618,16 +619,20 @@ const ALWAYS_CHECKED_EDIT_PATTERNS: Readonly<Record<string, boolean>> = {
 	'**/.vscode/*.json': false,
 };
 
-const allPlatformPatterns = [homedir() + '/.*', homedir() + '/.*/**'];
+const allPlatformPatterns: (glob.ParsedPattern | string)[] = [
+	glob.parse(homedir() + '/.*'),
+	glob.parse(homedir() + '/.*/**'),
+];
+
+const specializedPatterns: (glob.ParsedPattern | string | undefined)[] =
+	isWindows
+		? [process.env.APPDATA, process.env.LOCALAPPDATA]
+		: isMacintosh
+			? [homedir() + '/Library']
+			: [];
 
 // Path prefixes under which confirmation is unconditionally required
-const platformConfirmationRequiredPaths = (
-	isWindows
-		? [process.env.APPDATA + '/**', process.env.LOCALAPPDATA + '/**']
-		: isMacintosh
-			? [homedir() + '/Library/**']
-			: []
-).concat(allPlatformPatterns).map(p => glob.parse(p));
+const platformConfirmationRequiredPaths = specializedPatterns.filter(isDefined).concat(allPlatformPatterns);
 
 /**
  * Validates that a path doesn't contain suspicious characters that could be used
@@ -691,7 +696,7 @@ export function assertPathIsSafe(fsPath: string, _isWindows = isWindows): void {
 	}
 }
 
-const enum ConfirmationCheckResult {
+export const enum ConfirmationCheckResult {
 	NoConfirmation,
 	NoPermissions,
 	Sensitive,
@@ -703,7 +708,7 @@ const enum ConfirmationCheckResult {
  * Returns a function that returns whether a URI is approved for editing without
  * further user confirmation.
  */
-function makeUriConfirmationChecker(configuration: IConfigurationService, workspaceService: IWorkspaceService, customInstructionsService: ICustomInstructionsService) {
+export function makeUriConfirmationChecker(configuration: IConfigurationService, workspaceService: IWorkspaceService, customInstructionsService: ICustomInstructionsService) {
 	const patterns = configuration.getNonExtensionConfig<Record<string, boolean>>('chat.tools.edits.autoApprove');
 
 	const checks = new ResourceMap<{ patterns: { pattern: glob.ParsedPattern; isApproved: boolean }[]; ignoreCasing: boolean }>();
@@ -738,7 +743,21 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 
 		assertPathIsSafe(fsPath);
 
-		if (platformConfirmationRequiredPaths.some(p => p(fsPath))) {
+		const platformCheckFailed = platformConfirmationRequiredPaths.some(p => {
+			if (typeof p === 'function') {
+				return p(fsPath);
+			}
+
+			const parentURI = URI.file(p);
+			if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, parentURI)) {
+				// If the workspace is opened in the restricted folder, still allow edits within that workspace
+				return workspaceFolder && extUriBiasedIgnorePathCase.isEqualOrParent(workspaceFolder, parentURI) ? false : true;
+			}
+
+			return false;
+		});
+
+		if (platformCheckFailed) {
 			return ConfirmationCheckResult.SystemFile;
 		}
 
