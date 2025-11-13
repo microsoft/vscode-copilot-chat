@@ -24,12 +24,13 @@ import * as glob from '../../../util/vs/base/common/glob';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
-import { extUriBiasedIgnorePathCase, normalizePath, relativePath } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
+import { formatUriForFileWidget } from './toolUtils';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -780,7 +781,6 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 
 export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>): Promise<PreparedToolInvocation> {
 	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService), accessor.get(IWorkspaceService), accessor.get(ICustomInstructionsService));
-	const workspaceService = accessor.get(IWorkspaceService);
 	const needsConfirmation = (await Promise.all(uris
 		.map(async uri => ({ uri, reason: await checker(uri) }))
 	)).filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation);
@@ -789,10 +789,7 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 		return { presentation: 'hidden' };
 	}
 
-	const fileParts = needsConfirmation.map(({ uri }) => {
-		const wf = workspaceService.getWorkspaceFolder(uri);
-		return '`' + (wf ? relativePath(wf, uri) : uri.fsPath) + '`';
-	}).join(', ');
+	const fileParts = needsConfirmation.map(({ uri }) => formatUriForFileWidget(uri)).join(', ');
 
 	let message: string;
 	if (needsConfirmation.some(r => r.reason === ConfirmationCheckResult.NoPermissions)) {
