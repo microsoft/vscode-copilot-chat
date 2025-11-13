@@ -16,6 +16,7 @@ import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
 export interface ISearchSubagentParams {
+	// TODO: maybe we should remove the user query from the inputs. Consider ablation study to see impact?
 	/** Natural language query describing what to search for */
 	query: string;
 	/** User-visible description shown while invoking */
