@@ -19,18 +19,31 @@ const VSC_MODEL_HASHES_A = [
 	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
 	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
 	'b576d46942ee2c45ecd979cbbcb62688ae3171a07ac83f53b783787f345e3dd7',
-	'b46570bfd230db11a82d5463c160b9830195def7086519ca319c41037b991820',
+	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
+
 ];
 
 const VSC_MODEL_HASHES_B = [
 	'e30111497b2a7e8f1aa7beed60b69952537d99bcdc18987abc2f6add63a89960',
 	'df610ed210bb9266ff8ab812908d5837538cdb1d7436de907fb7e970dab5d289',
+	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
 ];
 
 const familyToHash = new Map<string, string>();
 const HIDDEN_MODEL_B_HASHES = [
 	'8f398886c326b5f8f07b20ac250c87de6723e062474465273fe1524f2b9092fa',
-	'40903c59d19feef1d67c455499304c194ebdec82df78790c3ceaac92bd1d84be'];
+	'40903c59d19feef1d67c455499304c194ebdec82df78790c3ceaac92bd1d84be',
+	'e7ee8b015b531feb8b6b0409f21aca9d5f0fba84db806c9d3ef671e2b36c55bf'];
+
+const HIDDEN_MODEL_C_HASHES = [
+	'57bc0aad677492da7a00731e3e411055b9828c6439f502fa5abd8fddb7a8a260',
+	'c5f9e7e93624823213aa93017d0d970ce3203d99dfcd616a0446f7bae2d8caf4'
+];
+
+const HIDDEN_MODEL_D_HASHES = [
+	'27d93f5008711fce9cf5425234e81432d8eec95284beff9d5edc8daecc81bf76',
+	'312f75b4c11f3fec13b8722cba17a3cb3e355144bce27ebb8afdd9abe2779685'
+];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 	return 'id' in model ? model.id : model.model;
@@ -55,15 +68,59 @@ export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint | 
 	return false;
 }
 
+export async function isHiddenModelC(model: LanguageModelChat | IChatEndpoint | string | undefined): Promise<boolean> {
+	if (!model) {
+		return false;
+	}
 
-export async function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
-	const h = await getCachedSha256Hash(getModelId(model));
+	const family = typeof model === 'string' ? model : model.family;
+	const h = familyToHash.get(family) ?? await getCachedSha256Hash(family);
+	if (HIDDEN_MODEL_C_HASHES.includes(h)) {
+		familyToHash.set(family, h);
+		return true;
+	}
+	return false;
+}
+
+export async function isHiddenModelD(model: LanguageModelChat | IChatEndpoint | string | undefined): Promise<boolean> {
+	if (!model) {
+		return false;
+	}
+
+	const family = typeof model === 'string' ? model : model.family;
+	const h = familyToHash.get(family) ?? await getCachedSha256Hash(family);
+	if (HIDDEN_MODEL_D_HASHES.includes(h)) {
+		familyToHash.set(family, h);
+		return true;
+	}
+	return false;
+}
+
+export async function isVSCModelA(model: LanguageModelChat | IChatEndpoint | string | undefined): Promise<boolean> {
+	if (!model) {
+		return false;
+	}
+	const key = typeof model === 'string' ? model : getModelId(model);
+	const h = await getCachedSha256Hash(key);
 	return VSC_MODEL_HASHES_A.includes(h);
 }
 
-export async function isVSCModelB(model: LanguageModelChat | IChatEndpoint) {
-	const h = await getCachedSha256Hash(getModelId(model));
+export async function isVSCModelB(model: LanguageModelChat | IChatEndpoint | string | undefined): Promise<boolean> {
+	if (!model) {
+		return false;
+	}
+
+	const key = typeof model === 'string' ? model : getModelId(model);
+	const h = await getCachedSha256Hash(key);
 	return VSC_MODEL_HASHES_B.includes(h);
+}
+
+/**
+ * Check if model is VSC Model A or B (checks both model ID and family)
+ */
+async function isVSCModelAorB(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	// Check model ID
+	return await isVSCModelA(model) || await isVSCModelB(model) || await isVSCModelA(model.family) || await isVSCModelB(model.family);
 }
 
 /**
@@ -86,7 +143,7 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
  * Model supports apply_patch as an edit tool.
  */
 export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || await isHiddenModelA(model) || await isHiddenModelB(model);
+	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || await isHiddenModelA(model) || await isHiddenModelB(model) || await isHiddenModelC(model) || await isHiddenModelD(model) || await isVSCModelAorB(model);
 }
 
 /**
@@ -145,7 +202,7 @@ export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): b
  * without needing insert_edit_into_file.
  */
 export async function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('gpt-5') || await isHiddenModelB(model);
+	return model.family.startsWith('gpt-5') || await isHiddenModelB(model) || await isHiddenModelC(model) || await isHiddenModelD(model) || await isVSCModelAorB(model);
 }
 
 /**
@@ -161,7 +218,7 @@ export function modelNeedsStrongReplaceStringHint(model: LanguageModelChat | ICh
  * Model can take the simple, modern apply_patch instructions.
  */
 export async function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('gpt-5') || await isHiddenModelB(model);
+	return model.family.startsWith('gpt-5') || await isHiddenModelB(model) || await isHiddenModelC(model) || await isHiddenModelD(model) || await isVSCModelAorB(model);
 }
 
 /**

@@ -7,7 +7,7 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isHiddenModelB, isVSCModelA, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelB, isHiddenModelC, isHiddenModelD, isVSCModelA, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -91,7 +91,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{this.props.endpoint.family.startsWith('gpt-5') || await isHiddenModelB(this.props.endpoint) ? (
+				{this.props.endpoint.family.startsWith('gpt-5') || await isHiddenModelB(this.props.endpoint) || await isHiddenModelC(this.props.endpoint) || await isHiddenModelD(this.props.endpoint) ? (
 					<>
 						<GPT5CopilotIdentityRule />
 						<Gpt5SafetyRule />
@@ -321,7 +321,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			this.logService.trace('Re-rendering historical user message');
 		}
 
-		const shouldIncludePreamble = await isVSCModelA(this.props.endpoint);
+		// Check if the model matches VSC Model A (checks both model ID and family)
+		const shouldIncludePreamble = await isVSCModelA(this.props.endpoint) || await isVSCModelA(this.props.endpoint.family);
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
@@ -408,7 +409,7 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 			<Tag name='toolReferences'>
 				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
 				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')} <br />
-				{(this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily)) && <>
+				{(this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily)) && <>
 					Start by using the most relevant tool attached to this message—the user expects you to act with it first.<br />
 				</>}
 			</Tag>
@@ -701,7 +702,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		if (this.props.modelFamily === 'gpt-4.1' || this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily)) {
+		if (this.props.modelFamily === 'gpt-4.1' || this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily)) {
 			if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 				// Extended reminder
 				return <>

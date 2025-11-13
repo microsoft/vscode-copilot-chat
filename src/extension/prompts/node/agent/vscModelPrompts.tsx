@@ -357,8 +357,8 @@ class VSCModelPromptB extends PromptElement<DefaultAgentPromptProps> {
 
 class VSCModelPromptResolverA implements IAgentPrompt {
 	static readonly familyPrefixes = ['vscModelA'];
-	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isVSCModelA(endpoint);
+	static async matchesModel(model: IChatEndpoint | string): Promise<boolean> {
+		return isVSCModelA(model);
 	}
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
@@ -368,8 +368,8 @@ class VSCModelPromptResolverA implements IAgentPrompt {
 
 class VSCModelPromptResolverB implements IAgentPrompt {
 	static readonly familyPrefixes = ['vscModelB'];
-	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isVSCModelB(endpoint);
+	static async matchesModel(model: IChatEndpoint | string): Promise<boolean> {
+		return isVSCModelB(model);
 	}
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
