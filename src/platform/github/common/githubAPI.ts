@@ -90,33 +90,7 @@ export async function makeGitHubAPIRequest<T = any>(
 	version?: string,
 	type: 'json' | 'text' = 'json',
 	userAgent?: string,
-	returnStatusCodeOnError?: false): Promise<T | undefined>;
-export async function makeGitHubAPIRequest<T = any>(
-	fetcherService: IFetcherService,
-	logService: ILogService,
-	telemetry: ITelemetryService,
-	host: string,
-	routeSlug: string,
-	method: 'GET' | 'POST',
-	token: string | undefined,
-	body: unknown,
-	version: string | undefined,
-	type: 'json' | 'text',
-	userAgent: string | undefined,
-	returnStatusCodeOnError: true): Promise<T | { status: number } | undefined>;
-export async function makeGitHubAPIRequest<T = any>(
-	fetcherService: IFetcherService,
-	logService: ILogService,
-	telemetry: ITelemetryService,
-	host: string,
-	routeSlug: string,
-	method: 'GET' | 'POST',
-	token: string | undefined,
-	body?: unknown,
-	version?: string,
-	type: 'json' | 'text' = 'json',
-	userAgent?: string,
-	returnStatusCodeOnError?: boolean): Promise<T | { status: number } | undefined> {
+	returnStatusCodeOnError: boolean = false): Promise<T | undefined> {
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -138,7 +112,7 @@ export async function makeGitHubAPIRequest<T = any>(
 	if (!response.ok) {
 		logService.error(`[GitHubAPI] ${method} ${host}/${routeSlug} - Status: ${response?.status}`);
 		if (returnStatusCodeOnError) {
-			return { status: response.status };
+			return { status: response.status } as T;
 		}
 		return undefined;
 	}
@@ -379,12 +353,11 @@ export async function closePullRequest(
 		'2022-11-28'
 	);
 
-	const success = result && 'state' in result && result.state === 'closed';
+	const success = result?.state === 'closed';
 	if (success) {
 		logService.debug(`[GitHubAPI] Successfully closed pull request ${owner}/${repo}#${pullNumber}`);
 	} else {
-		const state = result && 'state' in result ? result.state : 'unknown';
-		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${state}`);
+		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${result?.state}`);
 	}
 	return success;
 }

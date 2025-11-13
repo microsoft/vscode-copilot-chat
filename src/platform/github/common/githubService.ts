@@ -306,7 +306,7 @@ export class BaseOctoKitService {
 	}
 
 	protected async postCopilotAgentJobWithToken(owner: string, name: string, apiVersion: string, userAgent: string, payload: RemoteAgentJobPayload, token: string): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode | undefined> {
-		return makeGitHubAPIRequest<RemoteAgentJobResponse>(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent, true);
+		return makeGitHubAPIRequest<RemoteAgentJobResponse>(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent, true) as Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode | undefined>;
 	}
 
 	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo | undefined> {
@@ -346,7 +346,7 @@ export class BaseOctoKitService {
 	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
 		const response = await makeGitHubAPIRequest<{ content?: string; encoding?: string }>(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, 'GET', token, undefined);
 
-		if (response && 'content' in response && response.content && response.encoding === 'base64') {
+		if (response?.content && response.encoding === 'base64') {
 			return decodeBase64(response.content.replace(/\n/g, '')).toString();
 		} else {
 			return '';
