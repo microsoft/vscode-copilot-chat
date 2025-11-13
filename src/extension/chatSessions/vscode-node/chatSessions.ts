@@ -158,6 +158,14 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			})
 		);
 		this.copilotCloudRegistrations.add(
+			vscode.commands.registerCommand('github.copilot.cloud.sessions.retryPolling', async (prNumber: number) => {
+				// Submit a retry request to the chat to trigger polling restart
+				await vscode.commands.executeCommand('workbench.action.chat.submit', {
+					inputValue: `__retry_polling_${prNumber}__`
+				});
+			})
+		);
+		this.copilotCloudRegistrations.add(
 			vscode.commands.registerCommand(CLOSE_SESSION_PR_CMD, async (ctx: CrossChatSessionWithPR) => {
 				try {
 					const success = await this.octoKitService.closePullRequest(
