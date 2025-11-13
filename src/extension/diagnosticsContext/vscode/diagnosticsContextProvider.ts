@@ -15,16 +15,17 @@ import { autorun, IObservable } from '../../../util/vs/base/common/observableInt
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
-import { DiagnosticSeverity, Range as ExternalRange } from '../../../vscodeTypes';
+import { Diagnostic, DiagnosticSeverity, Range as ExternalRange } from '../../../vscodeTypes';
+import { N_LINES_ABOVE, N_LINES_BELOW } from '../../xtab/common/promptCrafting';
 
 export class DiagnosticsContextContribution extends Disposable {
 
 	private readonly _enableDiagnosticsContextProvider: IObservable<boolean>;
 
 	constructor(
-		@IConfigurationService configurationService: IConfigurationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ILogService private readonly logService: ILogService,
-		@IExperimentationService experimentationService: IExperimentationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ILanguageDiagnosticsService private readonly diagnostocsService: ILanguageDiagnosticsService,
 		@ILanguageContextProviderService private readonly languageContextProviderService: ILanguageContextProviderService,
 	) {
@@ -40,7 +41,7 @@ export class DiagnosticsContextContribution extends Disposable {
 	private register(): IDisposable {
 		const disposables = new DisposableStore();
 		try {
-			const resolver = new ContextResolver(this.diagnostocsService);
+			const resolver = new ContextResolver(this.diagnostocsService, this.configurationService, this.experimentationService);
 			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'diagnostics-context-provider',
 				selector: "*",
@@ -64,6 +65,8 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 
 	constructor(
 		private readonly diagnostocsService: ILanguageDiagnosticsService,
+		private readonly configurationService: IConfigurationService,
+		private readonly experimentationService: IExperimentationService,
 	) { }
 
 	async resolve(request: Copilot.ResolveRequest, token: CancellationToken): Promise<Copilot.SupportedContextItem[]> {
@@ -76,15 +79,15 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 		}
 
 		const requestedFileResource = URI.parse(request.documentContext.uri);
-		const cursor = new Position(
-			request.documentContext.position.line + 1,
-			request.documentContext.position.character + 1,
-		);
+		const cursor = new Position(request.documentContext.position.line + 1, request.documentContext.position.character + 1);
+		const linesAbove = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderNLinesAbove, this.experimentationService) ?? N_LINES_ABOVE;
+		const linesBelow = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderNLinesBelow, this.experimentationService) ?? N_LINES_BELOW;
+		const editWindow = new Range(cursor.lineNumber - linesAbove, 1, cursor.lineNumber + linesBelow, Number.MAX_SAFE_INTEGER);
 
 		return this.getContext(requestedFileResource, cursor, {
 			maxDiagnostics: 3,
 			includeWarnings: true,
-			includeDiagnosticsRange: new Range(cursor.lineNumber, 1, cursor.lineNumber + 5, 1),
+			includeDiagnosticsRange: editWindow,
 		});
 	}
 
@@ -105,28 +108,30 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 			return aDistance - bDistance;
 		});
 
-		const diagnosticsLimited = diagnosticsSortedByDistance.slice(0, options.maxDiagnostics);
-
-		const errorDiagnostics = diagnosticsLimited.filter(d => d.severity === DiagnosticSeverity.Error);
-		const warningsDiagnostics = diagnosticsLimited.filter(d => d.severity === DiagnosticSeverity.Warning);
-
-		const traits: Copilot.Trait[] = [];
-		if (errorDiagnostics.length > 0) {
-			traits.push({
-				name: "Errors near the users cursor",
-				value: errorDiagnostics.map(d => `- ${d.message}`).join('\n'),
-			});
-		}
-
-		if (warningsDiagnostics.length > 0) {
-			traits.push({
-				name: "Warnings near the users cursor",
-				value: warningsDiagnostics.map(d => `- ${d.message}`).join('\n'),
-			});
-		}
-
-		return traits;
+		return diagnosticsToTraits(diagnosticsSortedByDistance.slice(0, options.maxDiagnostics));
 	}
+}
+
+function diagnosticsToTraits(diagnostics: Diagnostic[]): Copilot.Trait[] {
+	const errorDiagnostics = diagnostics.filter(d => d.severity === DiagnosticSeverity.Error);
+	const warningsDiagnostics = diagnostics.filter(d => d.severity === DiagnosticSeverity.Warning);
+
+	const traits: Copilot.Trait[] = [];
+	if (errorDiagnostics.length > 0) {
+		traits.push({
+			name: "Errors near the users cursor",
+			value: errorDiagnostics.map(d => `- ${d.message}`).join('\n'),
+		});
+	}
+
+	if (warningsDiagnostics.length > 0) {
+		traits.push({
+			name: "Warnings near the users cursor",
+			value: warningsDiagnostics.map(d => `- ${d.message}`).join('\n'),
+		});
+	}
+
+	return traits;
 }
 
 function toInternalRange(range: ExternalRange): Range {
