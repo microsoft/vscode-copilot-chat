@@ -758,7 +758,7 @@ function getVSCModelReminder(isHiddenModel: boolean) {
 }
 
 async function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
-	if (modelFamily === 'gpt-5-codex') {
+	if (modelFamily === 'gpt-5-codex' || await isHiddenModelC(modelFamily) || await isHiddenModelD(modelFamily)) {
 		return;
 	}
 
