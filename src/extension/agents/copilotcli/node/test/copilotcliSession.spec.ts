@@ -96,8 +96,8 @@ describe('CopilotCLISession', () => {
 			}
 		}();
 		sdkSession = new MockSdkSession();
-		sessionOptions = new CopilotCLISessionOptions({}, logger);
 		workspaceService = createWorkspaceService('/workspace');
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0].fsPath }, logger);
 		instaService = services.seal();
 	});
 

@@ -16,6 +16,7 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
@@ -417,7 +418,7 @@ export class CopilotCLIChatSessionParticipant {
 			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory);
 		}
 		disposables.add(session.object.attachStream(stream));
-		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest) => this.instantiationService.invokeFunction(requestPermission, permissionRequest, this.toolsService, request.toolInvocationToken, token)));
+		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) => requestPermission(this.instantiationService, permissionRequest, toolCall, this.toolsService, request.toolInvocationToken, token)));
 
 
 		return session;
