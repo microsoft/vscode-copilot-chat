@@ -310,6 +310,8 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	}
 }
 
+const WAIT_FOR_NEW_SESSION_TO_GET_USED = 5 * 60 * 1000; // 5 minutes
+
 export class CopilotCLIChatSessionParticipant extends Disposable {
 	constructor(
 		private readonly promptResolver: CopilotCLIPromptResolver,
@@ -376,7 +378,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (!session) {
 				return {};
 			}
-			disposables.add(session);
+			if (isUntitled) {
+				// The SDK doesn't save the session as no messages were added,
+				// If we dispose this here, then we will not be able to find this session later.
+				// So leave this session alive till it gets used using the `getSession` API later
+				this._register(disposableTimeout(() => session.dispose(), WAIT_FOR_NEW_SESSION_TO_GET_USED));
+			} else {
+				disposables.add(session);
+			}
 
 			if (!isUntitled && confirmationResults.length) {
 				return await this.handleConfirmationData(session.object, request.prompt, confirmationResults, context, stream, token);
@@ -523,10 +532,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return {};
 		}
 		finally {
-			// The SDK diesn't save the session as no messages were added,
+			// The SDK doesn't save the session as no messages were added,
 			// If we dispose this here, then we will not be able to find this session later.
 			// So leave this session alive till it gets used using the `getSession` API later
-			this._register(disposableTimeout(() => session.dispose(), 5 * 60 * 1000));
+			this._register(disposableTimeout(() => session.dispose(), WAIT_FOR_NEW_SESSION_TO_GET_USED));
 		}
 	}
 
