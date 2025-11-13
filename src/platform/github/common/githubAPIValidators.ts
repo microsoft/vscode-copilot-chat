@@ -170,14 +170,14 @@ export const vClosePullRequestResponse = (): IValidator<ClosePullRequestResponse
 export interface RepositoryItem {
 	name: string;
 	path: string;
-	type: string;
+	type: 'file' | 'dir';
 	html_url: string;
 }
 
 export const vRepositoryItem = (): IValidator<RepositoryItem> => vObj({
 	name: vRequired(vString()),
 	path: vRequired(vString()),
-	type: vRequired(vString()),
+	type: vRequired(vEnum('file', 'dir')),
 	html_url: vRequired(vString()),
 });
 

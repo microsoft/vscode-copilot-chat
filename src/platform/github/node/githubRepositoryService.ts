@@ -86,7 +86,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 			}
 
 			for (const child of validation.content) {
-				paths.push({ name: child.name, path: child.path, type: child.type as any, html_url: child.html_url });
+				paths.push({ name: child.name, path: child.path, type: child.type, html_url: child.html_url });
 				if (child.type === 'dir') {
 					paths.push(...await this.getRepositoryItems(org, repo, child.path));
 				}
