@@ -1203,7 +1203,7 @@
 			{
 				"name": "read",
 				"description": "%copilot.toolSet.read.description%",
-				"icon": "$(search)",
+				"icon": "$(eye)",
 				"tools": [
 					"readFile",
 					"usages"
