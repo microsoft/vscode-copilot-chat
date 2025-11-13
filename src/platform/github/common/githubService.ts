@@ -6,11 +6,13 @@
 import type { Endpoints } from "@octokit/types";
 import { createServiceIdentifier } from '../../../util/common/services';
 import { decodeBase64 } from '../../../util/vs/base/common/buffer';
+import { vArray } from '../../configuration/common/validator';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { addPullRequestCommentGraphQLRequest, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeGitHubAPIRequestWithPagination, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { vFileContentResponse, vPullRequestFile, vIOctoKitUser, vRemoteAgentJobOrError, vGetCustomAgentsResponse, vSessionInfo, vJobInfo } from './githubAPIValidators';
 
 export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
 
@@ -277,7 +279,16 @@ export class BaseOctoKitService {
 	) { }
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
-		return this._makeGHAPIRequest('user', 'GET', token);
+		const result = await this._makeGHAPIRequest('user', 'GET', token);
+		if (!result) {
+			return undefined;
+		}
+		const validationResult = vIOctoKitUser.validate(result);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate authenticated user response: ${validationResult.error.message}`);
+			return undefined;
+		}
+		return validationResult.content;
 	}
 
 	async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
@@ -294,7 +305,16 @@ export class BaseOctoKitService {
 	}
 
 	protected async getCopilotSessionsForPRWithToken(prId: string, token: string) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/resource/pull/${prId}`, 'GET', token);
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/resource/pull/${prId}`, 'GET', token);
+		if (!result) {
+			return [];
+		}
+		const validationResult = vArray(vSessionInfo).validate(result);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate sessions for PR response: ${validationResult.error.message}`);
+			return [];
+		}
+		return validationResult.content;
 	}
 
 	protected async getSessionLogsWithToken(sessionId: string, token: string) {
@@ -302,19 +322,63 @@ export class BaseOctoKitService {
 	}
 
 	protected async getSessionInfoWithToken(sessionId: string, token: string) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}`, 'GET', token, undefined, undefined, 'text');
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}`, 'GET', token, undefined, undefined, 'text');
+		if (!result) {
+			return undefined;
+		}
+		// The response is text, so we need to parse it as JSON first
+		let parsed: unknown;
+		try {
+			parsed = typeof result === 'string' ? JSON.parse(result) : result;
+		} catch (error) {
+			this._logService.error(`[GitHubAPI] Failed to parse session info response as JSON: ${error}`);
+			return undefined;
+		}
+		const validationResult = vSessionInfo.validate(parsed);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate session info response: ${validationResult.error.message}`);
+			return undefined;
+		}
+		return validationResult.content;
 	}
 
 	protected async postCopilotAgentJobWithToken(owner: string, name: string, apiVersion: string, userAgent: string, payload: RemoteAgentJobPayload, token: string) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent, true);
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent, true);
+		if (!result) {
+			return undefined;
+		}
+		const validationResult = vRemoteAgentJobOrError.validate(result);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate remote agent job response: ${validationResult.error.message}`);
+			return undefined;
+		}
+		return validationResult.content;
 	}
 
 	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo> {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/${jobId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/${jobId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+		if (!result) {
+			throw new Error('Failed to fetch job info: No response received');
+		}
+		const validationResult = vJobInfo.validate(result);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate job info response: ${validationResult.error.message}`);
+			throw new Error(`Failed to validate job info: ${validationResult.error.message}`);
+		}
+		return validationResult.content;
 	}
 
 	protected async getJobBySessionIdWithToken(owner: string, repo: string, sessionId: string, userAgent: string, token: string): Promise<JobInfo> {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/session/${sessionId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/session/${sessionId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+		if (!result) {
+			throw new Error('Failed to fetch job info: No response received');
+		}
+		const validationResult = vJobInfo.validate(result);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate job info response: ${validationResult.error.message}`);
+			throw new Error(`Failed to validate job info: ${validationResult.error.message}`);
+		}
+		return validationResult.content;
 	}
 
 	protected async addPullRequestCommentWithToken(pullRequestId: string, commentBody: string, token: string): Promise<PullRequestComment | null> {
@@ -331,12 +395,29 @@ export class BaseOctoKitService {
 
 	protected async getCustomAgentsWithToken(owner: string, repo: string, token: string): Promise<GetCustomAgentsResponse> {
 		const queryParams = '?exclude_invalid_config=true';
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
+		if (!result) {
+			return { agents: [] };
+		}
+		const validationResult = vGetCustomAgentsResponse.validate(result);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate custom agents response: ${validationResult.error.message}`);
+			return { agents: [] };
+		}
+		return validationResult.content;
 	}
 
 	protected async getPullRequestFilesWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<PullRequestFile[]> {
 		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, undefined, '2022-11-28');
-		return result || [];
+		if (!result) {
+			return [];
+		}
+		const validationResult = vArray(vPullRequestFile).validate(result);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate pull request files response: ${validationResult.error.message}`);
+			return [];
+		}
+		return validationResult.content;
 	}
 
 	protected async closePullRequestWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<boolean> {
@@ -346,8 +427,18 @@ export class BaseOctoKitService {
 	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
 		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, 'GET', token, undefined);
 
-		if (response?.content && response.encoding === 'base64') {
-			return decodeBase64(response.content.replace(/\n/g, '')).toString();
+		if (!response) {
+			return '';
+		}
+
+		const validationResult = vFileContentResponse.validate(response);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate file content response: ${validationResult.error.message}`);
+			return '';
+		}
+
+		if (validationResult.content.encoding === 'base64') {
+			return decodeBase64(validationResult.content.content.replace(/\n/g, '')).toString();
 		} else {
 			return '';
 		}
