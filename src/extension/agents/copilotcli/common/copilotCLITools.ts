@@ -163,7 +163,7 @@ type SemanticCodeSearchTool = {
 	};
 };
 
-type ReplyToCommandTool = {
+type ReplyToCommentTool = {
 	toolName: 'reply_to_comment';
 	arguments: {
 		reply: string;
@@ -194,7 +194,7 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 	GrepTool | GLobTool |
 	ReportIntentTool | ThinkTool | ReportProgressTool |
 	SearchTool | SearchBashTool | SemanticCodeSearchTool |
-	ReplyToCommandTool | CodeReviewTool;
+	ReplyToCommentTool | CodeReviewTool;
 
 export type ToolCall = ToolInfo & { toolCallId: string };
 type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
@@ -367,6 +367,14 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
  * Creates a formatted tool invocation part for CopilotCLI tools
  */
 export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolName: string; arguments?: unknown }): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
+		const invocation = new ChatToolInvocationPart(data.toolName ?? 'unknown', data.toolCallId ?? '', false);
+		invocation.isConfirmed = false;
+		invocation.isComplete = false;
+		formatGenericInvocation(invocation, data as ToolCall);
+		return invocation;
+	}
+
 	const toolCall = data as ToolCall;
 	// Ensures arguments is at least an empty object
 	toolCall.arguments = toolCall.arguments ?? {};
@@ -380,8 +388,7 @@ export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolN
 		return undefined;
 	}
 
-	const [friendlyToolName, formatter] = Object.hasOwn(ToolFriendlyNameAndHandlers, toolCall.toolName) ? ToolFriendlyNameAndHandlers[toolCall.toolName] : [toolCall.toolName || 'unknown', formatGenericInvocation];
-
+	const [friendlyToolName, formatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
 	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '', false);
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
@@ -391,7 +398,7 @@ export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolN
 }
 
 type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall) => void;
-type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { type: T }>;
+type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { toolName: T }>;
 
 const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>) => void] } = {
 	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation],
@@ -414,7 +421,7 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invo
 	'glob': [l10n.t('Search'), formatSearchToolInvocation],
 	'search_bash': [l10n.t('Search'), formatSearchToolInvocation],
 	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation],
-	'reply_to_comment': [l10n.t('Reply to Comment'), formatCodeReviewReplyInvocation],
+	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation],
 	'code_review': [l10n.t('Review Code'), formatCodeReviewInvocation],
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation],
 	'think': [l10n.t('Thinking'), emptyInvocation],
@@ -548,10 +555,10 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	} else if (toolCall.toolName === 'search_bash') {
 		invocation.invocationMessage = `Command: ${toolCall.arguments.command}`;
 	} else if (toolCall.toolName === 'glob') {
-		const searchInPath = ` in ${toolCall.arguments.path}` || '';
+		const searchInPath = toolCall.arguments.path ? ` in ${toolCall.arguments.path}` : '';
 		invocation.invocationMessage = `Pattern: ${toolCall.arguments.pattern}${searchInPath}`;
 	} else if (toolCall.toolName === 'grep') {
-		const searchInPath = ` in ${toolCall.arguments.path}` || '';
+		const searchInPath = toolCall.arguments.path ? ` in ${toolCall.arguments.path}` : '';
 		invocation.invocationMessage = `Pattern: ${toolCall.arguments.pattern}${searchInPath}`;
 	}
 }
@@ -560,15 +567,19 @@ function formatCodeReviewInvocation(invocation: ChatToolInvocationPart, toolCall
 	invocation.invocationMessage = `**${toolCall.arguments.prTitle}**  \n${toolCall.arguments.prDescription}`;
 }
 
-function formatCodeReviewReplyInvocation(invocation: ChatToolInvocationPart, toolCall: ReplyToCommandTool): void {
+function formatReplyToCommentInvocation(invocation: ChatToolInvocationPart, toolCall: ReplyToCommentTool): void {
 	invocation.invocationMessage = toolCall.arguments.reply;
 }
 
 function formatGenericInvocation(invocation: ChatToolInvocationPart, toolCall: UnknownToolCall): void {
-	invocation.invocationMessage = l10n.t("Used tool: {0}", toolCall.toolName);
+	invocation.invocationMessage = l10n.t("Used tool: {0}", toolCall.toolName ?? 'unknown');
 }
 
-function emptyInvocation(invocation: ChatToolInvocationPart, toolCall: unknown): void {
+/**
+ * No-op formatter for tool invocations that do not require custom formatting.
+ * The `toolCall` parameter is unused and present for interface consistency.
+ */
+function emptyInvocation(_invocation: ChatToolInvocationPart, _toolCall: UnknownToolCall): void {
 	//
 }
 
