@@ -5,12 +5,13 @@
 
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { formatUriForFileWidget } from '../common/toolUtils';
+import { resolveToolInputPath } from './toolUtils';
 
 export interface ICreateDirectoryParams {
 	dirPath: string;

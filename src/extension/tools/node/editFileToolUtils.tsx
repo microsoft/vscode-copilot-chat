@@ -30,7 +30,7 @@ import { Position as EditorPosition } from '../../../util/vs/editor/common/core/
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
-import { formatUriForFileWidget } from './toolUtils';
+import { formatUriForFileWidget } from '../common/toolUtils';
 
 // Simplified Hunk type for the patch
 interface Hunk {

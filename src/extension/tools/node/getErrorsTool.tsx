@@ -28,7 +28,8 @@ import { Tag } from '../../prompts/node/base/tag';
 import { DiagnosticContext, Diagnostics } from '../../prompts/node/inline/diagnosticsContext';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { formatUriForFileWidget } from '../common/toolUtils';
+import { checkCancellation, resolveToolInputPath } from './toolUtils';
 
 interface IGetErrorsParams {
 	// Note that empty array is not the same as absence; empty array
