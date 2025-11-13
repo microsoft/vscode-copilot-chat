@@ -441,8 +441,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		cancellationToken: CancellationToken,
 	): Promise<LanguageContextResponse | undefined> {
 		const recordingEnabled = this.configService.getConfig<boolean>(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
+		const diagnosticsContextProviderEnabled = this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.DiagnosticsContextProvider, this.expService);
 
-		if (!promptOptions.languageContext.enabled && !recordingEnabled) {
+		if (!promptOptions.languageContext.enabled && !recordingEnabled && !diagnosticsContextProviderEnabled) {
 			return Promise.resolve(undefined);
 		}
 
@@ -494,7 +495,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					uri: textDoc.uri.toString(),
 					languageId: textDoc.languageId,
 					version: textDoc.version,
-					offset: textDoc.offsetAt(cursorPositionVscode)
+					offset: textDoc.offsetAt(cursorPositionVscode),
+					position: cursorPositionVscode
 				},
 				activeExperiments: new Map(),
 				timeBudget: debounceTime,
