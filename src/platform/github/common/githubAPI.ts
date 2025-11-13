@@ -90,7 +90,7 @@ export async function makeGitHubAPIRequest(
 	version?: string,
 	type: 'json' | 'text' = 'json',
 	userAgent?: string,
-	returnStatusCodeOnError: boolean = false) {
+	returnStatusCodeOnError: boolean = false): Promise<unknown> {
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
