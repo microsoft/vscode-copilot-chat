@@ -119,12 +119,14 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName) !== undefined);
 		if (this._apiKey) {
 			await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+			this._anthropicAPIClient = undefined;
 		}
 	}
 
 	async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove' = 'update', modelId?: string): Promise<void> {
 		if (action === 'remove') {
 			this._apiKey = undefined;
+			this._anthropicAPIClient = undefined;
 			await this._byokStorageService.deleteAPIKey(AnthropicLMProvider.providerName, this.authType, modelId);
 			this._logService.info(`BYOK: API key removed for provider ${AnthropicLMProvider.providerName}`);
 			return;
@@ -137,6 +139,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 		this._apiKey = apiKey;
 		await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, apiKey, this.authType, modelId);
+		this._anthropicAPIClient = undefined;
 		this._logService.info(`BYOK: API key updated for provider ${AnthropicLMProvider.providerName} from environment variable ${envVarName}`);
 	}
 
