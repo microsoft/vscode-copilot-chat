@@ -11,6 +11,8 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { addPullRequestCommentGraphQLRequest, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeGitHubAPIRequestWithPagination, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { vArray } from '../../configuration/common/validator';
+import { vFileContentResponse, vGetCustomAgentsResponse, vJobInfo, vOctoKitUser, vPullRequestFile } from './githubAPIValidators';
 
 export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
 
@@ -272,12 +274,21 @@ export class BaseOctoKitService {
 	constructor(
 		private readonly _capiClientService: ICAPIClientService,
 		private readonly _fetcherService: IFetcherService,
-		private readonly _logService: ILogService,
+		protected readonly _logService: ILogService,
 		private readonly _telemetryService: ITelemetryService
 	) { }
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
-		return this._makeGHAPIRequest('user', 'GET', token);
+		const response = await this._makeGHAPIRequest('user', 'GET', token);
+		if (!response) {
+			return undefined;
+		}
+		const validation = vOctoKitUser().validate(response);
+		if (validation.error) {
+			this._logService.error(`[GitHubService] Failed to validate user response: ${validation.error.message}`);
+			return undefined;
+		}
+		return validation.content;
 	}
 
 	async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
@@ -310,11 +321,29 @@ export class BaseOctoKitService {
 	}
 
 	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo> {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/${jobId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/${jobId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+		if (!response) {
+			throw new Error('Failed to get job by job ID');
+		}
+		const validation = vJobInfo().validate(response);
+		if (validation.error) {
+			this._logService.error(`[GitHubService] Failed to validate job info response: ${validation.error.message}`);
+			throw new Error(`Invalid job info response: ${validation.error.message}`);
+		}
+		return validation.content;
 	}
 
 	protected async getJobBySessionIdWithToken(owner: string, repo: string, sessionId: string, userAgent: string, token: string): Promise<JobInfo> {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/session/${sessionId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/session/${sessionId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+		if (!response) {
+			throw new Error('Failed to get job by session ID');
+		}
+		const validation = vJobInfo().validate(response);
+		if (validation.error) {
+			this._logService.error(`[GitHubService] Failed to validate job info response: ${validation.error.message}`);
+			throw new Error(`Invalid job info response: ${validation.error.message}`);
+		}
+		return validation.content;
 	}
 
 	protected async addPullRequestCommentWithToken(pullRequestId: string, commentBody: string, token: string): Promise<PullRequestComment | null> {
@@ -331,12 +360,29 @@ export class BaseOctoKitService {
 
 	protected async getCustomAgentsWithToken(owner: string, repo: string, token: string): Promise<GetCustomAgentsResponse> {
 		const queryParams = '?exclude_invalid_config=true';
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
+		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
+		if (!response) {
+			return { agents: [] };
+		}
+		const validation = vGetCustomAgentsResponse().validate(response);
+		if (validation.error) {
+			this._logService.error(`[GitHubService] Failed to validate custom agents response: ${validation.error.message}`);
+			return { agents: [] };
+		}
+		return validation.content;
 	}
 
 	protected async getPullRequestFilesWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<PullRequestFile[]> {
 		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, undefined, '2022-11-28');
-		return result || [];
+		if (!result) {
+			return [];
+		}
+		const validation = vArray(vPullRequestFile()).validate(result);
+		if (validation.error) {
+			this._logService.error(`[GitHubService] Failed to validate pull request files response: ${validation.error.message}`);
+			return [];
+		}
+		return validation.content;
 	}
 
 	protected async closePullRequestWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<boolean> {
@@ -346,8 +392,18 @@ export class BaseOctoKitService {
 	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
 		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, 'GET', token, undefined);
 
-		if (response?.content && response.encoding === 'base64') {
-			return decodeBase64(response.content.replace(/\n/g, '')).toString();
+		if (!response) {
+			return '';
+		}
+
+		const validation = vFileContentResponse().validate(response);
+		if (validation.error) {
+			this._logService.error(`[GitHubService] Failed to validate file content response: ${validation.error.message}`);
+			return '';
+		}
+
+		if (validation.content.encoding === 'base64') {
+			return decodeBase64(validation.content.content.replace(/\n/g, '')).toString();
 		} else {
 			return '';
 		}

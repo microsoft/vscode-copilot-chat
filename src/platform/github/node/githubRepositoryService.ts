@@ -8,6 +8,8 @@ import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { makeGitHubAPIRequest } from '../common/githubAPI';
 import { GithubRepositoryItem, IGetRepositoryInfoResponseData, IGithubRepositoryService } from '../common/githubService';
+import { vRepositoryContentItem, vRepositoryItem } from '../common/githubAPIValidators';
+import { vArray, vUnchecked } from '../../configuration/common/validator';
 
 export class GithubRepositoryService implements IGithubRepositoryService {
 
@@ -26,7 +28,19 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 	private async _doGetRepositoryInfo(owner: string, repo: string): Promise<IGetRepositoryInfoResponseData | undefined> {
 		const authToken: string | undefined = this._authenticationService.permissiveGitHubSession?.accessToken ?? this._authenticationService.anyGitHubSession?.accessToken;
 
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${owner}/${repo}`, 'GET', authToken);
+		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${owner}/${repo}`, 'GET', authToken);
+		if (!response) {
+			return undefined;
+		}
+
+		// IGetRepositoryInfoResponseData is from @octokit/types which is a complex external type
+		// We use vUnchecked here since it's a well-defined external API contract
+		const validation = vUnchecked<IGetRepositoryInfoResponseData>().validate(response);
+		if (validation.error) {
+			this._logService.error(`[GithubRepositoryService] Failed to validate repository info response: ${validation.error.message}`);
+			return undefined;
+		}
+		return validation.content;
 	}
 
 	async getRepositoryInfo(owner: string, repo: string) {
@@ -59,24 +73,26 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
 			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
 
-			if (response.ok) {
-				const data = (await response.json());
-				if (Array.isArray(data)) {
-					for (const child of data) {
-						if ('name' in child && 'path' in child && 'type' in child && 'html_url' in child) {
-							paths.push({ name: child.name, path: child.path, type: child.type, html_url: child.html_url });
-							if (child.type === 'dir') {
-								paths.push(...await this.getRepositoryItems(org, repo, child.path));
-							}
-						}
-					}
-				}
-			} else {
-				console.error(`Failed to fetch contents from ${org}:${repo}:${path}`);
+			if (!response) {
+				this._logService.error(`Failed to fetch contents from ${org}:${repo}:${path}`);
 				return [];
 			}
-		} catch {
-			console.error(`Failed to fetch contents from ${org}:${repo}:${path}`);
+
+			// Response should be an array of repository items
+			const validation = vArray(vRepositoryItem()).validate(response);
+			if (validation.error) {
+				this._logService.error(`[GithubRepositoryService] Failed to validate repository items response: ${validation.error.message}`);
+				return [];
+			}
+
+			for (const child of validation.content) {
+				paths.push({ name: child.name, path: child.path, type: child.type as any, html_url: child.html_url });
+				if (child.type === 'dir') {
+					paths.push(...await this.getRepositoryItems(org, repo, child.path));
+				}
+			}
+		} catch (e) {
+			this._logService.error(`Failed to fetch contents from ${org}:${repo}:${path}: ${e}`);
 			return [];
 		}
 		return paths;
@@ -88,18 +104,22 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
 			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
 
-			if (response.ok) {
-
-				const data = (await response.json());
-
-				if ('content' in data) {
-					const content = Buffer.from(data.content, 'base64');
-					return new Uint8Array(content);
-				}
-				throw new Error('Unexpected data from GitHub');
+			if (!response) {
+				this._logService.error(`Failed to fetch contents from ${org}:${repo}:${path}`);
+				return undefined;
 			}
-		} catch {
-			console.error(`Failed to contents from ${org}:${repo}:${path}`);
+
+			const validation = vRepositoryContentItem().validate(response);
+			if (validation.error) {
+				this._logService.error(`[GithubRepositoryService] Failed to validate repository content response: ${validation.error.message}`);
+				return undefined;
+			}
+
+			const content = Buffer.from(validation.content.content, 'base64');
+			return new Uint8Array(content);
+		} catch (e) {
+			this._logService.error(`Failed to fetch contents from ${org}:${repo}:${path}: ${e}`);
+			return undefined;
 		}
 	}
 }
