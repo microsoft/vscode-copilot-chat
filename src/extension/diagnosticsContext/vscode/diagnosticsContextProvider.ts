@@ -26,7 +26,7 @@ export class DiagnosticsContextContribution extends Disposable {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ILogService private readonly logService: ILogService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
-		@ILanguageDiagnosticsService private readonly diagnostocsService: ILanguageDiagnosticsService,
+		@ILanguageDiagnosticsService private readonly diagnosticsService: ILanguageDiagnosticsService,
 		@ILanguageContextProviderService private readonly languageContextProviderService: ILanguageContextProviderService,
 	) {
 		super();
@@ -41,7 +41,7 @@ export class DiagnosticsContextContribution extends Disposable {
 	private register(): IDisposable {
 		const disposables = new DisposableStore();
 		try {
-			const resolver = new ContextResolver(this.diagnostocsService, this.configurationService, this.experimentationService);
+			const resolver = new ContextResolver(this.diagnosticsService, this.configurationService, this.experimentationService);
 			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'diagnostics-context-provider',
 				selector: "*",
