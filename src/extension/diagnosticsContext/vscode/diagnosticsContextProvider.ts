@@ -48,7 +48,7 @@ export class DiagnosticsContextContribution extends Disposable {
 			};
 			disposables.add(this.languageContextProviderService.registerContextProvider(provider));
 		} catch (error) {
-			this.logService.error('Error regsistering prompt file context provider:', error);
+			this.logService.error('Error regsistering diagnostics context provider:', error);
 		}
 		return disposables;
 	}
