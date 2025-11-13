@@ -69,18 +69,18 @@ async function getFileEditConfirmationToolParams(instaService: IInstantiationSer
 			return '';
 		} else if (toolCall.toolName === 'str_replace_editor' && toolCall.arguments.path) {
 			if (toolCall.arguments.command === 'edit' || toolCall.arguments.command === 'str_replace') {
-				return getDetailslForFileEditPermissionRequest(accessor, toolCall.arguments);
+				return getDetailsForFileEditPermissionRequest(accessor, toolCall.arguments);
 			} else if (toolCall.arguments.command === 'create') {
-				return getDetailslForFileCreatePermissionRequest(accessor, toolCall.arguments);
+				return getDetailsForFileCreatePermissionRequest(accessor, toolCall.arguments);
 			} else if (toolCall.arguments.command === 'insert') {
-				return getDetailslForFileInsertPermissionRequest(accessor, toolCall.arguments);
+				return getDetailsForFileInsertPermissionRequest(accessor, toolCall.arguments);
 			}
 		} else if (toolCall.toolName === 'edit') {
-			return getDetailslForFileEditPermissionRequest(accessor, toolCall.arguments);
+			return getDetailsForFileEditPermissionRequest(accessor, toolCall.arguments);
 		} else if (toolCall.toolName === 'create') {
-			return getDetailslForFileCreatePermissionRequest(accessor, toolCall.arguments);
+			return getDetailsForFileCreatePermissionRequest(accessor, toolCall.arguments);
 		} else if (toolCall.toolName === 'insert') {
-			return getDetailslForFileInsertPermissionRequest(accessor, toolCall.arguments);
+			return getDetailsForFileInsertPermissionRequest(accessor, toolCall.arguments);
 		}
 	};
 
@@ -101,17 +101,17 @@ async function getFileEditConfirmationToolParams(instaService: IInstantiationSer
 	};
 }
 
-async function getDetailslForFileInsertPermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'insert' }>['arguments']): Promise<string | undefined> {
+async function getDetailsForFileInsertPermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'insert' }>['arguments']): Promise<string | undefined> {
 	if (args.path && args.new_str) {
 		return formatDiffAsUnified(accessor, URI.file(args.path), '', args.new_str);
 	}
 }
-async function getDetailslForFileCreatePermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'create' }>['arguments']): Promise<string | undefined> {
+async function getDetailsForFileCreatePermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'create' }>['arguments']): Promise<string | undefined> {
 	if (args.path && args.file_text) {
 		return formatDiffAsUnified(accessor, URI.file(args.path), '', args.file_text);
 	}
 }
-async function getDetailslForFileEditPermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'edit' }>['arguments']): Promise<string | undefined> {
+async function getDetailsForFileEditPermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'edit' }>['arguments']): Promise<string | undefined> {
 	if (args.path && (args.new_str || args.old_str)) {
 		return formatDiffAsUnified(accessor, URI.file(args.path), args.old_str ?? '', args.new_str ?? '');
 	}
