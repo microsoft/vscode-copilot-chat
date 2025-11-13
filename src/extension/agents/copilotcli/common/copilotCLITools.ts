@@ -27,7 +27,7 @@ interface ViewTool {
 }
 
 interface EditTool {
-	toolName: 'edit';
+	toolName: 'edit' | 'str_replace';
 	arguments: {
 		path: string;
 		old_str?: string;
@@ -140,21 +140,63 @@ type ReportProgressTool = {
 	};
 };
 
+type SearchTool = {
+	toolName: 'search';
+	arguments: {
+		question: string;
+		reason: string;
+		searchCommand: string;
+	};
+};
+
+type SearchBashTool = {
+	toolName: 'search_bash';
+	arguments: {
+		command: string;
+	};
+};
+
+type SemanticCodeSearchTool = {
+	toolName: 'semantic_code_search';
+	arguments: {
+		question: string;
+	};
+};
+
+type ReplyToCommandTool = {
+	toolName: 'reply_to_comment';
+	arguments: {
+		reply: string;
+		comment_id: string;
+	};
+};
+
+type CodeReviewTool = {
+	toolName: 'code_review';
+	arguments: {
+		prTitle: string;
+		prDescription: string;
+	};
+};
+
 
 type StringReplaceArgumentTypes = CreateTool | ViewTool | StrReplaceTool | EditTool | InsertTool | UndoEditTool;
 type ToStringReplaceEditorArguments<T extends StringReplaceArgumentTypes> = {
 	command: T['toolName'];
 } & T['arguments'];
-export type ToolInfo = {
+type StringReplaceEditorTool = {
 	toolName: 'str_replace_editor';
 	arguments: ToStringReplaceEditorArguments<CreateTool> | ToStringReplaceEditorArguments<ViewTool> | ToStringReplaceEditorArguments<EditTool> | ToStringReplaceEditorArguments<StrReplaceTool> |
 	ToStringReplaceEditorArguments<UndoEditTool> | ToStringReplaceEditorArguments<InsertTool>;
-} | EditTool | CreateTool | ViewTool | UndoEditTool | InsertTool |
+};
+export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewTool | UndoEditTool | InsertTool |
 	ShellTool | WriteShellTool | ReadShellTool | StopShellTool |
 	GrepTool | GLobTool |
-	ReportIntentTool | ThinkTool | ReportProgressTool;
+	ReportIntentTool | ThinkTool | ReportProgressTool |
+	SearchTool | SearchBashTool | SemanticCodeSearchTool |
+	ReplyToCommandTool | CodeReviewTool;
 
-type ToolCall = ToolInfo & { toolCallId: string };
+export type ToolCall = ToolInfo & { toolCallId: string };
 type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
 
 export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: unknown }): boolean {
@@ -326,6 +368,8 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
  */
 export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolName: string; arguments?: unknown }): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolCall = data as ToolCall;
+	// Ensures arguments is at least an empty object
+	toolCall.arguments = toolCall.arguments ?? {};
 	if (toolCall.toolName === 'report_intent') {
 		return undefined; // Ignore these for now
 	}
@@ -336,69 +380,57 @@ export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolN
 		return undefined;
 	}
 
-	const invocation = new ChatToolInvocationPart(friendlyToolName(toolCall.toolName), toolCall.toolCallId ?? '', false);
+	const [friendlyToolName, formatter] = Object.hasOwn(ToolFriendlyNameAndHandlers, toolCall.toolName) ? ToolFriendlyNameAndHandlers[toolCall.toolName] : [toolCall.toolName || 'unknown', formatGenericInvocation];
+
+	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '', false);
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
 
-	// Format based on tool name
-	if (toolCall.toolName === 'str_replace_editor') {
-		formatStrReplaceEditorInvocation(invocation, toolCall.arguments);
-	} else if (toolCall.toolName === 'bash' || toolCall.toolName === 'powershell') {
-		formatShellInvocation(invocation, toolCall.arguments, toolCall.toolName);
-	} else if (toolCall.toolName === 'read_bash' || toolCall.toolName === 'read_powershell') {
-		invocation.invocationMessage = l10n.t('Read logs from shell session');
-	} else if (toolCall.toolName === 'write_bash' || toolCall.toolName === 'write_powershell') {
-		invocation.invocationMessage = l10n.t('Send input to shell session');
-	} else if (toolCall.toolName === 'stop_bash' || toolCall.toolName === 'stop_powershell') {
-		invocation.invocationMessage = l10n.t('Stop shell session');
-	} else if (toolCall.toolName === 'view') {
-		formatViewToolInvocation(invocation, toolCall.arguments);
-	} else if (toolCall.toolName === 'edit') {
-		formatEditToolInvocation(invocation, toolCall.arguments);
-	} else if (toolCall.toolName === 'create') {
-		formatCreateToolInvocation(invocation, toolCall.arguments);
-	} else if (toolCall.toolName === 'report_progress') {
-		formatProgressToolInvocation(invocation, toolCall.arguments);
-	} else {
-		formatGenericInvocation(invocation, toolCall);
-	}
-
+	(formatter as Formatter)(invocation, toolCall);
 	return invocation;
 }
 
-const FriendlyToolNames: Record<ToolCall['toolName'], string> = {
-	'edit': l10n.t('Edit File'),
-	'create': l10n.t('Create File'),
-	'bash': l10n.t('Run Shell Command'),
-	'powershell': l10n.t('Run Powershell Command'),
-	'write_bash': l10n.t('Write to Bash'),
-	'write_powershell': l10n.t('Write to PowerShell'),
-	'read_bash': l10n.t('Read Terminal'),
-	'read_powershell': l10n.t('Read Terminal'),
-	'stop_bash': l10n.t('Stop Terminal Session'),
-	'stop_powershell': l10n.t('Stop Terminal Session'),
-	'grep': l10n.t('Grep Tool'),
-	'glob': l10n.t('Glob Tool'),
-	'report_intent': l10n.t('Report Intent'),
-	'think': l10n.t('Thinking'),
-	'report_progress': l10n.t('Progress Update'),
-	'undo_edit': l10n.t('Undo Edit'),
-	'str_replace_editor': l10n.t('String Replace Editor'),
-	'view': l10n.t('View File'),
-	'insert': l10n.t('Insert Text')
+type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall) => void;
+type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { type: T }>;
+
+const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>) => void] } = {
+	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation],
+	'edit': [l10n.t('Edit File'), formatEditToolInvocation],
+	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation],
+	'create': [l10n.t('Create File'), formatCreateToolInvocation],
+	'insert': [l10n.t('Edit File'), formatInsertToolInvocation],
+	'undo_edit': [l10n.t('Edit File'), formatUndoEdit],
+	'view': [l10n.t('Read'), formatViewToolInvocation],
+	'bash': [l10n.t('Run Shell Command'), formatShellInvocation],
+	'powershell': [l10n.t('Run Shell Command'), formatShellInvocation],
+	'write_bash': [l10n.t('Write to Bash'), emptyInvocation],
+	'write_powershell': [l10n.t('Write to PowerShell'), emptyInvocation],
+	'read_bash': [l10n.t('Read Terminal'), emptyInvocation],
+	'read_powershell': [l10n.t('Read Terminal'), emptyInvocation],
+	'stop_bash': [l10n.t('Stop Terminal Session'), emptyInvocation],
+	'stop_powershell': [l10n.t('Stop Terminal Session'), emptyInvocation],
+	'search': [l10n.t('Search'), formatSearchToolInvocation],
+	'grep': [l10n.t('Search'), formatSearchToolInvocation],
+	'glob': [l10n.t('Search'), formatSearchToolInvocation],
+	'search_bash': [l10n.t('Search'), formatSearchToolInvocation],
+	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation],
+	'reply_to_comment': [l10n.t('Reply to Comment'), formatCodeReviewReplyInvocation],
+	'code_review': [l10n.t('Review Code'), formatCodeReviewInvocation],
+	'report_intent': [l10n.t('Report Intent'), emptyInvocation],
+	'think': [l10n.t('Thinking'), emptyInvocation],
+	'report_progress': [l10n.t('Progress Update'), formatProgressToolInvocation],
 };
 
-function friendlyToolName(toolName: ToolCall['toolName']): string {
-	return FriendlyToolNames[toolName] || toolName || 'unknown';
-}
 
-function formatProgressToolInvocation(invocation: ChatToolInvocationPart, args: ReportProgressTool['arguments']): void {
+function formatProgressToolInvocation(invocation: ChatToolInvocationPart, toolCall: ReportProgressTool): void {
+	const args = toolCall.arguments;
 	invocation.invocationMessage = args.prDescription?.trim() || 'Progress Update';
 	if (args.commitMessage) {
 		invocation.originMessage = `Commit: ${args.commitMessage}`;
 	}
 }
-function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: ViewTool['arguments']): void {
+function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: ViewTool): void {
+	const args = toolCall.arguments;
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 
@@ -414,35 +446,51 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, args: View
 	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 }
 
-function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, args: Extract<ToolCall, { toolName: 'str_replace_editor' }>['arguments']): void {
+function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, toolCall: StringReplaceEditorTool): void {
+	const args = toolCall.arguments;
 	const command = args.command;
 	const path = args.path ?? '';
 	const display = path ? formatUriForMessage(path) : '';
 	switch (command) {
 		case 'view':
-			formatViewToolInvocation(invocation, args);
+			formatViewToolInvocation(invocation, { toolName: 'view', arguments: args } as ViewTool);
 			break;
 		case 'str_replace':
 			invocation.invocationMessage = new MarkdownString(l10n.t("Edited {0}", display));
 			break;
 		case 'edit':
-			formatEditToolInvocation(invocation, args);
+			formatEditToolInvocation(invocation, { toolName: 'edit', arguments: args } as EditTool);
 			break;
 		case 'insert':
-			invocation.invocationMessage = new MarkdownString(l10n.t("Inserted text in {0}", display));
+			formatInsertToolInvocation(invocation, { toolName: 'insert', arguments: args } as InsertTool);
 			break;
 		case 'create':
-			formatCreateToolInvocation(invocation, args);
+			formatCreateToolInvocation(invocation, { toolName: 'create', arguments: args } as CreateTool);
 			break;
 		case 'undo_edit':
-			invocation.invocationMessage = new MarkdownString(l10n.t("Undid edit in {0}", display));
+			formatUndoEdit(invocation, { toolName: 'undo_edit', arguments: args } as UndoEditTool);
 			break;
 		default:
 			invocation.invocationMessage = new MarkdownString(l10n.t("Modified {0}", display));
 	}
 }
 
-function formatEditToolInvocation(invocation: ChatToolInvocationPart, args: EditTool['arguments']): void {
+function formatInsertToolInvocation(invocation: ChatToolInvocationPart, toolCall: InsertTool): void {
+	const args = toolCall.arguments;
+	if (args.path) {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Inserted text in {0}", formatUriForMessage(args.path)));
+	}
+}
+
+function formatUndoEdit(invocation: ChatToolInvocationPart, toolCall: UndoEditTool): void {
+	const args = toolCall.arguments;
+	if (args.path) {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForMessage(args.path)));
+	}
+}
+
+function formatEditToolInvocation(invocation: ChatToolInvocationPart, toolCall: EditTool): void {
+	const args = toolCall.arguments;
 	const display = args.path ? formatUriForMessage(args.path) : '';
 
 	invocation.invocationMessage = display
@@ -451,7 +499,8 @@ function formatEditToolInvocation(invocation: ChatToolInvocationPart, args: Edit
 }
 
 
-function formatCreateToolInvocation(invocation: ChatToolInvocationPart, args: CreateTool['arguments']): void {
+function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall: CreateTool): void {
+	const args = toolCall.arguments;
 	const display = args.path ? formatUriForMessage(args.path) : '';
 
 	if (display) {
@@ -461,7 +510,8 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, args: Cr
 	}
 }
 
-function formatShellInvocation(invocation: ChatToolInvocationPart, args: ShellTool['arguments'], toolName: ShellTool['toolName']): void {
+function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: ShellTool): void {
+	const args = toolCall.arguments;
 	const command = args.command ?? '';
 	// TODO @DonJayamanne This is the code in copilot cloud, discuss and decide if we want to use it.
 	// Not for Cli as we want users to see the exact command being run so they can review and approve it.
@@ -487,12 +537,39 @@ function formatShellInvocation(invocation: ChatToolInvocationPart, args: ShellTo
 		commandLine: {
 			original: command,
 		},
-		language: toolName === 'bash' ? 'bash' : 'powershell'
+		language: toolCall.toolName === 'bash' ? 'bash' : 'powershell'
 	} as ChatTerminalToolInvocationData;
+}
+function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool): void {
+	if (toolCall.toolName === 'search') {
+		invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}  \nReason: ${toolCall.arguments.reason}`;
+	} else if (toolCall.toolName === 'semantic_code_search') {
+		invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
+	} else if (toolCall.toolName === 'search_bash') {
+		invocation.invocationMessage = `Command: ${toolCall.arguments.command}`;
+	} else if (toolCall.toolName === 'glob') {
+		const searchInPath = ` in ${toolCall.arguments.path}` || '';
+		invocation.invocationMessage = `Pattern: ${toolCall.arguments.pattern}${searchInPath}`;
+	} else if (toolCall.toolName === 'grep') {
+		const searchInPath = ` in ${toolCall.arguments.path}` || '';
+		invocation.invocationMessage = `Pattern: ${toolCall.arguments.pattern}${searchInPath}`;
+	}
+}
+
+function formatCodeReviewInvocation(invocation: ChatToolInvocationPart, toolCall: CodeReviewTool): void {
+	invocation.invocationMessage = `**${toolCall.arguments.prTitle}**  \n${toolCall.arguments.prDescription}`;
+}
+
+function formatCodeReviewReplyInvocation(invocation: ChatToolInvocationPart, toolCall: ReplyToCommandTool): void {
+	invocation.invocationMessage = toolCall.arguments.reply;
 }
 
 function formatGenericInvocation(invocation: ChatToolInvocationPart, toolCall: UnknownToolCall): void {
 	invocation.invocationMessage = l10n.t("Used tool: {0}", toolCall.toolName);
+}
+
+function emptyInvocation(invocation: ChatToolInvocationPart, toolCall: unknown): void {
+	//
 }
 
 function formatUriForMessage(path: string): string {
