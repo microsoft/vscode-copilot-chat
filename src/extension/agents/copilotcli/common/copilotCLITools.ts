@@ -207,6 +207,11 @@ export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: u
 	return toolCall.toolName === 'create' || toolCall.toolName === 'edit';
 }
 
+export function isSearchTool(data: { toolName: string; arguments?: unknown }) {
+	const toolCall = data as ToolCall;
+	return toolCall.toolName === 'search' || toolCall.toolName === 'grep' || toolCall.toolName === 'glob' || toolCall.toolName === 'search_bash' || toolCall.toolName === 'semantic_code_search';
+}
+
 export function getAffectedUrisForEditTool(data: { toolName: string; arguments?: unknown }): URI[] {
 	const toolCall = data as ToolCall;
 	// Old versions used str_replace_editor
