@@ -189,6 +189,9 @@
 			{
 				"name": "copilot_listCodeUsages",
 				"toolReferenceName": "usages",
+				"legacyToolReferenceFullNames": [
+					"usages"
+				],
 				"displayName": "%copilot.tools.listCodeUsages.name%",
 				"icon": "$(references)",
 				"canBeReferencedInPrompt": true,
@@ -325,6 +328,9 @@
 			{
 				"name": "copilot_readFile",
 				"toolReferenceName": "readFile",
+				"legacyToolReferenceFullNames": [
+					"search/readFile"
+				],
 				"displayName": "%copilot.tools.readFile.name%",
 				"modelDescription": "Read the contents of a file.\n\nYou must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads.",
 				"tags": [
@@ -378,6 +384,9 @@
 				"name": "copilot_getErrors",
 				"displayName": "%copilot.tools.getErrors.name%",
 				"toolReferenceName": "problems",
+				"legacyToolReferenceFullNames": [
+					"problems"
+				],
 				"canBeReferencedInPrompt": true,
 				"icon": "$(error)",
 				"userDescription": "%copilot.tools.errors.description%",
@@ -406,6 +415,9 @@
 				"name": "copilot_getChangedFiles",
 				"displayName": "%copilot.tools.getChangedFiles.name%",
 				"toolReferenceName": "changes",
+				"legacyToolReferenceFullNames": [
+					"changes"
+				],
 				"icon": "$(diff)",
 				"canBeReferencedInPrompt": true,
 				"userDescription": "%copilot.tools.changes.description%",
@@ -438,6 +450,9 @@
 			{
 				"name": "copilot_testFailure",
 				"toolReferenceName": "testFailure",
+				"legacyToolReferenceFullNames": [
+					"testFailure"
+				],
 				"displayName": "%copilot.tools.testFailure.name%",
 				"icon": "$(beaker)",
 				"userDescription": "%copilot.testFailure.tool.description%",
@@ -480,6 +495,9 @@
 				"name": "copilot_createNewWorkspace",
 				"displayName": "%github.copilot.tools.createNewWorkspace.name%",
 				"toolReferenceName": "newWorkspace",
+				"legacyToolReferenceFullNames": [
+					"new/newWorkspace"
+				],
 				"icon": "$(new-folder)",
 				"userDescription": "%github.copilot.tools.createNewWorkspace.userDescription%",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
@@ -506,6 +524,9 @@
 				"displayName": "%github.copilot.tools.getProjectSetupInfo.name%",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "getProjectSetupInfo",
+				"legacyToolReferenceFullNames": [
+					"new/getProjectSetupInfo"
+				],
 				"modelDescription": "Do not call this tool without first calling the tool to create a workspace. This tool provides a project setup information for a Visual Studio Code workspace based on a project type and programming language.",
 				"inputSchema": {
 					"type": "object",
@@ -526,6 +547,9 @@
 				"displayName": "Install Extension in VS Code",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "installExtension",
+				"legacyToolReferenceFullNames": [
+					"new/installExtension"
+				],
 				"modelDescription": "Install an extension in VS Code. Use this tool to install an extension in Visual Studio Code as part of a new workspace creation process only.",
 				"inputSchema": {
 					"type": "object",
@@ -550,7 +574,10 @@
 				"name": "copilot_runVscodeCommand",
 				"displayName": "Run VS Code Command",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
-				"toolReferenceName": "runVscodeCommand",
+				"toolReferenceName": "runCommand",
+				"legacyToolReferenceFullNames": [
+					"new/runVscodeCommand"
+				],
 				"modelDescription": "Run a command in VS Code. Use this tool to run a command in Visual Studio Code as part of a new workspace creation process only.",
 				"inputSchema": {
 					"type": "object",
@@ -583,6 +610,9 @@
 				"displayName": "Create New Jupyter Notebook",
 				"icon": "$(notebook)",
 				"toolReferenceName": "newJupyterNotebook",
+				"legacyToolReferenceFullNames": [
+					"newJupyterNotebook"
+				],
 				"modelDescription": "Generates a new Jupyter Notebook (.ipynb) in VS Code. Jupyter Notebooks are interactive documents commonly used for data exploration, analysis, visualization, and combining code with narrative text. Prefer creating plain Python files or similar unless a user explicitly requests creating a new Jupyter Notebook or already has a Jupyter Notebook opened or exists in the workspace.",
 				"userDescription": "%copilot.tools.newJupyterNotebook.description%",
 				"inputSchema": {
@@ -631,6 +661,9 @@
 			{
 				"name": "copilot_createFile",
 				"toolReferenceName": "createFile",
+				"legacyToolReferenceFullNames": [
+					"createFile"
+				],
 				"displayName": "%copilot.tools.createFile.name%",
 				"userDescription": "%copilot.tools.createFile.description%",
 				"modelDescription": "This is a tool for creating a new file in the workspace. The file will be created with the specified content. The directory will be created if it does not already exist. Never use this tool to edit a file that already exists.",
@@ -656,6 +689,9 @@
 			{
 				"name": "copilot_createDirectory",
 				"toolReferenceName": "createDirectory",
+				"legacyToolReferenceFullNames": [
+					"createDirectory"
+				],
 				"displayName": "%copilot.tools.createDirectory.name%",
 				"userDescription": "%copilot.tools.createDirectory.description%",
 				"modelDescription": "Create a new directory structure in the workspace. Will recursively create all directories in the path, like mkdir -p. You do not need to use this tool before using create_file, that tool will automatically create the needed directories.",
@@ -679,6 +715,9 @@
 				"modelDescription": "Preview a website or open a URL in the editor's Simple Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
 				"userDescription": "%copilot.tools.openSimpleBrowser.description%",
 				"toolReferenceName": "openSimpleBrowser",
+				"legacyToolReferenceFullNames": [
+					"openSimpleBrowser"
+				],
 				"canBeReferencedInPrompt": true,
 				"tags": [],
 				"inputSchema": {
@@ -833,7 +872,10 @@
 			{
 				"name": "copilot_runNotebookCell",
 				"displayName": "%copilot.tools.runNotebookCell.name%",
-				"toolReferenceName": "runCell",
+				"toolReferenceName": "runNotebookCell",
+				"legacyToolReferenceFullNames": [
+					"runNotebooks/runCell"
+				],
 				"icon": "$(play)",
 				"modelDescription": "This is a tool for running a code cell in a notebook file directly in the notebook editor. The output from the execution will be returned. Code cells should be run as they are added or edited when working through a problem to bring the kernel state up to date and ensure the code executes successfully. Code cells are ready to run and don't require any pre-processing. If asked to run the first cell in a notebook, you should run the first code cell since markdown cells cannot be executed. NOTE: Avoid executing Markdown cells or providing Markdown cell IDs, as Markdown cells cannot be  executed.",
 				"userDescription": "%copilot.tools.runNotebookCell.description%",
@@ -869,6 +911,9 @@
 			{
 				"name": "copilot_getNotebookSummary",
 				"toolReferenceName": "getNotebookSummary",
+				"legacyToolReferenceFullNames": [
+					"runNotebooks/getNotebookSummary"
+				],
 				"displayName": "Get the structure of a notebook",
 				"modelDescription": "This is a tool returns the list of the Notebook cells along with the id, cell types, line ranges, language, execution information and output mime types for each cell. This is useful to get Cell Ids when executing a notebook or determine what cells have been executed and what order, or what cells have outputs. If required to read contents of a cell use this to determine the line range of a cells, and then use read_file tool to read a specific line range. Requery this tool if the contents of the notebook change.",
 				"tags": [],
@@ -889,6 +934,9 @@
 				"name": "copilot_readNotebookCellOutput",
 				"displayName": "%copilot.tools.getNotebookCellOutput.name%",
 				"toolReferenceName": "readNotebookCellOutput",
+				"legacyToolReferenceFullNames": [
+					"runNotebooks/readNotebookCellOutput"
+				],
 				"icon": "$(notebook-render-output)",
 				"modelDescription": "This tool will retrieve the output for a notebook cell from its most recent execution or restored from disk. The cell may have output even when it has not been run in the current kernel session. This tool has a higher token limit for output length than the runNotebookCell tool.",
 				"userDescription": "%copilot.tools.getNotebookCellOutput.description%",
@@ -916,6 +964,9 @@
 				"name": "copilot_fetchWebPage",
 				"displayName": "%copilot.tools.fetchWebPage.name%",
 				"toolReferenceName": "fetch",
+				"legacyToolReferenceFullNames": [
+					"fetch"
+				],
 				"when": "!isWeb",
 				"canBeReferencedInPrompt": true,
 				"icon": "$(globe)",
@@ -1003,6 +1054,9 @@
 			{
 				"name": "copilot_githubRepo",
 				"toolReferenceName": "githubRepo",
+				"legacyToolReferenceFullNames": [
+					"githubRepo"
+				],
 				"displayName": "%github.copilot.tools.githubRepo.name%",
 				"modelDescription": "Searches a GitHub repository for relevant source code snippets. Only use this tool if the user is very clearly asking for code snippets from a specific GitHub repository. Do not use this tool for Github repos that the user has open in their workspace.",
 				"userDescription": "%github.copilot.tools.githubRepo.userDescription%",
@@ -1127,7 +1181,10 @@
 				"userDescription": "Edit files",
 				"icon": "$(pencil)",
 				"displayName": "Edit Files",
-				"toolReferenceName": "editFiles"
+				"toolReferenceName": "editFiles",
+				"legacyToolReferenceFullNames": [
+					"editFiles"
+				]
 			}
 		],
 		"languageModelToolSets": [
@@ -1136,21 +1193,20 @@
 				"description": "%copilot.toolSet.editing.description%",
 				"icon": "$(pencil)",
 				"tools": [
-					"createFile",
 					"createDirectory",
+					"createFile",
+					"editFiles",
 					"editNotebook",
-					"newJupyterNotebook",
-					"editFiles"
+					"newJupyterNotebook"
 				]
 			},
 			{
-				"name": "runNotebooks",
-				"description": "%copilot.toolSet.runNotebook.description%",
-				"icon": "$(notebook)",
+				"name": "read",
+				"description": "%copilot.toolSet.read.description%",
+				"icon": "$(search)",
 				"tools": [
-					"runCell",
-					"getNotebookSummary",
-					"readNotebookCellOutput"
+					"readFile",
+					"usages"
 				]
 			},
 			{
@@ -1158,23 +1214,38 @@
 				"description": "%copilot.toolSet.search.description%",
 				"icon": "$(search)",
 				"tools": [
-					"fileSearch",
-					"textSearch",
-					"listDirectory",
-					"readFile",
 					"codebase",
-					"searchResults"
+					"fileSearch",
+					"listDirectory",
+					"searchResults",
+					"textSearch"
 				]
 			},
 			{
-				"name": "new",
-				"description": "%copilot.toolSet.new.description%",
-				"icon": "$(new-folder)",
+				"name": "vscode",
+				"description": "%copilot.toolSet.vscode.description%",
+				"icon": "$(code)",
 				"tools": [
-					"newWorkspace",
-					"runVscodeCommand",
+					"changes",
+					"extensions",
 					"getProjectSetupInfo",
-					"installExtension"
+					"installExtension",
+					"newWorkspace",
+					"openSimpleBrowser",
+					"problems",
+					"runNotebookCell",
+					"runCommand",
+					"testFailure",
+					"vscodeAPI"
+				]
+			},
+			{
+				"name": "web",
+				"description": "%copilot.toolSet.web.description%",
+				"icon": "$(globe)",
+				"tools": [
+					"fetch",
+					"githubRepo"
 				]
 			}
 		],
