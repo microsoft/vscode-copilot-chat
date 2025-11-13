@@ -911,7 +911,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 								new Range(nextCursorLineOneBased, nextCursorColumn, nextCursorLineOneBased, nextCursorColumn),
 								pushEdit,
 								delaySession,
-								{ showLabel: false /*nextCursorLinePrediction === NextCursorLinePrediction.LabelOnlyWithEdit */ },
+								{ showLabel: nextCursorLinePrediction === NextCursorLinePrediction.LabelOnlyWithEdit },
 								logContext,
 								cancellationToken,
 								telemetryBuilder, RetryState.Retrying,
