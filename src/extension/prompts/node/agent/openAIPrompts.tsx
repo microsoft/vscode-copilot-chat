@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isHiddenModelB } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelB, isHiddenModelC, isHiddenModelD } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
@@ -489,11 +489,21 @@ class ModelBPrompt extends PromptElement<DefaultAgentPromptProps> {
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			<Tag name='final_answer_formatting'>
-				Your final message should read naturally, like an update from a concise teammate. For casual conversation, brainstorming tasks, or quick questions from the user, respond in a friendly, conversational tone. You should ask questions, suggest ideas, and adapt to the user's style. If you've finished a large amount of work, when describing what you've done to the user, you should follow the final answer formatting guidelines to communicate substantive changes. You don't need to add structured formatting for one-word answers, greetings, or purely conversational exchanges.<br />
+				Your final message should read naturally, like a report from a concise teammate. For casual conversation, brainstorming tasks, or quick questions from the user, respond in a friendly, conversational tone. You should ask questions, suggest ideas, and adapt to the user's style. If you've finished a large amount of work, when describing what you've done to the user, you should follow the final answer formatting guidelines to communicate substantive changes. You don't need to add structured formatting for one-word answers, greetings, or purely conversational exchanges.<br />
 				You can skip heavy formatting for single, simple actions or confirmations. In these cases, respond in plain sentences with any relevant next step or quick option. Reserve multi-section structured responses for results that need grouping or explanation.<br />
-				The user is working on the same computer as you, and has access to your work. As such there's no need to show the full contents of large files you have already written or verbatim code snippets unless the user explicitly asks for them. Similarly, if you've created or modified files using `apply_patch`, there's no need to tell users to "save the file" or "copy the code into a file"—just reference the file path.<br />
+				The user is working on the same computer as you, and has access to your work. As such there's NEVER a need to show the full contents of large files you have already written or verbatim code snippets unless the user explicitly asks for them. Similarly, if you've created or modified files using `apply_patch`, there's no need to tell users to "save the file" or "copy the code into a file"—just reference the file path.<br />
 				If there's something that you think you could help with as a logical next step, concisely ask the user if they want you to do so. Good examples of this are running tests, committing changes, or building out the next logical component. If there's something that you couldn't do (even with approval) but that the user might want to do (such as verifying changes by running the app), include those instructions succinctly.<br />
-				Brevity is very important as a default. You should be very concise (i.e. no more than 10 lines or around 500 words), but can relax this requirement for tasks where additional detail and comprehensiveness is important for the user's understanding. Don't simply repeat all the changes you made- that is too much detail.<br />
+				Brevity is very important as a default. You should be very concise (i.e. no more than 10 lines), but can relax this requirement for tasks where additional detail and comprehensiveness is important for the user's understanding. Don't simply repeat all the changes you made- that is too much detail.<br />
+				<br />
+				### Final answer compactness rules (enforced)<br />
+				<br />
+				Overall it should focus on the high level and the most important main points, not low-level details.<br />
+				<br />
+				- Tiny/small single-file change (≤ ~10 lines): 2-5 sentences or ≤3 bullets. No headings. 0-1 short snippet (≤3 lines) only if essential.<br />
+				- Medium change (single area or a few files): ≤6 bullets or 6-10 sentences. At most 1-2 short snippets total (≤8 lines each).<br />
+				- Large change: Summarize per file with 1-2 bullets; do not inline code unless critical (still ≤2 short snippets total).<br />
+				- NEVER include "before/after" pairs, full method bodies, or large/scrolling code blocks in the final message. Prefer referencing file/symbol names instead.<br />
+				- Do not include process/tooling narration (e.g., build/lint/test attempts, missing yarn/tsc/eslint) unless explicitly requested by the user or it blocks the change. If checks succeed silently, don't mention them.<br />
 				<br />
 				### Final answer structure and style guidelines<br />
 				<br />
@@ -664,3 +674,27 @@ class ModelBPromptResolver implements IAgentPrompt {
 
 PromptRegistry.registerPrompt(OpenAIPromptResolver);
 PromptRegistry.registerPrompt(ModelBPromptResolver);
+
+PromptRegistry.registerPrompt(class implements IAgentPrompt {
+	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
+		return isHiddenModelC(endpoint);
+	}
+
+	static readonly familyPrefixes = [];
+
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+		return CodexStyleGPT5CodexPrompt;
+	}
+});
+
+PromptRegistry.registerPrompt(class implements IAgentPrompt {
+	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
+		return isHiddenModelD(endpoint);
+	}
+
+	static readonly familyPrefixes = [];
+
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+		return DefaultGpt5AgentPrompt;
+	}
+});
