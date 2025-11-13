@@ -197,7 +197,7 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 	ReplyToCommentTool | CodeReviewTool;
 
 export type ToolCall = ToolInfo & { toolCallId: string };
-type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
+export type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
 
 export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: unknown }): boolean {
 	const toolCall = data as ToolCall;
