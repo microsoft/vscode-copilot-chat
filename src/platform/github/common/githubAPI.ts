@@ -6,6 +6,7 @@
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
+import { vSessionsResponse, vPullRequestStateResponse } from './githubAPIValidators';
 
 export interface PullRequestSearchItem {
 	id: string;
@@ -353,11 +354,22 @@ export async function closePullRequest(
 		'2022-11-28'
 	);
 
-	const success = result?.state === 'closed';
+	if (!result) {
+		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. No response received`);
+		return false;
+	}
+
+	const validationResult = vPullRequestStateResponse.validate(result);
+	if (validationResult.error) {
+		logService.error(`[GitHubAPI] Failed to validate pull request response: ${validationResult.error.message}`);
+		return false;
+	}
+
+	const success = validationResult.content.state === 'closed';
 	if (success) {
 		logService.debug(`[GitHubAPI] Successfully closed pull request ${owner}/${repo}#${pullNumber}`);
 	} else {
-		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${result?.state}`);
+		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${validationResult.content.state}`);
 	}
 	return success;
 }
@@ -387,9 +399,14 @@ export async function makeGitHubAPIRequestWithPagination(
 			logService.error(`[GitHubAPI] Failed to fetch sessions: ${response.status} ${response.statusText}`);
 			return sessionInfos;
 		}
-		const sessions = await response.json();
-		sessionInfos.push(...sessions.sessions);
-		hasNextPage = sessions.sessions.length === page_size;
+		const untrustedSessions = await response.json();
+		const validationResult = vSessionsResponse.validate(untrustedSessions);
+		if (validationResult.error) {
+			logService.error(`[GitHubAPI] Failed to validate sessions response: ${validationResult.error.message}`);
+			return sessionInfos;
+		}
+		sessionInfos.push(...validationResult.content.sessions);
+		hasNextPage = validationResult.content.sessions.length === page_size;
 		page++;
 	} while (hasNextPage);
 

@@ -6,11 +6,13 @@
 import type { Endpoints } from "@octokit/types";
 import { createServiceIdentifier } from '../../../util/common/services';
 import { decodeBase64 } from '../../../util/vs/base/common/buffer';
+import { vArray } from '../../configuration/common/validator';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { addPullRequestCommentGraphQLRequest, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeGitHubAPIRequestWithPagination, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { vFileContentResponse, vPullRequestFile } from './githubAPIValidators';
 
 export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
 
@@ -336,7 +338,15 @@ export class BaseOctoKitService {
 
 	protected async getPullRequestFilesWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<PullRequestFile[]> {
 		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, undefined, '2022-11-28');
-		return result || [];
+		if (!result) {
+			return [];
+		}
+		const validationResult = vArray(vPullRequestFile).validate(result);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate pull request files response: ${validationResult.error.message}`);
+			return [];
+		}
+		return validationResult.content;
 	}
 
 	protected async closePullRequestWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<boolean> {
@@ -346,8 +356,18 @@ export class BaseOctoKitService {
 	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
 		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, 'GET', token, undefined);
 
-		if (response?.content && response.encoding === 'base64') {
-			return decodeBase64(response.content.replace(/\n/g, '')).toString();
+		if (!response) {
+			return '';
+		}
+
+		const validationResult = vFileContentResponse.validate(response);
+		if (validationResult.error) {
+			this._logService.error(`[GitHubAPI] Failed to validate file content response: ${validationResult.error.message}`);
+			return '';
+		}
+
+		if (validationResult.content.encoding === 'base64') {
+			return decodeBase64(validationResult.content.content.replace(/\n/g, '')).toString();
 		} else {
 			return '';
 		}
