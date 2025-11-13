@@ -20,7 +20,7 @@ export class CopilotStatusBarPickMenu {
 	showStatusMenu() {
 		const quickpickList = window.createQuickPick();
 		quickpickList.placeholder = l10n.t('Select an option');
-		quickpickList.title = l10n.t('Configure Copilot Completions');
+		quickpickList.title = l10n.t('Configure Inline Suggestions');
 		quickpickList.items = this.collectQuickPickItems();
 		quickpickList.onDidAccept(() => this.handleItemSelection(quickpickList));
 		quickpickList.show();
