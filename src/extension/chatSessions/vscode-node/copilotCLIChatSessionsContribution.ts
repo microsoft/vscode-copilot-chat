@@ -12,6 +12,7 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
@@ -309,7 +310,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	}
 }
 
-export class CopilotCLIChatSessionParticipant {
+export class CopilotCLIChatSessionParticipant extends Disposable {
 	constructor(
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
@@ -324,7 +325,9 @@ export class CopilotCLIChatSessionParticipant {
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-	) { }
+	) {
+		super();
+	}
 
 	createHandler(): ChatExtendedRequestHandler {
 		return this.handleRequest.bind(this);
@@ -520,7 +523,10 @@ export class CopilotCLIChatSessionParticipant {
 			return {};
 		}
 		finally {
-			session.dispose();
+			// The SDK diesn't save the session as no messages were added,
+			// If we dispose this here, then we will not be able to find this session later.
+			// So leave this session alive till it gets used using the `getSession` API later
+			this._register(disposableTimeout(() => session.dispose(), 5 * 60 * 1000));
 		}
 	}
 

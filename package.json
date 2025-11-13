@@ -4530,8 +4530,8 @@
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
 		"@types/vscode": "^1.102.0",
-		"@types/yargs": "^17.0.24",
 		"@types/vscode-webview": "^1.57.4",
+		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
 		"@typescript-eslint/parser": "^8.32.0",
 		"@typescript-eslint/typescript-estree": "^8.26.1",
@@ -4601,7 +4601,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.68.0",
-		"@github/copilot": "^0.0.354",
+		"@github/copilot": "^0.0.356",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -4615,6 +4615,7 @@
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
 		"diff": "^8.0.2",
+		"dompurify": "^3.3.0",
 		"ignore": "^7.0.5",
 		"isbinaryfile": "^5.0.4",
 		"jsonc-parser": "^3.3.1",
@@ -4623,8 +4624,7 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0",
-		"dompurify": "^3.3.0"
+		"web-tree-sitter": "^0.23.0"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",
