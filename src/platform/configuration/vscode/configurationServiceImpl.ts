@@ -220,7 +220,7 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		}
 
 		if (key.fullyQualifiedOldId) {
-			const oldExpValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>(`copilotchat.config.${key.fullyQualifiedOldId}`);
+			const oldExpValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>(`copilotchat.config.${key.oldId}`);
 			if (oldExpValue !== undefined) {
 				return oldExpValue;
 			}
