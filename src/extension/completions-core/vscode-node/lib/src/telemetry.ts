@@ -358,16 +358,27 @@ export class TelemetryWithExp extends TelemetryData {
 }
 
 // Helpers
-function sendTelemetryEvent(
+function sendStandardTelemetryEvent(
 	completionsTelemetryService: ICompletionsTelemetryService,
-	store: TelemetryStore,
 	name: string,
 	data: { properties: TelemetryProperties; measurements: TelemetryMeasurements }
 ): void {
-	const properties = TelemetryData.maybeRemoveRepoInfoFromProperties(store, data.properties);
+	const properties = TelemetryData.maybeRemoveRepoInfoFromProperties(TelemetryStore.Standard, data.properties);
 	completionsTelemetryService.sendGHTelemetryEvent(
 		name,
 		properties,
+		data.measurements
+	);
+}
+
+function sendEnhancedTelemetryEvent(
+	completionsTelemetryService: ICompletionsTelemetryService,
+	name: string,
+	data: { properties: TelemetryProperties; measurements: TelemetryMeasurements }
+): void {
+	completionsTelemetryService.sendEnhancedGHTelemetryEvent(
+		name,
+		data.properties,
 		data.measurements
 	);
 }
@@ -450,8 +461,11 @@ async function _telemetry(
 	// if telemetry data isn't given, make a new one to hold at least the config
 	const definedTelemetryData = telemetryData || TelemetryData.createAndMarkAsIssued({}, {});
 	await definedTelemetryData.makeReadyForSending(accessor, store ?? false, 'IncludeExp', now);
-	if (!isEnhanced(store) || instantiationService.invokeFunction(shouldSendEnhanced)) {
-		sendTelemetryEvent(completionsTelemetryService, store, name, definedTelemetryData);
+	if (!isEnhanced(store)) {
+		sendStandardTelemetryEvent(completionsTelemetryService, name, definedTelemetryData);
+	}
+	if (instantiationService.invokeFunction(shouldSendEnhanced)) {
+		sendEnhancedTelemetryEvent(completionsTelemetryService, name, definedTelemetryData);
 	}
 	if (isEnhanced(store) && ftTelemetryEvents.includes(name) && instantiationService.invokeFunction(shouldSendFinetuningTelemetry)) {
 		instantiationService.invokeFunction(sendFTTelemetryEvent, store, name, definedTelemetryData);
@@ -468,7 +482,7 @@ async function _telemetryExpProblem(accessor: ServicesAccessor, telemetryPropert
 	const name = 'expProblem';
 	const definedTelemetryData = TelemetryData.createAndMarkAsIssued(telemetryProperties, {});
 	await definedTelemetryData.makeReadyForSending(accessor, TelemetryStore.Standard, 'SkipExp', now);
-	sendTelemetryEvent(completionsTelemetryService, TelemetryStore.Standard, name, definedTelemetryData);
+	sendStandardTelemetryEvent(completionsTelemetryService, name, definedTelemetryData);
 }
 
 /**
@@ -486,7 +500,7 @@ export function telemetryRaw(
 ) {
 	const completionsTelemetryService = accessor.get(ICompletionsTelemetryService);
 	const properties = { ...props, ...createRequiredProperties(accessor) };
-	sendTelemetryEvent(completionsTelemetryService, TelemetryStore.Standard, name, { properties, measurements });
+	sendStandardTelemetryEvent(completionsTelemetryService, name, { properties, measurements });
 }
 
 function createRequiredProperties(accessor: ServicesAccessor) {
