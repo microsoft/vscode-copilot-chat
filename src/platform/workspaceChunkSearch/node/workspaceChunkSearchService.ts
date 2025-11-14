@@ -126,6 +126,10 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 		super();
 
 		this.tryInit(true);
+
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			this.tryInit(true);
+		}));
 	}
 
 	private async tryInit(silent: boolean): Promise<WorkspaceChunkSearchServiceImpl | undefined> {
