@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { WorkspaceFolder } from '../../../types/src';
-import { ICompletionsContextService } from '../context';
 import { CopilotTextDocument, INotebookCell, INotebookDocument, ITextDocument } from '../textDocument';
 import {
 	TextDocumentChangeEvent,
@@ -94,10 +93,6 @@ export class SimpleTestTextDocumentManager extends TextDocumentManager {
 	private _notebookDocuments: Map<string, INotebookDocument> = new Map();
 	private _workspaceFolders: WorkspaceFolder[] = [];
 
-	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
-		super(ctx);
-	}
-
 	init(workspaceFolders: { readonly uri: string; readonly name?: string }[]) {
 		this._workspaceFolders = workspaceFolders.map(f => ({ uri: f.uri, name: f.name ?? basename(f.uri) }));
 	}
@@ -163,10 +158,6 @@ export class SimpleTestTextDocumentManager extends TextDocumentManager {
  */
 export class TestTextDocumentManager extends SimpleTestTextDocumentManager {
 	private contents = new Map<string, string>();
-
-	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
-		super(ctx);
-	}
 
 	override readTextDocumentFromDisk(uri: string): Promise<string | undefined> {
 		return Promise.resolve(this.contents.get(uri));

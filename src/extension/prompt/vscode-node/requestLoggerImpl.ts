@@ -522,15 +522,6 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 
 		const durationMs = entry.endTime.getTime() - entry.startTime.getTime();
-		let responseTokensPerSecond: string | undefined;
-		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
-			const completionTokens = entry.usage?.completion_tokens;
-			if (completionTokens && durationMs > 0) {
-				const tokensPerSecond = completionTokens / (durationMs / 1000);
-				responseTokensPerSecond = tokensPerSecond.toFixed(2);
-			}
-		}
-
 		const tocItems: string[] = [];
 		tocItems.push(`- [Request Messages](#request-messages)`);
 		tocItems.push(`  - [System](#system)`);
@@ -567,9 +558,6 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`startTime        : ${entry.startTime.toJSON()}`);
 		result.push(`endTime          : ${entry.endTime.toJSON()}`);
 		result.push(`duration         : ${durationMs}ms`);
-		if (responseTokensPerSecond) {
-			result.push(`response rate    : ${responseTokensPerSecond} tokens/s`);
-		}
 		result.push(`ourRequestId     : ${entry.chatParams.ourRequestId}`);
 
 		const ignoreStatefulMarker = entry.chatParams.ignoreStatefulMarker;

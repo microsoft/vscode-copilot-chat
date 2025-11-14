@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as util from 'node:util';
-import { LogLevel, LogTarget } from '../logger';
+import { ICompletionsLogTargetService, LogLevel } from '../logger';
 
 export type TestLogMessage = {
 	level: LogLevel;
@@ -12,7 +12,8 @@ export type TestLogMessage = {
 	extra: unknown[];
 };
 
-export class TestLogTarget extends LogTarget {
+export class TestLogTarget implements ICompletionsLogTargetService {
+	declare _serviceBrand: undefined;
 	private readonly _messages: TestLogMessage[] = [];
 
 	logIt(level: LogLevel, category: string, ...extra: unknown[]): void {

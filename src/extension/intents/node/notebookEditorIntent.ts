@@ -25,6 +25,7 @@ import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext, InternalToolReference } from '../../prompt/common/intents';
+import { getRequestedToolCallIterationLimit } from '../../prompt/common/specialRequestTypes';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IBuildPromptResult, IIntent } from '../../prompt/node/intents';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
@@ -33,7 +34,6 @@ import { getToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
 import { EditCode2IntentInvocation } from './editCodeIntent2';
-import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
 	instaService.invokeFunction(async accessor => {

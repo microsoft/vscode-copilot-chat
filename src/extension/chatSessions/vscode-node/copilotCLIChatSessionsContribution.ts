@@ -12,10 +12,12 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
@@ -44,18 +46,23 @@ export class CopilotCLIWorktreeManager {
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService) { }
 
 	async createWorktree(stream: vscode.ChatResponseStream): Promise<string | undefined> {
-		try {
-			const worktreePath = await this.commandExecutionService.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
-			if (worktreePath) {
-				stream.progress(vscode.l10n.t('Created isolated worktree at {0}', worktreePath));
-				return worktreePath;
-			} else {
-				stream.warning(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory'));
-			}
-		} catch (error) {
-			stream.warning(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error)));
-		}
-		return undefined;
+		return new Promise<string | undefined>((resolve) => {
+			stream.progress(vscode.l10n.t('Creating isolated worktree for Copilot CLI session...'), async progress => {
+				try {
+					const worktreePath = await this.commandExecutionService.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
+					if (worktreePath) {
+						resolve(worktreePath);
+						return vscode.l10n.t('Created isolated worktree at {0}', worktreePath);
+					} else {
+						progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+					}
+				} catch (error) {
+					progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
+				}
+
+				resolve(undefined);
+			});
+		});
 	}
 
 	async storeWorktreePath(sessionId: string, workingDirectory: string): Promise<void> {
@@ -303,7 +310,9 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	}
 }
 
-export class CopilotCLIChatSessionParticipant {
+const WAIT_FOR_NEW_SESSION_TO_GET_USED = 5 * 60 * 1000; // 5 minutes
+
+export class CopilotCLIChatSessionParticipant extends Disposable {
 	constructor(
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
@@ -318,7 +327,9 @@ export class CopilotCLIChatSessionParticipant {
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-	) { }
+	) {
+		super();
+	}
 
 	createHandler(): ChatExtendedRequestHandler {
 		return this.handleRequest.bind(this);
@@ -367,7 +378,14 @@ export class CopilotCLIChatSessionParticipant {
 			if (!session) {
 				return {};
 			}
-			disposables.add(session);
+			if (isUntitled) {
+				// The SDK doesn't save the session as no messages were added,
+				// If we dispose this here, then we will not be able to find this session later.
+				// So leave this session alive till it gets used using the `getSession` API later
+				this._register(disposableTimeout(() => session.dispose(), WAIT_FOR_NEW_SESSION_TO_GET_USED));
+			} else {
+				disposables.add(session);
+			}
 
 			if (!isUntitled && confirmationResults.length) {
 				return await this.handleConfirmationData(session.object, request.prompt, confirmationResults, context, stream, token);
@@ -412,7 +430,7 @@ export class CopilotCLIChatSessionParticipant {
 			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory);
 		}
 		disposables.add(session.object.attachStream(stream));
-		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest) => this.instantiationService.invokeFunction(requestPermission, permissionRequest, this.toolsService, request.toolInvocationToken, token)));
+		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) => requestPermission(this.instantiationService, permissionRequest, toolCall, this.toolsService, request.toolInvocationToken, token)));
 
 
 		return session;
@@ -514,7 +532,10 @@ export class CopilotCLIChatSessionParticipant {
 			return {};
 		}
 		finally {
-			session.dispose();
+			// The SDK doesn't save the session as no messages were added,
+			// If we dispose this here, then we will not be able to find this session later.
+			// So leave this session alive till it gets used using the `getSession` API later
+			this._register(disposableTimeout(() => session.dispose(), WAIT_FOR_NEW_SESSION_TO_GET_USED));
 		}
 	}
 
@@ -542,16 +563,31 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
+			const id = SessionIdForCLI.parse(sessionItem.resource);
+			const worktreePath = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(id);
+
+			const confirmMessage = worktreePath
+				? l10n.t('Are you sure you want to delete the session and its associated worktree?')
+				: l10n.t('Are you sure you want to delete the session?');
+
 			const deleteLabel = l10n.t('Delete');
 			const result = await vscode.window.showWarningMessage(
-				l10n.t('Are you sure you want to delete the session?'),
+				confirmMessage,
 				{ modal: true },
 				deleteLabel
 			);
 
 			if (result === deleteLabel) {
-				const id = SessionIdForCLI.parse(sessionItem.resource);
 				await copilotCLISessionService.deleteSession(id);
+
+				if (worktreePath) {
+					try {
+						await vscode.commands.executeCommand('git.deleteWorktree', Uri.file(worktreePath));
+					} catch (error) {
+						vscode.window.showErrorMessage(l10n.t('Failed to delete worktree: {0}', error instanceof Error ? error.message : String(error)));
+					}
+				}
+
 				copilotcliSessionItemProvider.refresh();
 			}
 		}
@@ -624,10 +660,9 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
-		// Migrate the changes, delete the worktree, and delete the session
+		// Migrate the changes, and close the active multi-file diff editor
 		await vscode.commands.executeCommand('git.migrateWorktreeChanges', activeRepository.rootUri, sessionWorktreeUri);
-		await vscode.commands.executeCommand('git.deleteWorktree', sessionWorktreeUri);
-		await copilotCLISessionService.deleteSession(sessionId);
+		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
 	}));
 	return disposableStore;
 }

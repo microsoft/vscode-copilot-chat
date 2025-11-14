@@ -2,9 +2,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { Logger, LogTarget } from '../logger';
+import { ICompletionsLogTargetService, Logger } from '../logger';
 import { postInsertionTasks, postRejectionTasks } from '../postInsertion';
 import { countLines, PartialAcceptTriggerKind, SuggestionStatus } from '../suggestions/partialSuggestions';
 import { TelemetryWithExp } from '../telemetry';
@@ -15,7 +15,28 @@ import { PostInsertionCategory, telemetryShown } from './telemetry';
 
 const ghostTextLogger = new Logger('ghostText');
 
-export class LastGhostText {
+export const ICompletionsLastGhostText = createServiceIdentifier<ICompletionsLastGhostText>('ICompletionsLastGhostText');
+export interface ICompletionsLastGhostText {
+	readonly _serviceBrand: undefined;
+
+	position: IPosition | undefined;
+	uri: string | undefined;
+	shownCompletions: CopilotCompletion[];
+	index: number | undefined;
+	totalLength: number | undefined;
+	partiallyAcceptedLength: number | undefined;
+	linesLeft: number | undefined;
+	linesAccepted: number;
+	lastLineAcceptedLength: number | undefined;
+
+	resetState(): void;
+	setState(document: TextDocumentIdentifier, position: IPosition): void;
+	resetPartialAcceptanceState(): void;
+}
+
+export class LastGhostText implements ICompletionsLastGhostText {
+	declare _serviceBrand: undefined;
+
 	#position: IPosition | undefined;
 	#uri: string | undefined;
 	#shownCompletions: CopilotCompletion[] = [];
@@ -61,7 +82,7 @@ export class LastGhostText {
 
 function computeRejectedCompletions<
 	T extends { completionText: string; completionTelemetryData: TelemetryWithExp; offset: number },
->(last: LastGhostText): T[] {
+>(last: ICompletionsLastGhostText): T[] {
 	const rejectedCompletions: T[] = [];
 	last.shownCompletions.forEach(c => {
 		if (c.displayText && c.telemetry) {
@@ -91,8 +112,7 @@ function computeRejectedCompletions<
 }
 
 export function rejectLastShown(accessor: ServicesAccessor, offset?: number) {
-	const ctx = accessor.get(ICompletionsContextService);
-	const last = ctx.get(LastGhostText);
+	const last = accessor.get(ICompletionsLastGhostText);
 	if (!last.position || !last.uri) { return; }
 	//The position has changed and we're not in typing-as-suggested flow
 	// so previously shown completions can be reported as rejected
@@ -110,8 +130,7 @@ export function setLastShown(
 	position: IPosition,
 	resultType: ResultType
 ) {
-	const ctx = accessor.get(ICompletionsContextService);
-	const last = ctx.get(LastGhostText);
+	const last = accessor.get(ICompletionsLastGhostText);
 	if (
 		last.position &&
 		last.uri &&
@@ -129,9 +148,8 @@ export function setLastShown(
 }
 
 export function handleGhostTextShown(accessor: ServicesAccessor, cmp: CopilotCompletion) {
-	const ctx = accessor.get(ICompletionsContextService);
-	const logTarget = ctx.get(LogTarget);
-	const last = ctx.get(LastGhostText);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const last = accessor.get(ICompletionsLastGhostText);
 	last.index = cmp.index;
 	if (!last.shownCompletions.find(c => c.index === cmp.index)) {
 		// Only update if .position is still at the position of the completion
@@ -160,7 +178,7 @@ export function handleGhostTextShown(accessor: ServicesAccessor, cmp: CopilotCom
  * VS Code tracks acceptance by lines and resets the accepted length per line.
  */
 function handleLineAcceptance(accessor: ServicesAccessor, cmp: CopilotCompletion, acceptedLength: number) {
-	const last = accessor.get(ICompletionsContextService).get(LastGhostText);
+	const last = accessor.get(ICompletionsLastGhostText);
 
 	// If this is the first acceptance, we need to initialize the linesLeft
 	if (last.linesLeft === undefined) {
@@ -190,8 +208,7 @@ export function handleGhostTextPostInsert(
 	cmp: CopilotCompletion,
 	triggerCategory: PostInsertionCategory = 'ghostText'
 ) {
-	const ctx = accessor.get(ICompletionsContextService);
-	const last = ctx.get(LastGhostText);
+	const last = accessor.get(ICompletionsLastGhostText);
 
 	let suggestionStatus: SuggestionStatus;
 
@@ -232,7 +249,7 @@ export function handlePartialGhostTextPostInsert(
 	triggerKind: PartialAcceptTriggerKind = PartialAcceptTriggerKind.Unknown,
 	triggerCategory: PostInsertionCategory = 'ghostText',
 ) {
-	const last = accessor.get(ICompletionsContextService).get(LastGhostText);
+	const last = accessor.get(ICompletionsLastGhostText);
 
 	handleLineAcceptance(accessor, cmp, acceptedLength);
 

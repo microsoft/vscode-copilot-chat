@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import EventEmitter from 'events';
+import { createServiceIdentifier } from '../../../../../util/common/services';
 import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
 import { CancellationToken, Disposable } from '../../types/src';
 import { CompletionState } from './completionState';
@@ -20,7 +21,22 @@ export type CompletionRequestedEvent = {
 
 const requestEventName = 'CompletionRequested';
 
-export class CompletionNotifier {
+export const ICompletionsNotifierService = createServiceIdentifier<ICompletionsNotifierService>('ICompletionsNotifierService');
+export interface ICompletionsNotifierService {
+	readonly _serviceBrand: undefined;
+	notifyRequest(
+		completionState: CompletionState,
+		completionId: string,
+		telemetryData: TelemetryWithExp,
+		cancellationToken?: CancellationToken,
+		options?: Partial<GetGhostTextOptions>
+	): void;
+
+	onRequest(listener: (event: CompletionRequestedEvent) => void): Disposable;
+}
+
+export class CompletionNotifier implements ICompletionsNotifierService {
+	declare _serviceBrand: undefined;
 	#emitter = new EventEmitter();
 	constructor(
 		@ICompletionsPromiseQueueService protected completionsPromiseQueue: ICompletionsPromiseQueueService,

@@ -6,16 +6,16 @@
 import assert from 'assert';
 import sinon from 'sinon';
 import { commands, env } from 'vscode';
+import { SyncDescriptor } from '../../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../../lib/src/context';
-import { AvailableModelsManager } from '../../../lib/src/openai/model';
+import { AvailableModelsManager, ICompletionsModelManagerService } from '../../../lib/src/openai/model';
 import { ModelPickerManager } from './../modelPicker';
 import { createExtensionTestingContext } from './context';
 
 suite('ModelPickerManager unit tests', function () {
 	let accessor: ServicesAccessor;
 	let modelPicker: ModelPickerManager;
-	let availableModelsManager: AvailableModelsManager;
+	let availableModelsManager: ICompletionsModelManagerService;
 	let sandbox: sinon.SinonSandbox;
 
 	// Couple of fake models to use in our tests.
@@ -41,13 +41,13 @@ suite('ModelPickerManager unit tests', function () {
 	setup(function () {
 		sandbox = sinon.createSandbox();
 		// Create our test context, and stub the AvailableModelsManager to return our fake models.
-		accessor = createExtensionTestingContext();
-		const instantiationService = accessor.get(IInstantiationService);
-		const contextService = accessor.get(ICompletionsContextService);
-		availableModelsManager = instantiationService.createInstance(AvailableModelsManager, true);
+		const serviceCollection = createExtensionTestingContext();
+		serviceCollection.define(ICompletionsModelManagerService, new SyncDescriptor(AvailableModelsManager, [true]));
+		accessor = serviceCollection.createTestingAccessor();
+
+		availableModelsManager = accessor.get(ICompletionsModelManagerService);
 		sandbox.stub(availableModelsManager, 'getGenericCompletionModels').returns(fakeModels);
-		contextService.forceSet(AvailableModelsManager, availableModelsManager);
-		modelPicker = instantiationService.createInstance(ModelPickerManager);
+		modelPicker = accessor.get(IInstantiationService).createInstance(ModelPickerManager);
 	});
 
 	teardown(async function () {

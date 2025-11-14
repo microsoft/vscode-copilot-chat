@@ -5,17 +5,16 @@
 
 import * as assert from 'assert';
 import Sinon from 'sinon';
-import { telemetryCatch, TelemetryData, TelemetryReporters, TelemetryStore, TelemetryUserConfig } from '../telemetry';
+import { ICompletionsTelemetryService } from '../../../bridge/src/completionsTelemetryServiceBridge';
+import { ICompletionsTelemetryReporters, telemetryCatch, TelemetryData, TelemetryStore } from '../telemetry';
+import { ICompletionsTelemetryUserConfigService } from '../telemetry/userConfig';
+import { ICompletionsPromiseQueueService } from '../util/promiseQueue';
 import { createLibTestingContext } from './context';
 import { NoopCopilotTelemetryReporter } from './noopTelemetry';
 import { withInMemoryTelemetry } from './telemetry';
-import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { ICompletionsTelemetryService } from '../../../bridge/src/completionsTelemetryServiceBridge';
-import { ICompletionsPromiseQueueService } from '../util/promiseQueue';
 
 suite('Telemetry unit tests', function () {
-	const accessor = createLibTestingContext();
+	const accessor = createLibTestingContext().createTestingAccessor();
 	let clock: Sinon.SinonFakeTimers;
 
 	setup(function () {
@@ -43,7 +42,6 @@ suite('Telemetry unit tests', function () {
 		assert.ok(telemetry.properties.common_extname);
 		assert.ok(telemetry.properties.common_extversion);
 		assert.ok(telemetry.properties.common_vscodeversion);
-		assert.ok(telemetry.properties.fetcher);
 		// assert.ok(telemetry.properties.proxy_enabled);
 		// assert.ok(telemetry.properties.proxy_auth);
 		// assert.ok(telemetry.properties.proxy_kerberos_spn);
@@ -52,8 +50,8 @@ suite('Telemetry unit tests', function () {
 	});
 
 	test('Telemetry user config has undefined tracking id', function () {
-		const accessor = createLibTestingContext();
-		const config = accessor.get(IInstantiationService).createInstance(TelemetryUserConfig);
+		const accessor = createLibTestingContext().createTestingAccessor();
+		const config = accessor.get(ICompletionsTelemetryUserConfigService);
 
 		assert.strictEqual(config.trackingId, undefined);
 	});
@@ -93,8 +91,7 @@ suite('Telemetry unit tests', function () {
 				() => {
 					throw new Error('boom!');
 				},
-				'exceptionTest',
-				{ testKey: 'testValue' }
+				'exceptionTest'
 			)();
 		});
 
@@ -106,11 +103,8 @@ suite('Telemetry unit tests', function () {
 		assert.ok(enhancedEvent);
 
 		// assert.deepStrictEqual(standardEvent.properties.message, 'boom!');
-		// assert.deepStrictEqual(standardEvent.properties.testKey, 'testValue');
 
 		assert.deepStrictEqual(enhancedEvent.properties.message, 'boom!');
-		// Chat has no properties when logging exceptions.
-		// assert.deepStrictEqual(enhancedEvent.properties.testKey, 'testValue');
 
 		// assert.ok(standardEvent.properties.restricted_unique_id);
 		// assert.deepStrictEqual(enhancedEvent.properties.unique_id, standardEvent.properties.restricted_unique_id);
@@ -119,11 +113,10 @@ suite('Telemetry unit tests', function () {
 
 suite('TelemetryReporters unit tests', function () {
 	test('deactivate is safe to call synchronously', async function () {
-		const accessor = createLibTestingContext();
+		const accessor = createLibTestingContext().createTestingAccessor();
 		const oldRepoter = new NoopCopilotTelemetryReporter();
 		const oldRestrictedReporter = new NoopCopilotTelemetryReporter();
-		const ctx = accessor.get(ICompletionsContextService);
-		const reporters = ctx.get(TelemetryReporters);
+		const reporters = accessor.get(ICompletionsTelemetryReporters);
 		reporters.setReporter(oldRepoter);
 		reporters.setEnhancedReporter(oldRestrictedReporter);
 

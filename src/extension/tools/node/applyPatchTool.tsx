@@ -43,7 +43,7 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
-import { ActionType, Commit, DiffError, FileChange, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
+import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
 import { canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
@@ -592,7 +592,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	}
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
-		const uris = identify_files_needed(options.input.input).map(f => URI.file(f));
+		const uris = [...identify_files_needed(options.input.input), ...identify_files_added(options.input.input)].map(f => URI.file(f));
 
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,

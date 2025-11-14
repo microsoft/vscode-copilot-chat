@@ -3,11 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert';
-import type { TextDocument } from 'vscode';
-import { CHAT_MODEL, ConfigKey } from '../../src/platform/configuration/common/configurationService';
-import { IHeatmapService, SelectionPoint } from '../../src/platform/heatmap/common/heatmapService';
+import { CHAT_MODEL } from '../../src/platform/configuration/common/configurationService';
 import { TestingServiceCollection } from '../../src/platform/test/node/services';
-import { createTextDocumentData } from '../../src/util/common/test/shims/textDocument';
 import { escapeRegExpCharacters } from '../../src/util/vs/base/common/strings';
 import { URI } from '../../src/util/vs/base/common/uri';
 import { Configuration, ssuite, stest } from '../base/stest';
@@ -57,49 +54,6 @@ forEditsAndAgent((strategy, variant, model, configurations) => {
 
 							assert.strictEqual((await getWorkspaceDiagnostics(accessor, workspace, 'tsc')).filter(d => d.kind === 'syntactic').length, 0);
 							assertNoElidedCodeComments(outcome);
-						}
-					}
-				]
-			});
-		});
-
-		stest({
-			description: 'Edits keeps editing files that are NOT attached due to temporal context #9130',
-			language: 'html',
-			model,
-			configurations: [{ key: ConfigKey.TemporalContextEditsEnabled as any, value: true }]
-		}, (testingServiceCollection) => {
-
-			testingServiceCollection = testingServiceCollection.clone();
-
-			testingServiceCollection.define(IHeatmapService, new class implements IHeatmapService {
-				_serviceBrand: undefined;
-				async getEntries(): Promise<Map<TextDocument, SelectionPoint[]>> {
-
-					const doc1 = createTextDocumentData(URI.parse('file:///test/path/index.html'), '<html><body>Hello</body></html>', 'html').document;
-					const doc2 = createTextDocumentData(URI.parse('file:///test/path/page.html'), '<html><head><title name="Page" /></head><body>Page</body></html>', 'html').document;
-
-					return new Map([
-						[doc1, [new SelectionPoint(0, Date.now() - 1000), new SelectionPoint(14, Date.now() - 88)]],
-						[doc2, [new SelectionPoint(50, Date.now() - 761), new SelectionPoint(21, Date.now() - 1761), new SelectionPoint(29, Date.now() - 161)]],
-					]);
-				}
-			});
-
-
-			return executeEditTest(strategy, testingServiceCollection, {
-				files: [
-					fromFixture('multiFileEdit/issue-9130/empty.html'),
-				],
-				queries: [
-					{
-						file: 'empty.html',
-						selection: [0, 0, 0, 0],
-						visibleRanges: [[0, 0, 0, 0]],
-						query: 'Create in #file:empty.html a fully functional chess game with the following requirements:\n\n1. **Rendering**:\n    - Use three.js to render a top-down view of the chessboard.\n    - Render chess pieces with artistic detail.\n\n2. **Game Mechanics**:\n    - Implement all standard chess rules.\n    - Support turns for two players.\n    - Allow previewing of possible moves for each piece.\n    - Animate piece movements, including jumps.\n\n3. **Implementation**:\n    - Develop the game within a single HTML page.\n    - Import three.js 0.169.0 and any other dependencies from jsdelivr using importmaps.\n\nEnsure the game is interactive and visually appealing.',
-						validate: async (outcome, workspace, accessor) => {
-							assertInlineEdit(outcome); // NO workspace edit
-							assertNoElidedCodeComments(outcome.fileContents);
 						}
 					}
 				]

@@ -7,21 +7,20 @@
 
 import * as assert from 'assert';
 import dedent from 'ts-dedent';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
-import { ICompletionsContextService } from '../../../context';
 import { DocumentMarker } from '../../../prompt/components/marker';
 import { createCompletionRequestData } from '../../../test/completionsPrompt';
 import { createLibTestingContext } from '../../../test/context';
 import { querySnapshot } from '../../../test/snapshot';
 import { createTextDocument, InMemoryNotebookDocument, TestTextDocumentManager } from '../../../test/textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
-import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsTextDocumentManagerService } from '../../../textDocumentManager';
 
 suite('Document Marker', function () {
 	let accessor: ServicesAccessor;
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 	});
 
 	test('creates path with relative path', async function () {
@@ -38,8 +37,7 @@ suite('Document Marker', function () {
 
 	test('creates language marker with relative path present but type is notebook', async function () {
 		const textDocument = createTextDocument('vscode-notebook:///mynotebook.ipynb', 'typescript', 0, '');
-		const ctx = accessor.get(ICompletionsContextService);
-		(ctx.get(TextDocumentManager) as TestTextDocumentManager).setNotebookDocument(
+		(accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager).setNotebookDocument(
 			textDocument,
 			new InMemoryNotebookDocument([])
 		);
@@ -59,9 +57,9 @@ suite('Document Marker', function () {
 				const b = 2;
 			`
 		);
-		const ctx = accessor.get(ICompletionsContextService);
+		const tdms = accessor.get(ICompletionsTextDocumentManagerService);
 		const position = textDocument.positionAt(textDocument.getText().indexOf('|'));
-		const virtualPrompt = new VirtualPrompt(<DocumentMarker ctx={ctx} />);
+		const virtualPrompt = new VirtualPrompt(<DocumentMarker tdms={tdms} />);
 		const pipe = virtualPrompt.createPipe();
 		await pipe.pump(createCompletionRequestData(accessor, textDocument, position));
 		const snapshot = virtualPrompt.snapshot();

@@ -3,10 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CompletionsTelemetryServiceBridge } from '../../../bridge/src/completionsTelemetryServiceBridge';
-import { ICompletionsContextService } from '../context';
-import { TelemetryReporters } from '../telemetry';
-import { PromiseQueue } from '../util/promiseQueue';
+import { ICompletionsTelemetryService } from '../../../bridge/src/completionsTelemetryServiceBridge';
+import { ICompletionsTelemetryReporters } from '../telemetry';
+import { ICompletionsPromiseQueueService, PromiseQueue } from '../util/promiseQueue';
 import { TelemetrySpy } from './telemetrySpy';
 
 export type EventData = {
@@ -110,107 +109,18 @@ export async function withInMemoryTelemetry<T>(
 ): Promise<{ reporter: TelemetrySpy; enhancedReporter: TelemetrySpy; result: T }> {
 	const reporter = new TelemetrySpy();
 	const enhancedReporter = new TelemetrySpy();
-	const ctx = accessor.get(ICompletionsContextService);
-	const serviceBridge = ctx.get(CompletionsTelemetryServiceBridge);
+	const telemetryService = accessor.get(ICompletionsTelemetryService);
+	const reporters = accessor.get(ICompletionsTelemetryReporters);
 	try {
-		serviceBridge.setSpyReporters(reporter, enhancedReporter);
-		ctx.get(TelemetryReporters).setReporter(reporter);
-		ctx.get(TelemetryReporters).setEnhancedReporter(enhancedReporter);
-		const queue = new TestPromiseQueue();
-		ctx.forceSet(PromiseQueue, queue);
-
+		telemetryService.setSpyReporters(reporter, enhancedReporter);
+		reporters.setReporter(reporter);
+		reporters.setEnhancedReporter(enhancedReporter);
 		const result = await work(accessor);
+		const queue = accessor.get(ICompletionsPromiseQueueService) as TestPromiseQueue;
 		await queue.awaitPromises();
 
 		return { reporter, enhancedReporter: enhancedReporter, result };
 	} finally {
-		serviceBridge.clearSpyReporters();
+		telemetryService.clearSpyReporters();
 	}
 }
-
-/*
-export async function withTelemetryCapture<T>(
-	ctx: Context,
-	work: () => T | Promise<T>
-): Promise<[CapturedTelemetry<EventData | ExceptionData>[], T, AuthorizationHeader]> {
-	return _withTelemetryCapture(ctx, true, work);
-}
-
-export async function withDisabledTelemetryCapture<T>(
-	ctx: Context,
-	work: () => T | Promise<T>
-): Promise<[CapturedTelemetry<EventData | ExceptionData>[], T, AuthorizationHeader]> {
-	return _withTelemetryCapture(ctx, false, work);
-}
-
-async function _withTelemetryCapture<T>(
-	ctx: Context,
-	enabled: boolean,
-	work: () => T | Promise<T>
-): Promise<[CapturedTelemetry<EventData | ExceptionData>[], T, AuthorizationHeader]> {
-	let authorization: AuthorizationHeader;
-	const messages: CapturedTelemetry<EventData | ExceptionData>[] = [];
-	const server = createServer((req, res) => {
-		if (req.method !== 'POST') { return; }
-		authorization = req.headers['authorization'];
-		let body = '';
-		req.on('end', () => {
-			const items = <typeof messages>JSON.parse(body);
-			messages.push(...items);
-			res.writeHead(204);
-			res.end();
-		});
-		req.on('data', chunk => {
-			body += String(chunk);
-		});
-	});
-	server.unref(); // don't keep the process alive for this server
-	const port = await new Promise<number>((resolve, reject) => {
-		server.on('error', err => reject(err));
-		server.listen(() => resolve((server.address() as net.AddressInfo).port));
-	});
-
-	// ensure we don't have a proxy setup in place from other tests
-	delete process.env.http_proxy;
-	delete process.env.https_proxy;
-
-	const telemetryInit = ctx.get(TelemetryInitialization);
-	telemetryInit.overrideEndpointUrlForTesting = `http://localhost:${port}/`;
-	telemetryInit.initialize(enabled);
-
-	try {
-		const queue = new TestPromiseQueue();
-		ctx.forceSet(PromiseQueue, queue);
-		const result = await work();
-		await queue.awaitPromises();
-		await telemetryInit.shutdown();
-		await waitForCapturedTelemetryWithRetry(messages);
-		return [messages, result, authorization];
-	} finally {
-		telemetryInit.overrideEndpointUrlForTesting = undefined;
-		server.close();
-	}
-}
-
-async function waitForCapturedTelemetryWithRetry(messages: unknown[]): Promise<void> {
-	for (let waitTimeMultiplier = 1; waitTimeMultiplier < 3; waitTimeMultiplier++) {
-		await new Promise(resolve => setTimeout(resolve, waitTimeMultiplier * 50));
-		if (messages.length > 0) { return; }
-		console.warn('Retrying to collect telemetry messages #' + waitTimeMultiplier);
-	}
-}
-
-export function assertHasProperty(
-	messages: CapturedTelemetry<EventData>[],
-	assertion: (m: { [key: string]: string }) => boolean
-) {
-	assert.ok(
-		messages
-			.filter(message => message.data.baseData.name.split('/')[1] !== 'ghostText.produced')
-			.every(message => {
-				const props = message.data.baseData.properties;
-				return assertion.call(props, props);
-			})
-	);
-}
-*/

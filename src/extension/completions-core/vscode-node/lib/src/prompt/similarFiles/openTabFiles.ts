@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { sortByAccessTimes } from '../../documentTracker';
+import { TextDocumentContents } from '../../textDocument';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import {
 	INeighborSource,
 	NeighborSource,
@@ -11,11 +13,9 @@ import {
 	NeighborsCollection,
 	considerNeighborFile,
 } from './neighborFiles';
-import { TextDocumentContents } from '../../textDocument';
-import { TextDocumentManager } from '../../textDocumentManager';
 
 export class OpenTabFiles implements INeighborSource {
-	constructor(private readonly docManager: TextDocumentManager) { }
+	constructor(@ICompletionsTextDocumentManagerService readonly docManager: ICompletionsTextDocumentManagerService) { }
 
 	private truncateDocs(
 		docs: readonly TextDocumentContents[],

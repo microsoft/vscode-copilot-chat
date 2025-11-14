@@ -18,9 +18,9 @@ import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposabl
 import { joinPath } from '../../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
+import { stripReminders } from '../common/copilotCLITools';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
-import { stripReminders } from './copilotcliToolInvocationFormatter';
 import { getCopilotLogger } from './logger';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
 
@@ -187,7 +187,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		this.logService.trace(`[CopilotCLIAgentManager] Created new CopilotCLI session ${sdkSession.sessionId}.`);
 
 
-		const session = await this.createCopilotSession(sdkSession, options, sessionManager);
+		const session = this.createCopilotSession(sdkSession, options, sessionManager);
 
 		session.object.add(toDisposable(() => this._newActiveSessions.delete(sdkSession.sessionId)));
 		session.object.add(session.object.onDidChangeStatus(() => {
@@ -219,8 +219,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				}
 			}
 
-			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-			const mcpServers = await this.mcpHandler.loadMcpConfig(workingDirectory);
+			const [sessionManager, mcpServers] = await Promise.all([
+				raceCancellationError(this.getSessionManager(), token),
+				this.mcpHandler.loadMcpConfig(workingDirectory)
+			]);
 			const options = new CopilotCLISessionOptions({ model, workingDirectory, isolationEnabled, mcpServers }, this.logService);
 
 			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
@@ -229,13 +231,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				return undefined;
 			}
 
-			return await this.createCopilotSession(sdkSession, options, sessionManager);
+			return this.createCopilotSession(sdkSession, options, sessionManager);
 		} finally {
 			lockDisposable.dispose();
 		}
 	}
 
-	private async createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.CLISessionManager): Promise<RefCountedSession> {
+	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.CLISessionManager): RefCountedSession {
 		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
 		session.add(session.onDidChangeStatus(() => this._onDidChangeSessions.fire()));
 		session.add(toDisposable(() => {

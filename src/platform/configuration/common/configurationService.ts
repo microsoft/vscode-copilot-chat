@@ -754,8 +754,8 @@ export namespace ConfigKey {
 		export const InlineEditsHideInternalInterface = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.hideInternalInterface', vBoolean(), false, INTERNAL_RESTRICTED);
 		export const InlineEditsLogCancelledRequests = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.logCancelledRequests', vBoolean(), false, INTERNAL_RESTRICTED);
 		export const InlineEditsUnification = defineExpSetting<boolean>('chat.advanced.inlineEdits.unification', false, INTERNAL_RESTRICTED);
-		export const InlineEditsNextCursorPredictionEnabled = defineExpSetting<NextCursorLinePrediction | boolean | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.enabled', { defaultValue: undefined, teamDefaultValue: NextCursorLinePrediction.LabelOnlyWithEdit }, INTERNAL_RESTRICTED);
-		export const InlineEditsNextCursorPredictionModelName = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.modelName', { defaultValue: undefined, teamDefaultValue: "xtab-cursor-jump-v2" }, INTERNAL_RESTRICTED);
+		export const InlineEditsNextCursorPredictionEnabled = defineExpSetting<NextCursorLinePrediction | boolean | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.enabled', { defaultValue: undefined, teamDefaultValue: NextCursorLinePrediction.OnlyWithEdit }, INTERNAL_RESTRICTED);
+		export const InlineEditsNextCursorPredictionModelName = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.modelName', { defaultValue: undefined, teamDefaultValue: "xtab-cursor-jump-1104" }, INTERNAL_RESTRICTED);
 		export const InlineEditsNextCursorPredictionUrl = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.url', vString(), undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsNextCursorPredictionApiKey = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.apiKey', vString(), undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabProviderUrl = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.xtabProvider.url', vString(), undefined, INTERNAL_RESTRICTED);
@@ -796,6 +796,7 @@ export namespace ConfigKey {
 		export const InlineChatUseCodeMapper = defineSetting<boolean>('chat.advanced.inlineChat.useCodeMapper', false, INTERNAL_RESTRICTED);
 		export const InstantApplyModelName = defineExpSetting<string>('chat.advanced.instantApply.modelName', 'gpt-4o-instant-apply-full-ft-v66', INTERNAL_RESTRICTED);
 		export const VerifyTextDocumentChanges = defineExpSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', false, INTERNAL_RESTRICTED);
+		export const DiagnosticsContextProvider = defineExpSetting<boolean>('chat.advanced.inlineEdits.diagnosticsContextProvider.enabled', true);
 
 		// TODO: @sandy081 - These should be moved away from this namespace
 		export const EnableReadFileV2 = defineExpSetting<boolean>('chat.advanced.enableReadFileV2', isPreRelease);
@@ -839,9 +840,6 @@ export namespace ConfigKey {
 	/** Enable memory tool */
 	export const MemoryToolEnabled = defineExpSetting<boolean>('chat.tools.memory.enabled', false);
 
-	/** Add context from recently used files */
-	export const TemporalContextInlineChatEnabled = defineExpSetting<boolean>('chat.editor.temporalContext.enabled', false);
-	export const TemporalContextEditsEnabled = defineExpSetting<boolean>('chat.edits.temporalContext.enabled', false);
 	/** User provided code generation instructions for the chat */
 	export const CodeGenerationInstructions = defineSetting('chat.codeGeneration.instructions', [] as CodeGenerationInstruction[]);
 	export const TestGenerationInstructions = defineSetting('chat.testGeneration.instructions', [] as CodeGenerationInstruction[]);

@@ -98,7 +98,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -234,7 +233,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -372,7 +370,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -498,7 +495,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -629,7 +625,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -905,7 +900,6 @@ custom mode instructions
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -958,7 +952,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -1017,7 +1010,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -1140,7 +1132,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -1273,7 +1264,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -1396,7 +1386,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -1564,7 +1553,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -1698,7 +1686,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -1834,7 +1821,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -1929,7 +1915,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -2029,7 +2014,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -2273,7 +2257,6 @@ custom mode instructions
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -2325,7 +2308,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -2383,7 +2365,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -2475,7 +2456,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -2577,7 +2557,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -2669,7 +2648,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -2802,7 +2780,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -2936,7 +2913,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -3072,7 +3048,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -3167,7 +3142,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -3267,7 +3241,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -3511,7 +3484,6 @@ custom mode instructions
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -3563,7 +3535,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -3621,7 +3592,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -3713,7 +3683,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -3815,7 +3784,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -3907,7 +3875,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -4076,7 +4043,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -4214,7 +4180,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -4354,7 +4319,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -4453,7 +4417,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -4557,7 +4520,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -4807,7 +4769,6 @@ custom mode instructions
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -4861,7 +4822,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -4921,7 +4881,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -5017,7 +4976,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -5123,7 +5081,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -5219,7 +5176,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -5543,7 +5499,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -5821,7 +5776,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -6101,7 +6055,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -6381,7 +6334,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -6666,7 +6618,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -7116,7 +7067,6 @@ custom mode instructions
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -7189,7 +7139,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -7268,7 +7217,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -7545,7 +7493,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -7832,7 +7779,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -8109,7 +8055,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -8270,7 +8215,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -8411,7 +8355,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -8554,7 +8497,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -8656,7 +8598,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -8763,7 +8704,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -9014,7 +8954,6 @@ custom mode instructions
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -9066,7 +9005,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -9124,7 +9062,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -9223,7 +9160,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -9332,7 +9268,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
@@ -9431,7 +9366,6 @@ This is a test custom instruction file
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:

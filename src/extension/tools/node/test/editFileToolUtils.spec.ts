@@ -4,17 +4,22 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as fs from 'fs';
+import { homedir } from 'os';
 import { beforeEach, describe, expect, test } from 'vitest';
+import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
+import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
+import type { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
 import { MockAlternativeNotebookContentService } from '../../../../platform/notebook/common/mockAlternativeContentService';
 import { INotebookService } from '../../../../platform/notebook/common/notebookService';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { WorkspaceEdit as WorkspaceEditShim } from '../../../../util/common/test/shims/editing';
 import { createTextDocumentData, IExtHostDocumentData, setDocText } from '../../../../util/common/test/shims/textDocument';
+import { isMacintosh } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { WorkspaceEdit } from '../../../../vscodeTypes';
 import { applyEdits as applyTextEdits } from '../../../prompt/node/intents';
-import { applyEdit, ContentFormatError, MultipleMatchesError, NoChangeError, NoMatchError } from '../editFileToolUtils';
+import { applyEdit, assertPathIsSafe, ConfirmationCheckResult, ContentFormatError, makeUriConfirmationChecker, MultipleMatchesError, NoChangeError, NoMatchError } from '../editFileToolUtils';
 
 describe('replace_string_in_file - applyEdit', () => {
 	let workspaceEdit: WorkspaceEdit;
@@ -351,5 +356,401 @@ describe('replace_string_in_file - applyEdit', () => {
 		expect(
 			applyTextEdits(input.join('\r\n'), workspaceEdit.entries()[0][1])
 		).toBe(output);
+	});
+});
+
+
+describe('assertPathIsSafe (Windows scenarios)', () => {
+	// Force Windows checks by passing true for _isWindows
+	test('accepts normal path', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\project\\file.txt', true)).not.toThrow();
+	});
+
+	test('rejects null byte', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\proje\0ct\\file.txt', true)).toThrow();
+	});
+
+	test('rejects ADS suffix', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\project\\file.txt:$I30:$INDEX_ALLOCATION', true)).toThrow();
+	});
+
+	test('rejects additional colon in component', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\file:name.txt', true)).toThrow();
+	});
+
+	test('rejects invalid characters', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\proj>ect\\file.txt', true)).toThrow();
+	});
+
+	test('rejects device path prefix \\?\\', () => {
+		// This should be treated as reserved device path
+		expect(() => assertPathIsSafe('\\\\?\\C:\\Users\\me\\file.txt', true)).toThrow();
+	});
+
+	test('rejects reserved device name component', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\CON\\file.txt', true)).toThrow();
+	});
+
+	test('rejects trailing dot in component', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\folder.\\file.txt', true)).toThrow();
+	});
+
+	test('rejects trailing space in component', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\folder \\file.txt', true)).toThrow();
+	});
+
+	test('rejects 8.3 short filename pattern', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\VSCODE~1\\settings.json', true)).toThrow();
+	});
+
+	test('allows tilde without digit', () => {
+		expect(() => assertPathIsSafe('C:\\Users\\me\\my~folder\\file.txt', true)).not.toThrow();
+	});
+});
+
+describe('makeUriConfirmationChecker', async () => {
+	// Mock custom instructions service
+	class MockCustomInstructionsService implements ICustomInstructionsService {
+		declare readonly _serviceBrand: undefined;
+		private externalFiles = new Set<string>();
+
+		setExternalFiles(uris: URI[]) {
+			this.externalFiles.clear();
+			uris.forEach(uri => this.externalFiles.add(uri.toString()));
+		}
+
+		isExternalInstructionsFile(uri: URI): boolean {
+			return this.externalFiles.has(uri.toString());
+		}
+
+		fetchInstructionsFromSetting(): Promise<any[]> {
+			return Promise.resolve([]);
+		}
+
+		fetchInstructionsFromFile(): Promise<any> {
+			return Promise.resolve(undefined);
+		}
+
+		getAgentInstructions(): Promise<URI[]> {
+			return Promise.resolve([]);
+		}
+	}
+
+	let configService: InMemoryConfigurationService;
+	let workspaceService: TestWorkspaceService;
+	let customInstructionsService: MockCustomInstructionsService;
+
+	beforeEach(() => {
+		configService = new InMemoryConfigurationService(new DefaultsOnlyConfigurationService());
+		workspaceService = new TestWorkspaceService([], []);
+		customInstructionsService = new MockCustomInstructionsService();
+	});
+
+	test('allows files within workspace folder', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		const fileInWorkspace = URI.file('/workspace/src/file.ts');
+		const result = await checker(fileInWorkspace);
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	test('rejects files outside workspace', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		const fileOutsideWorkspace = URI.file('/other/file.ts');
+		const result = await checker(fileOutsideWorkspace);
+		expect(result).toBe(ConfirmationCheckResult.OutsideWorkspace); // OutsideWorkspace
+	});
+
+	test('allows untitled files', async () => {
+		workspaceService = new TestWorkspaceService([], []);
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		const untitledFile = URI.parse('untitled:Untitled-1');
+		const result = await checker(untitledFile);
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	test('allows external instructions files', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		const externalInstruction = URI.file('/external/instruction.md');
+		customInstructionsService.setExternalFiles([externalInstruction]);
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+		const result = await checker(externalInstruction);
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	test('respects autoApprove patterns - allows matching files', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'**/*.test.ts': true,
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+		const testFile = URI.file('/workspace/src/app.test.ts');
+		const result = await checker(testFile);
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	test('respects autoApprove patterns - allows non-matching files by default', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'**/*.test.ts': true,
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+		const prodFile = URI.file('/workspace/src/app.ts');
+		const result = await checker(prodFile);
+		// Files in workspace are allowed by default unless explicitly blocked
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	test('respects autoApprove patterns - blocks explicitly denied files', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'**/*.env': false,
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+		const envFile = URI.file('/workspace/.env');
+		const result = await checker(envFile);
+		expect(result).toBe(ConfirmationCheckResult.Sensitive); // Sensitive
+	});
+
+	test('always checks .vscode/*.json files', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+		const settingsFile = URI.file('/workspace/.vscode/settings.json');
+		const result = await checker(settingsFile);
+		expect(result).toBe(ConfirmationCheckResult.Sensitive); // Sensitive - always requires confirmation
+	});
+
+	test('pattern precedence - later patterns override earlier ones', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'**/*.ts': true,
+			'**/secret.ts': false, // More specific pattern should win
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+		const secretFile = URI.file('/workspace/src/secret.ts');
+		const result = await checker(secretFile);
+		expect(result).toBe(ConfirmationCheckResult.Sensitive); // Sensitive - specific pattern blocks
+	});
+
+	test('handles invalid paths with security checks', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+		const invalidFile = URI.file('/workspace/file\0.ts');
+
+		await expect(checker(invalidFile)).rejects.toThrow();
+	});
+
+	test('multiple workspace folders - allows files in any folder', async () => {
+		const workspace1 = URI.file('/workspace1');
+		const workspace2 = URI.file('/workspace2');
+		workspaceService = new TestWorkspaceService([workspace1, workspace2], []);
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		const fileInWorkspace1 = URI.file('/workspace1/file.ts');
+		const fileInWorkspace2 = URI.file('/workspace2/file.ts');
+
+		expect(await checker(fileInWorkspace1)).toBe(ConfirmationCheckResult.NoConfirmation);
+		expect(await checker(fileInWorkspace2)).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	test('caches patterns per workspace folder', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'**/*.test.ts': true,
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		// First call should compute patterns
+		const file1 = URI.file('/workspace/test1.test.ts');
+		const result1 = await checker(file1);
+		expect(result1).toBe(ConfirmationCheckResult.NoConfirmation);
+
+		// Second call should use cached patterns
+		const file2 = URI.file('/workspace/test2.test.ts');
+		const result2 = await checker(file2);
+		expect(result2).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	test('case sensitivity handling', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'**/Test.ts': true,
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		// Case handling should depend on platform
+		const testFile = URI.file('/workspace/Test.ts');
+		const result = await checker(testFile);
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	test('empty autoApprove config - blocks all non-workspace files', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		// No autoApprove config set
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		const file = URI.file('/workspace/src/file.ts');
+		const result = await checker(file);
+		// Without explicit approval, files should still be allowed if not sensitive
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	test('workspace folder excluded by pattern - still allows workspace edits', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'/workspace/**': false,
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		// Pattern matching the workspace folder itself should not be included
+		const file = URI.file('/workspace/file.ts');
+		const result = await checker(file);
+		// The pattern should be ignored because it matches the workspace root
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
+	if (isMacintosh) {
+		test('pattern matching macOS Library path', async () => {
+			// Simulate a workspace opened in ~/Library (which is normally restricted)
+			const workspaceFolder = URI.file('/');
+			workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+			await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			const normalFile = URI.file(`${homedir()}/Library/MyApp/src/app.ts`);
+			expect(await checker(normalFile)).toBe(ConfirmationCheckResult.SystemFile);
+		});
+
+		test('pattern matching workspace folder on macOS Library path', async () => {
+			// Simulate a workspace opened in ~/Library (which is normally restricted)
+			const libraryWorkspace = URI.file(`${homedir()}/Library/MyApp`);
+			workspaceService = new TestWorkspaceService([libraryWorkspace], []);
+
+			await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+				'**/*.config': false,
+			});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			const normalFile = URI.file(`${homedir()}/Library/MyApp/src/app.ts`);
+			const configFile = URI.file(`${homedir()}/Library/MyApp/settings.config`);
+
+			expect(await checker(normalFile)).toBe(ConfirmationCheckResult.NoConfirmation);
+			expect(await checker(configFile)).toBe(ConfirmationCheckResult.Sensitive);
+		});
+	}
+
+
+	test('nested pattern matching', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'**/config/**': false,
+			'**/config/test/**': true, // More specific pattern
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		// More specific pattern should override the general one
+		const testConfigFile = URI.file('/workspace/config/test/settings.json');
+		const result = await checker(testConfigFile);
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation); // allowed by more specific pattern
+	});
+
+	test('handles relative workspace patterns correctly', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'src/**/*.ts': true,
+			'dist/**': false,
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		const srcFile = URI.file('/workspace/src/app.ts');
+		const distFile = URI.file('/workspace/dist/app.js');
+
+		expect(await checker(srcFile)).toBe(ConfirmationCheckResult.NoConfirmation);
+		expect(await checker(distFile)).toBe(ConfirmationCheckResult.Sensitive); // Sensitive - explicitly blocked
+	});
+
+	test('pattern matching is workspace-relative', async () => {
+		const workspace1 = URI.file('/workspace1');
+		const workspace2 = URI.file('/workspace2');
+		workspaceService = new TestWorkspaceService([workspace1, workspace2], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'secrets/**': false,
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		const secretsInWorkspace1 = URI.file('/workspace1/secrets/api-key.txt');
+		const secretsInWorkspace2 = URI.file('/workspace2/secrets/token.txt');
+
+		// Pattern should apply to both workspaces
+		expect(await checker(secretsInWorkspace1)).toBe(ConfirmationCheckResult.Sensitive); // Sensitive
+		expect(await checker(secretsInWorkspace2)).toBe(ConfirmationCheckResult.Sensitive); // Sensitive
+	});
+
+	test('complex glob patterns', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		await configService.setNonExtensionConfig('chat.tools.edits.autoApprove', {
+			'**/*.{env,secret,key}': false,
+			'**/test/**/*.env': true, // Exception for test env files
+		});
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+		const prodEnv = URI.file('/workspace/.env');
+		const testEnv = URI.file('/workspace/test/integration.env');
+		const apiKey = URI.file('/workspace/config/api.key');
+
+		expect(await checker(prodEnv)).toBe(ConfirmationCheckResult.Sensitive); // Sensitive - matches block pattern
+		expect(await checker(testEnv)).toBe(ConfirmationCheckResult.NoConfirmation); // exception pattern
+		expect(await checker(apiKey)).toBe(ConfirmationCheckResult.Sensitive); // Sensitive - matches block pattern
 	});
 });

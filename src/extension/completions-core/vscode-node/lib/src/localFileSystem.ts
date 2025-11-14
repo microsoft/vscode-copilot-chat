@@ -2,12 +2,14 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { FileIdentifier, FileStat, FileSystem, FileType } from './fileSystem';
-import { fsPath } from './util/uri';
 import { Stats, promises as fsp } from 'fs';
 import { join } from 'path';
+import { FileIdentifier, FileStat, FileType, ICompletionsFileSystemService } from './fileSystem';
+import { fsPath } from './util/uri';
 
-export class LocalFileSystem extends FileSystem {
+export class LocalFileSystem implements ICompletionsFileSystemService {
+	declare _serviceBrand: undefined;
+
 	async readFileString(uri: FileIdentifier): Promise<string> {
 		return (await fsp.readFile(fsPath(uri))).toString();
 	}

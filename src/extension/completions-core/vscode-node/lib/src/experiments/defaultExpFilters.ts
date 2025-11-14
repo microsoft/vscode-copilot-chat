@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
+import { IExperimentationService } from '../../../../../../platform/telemetry/common/nullExperimentationService';
 import { IDisposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
 import { CopilotToken } from '../auth/copilotTokenManager';
 import { getUserKind } from '../auth/orgs';
 import {
@@ -15,7 +15,6 @@ import {
 	getConfig,
 	ICompletionsBuildInfoService
 } from '../config';
-import { ICompletionsContextService } from '../context';
 import { getEngineRequestInfo } from '../openai/config';
 import { Filter, Release } from './filters';
 
@@ -42,12 +41,11 @@ function getPluginRelease(accessor: ServicesAccessor): Release {
 }
 
 function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, "token"> | undefined) {
-	const ctx = accessor.get(ICompletionsContextService);
-	const exp = ctx.get(CompletionsExperimentationServiceBridge);
+	const exp = accessor.get(IExperimentationService);
 
 	const filters = createCompletionsFilters(accessor, token);
 
-	exp.experimentationService.setCompletionsFilters(filters);
+	exp.setCompletionsFilters(filters);
 }
 
 export function createCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, "token"> | undefined) {

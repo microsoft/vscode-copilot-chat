@@ -273,7 +273,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 			if (summaryForTurn) {
 				// We have a summary for a tool call round that was part of this turn
 				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} />);
-			} else {
+			} else if (!turn.isContinuation) {
 				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint)} />);
 			}
 

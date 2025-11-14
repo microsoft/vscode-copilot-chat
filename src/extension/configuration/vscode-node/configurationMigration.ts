@@ -161,23 +161,3 @@ ConfigurationMigrationRegistry.registerConfigurationMigrations([{
 		];
 	}
 }]);
-
-ConfigurationMigrationRegistry.registerConfigurationMigrations([{
-	key: 'github.copilot.chat.experimental.temporalContext.enabled',
-	migrateFn: async (value: any) => {
-		return [
-			['github.copilot.chat.editor.temporalContext.enabled', { value }],
-			['github.copilot.chat.experimental.temporalContext.enabled', { value: undefined }]
-		];
-	}
-}]);
-
-ConfigurationMigrationRegistry.registerConfigurationMigrations([{
-	key: 'github.copilot.chat.temporalContext.enabled',
-	migrateFn: async (value: any) => {
-		return [
-			['github.copilot.chat.editor.temporalContext.enabled', { value }],
-			['github.copilot.chat.temporalContext.enabled', { value: undefined }]
-		];
-	}
-}]);

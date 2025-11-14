@@ -224,7 +224,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			tracer.trace(latency);
 
 			if (result.isError()) {
-				tracer.trace(`failed to fetch next edit ${result.err.kind}${(result.err as any).message ? ` (${(result.err as any).message})` : ''}`);
+				tracer.trace(`failed to fetch next edit ${result.err.toString()}`);
 				telemetryBuilder.setStatus(`noEdit:${result.err.kind}`);
 				error = result.err;
 			} else {
@@ -329,7 +329,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			const displayLocation: INextEditDisplayLocation = {
 				label,
 				range: currentCursorPosition,
-				jumpToEdit: true,
 			};
 
 			// const commandJumpToEditRange: vscode.Command = {

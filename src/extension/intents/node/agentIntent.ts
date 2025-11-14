@@ -32,6 +32,7 @@ import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation, RenderedUserMessageMetadata } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
+import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from '../../prompt/common/specialRequestTypes';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
@@ -39,7 +40,6 @@ import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/nod
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
-import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
 import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 import { ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
@@ -51,7 +51,6 @@ import { IToolGroupingService } from '../../tools/common/virtualTools/virtualToo
 import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
-import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
 
 export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
@@ -338,7 +337,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			});
 		}
 
-		const tempoStats = result.metadata.get(TemporalContextStats);
 
 		return {
 			...result,
@@ -349,7 +347,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			// Don't report file references that came in via chat variables in an editing session, unless they have warnings,
 			// because they are already displayed as part of the working set
 			// references: result.references.filter((ref) => this.shouldKeepReference(editCodeStep, ref, toolReferences, chatVariables)),
-			telemetryData: tempoStats && [tempoStats]
 		};
 	}
 

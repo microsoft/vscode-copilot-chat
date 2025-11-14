@@ -3,12 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
 import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../../types/src';
 import { ConfigKey, getConfig } from '../../config';
-import { ICompletionsContextService } from '../../context';
-import { Features } from '../../experiments/features';
-import { LogTarget } from '../../logger';
+import { ICompletionsFeaturesService } from '../../experiments/featuresService';
+import { ICompletionsFileSystemService } from '../../fileSystem';
+import { ICompletionsLogTargetService } from '../../logger';
 import { TelemetryWithExp } from '../../telemetry';
 import { NeighboringFileType } from './neighborFiles';
 import {
@@ -48,13 +49,14 @@ export class CompositeRelatedFilesProvider extends RelatedFilesProvider {
 	protected providers: Map<string, Map<string, Provider>> = new Map();
 	protected telemetrySent = false;
 	private reportedUnknownProviders = new Set<string>();
-	private logTarget: LogTarget;
 	constructor(
-		@ICompletionsContextService context: ICompletionsContextService,
-		@IInstantiationService instantiationService: IInstantiationService
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IIgnoreService ignoreService: IIgnoreService,
+		@ICompletionsFeaturesService private featuresService: ICompletionsFeaturesService,
+		@ICompletionsLogTargetService logTarget: ICompletionsLogTargetService,
+		@ICompletionsFileSystemService fileSystemService: ICompletionsFileSystemService,
 	) {
-		super(context, instantiationService);
-		this.logTarget = context.get(LogTarget);
+		super(instantiationService, ignoreService, logTarget, fileSystemService);
 	}
 	override async getRelatedFilesResponse(
 		docInfo: RelatedFilesDocumentInfo,
@@ -147,21 +149,21 @@ export class CompositeRelatedFilesProvider extends RelatedFilesProvider {
 	isActive(languageId: string, telemetryData: TelemetryWithExp): boolean {
 		if (csharpLanguageIds.includes(languageId)) {
 			return (
-				this.context.get(Features).relatedFilesVSCodeCSharp(telemetryData) ||
+				this.featuresService.relatedFilesVSCodeCSharp(telemetryData) ||
 				this.instantiationService.invokeFunction(getConfig<boolean>, ConfigKey.RelatedFilesVSCodeCSharp)
 			);
 		} else if (typescriptLanguageIds.includes(languageId)) {
 			return (
-				this.context.get(Features).relatedFilesVSCodeTypeScript(telemetryData) ||
+				this.featuresService.relatedFilesVSCodeTypeScript(telemetryData) ||
 				this.instantiationService.invokeFunction(getConfig<boolean>, ConfigKey.RelatedFilesVSCodeTypeScript)
 			);
 		} else if (cppLanguageIds.includes(languageId)) {
 			return (
-				this.context.get(Features).cppHeadersEnableSwitch(telemetryData)
+				this.featuresService.cppHeadersEnableSwitch(telemetryData)
 			);
 		}
 		return (
-			this.context.get(Features).relatedFilesVSCode(telemetryData) ||
+			this.featuresService.relatedFilesVSCode(telemetryData) ||
 			this.instantiationService.invokeFunction(getConfig<boolean>, ConfigKey.RelatedFilesVSCode)
 		);
 	}

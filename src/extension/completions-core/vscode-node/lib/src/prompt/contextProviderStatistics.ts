@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { ComponentStatistics } from '../../../prompt/src/components/components';
 import {
 	ContextItemOrigin,
@@ -23,7 +24,17 @@ export type PromptMatcher = {
 	actualTokens: number;
 };
 
-export class ContextProviderStatistics {
+export const ICompletionsContextProviderService = createServiceIdentifier<ICompletionsContextProviderService>('ICompletionsContextProviderService');
+export interface ICompletionsContextProviderService {
+	readonly _serviceBrand: undefined;
+
+	getStatisticsForCompletion(completionId: string): PerCompletionContextProviderStatistics;
+	getPreviousStatisticsForCompletion(completionId: string): PerCompletionContextProviderStatistics | undefined;
+}
+
+export class ContextProviderStatistics implements ICompletionsContextProviderService {
+	declare _serviceBrand: undefined;
+
 	private statistics = new LRUCacheMap<string, PerCompletionContextProviderStatistics>(25);
 
 	constructor(

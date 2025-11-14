@@ -7,28 +7,26 @@ import { commands, Disposable, languages, LanguageStatusItem, LanguageStatusSeve
 import { IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
-import { ICompletionsContextService } from '../../lib/src/context';
 import { CMDQuotaExceeded } from '../../lib/src/openai/fetch';
 import { StatusChangedEvent, StatusReporter } from '../../lib/src/progress';
 import { isCompletionEnabled, isInlineSuggestEnabled } from './config';
 import { CMDToggleStatusMenuChat } from './constants';
-import { CopilotExtensionStatus } from './extensionStatus';
+import { ICompletionsExtensionStatus } from './extensionStatus';
 import { Icon } from './icon';
 
 export class CopilotStatusBar extends StatusReporter implements IDisposable {
 	readonly item!: LanguageStatusItem;
 	showingMessage = false;
-	state!: CopilotExtensionStatus;
 	private disposables: Disposable[] = [];
 
 	constructor(
 		id: string,
-		@ICompletionsContextService ctx: ICompletionsContextService,
+		@ICompletionsExtensionStatus readonly extensionStatusService: ICompletionsExtensionStatus,
 		@IInstantiationService readonly instantiationService: IInstantiationService,
+
 	) {
 		super();
 
-		this.state = ctx.get(CopilotExtensionStatus);
 		this.item = languages.createLanguageStatusItem(id, '*');
 		this.disposables.push(this.item);
 
@@ -61,9 +59,9 @@ export class CopilotStatusBar extends StatusReporter implements IDisposable {
 	}
 
 	override didChange(event: StatusChangedEvent): void {
-		this.state.kind = event.kind;
-		this.state.message = event.message;
-		this.state.command = event.command;
+		this.extensionStatusService.kind = event.kind;
+		this.extensionStatusService.message = event.message;
+		this.extensionStatusService.command = event.command;
 		this.updateStatusBarIndicator();
 	}
 
@@ -78,12 +76,12 @@ export class CopilotStatusBar extends StatusReporter implements IDisposable {
 		void commands.executeCommand(
 			'setContext',
 			'github.copilot.completions.quotaExceeded',
-			this.state.command?.command === CMDQuotaExceeded
+			this.extensionStatusService.command?.command === CMDQuotaExceeded
 		);
 		const enabled = this.checkEnabledForLanguage();
 		void commands.executeCommand('setContext', 'github.copilot.completions.enabled', enabled);
 		this.item.command = { command: CMDToggleStatusMenuChat, title: 'View Details' };
-		switch (this.state.kind) {
+		switch (this.extensionStatusService.kind) {
 			case 'Error':
 				this.item.severity = LanguageStatusSeverity.Error;
 				this.item.text = `${Icon.Warning} Completions`;
@@ -117,9 +115,9 @@ export class CopilotStatusBar extends StatusReporter implements IDisposable {
 		this.item.accessibilityInformation = {
 			label: 'Inline Suggestions',
 		};
-		if (this.state.command) {
-			this.item.command = this.state.command;
-			this.item.detail = this.state.message;
+		if (this.extensionStatusService.command) {
+			this.item.command = this.extensionStatusService.command;
+			this.item.detail = this.extensionStatusService.message;
 		}
 	}
 

@@ -17,7 +17,8 @@ import { LanguageModelPromptTsxPart, LanguageModelToolResult, MarkdownString } f
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
-import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { formatUriForFileWidget } from '../common/toolUtils';
+import { checkCancellation, resolveToolInputPath } from './toolUtils';
 
 interface IListDirParams {
 	path: string;

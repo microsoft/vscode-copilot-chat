@@ -14,7 +14,7 @@ suite('OpenAI Config Tests', function () {
 	let accessor: ServicesAccessor;
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 	});
 
 	test('getEngineRequestInfo() returns the model from AvailableModelManager', function () {

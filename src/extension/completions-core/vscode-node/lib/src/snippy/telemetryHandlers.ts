@@ -3,8 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { LogTarget } from '../logger';
+import { ICompletionsLogTargetService } from '../logger';
 import { telemetry, TelemetryData, telemetryError } from '../telemetry';
 import { codeReferenceLogger } from './logger';
 
@@ -100,7 +99,7 @@ class SnippyTelemetry extends CodeQuoteTelemetry {
 
 	handleSnippyNetworkError({ instantiationService, origin, reason, message }: SnippyNetworkErrorDetails) {
 		if (!origin.match(statusCodeRe)) {
-			instantiationService.invokeFunction(acc => codeReferenceLogger.debug(acc.get(ICompletionsContextService).get(LogTarget), 'Invalid status code, not sending telemetry', { origin }));
+			instantiationService.invokeFunction(acc => codeReferenceLogger.debug(acc.get(ICompletionsLogTargetService), 'Invalid status code, not sending telemetry', { origin }));
 			return;
 		}
 

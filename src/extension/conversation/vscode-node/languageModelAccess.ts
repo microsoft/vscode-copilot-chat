@@ -30,7 +30,7 @@ import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokeni
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
-import { isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
+import { isBoolean, isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtensionMode } from '../../../vscodeTypes';
@@ -44,7 +44,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 	readonly id = 'languageModelAccess';
 
-	readonly activationBlocker?: Promise<any>;
+	readonly activationBlocker?: Promise<unknown>;
 
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	private _currentModels: vscode.LanguageModelChatInformation[] = []; // Store current models for reference
@@ -233,7 +233,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		options: vscode.ProvideLanguageModelChatResponseOptions,
 		progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
 		token: vscode.CancellationToken
-	): Promise<any> {
+	): Promise<void> {
 		const endpoint = this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
 		if (!endpoint) {
 			throw new Error(`Endpoint not found for model ${model.id}`);
@@ -353,7 +353,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		super();
 	}
 
-	private async _provideLanguageModelResponse(_endpoint: IChatEndpoint, _messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, _options: vscode.ProvideLanguageModelChatResponseOptions, extensionId: string, callback: FinishedCallback, token: vscode.CancellationToken): Promise<any> {
+	private async _provideLanguageModelResponse(_endpoint: IChatEndpoint, _messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, _options: vscode.ProvideLanguageModelChatResponseOptions, extensionId: string, callback: FinishedCallback, token: vscode.CancellationToken): Promise<void> {
 
 		const extensionInfo = extensionId === 'core' ? { packageJSON: { version: this._envService.vscodeVersion } } : vscode.extensions.getExtension(extensionId, true);
 		if (!extensionInfo || typeof extensionInfo.packageJSON.version !== 'string') {
@@ -492,7 +492,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		);
 	}
 
-	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.ProvideLanguageModelChatResponseOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
+	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.ProvideLanguageModelChatResponseOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<void> {
 		let thinkingActive = false;
 		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
 			if (delta.thinking) {
@@ -621,13 +621,13 @@ export class CopilotLanguageModelWrapper extends Disposable {
 }
 
 
-function or(...checks: ((value: any) => boolean)[]): (value: any) => boolean {
+function or(...checks: ((value: unknown) => boolean)[]): (value: unknown) => boolean {
 	return (value) => checks.some(check => check(value));
 }
 
 class LanguageModelOptions {
 
-	private static _defaultDesc: Record<string, (value: any) => boolean> = {
+	private static _defaultDesc: Record<string, (value: unknown) => boolean> = {
 		stop: or(isStringArray, isString),
 		temperature: isNumber,
 		max_tokens: isNumber,
@@ -637,15 +637,18 @@ class LanguageModelOptions {
 
 	static Default = new LanguageModelOptions({ ...this._defaultDesc });
 
-	constructor(private _description: Record<string, (value: any) => boolean>) { }
+	constructor(private _description: Record<string, (value: unknown) => boolean>) { }
 
-	convert(options: { [name: string]: any }): Record<string, number | boolean | string> {
+	convert(options: { [name: string]: unknown }): Record<string, number | boolean | string> {
 		const result: Record<string, number | boolean | string> = {};
 		for (const key in this._description) {
 			const isValid = this._description[key];
 			const value = options[key];
 			if (value !== null && value !== undefined && isValid(value)) {
-				result[key] = value;
+				// Type guards ensure we only add values of the correct type
+				if (isNumber(value) || isBoolean(value) || isString(value)) {
+					result[key] = value;
+				}
 			}
 		}
 		return result;

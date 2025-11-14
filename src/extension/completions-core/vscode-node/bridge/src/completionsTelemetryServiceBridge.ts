@@ -5,13 +5,13 @@
 
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../../../platform/telemetry/common/telemetry';
 import { wrapEventNameForPrefixRemoval } from '../../../../../platform/telemetry/node/azureInsightsReporter';
-import { createDecorator } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { createServiceIdentifier } from '../../../../../util/common/services';
 import { TelemetryMeasurements, TelemetryProperties, TelemetryStore } from '../../lib/src/telemetry';
 import type { TelemetrySpy } from '../../lib/src/test/telemetrySpy';
 
-export const ICompletionsTelemetryService = createDecorator<ICompletionsTelemetryService>('completionsTelemetryService');
+export const ICompletionsTelemetryService = createServiceIdentifier<ICompletionsTelemetryService>('completionsTelemetryService');
 export interface ICompletionsTelemetryService {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void;
 	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void;
@@ -21,7 +21,7 @@ export interface ICompletionsTelemetryService {
 }
 
 export class CompletionsTelemetryServiceBridge implements ICompletionsTelemetryService {
-	_serviceBrand: undefined;
+	declare _serviceBrand: undefined;
 
 	private reporter: TelemetrySpy | undefined;
 	private enhancedReporter: TelemetrySpy | undefined;

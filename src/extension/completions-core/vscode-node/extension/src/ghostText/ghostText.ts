@@ -20,7 +20,6 @@ import {
 	window,
 } from 'vscode';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../../lib/src/context';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
 import { getInlineCompletions } from '../../../lib/src/inlineCompletion';
@@ -30,10 +29,7 @@ import { wrapDoc } from '../textDocumentManager';
 const postInsertCmdName = '_github.copilot.ghostTextPostInsert2';
 
 export class GhostTextProvider implements InlineCompletionItemProvider {
-	constructor(
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-	) { }
+	constructor(@IInstantiationService private readonly instantiationService: IInstantiationService) { }
 
 	async provideInlineCompletionItems(
 		vscodeDoc: TextDocument,
@@ -41,7 +37,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<InlineCompletionList | undefined> {
-		const textDocument = wrapDoc(this.ctx, vscodeDoc);
+		const textDocument = wrapDoc(vscodeDoc);
 		if (!textDocument) {
 			return;
 		}

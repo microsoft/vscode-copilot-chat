@@ -24,7 +24,7 @@ suite('CodeReference', function () {
 	let sub: Disposable | undefined;
 
 	setup(function () {
-		const accessor = createExtensionTestingContext();
+		const accessor = createExtensionTestingContext().createTestingAccessor();
 		instantiationService = accessor.get(IInstantiationService);
 		extensionContext = testExtensionContext() as unknown as ExtensionContext;
 	});

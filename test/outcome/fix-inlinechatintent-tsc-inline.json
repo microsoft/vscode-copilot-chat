@@ -2,288 +2,270 @@
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - (AML-10-31) Parameter data implicitly has an any type.",
 		"requests": [
-			"dc33c413de527648698acde4fca5d65ca42111569562681077ae24e168873364"
+			"5a3b231c56942074ca6211610f9ad936c530393488124d06338605b3274898a2",
+			"7b934ea8ee4899333274a8d0b8422cce89a7be868f59445c8a9a67274b01c60a",
+			"848345275d69155efc3afdfe0f499c93bc34488135a3a1643da94f455bba0454",
+			"c41f5feecf12ed70f9a9689b80c55e3e8b572db903dcfd4432cdd3369b80ce1a",
+			"d7ad5fcf4520b1efcc26cdb03c886d4af0bffb26846ee31a767a8a138a4a6a02"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - 22222 Error 2322 - type undefined is not assignable to type",
 		"requests": [
-			"6c15c1ab7782c4cbac8aa6a2f7b3b8cea185fa56cb3715661f38cfc773e0ca5b"
+			"c5d94c31e86b1c3841d7975c46d8f68971c90e473efde7927c20905266b862af"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - can not assign to parameter of type",
 		"requests": [
-			"7135260d08f2a04660e425825ad43ee172d663a656216201d360e5b6ca3fb2fd"
+			"9db049e5d049ae9950b02e21a5cf5ca2fa6f73de1d548c8242a6a23403708ba5"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - declaration or statement expected",
 		"requests": [
-			"6b2d15a4752b2b0ab2eaf75b6bb353735778885de9f0dd03045eea71ffab2dc4"
+			"63f9d3fb77b32cdc500151044e36ab8c84c43fae18f4b025f380301271e8e7cc"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - duplicate identifier",
 		"requests": [
-			"bae4835464a9d519dd0f714d19d6f895de49130a15091f1b62b59a5a1e7a5db9"
+			"5a041c19067beb9612158cdcb357b88718d22470555fac6165b6f82240968f74"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 1015 - parameter cannot have question mark and initializer, with corresponding diagnostics",
 		"requests": [
-			"19ea2a4243d906149e7395539d588bdc0d0e980398a7c3dc4badad613891fa1e"
+			"7d64b24a27091b788bc2a6e79b55b6b0abbdd1240553e02c3eb2afeb053f8b72"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 1015 - parameter cannot have question mark and initializer, without corresponding diagnostics",
 		"requests": [
-			"19ea2a4243d906149e7395539d588bdc0d0e980398a7c3dc4badad613891fa1e"
+			"7d64b24a27091b788bc2a6e79b55b6b0abbdd1240553e02c3eb2afeb053f8b72"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 18047 - (AML-10-64) possibly null",
 		"requests": [
-			"3f92a6ba533c609358e92136cbd60f34b7c385e3f0364ca48c92ac7a95240c1a",
-			"6c7dee5de0cbd413c99edac68311bd750c59cf87b70439e4e29dcc3f5186e2bf",
-			"7516681350460133b52df8db60d2a248b618ef2534d1d222070137ca1af18c44",
-			"ced01def3302783c7a88f7a4dfad495af27cc9f48fef1d1309eb7f6c8355cf30",
-			"f043c40eabb8e6fc90ef4af6ac8b4db480ee03e5b8de4cdc3b6ea7c13dfbf6a0"
+			"27bb25333fd732bc08a90df1b3ae73ffbdd334bbd98f8124ae3630dec1c9d8ea"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 18047 - (AML-8-1) property does not exist on type window",
 		"requests": [
-			"0047000b98bfac0bcf560da99e85e41ad0b50dd7172f962f41ec025b506efaea",
-			"04275b391fd6baad33092e1bdf6855ea121d68601fa1d5ea35f6ea747bcafc1b",
-			"08f5e306f87a44ba6b2f834350811aec9a5c7cc7d72a83b9f42e67f1aaeff4ce",
-			"3a29bd56be369c10224fb169e27270251f26be8c012e112a754c7700f75cbdce"
+			"0849a385fe3fabea2b522d606a3a43da208b49c20a2c3ce7ad6014559d62c435",
+			"43e345200f9c466ffa5848156d7d74a71a672d94d2db9ab0b3c8bc989a978bfa",
+			"475dc4628ff9c100e5e160f6b593cb01913524c82082bbc5671426643e06f0cb",
+			"4ce053298e19ae6315013389e87db1dd8f4e7dfc46fc368323bbdc1cb67d17fe",
+			"8441ed482010fa7b4caf2f506f1fb12f1027af28d17a738c6cfecb7ff1f5a281",
+			"dd9c9d20a0366e8e65aea3b487db362a6d9c90e8147fc7049f0175669100a0f1",
+			"f66c2c6e506988cd69730b93951da0f7d367f0dc5ad84639d9cbf7b0eb023d2e"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 18048 - (AML-10-86) possibly undefined",
 		"requests": [
-			"431ef44cbe0cafd597fc1890ca835241438e326a758410e16909932f51adbaf7",
-			"4d652b276443215af421936334aa272134c4f2bdd620c8859908a05541b41bcc",
-			"89a61896c71ef1144d13aa97a9e79983e99b214f6145f5ca02e55125116732dd",
-			"9ccb75aa49e62d5c8e2a1189ce99b78c6148b7e081c51711c5f78e634f593530",
-			"a4274ba49b4d82f8d5083bb9d7d82046d8474602c115ebd6115500bc9647a34d",
-			"c3f4d0a05fce52cd85741902f7f2bfc82d43f6fd1c3d55a220f0a2fed24584da"
+			"5f71e713416cbfe89281f90c7d0b7497e4719fd67c4f6bb794f5fe0ff67c33f2"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - (AML-10-14) can not find module",
 		"requests": [
-			"04435b70a82bafe193d9033d135bf12c6c2c880ed76d6d8ff113c147bbc91e8b",
-			"39bed8c3410abe7e77c6476bb43fc50bd57ba37d78dcf0c485222d7318bddff9",
-			"4afe9776fedebb5d43f06f05860196581faa356052bfa31ac0086d22958acb65",
-			"b0a6ade0b8a866d0f5945cf7e9c20ab51d3786ae691bfc6da9c5f344a64770b2",
-			"c2bc0c350cf02d3eadf7db9b2df5b0eeaa49fa34f5e4d69dc1a1ab6ecacaf0fa",
-			"dc43286957594d3ae193d7ee4c67869c431aff6343b6f6df5fbe684d5cf9d295"
+			"04fca9633930850adf8fff994c50df64274430bf33c0b95c333db6a8336362ed",
+			"4c7e91bd1bef8d2fc8eb9c62fdd02e5b73238b169299e2bd0ddd1f85e11f2a39",
+			"6a65843090a96ff2b4f180928b12900f890a1be589dd5784d8851441970962de",
+			"97ce32374f26923ea3651071a6e5893c6f39b156c7e242054fd2e59dfc84d418"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - (AML-8-125) can not find name",
 		"requests": [
-			"28403d809b5cd5ff669e7958c522d942294836f2148dd71643e0e1552b8ed010",
-			"3e5f13b9d7d9ff71fb88aa3c905bd177a8fd498ead4feb536331bffff9cfebe4",
-			"ac0a90e10338ba9124b7eca1446c7aaf8ac27421e055167666d922c3aad578c0",
-			"d67d9af6e0fde2580971f33ee5fa65a9da8511451f1dad1c554b558f926dffdf",
-			"df5df5245919217e9a98c79cfb5782e625df914c5604bec88f94f3811660a64d",
-			"eeadd1a8b2cbf6c0dca50ea573e6d34974a26cceb25f39fa2e6bf943481928fa",
-			"f0125858a272f5e4b6050e612536e2a7c04db602ba79280434c3fb1c8526e15f"
+			"0e660449eeffa14e5f9bc8e18f0fc31f6562c5549ae67e639bb93b502396c1db",
+			"308773d56540ee60f279402245cbffa0a936b990590d87da35db0cc288da9ea7",
+			"31182e742e426c47474ca3df3234e1bc97840054b842da265a2c106d351f4ad7",
+			"772ebdfc4eac6ae0e936881d9b09e28704b00209d465614ebd1edce8434adfe7",
+			"dc810cbbc9ef3c2aa72ab999649b50fa9d785cfe0908c6d9fbe4053bc0496515",
+			"ec90b9ca7178c4a6fc9f89ead1e9627c9756c88509124788d22a7eeffae5ea48"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - (AML-8-125) can not find name 2",
 		"requests": [
-			"3ffe98407b666e49d1878b7706278ee6d149451aee71be0c0be1686e1d8d27a8",
-			"a8197948fb31c9c2dd28c21088346c07bddeac53b01b8c6b1268805895f3dd58",
-			"c14168568416f099c1940f2ccec8e6461a0700bf3abba9cf6cca029e4f2bce29",
-			"c67eefbbbfc54dba946425991e0223e39a5c0d3cd60d59d4db8a17056844fa79",
-			"fa2a7231afdacbcf5ca52ea3118a4cfc255e2a30f1f3cf335a4e39f12fe95993"
+			"2d73a5dfdbecec3cdbc01c75612499a5e3430ce4607fa6975f256efc29c5353e",
+			"30c1c822416d85ae5c3624a4ac4f1e711e2ef8543c483d33486d07ee7768b46f",
+			"9a80b91659b201765632850f7a5286b9c1a21b4b891ceea9cfa28be6a7618e71",
+			"f332eeaafad3209e1b16af37e909701556e6ad005dd92325be07e368e2bb68fd"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - can not find name",
 		"requests": [
-			"39d8a28c5780d112ff26f84f1e08dfff458d62bfbcbf38701865761e347c08d8",
-			"4e0f2d73fc96d60799f430a442d39f64f341328a0d66528e385d24825d17016d",
-			"9d7380efd8c0752e7e5e8b5c5633435de7288043a3d27a429229b58d9005f940",
-			"b303f60ab57ab07abdf36be043c4d133e944631d2c52e8d27a61c46dc9f49ea3"
+			"775122a7f0457592cad3fec0eca9c7ae2c21c56da501e71d2e4c6aafd742e092",
+			"b303f60ab57ab07abdf36be043c4d133e944631d2c52e8d27a61c46dc9f49ea3",
+			"edd71630079703ea9ae6a705f2648ac4253eb2b4e40234c2389b3f14133dfee9"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2307 - can not find module",
 		"requests": [
-			"b9a15f8012b1686cddb99ccff5698ac3d76902e4153f16d2b78ffe33a25e127a"
+			"92dd5a42ae40b9439b333d3b049adf1a97e949e39257deb8dd8f38ea204100e4"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2322 - type undefined is not assignable to type",
 		"requests": [
-			"6c15c1ab7782c4cbac8aa6a2f7b3b8cea185fa56cb3715661f38cfc773e0ca5b"
+			"c5d94c31e86b1c3841d7975c46d8f68971c90e473efde7927c20905266b862af"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2339 - (AML-10-55) property does not exist on type 2",
 		"requests": [
-			"279abfc80269ee9012b74627e6cbeb1d6e77f25b2a2aa02ec5bea7b2ab1516c3",
-			"7d111e575367e27ac949a3fdd88b948369b76ca2d7839a1baeee2974195be056",
-			"81d7abe219b7bb39caa155821375fcaf8a11dd67b336a05aea2735492fde765a",
-			"8f145656bad2fbe0c166a3ee40505df392c5d6ebf4b5de9595e2a039ce8e5405",
-			"9bfe1442cfcebf14ca68adf00db462dc3f5403cd5257ccc027195b0684b1dab0",
-			"a36794ab83121c05f9669dadf2eb0de4d53995d1b285c5f35d4c7344f43c3337",
-			"b5829c823568fbcb09a09759df87e57933e14cb6f2575dab5c1a22d000873bee",
-			"ec83c947b8f48a950f9f3359e9ef29e7725c3b0e987ba0c537d5b6c245ef9e0f",
-			"ef43215a548796a18c05a973e87e30989bd980bd6884b5b30983e9380cc976fa",
-			"fcdfe3eba4eb0d90b4535509418f90a32f04d99be642d7582391f2da36fc237d"
+			"06093e0cefd6cdc183356eadc39ba1e7be1559406b5ba6898af07f17ca42b784",
+			"1e84e9d12cf6e811f1a431b6e96ba5542c28db1ce6a4cc6ecf6e0b14421514f0",
+			"4009ec2a8660e7cca90b413b092e0909a6d0ad1701346bad8e2d8f98ece12a70",
+			"4586786915b4c99bf097ab44a7479a6dd8e9e9808ed9857f899c08d736225c56",
+			"5c7fa982ea4856238304a22f9bb24075ebb4745d75ff286ed2e0606d7638568b",
+			"6c45df85d9448c8b08f69a5f67b4949653e7268c28e0f6e57d3539fed4420b31",
+			"8097667addd95f0e741e816801914eb8ba6ed7d575254373893b6cb4c36c8553",
+			"be58de9d16b11702b443acbe98965b532c50574fdc64a240178b01c839779a2e"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2339 - (AML-10-98) property does not exist on type 3",
 		"requests": [
-			"0288f3e6ffbadabb216666e7e35f1b67a9b34b919144ca5b1aeba573f2ffc626",
-			"1a58667f9607e15bdedfe50c9e9f86c92e467b19efa0ae8210afc27de64e4930",
-			"2d7b811eb9eed9a9bc78b8889693ea5421302a46facf958cada4fe37d935b8ef",
-			"613ad924cc7d9e6fceee16c449d4ff40ab6eb4179fa57dd300e283a0fcdc292e",
-			"7403b1806b3928c38c03928fb5d4fc8ec41c73afddb899c4fbb324a57a983307",
-			"9ccc65f06796d4b63f54f41735a643f0b837ecdcf745f307d66764de4903d231",
-			"e9dc41e4f40b87b9aaaf47ad3987bb351997231e56f0b9114b3fbf1b23c82efc",
-			"f46a40b557b96639611dd999aa0a2e774add126c1054ad1a66eddeb93d63f613",
-			"fc161abb32cc2bbaf85578af6f405a29509b0a558b610ad3b548c984b66c9158",
-			"fc1b21feb197b3f7530379111fae7e1ed4663146e0b730918a569eda14aad15c"
+			"10656653ce0031f6c2d0ab239693864b17abd320cf1462600b420b84cb8c51b2",
+			"50e01facea423404d93924ce2af6ba7daef8d35c15395c41208621f4fcd3a557",
+			"56446c0dc6f9882615a370c9474228909bf59159eae4d6cb1db675962f28f4b9",
+			"6cdc64e0cd86b3e7c56c85532ac6fae954efce39834fc9746fb3ebfa162a32dc",
+			"6d6c78e49955f9e4ea532253d0b43bb8d3932cbbbebf3f075e415e47d42ad0ac",
+			"c3908ff1b96a7d2f3f19e343c4b89f6cb7e883e007cda92810848c4e8e721be8",
+			"d03fc24ffddd0c49ddeb2b62409a9da37af29ae51903d267e3b61103d0e8e5c7",
+			"df5af8c929b00860a0e6b86ff6ca2befdff897a9912a327ea4193450bb570ada",
+			"dfc5aba28b372e592c27e6be6cc71fcb0b10db141eda857db17db9111525a21c"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2339 - property does not exist on type 1",
 		"requests": [
-			"0b6abaa5749af33f355133f855fb3bad10bd6e61ba8987b7dfe081b2210f176b",
-			"3c0c09913da3bed1a3059fb91b8fe637ac16c5c77bb86b7c97a1c78344bfb4d7"
+			"a9fb73f729cf262d896ffb56e86fb031ab944bbe3d0aed592a3ceaa3936402cf"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2341 - property is private and only accessible within class",
 		"requests": [
-			"91f61de0d375c86cd9db848812688642adb3765cd720b619f6b5e34873529d09"
+			"03047138ae340e93e5e7495dbed36a3e0587981d675b468e974fc5b536c7332a"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2345 - Got boolean but expected options bag",
 		"requests": [
-			"a81ec94c465f991cbb3ca4d4a4280db3684211db610287efb1f34eab16c6fd70"
+			"76e07e9b277115dede4c59dbd497ae12154a0ce00a56fce703f8c9466dd3a913"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2345 - Last two arguments swapped",
 		"requests": [
-			"b3ec975e6c2452ab3c3d56e31ebee1a3e5a1eb417673c1576b0cfd6617734255"
+			"9384193b99a5cd57b5d104a84fbdf0b85ffa7313d02b60f940d3edba3cf3ed19"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2355 - a function whose declared type is neither undefined, void, nor any must return a value.",
 		"requests": [
-			"02a7ebb8ad8c7231f46d3937d4c71b6e74460534f90f4c70d78c0e9ca748223f",
-			"52eeea489fe5759b57ae9e5f6cd8d885790d328b1090b32e178f7121e5919677",
-			"c8ec3c0145c34b757547a562cd936e415a6ca6ecc7e16c9624c1a645e0df005a",
-			"c9414180df4967e875d0339a8b44c545f4ab002b8b0ec3e13890e04fc352a728",
-			"da97c28c055655ed91d038f9593f087ef3ac8af41238eca786f00b11f9ca3f64"
+			"635d80ce4dab7e8625ab68147b4f0a50c7b9d1651237e8b694cd51a7ea318102",
+			"d7d439f82955dbaf94c6f7cf8f20f5b9e8a46f94fc121478eef1b7f88dc8defe",
+			"ffc56fe8ae62c6fb843b673eaa02dc26a8fb3fe78d01831676875273199a9541"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2391 - function implementation is missing or not immediately following the declaration",
 		"requests": [
-			"55d9b93e2d1c29165ebc71fdcccc9530ce12716f49227c83ed0980f7e6b8ed5d"
+			"a15e7b897b9166990daeb264354abb4bdf3ad1e0adb3f3ebfb0f941eb0838877"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2420 - incorrect interface implementation",
 		"requests": [
-			"0a5f1fe5cd8136e999c7115c6c4e3c1383dae1a74b26fb9e3ed0575b170f3be7",
-			"3ac2ee3c3237ced1e2c4c46df2304d2977467135a318f1fa8a6eb9142c057d2c",
-			"942125520968cc0f150020fae3a9bfaa1690c4c7b140502471851dc29861449f",
-			"a1a0ee8c5c477f46c024663b2ceddd3099312d64d98e6e4c163400dacd04237f",
-			"d3e53df3f1b97a7e748a33ab5833837ab008c26258a6e2ebe92eb6263f7e9399",
-			"e6657ba1c3df320776e9781ecb60ceafda4ff1cd83056289edeb0cca031509e4"
+			"09c89937d8e2d83bc7528c6ae2a73fd533da951fe0c6c12050bba450bce219b5",
+			"2de61ef57dc5b78fe5cc2e1f6f22644e8b20f3fe85c87cd56c1ef1d0a3c41dac",
+			"b52a3111208f1cda06248e3555f4eb26f7abbbb96c3aea60f259a324325892bc",
+			"cc9122fe43946c495d3c921a4e9719d95ed2239215ae1139df5161042ebb2634",
+			"dd4aa9542eaeab4a63d841b104f404f7cb08b1cd6ff92534ee2e6e49be02d9b5",
+			"f35907cf011b96f5918fdfd2e41cfcdeea8a053ef5cb629de94ca40029a5ea9f"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2420 - incorrect interface implementation, with related information",
 		"requests": [
-			"0a772a9bdc4e6ddc144e4d7fac62a141d208070d22104cadb0dcf82817fe6ebc",
+			"714df1e30477c5b37968e955ba12daed8b7f0dbcc6ec4db75e837de6be36e31b",
 			"dd4aa9542eaeab4a63d841b104f404f7cb08b1cd6ff92534ee2e6e49be02d9b5",
-			"eee05fe0f23e73769b1150767e98defecca14e4b834bfd7e73475fdb14c1ce96",
-			"f35907cf011b96f5918fdfd2e41cfcdeea8a053ef5cb629de94ca40029a5ea9f",
-			"ff34a53355230c9da78497af5a324596ab76880638d0e722649aa834aa08bb05"
+			"f35907cf011b96f5918fdfd2e41cfcdeea8a053ef5cb629de94ca40029a5ea9f"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2454 - variable is used before being assigned",
 		"requests": [
-			"b15ca843ae8c0d3a5a0c9be6c7bb51accbd29cdc3d74a18d828545a8e9896f2e"
+			"1e23dff6aab3eed233b03628af4410bb12a09486dffd2713c2447d8be12b0bd5"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2554 - expected m arguments, but got n.",
 		"requests": [
-			"03b6f67ab36d23f63ed3bc3dbe21339622999e23f2800b0adc534b6996483422",
-			"3b0db05efefa46a31701db715084ec4f7fc5971d4d64ce1a6b81fa7647eac97a",
-			"856889205847be82855838520cbb2499600bb5f5da1c5665239aaa7ee687418c",
-			"8b5b9d7e46687b781bd24b6e00b4283510420dc008a512eb2ecf87a394add7b8",
-			"a837eaf0fb215acee654d993b25fee9f75510ca0258b971a98559e328b6cf26d",
-			"cc26d5392ad75ea99863b0b5668589976bbe632c523f878a4d242a6960ef20be",
-			"e2a6987d4fb9f1fe27937af938d3bc6646b97a0156a648b8d9ddd1d85f97e0c0"
+			"fde0c21e211496eb6161adb8caea1d8ca70f499ee72d032abe773654f4968632"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2554 - Got two args but expected options bag",
 		"requests": [
-			"821a46116cb630418aa5c78f336eaa835ff3e8eabcb26474859f7cd88b4aeb3b"
+			"09ba6ac8e20397b14d0c261ae0018e4c626f8e1ff7fdda42e2390554a38e8960"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2802 - large file - Type Uint32Array can only be iterated through",
 		"requests": [
-			"ccb2fbbbfffbcf698237209fd8207de79d01044d73c56365739d551f3da59f79"
+			"68e939d4c9e00befd6788a2a25f7db468ec636e343bd4fa8027c55d70fa5e57e"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 7006 - (AML-10-23) implicitly has any type",
 		"requests": [
-			"06f997f6139adb2ef5c76149ad5e4cf159db3e587e3a4c68bfd647a098a1c25a",
-			"3b432e36df3f277ce6cd2b46a5b6c00a3462f060bf1d52de9b4342248b8516ec"
+			"7772364122f846a21b9e22a402c52028f55ade50da51ce183cf2374af33704c6"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 7053 - (AML-10-25) expression of type can't be used to index",
 		"requests": [
-			"8ee790b6289299a385a89db222af29f90e1581ee63f42b13c309df0ae8d64da1",
-			"cd9d33199949e91f126f5631c02ce4937cd18bf2cbe58989443e1ae256412f8e",
-			"fac84522ee2fdfc600fe84616c864157482a1b31f6e0ae2debb655d7d4ae2169"
+			"a4b67c54255140ee8f8d5391605327d3e63b9fc03e92a3023e38972a69e620cf"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Issue #7300",
 		"requests": [
-			"133d630afc6612ad0a5cf03212923f4ff5dd8c390d23a799e5cc6071e2d8a4df"
+			"0ee97ddbcf0a8b0e30df538048cb69b3b1ad155b89e5b35ef93bc55b4fb94108",
+			"86e6208722f6d5853a8b5bf05062727adf3d624cc9cff649c43ef0e2df384303"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Issue 6571",
 		"requests": [
-			"52818ecb0649a8750240e7e1358490751965e29b29e35896a259a1a4e39c5ad0"
+			"09446168f0496e6884f2c7eb05a705c05237ece81be250f86ff173bd041cdfef",
+			"10fadc9e0b0ad8377a1a13074dfee5efa39a0305fa8e39145cf2dd5548ac8245",
+			"2b7b1f526614118622790b92c01292f22e107deb6cce21e0c784656eab6a1e06",
+			"7732422bea93e620f249698351a6a760023aa25cc7b42cc15beaa8c25cad7eb0",
+			"f0ac2f0c4ffdb45859090562fa0c17093a6e95954090f3084dd69fb9bd3a2722",
+			"f5e9068916ecd6b5f0de23bf08155c33c085135ee6f5df865ee211d5e465db9d"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - left side of comma operator is unused",
 		"requests": [
-			"d9febfbb520c9c45c006fe2f0bf37d06788b590be5fcbb439b072d361f102580"
+			"6709aa94d46d2d9e6f793e7f5deff8cdd2c28e7888555723e04c220df419fd52"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (TSC) [inline] [typescript] - object is possibly undefined",
 		"requests": [
-			"57170e8ba6bf8cd3a78325346798e0570a0ba59dee64647d5e1769c59d742565"
+			"8df1da3e0e7023276c57feda70118cf8d810576293c8a7b40eb7064a39a7f4a6"
 		]
 	}
 ]

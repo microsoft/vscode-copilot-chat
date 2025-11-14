@@ -5,10 +5,9 @@
 
 import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { Trait } from '../../../../types/src';
-import { ICompletionsContextService } from '../../context';
 import { telemetry, TelemetryProperties, TelemetryWithExp } from '../../telemetry';
 import { ResolvedContextItem } from '../contextProviderRegistry';
-import { ContextProviderStatistics } from '../contextProviderStatistics';
+import { ICompletionsContextProviderService } from '../contextProviderStatistics';
 import { filterContextItemsByType, TraitWithId } from './contextItemSchemas';
 
 export function getTraitsFromContextItems(
@@ -30,8 +29,7 @@ export function getTraitsFromContextItems(
 }
 
 function setupExpectationsForTraits(accessor: ServicesAccessor, completionId: string, traits: TraitWithId[], providerId: string) {
-	const ctx = accessor.get(ICompletionsContextService);
-	const statistics = ctx.get(ContextProviderStatistics).getStatisticsForCompletion(completionId);
+	const statistics = accessor.get(ICompletionsContextProviderService).getStatisticsForCompletion(completionId);
 
 	traits.forEach(t => {
 		statistics.addExpectations(providerId, [[t, 'included']]);

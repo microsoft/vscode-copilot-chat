@@ -136,7 +136,6 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	 * @returns The resolved model with proper exp overrides and token counts
 	 */
 	private async _hydrateResolvedModel(resolvedModel: IModelAPIResponse | undefined): Promise<IModelAPIResponse> {
-		resolvedModel = resolvedModel ? await this._getExpModelOverride(resolvedModel) : undefined;
 		if (!resolvedModel) {
 			throw this._lastFetchError;
 		}
@@ -298,71 +297,6 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, e);
 			}
 		}
-	}
-
-	private async _fetchModel(modelId: string): Promise<IModelAPIResponse | undefined> {
-		const copilotToken = (await this._authService.getCopilotToken()).token;
-		const requestId = generateUuid();
-		const requestMetadata = { type: RequestType.ListModel, modelId: modelId };
-
-		try {
-			const response = await getRequest(
-				this._fetcher,
-				this._telemetryService,
-				this._capiClientService,
-				requestMetadata,
-				copilotToken,
-				await createRequestHMAC(process.env.HMAC_SECRET),
-				'model-access',
-				requestId,
-			);
-
-			const data: IModelAPIResponse = await response.json();
-			if (response.status !== 200) {
-				this._logService.error(`Failed to fetch model ${modelId} (requestId: ${requestId}): ${JSON.stringify(data)}`);
-				return;
-			}
-			this._requestLogger.logModelListCall(requestId, requestMetadata, [data]);
-			if (data.capabilities.type === 'completion') {
-				return;
-			}
-			// Functions that call this method, check the family map first so this shouldn't result in duplicate entries
-			if (this._familyMap.has(data.capabilities.family)) {
-				this._familyMap.get(data.capabilities.family)?.push(data);
-			} else {
-				this._familyMap.set(data.capabilities.family, [data]);
-			}
-			this._onDidModelRefresh.fire();
-			return data;
-		} catch {
-			// Couldn't find this model, must not be availabe in CAPI.
-			return undefined;
-		}
-	}
-
-	private async _getExpModelOverride(resolvedModel: IModelAPIResponse): Promise<IModelAPIResponse | undefined> {
-		// This is a mapping of model id to model id. Allowing us to override the request for any model with a different model
-		let modelExpOverrides: { [key: string]: string } = {};
-		const expResult = this._expService.getTreatmentVariable<string>('copilotchat.modelOverrides');
-		try {
-			modelExpOverrides = JSON.parse(expResult || '{}');
-		} catch {
-			// No-op if parsing experiment fails
-		}
-		if (modelExpOverrides[resolvedModel.id]) {
-			for (const [, models] of this._familyMap) {
-				const model = models.find(m => m.id === modelExpOverrides[resolvedModel.id]);
-				// Found the model in the cache, return it
-				if (model) {
-					return model;
-				}
-			}
-			const experimentalModel = await this._taskSingler.getOrCreate(modelExpOverrides[resolvedModel.id], () => this._fetchModel(modelExpOverrides[resolvedModel.id]));
-
-			// Use the experimental model if it exists, otherwise fallback to the normal model we resolved
-			resolvedModel = experimentalModel ?? resolvedModel;
-		}
-		return resolvedModel;
 	}
 
 	// get ChatMaxNumTokens from config for experimentation

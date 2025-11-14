@@ -77,7 +77,7 @@ export class CopilotCLISessionOptions {
 }
 
 export interface ICopilotCLIModels {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 	toModelProvider(modelId: string): string;
 	getDefaultModel(): Promise<ChatSessionProviderOptionItem>;
 	setDefaultModel(model: ChatSessionProviderOptionItem): Promise<void>;

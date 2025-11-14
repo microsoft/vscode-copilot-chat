@@ -4,9 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { Features } from '../experiments/features';
-import { logger, LogTarget } from '../logger';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
+import { ICompletionsLogTargetService, logger } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
 import { ActiveExperiments } from './contextProviderRegistry';
 
@@ -40,11 +39,10 @@ export function fillInCppVSCodeActiveExperiments(
 
 function addActiveExperiments(accessor: ServicesAccessor, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
 	try {
-		const ctx = accessor.get(ICompletionsContextService);
-		const features = ctx.get(Features);
-		const logTarget = ctx.get(LogTarget);
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		const logTarget = accessor.get(ICompletionsLogTargetService);
 		let params = cppContextProviderParamsDefault;
-		const cppContextProviderParams = features.cppContextProviderParams(telemetryData);
+		const cppContextProviderParams = featuresService.cppContextProviderParams(telemetryData);
 		if (cppContextProviderParams) {
 			try {
 				params = JSON.parse(cppContextProviderParams) as CppContextProviderParams;
@@ -52,7 +50,7 @@ function addActiveExperiments(accessor: ServicesAccessor, activeExperiments: Act
 				logger.error(logTarget, 'Failed to parse cppContextProviderParams', e);
 			}
 		} else {
-			const langSpecific = features.getContextProviderExpSettings('cpp')?.params;
+			const langSpecific = featuresService.getContextProviderExpSettings('cpp')?.params;
 			if (langSpecific) {
 				params = { ...langSpecific };
 			}

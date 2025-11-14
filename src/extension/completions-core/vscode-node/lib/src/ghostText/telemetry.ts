@@ -3,13 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { Logger, LogTarget } from '../logger';
+import { ICompletionsLogTargetService, Logger } from '../logger';
 import { PromptResponse } from '../prompt/prompt';
 import { now, telemetry, TelemetryData, telemetryRaw, TelemetryWithExp } from '../telemetry';
 import { CopilotCompletion } from './copilotCompletion';
 import { ResultType } from './ghostText';
-import { SpeculativeRequestCache } from './speculativeRequestCache';
+import { ICompletionsSpeculativeRequestCache } from './speculativeRequestCache';
 
 export type PostInsertionCategory = 'ghostText' | 'solution';
 
@@ -17,8 +16,8 @@ export const logger = new Logger('getCompletions');
 
 /** Send `.shown` event */
 export function telemetryShown(accessor: ServicesAccessor, insertionCategory: PostInsertionCategory, completion: CopilotCompletion) {
-	const ctx = accessor.get(ICompletionsContextService);
-	void ctx.get(SpeculativeRequestCache).request(completion.clientCompletionId);
+	const speculativeRequestCache = accessor.get(ICompletionsSpeculativeRequestCache);
+	void speculativeRequestCache.request(completion.clientCompletionId);
 	completion.telemetry.markAsDisplayed(); // TODO: Consider removing displayedTime as unused and generally incorrect.
 	completion.telemetry.properties.reason = resultTypeToString(completion.resultType);
 	telemetry(accessor, `${insertionCategory}.shown`, completion.telemetry);
@@ -169,7 +168,7 @@ export function handleGhostTextResultTelemetry<T>(
 	accessor: ServicesAccessor,
 	result: GhostTextResultWithTelemetry<T>
 ): T | undefined {
-	const logTarget = accessor.get(ICompletionsContextService).get(LogTarget);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 	// testing/debugging only case, no telemetry
 	if (result.type === 'promptOnly') { return; }
 

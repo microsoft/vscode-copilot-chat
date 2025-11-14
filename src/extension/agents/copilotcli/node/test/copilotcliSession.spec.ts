@@ -15,15 +15,14 @@ import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
 import { CopilotCLISessionOptions } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
-import { CopilotCLIToolNames } from '../copilotcliToolInvocationFormatter';
 import { PermissionRequest } from '../permissionHelpers';
-import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
@@ -97,8 +96,8 @@ describe('CopilotCLISession', () => {
 			}
 		}();
 		sdkSession = new MockSdkSession();
-		sessionOptions = new CopilotCLISessionOptions({}, logger);
 		workspaceService = createWorkspaceService('/workspace');
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0].fsPath }, logger);
 		instaService = services.seal();
 	});
 
@@ -339,7 +338,7 @@ describe('CopilotCLISession', () => {
 		for (let i = 1; i <= 10; i++) {
 			sdkSession.emit('tool.execution_start', {
 				toolCallId: String(i),
-				toolName: CopilotCLIToolNames.StrReplaceEditor,
+				toolName: 'str_replace_editor',
 				arguments: { command: 'str_replace', path: filePath }
 			});
 		}
@@ -358,7 +357,7 @@ describe('CopilotCLISession', () => {
 			// Complete the edit so the tracker (if it were real) would finish; emit completion event
 			sdkSession.emit('tool.execution_complete', {
 				toolCallId: String(i),
-				toolName: CopilotCLIToolNames.StrReplaceEditor,
+				toolName: 'str_replace_editor',
 				arguments: { command: 'str_replace', path: filePath },
 				success: true,
 				result: { content: '' }

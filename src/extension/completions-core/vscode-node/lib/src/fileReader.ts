@@ -2,19 +2,37 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ICompletionsContextService } from './context';
-import { FileSystem } from './fileSystem';
+import { createServiceIdentifier } from '../../../../../util/common/services';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsFileSystemService } from './fileSystem';
 import { CopilotTextDocument, ITextDocument, TextDocumentIdentifier, TextDocumentResult } from './textDocument';
-import { TextDocumentManager } from './textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from './textDocumentManager';
 import { isDocumentValid } from './util/documentEvaluation';
 import { basename } from './util/uri';
 
-export class FileReader {
-	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) { }
+export const ICompletionsFileReaderService = createServiceIdentifier<ICompletionsFileReaderService>('ICompletionsFileReaderService');
+export interface ICompletionsFileReaderService {
+	readonly _serviceBrand: undefined;
+
+	getRelativePath(doc: TextDocumentIdentifier): string | undefined;
+
+	getOrReadTextDocument(doc: TextDocumentIdentifier): Promise<TextDocumentResult>;
+
+	getOrReadTextDocumentWithFakeClientProperties(
+		doc: TextDocumentIdentifier
+	): Promise<TextDocumentResult<ITextDocument>>;
+}
+
+export class FileReader implements ICompletionsFileReaderService {
+	declare _serviceBrand: undefined;
+	constructor(
+		@ICompletionsTextDocumentManagerService private readonly documentManagerService: ICompletionsTextDocumentManagerService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICompletionsFileSystemService private readonly fileSystemService: ICompletionsFileSystemService,
+	) { }
 
 	getRelativePath(doc: TextDocumentIdentifier) {
-		const documentManager = this.ctx.get(TextDocumentManager);
-		return documentManager.getRelativePath(doc) ?? basename(doc.uri);
+		return this.documentManagerService.getRelativePath(doc) ?? basename(doc.uri);
 	}
 
 	getOrReadTextDocument(doc: TextDocumentIdentifier): Promise<TextDocumentResult> {
@@ -31,8 +49,7 @@ export class FileReader {
 	 * @deprecated use `getOrReadTextDocument` instead
 	 */
 	protected async readFile(uri: string): Promise<TextDocumentResult<ITextDocument>> {
-		const documentManager = this.ctx.get(TextDocumentManager);
-		const documentResult = await documentManager.getTextDocumentWithValidation({ uri });
+		const documentResult = await this.documentManagerService.getTextDocumentWithValidation({ uri });
 		if (documentResult.status !== 'notfound') {
 			return documentResult;
 		}
@@ -46,7 +63,7 @@ export class FileReader {
 			const text = await this.doReadFile(uri);
 
 			// Note, that we check for blocked files even for empty files!
-			const rcmResult = await isDocumentValid(this.ctx, { uri }, text);
+			const rcmResult = await this.instantiationService.invokeFunction(isDocumentValid, { uri });
 			if (rcmResult.status === 'valid') {
 				const doc = CopilotTextDocument.create(uri, 'UNKNOWN', -1, text);
 				return { status: 'valid' as const, document: doc };
@@ -59,11 +76,11 @@ export class FileReader {
 	}
 
 	private async doReadFile(uri: string) {
-		return await this.ctx.get(FileSystem).readFileString(uri);
+		return await this.fileSystemService.readFileString(uri);
 	}
 
 	private async getFileSizeMB(uri: string) {
-		const stat = await this.ctx.get(FileSystem).stat(uri);
+		const stat = await this.fileSystemService.stat(uri);
 		return stat.size / 1024 / 1024;
 	}
 }

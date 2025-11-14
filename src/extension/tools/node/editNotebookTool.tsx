@@ -34,7 +34,8 @@ import { EXISTING_CODE_MARKER } from '../../prompts/node/panel/codeBlockFormatti
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { formatUriForFileWidget } from '../common/toolUtils';
+import { resolveToolInputPath } from './toolUtils';
 
 export interface IEditNotebookToolParams {
 	filePath: string;

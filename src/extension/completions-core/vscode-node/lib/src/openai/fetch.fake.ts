@@ -4,11 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { CancellationToken } from 'vscode';
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { getTokenizer } from '../../../prompt/src/tokenization';
-import { CopilotTokenManager } from '../auth/copilotTokenManager';
+import { ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
+import { ICompletionsLogTargetService } from '../logger';
 import { Response } from '../networking';
+import { ICompletionsStatusReporter } from '../progress';
 import { TelemetryData, TelemetryWithExp } from '../telemetry';
+import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 import {
 	CompletionError,
 	CompletionParams,
@@ -22,9 +28,6 @@ import {
 	SpeculationFetchParams
 } from './fetch';
 import { APIChoice } from './openai';
-import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
-import { ICompletionsContextService } from '../context';
 
 /**
  * This module supports fake implementations of the completions returned by OpenAI, as well
@@ -124,7 +127,7 @@ export class SyntheticCompletions extends OpenAIFetcher {
 
 	constructor(
 		private readonly _completions: string[],
-		@ICompletionsContextService private readonly completionsContextService: ICompletionsContextService,
+		@ICompletionsCopilotTokenManager private readonly copilotTokenManager: ICompletionsCopilotTokenManager,
 	) {
 		super();
 	}
@@ -137,7 +140,7 @@ export class SyntheticCompletions extends OpenAIFetcher {
 		teletryProperties?: { [key: string]: string }
 	): Promise<CompletionResults | CompletionError> {
 		// check we have a valid token - ignore the result
-		void this.completionsContextService.get(CopilotTokenManager).getToken();
+		void this.copilotTokenManager.getToken();
 		if (cancel?.isCancellationRequested) {
 			return { type: 'canceled', reason: 'canceled during test' };
 		}
@@ -159,13 +162,22 @@ export class SyntheticCompletions extends OpenAIFetcher {
 export class ErrorReturningFetcher extends LiveOpenAIFetcher {
 	lastSpeculationParams?: CompletionParams | SpeculationFetchParams;
 
+	private response: Response | 'not-sent' = 'not-sent';
+
 	constructor(
-		private readonly response: Response,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@ICompletionsContextService completionsContextService: ICompletionsContextService,
 		@ICompletionsRuntimeModeService runtimeModeService: ICompletionsRuntimeModeService,
+		@ICompletionsFeaturesService featuresService: ICompletionsFeaturesService,
+		@ICompletionsLogTargetService logTargetService: ICompletionsLogTargetService,
+		@ICompletionsCopilotTokenManager copilotTokenManager: ICompletionsCopilotTokenManager,
+		@ICompletionsStatusReporter statusReporter: ICompletionsStatusReporter,
+		@IAuthenticationService authenticationService: IAuthenticationService,
 	) {
-		super(instantiationService, completionsContextService, runtimeModeService);
+		super(instantiationService, runtimeModeService, featuresService, logTargetService, copilotTokenManager, statusReporter, authenticationService);
+	}
+
+	setResponse(response: Response | 'not-sent') {
+		this.response = response;
 	}
 
 	override fetchWithParameters(
@@ -175,6 +187,8 @@ export class ErrorReturningFetcher extends LiveOpenAIFetcher {
 		telemetryData: TelemetryData,
 		cancel?: CancellationToken
 	): Promise<Response | 'not-sent'> {
-		return Promise.resolve(this.response);
+		const response = this.response;
+		this.response = 'not-sent';
+		return Promise.resolve(response);
 	}
 }
