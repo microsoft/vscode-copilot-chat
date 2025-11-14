@@ -271,20 +271,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					return undefined;
 				}
 
-				const uri = await toOpenPullRequestWebviewUri({ owner: repoId.org, repo: repoId.repo, pullRequestNumber: pr.number });
-				const prLinkTitle = vscode.l10n.t('Open pull request in VS Code');
-				const finishedInText = vscode.l10n.t('Finished in {0}', `#${pr.number}`);
-				const description = new vscode.MarkdownString(`[${finishedInText}](${uri.toString()} "${prLinkTitle}")`);
-				const tooltip = this.createPullRequestTooltip(pr);
-
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status: this.getSessionStatusFromSession(sessionItem),
-					description,
-					tooltip,
+					description: this.getPullRequestDescription(pr),
+					tooltip: this.createPullRequestTooltip(pr),
 					timing: {
-						startTime: new Date(sessionItem.last_updated_at).getTime(),
+						startTime: new Date(sessionItem.created_at).getTime(),
+						endTime: sessionItem.completed_at ? new Date(sessionItem.completed_at).getTime() : undefined
 					},
 					statistics: {
 						files: pr.files.totalCount,
@@ -524,6 +519,28 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			default:
 				return vscode.ChatSessionStatus.Completed;
 		}
+	}
+
+	private getPullRequestDescription(pr: PullRequestSearchItem): vscode.MarkdownString {
+		let descriptionText: string;
+		switch (pr.state) {
+			case 'failed':
+				descriptionText = vscode.l10n.t('$(git-pull-request) Failed in PR {0}', `#${pr.number}`);
+				break;
+			case 'in_progress':
+				descriptionText = vscode.l10n.t('$(git-pull-request) In progress in PR {0}', `#${pr.number}`);
+				break;
+			case 'queued':
+				descriptionText = vscode.l10n.t('$(git-pull-request) Queued in PR {0}', `#${pr.number}`);
+				break;
+			default:
+				descriptionText = vscode.l10n.t('$(git-pull-request) Finished in PR {0}', `#${pr.number}`);
+				break;
+		}
+
+		const description = new vscode.MarkdownString(descriptionText);
+		description.supportThemeIcons = true;
+		return description;
 	}
 
 	private createPullRequestTooltip(pr: PullRequestSearchItem): vscode.MarkdownString {

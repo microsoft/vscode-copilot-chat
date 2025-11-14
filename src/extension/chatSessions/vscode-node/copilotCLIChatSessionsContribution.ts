@@ -15,7 +15,6 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
-import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
@@ -178,8 +177,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const worktreePath = this.worktreeManager.getWorktreePath(session.id);
 		const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.id);
 
-		const label = session.label ?? 'Copilot CLI';
-		const tooltipLines = [`Copilot CLI session: ${label}`];
+		const label = session.label ?? vscode.l10n.t('Background Agent Session');
+		const tooltipLines = [vscode.l10n.t(`Background agent session: {0}`, label)];
 		let description: vscode.MarkdownString | undefined;
 		let statistics: { files: number; insertions: number; deletions: number } | undefined;
 
@@ -189,7 +188,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			description.supportThemeIcons = true;
 
 			// Tooltip
-			tooltipLines.push(`Worktree: ${worktreeRelativePath}`);
+			tooltipLines.push(vscode.l10n.t(`Worktree: {0}`, worktreeRelativePath));
 
 			// Statistics
 			statistics = await this.gitService.diffIndexWithHEADShortStats(Uri.file(worktreePath));
@@ -209,7 +208,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async createCopilotCLITerminal(): Promise<void> {
 		// TODO@rebornix should be set by CLI
-		const terminalName = process.env.COPILOTCLI_TERMINAL_TITLE || 'Copilot CLI';
+		const terminalName = process.env.COPILOTCLI_TERMINAL_TITLE || vscode.l10n.t('Copilot CLI');
 		await this.terminalIntegration.openTerminal(terminalName);
 	}
 
@@ -455,7 +454,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private async handleDelegateCommand(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (!this.cloudSessionProvider) {
-			stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
+			stream.warning(vscode.l10n.t('No cloud agent available'));
 			return;
 		}
 
@@ -464,7 +463,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const hasChanges = (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0);
 
 		if (hasChanges) {
-			stream.warning(localize('copilotcli.uncommittedChanges', "You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them."));
+			stream.warning(vscode.l10n.t('You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them.'));
 		}
 
 		const history = await this.summarizer.provideChatSummary(context, token);
@@ -584,7 +583,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 					try {
 						await vscode.commands.executeCommand('git.deleteWorktree', Uri.file(worktreePath));
 					} catch (error) {
-						vscode.window.showErrorMessage(l10n.t('Failed to delete worktree: {0}', error instanceof Error ? error.message : String(error)));
+						vscode.window.showErrorMessage(vscode.l10n.t('Failed to delete worktree: {0}', error instanceof Error ? error.message : String(error)));
 					}
 				}
 
@@ -618,7 +617,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
-		const title = `Copilot CLI (${sessionWorktreeName})`;
+		const title = vscode.l10n.t('Copilot CLI ({0})', sessionWorktreeName);
 		const multiDiffSourceUri = Uri.parse(`copilotcli-worktree-changes:/${sessionId}`);
 		const resources = repository.changes.indexChanges.map(change => {
 			switch (change.status) {
