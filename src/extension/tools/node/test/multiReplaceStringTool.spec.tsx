@@ -158,7 +158,7 @@ import { IFile } from '../../../../../base/node/zip.js';`
 		await expect(await applyEditsInMap(r.edits)).toMatchFileSnapshot(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-actual.txt');
 	});
 
-	test.only('The multi_replace_string_in_file trashed my file due to overlapping replacements #277154', async () => {
+	test('The multi_replace_string_in_file trashed my file due to overlapping replacements #277154', async () => {
 
 		const input: IMultiReplaceStringToolParams = {
 			"explanation": "Adding JSDoc comments to the div and mul functions",
