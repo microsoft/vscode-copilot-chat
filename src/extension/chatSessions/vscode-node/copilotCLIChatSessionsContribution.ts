@@ -246,7 +246,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			[MODELS_OPTION_ID]: _sessionModel.get(copilotcliSessionId)?.id ?? defaultModel.id,
 		};
 
-		if (!existingSession && this.configurationService.getConfig(ConfigKey.AdvancedExperimental.CLIIsolationEnabled)) {
+		if (!existingSession && this.configurationService.getConfig(ConfigKey.Internal.CLIIsolationEnabled)) {
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
 		const history = existingSession?.object?.getChatHistory() || [];

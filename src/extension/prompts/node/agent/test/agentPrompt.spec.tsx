@@ -260,7 +260,7 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 		});
 
 		test('omit base agent instructions', async () => {
-			accessor.get(IConfigurationService).setConfig(ConfigKey.AdvancedExperimental.OmitBaseAgentInstructions, true);
+			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.OmitBaseAgentInstructions, true);
 			expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],

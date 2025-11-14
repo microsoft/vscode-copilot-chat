@@ -10,7 +10,7 @@
 
 
 import { ConfigurationTarget, Uri, window, workspace, WorkspaceFolder } from 'vscode';
-import { ConfigurationKeyValuePairs, ConfigurationMigration, ConfigurationMigrationRegistry, ConfigurationValue } from '../../../platform/configuration/common/configurationService';
+import { Emitter } from '../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
 import { IExtensionContribution } from '../../common/contributions';
@@ -34,6 +34,28 @@ export const applicationConfigurationNodeBase = Object.freeze<IConfigurationNode
 export const Extensions = {
 	ConfigurationMigration: 'base.contributions.configuration.migration'
 };
+
+export type ConfigurationValue = { value: any | undefined /* Remove */ };
+export type ConfigurationKeyValuePairs = [string, ConfigurationValue][];
+export type ConfigurationMigrationFn = (value: any) => ConfigurationValue | ConfigurationKeyValuePairs | Promise<ConfigurationValue | ConfigurationKeyValuePairs>;
+export type ConfigurationMigration = { key: string; migrateFn: ConfigurationMigrationFn };
+
+export interface IConfigurationMigrationRegistry {
+	registerConfigurationMigrations(configurationMigrations: ConfigurationMigration[]): void;
+}
+
+class ConfigurationMigrationRegistryImpl implements IConfigurationMigrationRegistry {
+	readonly migrations: ConfigurationMigration[] = [];
+
+	private readonly _onDidRegisterConfigurationMigrations = new Emitter<ConfigurationMigration[]>();
+	readonly onDidRegisterConfigurationMigration = this._onDidRegisterConfigurationMigrations.event;
+
+	registerConfigurationMigrations(configurationMigrations: ConfigurationMigration[]): void {
+		this.migrations.push(...configurationMigrations);
+	}
+}
+
+export const ConfigurationMigrationRegistry = new ConfigurationMigrationRegistryImpl();
 
 export class ConfigurationMigrationContribution implements IExtensionContribution {
 	private readonly _disposables = new DisposableStore();

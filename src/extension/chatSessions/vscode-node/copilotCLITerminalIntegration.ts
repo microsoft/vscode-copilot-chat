@@ -59,7 +59,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	}
 
 	private async initialize(): Promise<void> {
-		const enabled = this.configurationService.getConfig(ConfigKey.AdvancedExperimental.CopilotCLIEnabled);
+		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
 		if (!enabled) {
 			return;
 		}

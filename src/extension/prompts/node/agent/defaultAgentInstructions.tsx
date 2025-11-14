@@ -6,7 +6,6 @@
 import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isHiddenModelB, isHiddenModelC, isHiddenModelD } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -17,6 +16,7 @@ import { Tag } from '../base/tag';
 import { CodeBlockFormattingRules, EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
+import { isHiddenModelB, isHiddenModelC, isHiddenModelD } from '../../../../platform/endpoint/common/chatModelCapabilities';
 
 // Types and interfaces for reusable components
 interface ToolCapabilities extends Partial<Record<ToolName, boolean>> {
@@ -402,7 +402,7 @@ export class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProp
 
 	async render(state: void, sizing: PromptSizing) {
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
-		const useSimpleInstructions = (isGpt5 || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily)) && this.configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.Gpt5AlternativePatch, this._experimentationService);
+		const useSimpleInstructions = (isGpt5 || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily)) && this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, this._experimentationService);
 
 		return <Tag name='applyPatchInstructions'>
 			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. {this.props.tools[ToolName.EditFile] && <>If you are stuck, you can fall back on the {ToolName.EditFile} tool, but {ToolName.ApplyPatch} is much faster and is the preferred tool.</>}<br />

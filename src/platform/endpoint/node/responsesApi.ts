@@ -53,7 +53,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		text: verbosity ? { verbosity } : undefined,
 	};
 
-	body.truncation = configService.getConfig(ConfigKey.AdvancedExperimental.UseResponsesApiTruncation) ?
+	body.truncation = configService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
 		'auto' :
 		'disabled';
 	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
