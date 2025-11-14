@@ -28,7 +28,7 @@ import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData, ChatResponseTextEditPart, EndOfLine, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, EndOfLine, ExtendedLanguageModelToolResult, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CellOrNotebookEdit, processFullRewriteNotebookEdits } from '../../prompts/node/codeMapper/codeMapper';
@@ -39,7 +39,7 @@ import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { EditError, NoChangeError, NoMatchError, applyEdit, canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
+import { applyEdit, canExistingFileBeEdited, createEditConfirmation, EditError, formatDiffAsUnified, logEditToolResult, NoChangeError, NoMatchError, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -308,7 +308,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 
 		const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;
 
-		return new LanguageModelToolResult([
+		const result = new ExtendedLanguageModelToolResult([
 			new LanguageModelPromptTsxPart(
 				await renderPromptElementJSON(
 					this.instantiationService,
@@ -324,6 +324,9 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				),
 			)
 		]);
+
+		result.hasError = fileResults.some(f => f.error);
+		return result;
 	}
 
 	private async generateEdit(uri: URI, document: TextDocumentSnapshot | NotebookDocumentSnapshot, options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput, didHealRef: { healed?: IAbstractReplaceStringInput }, token: vscode.CancellationToken) {
