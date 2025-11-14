@@ -50,7 +50,7 @@ export class ChatReplayContribution extends Disposable {
 	private registerStartReplayCommand() {
 		this._register(commands.registerCommand('github.copilot.chat.replay', async () => {
 			const editor = window.activeTextEditor;
-			if (!editor || editor.document.languageId !== 'chatReplay') {
+			if (!editor) {
 				window.showInformationMessage('Open a chat replay file to debug.');
 				return;
 			}

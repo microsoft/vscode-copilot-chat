@@ -5,15 +5,27 @@
 
 import { ChatStep } from '../common/chatReplayResponses';
 
+interface PromptObject {
+	[key: string]: unknown;
+	prompt: unknown;
+	logs: unknown;
+}
+
+function isValidPrompt(prompt: { [key: string]: unknown }): prompt is PromptObject {
+	return 'prompt' in prompt && 'logs' in prompt;
+}
+
 export function parseReplay(content: string): ChatStep[] {
 	const parsed = JSON.parse(content);
-	const prompts = (parsed.prompts && Array.isArray(parsed.prompts) ? parsed.prompts : [parsed]) as { [key: string]: any }[];
-	if (prompts.filter(p => !p.prompt).length) {
-		throw new Error('Invalid replay content: expected a prompt object or an array of prompts in the base JSON structure.');
+	const prompts = (parsed.prompts && Array.isArray(parsed.prompts) ? parsed.prompts : [parsed]) as { [key: string]: unknown }[];
+
+	const validPrompts = prompts.filter(isValidPrompt);
+	if (validPrompts.length !== prompts.length) {
+		console.warn(`Found invalid prompt(s) in replay content. Skipping invalid prompts.`);
 	}
 
 	const steps: ChatStep[] = [];
-	for (const prompt of prompts) {
+	for (const prompt of validPrompts) {
 		parsePrompt(prompt, steps);
 	}
 
@@ -41,14 +53,14 @@ export function parseReplay(content: string): ChatStep[] {
 	return steps;
 }
 
-function parsePrompt(prompt: { [key: string]: any }, steps: ChatStep[]) {
+function parsePrompt(prompt: PromptObject, steps: ChatStep[]) {
 	steps.push({
 		kind: 'userQuery',
-		query: prompt.prompt,
+		query: prompt.prompt as string,
 		line: 0,
 	});
 
-	for (const log of prompt.logs) {
+	for (const log of prompt.logs as any[]) {
 		if (log.kind === 'toolCall') {
 			steps.push({
 				kind: 'toolCall',
