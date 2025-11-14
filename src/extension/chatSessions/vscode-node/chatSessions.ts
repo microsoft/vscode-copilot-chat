@@ -107,14 +107,14 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const summarizer = copilotcliAgentInstaService.createInstance(ChatSummarizerProvider);
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 
-		const copilotcliChatSessionParticipant = copilotcliAgentInstaService.createInstance(
+		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
 			promptResolver,
 			copilotcliSessionItemProvider,
 			cloudSessionProvider,
 			summarizer,
 			copilotCLIWorktreeManager
-		);
+		));
 		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
@@ -155,6 +155,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this.copilotCloudRegistrations.add(
 			vscode.commands.registerCommand('github.copilot.cloud.sessions.openInBrowser', async (chatSessionItem: vscode.ChatSessionItem) => {
 				cloudSessionsProvider.openSessionsInBrowser(chatSessionItem);
+			})
+		);
+		this.copilotCloudRegistrations.add(
+			vscode.commands.registerCommand('agentSession.copilot-cloud-agent.openChanges', async (sessionItemResource: vscode.Uri) => {
+				await cloudSessionsProvider.openChanges(sessionItemResource);
 			})
 		);
 		this.copilotCloudRegistrations.add(

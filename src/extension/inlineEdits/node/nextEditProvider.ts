@@ -329,7 +329,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			const displayLocation: INextEditDisplayLocation = {
 				label,
 				range: currentCursorPosition,
-				jumpToEdit: true,
 			};
 
 			// const commandJumpToEditRange: vscode.Command = {

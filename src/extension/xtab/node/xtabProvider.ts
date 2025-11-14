@@ -241,9 +241,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const currentDocument = new CurrentDocument(activeDocument.documentAfterEdits, cursorPosition);
 
 		const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
-		const isCursorAtEndOfLine = cursorPosition.column === cursorLine.trimEnd().length;
+		// check if there's any non-whitespace character after the cursor in the line
+		const isCursorAtEndOfLine = cursorLine.substring(cursorPosition.column - 1).match(/^\s*$/) !== null;
 		if (isCursorAtEndOfLine) {
+			tracer.trace('Debouncing for cursor at end of line');
 			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsExtraDebounceEndOfLine, this.expService));
+		} else {
+			tracer.trace('Debouncing for cursor NOT at end of line');
 		}
 		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
@@ -441,8 +445,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		cancellationToken: CancellationToken,
 	): Promise<LanguageContextResponse | undefined> {
 		const recordingEnabled = this.configService.getConfig<boolean>(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
+		const diagnosticsContextProviderEnabled = this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.DiagnosticsContextProvider, this.expService);
 
-		if (!promptOptions.languageContext.enabled && !recordingEnabled) {
+		if (!promptOptions.languageContext.enabled && !recordingEnabled && !diagnosticsContextProviderEnabled) {
 			return Promise.resolve(undefined);
 		}
 
@@ -494,7 +499,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					uri: textDoc.uri.toString(),
 					languageId: textDoc.languageId,
 					version: textDoc.version,
-					offset: textDoc.offsetAt(cursorPositionVscode)
+					offset: textDoc.offsetAt(cursorPositionVscode),
+					position: cursorPositionVscode
 				},
 				activeExperiments: new Map(),
 				timeBudget: debounceTime,

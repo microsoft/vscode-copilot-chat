@@ -366,7 +366,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			range: displayLocationRange,
 			label: result.displayLocation.label,
 			kind: InlineCompletionDisplayLocationKind.Code,
-			jumpToEdit: result.displayLocation.jumpToEdit
 		} : undefined;
 
 

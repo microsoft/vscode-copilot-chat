@@ -1223,8 +1223,6 @@
 			},
 			{
 				"name": "vscode",
-				"description": "%copilot.toolSet.vscode.description%",
-				"icon": "$(code)",
 				"tools": [
 					"changes",
 					"extensions",
@@ -1899,7 +1897,7 @@
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
-				"enablement": "resourceLangId == chatReplay && !inDebugMode"
+				"enablement": "resourceFilename === 'benchRun.chatReplay.json' && !inDebugMode"
 			},
 			{
 				"command": "github.copilot.chat.replay.enableWorkspaceEditTracing",
@@ -2282,6 +2280,11 @@
 				"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 				"title": "Export All Prompt Logs as JSON...",
 				"icon": "$(export)"
+			},
+			{
+				"command": "github.copilot.chat.showAsChatSession",
+				"title": "Show as chat session",
+				"icon": "$(chat-sparkle)"
 			},
 			{
 				"command": "github.copilot.debug.collectWorkspaceIndexDiagnostics",
@@ -3093,7 +3096,7 @@
 								},
 								"url": {
 									"type": "string",
-									"description": "URL endpoint for the Azure model"
+									"markdownDescription": "URL endpoint for the Azure model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
 								},
 								"toolCalling": {
 									"type": "boolean",
@@ -3151,7 +3154,7 @@
 								},
 								"url": {
 									"type": "string",
-									"description": "URL endpoint for the custom OpenAI-compatible model"
+									"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
 								},
 								"toolCalling": {
 									"type": "boolean",
@@ -3436,12 +3439,24 @@
 				{
 					"command": "github.copilot.chat.replay",
 					"group": "navigation@9",
-					"when": "resourceLangId == chatReplay"
+					"when": "resourceFilename === 'benchRun.chatReplay.json'"
+				},
+				{
+					"command": "github.copilot.chat.showAsChatSession",
+					"group": "navigation@9",
+					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'"
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 					"group": "navigation@1",
 					"when": "resourceScheme == copilotcli-worktree-changes"
+				}
+			],
+			"explorer/context": [
+				{
+					"command": "github.copilot.chat.showAsChatSession",
+					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'",
+					"group": "2_copilot@1"
 				}
 			],
 			"editor/context": [
@@ -3702,6 +3717,10 @@
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.showAsChatSession",
 					"when": "false"
 				}
 			],
@@ -4135,17 +4154,6 @@
 				"extensions": [
 					".copilotmd"
 				]
-			},
-			{
-				"id": "chatReplay",
-				"aliases": [
-					"chatReplay",
-					"Chat Replay"
-				],
-				"extensions": [
-					".chatReplay.json",
-					".chatreplay.json"
-				]
 			}
 		],
 		"views": {
@@ -4465,8 +4473,9 @@
 				"type": "vscode-chat-replay",
 				"label": "vscode-chat-replay",
 				"languages": [
-					"chatReplay"
+					"json"
 				],
+				"when": "resourceFilename === 'benchRun.chatReplay.json'",
 				"configurationAttributes": {
 					"launch": {
 						"properties": {
@@ -4580,8 +4589,8 @@
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
 		"@types/vscode": "^1.102.0",
-		"@types/yargs": "^17.0.24",
 		"@types/vscode-webview": "^1.57.4",
+		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
 		"@typescript-eslint/parser": "^8.32.0",
 		"@typescript-eslint/typescript-estree": "^8.26.1",
@@ -4651,7 +4660,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.68.0",
-		"@github/copilot": "^0.0.354",
+		"@github/copilot": "^0.0.356",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -4665,6 +4674,7 @@
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
 		"diff": "^8.0.2",
+		"dompurify": "^3.3.0",
 		"ignore": "^7.0.5",
 		"isbinaryfile": "^5.0.4",
 		"jsonc-parser": "^3.3.1",
@@ -4673,8 +4683,7 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0",
-		"dompurify": "^3.3.0"
+		"web-tree-sitter": "^0.23.0"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",

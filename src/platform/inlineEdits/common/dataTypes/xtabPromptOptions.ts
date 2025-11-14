@@ -114,7 +114,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 export const LANGUAGE_CONTEXT_ENABLED_LANGUAGES: LanguageContextLanguages = {
 	'prompt': true,
 	'instructions': true,
-	'chatmode': true,
+	'chatagent': true,
 };
 
 export interface ModelConfiguration {

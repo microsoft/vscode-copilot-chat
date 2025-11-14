@@ -19,7 +19,6 @@ import {
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
-import { ICompletionsBuildInfoService } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
@@ -29,6 +28,7 @@ import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
 import { ICompletionsExtensionStatus } from './extensionStatus';
 import { GhostTextProvider } from './ghostText/ghostText';
+import { BuildInfo } from '../../lib/src/config';
 
 const logger = new Logger('inlineCompletionItemProvider');
 
@@ -60,7 +60,6 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@ICompletionsBuildInfoService private readonly buildInfoService: ICompletionsBuildInfoService,
 		@ICompletionsTelemetryService private readonly telemetryService: ICompletionsTelemetryService,
 		@ICompletionsExtensionStatus private readonly extensionStatusService: ICompletionsExtensionStatus,
 	) {
@@ -125,7 +124,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		// match it, VS Code won't show it to the user unless the completion dropdown is dismissed. Historically we've
 		// chosen to favor completion quality, but this option allows opting into or out of generating a completion that
 		// VS Code will actually show.
-		if (!copilotConfig.get('respectSelectedCompletionInfo', quickSuggestionsDisabled() || this.buildInfoService.isPreRelease())) {
+		if (!copilotConfig.get('respectSelectedCompletionInfo', quickSuggestionsDisabled() || BuildInfo.isPreRelease())) {
 			context = { ...context, selectedCompletionInfo: undefined };
 		}
 		try {

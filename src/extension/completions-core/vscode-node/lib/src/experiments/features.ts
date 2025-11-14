@@ -125,10 +125,6 @@ export class Features implements ICompletionsFeaturesService {
 		return this.createExpConfigAndFilters(token);
 	}
 
-	disableLogProb(telemetryWithExp: TelemetryWithExp): boolean {
-		return (telemetryWithExp.filtersAndExp.exp.variables[ExpTreatmentVariables.disableLogProb] as boolean) ?? true;
-	}
-
 	/** Override for BlockMode to send in the request. */
 	overrideBlockMode(telemetryWithExp: TelemetryWithExp): BlockMode | undefined {
 		return (
@@ -358,10 +354,6 @@ export class Features implements ICompletionsFeaturesService {
 			(telemetryWithExp.filtersAndExp.exp.variables[ExpTreatmentVariables.AsyncCompletionsTimeout] as number) ??
 			200
 		);
-	}
-
-	enablePromptContextProxyField(telemetryWithExp: TelemetryWithExp): boolean {
-		return true;
 	}
 
 	enableProgressiveReveal(telemetryWithExp: TelemetryWithExp): boolean {
