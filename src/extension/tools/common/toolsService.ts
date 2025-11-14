@@ -57,8 +57,8 @@ export interface IToolsService {
 	/**
 	 * Tool implementations from tools in this extension
 	 */
-	copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
-	getCopilotTool(name: string): ICopilotTool<any> | undefined;
+	copilotTools: ReadonlyMap<ToolName, ICopilotTool<unknown>>;
+	getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 
 	invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
 	getTool(name: string): vscode.LanguageModelToolInformation | undefined;
@@ -159,13 +159,13 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	public get onWillInvokeTool() { return this._onWillInvokeTool.event; }
 
 	abstract tools: ReadonlyArray<vscode.LanguageModelToolInformation>;
-	abstract copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
+	abstract copilotTools: ReadonlyMap<ToolName, ICopilotTool<unknown>>;
 
 	private readonly ajv = new Ajv({ coerceTypes: true });
 	private didWarnAboutValidationError?: Set<string>;
 	private readonly schemaCache = new LRUCache<ValidateFunction>(16);
 
-	abstract getCopilotTool(name: string): ICopilotTool<any> | undefined;
+	abstract getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 	abstract invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
 	abstract getTool(name: string): vscode.LanguageModelToolInformation | undefined;
 	abstract getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined;
@@ -239,7 +239,7 @@ export class NullToolsService extends BaseToolsService implements IToolsService 
 		return undefined;
 	}
 
-	override getCopilotTool(name: string): ICopilotTool<any> | undefined {
+	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
 		return undefined;
 	}
 
