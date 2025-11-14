@@ -22,11 +22,13 @@ export class DelaySession {
 
 	getDebounceTime() {
 		const expectedDebounceTime = this.expectedTotalTime === undefined
-			? this.baseDebounceTime + this.extraDebounce
-			: Math.min(this.baseDebounceTime + this.extraDebounce, this.expectedTotalTime);
+			? this.baseDebounceTime
+			: Math.min(this.baseDebounceTime, this.expectedTotalTime);
+
+		const expectedDebounceTimeWithExtras = expectedDebounceTime + this.extraDebounce;
 
 		const timeAlreadySpent = Date.now() - this.providerInvocationTime;
-		const actualDebounceTime = Math.max(0, expectedDebounceTime - timeAlreadySpent);
+		const actualDebounceTime = Math.max(0, expectedDebounceTimeWithExtras - timeAlreadySpent);
 
 		return actualDebounceTime;
 	}
