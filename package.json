@@ -194,7 +194,6 @@
 				],
 				"displayName": "%copilot.tools.listCodeUsages.name%",
 				"icon": "$(references)",
-				"canBeReferencedInPrompt": true,
 				"userDescription": "%copilot.listCodeUsages.tool.description%",
 				"modelDescription": "Request to list all usages (references, definitions, implementations etc) of a function, class, method, variable etc. Use this tool when \n1. Looking for a sample implementation of an interface or class\n2. Checking how a function is used throughout the codebase.\n3. Including and updating all usages when changing a function, method, or constructor",
 				"tags": [
@@ -239,8 +238,7 @@
 						"query"
 					]
 				},
-				"tags": [],
-				"canBeReferencedInPrompt": true
+				"tags": []
 			},
 			{
 				"name": "copilot_findFiles",
@@ -387,7 +385,6 @@
 				"legacyToolReferenceFullNames": [
 					"problems"
 				],
-				"canBeReferencedInPrompt": true,
 				"icon": "$(error)",
 				"userDescription": "%copilot.tools.errors.description%",
 				"modelDescription": "Get any compile or lint errors in a specific file or across all files. If the user mentions errors or problems in a file, they may be referring to these. Use the tool to see the same errors that the user is seeing. If the user asks you to analyze all errors, or does not specify a file, use this tool to gather errors for all files. Also use this tool after editing a file to validate the change.",
@@ -419,7 +416,6 @@
 					"changes"
 				],
 				"icon": "$(diff)",
-				"canBeReferencedInPrompt": true,
 				"userDescription": "%copilot.tools.changes.description%",
 				"modelDescription": "Get git diffs of current file changes in a git repository. Don't forget that you can use run_in_terminal to run git commands in a terminal as well.",
 				"tags": [
@@ -464,8 +460,7 @@
 					"enable_other_tool_copilot_listDirectory",
 					"enable_other_tool_copilot_findFiles",
 					"enable_other_tool_copilot_runTests"
-				],
-				"canBeReferencedInPrompt": true
+				]
 			},
 			{
 				"name": "copilot_updateUserPreferences",
@@ -718,7 +713,6 @@
 				"legacyToolReferenceFullNames": [
 					"openSimpleBrowser"
 				],
-				"canBeReferencedInPrompt": true,
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
@@ -968,7 +962,6 @@
 					"fetch"
 				],
 				"when": "!isWeb",
-				"canBeReferencedInPrompt": true,
 				"icon": "$(globe)",
 				"userDescription": "%copilot.tools.fetchWebPage.description%",
 				"modelDescription": "Fetches the main content from a web page. This tool is useful for summarizing or analyzing the content of a webpage. You should use this tool when you think the user is looking for information from a specific webpage.",
@@ -1061,7 +1054,6 @@
 				"modelDescription": "Searches a GitHub repository for relevant source code snippets. Only use this tool if the user is very clearly asking for code snippets from a specific GitHub repository. Do not use this tool for Github repos that the user has open in their workspace.",
 				"userDescription": "%github.copilot.tools.githubRepo.userDescription%",
 				"icon": "$(repo)",
-				"canBeReferencedInPrompt": true,
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -1225,7 +1217,6 @@
 				"name": "vscode",
 				"tools": [
 					"changes",
-					"extensions",
 					"getProjectSetupInfo",
 					"installExtension",
 					"newWorkspace",
