@@ -321,7 +321,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			this.logService.trace('Re-rendering historical user message');
 		}
 
-		const shouldIncludePreamble = await isVSCModelA(this.props.endpoint);
+		// Check if the model matches VSC Model A (checks both model ID and family)
+		const shouldIncludePreamble = await isVSCModelA(this.props.endpoint) || await isVSCModelA(this.props.endpoint.family);
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);

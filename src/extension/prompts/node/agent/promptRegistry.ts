@@ -15,14 +15,14 @@ export interface IAgentPrompt {
 
 export interface IAgentPromptCtor {
 	readonly familyPrefixes: readonly string[];
-	matchesModel?(endpoint: IChatEndpoint): Promise<boolean> | boolean;
+	matchesModel?(model: IChatEndpoint | string): Promise<boolean> | boolean;
 	new(...args: any[]): IAgentPrompt;
 }
 
 export type AgentPromptClass = IAgentPromptCtor & (new (...args: any[]) => IAgentPrompt);
 
 type PromptWithMatcher = IAgentPromptCtor & {
-	matchesModel: (endpoint: IChatEndpoint) => Promise<boolean> | boolean;
+	matchesModel: (model: IChatEndpoint | string) => Promise<boolean> | boolean;
 };
 
 export const PromptRegistry = new class {
@@ -42,14 +42,17 @@ export const PromptRegistry = new class {
 	async getPrompt(
 		endpoint: IChatEndpoint
 	): Promise<IAgentPromptCtor | undefined> {
-
-		for (const prompt of this.promptsWithMatcher) {
-			const matches = await prompt.matchesModel(endpoint);
-			if (matches) {
-				return prompt;
+		// Try matching by model ID first (pass full endpoint), then by family name (pass string)
+		for (const key of [endpoint, endpoint.family]) {
+			for (const prompt of this.promptsWithMatcher) {
+				const matches = await prompt.matchesModel(key);
+				if (matches) {
+					return prompt;
+				}
 			}
 		}
 
+		// Finally check for family name prefix
 		for (const { prefix, prompt } of this.familyPrefixList) {
 			if (endpoint.family.startsWith(prefix)) {
 				return prompt;
