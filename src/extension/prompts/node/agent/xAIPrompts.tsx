@@ -121,6 +121,10 @@ class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptPro
 class XAIPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['grok-code'];
 
+	static matchesModel(endpoint: IChatEndpoint): Promise<boolean> | boolean {
+		return endpoint.family === 'xAI';
+	}
+
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
 		return DefaultGrokCodeFastAgentPrompt;
 	}
