@@ -8,3 +8,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 export function isGitHubRemoteRepository(uri: URI): boolean {
 	return uri.scheme === 'vscode-vfs' && uri.authority.startsWith('github');
 }
+
+export function isAzureDevOpsRemoteRepository(uri: URI): boolean {
+	return uri.scheme === 'vscode-vfs' && uri.authority.startsWith('azurerepos');
+}
