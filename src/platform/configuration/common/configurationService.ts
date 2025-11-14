@@ -669,8 +669,8 @@ export namespace ConfigKey {
 		export const ClaudeCodeDebugEnabled = defineAndMigrateSetting<boolean>('chat.advanced.claudeCode.debug', 'chat.claudeCode.debug', false);
 		export const CopilotCLIEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.copilotCLI.enabled', 'chat.copilotCLI.enabled', true);
 		export const GitHistoryRelatedFilesUsingEmbeddings = defineAndMigrateSetting('chat.advanced.suggestRelatedFilesFromGitHistory.useEmbeddings', 'chat.suggestRelatedFilesFromGitHistory.useEmbeddings', false);
-		export const CLIIsolationEnabled = defineAndMigrateSetting<boolean | undefined>('chat.cli.isolation.enabled', 'chat.advanced.cli.isolation.enabled', false);
-		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.cli.mcp.enabled', 'chat.advanced.cli.mcp.enabled', false);
+		export const CLIIsolationEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.isolation.enabled', 'chat.cli.isolation.enabled', false);
+		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', false);
 
 		// Unused
 		export const EditSourceTrackingShowDecorations = defineAndMigrateSetting('chat.advanced.editSourceTracking.showDecorations', 'chat.editSourceTracking.showDecorations', false);
