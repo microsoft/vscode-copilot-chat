@@ -9,6 +9,8 @@ import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 import { BaseOctoKitService, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { vErrorResponseWithStatusCode, vRemoteAgentJobResponse, vSessionInfo, vSessionsResponse } from './githubAPIValidators';
+import { vString } from '../../configuration/common/validator';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -54,8 +56,15 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			prId,
 			authToken,
 		);
-		const { sessions } = response;
-		return sessions;
+		if (!response) {
+			return [];
+		}
+		const validation = vSessionsResponse().validate(response);
+		if (validation.error) {
+			this._logService.error(`[OctoKitService] Failed to validate sessions response: ${validation.error.message}`);
+			return [];
+		}
+		return validation.content.sessions;
 	}
 
 	async getSessionLogs(sessionId: string): Promise<string> {
@@ -67,7 +76,15 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			sessionId,
 			authToken,
 		);
-		return response;
+		if (!response) {
+			return '';
+		}
+		const validation = vString().validate(response);
+		if (validation.error) {
+			this._logService.error(`[OctoKitService] Failed to validate session logs response: ${validation.error.message}`);
+			return '';
+		}
+		return validation.content;
 	}
 
 	async getSessionInfo(sessionId: string): Promise<SessionInfo> {
@@ -79,10 +96,26 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			sessionId,
 			authToken,
 		);
-		if (typeof response === 'string') {
-			return JSON.parse(response) as SessionInfo;
+		if (!response) {
+			throw new Error('No session info response received');
 		}
-		return response;
+
+		// The response might be a string (JSON) or already parsed
+		let parsedResponse: unknown = response;
+		if (typeof response === 'string') {
+			try {
+				parsedResponse = JSON.parse(response);
+			} catch (e) {
+				throw new Error('Failed to parse session info response');
+			}
+		}
+
+		const validation = vSessionInfo().validate(parsedResponse);
+		if (validation.error) {
+			this._logService.error(`[OctoKitService] Failed to validate session info response: ${validation.error.message}`);
+			throw new Error(`Invalid session info response: ${validation.error.message}`);
+		}
+		return validation.content;
 	}
 
 	async postCopilotAgentJob(owner: string, name: string, apiVersion: string, payload: RemoteAgentJobPayload): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode> {
@@ -90,7 +123,24 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
-		return this.postCopilotAgentJobWithToken(owner, name, apiVersion, 'vscode-copilot-chat', payload, authToken);
+		const response = await this.postCopilotAgentJobWithToken(owner, name, apiVersion, 'vscode-copilot-chat', payload, authToken);
+		if (!response) {
+			throw new Error('No response received from post copilot agent job');
+		}
+
+		// Try to validate as RemoteAgentJobResponse first, then as ErrorResponseWithStatusCode
+		const jobResponseValidation = vRemoteAgentJobResponse().validate(response);
+		if (!jobResponseValidation.error) {
+			return jobResponseValidation.content;
+		}
+
+		const errorResponseValidation = vErrorResponseWithStatusCode().validate(response);
+		if (!errorResponseValidation.error) {
+			return errorResponseValidation.content;
+		}
+
+		this._logService.error(`[OctoKitService] Failed to validate post copilot agent job response: ${jobResponseValidation.error.message}`);
+		throw new Error(`Invalid post copilot agent job response: ${jobResponseValidation.error.message}`);
 	}
 
 	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo> {
