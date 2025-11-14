@@ -71,19 +71,19 @@ export type CopilotToolParamsBase = {} | void;
 
 export interface ICopilotToolCtor<T = CopilotToolParamsBase> {
 	readonly toolName: ToolName;
-	new(...args: unknown[]): ICopilotTool<T>;
+	new(...args: never[]): ICopilotTool<T>;
 }
 
 export interface ICopilotToolExtensionCtor<T = CopilotToolParamsBase> {
 	readonly toolName: ToolName;
-	new(...args: unknown[]): ICopilotToolExtension<T>;
+	new(...args: never[]): ICopilotToolExtension<T>;
 }
 
 export const ToolRegistry = new class {
 	private _tools: Array<ICopilotToolCtor<CopilotToolParamsBase>> = [];
 	private _toolExtensions: Array<ICopilotToolExtensionCtor<CopilotToolParamsBase>> = [];
 
-	public registerTool<T extends CopilotToolParamsBase>(tool: { readonly toolName: ToolName; new(...args: any[]): ICopilotTool<T> }) {
+	public registerTool<T extends CopilotToolParamsBase>(tool: ICopilotToolCtor<T>) {
 		this._tools.push(tool);
 	}
 
@@ -91,7 +91,7 @@ export const ToolRegistry = new class {
 		return this._tools;
 	}
 
-	public registerToolExtension<T extends CopilotToolParamsBase>(tool: { readonly toolName: ToolName; new(...args: any[]): ICopilotToolExtension<T> }) {
+	public registerToolExtension<T extends CopilotToolParamsBase>(tool: ICopilotToolExtensionCtor<T>) {
 		this._toolExtensions.push(tool);
 	}
 
