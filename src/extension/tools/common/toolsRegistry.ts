@@ -67,35 +67,35 @@ export interface ICopilotToolExtension<T> {
 export interface ICopilotTool<T> extends vscode.LanguageModelTool<T>, ICopilotToolExtension<T> {
 }
 
-type ToolParamsBase = {} | void;
+export type CopilotToolParamsBase = {} | void;
 
-export interface ICopilotToolCtor<T = ToolParamsBase> {
+export interface ICopilotToolCtor<T = CopilotToolParamsBase> {
 	readonly toolName: ToolName;
 	new(...args: unknown[]): ICopilotTool<T>;
 }
 
-export interface ICopilotToolExtensionCtor<T = ToolParamsBase> {
+export interface ICopilotToolExtensionCtor<T = CopilotToolParamsBase> {
 	readonly toolName: ToolName;
 	new(...args: unknown[]): ICopilotToolExtension<T>;
 }
 
 export const ToolRegistry = new class {
-	private _tools: Array<ICopilotToolCtor<ToolParamsBase>> = [];
-	private _toolExtensions: Array<ICopilotToolExtensionCtor<ToolParamsBase>> = [];
+	private _tools: Array<ICopilotToolCtor<CopilotToolParamsBase>> = [];
+	private _toolExtensions: Array<ICopilotToolExtensionCtor<CopilotToolParamsBase>> = [];
 
-	public registerTool<T extends ToolParamsBase>(tool: { readonly toolName: ToolName; new(...args: any[]): ICopilotTool<T> }) {
+	public registerTool<T extends CopilotToolParamsBase>(tool: { readonly toolName: ToolName; new(...args: any[]): ICopilotTool<T> }) {
 		this._tools.push(tool);
 	}
 
-	public getTools(): readonly ICopilotToolCtor<ToolParamsBase>[] {
+	public getTools(): readonly ICopilotToolCtor<CopilotToolParamsBase>[] {
 		return this._tools;
 	}
 
-	public registerToolExtension<T extends ToolParamsBase>(tool: { readonly toolName: ToolName; new(...args: any[]): ICopilotToolExtension<T> }) {
+	public registerToolExtension<T extends CopilotToolParamsBase>(tool: { readonly toolName: ToolName; new(...args: any[]): ICopilotToolExtension<T> }) {
 		this._toolExtensions.push(tool);
 	}
 
-	public getToolExtensions(): readonly ICopilotToolExtensionCtor<ToolParamsBase>[] {
+	public getToolExtensions(): readonly ICopilotToolExtensionCtor<CopilotToolParamsBase>[] {
 		return this._toolExtensions;
 	}
 }();
