@@ -331,24 +331,29 @@ function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string
 
 	const newLines = newStr.trim().split(eol);
 	const identical = getIndenticalLines(oldLines, newLines);
-	const positions = matchedLines.map(match => convert.positionToOffset(new EditorPosition(match + identical.leading + 1, 1)));
+	const positions = matchedLines.map(match => {
+		const start = new EditorPosition(match + identical.leading + 1, 1);
+		const end = start.delta(oldLines.length - identical.trailing);
+		return { start, end };
+	});
 
 	if (matchedLines.length > 1) {
 		return {
 			text,
 			type: 'multiple',
 			editPosition: [],
-			matchPositions: positions,
+			matchPositions: positions.map(p => convert.positionToOffset(p.start)),
 			suggestion: "Multiple matches found with flexible whitespace. Make your search string more unique.",
 			strategy: 'whitespace',
 		};
 	}
 
-	// Exactly one whitespace-flexible match found
-	const startIdx = positions[0];
-	const endIdx = convert.positionToOffset(new EditorPosition(matchedLines[0] + 1 + needle.length - identical.trailing, 1));
+	const { start, end } = positions[0];
+	const startIdx = convert.positionToOffset(start);
+	const endIdx = convert.positionToOffset(end) - 1; // -1 to include the last EOL
+
 	const minimizedNewStr = newLines.slice(identical.leading, newLines.length - identical.trailing).join(eol);
-	const replaced = text.slice(0, startIdx) + minimizedNewStr + eol + text.slice(endIdx);
+	const replaced = text.slice(0, startIdx) + minimizedNewStr + text.slice(endIdx);
 	return {
 		text: replaced,
 		editPosition: [{ start: startIdx, end: endIdx, text: minimizedNewStr }],
