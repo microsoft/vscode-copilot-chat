@@ -217,7 +217,7 @@ export class InlineEditTriggerer extends Disposable {
 
 			const selectionLine = range.start.line;
 
-			const triggerOnActiveEditorChange = this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
+			const triggerOnActiveEditorChange = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
 			// If we're in a notebook cell,
 			// Its possible user made changes in one cell and now is moving to another cell
 			// In such cases we should account for the possibility of the user wanting to edit the new cell and trigger suggestions.
@@ -264,7 +264,7 @@ export class InlineEditTriggerer extends Disposable {
 
 	private _maybeTriggerOnDocumentSwitch(e: vscode.TextEditorSelectionChangeEvent, isSameDoc: boolean, parentTracer: ITracer): boolean {
 		const tracer = parentTracer.subNoEntry('editorSwitch');
-		const triggerAfterSeconds = this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
+		const triggerAfterSeconds = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
 		if (triggerAfterSeconds === undefined) {
 			tracer.trace('document switch disabled');
 			return false;

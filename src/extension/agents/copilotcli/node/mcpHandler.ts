@@ -89,7 +89,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	) { }
 
 	public async loadMcpConfig(workingDirectory: string | undefined): Promise<Record<string, MCPServerConfig> | undefined> {
-		if (!this.configurationService.getConfig(ConfigKey.AdvancedExperimental.CLIMCPServerEnabled)) {
+		if (!this.configurationService.getConfig(ConfigKey.Internal.CLIMCPServerEnabled)) {
 			return undefined;
 		}
 

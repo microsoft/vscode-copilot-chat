@@ -238,7 +238,7 @@ export class ClaudeCodeSession extends Disposable {
 	private async _startSession(token: vscode.CancellationToken): Promise<void> {
 		// Build options for the Claude Code SDK
 		// process.env.DEBUG = '1'; // debug messages from sdk.mjs
-		const isDebugEnabled = this.configService.getConfig(ConfigKey.AdvancedExperimental.ClaudeCodeDebugEnabled);
+		const isDebugEnabled = this.configService.getConfig(ConfigKey.Internal.ClaudeCodeDebugEnabled);
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {

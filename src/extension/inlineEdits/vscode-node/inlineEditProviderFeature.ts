@@ -87,7 +87,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.trace(s));
 		const constructorTracer = tracer.sub('constructor');
 		const hasUpdatedNesSettingKey = 'copilot.chat.nextEdits.hasEnabledNesInSettings';
-		const enableEnhancedNotebookNES = this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.UseAlternativeNESNotebookFormat, _experimentationService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, _experimentationService);
+		const enableEnhancedNotebookNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, _experimentationService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, _experimentationService);
 		const unificationState = unificationStateObservable(this);
 
 		commands.executeCommand('setContext', useEnhancedNotebookNESContextKey, enableEnhancedNotebookNES);

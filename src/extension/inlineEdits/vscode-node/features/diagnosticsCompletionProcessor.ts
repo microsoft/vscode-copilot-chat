@@ -34,11 +34,11 @@ import { StringText } from '../../../../util/vs/editor/common/core/text/abstract
 import { getInformationDelta, InformationDelta } from '../../common/informationDelta';
 import { RejectionCollector } from '../../common/rejectionCollector';
 import { IVSCodeObservableDocument, VSCodeWorkspace } from '../parts/vscodeWorkspace';
-import { toInternalPosition } from '../utils/translations';
 import { AnyDiagnosticCompletionItem, AnyDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/anyDiagnosticsCompletionProvider';
 import { AsyncDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/asyncDiagnosticsCompletionProvider';
 import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, distanceToClosestDiagnostic, IDiagnosticCompletionProvider, log, logList, sortDiagnosticsByDistance } from './diagnosticsBasedCompletions/diagnosticsCompletions';
 import { ImportDiagnosticCompletionItem, ImportDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/importDiagnosticsCompletionProvider';
+import { toInternalPosition } from '../utils/translations';
 
 interface IDiagnosticsCompletionState<T extends DiagnosticCompletionItem = DiagnosticCompletionItem> {
 	completionItem: T | null;
