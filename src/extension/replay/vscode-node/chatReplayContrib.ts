@@ -6,6 +6,7 @@ import { CancellationToken, chat, commands, debug, DebugAdapterDescriptor, Debug
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatReplayParticipant } from './chatReplayParticipant';
 import { ChatReplaySessionProvider } from './chatReplaySessionProvider';
 import { ChatReplayDebugSession } from './replayDebugSession';
 
@@ -20,10 +21,8 @@ export class ChatReplayContribution extends Disposable {
 
 		this._sessionProvider = this._register(new ChatReplaySessionProvider());
 
-		const chatParticipant = chat.createChatParticipant('chat-replay', async (request, context, response, token) => {
-			// Chat replays are readonly, so the participant does nothing
-			return {};
-		});
+		const replayParticipant = this._instantiationService.createInstance(ChatReplayParticipant);
+		const chatParticipant = chat.createChatParticipant('github.copilot.chatReplay', replayParticipant.handleRequest.bind(replayParticipant));
 		this._register(chat.registerChatSessionContentProvider('chat-replay', this._sessionProvider, chatParticipant));
 
 		const provider = new ChatReplayConfigProvider();
