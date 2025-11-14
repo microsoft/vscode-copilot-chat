@@ -349,7 +349,7 @@
 	"copilot.toolSet.search.description": "Search and read files in your workspace",
 	"copilot.toolSet.new.description": "Scaffold a new workspace with VS Code-specific configurations to compile, debug and run new projects.",
 	"copilot.toolSet.runTasks.description": "Run tasks in your workspace",
-	"github.copilot.config.useResponsesApi": "Use the Responses API instead of the Chat Completions API when supported. Enables reasoning and reasoning summaries.\n\n**Note**: This is an experimental feature that is not yet activated for all users.",
+	"github.copilot.config.useResponsesApi": "Use the Responses API instead of the Chat Completions API when supported. Enables reasoning and reasoning summaries.\n\n**Note**: This is an experimental feature that is not yet activated for all users.\n\n**Important**: URL API path resolution for custom OpenAI-compatible and Azure models are independent of this setting and fully determined by `url` property of `#github.copilot.chat.customOAIModels#` or `#github.copilot.chat.azureModels#` respectively.",
 	"github.copilot.config.responsesApiReasoningEffort": "Sets the reasoning effort used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
 	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
 	"github.copilot.config.anthropic.thinking.enabled": "Enable extended thinking for Anthropic models that support it. \n\n **Note**: This is an experimental feature only supported in BYOK Anthropic models.",

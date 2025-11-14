@@ -3027,7 +3027,7 @@
 								},
 								"url": {
 									"type": "string",
-									"description": "URL endpoint for the Azure model"
+									"markdownDescription": "URL endpoint for the Azure model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
 								},
 								"toolCalling": {
 									"type": "boolean",
@@ -3085,7 +3085,7 @@
 								},
 								"url": {
 									"type": "string",
-									"description": "URL endpoint for the custom OpenAI-compatible model"
+									"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
 								},
 								"toolCalling": {
 									"type": "boolean",
