@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
-import * as l10n from '@vscode/l10n';
+import * as vscode from 'vscode';
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -493,7 +493,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 							};
 
 							// Format citation as readable blockquote with source link
-							const referenceText = `\n> "${citation.cited_text}" — [${l10n.t('Source')}](${citation.url})\n\n`;
+							const referenceText = `\n> "${citation.cited_text}" — [${vscode.l10n.t('Source')}](${citation.url})\n\n`;
 
 							// Report formatted reference text to user
 							progress.report(new LanguageModelTextPart(referenceText));
