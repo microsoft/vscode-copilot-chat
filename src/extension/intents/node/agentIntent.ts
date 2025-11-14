@@ -246,6 +246,11 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const tools = await this.getAvailableTools();
 		const toolTokens = tools?.length ? await this.endpoint.acquireTokenizer().countToolTokens(tools) : 0;
 
+		const summarizeThresholdOverride = this.configurationService.getConfig<number | undefined>(ConfigKey.Internal.SummarizeAgentConversationHistoryThreshold);
+		if (typeof summarizeThresholdOverride === 'number' && summarizeThresholdOverride < 100) {
+			throw new Error(`Setting github.copilot.${ConfigKey.Internal.SummarizeAgentConversationHistoryThreshold.id} is too low`);
+		}
+
 		// Reserve extra space when tools are involved due to token counting issues
 		const baseBudget = Math.min(
 			this.configurationService.getConfig<number | undefined>(ConfigKey.Internal.SummarizeAgentConversationHistoryThreshold) ?? this.endpoint.modelMaxPromptTokens,
@@ -306,12 +311,22 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					*/
 					this.telemetryService.sendMSFTTelemetryEvent('triggerSummarizeFailed', { errorKind, model: props.endpoint.model });
 
-					// Something else went wrong, eg summarization failed, so render the prompt with no cache breakpoints or summarization
-					const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
+					// Something else went wrong, eg summarization failed, so render the prompt with no cache breakpoints, summarization, endpoint not reduced in size for tools or safety buffer
+					const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
 						...props,
+						endpoint: this.endpoint,
 						enableCacheBreakpoints: false
 					});
-					result = await renderer.render(progress, token);
+					try {
+						result = await renderer.render(progress, token);
+					} catch (e) {
+						if (e instanceof BudgetExceededError) {
+							this.logService.error(e, `[Agent] final render fallback failed due to budget exceeded`);
+							const maxTokens = this.endpoint.modelMaxPromptTokens;
+							throw new Error(`Unable to build prompt, modelMaxPromptTokens=${maxTokens} (${e.message})`);
+						}
+						throw e;
+					}
 				}
 			} else {
 				throw e;
