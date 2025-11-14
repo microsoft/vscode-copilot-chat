@@ -47,6 +47,8 @@ You can find the configuration in `config/app.config.json`.
 This is a test custom instruction file
 </instructions>
 
+
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -72,6 +74,16 @@ This is the state of the context at this point in the conversation. The view of 
 
 ### User
 ~~~md
+<attachments>
+<attachment id="file" filePath="/workspace/file.ts">
+line 1
+line 2
+
+line 4
+line 5
+</attachment>
+
+</attachments>
 <context>
 (Date removed from snapshot)
 </context>
@@ -81,150 +93,9 @@ You take action when possible- the user is expecting YOU to take action and go t
 
 </reminderInstructions>
 <userRequest>
-previous turn
+edit this file (See <attachments> above for file contents. You may not need to search or read the file again.)
 </userRequest>
 
-~~~
-
-
-### Assistant
-~~~md
-response
-🛠️ insert_edit_into_file (tooluse_0) {
-  "filePath": "/workspace/file.ts",
-  "code": "// existing code...
-console.log('hi')"
-}
-🛠️ insert_edit_into_file (tooluse_1) {
-  "filePath": "/workspace/file.ts",
-  "code": "// existing code...
-console.log('hi')"
-}
-~~~
-
-
-### Tool
-~~~md
-🛠️ tooluse_0
-success
-~~~
-
-
-### Tool
-~~~md
-🛠️ tooluse_1
-success
-~~~
-
-
-### Assistant
-~~~md
-response 2
-🛠️ insert_edit_into_file (tooluse_2) {
-  "filePath": "/workspace/file.ts",
-  "code": "// existing code...
-console.log('hi')"
-}
-🛠️ insert_edit_into_file (tooluse_3) {
-  "filePath": "/workspace/file.ts",
-  "code": "// existing code...
-console.log('hi')"
-}
-~~~
-
-
-### Tool
-~~~md
-🛠️ tooluse_2
-success
-~~~
-
-
-### Tool
-~~~md
-🛠️ tooluse_3
-success
-~~~
-
-
-### User
-~~~md
-<context>
-(Date removed from snapshot)
-</context>
-<reminderInstructions>
-You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.
-You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.
-
-</reminderInstructions>
-<userRequest>
-edit this file
-</userRequest>
-
-
-[copilot_cache_control: { type: 'ephemeral' }]
-~~~
-
-
-### Assistant
-~~~md
-ok
-🛠️ insert_edit_into_file (tooluse_4) {
-  "filePath": "/workspace/file.ts",
-  "code": "// existing code...
-console.log('hi')"
-}
-🛠️ insert_edit_into_file (tooluse_5) {
-  "filePath": "/workspace/file.ts",
-  "code": "// existing code...
-console.log('hi')"
-}
-~~~
-
-
-### Tool
-~~~md
-🛠️ tooluse_4
-success
-~~~
-
-
-### Tool
-~~~md
-🛠️ tooluse_5
-success
-
-[copilot_cache_control: { type: 'ephemeral' }]
-~~~
-
-
-### Assistant
-~~~md
-ok
-🛠️ insert_edit_into_file (tooluse_6) {
-  "filePath": "/workspace/file.ts",
-  "code": "// existing code...
-console.log('hi')"
-}
-🛠️ insert_edit_into_file (tooluse_7) {
-  "filePath": "/workspace/file.ts",
-  "code": "// existing code...
-console.log('hi')"
-}
-~~~
-
-
-### Tool
-~~~md
-🛠️ tooluse_6
-success
-~~~
-
-
-### Tool
-~~~md
-🛠️ tooluse_7
-success
 
 [copilot_cache_control: { type: 'ephemeral' }]
 ~~~

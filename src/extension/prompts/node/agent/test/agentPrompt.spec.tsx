@@ -249,7 +249,7 @@ testFamilies.forEach(family => {
 				},
 				{
 					enableCacheBreakpoints: true,
-				})).toMatchFileSnapshot(getSnapshotFile('cache_BPs'));
+				})).toMatchFileSnapshot(getSnapshotFile('cache_BPs_multi_round'));
 		});
 
 		test('custom instructions not in system message', async () => {
