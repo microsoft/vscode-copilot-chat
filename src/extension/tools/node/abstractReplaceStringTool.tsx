@@ -25,6 +25,7 @@ import { removeLeadingFilepathComment } from '../../../util/common/markdown';
 import { timeout } from '../../../util/vs/base/common/async';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -102,11 +103,52 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		if (this.lastOperation?.inputKey !== cacheKey) {
 			this.lastOperation = {
 				inputKey: cacheKey,
-				operation: Promise.all(input.map(i => this._prepareEditsForFile(options, i, token))),
+				operation: this._prepareEdits(options, input, token)
 			};
 		}
 
 		return this.lastOperation.operation;
+	}
+
+	private async _prepareEdits(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput[], token: vscode.CancellationToken) {
+		const results = await Promise.all(input.map(i => this._prepareEditsForFile(options, i, token)));
+		this._errorConflictingEdits(results);
+		return results;
+	}
+
+	private _errorConflictingEdits(results: IPrepareEdit[]) {
+		for (let i = 1; i < results.length; i++) {
+			const current = results[i];
+			if (!current.generatedEdit.success) {
+				continue;
+			}
+
+			for (let k = 0; k < i; k++) {
+				const other = results[k];
+				if (!other.generatedEdit.success || !extUriBiasedIgnorePathCase.isEqual(current.uri, other.uri)) {
+					continue;
+				}
+
+				const allEdits = [
+					...current.generatedEdit.textEdits,
+					...other.generatedEdit.textEdits,
+				].sort((a, b) => a.range.start.compareTo(b.range.start));
+
+				const hasOverlap = allEdits.some((e2, i) => {
+					if (i === 0) { return false; }
+					const e1 = allEdits[i - 1];
+					return !e1.range.end.isBeforeOrEqual(e2.range.start);
+				});
+
+				if (hasOverlap) {
+					current.generatedEdit = {
+						success: false,
+						errorMessage: `Edit at index ${i} conflicts with another replacement in ${this.promptPathRepresentationService.getFilePath(current.uri)}. You can make another call to try again.`
+					};
+					break;
+				}
+			}
+		}
 	}
 
 	private async _prepareEditsForFile(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput, token: vscode.CancellationToken): Promise<IPrepareEdit> {

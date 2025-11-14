@@ -21,6 +21,7 @@ import { ToolName } from '../../common/toolNames';
 import { CopilotToolMode } from '../../common/toolsRegistry';
 import { IToolsService } from '../../common/toolsService';
 import { IMultiReplaceStringToolParams } from '../multiReplaceStringTool';
+import { toolResultToString } from './toolTestUtils';
 
 suite('MultiReplaceString', () => {
 	let accessor: ITestingServicesAccessor;
@@ -154,10 +155,10 @@ import { IFile } from '../../../../../base/node/zip.js';`
 		};
 
 		const r = await invoke(input);
-		expect(await applyEditsInMap(r.edits)).toMatchFileSnapshot(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-actual.txt');
+		await expect(await applyEditsInMap(r.edits)).toMatchFileSnapshot(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-actual.txt');
 	});
 
-	test.skip('The multi_replace_string_in_file trashed my file due to overlapping replacements #277154', async () => {
+	test.only('The multi_replace_string_in_file trashed my file due to overlapping replacements #277154', async () => {
 
 		const input: IMultiReplaceStringToolParams = {
 			"explanation": "Adding JSDoc comments to the div and mul functions",
@@ -231,6 +232,12 @@ export function sumThreeFloats(a, b, c) {`,
 		};
 
 		const r = await invoke(input);
+
+		expect(await toolResultToString(accessor, r.result)).toMatchInlineSnapshot(`
+			"The following files were successfully edited:
+			/workspace/math.js
+			Edit at index 1 conflicts with another replacement in /workspace/math.js. You can make another call to try again."
+		`);
 
 		const edits = Object.values(r.edits).flat(); //
 

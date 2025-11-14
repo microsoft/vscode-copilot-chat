@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import { homedir } from 'os';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import type { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
@@ -19,7 +19,7 @@ import { isMacintosh } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { WorkspaceEdit } from '../../../../vscodeTypes';
 import { applyEdits as applyTextEdits } from '../../../prompt/node/intents';
-import { applyEdit, assertPathIsSafe, ConfirmationCheckResult, ContentFormatError, makeUriConfirmationChecker, MultipleMatchesError, NoChangeError, NoMatchError } from '../editFileToolUtils';
+import { applyEdit, assertPathIsSafe, ConfirmationCheckResult, ContentFormatError, makeUriConfirmationChecker, MultipleMatchesError, NoChangeError, NoMatchError, setSimilarityMatchThresholdForTests } from '../editFileToolUtils';
 
 describe('replace_string_in_file - applyEdit', () => {
 	let workspaceEdit: WorkspaceEdit;
@@ -356,6 +356,245 @@ describe('replace_string_in_file - applyEdit', () => {
 		expect(
 			applyTextEdits(input.join('\r\n'), workspaceEdit.entries()[0][1])
 		).toBe(output);
+	});
+
+	// Whitespace-flexible matching strategy tests
+	// Note: Whitespace-flexible matching only triggers when:
+	// 1. No exact match exists
+	// 2. No fuzzy match exists (fuzzy allows trailing spaces but not leading/different indentation)
+	// 3. Trimmed lines match exactly AND there's an empty line after the match
+	describe('whitespace-flexible matching', () => {
+		test('matches when file has empty line after content', async () => {
+			// File has content followed by empty line, with varying indentation
+			setText('function test() {\n  \tconsole.log("hello");\n\treturn true;\n\n}');
+			// Search for content with trailing newline - the empty line in file will match the empty needle element
+			const result = await doApplyEdit('console.log("hello");\nreturn true;\n', 'console.log("updated");\nreturn false;\n');
+			expect(result.updatedFile).toContain('console.log("updated");');
+			expect(result.updatedFile).toContain('return false;');
+		});
+
+		test('matches when indentation varies and empty line follows', async () => {
+			setText('if (x) {\n\t\t  if (y) {\n    \t\tcode();\n\t  \t}\n\n}');
+			// Empty line in file matches empty string in needle
+			const result = await doApplyEdit('if (y) {\ncode();\n}\n', 'if (y) {\nupdated();\n}\n');
+			expect(result.updatedFile).toContain('updated();');
+		});
+
+		test('throws error on multiple matches with empty lines', async () => {
+			setText('function a() {\n  \treturn 1;\n\n}\nfunction b() {\n\t return 1;\n\n}');
+			// Both functions have same content when trimmed, followed by empty lines
+			await expect(doApplyEdit('return 1;\n', 'return 2;\n')).rejects.toThrow(MultipleMatchesError);
+		});
+
+		test('matches block with trailing empty line preserving structure', async () => {
+			setText('class Test {\n\t  method() {\n  \t\tconst x = 1;\n\t    const y = 2;\n\n  \t}\n}');
+			// Search with trailing newline to match the empty line
+			const result = await doApplyEdit('const x = 1;\nconst y = 2;\n', 'const z = 3;\n');
+			expect(result.updatedFile).toContain('const z = 3;');
+			expect(result.updatedFile).toContain('class Test');
+		});
+
+		test('whitespace-flexible match minimizes edits with empty line', async () => {
+			setText('function test() {\n  \tconst a = 1;\n\t  const b = 2;\n\n}');
+			const result = await doApplyEdit('const a = 1;\nconst b = 2;\n', 'const a = 1;\nconst b = 3;\n');
+			// Should preserve identical first line
+			expect(result.edits.length).toBe(1);
+			expect(result.updatedFile).toContain('const b = 3;');
+		});
+
+		test('empty line in haystack required for whitespace-flexible match', async () => {
+			setText('line1\n  \tline2\n\n\t  line3');
+			// Search with trailing newline - empty line in haystack matches empty needle element
+			const result = await doApplyEdit('line1\nline2\n', 'new1\nnew2\n');
+			expect(result.updatedFile).toContain('new1');
+			expect(result.updatedFile).toContain('new2');
+			expect(result.updatedFile).toContain('line3');
+		});
+	});
+
+	// Similarity-based matching strategy tests
+	describe('similarity matching', () => {
+		test('matches highly similar content with minor differences', async () => {
+			setText('function calculate(items) {\n\tlet total = 0;\n\tfor (let i = 0; i < items.length; i++) {\n\t\ttotal += items[i].price;\n\t}\n\treturn total;\n}');
+			// Search string has slightly different variable name - 1 char diff in one place
+			const result = await doApplyEdit(
+				'function calculate(items) {\n\tlet total = 0;\n\tfor (let i = 0; i < items.length; i++) {\n\t\ttotal += items[i].pric;\n\t}\n\treturn total;\n}',
+				'function calculate(items) {\n\treturn items.reduce((acc, item) => acc + item.price, 0);\n}'
+			);
+			expect(result.updatedFile).toBe('function calculate(items) {\n\treturn items.reduce((acc, item) => acc + item.price, 0);\n}');
+		});
+
+		test('similarity match with small typos in search string', async () => {
+			setText('const message = "Hello, World!";\nconsole.log(message);');
+			// Search has a typo but high similarity (95%+)
+			const result = await doApplyEdit('const mesage = "Hello, World!";\nconsole.log(message);', 'const greeting = "Hi there!";\nconsole.log(greeting);');
+			// Should find a match and replace
+			expect(result.updatedFile).toContain('greeting');
+		});
+
+		test('similarity match does not trigger for low similarity', async () => {
+			setText('function test() {\n\treturn true;\n}');
+			// Very different content should not match
+			await expect(doApplyEdit('completely different text here with no similarity at all to the original', 'replacement')).rejects.toThrow(NoMatchError);
+		});
+
+		test('similarity match prefers best match among candidates', async () => {
+			setText('function a() {\n\tconst x = 1;\n\tconst y = 2;\n}\nfunction b() {\n\tconst x = 1;\n\tconst z = 3;\n}');
+			// Should match function a (higher similarity with y vs z)
+			const result = await doApplyEdit('function a() {\nconst x = 1;\nconst y = 2;\n}', 'function a() {\nconst result = 3;\n}');
+			expect(result.updatedFile).toContain('const result = 3');
+			expect(result.updatedFile).toContain('function b()'); // Second function unchanged
+		});
+
+		test('similarity match skips very large strings', async () => {
+			// Similarity matching should skip strings > 1000 chars or > 20 lines
+			const largeText = 'line\n'.repeat(50) + 'target line\n' + 'line\n'.repeat(50);
+			setText(largeText);
+			// Should fall back to exact/fuzzy matching instead of similarity
+			const result = await doApplyEdit('target line', 'replaced line');
+			expect(result.updatedFile).toContain('replaced line');
+		});
+
+		test('similarity match minimizes edits - preserves identical lines', async () => {
+			setText('function test() {\n\tconst a = 1;\n\tconst b = 2;\n\tconst c = 3;\n}');
+			const result = await doApplyEdit(
+				'function test() {\n\tconst a = 1;\n\tconst x = 2;\n\tconst c = 3;\n}',
+				'function test() {\n\tconst a = 1;\n\tconst y = 4;\n\tconst c = 3;\n}'
+			);
+			// Should preserve identical first and last lines
+			expect(result.updatedFile).toContain('const a = 1');
+			expect(result.updatedFile).toContain('const y = 4');
+			expect(result.updatedFile).toContain('const c = 3');
+		});
+
+		test('similarity match with small content blocks', async () => {
+			setText('const x = 1;\nconst y = 2;\nconst z = 3;');
+			// Small similar block should match via similarity
+			const result = await doApplyEdit('const x = 1;\nconst w = 2;', 'const a = 10;\nconst b = 20;');
+			// Should match first two lines and replace them
+			expect(result.updatedFile).toContain('const a = 10');
+			expect(result.updatedFile).toContain('const b = 20');
+		});
+
+		describe('similarity match - edge cases for slice calculations', () => {
+			let prev: number;
+			beforeEach(() => {
+				prev = setSimilarityMatchThresholdForTests(0.6);
+			});
+
+			afterEach(() => {
+				setSimilarityMatchThresholdForTests(prev);
+			});
+
+			test('similarity match preserves lines after replacement when there are identical trailing lines', async () => {
+				// This test checks for off-by-one errors in the slice calculation
+				setText('function test() {\n\tconst a = 1;\n\tconst b = 2;\n\tconst c = 3;\n\tconst d = 4;\n}');
+				// Search has identical first and last lines, different middle
+				const result = await doApplyEdit(
+					'function test() {\n\tconst a = 1;\n\tconst x = 2;\n\tconst y = 3;\n\tconst d = 4;\n}',
+					'function test() {\n\tconst a = 1;\n\tconst newB = 20;\n\tconst newC = 30;\n\tconst d = 4;\n}'
+				);
+				// Should preserve the closing brace
+				expect(result.updatedFile).toBe('function test() {\n\tconst a = 1;\n\tconst newB = 20;\n\tconst newC = 30;\n\tconst d = 4;\n}');
+			});
+
+			test('similarity match with multiple identical trailing lines', async () => {
+				// Edge case that tests the slice calculation for multiple trailing lines
+				// Use similar strings to meet the 60% threshold while ensuring window i=0 has best match
+				setText('EXACT_START\nchange_me_1\nchange_me_2\nEXACT_END1\nEXACT_END2');
+				// Window at i=0: EXACT_START (100%) + change_me_1 vs modify_1 (~70%) + change_me_2 vs modify_2 (~70%) + EXACT_END1 (100%) + EXACT_END2 (100%) = ~88%
+				const result = await doApplyEdit(
+					'EXACT_START\nmodify_1\nmodify_2\nEXACT_END1\nEXACT_END2',
+					'EXACT_START\nNEW_1\nNEW_2\nEXACT_END1\nEXACT_END2'
+				);
+				// Should match window at i=0 and replace the middle 2 lines
+				expect(result.updatedFile).toBe('EXACT_START\nNEW_1\nNEW_2\nEXACT_END1\nEXACT_END2');
+			}); test('similarity match boundary: no identical lines', async () => {
+				setText('aaa\nbbb\nccc');
+				// With low similarity, should not match
+				await expect(doApplyEdit('xxx\nyyy\nzzz', 'new1\nnew2\nnew3')).rejects.toThrow(NoMatchError);
+			});
+
+			test('similarity match edge case: all identical lines except middle', async () => {
+				// This tests the slice calculation with identical leading and trailing lines
+				// File has 5 lines, search differs in 1 line = 80% similarity, above 60% threshold
+				setText('Alpha\nBravo\nCharlie\nDelta\nEcho');
+				// Search has identical first 2 and last 2, different middle
+				// identical.leading = 2, identical.trailing = 2
+				const result = await doApplyEdit(
+					'Alpha\nBravo\nXray\nDelta\nEcho',
+					'Alpha\nBravo\nNEW\nDelta\nEcho'
+				);
+				// Should replace only line Charlie with NEW, preserving all other lines
+				expect(result.updatedFile).toBe('Alpha\nBravo\nNEW\nDelta\nEcho');
+			});
+
+			test('similarity match edge case: only last line differs', async () => {
+				// Tests the slice calculation when identical.trailing = 0
+				// 3/4 lines match = 75% similarity > 60% threshold
+				setText('start_line\nmiddle_one\nmiddle_two\nold_ending');
+				// Search matches first 3 lines, last is different
+				// identical.leading = 3, identical.trailing = 0
+				const result = await doApplyEdit(
+					'start_line\nmiddle_one\nmiddle_two\nwrong_ending',
+					'start_line\nmiddle_one\nmiddle_two\nnew_ending'
+				);
+				// Should preserve first 3 lines and replace only last line
+				expect(result.updatedFile).toBe('start_line\nmiddle_one\nmiddle_two\nnew_ending');
+			});
+
+			test('similarity match edge case: only first line differs', async () => {
+				// Tests the slice calculation when identical.leading = 0
+				// 3/4 lines match = 75% similarity > 60% threshold
+				setText('old_beginning\nmiddle_one\nmiddle_two\nending_line');
+				// Search matches last 3 lines, first is different
+				// identical.leading = 0, identical.trailing = 3
+				const result = await doApplyEdit(
+					'wrong_beginning\nmiddle_one\nmiddle_two\nending_line',
+					'new_beginning\nmiddle_one\nmiddle_two\nending_line'
+				);
+				// Should replace only first line, preserve last 3
+				expect(result.updatedFile).toBe('new_beginning\nmiddle_one\nmiddle_two\nending_line');
+			});
+		});
+	});
+
+	// Edit minimization tests across all strategies
+	describe('edit minimization', () => {
+		test('exact match minimizes edits - preserves identical prefix/suffix', async () => {
+			setText('prefix unchanged middle changed suffix unchanged');
+			const result = await doApplyEdit('prefix unchanged middle changed suffix unchanged', 'prefix unchanged middle updated suffix unchanged');
+			// Should only edit the "changed" -> "updated" part
+			expect(result.edits.length).toBe(1);
+			expect(result.edits[0].newText).toBe('updat');
+		});
+
+		test('fuzzy match only replaces different content', async () => {
+			setText('line1\nline2\nline3\n');
+			const result = await doApplyEdit('line1\nline2\nline3', 'line1\nmodified\nline3');
+			// Should edit the content
+			expect(result.updatedFile).toBe('line1\nmodified\nline3\n');
+		});
+
+		test('edits array contains correct positions', async () => {
+			setText('start\ntarget line to change\nend');
+			const result = await doApplyEdit('target line to change', 'modified line');
+
+			expect(result.edits.length).toBe(1);
+			const edit = result.edits[0];
+
+			// Verify the edit has the right text
+			expect(edit.newText).toBe('modified lin');
+			// Verify it's on the correct line
+			expect(edit.range.start.line).toBe(1); // 0-indexed, so line 2
+		});
+
+		test('exact match with partial change minimizes edited text', async () => {
+			setText('const a = 1;\nconst b = 2;\nconst c = 3;');
+			const result = await doApplyEdit('const a = 1;\nconst b = 2;\nconst c = 3;', 'const a = 10;\nconst b = 2;\nconst c = 30;');
+			// Should have minimized the edits
+			expect(result.updatedFile).toBe('const a = 10;\nconst b = 2;\nconst c = 30;');
+		});
 	});
 });
 
