@@ -34,6 +34,10 @@ export class NullEnvService extends AbstractEnvService {
 		return 'test-machine';
 	}
 
+	override get devDeviceId(): string {
+		return 'test-dev-device';
+	}
+
 	override get remoteName(): string | undefined {
 		return undefined;
 	}

@@ -121,6 +121,7 @@ function decorateWithCommonProperties(properties: TelemetryProperties, envServic
 	// We have editor-agnostic fields but keep the vs-specific ones for backward compatibility
 	properties['common_vscodemachineid'] = envService.machineId;
 	properties['common_vscodesessionid'] = envService.sessionId;
+	properties['client_deviceid'] = envService.devDeviceId;
 
 	properties['common_uikind'] = envService.uiKind;
 	properties['common_remotename'] = envService.remoteName ?? 'none';
