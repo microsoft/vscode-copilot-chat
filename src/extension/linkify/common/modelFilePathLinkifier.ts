@@ -45,29 +45,28 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 				continue;
 			}
 
-			const resolved = await this.resolveTarget(parsed.targetPath, workspaceFolders, parsed.preserveDirectorySlash);
-			if (!resolved) {
-				parts.push(original);
-				continue;
-			}
+			// Push promise to resolve in parallel with other matches
+			parts.push(this.resolveTarget(parsed.targetPath, workspaceFolders, parsed.preserveDirectorySlash).then(resolved => {
+				if (!resolved) {
+					return original;
+				}
 
-			const basePath = getWorkspaceFileDisplayPath(this.workspaceService, resolved);
-			const anchorRange = this.parseAnchor(parsed.anchor);
-			if (parsed.anchor && !anchorRange) {
-				parts.push(original);
-				continue;
-			}
+				const basePath = getWorkspaceFileDisplayPath(this.workspaceService, resolved);
+				const anchorRange = this.parseAnchor(parsed.anchor);
+				if (parsed.anchor && !anchorRange) {
+					return original;
+				}
 
-			if (anchorRange) {
-				const { range, startLine, endLine } = anchorRange;
-				const displayPath = endLine && startLine !== endLine
-					? `${basePath}#L${startLine}-${endLine}`
-					: `${basePath}#L${startLine}`;
-				parts.push(new LinkifyLocationAnchor(new Location(resolved, range), displayPath));
-				continue;
-			}
+				if (anchorRange) {
+					const { range, startLine, endLine } = anchorRange;
+					const displayPath = endLine && startLine !== endLine
+						? `${basePath}#L${startLine}-L${endLine}`
+						: `${basePath}#L${startLine}`;
+					return new LinkifyLocationAnchor(new Location(resolved, range), displayPath);
+				}
 
-			parts.push(new LinkifyLocationAnchor(resolved, basePath));
+				return new LinkifyLocationAnchor(resolved, basePath);
+			}));
 		}
 
 		const suffix = text.slice(lastIndex);
@@ -125,9 +124,9 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 		const { text, targetPath, anchor } = parsed;
 		const textMatchesBase = targetPath === text;
 		const textIsFilename = !text.includes('/') && targetPath.endsWith(`/${text}`);
-		const descriptiveAbsolute = this.isAbsolutePath(targetPath) && !!anchor;
+		const descriptiveWithAnchor = !!anchor; // Allow any descriptive text when anchor is present
 
-		return Boolean(workspaceFolders.length) && (textMatchesBase || textIsFilename || descriptiveAbsolute);
+		return Boolean(workspaceFolders.length) && (textMatchesBase || textIsFilename || descriptiveWithAnchor);
 	}
 
 	private async resolveTarget(targetPath: string, workspaceFolders: readonly Uri[], preserveDirectorySlash: boolean): Promise<Uri | undefined> {
@@ -187,13 +186,14 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 	}
 
 	private parseAnchor(anchor: string | undefined): { readonly range: Range; readonly startLine: string; readonly endLine: string | undefined } | undefined {
-		// Ensure the anchor follows the #L123 or #L123-456 format before parsing it.
-		if (!anchor || !/^L\d+(?:-\d+)?$/.test(anchor)) {
+		// Ensure the anchor follows the #L123, #L123-456, or #L123-L456 format before parsing it.
+		if (!anchor || !/^L\d+(?:-L?\d+)?$/.test(anchor)) {
 			return undefined;
 		}
 
 		// Capture the start (and optional end) line numbers from the anchor.
-		const match = /^L(\d+)(?:-(\d+))?$/.exec(anchor);
+		// Support both L123-456 and L123-L456 formats
+		const match = /^L(\d+)(?:-L?(\d+))?$/.exec(anchor);
 		if (!match) {
 			return undefined;
 		}

@@ -14,7 +14,7 @@ suite('Model File Path Linkifier', () => {
 		const result = await linkify(service, '[src/file.ts](src/file.ts#L10-12)');
 		const anchor = result.parts[0] as LinkifyLocationAnchor;
 		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(9, 0), new Position(11, 0))));
-		expect(anchor.title).toBe('src/file.ts#L10-12');
+		expect(anchor.title).toBe('src/file.ts#L10-L12');
 		assertPartsEqual([anchor], [expected]);
 	});
 
@@ -45,21 +45,68 @@ suite('Model File Path Linkifier', () => {
 		assertPartsEqual([anchor], [expected]);
 	});
 
-	test('Should fallback when text does not match base path', async () => {
+	test('Should fallback when text does not match base path and no anchor', async () => {
 		const service = createTestLinkifierService('src/file.ts');
-		const result = await linkify(service, '[other](src/file.ts#L2-3)');
+		const result = await linkify(service, '[other](src/file.ts)');
 		assertPartsEqual(result.parts, ['other']);
 	});
 
-	test('Should return label when text omits path', async () => {
+	test('Should linkify descriptive text with anchor', async () => {
 		const service = createTestLinkifierService('src/file.ts');
-		const result = await linkify(service, '[line 54](src/file.ts#L54)');
-		assertPartsEqual(result.parts, ['line 54']);
+		const result = await linkify(service, '[Await chat view](src/file.ts#L54)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(53, 0), new Position(53, 0))));
+		expect(anchor.title).toBe('src/file.ts#L54');
+		assertPartsEqual([anchor], [expected]);
 	});
 
 	test('Should fallback for invalid anchor syntax', async () => {
 		const service = createTestLinkifierService('src/file.ts');
 		const result = await linkify(service, '[src/file.ts](src/file.ts#Lines10-12)');
 		assertPartsEqual(result.parts, ['src/file.ts']);
+	});
+
+	test('Should handle backticks in link text', async () => {
+		const service = createTestLinkifierService('file.ts');
+		const result = await linkify(service, '[`file.ts`](file.ts)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(workspaceFile('file.ts'));
+		assertPartsEqual([anchor], [expected]);
+	});
+
+	test('Should handle backticks in link text with line anchor', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[`src/file.ts`](src/file.ts#L42)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(41, 0), new Position(41, 0))));
+		expect(anchor.title).toBe('src/file.ts#L42');
+		assertPartsEqual([anchor], [expected]);
+	});
+
+	test('Should handle L123-L456 anchor format with L prefix on end line', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[src/file.ts](src/file.ts#L10-L15)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(9, 0), new Position(14, 0))));
+		expect(anchor.title).toBe('src/file.ts#L10-L15');
+		assertPartsEqual([anchor], [expected]);
+	});
+
+	test('Should handle descriptive text with L123-L456 anchor format', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[Some descriptive text](src/file.ts#L20-L25)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(19, 0), new Position(24, 0))));
+		expect(anchor.title).toBe('src/file.ts#L20-L25');
+		assertPartsEqual([anchor], [expected]);
+	});
+
+	test('Should normalize non-standard L123-456 format to standard L123-L456', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[src/file.ts](src/file.ts#L20-25)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(19, 0), new Position(24, 0))));
+		expect(anchor.title).toBe('src/file.ts#L20-L25');
+		assertPartsEqual([anchor], [expected]);
 	});
 });
