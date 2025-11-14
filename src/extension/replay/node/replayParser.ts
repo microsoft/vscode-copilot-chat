@@ -3,12 +3,23 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ChatStep } from '../common/chatReplayResponses';
+import { ChatStep, FileEdits } from '../common/chatReplayResponses';
 
 interface PromptObject {
 	[key: string]: unknown;
 	prompt: unknown;
 	logs: unknown;
+}
+
+interface LogEntry {
+	kind: 'toolCall' | 'request';
+	id: string;
+	tool: string;
+	args: string;
+	edits: FileEdits[];
+	messages: string;
+	response: string[] | { message: string[] };
+	[key: string]: unknown;
 }
 
 function isValidPrompt(prompt: { [key: string]: unknown }): prompt is PromptObject {
@@ -60,7 +71,7 @@ function parsePrompt(prompt: PromptObject, steps: ChatStep[]) {
 		line: 0,
 	});
 
-	for (const log of prompt.logs as any[]) {
+	for (const log of prompt.logs as LogEntry[]) {
 		if (log.kind === 'toolCall') {
 			steps.push({
 				kind: 'toolCall',
@@ -69,7 +80,7 @@ function parsePrompt(prompt: PromptObject, steps: ChatStep[]) {
 				toolName: log.tool,
 				args: JSON.parse(log.args),
 				edits: log.edits,
-				results: log.response
+				results: Array.isArray(log.response) ? log.response : log.response.message
 			});
 		} else if (log.kind === 'request') {
 			steps.push({
@@ -77,7 +88,7 @@ function parsePrompt(prompt: PromptObject, steps: ChatStep[]) {
 				id: log.id,
 				line: 0,
 				prompt: log.messages,
-				result: Array.isArray(log.response.message) ? log.response.message.join('\n') : log.response.message
+				result: Array.isArray(log.response) ? log.response.join('\n') : log.response.message.join('\n')
 			});
 		}
 	}
