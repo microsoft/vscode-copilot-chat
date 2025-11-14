@@ -45,6 +45,10 @@ const HIDDEN_MODEL_D_HASHES = [
 	'312f75b4c11f3fec13b8722cba17a3cb3e355144bce27ebb8afdd9abe2779685'
 ];
 
+const HIDDEN_MODEL_E_HASHES: string[] = [
+	'6013de0381f648b7f21518885c02b40b7583adfb33c6d9b64d3aed52c3934798'
+];
+
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 	return 'id' in model ? model.id : model.model;
 }
@@ -94,6 +98,11 @@ export async function isHiddenModelD(model: LanguageModelChat | IChatEndpoint | 
 		return true;
 	}
 	return false;
+}
+
+export async function isHiddenModelE(model: LanguageModelChat | IChatEndpoint) {
+	const h = await getCachedSha256Hash(model.family);
+	return HIDDEN_MODEL_E_HASHES.includes(h);
 }
 
 export async function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
@@ -150,7 +159,7 @@ export async function modelSupportsReplaceString(model: LanguageModelChat | ICha
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export async function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || await isHiddenModelE(model);
 }
 
 /**
@@ -158,7 +167,7 @@ export async function modelSupportsMultiReplaceString(model: LanguageModelChat |
  * without needing insert_edit_into_file.
  */
 export async function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code');
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code') || await isHiddenModelE(model);
 }
 
 /**
@@ -173,7 +182,7 @@ export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IC
  * The model can accept image urls as the `image_url` parameter in mcp tool results.
  */
 export async function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic');
+	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic') && !await isHiddenModelE(model);
 }
 
 /**
