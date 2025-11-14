@@ -23,7 +23,7 @@ import { StringText } from '../../../util/vs/editor/common/core/text/abstractTex
 import { Uri } from '../../../vscodeTypes';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
-import { INextEditDisplayLocation, INextEditResult } from './nextEditResult';
+import { INextEditCommandResult, INextEditDisplayLocation, INextEditResult } from './nextEditResult';
 
 export type NextEditTelemetryStatus = 'new' | 'requested' | `noEdit:${string}` | 'docChanged' | 'emptyEdits' | 'previouslyRejected' | 'previouslyRejectedCache' | 'accepted' | 'notAccepted' | 'rejected';
 
@@ -592,9 +592,10 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 
 	private _postProcessingOutcome: string | undefined;
 	public setPostProcessingOutcome(suggestion: {
-		edit: StringReplacement;
+		edit: StringReplacement | undefined;
 		isInlineCompletion: boolean;
 		displayLocation?: INextEditDisplayLocation;
+		commandId: string | undefined;
 	}): this {
 		const displayLocation = suggestion.displayLocation ? {
 			label: suggestion.displayLocation.label,
@@ -602,9 +603,10 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		} : undefined;
 
 		this._postProcessingOutcome = JSON.stringify({
-			suggestedEdit: suggestion.edit.toString(),
+			suggestedEdit: suggestion.edit?.toString(),
 			isInlineCompletion: suggestion.isInlineCompletion,
-			displayLocation
+			displayLocation,
+			commandId: suggestion.commandId,
 		});
 
 		return this;
@@ -613,7 +615,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 
 export class TelemetrySender implements IDisposable {
 
-	private readonly _map = new Map<INextEditResult, { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle }>();
+	private readonly _map = new Map<INextEditResult | INextEditCommandResult, { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle }>();
 
 	constructor(
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -623,7 +625,7 @@ export class TelemetrySender implements IDisposable {
 	/**
 	 * Schedule sending telemetry for the next edit result in case it gets ignored by user (ie is not accepted or rejected, so gets replaced by another edit)
 	 */
-	public scheduleSendingEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
+	public scheduleSendingEnhancedTelemetry(nextEditResult: INextEditResult | INextEditCommandResult, builder: NextEditProviderTelemetryBuilder): void {
 		const timeout = setTimeout(() => {
 			let telemetry: INextEditProviderTelemetry;
 			this._map.delete(nextEditResult);
@@ -640,7 +642,7 @@ export class TelemetrySender implements IDisposable {
 	/**
 	 * Send telemetry for the next edit result in case it has already been rejected or contains no edits to be shown.
 	 */
-	public sendTelemetry(nextEditResult: INextEditResult | undefined, builder: NextEditProviderTelemetryBuilder): void {
+	public sendTelemetry(nextEditResult: INextEditResult | INextEditCommandResult | undefined, builder: NextEditProviderTelemetryBuilder): void {
 		if (nextEditResult) {
 			const data = this._map.get(nextEditResult);
 			if (data) {
