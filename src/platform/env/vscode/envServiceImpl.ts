@@ -22,6 +22,9 @@ export class EnvServiceImpl implements IEnvService {
 	public get machineId(): string {
 		return vscode.env.machineId;
 	}
+	public get devDeviceId(): string {
+		return vscode.env.devDeviceId;
+	}
 	public get vscodeVersion(): string {
 		return vscode.version;
 	}
