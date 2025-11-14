@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IOctoKitService } from '../../../platform/github/common/githubService';
+import { IOctoKitService, PullRequestFile } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
@@ -24,6 +24,7 @@ export interface PRContentUriParams {
 	commitSha: string;
 	isBase: boolean; // true for left side, false for right side
 	previousFileName?: string; // for renames
+	status?: PullRequestFile['status'];
 }
 
 /**
@@ -54,6 +55,16 @@ export function fromPRContentUri(uri: vscode.Uri): PRContentUriParams | undefine
 	}
 }
 
+function isMissingOnSide(status: PullRequestFile['status'] | undefined, isBase: boolean): boolean {
+	if (!status) {
+		return false;
+	}
+	if (isBase) {
+		return status === 'added';
+	}
+	return status === 'removed';
+}
+
 /**
  * TextDocumentContentProvider for PR content that fetches file content from GitHub
  */
@@ -81,6 +92,13 @@ export class PRContentProvider extends Disposable implements vscode.TextDocument
 		const params = fromPRContentUri(uri);
 		if (!params) {
 			this.logService.error(`[${PRContentProvider.ID}] Invalid PR content URI: ${uri.toString()}`);
+			return '';
+		}
+
+		if (isMissingOnSide(params.status, params.isBase)) {
+			this.logService.trace(
+				`[${PRContentProvider.ID}] Skipping fetch for ${params.fileName} because it does not exist on the ${params.isBase ? 'base' : 'head'} side (status: ${params.status})`
+			);
 			return '';
 		}
 

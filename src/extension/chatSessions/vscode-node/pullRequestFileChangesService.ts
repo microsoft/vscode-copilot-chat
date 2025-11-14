@@ -72,7 +72,8 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 						prNumber: pullRequest.number,
 						commitSha: pullRequest.baseRefOid,
 						isBase: true,
-						previousFileName: file.previous_filename
+						previousFileName: file.previous_filename,
+						status: file.status
 					}
 				);
 
@@ -83,7 +84,8 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 						repo: repoId.repo,
 						prNumber: pullRequest.number,
 						commitSha: pullRequest.headRefOid,
-						isBase: false
+						isBase: false,
+						status: file.status
 					}
 				);
 
