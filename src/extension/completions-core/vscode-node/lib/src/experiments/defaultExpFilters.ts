@@ -10,10 +10,10 @@ import { IInstantiationService, ServicesAccessor } from '../../../../../../util/
 import { CopilotToken } from '../auth/copilotTokenManager';
 import { getUserKind } from '../auth/orgs';
 import {
+	BuildInfo,
 	BuildType,
 	ConfigKey,
-	getConfig,
-	ICompletionsBuildInfoService
+	getConfig
 } from '../config';
 import { getEngineRequestInfo } from '../openai/config';
 import { Filter, Release } from './filters';
@@ -34,7 +34,7 @@ export function setupCompletionsExperimentationService(accessor: ServicesAccesso
 }
 
 function getPluginRelease(accessor: ServicesAccessor): Release {
-	if (accessor.get(ICompletionsBuildInfoService).getBuildType() === BuildType.NIGHTLY) {
+	if (BuildInfo.getBuildType() === BuildType.NIGHTLY) {
 		return Release.Nightly;
 	}
 	return Release.Stable;
@@ -53,7 +53,7 @@ export function createCompletionsFilters(accessor: ServicesAccessor, token: Omit
 
 	filters.set(Filter.ExtensionRelease, getPluginRelease(accessor));
 	filters.set(Filter.CopilotOverrideEngine, getConfig(accessor, ConfigKey.DebugOverrideEngine) || getConfig(accessor, ConfigKey.DebugOverrideEngineLegacy));
-	filters.set(Filter.CopilotClientVersion, accessor.get(ICompletionsBuildInfoService).isProduction() ? accessor.get(ICompletionsBuildInfoService).getVersion() : '1.999.0');
+	filters.set(Filter.CopilotClientVersion, BuildInfo.isProduction() ? BuildInfo.getVersion() : '1.999.0');
 
 	if (token) {
 		const userKind = getUserKind(token);

@@ -321,88 +321,31 @@ export function dumpForTelemetry(accessor: ServicesAccessor) {
 	}
 }
 
-export const ICompletionsBuildInfoService = createServiceIdentifier<ICompletionsBuildInfoService>('completionsBuildInfoService');
-export interface ICompletionsBuildInfoService {
-	readonly _serviceBrand: undefined;
+export class BuildInfo {
 
-	isPreRelease(): boolean;
-	isProduction(): boolean;
-	getBuildType(): BuildType;
-	getVersion(): string;
-	getDisplayVersion(): string;
-	getBuild(): string;
-	getName(): string;
-}
-
-export class BuildInfo implements ICompletionsBuildInfoService {
-	declare _serviceBrand: undefined;
-
-	// TODO for now this is just initialised from `packageJson` which is the same across agent/extension.
-	// Consider reworking this.
-	private packageJson = packageJson;
-	constructor() { }
-
-	/**
-	 * @returns true if this is a build for end users.
-	 * (for the VSCode extension this is currently either the normal extension or the nightly release)
-	 */
-
-	isPreRelease(): boolean {
+	static isPreRelease(): boolean {
 		return this.getBuildType() === BuildType.NIGHTLY;
 	}
 
-	isProduction(): boolean {
+	static isProduction(): boolean {
 		return this.getBuildType() !== BuildType.DEV;
 	}
 
-	getBuildType(): BuildType {
-		const buildType = <'dev' | 'prod'>this.packageJson.buildType;
+	static getBuildType(): BuildType {
+		const buildType = <'dev' | 'prod'>packageJson.buildType;
 		if (buildType === 'prod') {
-			return this.getVersion().length === 15 ? BuildType.NIGHTLY : BuildType.PROD;
+			return BuildInfo.getVersion().length === 15 ? BuildType.NIGHTLY : BuildType.PROD;
 		}
 		return BuildType.DEV;
 	}
 
-	getVersion(): string {
-		return this.packageJson.version;
+	static getVersion(): string {
+		return packageJson.version;
 	}
 
-	getDisplayVersion(): string {
-		if (this.getBuildType() === BuildType.DEV) {
-			return `${this.getVersion()}-dev`;
-		} else {
-			return this.getVersion();
-		}
+	static getBuild(): string {
+		return packageJson.build;
 	}
-
-	getBuild(): string {
-		return this.packageJson.build;
-	}
-
-	getName(): string {
-		return this.packageJson.name;
-	}
-}
-
-export const ICompletionsEditorSessionService = createServiceIdentifier<ICompletionsEditorSessionService>('completionsEditorSessionService');
-export interface ICompletionsEditorSessionService {
-	readonly _serviceBrand: undefined;
-
-	readonly sessionId: string;
-	readonly machineId: string;
-	readonly remoteName: string;
-	readonly uiKind: 'desktop' | 'web';
-}
-
-export class EditorSession implements ICompletionsEditorSessionService {
-	declare _serviceBrand: undefined;
-
-	constructor(
-		readonly sessionId: string,
-		readonly machineId: string,
-		readonly remoteName = 'none',
-		readonly uiKind: 'desktop' | 'web' = 'desktop'
-	) { }
 }
 
 type NameAndVersion = {
@@ -443,10 +386,9 @@ export const apiVersion = '2025-05-01';
 
 export function editorVersionHeaders(accessor: ServicesAccessor): { [key: string]: string } {
 	const info = accessor.get(ICompletionsEditorAndPluginInfo);
-	const buildInfo = accessor.get(ICompletionsBuildInfoService);
 	return {
 		'Editor-Version': formatNameAndVersion(info.getEditorInfo()),
 		'Editor-Plugin-Version': formatNameAndVersion(info.getEditorPluginInfo()),
-		'Copilot-Language-Server-Version': buildInfo.getVersion(),
+		'Copilot-Language-Server-Version': BuildInfo.getVersion(),
 	};
 }

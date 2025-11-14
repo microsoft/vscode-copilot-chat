@@ -10,7 +10,6 @@ import { IInstantiationService, ServicesAccessor } from '../../../../../../util/
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { CopilotToken, ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
-import { ICompletionsFeaturesService } from '../experiments/featuresService';
 import { asyncIterableFilter, asyncIterableMap } from '../helpers/iterableHelpers';
 import { ICompletionsLogTargetService, Logger } from '../logger';
 import { getEndpointUrl } from '../networkConfiguration';
@@ -434,7 +433,6 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ICompletionsRuntimeModeService private readonly runtimeModeService: ICompletionsRuntimeModeService,
-		@ICompletionsFeaturesService private readonly featuresService: ICompletionsFeaturesService,
 		@ICompletionsLogTargetService private readonly logTargetService: ICompletionsLogTargetService,
 		@ICompletionsCopilotTokenManager private readonly copilotTokenManager: ICompletionsCopilotTokenManager,
 		@ICompletionsStatusReporter private readonly statusReporter: ICompletionsStatusReporter,
@@ -506,7 +504,6 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		baseTelemetryData: TelemetryWithExp,
 		cancel?: ICancellationToken
 	): Promise<Response | 'not-sent'> {
-		const disableLogProb = this.featuresService.disableLogProb(baseTelemetryData);
 
 		const request: CompletionRequest = {
 			prompt: params.prompt.prefix,
@@ -520,7 +517,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			extra: params.extra,
 		};
 
-		if (params.requestLogProbs || !disableLogProb) {
+		if (params.requestLogProbs) {
 			request.logprobs = 2; // Request that logprobs of 2 tokens (i.e. including the best alternative) be returned
 		}
 

@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { commands, env, UIKind } from 'vscode';
+import { commands, env } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -28,7 +28,7 @@ import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from './lib/
 import { ICompletionsCitationManager } from './lib/src/citationManager';
 import { CompletionNotifier, ICompletionsNotifierService } from './lib/src/completionNotifier';
 import { CompletionsObservableWorkspace, ICompletionsObservableWorkspace } from './lib/src/completionsObservableWorkspace';
-import { BuildInfo, EditorSession, ICompletionsBuildInfoService, ICompletionsConfigProvider, ICompletionsEditorAndPluginInfo, ICompletionsEditorSessionService } from './lib/src/config';
+import { ICompletionsConfigProvider, ICompletionsEditorAndPluginInfo } from './lib/src/config';
 import { registerDocumentTracker } from './lib/src/documentTracker';
 import { ICompletionsUserErrorNotifierService, UserErrorNotifier } from './lib/src/error/userErrorNotifier';
 import { setupCompletionsExperimentationService } from './lib/src/experiments/defaultExpFilters';
@@ -88,7 +88,6 @@ export function createContext(serviceAccessor: ServicesAccessor, store: Disposab
 	});
 
 	serviceCollection.set(ICompletionsRuntimeModeService, RuntimeMode.fromEnvironment(false));
-	serviceCollection.set(ICompletionsBuildInfoService, new BuildInfo());
 	serviceCollection.set(ICompletionsCacheService, new CompletionsCache());
 	serviceCollection.set(ICompletionsConfigProvider, new VSCodeConfigProvider());
 	serviceCollection.set(ICompletionsLastGhostText, new LastGhostText());
@@ -103,7 +102,6 @@ export function createContext(serviceAccessor: ServicesAccessor, store: Disposab
 	serviceCollection.set(ICompletionsCopilotTokenManager, new SyncDescriptor(CopilotTokenManagerImpl, [false]));
 	serviceCollection.set(ICompletionsTextDocumentManagerService, new SyncDescriptor(ExtensionTextDocumentManager));
 	serviceCollection.set(ICompletionsFileReaderService, new SyncDescriptor(FileReader));
-	serviceCollection.set(ICompletionsEditorSessionService, new EditorSession(env.sessionId, env.machineId, env.remoteName, uiKindToString(env.uiKind)));
 	serviceCollection.set(ICompletionsBlockModeConfig, new SyncDescriptor(ConfigBlockModeConfig));
 	serviceCollection.set(ICompletionsTelemetryService, new SyncDescriptor(CompletionsTelemetryServiceBridge));
 	serviceCollection.set(ICompletionsTelemetryUserConfigService, new SyncDescriptor(TelemetryUserConfig));
@@ -258,15 +256,6 @@ function registerDiagnosticCommands(accessor: ServicesAccessor): IDisposable {
 	}));
 
 	return disposables;
-}
-
-function uiKindToString(uiKind: UIKind): 'desktop' | 'web' {
-	switch (uiKind) {
-		case UIKind.Desktop:
-			return 'desktop';
-		case UIKind.Web:
-			return 'web';
-	}
 }
 
 export function registerCommandWrapper(accessor: ServicesAccessor, command: string, fn: (...args: unknown[]) => unknown): IDisposable {
