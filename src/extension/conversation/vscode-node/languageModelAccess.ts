@@ -109,7 +109,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];
-		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
+		const chatEndpoints = (await this._endpointProvider.getAllChatEndpoints()).filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
 		chatEndpoints.push(autoEndpoint);
 		let defaultChatEndpoint: IChatEndpoint | undefined;
