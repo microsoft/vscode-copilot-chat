@@ -5,12 +5,6 @@
 
 import { ChatStep, FileEdits } from '../common/chatReplayResponses';
 
-interface PromptObject {
-	[key: string]: unknown;
-	prompt: unknown;
-	logs: unknown;
-}
-
 interface LogEntry {
 	kind: 'toolCall' | 'request';
 	id: string;
@@ -22,8 +16,14 @@ interface LogEntry {
 	[key: string]: unknown;
 }
 
+interface PromptObject {
+	[key: string]: unknown;
+	prompt: unknown;
+	logs: LogEntry[];
+}
+
 function isValidPrompt(prompt: { [key: string]: unknown }): prompt is PromptObject {
-	return 'prompt' in prompt && 'logs' in prompt;
+	return 'prompt' in prompt && 'logs' in prompt && Array.isArray(prompt.logs);
 }
 
 export function parseReplay(content: string): ChatStep[] {
@@ -71,7 +71,7 @@ function parsePrompt(prompt: PromptObject, steps: ChatStep[]) {
 		line: 0,
 	});
 
-	for (const log of prompt.logs as LogEntry[]) {
+	for (const log of prompt.logs) {
 		if (log.kind === 'toolCall') {
 			steps.push({
 				kind: 'toolCall',
