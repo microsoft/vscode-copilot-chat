@@ -382,6 +382,20 @@ function sendTelemetryEvent(
 	);
 }
 
+function sendEnhancedTelemetryEvent(
+	completionsTelemetryService: ICompletionsTelemetryService,
+	store: TelemetryStore,
+	name: string,
+	data: { properties: TelemetryProperties; measurements: TelemetryMeasurements }
+): void {
+	const properties = TelemetryData.maybeRemoveRepoInfoFromProperties(store, data.properties);
+	completionsTelemetryService.sendEnhancedGHTelemetryEvent(
+		name,
+		properties,
+		data.measurements
+	);
+}
+
 function sendTelemetryErrorEvent(
 	accessor: ServicesAccessor,
 	store: TelemetryStore,
@@ -465,8 +479,11 @@ async function _telemetry(
 	// if telemetry data isn't given, make a new one to hold at least the config
 	const definedTelemetryData = telemetryData || TelemetryData.createAndMarkAsIssued({}, {});
 	await definedTelemetryData.makeReadyForSending(accessor, store ?? false, 'IncludeExp', now);
-	if (!isEnhanced(store) || instantiationService.invokeFunction(shouldSendEnhanced)) {
+	if (!isEnhanced(store)) {
 		sendTelemetryEvent(completionsTelemetryService, store, name, definedTelemetryData);
+	}
+	else if (instantiationService.invokeFunction(shouldSendEnhanced)) {
+		sendEnhancedTelemetryEvent(completionsTelemetryService, store, name, definedTelemetryData);
 	}
 	if (isEnhanced(store) && ftTelemetryEvents.includes(name) && instantiationService.invokeFunction(shouldSendFinetuningTelemetry)) {
 		instantiationService.invokeFunction(sendFTTelemetryEvent, store, name, definedTelemetryData);
