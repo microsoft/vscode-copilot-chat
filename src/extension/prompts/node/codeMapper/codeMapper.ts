@@ -314,7 +314,7 @@ export class CodeMapper {
 		this.gpt4oProxyEndpoint = this.experimentationService.hasTreatments().then(() => this.instantiationService.createInstance(Proxy4oEndpoint));
 		this.shortIAEndpoint = this.experimentationService.hasTreatments().then(() => this.instantiationService.createInstance(ProxyInstantApplyShortEndpoint));
 
-		this.shortContextLimit = configurationService.getExperimentBasedConfig<number>(ConfigKey.Internal.InstantApplyShortContextLimit, experimentationService) ?? 8000;
+		this.shortContextLimit = configurationService.getExperimentBasedConfig<number>(ConfigKey.AdvancedExperimentalExperiments.InstantApplyShortContextLimit, experimentationService) ?? 8000;
 	}
 
 	public async mapCode(request: ICodeMapperRequestInput, resultStream: MappedEditsResponseStream, telemetryInfo: ICodeMapperTelemetryInfo | undefined, token: CancellationToken): Promise<CodeMapperOutcome | undefined> {

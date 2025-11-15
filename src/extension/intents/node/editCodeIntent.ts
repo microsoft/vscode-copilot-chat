@@ -101,7 +101,7 @@ export class EditCodeIntent implements IIntent {
 
 	private async _handleCodesearch(conversation: Conversation, request: vscode.ChatRequest, location: ChatLocation, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, chatTelemetry: ChatTelemetryBuilder): Promise<{ request: vscode.ChatRequest; conversation: Conversation }> {
 		const foundReferences: vscode.ChatPromptReference[] = [];
-		if ((this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Internal.CodeSearchAgentEnabled)) && request.toolReferences.find((r) => r.name === CodebaseTool.toolName && !isDirectorySemanticSearch(r))) {
+		if ((this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.AdvancedExperimental.CodeSearchAgentEnabled)) && request.toolReferences.find((r) => r.name === CodebaseTool.toolName && !isDirectorySemanticSearch(r))) {
 
 			const latestTurn = conversation.getLatestTurn();
 

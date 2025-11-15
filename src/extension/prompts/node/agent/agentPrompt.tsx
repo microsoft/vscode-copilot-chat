@@ -87,7 +87,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const instructions = await this.getInstructions();
 
-		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
+		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.AdvancedExperimental.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />

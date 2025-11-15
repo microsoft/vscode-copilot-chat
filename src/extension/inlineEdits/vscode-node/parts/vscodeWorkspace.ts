@@ -44,7 +44,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	private readonly _store = new DisposableStore();
 	private readonly _filter = this._instaService.createInstance(DocumentFilter);
 	private get _useAlternativeNotebookFormat(): boolean {
-		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._experimentationService)
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.UseAlternativeNESNotebookFormat, this._experimentationService)
 			|| this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, this._experimentationService);
 	}
 	private readonly _markdownNotebookCells = new Lazy<ResourceSet>(() => {
