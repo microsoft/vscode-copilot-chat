@@ -100,11 +100,10 @@ export class ConversationFeature implements IExtensionContribution {
 			this.logService.debug(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
 			if (hasSession) {
 				this.activated = true;
+				activationBlockerDeferred.complete();
 			} else {
 				this.activated = false;
 			}
-
-			activationBlockerDeferred.complete();
 		}));
 	}
 
