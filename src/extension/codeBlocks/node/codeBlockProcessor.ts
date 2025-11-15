@@ -9,6 +9,7 @@ import { createFilepathRegexp, mdCodeBlockLangToLanguageId } from '../../../util
 import { CharCode } from '../../../util/vs/base/common/charCode';
 import { isFalsyOrWhitespace, splitLinesIncludeSeparators } from '../../../util/vs/base/common/strings';
 
+import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, MarkdownString } from '../../../vscodeTypes';
 import { CodeBlock } from '../../prompt/common/conversation';
@@ -38,6 +39,7 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 		private readonly _wrapped: ChatResponseStream,
 		codeblocksRepresentEdits: boolean | undefined,
 		@IPromptPathRepresentationService _promptPathRepresentationService: IPromptPathRepresentationService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		let uriReportedForIndex = -1;
 		this._codeBlockProcessor = new CodeBlockProcessor(
@@ -102,26 +104,37 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 		return new CodeBlocksMetadata(this._codeBlocks);
 	}
 
-	private forward(fc: CallableFunction) {
-		return (...args: any[]) => {
+	private forward<K extends keyof ChatResponseStream>(methodName: K): ChatResponseStream[K] {
+		const method = this._wrapped[methodName];
+		if (typeof method !== 'function') {
+			this._logService.warn(`[CodeBlockTrackingChatResponseStream] Method '${String(methodName)}' does not exist on the wrapped ChatResponseStream.`);
+			// Create a proper no-op function that matches the method signature
+			const noOp = (..._args: any[]): any => {
+				return undefined;
+			};
+			return noOp as ChatResponseStream[K];
+		}
+		// Preserve the function signature without double casting
+		const boundMethod = (...args: any[]) => {
 			this._codeBlockProcessor.flush();
-			return fc(...args);
+			return (method as Function).apply(this._wrapped, args);
 		};
+		return boundMethod as ChatResponseStream[K];
 	}
 
-	button = this.forward(this._wrapped.button.bind(this._wrapped));
-	filetree = this.forward(this._wrapped.filetree.bind(this._wrapped));
-	progress = this._wrapped.progress.bind(this._wrapped);
-	reference = this.forward(this._wrapped.reference.bind(this._wrapped));
-	textEdit = this.forward(this._wrapped.textEdit.bind(this._wrapped));
-	notebookEdit = this.forward(this._wrapped.notebookEdit.bind(this._wrapped));
-	confirmation = this.forward(this._wrapped.confirmation.bind(this._wrapped));
-	warning = this.forward(this._wrapped.warning.bind(this._wrapped));
-	reference2 = this.forward(this._wrapped.reference2.bind(this._wrapped));
-	codeCitation = this.forward(this._wrapped.codeCitation.bind(this._wrapped));
-	anchor = this.forward(this._wrapped.anchor.bind(this._wrapped));
-	externalEdit = this.forward(this._wrapped.externalEdit.bind(this._wrapped));
-	prepareToolInvocation = this.forward(this._wrapped.prepareToolInvocation.bind(this._wrapped));
+	button = this.forward('button');
+	filetree = this.forward('filetree');
+	progress = this.forward('progress');
+	reference = this.forward('reference');
+	textEdit = this.forward('textEdit');
+	notebookEdit = this.forward('notebookEdit');
+	confirmation = this.forward('confirmation');
+	warning = this.forward('warning');
+	reference2 = this.forward('reference2');
+	codeCitation = this.forward('codeCitation');
+	anchor = this.forward('anchor');
+	externalEdit = this.forward('externalEdit');
+	prepareToolInvocation = this.forward('prepareToolInvocation');
 }
 
 

@@ -4,13 +4,47 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { EndpointEditToolName, IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { BYOKModelCapabilities } from '../common/byokProvider';
 import { IBYOKStorageService } from './byokStorageService';
 import { CustomOAIBYOKModelProvider, hasExplicitApiPath } from './customOAIProvider';
 
-export function resolveAzureUrl(modelId: string, url: string): string {
+export interface AzureUrlOptions {
+	deploymentType: 'completions' | 'responses';
+	deploymentName: string;
+	apiVersion: string;
+}
+
+interface AzureModelConfig {
+	name: string;
+	url: string;
+	deploymentType?: 'completions' | 'responses';
+	deploymentName?: string;
+	apiVersion?: string;
+	maxInputTokens: number;
+	maxOutputTokens: number;
+	toolCalling?: boolean;
+	editTools?: EndpointEditToolName[];
+	thinking?: boolean;
+	vision?: boolean;
+	temperature?: number;
+	requiresAPIKey?: boolean;
+	requestHeaders?: Record<string, string>;
+}
+
+function createAzureUrlOptions(modelId: string, config?: Partial<AzureModelConfig>): AzureUrlOptions {
+	return {
+		deploymentType: config?.deploymentType ?? 'completions',
+		deploymentName: config?.deploymentName ?? modelId,
+		apiVersion: config?.apiVersion ?? '2025-01-01-preview'
+	};
+}
+
+export function resolveAzureUrl(modelId: string, url: string, options: AzureUrlOptions): string {
+
 	// The fully resolved url was already passed in
 	if (hasExplicitApiPath(url)) {
 		return url;
@@ -25,15 +59,40 @@ export function resolveAzureUrl(modelId: string, url: string): string {
 		url = url.slice(0, -3);
 	}
 
-	// Default to chat completions for base URLs
-	const defaultApiPath = '/chat/completions';
+	const { deploymentName, deploymentType, apiVersion } = options;
 
-	if (url.includes('models.ai.azure.com') || url.includes('inference.ml.azure.com')) {
-		return `${url}/v1${defaultApiPath}`;
-	} else if (url.includes('openai.azure.com')) {
-		return `${url}/openai/deployments/${modelId}${defaultApiPath}?api-version=2025-01-01-preview`;
+	// Determine if this is an Azure OpenAI endpoint (requires deployment name in path)
+	const isAzureOpenAIEndpointv1 = url.includes('models.ai.azure.com') || url.includes('inference.ml.azure.com');
+	const isAzureOpenAIEndpoint = url.includes('openai.azure.com') || url.includes('cognitiveservices.azure.com');
+
+	if (deploymentType === 'responses') {
+		// Handle Responses API
+		// Deployment name is passed in the request body as 'model' parameter, not in URL
+		let resolvedUrl: string;
+		if (isAzureOpenAIEndpointv1) {
+			resolvedUrl = `${url}/v1/responses?api-version=${apiVersion}`;
+		} else if (isAzureOpenAIEndpoint) {
+			resolvedUrl = `${url}/openai/responses?api-version=${apiVersion}`;
+		} else {
+			throw new Error(`Unrecognized Azure deployment URL for Responses API: ${url}`);
+		}
+
+		return resolvedUrl;
+	} else if (deploymentType === 'completions') {
+		// Handle Chat Completions API (default)
+		const defaultApiPath = '/chat/completions';
+		let resolvedUrl: string;
+
+		if (isAzureOpenAIEndpointv1) {
+			resolvedUrl = `${url}/v1${defaultApiPath}`;
+		} else if (isAzureOpenAIEndpoint) {
+			resolvedUrl = `${url}/openai/deployments/${deploymentName}${defaultApiPath}?api-version=${apiVersion}`;
+		} else {
+			throw new Error(`Unrecognized Azure deployment URL: ${url}`);
+		}
+		return resolvedUrl;
 	} else {
-		throw new Error(`Unrecognized Azure deployment URL: ${url}`);
+		throw new Error(`Invalid deployment type specified for model ${modelId}: ${deploymentType}`);
 	}
 }
 
@@ -41,18 +100,18 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 	static override readonly providerName = 'Azure';
 
 	constructor(
-		byokStorageService: IBYOKStorageService,
-		@IConfigurationService configurationService: IConfigurationService,
-		@ILogService logService: ILogService,
-		@IInstantiationService instantiationService: IInstantiationService,
-		@IExperimentationService experimentationService: IExperimentationService
+		_byokStorageService: IBYOKStorageService,
+		@IConfigurationService _configurationService: IConfigurationService,
+		@ILogService _logService: ILogService,
+		@IInstantiationService _instantiationService: IInstantiationService,
+		@IExperimentationService _experimentationService: IExperimentationService
 	) {
 		super(
-			byokStorageService,
-			configurationService,
-			logService,
-			instantiationService,
-			experimentationService
+			_byokStorageService,
+			_configurationService,
+			_logService,
+			_instantiationService,
+			_experimentationService
 		);
 		// Override the instance properties
 		this.providerName = AzureBYOKModelProvider.providerName;
@@ -63,6 +122,39 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 	}
 
 	protected override resolveUrl(modelId: string, url: string): string {
-		return resolveAzureUrl(modelId, url);
+		// Get model config to access deployment options
+		const modelConfig = this._configurationService?.getConfig(this.getConfigKey()) as Record<string, AzureModelConfig> | undefined;
+		const config = modelConfig?.[modelId];
+		const options = createAzureUrlOptions(modelId, config);
+		return resolveAzureUrl(modelId, url, options);
+	}
+
+	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
+		// Get model config to check deployment type and deployment name
+		const configKey = this.getConfigKey();
+		const modelConfig = this._configurationService.getConfig(configKey);
+
+		// Safely access the model-specific config
+		let config: AzureModelConfig | undefined;
+		if (modelConfig && typeof modelConfig === 'object' && modelId in modelConfig) {
+			config = (modelConfig as Record<string, AzureModelConfig>)[modelId];
+		}
+
+		const options = createAzureUrlOptions(modelId, config);
+		const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
+
+		// Override modelInfo.id with the deployment name (deployment name is also handled).
+		// This is required because Azure OpenAI uses the deployment name for API routing.
+		modelInfo.id = options.deploymentName;
+
+		// Set supported endpoints based on deployment type
+		if (options.deploymentType === 'responses') {
+			modelInfo.supported_endpoints = [ModelSupportedEndpoint.Responses];
+		} else {
+			// For completions API, only support chat completions
+			modelInfo.supported_endpoints = [ModelSupportedEndpoint.ChatCompletions];
+		}
+
+		return modelInfo;
 	}
 }

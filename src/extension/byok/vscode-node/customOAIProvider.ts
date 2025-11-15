@@ -44,9 +44,24 @@ export function hasExplicitApiPath(url: string): boolean {
 	return url.includes('/responses') || url.includes('/chat/completions');
 }
 
+interface UserModelConfig {
+	name: string;
+	url: string;
+	maxInputTokens: number;
+	maxOutputTokens: number;
+	toolCalling?: boolean;
+	editTools?: EndpointEditToolName[];
+	temperature?: number;
+	thinking?: boolean;
+	vision?: boolean;
+	requestHeaders?: Record<string, string>;
+	requiresAPIKey: boolean;
+}
+
 interface CustomOAIModelInfo extends LanguageModelChatInformation {
 	url: string;
 	thinking: boolean;
+	temperature?: number;
 	requestHeaders?: Record<string, string>;
 }
 
@@ -86,8 +101,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return modelInfo;
 	}
 
-	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }> {
-		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }>;
+	private getUserModelConfig(): Record<string, UserModelConfig> {
+		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, UserModelConfig>;
 		return modelConfig;
 	}
 
@@ -107,13 +122,14 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			models[modelId] = {
 				name: modelInfo.name,
 				url: resolvedUrl,
-				toolCalling: modelInfo.toolCalling,
-				vision: modelInfo.vision,
 				maxInputTokens: modelInfo.maxInputTokens,
 				maxOutputTokens: modelInfo.maxOutputTokens,
-				thinking: modelInfo.thinking,
+				toolCalling: modelInfo.toolCalling ?? false,
 				editTools: modelInfo.editTools,
-				requestHeaders: modelInfo.requestHeaders ? { ...modelInfo.requestHeaders } : undefined
+				vision: modelInfo.vision ?? false,
+				thinking: modelInfo.thinking,
+				temperature: modelInfo.temperature,
+				requestHeaders: modelInfo.requestHeaders ? { ...modelInfo.requestHeaders } : undefined,
 			};
 		}
 		return models;
@@ -145,8 +161,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 	private createModelInfo(id: string, capabilities: BYOKKnownModels[string]): CustomOAIModelInfo {
 		const baseInfo: CustomOAIModelInfo = {
 			id,
-			url: capabilities.url || '',
 			name: capabilities.name,
+			url: capabilities.url || '',
 			detail: this.providerName,
 			version: '1.0.0',
 			maxOutputTokens: capabilities.maxOutputTokens,
@@ -159,6 +175,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 				editTools: capabilities.editTools
 			},
 			thinking: capabilities.thinking || false,
+			temperature: capabilities.temperature,
 			requestHeaders: capabilities.requestHeaders,
 		};
 		return baseInfo;
@@ -190,14 +207,15 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			}
 		}
 		const modelInfo = await this.getModelInfo(model.id, apiKey, {
+			name: model.name,
+			url: model.url,
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,
-			vision: !!model.capabilities?.imageInput || false,
-			name: model.name,
-			url: model.url,
-			thinking: model.thinking,
 			editTools: model.capabilities.editTools?.filter(isEndpointEditToolName),
+			vision: !!model.capabilities?.imageInput || false,
+			thinking: model.thinking,
+			temperature: model.temperature,
 			requestHeaders: model.requestHeaders,
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
@@ -216,14 +234,15 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		}
 
 		const modelInfo = await this.getModelInfo(model.id, apiKey, {
+			name: model.name,
+			url: model.url,
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,
 			vision: !!model.capabilities?.imageInput || false,
-			name: model.name,
-			url: model.url,
 			thinking: model.thinking,
-			requestHeaders: model.requestHeaders
+			temperature: model.temperature,
+			requestHeaders: model.requestHeaders,
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
 		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);
