@@ -13,6 +13,7 @@ import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
 import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
+import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
 
 class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
@@ -104,6 +105,7 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
 					You can find the configuration in `config/app.config.json`.
 				</Tag>
+				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
@@ -200,6 +202,7 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
 					You can find the configuration in `config/app.config.json`.
 				</Tag>
+				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />

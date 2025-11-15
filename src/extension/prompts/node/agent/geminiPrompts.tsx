@@ -13,6 +13,7 @@ import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
 import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
+import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
 
 /**
@@ -102,6 +103,7 @@ export class DefaultGeminiAgentPrompt extends PromptElement<DefaultAgentPromptPr
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				<FileLinkificationInstructions />
 				<Tag name='example'>
 					The class `Person` is in `src/models/person.ts`.<br />
 					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />

@@ -12,6 +12,7 @@ import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
+import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
 
 class VSCModelPromptA extends PromptElement<DefaultAgentPromptProps> {
@@ -330,6 +331,7 @@ class VSCModelPromptB extends PromptElement<DefaultAgentPromptProps> {
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				<FileLinkificationInstructions />
 				{tools[ToolName.CoreRunInTerminal] ? <>
 					When commands are required, run them yourself in a terminal and summarize the results. Do not print runnable commands unless the user asks. If you must show them for documentation, make them clearly optional and keep one command per line.<br />
 				</> : <>

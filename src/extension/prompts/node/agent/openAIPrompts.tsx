@@ -14,6 +14,7 @@ import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
 import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
+import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
 
 export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
@@ -101,6 +102,7 @@ export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptPr
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				<FileLinkificationInstructions />
 				<Tag name='example'>
 					The class `Person` is in `src/models/person.ts`.<br />
 					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
@@ -312,9 +314,11 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				<br />
 				For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.<br />
 				<br />
+				<FileLinkificationInstructions />
 				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.
+					The class `Person` is in `src/models/person.ts`.<br />
+					Code for the HTTP client is in [src/network/httpClient.ts](src/network/httpClient.ts#L42).<br />
 				</Tag>
 				<MathIntegrationRules />
 			</Tag>
@@ -631,15 +635,13 @@ class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 			- Tone: collaborative, concise, factual; present tense, active voice; self-contained; no "above/below"; parallel wording.<br />
 			- Don'ts: no nested bullets/hierarchies; no ANSI codes; don't cram unrelated keywords; keep keyword lists short—wrap/reformat if long; avoid naming formatting styles in answers.<br />
 			- Adaptation: code explanations → precise, structured with code refs; simple tasks → lead with outcome; big changes → logical walkthrough + rationale + next actions; casual one-offs → plain sentences, no headers/bullets.<br />
-			- File References: When referencing files in your response, always follow the below rules:<br />
-			* Use inline code to make file paths clickable.<br />
-			* Each reference should have a stand alone path. Even if it's the same file.<br />
-			* Accepted: absolute, workspace-relative, a/ or b/ diff prefixes, or bare filename/suffix.<br />
-			* Do not use URIs like file://, vscode://, or https://.<br />
-			* Examples: src/app.ts, C:\repo\project\main.rs<br />
+			<br />
+			<FileLinkificationInstructions />
 		</InstructionMessage>;
 	}
 }
+
+// FileLinkificationInstructions extracted to shared fileLinkificationInstructions.tsx
 
 class OpenAIPromptResolver implements IAgentPrompt {
 
