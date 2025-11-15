@@ -83,7 +83,19 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 					configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
 				}
 			} else {
-				configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
+				if (key.oldId && key.oldId.startsWith('chat.advanced')) {
+					// Migrated advanced settings were not registered before
+					// So when not configured the default value from config API is undefined
+					// and the default value is obtained from the registered Config<T>.
+					// Therefore, to get the same behavior as before
+					// we need to check if the migrated setting is configured
+					// and take only the configured value and let the default value be obtained from the registered Config<T>.
+					if (this.isConfigured(key, scope)) {
+						configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
+					}
+				} else {
+					configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
+				}
 			}
 		}
 
