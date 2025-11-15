@@ -20,6 +20,11 @@
       "resolved": "ghcr.io/devcontainers/features/dotnet@sha256:06f4ef2c23792da4832a74da195d478d8f64316c45c7624a0367d6bd5c3fc500",
       "integrity": "sha256:06f4ef2c23792da4832a74da195d478d8f64316c45c7624a0367d6bd5c3fc500"
     },
+    "ghcr.io/devcontainers/features/git-lfs:1": {
+      "version": "1.2.5",
+      "resolved": "ghcr.io/devcontainers/features/git-lfs@sha256:71c2b371cf12ab7fcec47cf17369c6f59156100dad9abf9e4c593049d789de72",
+      "integrity": "sha256:71c2b371cf12ab7fcec47cf17369c6f59156100dad9abf9e4c593049d789de72"
+    },
     "ghcr.io/devcontainers/features/python:1": {
       "version": "1.7.1",
       "resolved": "ghcr.io/devcontainers/features/python@sha256:cf9b6d879790a594b459845b207c5e1762a0c8f954bb8033ff396e497f9c301b",
