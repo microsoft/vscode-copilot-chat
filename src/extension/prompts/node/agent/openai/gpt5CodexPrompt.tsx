@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isGptCodexFamily } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { InstructionMessage } from '../../base/instructionMessage';
@@ -91,7 +90,7 @@ class Gpt5CodexResolver implements IAgentPrompt {
 	static readonly familyPrefixes = [];
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isGptCodexFamily(endpoint.family);
+		return endpoint.family === 'gpt-5-codex';
 	}
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
