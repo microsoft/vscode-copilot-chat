@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
+import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
 
 
 interface CreateTool {
@@ -197,7 +198,13 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 	ReplyToCommentTool | CodeReviewTool;
 
 export type ToolCall = ToolInfo & { toolCallId: string };
-type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
+export type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
+
+function isInstructionAttachmentPath(path: string): boolean {
+	const normalizedPath = path.replace(/\\/g, '/');
+	return normalizedPath.endsWith('/.github/copilot-instructions.md')
+		|| (normalizedPath.includes('/.github/instructions/') && normalizedPath.endsWith('.md'));
+}
 
 export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: unknown }): boolean {
 	const toolCall = data as ToolCall;
@@ -289,7 +296,11 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 					type: "file" | "directory";
 					displayName: string;
 				};
-				const references: ChatPromptReference[] = ((event.data.attachments || []) as Attachment[]).map(attachment => ({ id: attachment.path, name: attachment.displayName, value: Uri.file(attachment.path) } as ChatPromptReference));
+				// Filter out vscode instruction files from references when building session history
+				// TODO@rebornix filter instructions should be rendered as "references" in chat response like normal chat.
+				const references: ChatPromptReference[] = ((event.data.attachments || []) as Attachment[])
+					.filter(attachment => !isInstructionAttachmentPath(attachment.path))
+					.map(attachment => ({ id: attachment.path, name: attachment.displayName, value: Uri.file(attachment.path) } as ChatPromptReference));
 				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, references, '', [], undefined));
 				break;
 			}
@@ -438,32 +449,31 @@ function formatProgressToolInvocation(invocation: ChatToolInvocationPart, toolCa
 }
 function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: ViewTool): void {
 	const args = toolCall.arguments;
-	const path = args.path ?? '';
-	const display = path ? formatUriForMessage(path) : '';
 
-	if (args.view_range && args.view_range[1] >= args.view_range[0]) {
+	if (!args.path) {
+		return;
+	} else if (args.view_range && args.view_range[1] >= args.view_range[0]) {
+		const display = formatUriForFileWidget(Uri.file(args.path));
 		const [start, end] = args.view_range;
 		const localizedMessage = start === end
-			? l10n.t("Read {0} (line {1})", display, start)
-			: l10n.t("Read {0} (lines {1} to {2})", display, start, end);
+			? l10n.t("Read {0}, line {1}", display, start)
+			: l10n.t("Read {0}, lines {1} to {2}", display, start, end);
 		invocation.invocationMessage = new MarkdownString(localizedMessage);
-		return;
+	} else {
+		const display = formatUriForFileWidget(Uri.file(args.path));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 	}
-
-	invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
 }
 
 function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, toolCall: StringReplaceEditorTool): void {
+	if (!toolCall.arguments.path) {
+		return;
+	}
 	const args = toolCall.arguments;
-	const command = args.command;
-	const path = args.path ?? '';
-	const display = path ? formatUriForMessage(path) : '';
-	switch (command) {
+	const display = formatUriForFileWidget(Uri.file(args.path));
+	switch (args.command) {
 		case 'view':
 			formatViewToolInvocation(invocation, { toolName: 'view', arguments: args } as ViewTool);
-			break;
-		case 'str_replace':
-			invocation.invocationMessage = new MarkdownString(l10n.t("Edited {0}", display));
 			break;
 		case 'edit':
 			formatEditToolInvocation(invocation, { toolName: 'edit', arguments: args } as EditTool);
@@ -485,20 +495,20 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, to
 function formatInsertToolInvocation(invocation: ChatToolInvocationPart, toolCall: InsertTool): void {
 	const args = toolCall.arguments;
 	if (args.path) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Inserted text in {0}", formatUriForMessage(args.path)));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Inserted text in {0}", formatUriForFileWidget(Uri.file(args.path))));
 	}
 }
 
 function formatUndoEdit(invocation: ChatToolInvocationPart, toolCall: UndoEditTool): void {
 	const args = toolCall.arguments;
 	if (args.path) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForMessage(args.path)));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
 	}
 }
 
 function formatEditToolInvocation(invocation: ChatToolInvocationPart, toolCall: EditTool): void {
 	const args = toolCall.arguments;
-	const display = args.path ? formatUriForMessage(args.path) : '';
+	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 
 	invocation.invocationMessage = display
 		? new MarkdownString(l10n.t("Edited {0}", display))
@@ -508,7 +518,7 @@ function formatEditToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 
 function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall: CreateTool): void {
 	const args = toolCall.arguments;
-	const display = args.path ? formatUriForMessage(args.path) : '';
+	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 
 	if (display) {
 		invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
@@ -581,8 +591,4 @@ function formatGenericInvocation(invocation: ChatToolInvocationPart, toolCall: U
  */
 function emptyInvocation(_invocation: ChatToolInvocationPart, _toolCall: UnknownToolCall): void {
 	//
-}
-
-function formatUriForMessage(path: string): string {
-	return `[](${URI.file(path).toString()})`;
 }

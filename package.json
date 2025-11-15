@@ -1828,7 +1828,7 @@
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
-				"enablement": "resourceLangId == chatReplay && !inDebugMode"
+				"enablement": "resourceFilename === 'benchRun.chatReplay.json' && !inDebugMode"
 			},
 			{
 				"command": "github.copilot.chat.replay.enableWorkspaceEditTracing",
@@ -3027,7 +3027,7 @@
 								},
 								"url": {
 									"type": "string",
-									"description": "URL endpoint for the Azure model"
+									"markdownDescription": "URL endpoint for the Azure model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
 								},
 								"toolCalling": {
 									"type": "boolean",
@@ -3085,7 +3085,7 @@
 								},
 								"url": {
 									"type": "string",
-									"description": "URL endpoint for the custom OpenAI-compatible model"
+									"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
 								},
 								"toolCalling": {
 									"type": "boolean",
@@ -3325,6 +3325,469 @@
 						]
 					}
 				}
+			},
+			{
+				"id": "advanced",
+				"properties": {
+					"github.copilot.chat.debug.overrideChatEngine": {
+						"type": [
+							"string",
+							"null"
+						],
+						"markdownDescription": "%github.copilot.config.debug.overrideChatEngine%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.projectLabels.expanded": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.projectLabels.expanded%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.projectLabels.chat": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.projectLabels.chat%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.projectLabels.inline": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.projectLabels.inline%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.workspace.maxLocalIndexSize": {
+						"type": "number",
+						"default": 100000,
+						"markdownDescription": "%github.copilot.config.workspace.maxLocalIndexSize%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.workspace.enableFullWorkspace": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.workspace.enableFullWorkspace%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.workspace.enableCodeSearch": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.workspace.enableCodeSearch%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.workspace.enableEmbeddingsSearch": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.workspace.enableEmbeddingsSearch%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.workspace.preferredEmbeddingsModel": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "%github.copilot.config.workspace.preferredEmbeddingsModel%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.workspace.prototypeAdoCodeSearchEndpointOverride": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "%github.copilot.config.workspace.prototypeAdoCodeSearchEndpointOverride%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.feedback.onChange": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.feedback.onChange%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.review.intent": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.review.intent%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.notebook.summaryExperimentEnabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.notebook.summaryExperimentEnabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.notebook.variableFilteringEnabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.notebook.variableFilteringEnabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.notebook.alternativeFormat": {
+						"type": "string",
+						"default": "xml",
+						"enum": ["xml", "markdown"],
+						"markdownDescription": "%github.copilot.config.notebook.alternativeFormat%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.notebook.alternativeNESFormat.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.notebook.alternativeNESFormat.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.debugTerminalCommandPatterns": {
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"markdownDescription": "%github.copilot.config.debugTerminalCommandPatterns%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.editSourceTracking.showDecorations": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.editSourceTracking.showDecorations%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.editSourceTracking.showStatusBar": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.editSourceTracking.showStatusBar%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.localWorkspaceRecording.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.localWorkspaceRecording.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.editRecording.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.editRecording.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.temporalContext.maxAge": {
+						"type": "number",
+						"default": 100,
+						"markdownDescription": "%github.copilot.config.temporalContext.maxAge%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.temporalContext.preferSameLang": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.temporalContext.preferSameLang%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.codesearch.agent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.codesearch.agent.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.agent.temperature": {
+						"type": ["number", "null"],
+						"markdownDescription": "%github.copilot.config.agent.temperature%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.instantApply.shortContextModelName": {
+						"type": "string",
+						"default": "gpt-4o-instant-apply-full-ft-v66-short",
+						"markdownDescription": "%github.copilot.config.instantApply.shortContextModelName%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.instantApply.shortContextLimit": {
+						"type": "number",
+						"default": 8000,
+						"markdownDescription": "%github.copilot.config.instantApply.shortContextLimit%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.enableUserPreferences": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.enableUserPreferences%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.summarizeAgentConversationHistoryThreshold": {
+						"type": ["number", "null"],
+						"markdownDescription": "%github.copilot.config.summarizeAgentConversationHistoryThreshold%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.agentHistorySummarizationMode": {
+						"type": ["string", "null"],
+						"markdownDescription": "%github.copilot.config.agentHistorySummarizationMode%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.agentHistorySummarizationWithPromptCache": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agentHistorySummarizationWithPromptCache%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.agentHistorySummarizationForceGpt41": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agentHistorySummarizationForceGpt41%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.useResponsesApiTruncation": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.useResponsesApiTruncation%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.omitBaseAgentInstructions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.omitBaseAgentInstructions%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.promptFileContextProvider.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.promptFileContextProvider.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.tools.defaultToolsGrouped": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.tools.defaultToolsGrouped%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.virtualTools.embeddingRanking": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.virtualTools.embeddingRanking%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.multiReplaceStringGrok.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.multiReplaceStringGrok.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.claudeCode.enabled": {
+						"type": ["boolean", "string"],
+						"default": false,
+						"markdownDescription": "%github.copilot.config.claudeCode.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.claudeCode.debug": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.claudeCode.debug%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.copilotCLI.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.copilotCLI.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.gpt5AlternativePatch": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.gpt5AlternativePatch%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.inlineEdits.triggerOnEditorChangeAfterSeconds": {
+						"type": ["number", "null"],
+						"markdownDescription": "%github.copilot.config.inlineEdits.triggerOnEditorChangeAfterSeconds%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.inlineEdits.nextCursorPrediction.displayLine": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.inlineEdits.nextCursorPrediction.displayLine%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.inlineEdits.nextCursorPrediction.currentFileMaxTokens": {
+						"type": "number",
+						"default": 2000,
+						"markdownDescription": "%github.copilot.config.inlineEdits.nextCursorPrediction.currentFileMaxTokens%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.suggestRelatedFilesFromGitHistory.useEmbeddings": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.suggestRelatedFilesFromGitHistory.useEmbeddings%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.cli.isolation.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.isolation.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.cli.mcp.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.mcp.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					}
+				}
 			}
 		],
 		"submenus": [
@@ -3370,12 +3833,12 @@
 				{
 					"command": "github.copilot.chat.replay",
 					"group": "navigation@9",
-					"when": "resourceLangId == chatReplay"
+					"when": "resourceFilename === 'benchRun.chatReplay.json'"
 				},
 				{
 					"command": "github.copilot.chat.showAsChatSession",
 					"group": "navigation@9",
-					"when": "resourceLangId == chatReplay"
+					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'"
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
@@ -4085,17 +4548,6 @@
 				"extensions": [
 					".copilotmd"
 				]
-			},
-			{
-				"id": "chatReplay",
-				"aliases": [
-					"chatReplay",
-					"Chat Replay"
-				],
-				"extensions": [
-					".chatReplay.json",
-					".chatreplay.json"
-				]
 			}
 		],
 		"views": {
@@ -4415,8 +4867,9 @@
 				"type": "vscode-chat-replay",
 				"label": "vscode-chat-replay",
 				"languages": [
-					"chatReplay"
+					"json"
 				],
+				"when": "resourceFilename === 'benchRun.chatReplay.json'",
 				"configurationAttributes": {
 					"launch": {
 						"properties": {
@@ -4530,8 +4983,8 @@
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
 		"@types/vscode": "^1.102.0",
-		"@types/yargs": "^17.0.24",
 		"@types/vscode-webview": "^1.57.4",
+		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
 		"@typescript-eslint/parser": "^8.32.0",
 		"@typescript-eslint/typescript-estree": "^8.26.1",
@@ -4601,7 +5054,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.68.0",
-		"@github/copilot": "^0.0.354",
+		"@github/copilot": "^0.0.356",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -4615,6 +5068,7 @@
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
 		"diff": "^8.0.2",
+		"dompurify": "^3.3.0",
 		"ignore": "^7.0.5",
 		"isbinaryfile": "^5.0.4",
 		"jsonc-parser": "^3.3.1",
@@ -4623,8 +5077,7 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0",
-		"dompurify": "^3.3.0"
+		"web-tree-sitter": "^0.23.0"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",

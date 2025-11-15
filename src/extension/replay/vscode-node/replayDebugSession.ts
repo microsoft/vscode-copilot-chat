@@ -20,6 +20,8 @@ import { commands, type WorkspaceFolder } from 'vscode';
 import { ChatReplayResponses, ChatStep } from '../common/chatReplayResponses';
 import { parseReplay } from '../node/replayParser';
 
+interface launchArgs extends DebugProtocol.LaunchRequestArguments { stopOnEntry: boolean; program: string }
+
 export class ChatReplayDebugSession extends LoggingDebugSession {
 
 	private static THREAD_ID = 1;
@@ -29,7 +31,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	private _chatSteps: ChatStep[] = [];
 	private _currentIndex = -1;
 	private _stopOnEntry = true;
-	private _variableHandles = new Handles<any>();
+	private _variableHandles = new Handles<{ step: ChatStep }>();
 	private _replay = ChatReplayResponses.getInstance();
 
 	constructor(workspaceFolder: WorkspaceFolder | undefined) {
@@ -51,7 +53,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	}
 
 	// Launch the session: read and parse the markdown file and stop on the first header if requested
-	protected override async launchRequest(response: DebugProtocol.LaunchResponse, args: any): Promise<void> {
+	protected override async launchRequest(response: DebugProtocol.LaunchResponse, args: launchArgs): Promise<void> {
 		try {
 			this._stopOnEntry = !!args.stopOnEntry;
 			const programArg: string = args.program;
@@ -82,7 +84,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			if (this._stopOnEntry) {
 				this.sendEvent(new StoppedEvent('entry', ChatReplayDebugSession.THREAD_ID));
 			}
-		} catch (err: any) {
+		} catch (err) {
 			this.sendErrorResponse(response, 3002, `Failed to launch: ${err?.message || String(err)}`);
 		}
 	}

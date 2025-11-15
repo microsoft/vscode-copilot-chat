@@ -15,11 +15,8 @@ import { ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
 import { ICompletionsCitationManager, NoOpCitationManager } from '../citationManager';
 import { CompletionNotifier, ICompletionsNotifierService } from '../completionNotifier';
 import {
-	BuildInfo, DefaultsOnlyConfigProvider, EditorSession,
-	ICompletionsBuildInfoService,
-	ICompletionsConfigProvider,
+	DefaultsOnlyConfigProvider, ICompletionsConfigProvider,
 	ICompletionsEditorAndPluginInfo,
-	ICompletionsEditorSessionService,
 	InMemoryConfigProvider
 } from '../config';
 import { ICompletionsUserErrorNotifierService, UserErrorNotifier } from '../error/userErrorNotifier';
@@ -82,7 +79,6 @@ export function _createBaselineContext(serviceCollection: TestingServiceCollecti
 	serviceCollection.define(ICompletionsCacheService, new CompletionsCache());
 	serviceCollection.define(ICompletionsConfigProvider, configProvider);
 	serviceCollection.define(ICompletionsRuntimeModeService, new RuntimeMode({ debug: false, verboseLogging: false, testMode: true, simulation: false }));
-	serviceCollection.define(ICompletionsBuildInfoService, new BuildInfo());
 	serviceCollection.define(ICompletionsSpeculativeRequestCache, new SpeculativeRequestCache());
 	serviceCollection.define(ICompletionsLastGhostText, new LastGhostText());
 	serviceCollection.define(ICompletionsCurrentGhostText, new CurrentGhostText());
@@ -90,7 +86,6 @@ export function _createBaselineContext(serviceCollection: TestingServiceCollecti
 	serviceCollection.define(ICompletionsCitationManager, new NoOpCitationManager());
 	serviceCollection.define(ICompletionsNotificationSender, new TestNotificationSender());
 	serviceCollection.define(ICompletionsTelemetryReporters, new TelemetryReporters());
-	serviceCollection.define(ICompletionsEditorSessionService, new EditorSession('test-session', 'test-machine'));
 	serviceCollection.define(ICompletionsCopilotTokenManager, new FakeCopilotTokenManager());
 	serviceCollection.define(ICompletionsFeaturesService, new SyncDescriptor(Features));
 	serviceCollection.define(ICompletionsTelemetryService, new SyncDescriptor(CompletionsTelemetryServiceBridge));

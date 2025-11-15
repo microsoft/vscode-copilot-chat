@@ -274,10 +274,10 @@ export class SimulationReviewService implements IReviewService {
 	}
 
 	isIntentEnabled(): boolean {
-		if (ConfigValueValidators.isDefaultValueWithTeamValue(ConfigKey.Internal.ReviewIntent.defaultValue)) {
-			return ConfigKey.Internal.ReviewIntent.defaultValue.defaultValue;
+		if (ConfigValueValidators.isDefaultValueWithTeamValue(ConfigKey.AdvancedExperimental.ReviewIntent.defaultValue)) {
+			return ConfigKey.AdvancedExperimental.ReviewIntent.defaultValue.defaultValue;
 		}
-		return ConfigKey.Internal.ReviewIntent.defaultValue;
+		return ConfigKey.AdvancedExperimental.ReviewIntent.defaultValue;
 	}
 
 	getDiagnosticCollection(): ReviewDiagnosticCollection {

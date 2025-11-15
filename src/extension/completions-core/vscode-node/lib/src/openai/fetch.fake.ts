@@ -9,7 +9,6 @@ import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { getTokenizer } from '../../../prompt/src/tokenization';
 import { ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
-import { ICompletionsFeaturesService } from '../experiments/featuresService';
 import { ICompletionsLogTargetService } from '../logger';
 import { Response } from '../networking';
 import { ICompletionsStatusReporter } from '../progress';
@@ -167,13 +166,12 @@ export class ErrorReturningFetcher extends LiveOpenAIFetcher {
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 		@ICompletionsRuntimeModeService runtimeModeService: ICompletionsRuntimeModeService,
-		@ICompletionsFeaturesService featuresService: ICompletionsFeaturesService,
 		@ICompletionsLogTargetService logTargetService: ICompletionsLogTargetService,
 		@ICompletionsCopilotTokenManager copilotTokenManager: ICompletionsCopilotTokenManager,
 		@ICompletionsStatusReporter statusReporter: ICompletionsStatusReporter,
 		@IAuthenticationService authenticationService: IAuthenticationService,
 	) {
-		super(instantiationService, runtimeModeService, featuresService, logTargetService, copilotTokenManager, statusReporter, authenticationService);
+		super(instantiationService, runtimeModeService, logTargetService, copilotTokenManager, statusReporter, authenticationService);
 	}
 
 	setResponse(response: Response | 'not-sent') {

@@ -271,20 +271,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					return undefined;
 				}
 
-				const uri = await toOpenPullRequestWebviewUri({ owner: repoId.org, repo: repoId.repo, pullRequestNumber: pr.number });
-				const prLinkTitle = vscode.l10n.t('Open pull request in VS Code');
-				const finishedInText = vscode.l10n.t('Finished in {0}', `#${pr.number}`);
-				const description = new vscode.MarkdownString(`[${finishedInText}](${uri.toString()} "${prLinkTitle}")`);
-				const tooltip = this.createPullRequestTooltip(pr);
-
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status: this.getSessionStatusFromSession(sessionItem),
-					description,
-					tooltip,
+					description: this.getPullRequestDescription(pr),
+					tooltip: this.createPullRequestTooltip(pr),
 					timing: {
-						startTime: new Date(sessionItem.last_updated_at).getTime(),
+						startTime: new Date(sessionItem.created_at).getTime(),
+						endTime: sessionItem.completed_at ? new Date(sessionItem.completed_at).getTime() : undefined
 					},
 					statistics: {
 						files: pr.files.totalCount,
@@ -419,6 +414,39 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		await vscode.env.openExternal(vscode.Uri.parse(url));
 	}
 
+	async openChanges(chatSessionItemResource: vscode.Uri): Promise<void> {
+		const session = SessionIdForPr.parse(chatSessionItemResource);
+		let prNumber = session?.prNumber;
+		if (typeof prNumber === 'undefined' || isNaN(prNumber)) {
+			prNumber = SessionIdForPr.parsePullRequestNumber(chatSessionItemResource);
+			if (isNaN(prNumber)) {
+				vscode.window.showErrorMessage(vscode.l10n.t('Could not parse PR number from session resource'));
+				this.logService.error(`Could not parse PR number from session resource: ${chatSessionItemResource}`);
+				return;
+			}
+		}
+
+		const pr = await this.findPR(prNumber);
+		if (!pr) {
+			vscode.window.showErrorMessage(vscode.l10n.t('Could not find pull request #{0}', prNumber));
+			this.logService.error(`Could not find pull request #${prNumber}`);
+			return;
+		}
+
+		const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pr);
+		if (!multiDiffPart) {
+			vscode.window.showWarningMessage(vscode.l10n.t('No file changes found for pull request #{0}', prNumber));
+			this.logService.warn(`No file changes found for PR #${prNumber}`);
+			return;
+		}
+
+		await vscode.commands.executeCommand('_workbench.openMultiDiffEditor', {
+			multiDiffSourceUri: vscode.Uri.parse(`copilotcloud-pr-changes:/${prNumber}`),
+			title: vscode.l10n.t('Pull Request #{0}', prNumber),
+			resources: multiDiffPart.value
+		});
+	}
+
 	private findActiveResponseCallback(
 		sessions: SessionInfo[],
 		pr: PullRequestSearchItem
@@ -491,6 +519,28 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			default:
 				return vscode.ChatSessionStatus.Completed;
 		}
+	}
+
+	private getPullRequestDescription(pr: PullRequestSearchItem): vscode.MarkdownString {
+		let descriptionText: string;
+		switch (pr.state) {
+			case 'failed':
+				descriptionText = vscode.l10n.t('$(git-pull-request) Failed in PR {0}', `#${pr.number}`);
+				break;
+			case 'in_progress':
+				descriptionText = vscode.l10n.t('$(git-pull-request) In progress in PR {0}', `#${pr.number}`);
+				break;
+			case 'queued':
+				descriptionText = vscode.l10n.t('$(git-pull-request) Queued in PR {0}', `#${pr.number}`);
+				break;
+			default:
+				descriptionText = vscode.l10n.t('$(git-pull-request) Finished in PR {0}', `#${pr.number}`);
+				break;
+		}
+
+		const description = new vscode.MarkdownString(descriptionText);
+		description.supportThemeIcons = true;
+		return description;
 	}
 
 	private createPullRequestTooltip(pr: PullRequestSearchItem): vscode.MarkdownString {

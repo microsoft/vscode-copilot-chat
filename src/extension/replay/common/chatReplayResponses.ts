@@ -24,7 +24,7 @@ export type ToolStep = {
 	kind: 'toolCall';
 	id: string;
 	line: number;
-	args: { [key: string]: any };
+	args: { [key: string]: unknown };
 	toolName: string;
 	edits: FileEdits[];
 	results: string[];

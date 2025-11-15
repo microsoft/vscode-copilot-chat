@@ -5,10 +5,11 @@
 
 import type { WorkspaceConfiguration } from 'vscode';
 import * as vscode from 'vscode';
+import { distinct } from '../../../util/vs/base/common/arrays';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { packageJson } from '../../env/common/packagejson';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { AbstractConfigurationService, BaseConfig, Config, ConfigValueValidators, CopilotConfigPrefix, ExperimentBasedConfig, ExperimentBasedConfigType, InspectConfigResult } from '../common/configurationService';
+import { AbstractConfigurationService, BaseConfig, Config, ConfigValueValidators, CopilotConfigPrefix, ExperimentBasedConfig, ExperimentBasedConfigType, globalConfigRegistry, InspectConfigResult } from '../common/configurationService';
 
 // Helper to avoid JSON.stringify quoting strings
 function stringOrStringify(value: any) {
@@ -30,7 +31,18 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			if (changeEvent.affectsConfiguration(CopilotConfigPrefix)) {
 				this.config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
 			}
-			this._onDidChangeConfiguration.fire(changeEvent);
+			this._onDidChangeConfiguration.fire({
+				affectsConfiguration: (section: string, scope?: vscode.ConfigurationScope) => {
+					if (changeEvent.affectsConfiguration(section, scope)) {
+						return true;
+					}
+					const oldId = globalConfigRegistry.configs.get(section)?.fullyQualifiedOldId;
+					if (oldId && changeEvent.affectsConfiguration(oldId, scope)) {
+						return true;
+					}
+					return false;
+				}
+			});
 		});
 	}
 
@@ -68,10 +80,22 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 				// or internal users, so the (public) default value used by vscode is not the same.
 				// We need to really check if the user or workspace configured the setting
 				if (this.isConfigured(key, scope)) {
-					configuredValue = config.get<T>(key.id);
+					configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
 				}
 			} else {
-				configuredValue = config.get<T>(key.id);
+				if (key.oldId && key.oldId.startsWith('chat.advanced')) {
+					// Migrated advanced settings were not registered before
+					// So when not configured the default value from config API is undefined
+					// and the default value is obtained from the registered Config<T>.
+					// Therefore, to get the same behavior as before
+					// we need to check if the migrated setting is configured
+					// and take only the configured value and let the default value be obtained from the registered Config<T>.
+					if (this.isConfigured(key, scope)) {
+						configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
+					}
+				} else {
+					configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
+				}
 			}
 		}
 
@@ -98,7 +122,24 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		}
 
 		const config = scope === undefined ? this.config : vscode.workspace.getConfiguration(CopilotConfigPrefix, scope);
-		return config.inspect(key.id);
+		const inspectResult = config.inspect<T>(key.id);
+		if (!key.oldId) {
+			return inspectResult;
+		}
+
+		const oldInspectResult = config.inspect<T>(key.oldId);
+		const languageIds = distinct([...inspectResult?.languageIds ?? [], ...oldInspectResult?.languageIds ?? []]);
+		return {
+			defaultValue: inspectResult?.defaultValue ?? oldInspectResult?.defaultValue,
+			globalValue: inspectResult?.globalValue ?? oldInspectResult?.globalValue,
+			workspaceValue: inspectResult?.workspaceValue ?? oldInspectResult?.workspaceValue,
+			workspaceFolderValue: inspectResult?.workspaceFolderValue ?? oldInspectResult?.workspaceFolderValue,
+			defaultLanguageValue: inspectResult?.defaultLanguageValue ?? oldInspectResult?.defaultLanguageValue,
+			globalLanguageValue: inspectResult?.globalLanguageValue ?? oldInspectResult?.globalLanguageValue,
+			workspaceLanguageValue: inspectResult?.workspaceLanguageValue ?? oldInspectResult?.workspaceLanguageValue,
+			workspaceFolderLanguageValue: inspectResult?.workspaceFolderLanguageValue ?? oldInspectResult?.workspaceFolderLanguageValue,
+			languageIds: languageIds.length ? languageIds : undefined,
+		};
 	}
 
 	override getNonExtensionConfig<T>(configKey: string): T | undefined {
@@ -190,6 +231,18 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			return expValue2;
 		}
 
+		if (key.fullyQualifiedOldId) {
+			const oldExpValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>(`copilotchat.config.${key.oldId}`);
+			if (oldExpValue !== undefined) {
+				return oldExpValue;
+			}
+
+			const oldExpValue2 = experimentationService.getTreatmentVariable<Exclude<T, undefined>>(`config.${key.fullyQualifiedOldId}`);
+			if (oldExpValue2 !== undefined) {
+				return oldExpValue2;
+			}
+		}
+
 		return this.getDefaultValue(key);
 	}
 
@@ -206,7 +259,7 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			return undefined;
 		}
 
-		return config.get<T>(key.id);
+		return config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
 	}
 
 	// Dumps config settings defined in the extension json
@@ -247,8 +300,14 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		// Fire simulated event which checks if a configuration is affected in the treatments
 		this._onDidChangeConfiguration.fire({
 			affectsConfiguration: (section: string, _scope?: vscode.ConfigurationScope) => {
-				const result = treatments.some(t => t.startsWith(`config.${section}`));
-				return result;
+				if (treatments.some(t => t.startsWith(`config.${section}`))) {
+					return true;
+				}
+				const oldId = globalConfigRegistry.configs.get(section)?.fullyQualifiedOldId;
+				if (oldId && treatments.some(t => t.startsWith(`config.${oldId}`))) {
+					return true;
+				}
+				return false;
 			}
 		});
 	}

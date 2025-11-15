@@ -70,7 +70,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 	}
 
 	private get _overridenChatModel(): string | undefined {
-		return this._configService.getConfig(ConfigKey.Internal.DebugOverrideChatEngine);
+		return this._configService.getConfig(ConfigKey.AdvancedExperimental.DebugOverrideChatEngine);
 	}
 
 	private getOrCreateChatEndpointInstance(modelMetadata: IChatModelInformation): IChatEndpoint {

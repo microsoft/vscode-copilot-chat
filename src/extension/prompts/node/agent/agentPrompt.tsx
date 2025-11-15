@@ -7,7 +7,7 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isHiddenModelB, isHiddenModelC, isHiddenModelD, isVSCModelA, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt51Family, isGpt5Family, isGpt5PlusFamily, isGptCodexFamily, isGptFamily, isVSCModelA, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -87,11 +87,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const instructions = await this.getInstructions();
 
-		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
+		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.AdvancedExperimental.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{this.props.endpoint.family.startsWith('gpt-5') || await isHiddenModelB(this.props.endpoint) || await isHiddenModelC(this.props.endpoint) || await isHiddenModelD(this.props.endpoint) ? (
+				{isGpt5PlusFamily(this.props.endpoint.family) ? (
 					<>
 						<GPT5CopilotIdentityRule />
 						<Gpt5SafetyRule />
@@ -408,7 +408,7 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 			<Tag name='toolReferences'>
 				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
 				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')} <br />
-				{(this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily)) && <>
+				{(isGpt5Family(this.props.modelFamily)) && <>
 					Start by using the most relevant tool attached to this message—the user expects you to act with it first.<br />
 				</>}
 			</Tag>
@@ -701,7 +701,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		if (this.props.modelFamily === 'gpt-4.1' || this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily)) {
+		if (isGptFamily(this.props.modelFamily) && !isGptCodexFamily(this.props.modelFamily)) {
 			if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 				// Extended reminder
 				return <>
@@ -714,9 +714,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 					You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
 					You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
 				</>;
-			} else if (this.props.modelFamily === 'gpt-5-codex') {
-				return undefined;
-			} else if (this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily)) {
+			} else if (isGpt5PlusFamily(this.props.modelFamily)) {
 				return <>
 					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
 					Take action when possible; the user expects you to do useful work without unnecessary questions.<br />
@@ -758,13 +756,12 @@ function getVSCModelReminder(isHiddenModel: boolean) {
 }
 
 async function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
-	if (modelFamily === 'gpt-5-codex') {
+	if (isGptCodexFamily(modelFamily)) {
 		return;
 	}
 
 	const isGpt5Mini = modelFamily === 'gpt-5-mini';
-	const isModelB = await isHiddenModelB(modelFamily);
-	return modelFamily?.startsWith('gpt-5') || isModelB ?
+	return isGpt5Family(modelFamily) ?
 		<>
 			Skip filler acknowledgements like "Sounds good" or "Okay, I will…". Open with a purposeful one-liner about what you're doing next.<br />
 			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />
@@ -773,10 +770,9 @@ async function getExplanationReminder(modelFamily: string | undefined, hasTodoTo
 			For non-trivial code generation, produce a complete, runnable solution: necessary source files, a tiny runner or test/benchmark harness, a minimal `README.md`, and updated dependency manifests (e.g., `package.json`, `requirements.txt`, `pyproject.toml`). Offer quick "try it" commands and optional platform-specific speed-ups when relevant.<br />
 			Your goal is to act like a pair programmer: be friendly and helpful. If you can do more, do more. Be proactive with your solutions, think about what the user needs and what they want, and implement it proactively.<br />
 			<Tag name='importantReminders'>
-				Before starting a task, review and follow the guidance in &lt;responseModeHints&gt;, &lt;engineeringMindsetHints&gt;, and &lt;requirementsUnderstanding&gt;.<br />
 				{!isGpt5Mini && <>Start your response with a brief acknowledgement, followed by a concise high-level plan outlining your approach.<br /></>}
 				Do NOT volunteer your model name unless the user explicitly asks you about it. <br />
-				{hasTodoTool && !isModelB && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks.<br /></>}
+				{hasTodoTool && !isGpt51Family(modelFamily) && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks.<br /></>}
 				{!hasTodoTool && <>Break down the request into clear, actionable steps and present them at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
 				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 			</Tag>

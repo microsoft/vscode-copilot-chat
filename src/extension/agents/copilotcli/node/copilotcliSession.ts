@@ -17,7 +17,7 @@ import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/reso
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall } from '../common/copilotCLITools';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
 import { CopilotCLISessionOptions, getAuthInfo } from './copilotCli';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
 
@@ -170,7 +170,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					if (editUris.length) {
 						editUris.forEach(uri => {
 							const ids = editFilesAndToolCallIds.get(uri) || [];
-							ids.push(event.data);
+							ids.push(event.data as UnknownToolCall as ToolCall);
 							editFilesAndToolCallIds.set(uri, ids);
 							this.logService.trace(`[CopilotCLISession] Tracking for toolCallId ${event.data.toolCallId} of file ${uri.fsPath}`);
 						});

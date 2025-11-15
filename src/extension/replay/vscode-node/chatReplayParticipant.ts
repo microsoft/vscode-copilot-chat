@@ -5,50 +5,28 @@
 
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
-import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceCancellation } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
 import { Range, Uri, WorkspaceEdit } from '../../../vscodeTypes';
-import { Intent } from '../../common/constants';
-import { Conversation } from '../../prompt/common/conversation';
-import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
-import { IDocumentContext } from '../../prompt/node/documentContext';
-import { IIntent, IIntentInvocation, IIntentInvocationContext } from '../../prompt/node/intents';
 import { ChatReplayResponses, ChatStep, FileEdits, Replacement } from '../../replay/common/chatReplayResponses';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 
-export class ChatReplayIntent implements IIntent {
-
-	static readonly ID: Intent = Intent.ChatReplay;
-
-	readonly id: string = ChatReplayIntent.ID;
-
-	readonly description = l10n.t('Replay a previous conversation');
-
-	readonly locations = [ChatLocation.Panel];
-
-	isListedCapability = false;
+export class ChatReplayParticipant {
 
 	constructor(
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IToolsService private readonly toolsService: IToolsService
 	) { }
 
-	invoke(invocationContext: IIntentInvocationContext): Promise<IIntentInvocation> {
-		// implement handleRequest ourselves so we can skip implementing this.
-		throw new Error('Method not implemented.');
-	}
-
-	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+	async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, response: vscode.ChatResponseStream, token: CancellationToken): Promise<vscode.ChatResult> {
 		const replay = ChatReplayResponses.getInstance();
 		let res = await raceCancellation(replay.getResponse(), token);
 
 		while (res && res !== 'finished') {
 			// Stop processing if cancelled
-			await raceCancellation(this.processStep(res, replay, stream, request.toolInvocationToken), token);
+			await raceCancellation(this.processStep(res, replay, response, request.toolInvocationToken), token);
 			res = await raceCancellation(replay.getResponse(), token);
 		}
 

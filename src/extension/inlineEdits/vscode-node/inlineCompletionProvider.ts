@@ -120,7 +120,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
-		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
+		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.UseAlternativeNESNotebookFormat, this._expService);
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -366,7 +366,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			range: displayLocationRange,
 			label: result.displayLocation.label,
 			kind: InlineCompletionDisplayLocationKind.Code,
-			jumpToEdit: result.displayLocation.jumpToEdit
 		} : undefined;
 
 
