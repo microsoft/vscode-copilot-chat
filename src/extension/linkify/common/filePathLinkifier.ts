@@ -47,7 +47,7 @@ export class FilePathLinkifier implements IContributedLinkifier {
 	) { }
 
 	async linkify(text: string, context: LinkifierContext, token: CancellationToken): Promise<LinkifiedText> {
-		const parts: Array<Promise<LinkifiedPart> | LinkifiedPart> = [];
+		const parts: LinkifiedPart[] = [];
 
 		let endLastMatch = 0;
 		for (const match of text.matchAll(pathMatchRe)) {
@@ -78,8 +78,28 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			}
 			pathText ??= match.groups?.['inlineCodePath'] ?? match.groups?.['plainTextPath'] ?? '';
 
-			parts.push(this.resolvePathText(pathText, context)
-				.then(uri => uri ? new LinkifyLocationAnchor(uri) : matched));
+
+
+			// Determine path by truncating at the end of the file extension.
+			// This avoids relying on generic punctuation stripping and instead uses
+			// knowledge that a filename ends right after the extension token.
+			let trailing = '';
+			let core = pathText;
+			// Split off trailing punctuation after a valid file extension (letters/numbers after final dot)
+			const extMatch = core.match(/(.+\.[A-Za-z0-9]+)([.,;:]*)$/);
+			if (extMatch) {
+				core = extMatch[1];
+				trailing = extMatch[2];
+			}
+			const uri = await this.resolvePathText(core, context);
+			if (uri) {
+				// Reconstruct matched text into prefix + anchor + trailing remainder.
+				parts.push(new LinkifyLocationAnchor(uri));
+				if (trailing) { parts.push(trailing); }
+			} else {
+				// Fallback: use original matched text including punctuation
+				parts.push(matched);
+			}
 
 			endLastMatch = match.index + matched.length;
 		}
@@ -89,7 +109,7 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			parts.push(suffix);
 		}
 
-		return { parts: coalesceParts(await Promise.all(parts)) };
+		return { parts: coalesceParts(parts) };
 	}
 
 	private async resolvePathText(pathText: string, context: LinkifierContext): Promise<Uri | undefined> {

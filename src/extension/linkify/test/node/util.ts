@@ -78,7 +78,19 @@ export function assertPartsEqual(actualParts: readonly LinkifiedPart[], expected
 			assert.strictEqual(actual, expected);
 		} else if (actual instanceof LinkifyLocationAnchor) {
 			assert(expected instanceof LinkifyLocationAnchor, "Expected LinkifyLocationAnchor");
-			assert.strictEqual(actual.value.toString(), expected.value.toString());
+			const actualVal = actual.value;
+			const expectedVal = expected.value;
+			if (typeof actualVal === 'object' && actualVal !== null && 'range' in actualVal && 'uri' in actualVal &&
+				typeof expectedVal === 'object' && expectedVal !== null && 'range' in expectedVal && 'uri' in expectedVal) {
+				assert.strictEqual(actualVal.uri.toString(), expectedVal.uri.toString());
+				// Compare full range, not just start line, so tests fail if columns or end positions diverge.
+				assert.strictEqual(actualVal.range.start.line, expectedVal.range.start.line, 'start line mismatch');
+				assert.strictEqual(actualVal.range.start.character, expectedVal.range.start.character, 'start character mismatch');
+				assert.strictEqual(actualVal.range.end.line, expectedVal.range.end.line, 'end line mismatch');
+				assert.strictEqual(actualVal.range.end.character, expectedVal.range.end.character, 'end character mismatch');
+			} else {
+				assert.strictEqual(actual.value.toString(), expected.value.toString());
+			}
 		} else {
 			assert(actual instanceof LinkifySymbolAnchor);
 			assert(expected instanceof LinkifySymbolAnchor, "Expected LinkifySymbolAnchor");

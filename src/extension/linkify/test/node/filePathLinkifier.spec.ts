@@ -6,6 +6,7 @@
 import { suite, test } from 'vitest';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { Location, Position, Range } from '../../../../vscodeTypes';
 import { LinkifyLocationAnchor } from '../../common/linkifiedText';
 import { assertPartsEqual, createTestLinkifierService, linkify, workspaceFile } from './util';
 
@@ -252,6 +253,347 @@ suite('File Path Linkifier', () => {
 				new LinkifyLocationAnchor(workspaceFile('file.ts')),
 				`**`,
 			],
+		);
+	});
+
+	test(`Should create file link with single line annotation`, async () => {
+		const linkifier = createTestLinkifierService(
+			'inspectdb.py'
+		);
+
+		const result = await linkify(linkifier,
+			'inspectdb.py (line 340) - The primary usage.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				new LinkifyLocationAnchor({ uri: workspaceFile('inspectdb.py'), range: new Range(new Position(339, 0), new Position(339, 0)) } as Location),
+				' (line 340) - The primary usage.'
+			]
+		);
+	});
+
+	test(`Should create file link with multi line annotation (range)`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'The return statement in exampleScript.ts is located at lines 77–85.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'The return statement in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(76, 0), new Position(76, 0)) } as Location),
+				' is located at lines 77–85.'
+			]
+		);
+	});
+
+	test(`Should create file link with multi line annotation using various phrases and dash types`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		// Test 'found at' with en-dash
+		const result1 = await linkify(linkifier,
+			'The return statement for the createScenarioFromLogContext function in exampleScript.ts is found at lines 76–82.'
+		);
+		assertPartsEqual(
+			result1.parts,
+			[
+				'The return statement for the createScenarioFromLogContext function in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(75, 0), new Position(75, 0)) } as Location),
+				' is found at lines 76–82.'
+			]
+		);
+
+		// Test 'is at' with en-dash
+		const result2 = await linkify(linkifier,
+			'The return statement for the createScenarioFromLogContext function in exampleScript.ts is at lines 76–82.'
+		);
+		assertPartsEqual(
+			result2.parts,
+			[
+				'The return statement for the createScenarioFromLogContext function in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(75, 0), new Position(75, 0)) } as Location),
+				' is at lines 76–82.'
+			]
+		);
+
+		// Test 'is at' with hyphen
+		const result3 = await linkify(linkifier,
+			'The return statement for the createScenarioFromLogContext function in exampleScript.ts is at lines 76-83.'
+		);
+		assertPartsEqual(
+			result3.parts,
+			[
+				'The return statement for the createScenarioFromLogContext function in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(75, 0), new Position(75, 0)) } as Location),
+				' is at lines 76-83.'
+			]
+		);
+	});
+
+	test(`Should create file link with parenthesized multi line annotation variant (lines 10-12)`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'exampleScript.ts (lines 10-12) reference'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(9, 0), new Position(9, 0)) } as Location),
+				' (lines 10-12) reference'
+			]
+		);
+	});
+
+	test(`Should create file link with 'on line' prose variant`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'The init logic in exampleScript.ts on line 45.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'The init logic in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(44, 0), new Position(44, 0)) } as Location),
+				' on line 45.'
+			]
+		);
+	});
+
+	test(`Should create file link with range connectors ('through' and 'to')`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		// Test 'through' connector
+		const result1 = await linkify(linkifier,
+			'exampleScript.ts is at lines 5 through 9.'
+		);
+		assertPartsEqual(
+			result1.parts,
+			[
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(4, 0), new Position(4, 0)) } as Location),
+				' is at lines 5 through 9.'
+			]
+		);
+
+		// Test 'to' connector
+		const result2 = await linkify(linkifier,
+			'This section in exampleScript.ts spans lines 3 to 7.'
+		);
+		assertPartsEqual(
+			result2.parts,
+			[
+				'This section in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(2, 0), new Position(2, 0)) } as Location),
+				' spans lines 3 to 7.'
+			]
+		);
+	});
+
+	test(`Should create file link with 'Ln' shorthand single line`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Check exampleScript.ts Ln 22 for setup.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Check ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(21, 0), new Position(21, 0)) } as Location),
+				' Ln 22 for setup.'
+			]
+		);
+	});
+
+	test(`Should not create file link for non-annotation word containing 'line' substring (deadline 30)`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'This exampleScript.ts deadline 30 is informational.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'This ',
+				new LinkifyLocationAnchor(workspaceFile('exampleScript.ts')),
+				' deadline 30 is informational.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding range annotation 'in lines 5-7 of file'`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Critical init in lines 5-7 of exampleScript.ts ensures state.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Critical init in lines 5-7 of ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(4, 0), new Position(4, 0)) } as Location),
+				' ensures state.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding single line annotation 'on line 45 of file'`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Bug fix applied on line 45 of exampleScript.ts today.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Bug fix applied on line 45 of ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(44, 0), new Position(44, 0)) } as Location),
+				' today.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding shorthand 'ln 22 of file'`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Configuration lives ln 22 of exampleScript.ts for now.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Configuration lives ln 22 of ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(21, 0), new Position(21, 0)) } as Location),
+				' for now.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding single line annotation using 'at line N in file'`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'The main function is defined at line 19 in exampleScript.ts.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'The main function is defined at line 19 in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(18, 0), new Position(18, 0)) } as Location),
+				'.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding single line annotation using 'line N in file' (no leading preposition)`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Review line 19 in exampleScript.ts for correctness.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'Review line 19 in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(18, 0), new Position(18, 0)) } as Location),
+				' for correctness.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with preceding single line annotation and trailing punctuation`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'The main function is defined at line 25 in exampleScript.ts.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'The main function is defined at line 25 in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(24, 0), new Position(24, 0)) } as Location),
+				'.'
+			]
+		);
+	});
+
+	test(`Should not mis-upgrade when 'lines' appears without 'of' before file name`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'Review lines 10-12 exampleScript.ts for coverage.'
+		);
+
+		// No preceding upgrade; file anchor should be plain (no range) because pattern missing 'of'.
+		assertPartsEqual(
+			result.parts,
+			[
+				'Review lines 10-12 ',
+				new LinkifyLocationAnchor(workspaceFile('exampleScript.ts')),
+				' for coverage.'
+			]
+		);
+	});
+
+	test(`Should upgrade file link with formatted preceding single line annotation (bold line number)`, async () => {
+		const linkifier = createTestLinkifierService(
+			'exampleScript.ts'
+		);
+
+		const result = await linkify(linkifier,
+			'The main function is defined at **line 25** in exampleScript.ts.'
+		);
+
+		assertPartsEqual(
+			result.parts,
+			[
+				'The main function is defined at **line 25** in ',
+				new LinkifyLocationAnchor({ uri: workspaceFile('exampleScript.ts'), range: new Range(new Position(24, 0), new Position(24, 0)) } as Location),
+				'.'
+			]
 		);
 	});
 });
