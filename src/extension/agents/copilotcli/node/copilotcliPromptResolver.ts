@@ -30,11 +30,7 @@ export class CopilotCLIPromptResolver {
 		const diagnosticTexts: string[] = [];
 		const files: { path: string; name: string }[] = [];
 		const attachedFiles = new ResourceSet();
-		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
 		request.references.forEach(ref => {
-			if (shouldExcludeReference(ref)) {
-				return;
-			}
 			if (collectDiagnosticContent(ref.value, diagnosticTexts, files)) {
 				return;
 			}
@@ -92,10 +88,6 @@ export class CopilotCLIPromptResolver {
 
 		return { prompt, attachments };
 	}
-}
-
-function shouldExcludeReference(ref: vscode.ChatPromptReference): boolean {
-	return ref.id.startsWith('vscode.prompt.instructions');
 }
 
 function collectDiagnosticContent(value: unknown, diagnosticTexts: string[], files: { path: string; name: string }[]): boolean {
