@@ -528,7 +528,6 @@ export default tseslint.config(
 			'./src/platform/test/node/fetcher.ts',
 			'./src/platform/test/node/services.ts',
 			'./src/platform/test/node/simulationWorkspace.ts',
-			'./src/platform/test/node/simulationWorkspaceServices.ts',
 			'./src/platform/test/node/telemetry.ts',
 			'./src/platform/test/node/testWorkbenchService.ts',
 			'./src/platform/testing/common/nullWorkspaceMutationManager.ts',

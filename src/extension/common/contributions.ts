@@ -29,7 +29,7 @@ export interface IExtensionContributionFactory {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function asContributionFactory(ctor: { new(...args: any[]): IExtensionContribution }): IExtensionContributionFactory {
+export function asContributionFactory(ctor: { new(...args: any): any }): IExtensionContributionFactory {
 	return {
 		create(accessor: ServicesAccessor): IExtensionContribution {
 			const instantiationService = accessor.get(IInstantiationService);
