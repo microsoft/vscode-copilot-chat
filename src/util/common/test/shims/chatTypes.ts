@@ -404,9 +404,9 @@ export class LanguageModelToolMCPSource implements vscode.LanguageModelToolMCPSo
 export class LanguageModelToolCallPart implements vscode.LanguageModelToolCallPart {
 	callId: string;
 	name: string;
-	input: any;
+	input: object;
 
-	constructor(callId: string, name: string, input: any) {
+	constructor(callId: string, name: string, input: object) {
 		this.callId = callId;
 		this.name = name;
 
