@@ -21,14 +21,14 @@ export interface IExtensionContribution {
 	 * A promise that the extension `activate` method will wait on before completing.
 	 * USE this carefully as it will delay startup of our extension.
 	 */
-	activationBlocker?: Promise<any>;
+	activationBlocker?: Promise<void>;
 }
 
 export interface IExtensionContributionFactory {
 	create(accessor: ServicesAccessor): IExtensionContribution | void;
 }
 
-export function asContributionFactory(ctor: { new(...args: any[]): any }): IExtensionContributionFactory {
+export function asContributionFactory(ctor: { new(...args: unknown[]): IExtensionContribution }): IExtensionContributionFactory {
 	return {
 		create(accessor: ServicesAccessor): IExtensionContribution {
 			const instantiationService = accessor.get(IInstantiationService);
@@ -38,7 +38,7 @@ export function asContributionFactory(ctor: { new(...args: any[]): any }): IExte
 }
 
 export class ContributionCollection extends Disposable {
-	private readonly allActivationBlockers: Promise<any>[] = [];
+	private readonly allActivationBlockers: Promise<void>[] = [];
 
 	constructor(
 		contribs: IExtensionContributionFactory[],

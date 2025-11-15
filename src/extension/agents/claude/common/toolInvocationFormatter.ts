@@ -7,7 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
-import { ClaudeToolNames, IBashToolInput, IGlobToolInput, IGrepToolInput, IExitPlanModeInput, ILSToolInput, IReadToolInput, ITaskToolInput } from './claudeTools';
+import { ClaudeToolNames, IBashToolInput, IExitPlanModeInput, IGlobToolInput, IGrepToolInput, ILSToolInput, IReadToolInput, ITaskToolInput } from './claudeTools';
 
 /**
  * Creates a formatted tool invocation part based on the tool type and input
