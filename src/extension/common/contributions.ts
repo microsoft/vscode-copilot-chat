@@ -28,7 +28,8 @@ export interface IExtensionContributionFactory {
 	create(accessor: ServicesAccessor): IExtensionContribution | void;
 }
 
-export function asContributionFactory(ctor: { new(...args: unknown[]): IExtensionContribution }): IExtensionContributionFactory {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function asContributionFactory(ctor: { new(...args: any[]): IExtensionContribution }): IExtensionContributionFactory {
 	return {
 		create(accessor: ServicesAccessor): IExtensionContribution {
 			const instantiationService = accessor.get(IInstantiationService);

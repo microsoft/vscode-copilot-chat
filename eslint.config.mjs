@@ -376,7 +376,6 @@ export default tseslint.config(
 			'src/util/vs/**/*.ts', // vendored code
 			'src/**/*.spec.ts', // allow in tests
 			'./src/extension/agents/copilotcli/node/nodePtyShim.ts',
-			'./src/extension/agents/node/adapters/anthropicAdapter.ts',
 			'./src/extension/byok/common/anthropicMessageConverter.ts',
 			'./src/extension/byok/common/geminiFunctionDeclarationConverter.ts',
 			'./src/extension/byok/common/geminiMessageConverter.ts',
@@ -561,7 +560,6 @@ export default tseslint.config(
 			'./src/util/common/timeTravelScheduler.ts',
 			'./src/util/common/types.ts',
 			'./src/util/node/worker.ts',
-			'./src/extension/prompt/common/specialRequestTypes.ts',
 		],
 		languageOptions: {
 			parser: tseslint.parser,
