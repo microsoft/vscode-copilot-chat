@@ -16,10 +16,10 @@ import { BaseToolsService } from '../common/toolsService';
 export class ToolsService extends BaseToolsService {
 	declare _serviceBrand: undefined;
 
-	private readonly _copilotTools: Lazy<Map<ToolName, ICopilotTool<any>>>;
+	private readonly _copilotTools: Lazy<Map<ToolName, ICopilotTool<unknown>>>;
 
 	// Extensions to override definitions for existing tools.
-	private readonly _toolExtensions: Lazy<Map<ToolName, ICopilotToolExtension<any>>>;
+	private readonly _toolExtensions: Lazy<Map<ToolName, ICopilotToolExtension<unknown>>>;
 
 	private readonly _contributedToolCache: {
 		input: readonly vscode.LanguageModelToolInformation[];
@@ -83,7 +83,7 @@ export class ToolsService extends BaseToolsService {
 		return vscode.lm.invokeTool(getContributedToolName(name), options, token);
 	}
 
-	override getCopilotTool(name: string): ICopilotTool<any> | undefined {
+	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
 		const tool = this._copilotTools.value.get(name as ToolName);
 		return tool;
 	}
