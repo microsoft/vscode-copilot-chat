@@ -54,6 +54,9 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			prId,
 			authToken,
 		);
+		if (!response) {
+			return [];
+		}
 		const { sessions } = response;
 		return sessions;
 	}
@@ -67,7 +70,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			sessionId,
 			authToken,
 		);
-		return response;
+		return response ?? '';
 	}
 
 	async getSessionInfo(sessionId: string): Promise<SessionInfo> {
@@ -79,6 +82,9 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			sessionId,
 			authToken,
 		);
+		if (!response) {
+			throw new Error('Failed to fetch session info');
+		}
 		if (typeof response === 'string') {
 			return JSON.parse(response) as SessionInfo;
 		}
@@ -90,7 +96,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
-		return this.postCopilotAgentJobWithToken(owner, name, apiVersion, 'vscode-copilot-chat', payload, authToken);
+		const result = await this.postCopilotAgentJobWithToken(owner, name, apiVersion, 'vscode-copilot-chat', payload, authToken);
+		if (!result) {
+			throw new Error('Failed to post copilot agent job');
+		}
+		return result;
 	}
 
 	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo> {
@@ -98,7 +108,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
-		return this.getJobByJobIdWithToken(owner, repo, jobId, userAgent, authToken);
+		const result = await this.getJobByJobIdWithToken(owner, repo, jobId, userAgent, authToken);
+		if (!result) {
+			throw new Error('Failed to fetch job info');
+		}
+		return result;
 	}
 
 	async getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string): Promise<JobInfo> {
@@ -106,7 +120,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
-		return this.getJobBySessionIdWithToken(owner, repo, sessionId, userAgent, authToken);
+		const result = await this.getJobBySessionIdWithToken(owner, repo, sessionId, userAgent, authToken);
+		if (!result) {
+			throw new Error('Failed to fetch job info');
+		}
+		return result;
 	}
 
 	async addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null> {
@@ -138,7 +156,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		if (!authToken) {
 			return [];
 		}
-		const { agents } = await this.getCustomAgentsWithToken(owner, repo, authToken);
+		const response = await this.getCustomAgentsWithToken(owner, repo, authToken);
+		if (!response) {
+			return [];
+		}
+		const { agents } = response;
 		if (!Array.isArray(agents)) {
 			return [];
 		}

@@ -26,7 +26,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 	private async _doGetRepositoryInfo(owner: string, repo: string): Promise<IGetRepositoryInfoResponseData | undefined> {
 		const authToken: string | undefined = this._authenticationService.permissiveGitHubSession?.accessToken ?? this._authenticationService.anyGitHubSession?.accessToken;
 
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${owner}/${repo}`, 'GET', authToken);
+		return makeGitHubAPIRequest<IGetRepositoryInfoResponseData>(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${owner}/${repo}`, 'GET', authToken);
 	}
 
 	async getRepositoryInfo(owner: string, repo: string) {
@@ -57,17 +57,14 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		try {
 			const authToken = this._authenticationService.permissiveGitHubSession?.accessToken;
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
+			const response = await makeGitHubAPIRequest<GithubRepositoryItem[]>(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
 
-			if (response.ok) {
-				const data = (await response.json());
-				if (Array.isArray(data)) {
-					for (const child of data) {
-						if ('name' in child && 'path' in child && 'type' in child && 'html_url' in child) {
-							paths.push({ name: child.name, path: child.path, type: child.type, html_url: child.html_url });
-							if (child.type === 'dir') {
-								paths.push(...await this.getRepositoryItems(org, repo, child.path));
-							}
+			if (response && Array.isArray(response)) {
+				for (const child of response) {
+					if ('name' in child && 'path' in child && 'type' in child && 'html_url' in child) {
+						paths.push({ name: child.name, path: child.path, type: child.type, html_url: child.html_url });
+						if (child.type === 'dir') {
+							paths.push(...await this.getRepositoryItems(org, repo, child.path));
 						}
 					}
 				}
@@ -86,18 +83,13 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		try {
 			const authToken = this._authenticationService.permissiveGitHubSession?.accessToken;
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
+			const response = await makeGitHubAPIRequest<{ content?: string }>(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
 
-			if (response.ok) {
-
-				const data = (await response.json());
-
-				if ('content' in data) {
-					const content = Buffer.from(data.content, 'base64');
-					return new Uint8Array(content);
-				}
-				throw new Error('Unexpected data from GitHub');
+			if (response && 'content' in response) {
+				const content = Buffer.from(response.content!, 'base64');
+				return new Uint8Array(content);
 			}
+			throw new Error('Unexpected data from GitHub');
 		} catch {
 			console.error(`Failed to contents from ${org}:${repo}:${path}`);
 		}
