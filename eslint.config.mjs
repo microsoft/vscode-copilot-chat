@@ -375,8 +375,6 @@ export default tseslint.config(
 		ignores: [
 			'src/util/vs/**/*.ts', // vendored code
 			'src/**/*.spec.ts', // allow in tests
-			'./src/extension/agents/claude/common/claudeTools.ts',
-			'./src/extension/agents/claude/common/toolInvocationFormatter.ts',
 			'./src/extension/agents/copilotcli/node/nodePtyShim.ts',
 			'./src/extension/agents/node/adapters/anthropicAdapter.ts',
 			'./src/extension/byok/common/anthropicMessageConverter.ts',
