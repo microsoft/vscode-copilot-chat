@@ -843,7 +843,8 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 				"snippy"?: <boolean> | null, // optional, if null removes from request body
 				"max_tokens"?: <number> | null, // optional, if null removes from request body
 				"max_completion_tokens"?: <number> | null, // optional, if null removes from request body
-				"intent"?: <boolean> | null // optional, if null removes from request body
+				"intent"?: <boolean> | null, // optional, if null removes from request body
+				"reasoning_effort"?: <number> | null // optional, if null removes from request body
 			}
 		},
 		...
@@ -917,6 +918,7 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 			checkProperty(overrides, 'intent', 'boolean', true, true);
 			checkProperty(overrides, 'max_tokens', 'number', true, true);
 			checkProperty(overrides, 'max_completion_tokens', 'number', true, true);
+			checkProperty(overrides, 'reasoning_effort', 'string', true, true);
 		}
 
 		// Validate supported_endpoints
@@ -967,6 +969,7 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 				intent: model.overrides?.hasOwnProperty('intent') ? model.overrides.intent : undefined,
 				max_tokens: model.overrides?.hasOwnProperty('max_tokens') ? model.overrides.max_tokens : undefined,
 				max_completion_tokens: model.overrides?.hasOwnProperty('max_completion_tokens') ? model.overrides.max_completion_tokens : undefined,
+				reasoning_effort: model.overrides?.hasOwnProperty('reasoning_effort') ? model.overrides.reasoning_effort : undefined,
 			}
 		});
 	}
