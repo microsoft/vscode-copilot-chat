@@ -862,6 +862,7 @@ export namespace ConfigKey {
 	export const CodeFeedbackInstructions = defineSetting('chat.reviewSelection.instructions', [] as CodeGenerationInstruction[]);
 
 	export const UseProjectTemplates = defineSetting('chat.useProjectTemplates', true);
+	export const CloudAutoCommitAndPush = defineSetting('chat.agent.delegate.autoCommitAndPush', false);
 	export const ExplainScopeSelection = defineSetting('chat.scopeSelection', false);
 	export const EnableCodeActions = defineSetting('editor.enableCodeActions', true);
 	export const LocaleOverride = defineSetting('chat.localeOverride', 'auto');

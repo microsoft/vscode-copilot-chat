@@ -25,7 +25,7 @@ import { PermissionRequest, requestPermission } from '../../agents/copilotcli/no
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
-import { ConfirmationResult, CopilotCloudSessionsProvider, UncommittedChangesStep } from './copilotCloudSessionsProvider';
+import { ConfirmationMetadata, ConfirmationResult, CopilotCloudSessionsProvider, UncommittedChangesStep } from './copilotCloudSessionsProvider';
 
 const MODELS_OPTION_ID = 'model';
 const ISOLATION_OPTION_ID = 'isolation';
@@ -468,16 +468,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		const history = await this.summarizer.provideChatSummary(context, token);
 		const prompt = request.prompt.substring('/delegate'.length).trim();
-		if (!await this.cloudSessionProvider.tryHandleUncommittedChanges({
-			prompt: prompt,
-			history: history,
+		const metadata: ConfirmationMetadata = {
+			prompt,
+			history,
 			chatContext: context
-		}, stream, token)) {
-			const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
-				prompt,
-				history,
-				chatContext: context
-			}, stream, token);
+		};
+		if (!await this.cloudSessionProvider.tryHandleUncommittedChanges(metadata, stream, token)) {
+			const prInfo = await this.cloudSessionProvider.createDelegatedChatSession(metadata, stream, token);
 			if (prInfo) {
 				await this.recordPushToSession(session, request.prompt, prInfo);
 			}
@@ -504,11 +501,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return {};
 		}
 
-		const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession({
-			prompt: uncommittedChangesData.metadata.prompt,
-			history: uncommittedChangesData.metadata.history,
-			chatContext: context
-		}, stream, token);
+		const metadata = uncommittedChangesData.metadata as ConfirmationMetadata;
+		metadata.chatContext = context;
+		const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession(metadata, stream, token);
 		if (prInfo) {
 			await this.recordPushToSession(session, prompt, prInfo);
 		}
