@@ -9,7 +9,7 @@ import { IAuthenticationService } from '../../../../platform/authentication/comm
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { raceCancellation, raceCancellationError } from '../../../../util/vs/base/common/async';
+import { raceCancellation } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -153,7 +153,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			if (modelId && modelId !== currentModel && !token.isCancellationRequested) {
 				this._lastUsedModel = modelId;
-				await raceCancellationError(this._sdkSession.setSelectedModel(modelId), token);
+				await raceCancellation(this._sdkSession.setSelectedModel(modelId), token);
 			}
 
 			disposables.add(toDisposable(this._sdkSession.on('*', (event) => this.logService.trace(`[CopilotCLISession]CopilotCLI Event: ${JSON.stringify(event, null, 2)}`))));
