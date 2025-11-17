@@ -98,9 +98,9 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 				}
 			}
 
-			noMatchInstructions = `Your search pattern might be excluded completedly by either the search.exclude settings or .*ignore files.
-			If you believe that it should have results, you can check into the .*ignore files and the exclude setting (here are some excluded patterns for reference:[${excludePaths.join(';')}] separated by ';').
-			Then if you want to include those files you can call the tool again by setting "includeIgnoredFiles" to true.`;
+			noMatchInstructions = `Your search pattern might be excluded completely by either the search.exclude settings or .*ignore files.
+If you believe that it should have results, you can check into the .*ignore files and the exclude setting (here are some excluded patterns for reference:[${excludePaths.join(',')}]).
+Then if you want to include those files you can call the tool again by setting "includeIgnoredFiles" to true.`;
 		}
 
 		const prompt = await renderPromptElementJSON(this.instantiationService,
