@@ -370,7 +370,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	private _shouldLog(entry: LoggedRequest) {
 		// don't log cancelled requests by XTabProviderId (because it triggers and cancels lots of requests)
 		if (entry.debugName === XTabProviderId &&
-			!this._configService.getConfig(ConfigKey.Internal.InlineEditsLogCancelledRequests) &&
+			!this._configService.getConfig(ConfigKey.TeamInternal.InlineEditsLogCancelledRequests) &&
 			entry.type === LoggedRequestKind.ChatMLCancelation
 		) {
 			return false;
@@ -389,7 +389,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 
 		this._entries.push(entry);
-		const maxEntries = this._configService.getConfig(ConfigKey.Internal.RequestLoggerMaxEntries);
+		const maxEntries = this._configService.getConfig(ConfigKey.Advanced.RequestLoggerMaxEntries);
 		if (this._entries.length > maxEntries) {
 			this._entries.shift();
 		}

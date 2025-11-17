@@ -71,7 +71,7 @@ export class ContextKeysContribution extends Disposable {
 		this._updateDebugContext();
 		this._updatePrExtensionInstalledContext();
 
-		const debugReportFeedback = this._configService.getConfigObservable(ConfigKey.Internal.DebugReportFeedback);
+		const debugReportFeedback = this._configService.getConfigObservable(ConfigKey.TeamInternal.DebugReportFeedback);
 		this._register(autorun(reader => {
 			commands.executeCommand('setContext', debugReportFeedbackContextKey, debugReportFeedback.read(reader));
 		}));

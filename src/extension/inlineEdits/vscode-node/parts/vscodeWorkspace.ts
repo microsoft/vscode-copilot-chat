@@ -44,7 +44,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	private readonly _store = new DisposableStore();
 	private readonly _filter = this._instaService.createInstance(DocumentFilter);
 	private get _useAlternativeNotebookFormat(): boolean {
-		return this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.UseAlternativeNESNotebookFormat, this._experimentationService)
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._experimentationService)
 			|| this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, this._experimentationService);
 	}
 	private readonly _markdownNotebookCells = new Lazy<ResourceSet>(() => {
@@ -61,7 +61,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	) {
 		super();
 
-		const config = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.VerifyTextDocumentChanges, this._experimentationService);
+		const config = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.VerifyTextDocumentChanges, this._experimentationService);
 		this._store.add(autorun(reader => {
 			if (config.read(reader)) {
 				reader.store.add(this._instaService.createInstance(VerifyTextDocumentChanges));

@@ -21,6 +21,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { Conversation } from '../../prompt/common/conversation';
+import { getRequestedToolCallIterationLimit } from '../../prompt/common/specialRequestTypes';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { DefaultIntentRequestHandler, IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
@@ -29,7 +30,6 @@ import { AgentPrompt } from '../../prompts/node/agent/agentPrompt';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { AgentIntentInvocation } from './agentIntent';
-import { getRequestedToolCallIterationLimit } from '../../prompt/common/specialRequestTypes';
 
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
@@ -64,7 +64,7 @@ export class AskAgentIntent implements IIntent {
 	private getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
 		return {
 			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.configurationService.getNonExtensionConfig('chat.agent.maxRequests') ?? 15,
-			temperature: this.configurationService.getConfig(ConfigKey.AdvancedExperimental.AgentTemperature) ?? 0,
+			temperature: this.configurationService.getConfig(ConfigKey.Advanced.AgentTemperature) ?? 0,
 			overrideRequestLocation: ChatLocation.EditingSession,
 		};
 	}

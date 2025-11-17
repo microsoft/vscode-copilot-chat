@@ -3544,6 +3544,25 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.debug.requestLogger.maxEntries": {
+						"type": "number",
+						"default": 100,
+						"markdownDescription": "%github.copilot.config.debug.requestLogger.maxEntries%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.advanced.inlineEdits.diagnosticsContextProvider.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.temporalContext.preferSameLang": {
 						"type": "boolean",
 						"default": false,

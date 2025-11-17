@@ -384,6 +384,8 @@
 	"github.copilot.config.editRecording.enabled": "Enable edit recording for analysis.",
 	"github.copilot.config.temporalContext.maxAge": "Maximum age (in editor changes) for temporal context.",
 	"github.copilot.config.temporalContext.preferSameLang": "Prefer same language files in temporal context.",
+	"github.copilot.config.debug.requestLogger.maxEntries": "Maximum number of entries to keep in the request logger for debugging purposes.",
+	"github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled": "Enable diagnostics context provider for next edit suggestions.",
 	"github.copilot.config.codesearch.agent.enabled": "Enable code search capabilities in agent mode.",
 	"github.copilot.config.agent.temperature": "Temperature setting for agent mode requests.",
 	"github.copilot.config.instantApply.shortContextModelName": "Model name for short context instant apply.",

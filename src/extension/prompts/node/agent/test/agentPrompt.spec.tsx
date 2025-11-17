@@ -263,7 +263,7 @@ testFamilies.forEach(family => {
 		});
 
 		test('omit base agent instructions', async () => {
-			accessor.get(IConfigurationService).setConfig(ConfigKey.AdvancedExperimental.OmitBaseAgentInstructions, true);
+			accessor.get(IConfigurationService).setConfig(ConfigKey.Advanced.OmitBaseAgentInstructions, true);
 			expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
