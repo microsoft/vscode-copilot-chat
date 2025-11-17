@@ -50,8 +50,11 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 					new ChatResponseTurn2([new ChatResponseMarkdownPart(step.result)], {}, 'copilot')
 				);
 			} else if (step.kind === 'toolCall') {
+				const toolCall = new ChatToolInvocationPart(step.toolName, '', false);
+				toolCall.isComplete = true;
+				toolCall.isConfirmed = true;
 				history.push(
-					new ChatResponseTurn2([new ChatToolInvocationPart(step.toolName, '', false)], {}, 'copilot')
+					new ChatResponseTurn2([toolCall], {}, 'copilot')
 				);
 			}
 		}
