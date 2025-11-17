@@ -25,7 +25,7 @@ export function startFeedbackCollection(accessor: ServicesAccessor) {
 	const instantiationService = accessor.get(IInstantiationService);
 	const logService = accessor.get(ILogService);
 	const disposables = new DisposableStore();
-	const enabled = configurationService.getConfig(ConfigKey.Internal.FeedbackOnChange);
+	const enabled = configurationService.getConfig(ConfigKey.Advanced.FeedbackOnChange);
 	if (!enabled) {
 		return disposables;
 	}

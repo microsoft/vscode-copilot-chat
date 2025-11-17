@@ -158,7 +158,7 @@ export class InlineEditTester {
 			stestRuntime.writeFile('nesUserEditHistory.json', JSON.stringify(nesUserEditHistory, null, 2), NES_USER_EDITS_HISTORY_TAG);
 		}
 
-		const nextEditProviderId = configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsProviderId, expService);
+		const nextEditProviderId = configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsProviderId, expService);
 		const statelessNextEditProvider = createNextEditProvider(nextEditProviderId, instaService);
 		const nextEditProvider = instaService.createInstance(NextEditProvider, workspace, statelessNextEditProvider, historyContextProvider, nesXtabHistoryTracker, debugRecorder);
 

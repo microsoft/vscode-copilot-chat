@@ -44,7 +44,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 	readonly id = 'languageModelAccess';
 
-	readonly activationBlocker?: Promise<unknown>;
+	readonly activationBlocker?: Promise<void>;
 
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	private _currentModels: vscode.LanguageModelChatInformation[] = []; // Store current models for reference
@@ -76,7 +76,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		this.activationBlocker = Promise.all([
 			this._registerChatProvider(),
 			this._registerEmbeddings(),
-		]);
+		]).then(() => { });
 	}
 
 	override dispose(): void {

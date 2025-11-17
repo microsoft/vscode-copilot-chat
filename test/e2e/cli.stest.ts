@@ -25,7 +25,7 @@ import { ssuite, stest } from '../base/stest';
 
 function registerChatServices(testingServiceCollection: TestingServiceCollection) {
 	class TestCopilotCLISDK extends CopilotCLISDK {
-		override async ensureNodePtyShim(): Promise<void> {
+		override async ensureShims(): Promise<void> {
 			// Override to do nothing in tests
 		}
 	}

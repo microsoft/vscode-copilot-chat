@@ -34,7 +34,7 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 		@IExperimentationService experimentationService: IExperimentationService,
 		@ILogService logService: ILogService,
 	) {
-		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyShortModelName, experimentationService) ?? CHAT_MODEL.SHORT_INSTANT_APPLY;
+		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Advanced.InstantApplyShortModelName, experimentationService) ?? CHAT_MODEL.SHORT_INSTANT_APPLY;
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,

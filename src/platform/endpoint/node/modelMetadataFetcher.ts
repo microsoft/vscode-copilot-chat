@@ -302,7 +302,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	// get ChatMaxNumTokens from config for experimentation
 	private _getMaxPromptTokensOverride(chatModelInfo: IChatModelInformation): number {
 		// check debug override ChatMaxTokenNum
-		const chatMaxTokenNumOverride = this._configService.getConfig(ConfigKey.Internal.DebugOverrideChatMaxTokenNum); // can only be set by internal users
+		const chatMaxTokenNumOverride = this._configService.getConfig(ConfigKey.TeamInternal.DebugOverrideChatMaxTokenNum); // can only be set by internal users
 		// Base 3 tokens for each OpenAI completion
 		let modelLimit = -3;
 		// if option is set, takes precedence over any other logic

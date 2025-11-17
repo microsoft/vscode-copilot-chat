@@ -60,7 +60,7 @@ export class InlineChatGenerateCodePrompt extends PromptElement<InlineChatGenera
 
 		const { query, history, chatVariables, } = this.props.promptContext;
 
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.ProjectLabelsInline, this._experimentationService);
+		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsInline, this._experimentationService);
 
 		const data = await SummarizedDocumentData.create(this._parserService, document, context.fileIndentInfo, context.wholeRange, SelectionSplitKind.OriginalEnd);
 

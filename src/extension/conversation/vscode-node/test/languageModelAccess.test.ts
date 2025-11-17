@@ -11,6 +11,7 @@ import { IEndpointProvider } from '../../../../platform/endpoint/common/endpoint
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionTestingServices } from '../../../test/vscode-node/services';
 import { CopilotLanguageModelWrapper } from '../languageModelAccess';
@@ -39,7 +40,7 @@ suite('CopilotLanguageModelWrapper', () => {
 
 		const runTest = async (messages: vscode.LanguageModelChatMessage[], tools?: vscode.LanguageModelChatTool[], errMsg?: string) => {
 			await assert.rejects(
-				() => wrapper.provideLanguageModelResponse(endpoint, messages, { tools, requestInitiator: 'unknown', toolMode: vscode.LanguageModelChatToolMode.Auto }, vscode.extensions.all[0].id, null!, null!),
+				() => wrapper.provideLanguageModelResponse(endpoint, messages, { tools, requestInitiator: 'unknown', toolMode: vscode.LanguageModelChatToolMode.Auto }, vscode.extensions.all[0].id, { report: () => { } }, CancellationToken.None),
 				err => {
 					errMsg ??= 'Invalid request';
 					assert.ok(err instanceof Error, 'expected an Error');
@@ -58,15 +59,16 @@ suite('CopilotLanguageModelWrapper', () => {
 		});
 	});
 
-	suite.skip('validateRequest - valid', async () => {
+	suite('validateRequest - valid', async () => {
 		let wrapper: CopilotLanguageModelWrapper;
 		let endpoint: IChatEndpoint;
 		setup(async () => {
+			createAccessor();
 			endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
 			wrapper = instaService.createInstance(CopilotLanguageModelWrapper);
 		});
 		const runTest = async (messages: vscode.LanguageModelChatMessage[], tools?: vscode.LanguageModelChatTool[]) => {
-			await wrapper.provideLanguageModelResponse(endpoint, messages, { tools, requestInitiator: 'unknown', toolMode: vscode.LanguageModelChatToolMode.Auto }, vscode.extensions.all[0].id, null!, null!);
+			await wrapper.provideLanguageModelResponse(endpoint, messages, { tools, requestInitiator: 'unknown', toolMode: vscode.LanguageModelChatToolMode.Auto }, vscode.extensions.all[0].id, { report: () => { } }, CancellationToken.None);
 		};
 
 		test('simple', async () => {

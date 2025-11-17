@@ -80,12 +80,12 @@ export class XtabEndpoint extends ChatEndpoint {
 	}
 
 	override get urlOrRequestMetadata(): string {
-		return this._configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderUrl) || this._url;
+		return this._configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUrl) || this._url;
 	}
 
 
 	public override getExtraHeaders(): Record<string, string> {
-		const apiKey = this._configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderApiKey) || this._apiKey;
+		const apiKey = this._configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderApiKey) || this._apiKey;
 		if (!apiKey) {
 			const message = `Missing API key for custom URL (${this.urlOrRequestMetadata}). Provide the API key using vscode setting \`github.copilot.chat.advanced.inlineEdits.xtabProvider.apiKey\` or, if in simulations using \`--nes-api-key\` or \`--config-file\``;
 			console.error(message);

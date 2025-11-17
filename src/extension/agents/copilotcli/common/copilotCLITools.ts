@@ -200,6 +200,12 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 export type ToolCall = ToolInfo & { toolCallId: string };
 export type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
 
+function isInstructionAttachmentPath(path: string): boolean {
+	const normalizedPath = path.replace(/\\/g, '/');
+	return normalizedPath.endsWith('/.github/copilot-instructions.md')
+		|| (normalizedPath.includes('/.github/instructions/') && normalizedPath.endsWith('.md'));
+}
+
 export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: unknown }): boolean {
 	const toolCall = data as ToolCall;
 	if (toolCall.toolName === 'str_replace_editor') {
@@ -290,7 +296,11 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 					type: "file" | "directory";
 					displayName: string;
 				};
-				const references: ChatPromptReference[] = ((event.data.attachments || []) as Attachment[]).map(attachment => ({ id: attachment.path, name: attachment.displayName, value: Uri.file(attachment.path) } as ChatPromptReference));
+				// Filter out vscode instruction files from references when building session history
+				// TODO@rebornix filter instructions should be rendered as "references" in chat response like normal chat.
+				const references: ChatPromptReference[] = ((event.data.attachments || []) as Attachment[])
+					.filter(attachment => !isInstructionAttachmentPath(attachment.path))
+					.map(attachment => ({ id: attachment.path, name: attachment.displayName, value: Uri.file(attachment.path) } as ChatPromptReference));
 				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, references, '', [], undefined));
 				break;
 			}

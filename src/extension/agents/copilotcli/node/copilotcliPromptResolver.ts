@@ -30,11 +30,7 @@ export class CopilotCLIPromptResolver {
 		const diagnosticTexts: string[] = [];
 		const files: { path: string; name: string }[] = [];
 		const attachedFiles = new ResourceSet();
-		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
 		request.references.forEach(ref => {
-			if (shouldExcludeReference(ref)) {
-				return;
-			}
 			if (collectDiagnosticContent(ref.value, diagnosticTexts, files)) {
 				return;
 			}
@@ -64,7 +60,7 @@ export class CopilotCLIPromptResolver {
 				const stat = await raceCancellationError(this.fileSystemService.stat(URI.file(file.path)), token);
 				const type = stat.type === FileType.Directory ? 'directory' : stat.type === FileType.File ? 'file' : undefined;
 				if (!type) {
-					this.logService.error(`[CopilotCLIAgentManager] Ignoring attachment as its not a file/directory (${file.path})`);
+					this.logService.error(`[CopilotCLISession] Ignoring attachment as its not a file/directory (${file.path})`);
 					return;
 				}
 				attachments.push({
@@ -73,7 +69,7 @@ export class CopilotCLIPromptResolver {
 					path: file.path
 				});
 			} catch (error) {
-				this.logService.error(`[CopilotCLIAgentManager] Failed to attach ${file.path}: ${error}`);
+				this.logService.error(`[CopilotCLISession] Failed to attach ${file.path}: ${error}`);
 			}
 		}));
 
@@ -92,10 +88,6 @@ export class CopilotCLIPromptResolver {
 
 		return { prompt, attachments };
 	}
-}
-
-function shouldExcludeReference(ref: vscode.ChatPromptReference): boolean {
-	return ref.id.startsWith('vscode.prompt.instructions');
 }
 
 function collectDiagnosticContent(value: unknown, diagnosticTexts: string[], files: { path: string; name: string }[]): boolean {

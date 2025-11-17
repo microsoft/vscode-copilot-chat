@@ -158,6 +158,18 @@ export interface PullRequestFile {
 	changes: number;
 	patch?: string;
 	previous_filename?: string;
+	sha?: string;
+}
+
+interface GitHubContentResponse {
+	content?: string;
+	encoding?: string;
+	sha?: string;
+}
+
+interface GitHubBlobResponse {
+	content: string;
+	encoding: string;
 }
 
 export interface IOctoKitService {
@@ -344,12 +356,43 @@ export class BaseOctoKitService {
 	}
 
 	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
-		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, 'GET', token, undefined);
+		const route = `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`;
+		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, route, 'GET', token, undefined);
 
-		if (response?.content && response.encoding === 'base64') {
-			return decodeBase64(response.content.replace(/\n/g, '')).toString();
-		} else {
-			return '';
+		if (!response || Array.isArray(response)) {
+			throw new Error('Unable to fetch file content');
 		}
+
+		const typedResponse = response as GitHubContentResponse;
+
+		if (typedResponse.content && typedResponse.encoding === 'base64') {
+			return decodeBase64(typedResponse.content.replace(/\n/g, '')).toString();
+		}
+
+		if (typedResponse.sha) {
+			const blob = await this.getBlobContentWithToken(owner, repo, typedResponse.sha, token);
+			if (blob) {
+				return blob;
+			}
+		}
+
+		this._logService.error(`Failed to get file content for ${owner}/${repo}/${path} at ref ${ref}`);
+		return '';
+	}
+
+	private async getBlobContentWithToken(owner: string, repo: string, sha: string, token: string): Promise<string | undefined> {
+		const blobRoute = `repos/${owner}/${repo}/git/blobs/${sha}`;
+		const blobResponse = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, blobRoute, 'GET', token, undefined, '2022-11-28');
+
+		if (!blobResponse || Array.isArray(blobResponse)) {
+			return undefined;
+		}
+
+		const typedBlob = blobResponse as GitHubBlobResponse;
+		if (typedBlob.content && typedBlob.encoding === 'base64') {
+			return decodeBase64(typedBlob.content.replace(/\n/g, '')).toString();
+		}
+
+		return undefined;
 	}
 }
