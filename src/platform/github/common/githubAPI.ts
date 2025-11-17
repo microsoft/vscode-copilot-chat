@@ -6,6 +6,7 @@
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
+import { vClosePullRequestResponse } from './githubAPIValidators';
 
 export interface PullRequestSearchItem {
 	id: string;
@@ -77,6 +78,11 @@ export interface PullRequestComment {
 	};
 	url: string;
 }
+
+export interface ClosePullRequestResponse {
+	state: string;
+}
+
 
 export async function makeGitHubAPIRequest(
 	fetcherService: IFetcherService,
@@ -354,16 +360,21 @@ export async function closePullRequest(
 	);
 
 	if (!result) {
-		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. No response received.`);
+		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}: No response`);
 		return false;
 	}
 
-	const response = result as { state: string };
-	const success = response.state === 'closed';
+	const validation = vClosePullRequestResponse().validate(result);
+	if (validation.error) {
+		logService.error(`[GitHubAPI] Failed to validate close pull request response: ${validation.error.message}`);
+		return false;
+	}
+
+	const success = validation.content.state === 'closed';
 	if (success) {
 		logService.debug(`[GitHubAPI] Successfully closed pull request ${owner}/${repo}#${pullNumber}`);
 	} else {
-		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${response.state}`);
+		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${validation.content.state}`);
 	}
 	return success;
 }

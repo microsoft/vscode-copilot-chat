@@ -4,15 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IValidator, vArray, vNumber, vObj, vString } from '../../configuration/common/validator';
+import { ClosePullRequestResponse } from './githubAPI';
 import { CustomAgentListItem, JobInfo } from './githubService';
 
-// Validator for Actor (used in JobInfo)
 const vActor = () => vObj({
 	id: vNumber(),
 	login: vString(),
 });
 
-// Validator for JobInfo
 export const vJobInfo = (): IValidator<JobInfo> => vObj({
 	job_id: vString(),
 	session_id: vString(),
@@ -38,7 +37,6 @@ export const vJobInfo = (): IValidator<JobInfo> => vObj({
 	event_identifiers: vArray(vString()),
 });
 
-// Validator for CustomAgentListItem
 export const vCustomAgentListItem = (): IValidator<CustomAgentListItem> => vObj({
 	name: vString(),
 	repo_owner_id: vNumber(),
@@ -51,11 +49,14 @@ export const vCustomAgentListItem = (): IValidator<CustomAgentListItem> => vObj(
 	version: vString(),
 });
 
-// Validator for GetCustomAgentsResponse
 export interface GetCustomAgentsResponse {
 	agents: CustomAgentListItem[];
 }
 
 export const vGetCustomAgentsResponse = (): IValidator<GetCustomAgentsResponse> => vObj({
 	agents: vArray(vCustomAgentListItem()),
+});
+
+export const vClosePullRequestResponse = (): IValidator<ClosePullRequestResponse> => vObj({
+	state: vString(),
 });
