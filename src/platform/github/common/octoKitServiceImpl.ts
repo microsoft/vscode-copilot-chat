@@ -9,8 +9,6 @@ import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 import { BaseOctoKitService, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
-import { vErrorResponseWithStatusCode, vRemoteAgentJobResponse, vSessionInfo, vSessionsResponse } from './githubAPIValidators';
-import { vString } from '../../configuration/common/validator';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -59,12 +57,8 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		if (!response) {
 			return [];
 		}
-		const validation = vSessionsResponse().validate(response);
-		if (validation.error) {
-			this._logService.error(`[OctoKitService] Failed to validate sessions response: ${validation.error.message}`);
-			return [];
-		}
-		return validation.content.sessions;
+		const sessionsResponse = response as { sessions: SessionInfo[] };
+		return sessionsResponse.sessions;
 	}
 
 	async getSessionLogs(sessionId: string): Promise<string> {
@@ -79,12 +73,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		if (!response) {
 			return '';
 		}
-		const validation = vString().validate(response);
-		if (validation.error) {
-			this._logService.error(`[OctoKitService] Failed to validate session logs response: ${validation.error.message}`);
-			return '';
-		}
-		return validation.content;
+		return response as string;
 	}
 
 	async getSessionInfo(sessionId: string): Promise<SessionInfo> {
@@ -101,21 +90,16 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 
 		// The response might be a string (JSON) or already parsed
-		let parsedResponse: unknown = response;
+		let parsedResponse: SessionInfo = response as SessionInfo;
 		if (typeof response === 'string') {
 			try {
-				parsedResponse = JSON.parse(response);
+				parsedResponse = JSON.parse(response) as SessionInfo;
 			} catch (e) {
 				throw new Error('Failed to parse session info response');
 			}
 		}
 
-		const validation = vSessionInfo().validate(parsedResponse);
-		if (validation.error) {
-			this._logService.error(`[OctoKitService] Failed to validate session info response: ${validation.error.message}`);
-			throw new Error(`Invalid session info response: ${validation.error.message}`);
-		}
-		return validation.content;
+		return parsedResponse;
 	}
 
 	async postCopilotAgentJob(owner: string, name: string, apiVersion: string, payload: RemoteAgentJobPayload): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode> {
@@ -128,19 +112,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			throw new Error('No response received from post copilot agent job');
 		}
 
-		// Try to validate as RemoteAgentJobResponse first, then as ErrorResponseWithStatusCode
-		const jobResponseValidation = vRemoteAgentJobResponse().validate(response);
-		if (!jobResponseValidation.error) {
-			return jobResponseValidation.content;
-		}
-
-		const errorResponseValidation = vErrorResponseWithStatusCode().validate(response);
-		if (!errorResponseValidation.error) {
-			return errorResponseValidation.content;
-		}
-
-		this._logService.error(`[OctoKitService] Failed to validate post copilot agent job response: ${jobResponseValidation.error.message}`);
-		throw new Error(`Invalid post copilot agent job response: ${jobResponseValidation.error.message}`);
+		return response as RemoteAgentJobResponse | ErrorResponseWithStatusCode;
 	}
 
 	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo> {

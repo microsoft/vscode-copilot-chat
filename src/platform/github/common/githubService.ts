@@ -11,8 +11,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { addPullRequestCommentGraphQLRequest, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeGitHubAPIRequestWithPagination, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { vArray } from '../../configuration/common/validator';
-import { vFileContentResponse, vGetCustomAgentsResponse, vJobInfo, vOctoKitUser, vPullRequestFile } from './githubAPIValidators';
+import { vGetCustomAgentsResponse, vJobInfo } from './githubAPIValidators';
 
 export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
 
@@ -283,12 +282,7 @@ export class BaseOctoKitService {
 		if (!response) {
 			return undefined;
 		}
-		const validation = vOctoKitUser().validate(response);
-		if (validation.error) {
-			this._logService.error(`[GitHubService] Failed to validate user response: ${validation.error.message}`);
-			return undefined;
-		}
-		return validation.content;
+		return response as IOctoKitUser;
 	}
 
 	async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
@@ -377,12 +371,7 @@ export class BaseOctoKitService {
 		if (!result) {
 			return [];
 		}
-		const validation = vArray(vPullRequestFile()).validate(result);
-		if (validation.error) {
-			this._logService.error(`[GitHubService] Failed to validate pull request files response: ${validation.error.message}`);
-			return [];
-		}
-		return validation.content;
+		return result as PullRequestFile[];
 	}
 
 	protected async closePullRequestWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<boolean> {
@@ -396,14 +385,9 @@ export class BaseOctoKitService {
 			return '';
 		}
 
-		const validation = vFileContentResponse().validate(response);
-		if (validation.error) {
-			this._logService.error(`[GitHubService] Failed to validate file content response: ${validation.error.message}`);
-			return '';
-		}
-
-		if (validation.content.encoding === 'base64') {
-			return decodeBase64(validation.content.content.replace(/\n/g, '')).toString();
+		const fileContent = response as { content: string; encoding: string };
+		if (fileContent.encoding === 'base64') {
+			return decodeBase64(fileContent.content.replace(/\n/g, '')).toString();
 		} else {
 			return '';
 		}
