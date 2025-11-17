@@ -557,7 +557,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 		result.push(`model            : ${entry.chatParams.model}`);
 		result.push(`maxPromptTokens  : ${entry.chatEndpoint.modelMaxPromptTokens}`);
-		result.push(`maxResponseTokens: ${entry.chatParams.body?.max_tokens ?? entry.chatParams.body?.max_output_tokens}`);
+		result.push(`maxResponseTokens: ${entry.chatParams.body?.max_tokens ?? entry.chatParams.body?.max_output_tokens ?? entry.chatParams.body?.max_completion_tokens}`);
 		result.push(`location         : ${entry.chatParams.location}`);
 		result.push(`otherOptions     : ${JSON.stringify(otherOptions)}`);
 		if (entry.chatParams.body?.reasoning) {
