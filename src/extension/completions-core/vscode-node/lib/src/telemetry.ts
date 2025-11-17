@@ -375,11 +375,19 @@ function sendTelemetryEvent(
 	data: { properties: TelemetryProperties; measurements: TelemetryMeasurements }
 ): void {
 	const properties = TelemetryData.maybeRemoveRepoInfoFromProperties(store, data.properties);
-	completionsTelemetryService.sendGHTelemetryEvent(
-		name,
-		properties,
-		data.measurements
-	);
+	if (!isEnhanced(store)) {
+		completionsTelemetryService.sendGHTelemetryEvent(
+			name,
+			properties,
+			data.measurements
+		);
+	} else {
+		completionsTelemetryService.sendEnhancedGHTelemetryEvent(
+			name,
+			properties,
+			data.measurements
+		);
+	}
 }
 
 function sendTelemetryErrorEvent(
