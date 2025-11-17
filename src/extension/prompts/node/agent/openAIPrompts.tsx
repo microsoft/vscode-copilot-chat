@@ -695,6 +695,6 @@ PromptRegistry.registerPrompt(class implements IAgentPrompt {
 	static readonly familyPrefixes = [];
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
-		return DefaultGpt5AgentPrompt;
+		return CodexStyleGPT5CodexPrompt;
 	}
 });
