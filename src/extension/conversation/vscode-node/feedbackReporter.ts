@@ -42,7 +42,7 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 	) {
 		super();
 
-		this.canReport = this._configurationService.getConfigObservable(ConfigKey.Internal.DebugReportFeedback);
+		this.canReport = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.DebugReportFeedback);
 	}
 
 	private _findChatParamsForTurn(turn: Turn): ILoggedPendingRequest | undefined {

@@ -22,10 +22,7 @@ suite('Configuration Defaults', () => {
 	teardown(() => testObject.dispose());
 
 	test('default values of all advanced settings should match default values', () => {
-		const advancedSettings = [
-			...Object.values(ConfigKey.AdvancedExperimental),
-			...Object.values(ConfigKey.AdvancedExperimentalExperiments)
-		] as Config<unknown>[];
+		const advancedSettings = Object.values(ConfigKey.Advanced) as Config<unknown>[];
 
 		for (const setting of advancedSettings) {
 			const actual = testObject.getConfig<unknown>(setting);
@@ -36,7 +33,7 @@ suite('Configuration Defaults', () => {
 	});
 
 	test('default values of all internal settings', () => {
-		const internalSettings = Object.values(ConfigKey.Internal) as Config<unknown>[];
+		const internalSettings = Object.values(ConfigKey.TeamInternal) as Config<unknown>[];
 
 		for (const setting of internalSettings) {
 			const actual = testObject.getConfig<unknown>(setting);

@@ -60,7 +60,7 @@ export class CopilotCLIPromptResolver {
 				const stat = await raceCancellationError(this.fileSystemService.stat(URI.file(file.path)), token);
 				const type = stat.type === FileType.Directory ? 'directory' : stat.type === FileType.File ? 'file' : undefined;
 				if (!type) {
-					this.logService.error(`[CopilotCLIAgentManager] Ignoring attachment as its not a file/directory (${file.path})`);
+					this.logService.error(`[CopilotCLISession] Ignoring attachment as its not a file/directory (${file.path})`);
 					return;
 				}
 				attachments.push({
@@ -69,7 +69,7 @@ export class CopilotCLIPromptResolver {
 					path: file.path
 				});
 			} catch (error) {
-				this.logService.error(`[CopilotCLIAgentManager] Failed to attach ${file.path}: ${error}`);
+				this.logService.error(`[CopilotCLISession] Failed to attach ${file.path}: ${error}`);
 			}
 		}));
 

@@ -32,7 +32,7 @@ export class PromptFileContextContribution extends Disposable {
 		@ILanguageContextProviderService private readonly languageContextProviderService: ILanguageContextProviderService,
 	) {
 		super();
-		this._enableCompletionContext = configurationService.getExperimentBasedConfigObservable(ConfigKey.AdvancedExperimentalExperiments.PromptFileContext, experimentationService);
+		this._enableCompletionContext = configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.PromptFileContext, experimentationService);
 		this._register(autorun(reader => {
 			if (this._enableCompletionContext.read(reader)) {
 				this.registration = this.register();

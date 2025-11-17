@@ -13,6 +13,7 @@ import { toGitUri } from '../../../platform/git/common/utils';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -234,19 +235,20 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			this.copilotCLIModels.getDefaultModel()
 		]);
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
+		const isUntitled = copilotcliSessionId.startsWith('untitled-');
 		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
 		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
 
 		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
+		const existingSession = isUntitled ? undefined : await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
 		const selectedModelId = await existingSession?.object?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
 		const options: Record<string, string> = {
 			[MODELS_OPTION_ID]: _sessionModel.get(copilotcliSessionId)?.id ?? defaultModel.id,
 		};
 
-		if (!existingSession && this.configurationService.getConfig(ConfigKey.AdvancedExperimental.CLIIsolationEnabled)) {
+		if (!existingSession && this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
 		const history = existingSession?.object?.getChatHistory() || [];
@@ -374,7 +376,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			]);
 
 			const session = await this.getOrCreateSession(request, chatSessionContext, prompt, modelId, stream, disposables, token);
-			if (!session) {
+			if (!session || token.isCancellationRequested) {
 				return {};
 			}
 			if (isUntitled) {
@@ -396,10 +398,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await session.object.handleRequest(prompt, attachments, modelId, token);
 			}
 
-			if (isUntitled) {
+			if (isUntitled && !token.isCancellationRequested) {
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt ?? 'CopilotCLI' });
 			}
 			return {};
+		} catch (ex) {
+			if (isCancellationError(ex)) {
+				return {};
+			}
+			throw ex;
 		}
 		finally {
 			disposables.dispose();

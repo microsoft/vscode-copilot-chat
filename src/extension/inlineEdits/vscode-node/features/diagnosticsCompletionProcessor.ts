@@ -181,7 +181,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._tracer = createTracer(['NES', 'DiagnosticsInlineCompletionProvider'], (s) => logService.trace(s));
 
-		const diagnosticsExplorationEnabled = configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsDiagnosticsExplorationEnabled);
+		const diagnosticsExplorationEnabled = configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsDiagnosticsExplorationEnabled);
 
 		const importProvider = new ImportDiagnosticCompletionProvider(this._tracer.sub('Import'), workspaceService, fileSystemService);
 		const asyncProvider = new AsyncDiagnosticCompletionProvider(this._tracer.sub('Async'));

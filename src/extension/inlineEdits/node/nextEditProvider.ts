@@ -110,7 +110,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	private _cancelPendingRequestDueToDocChange(docId: DocumentId, docValue: StringText) {
-		const isAsyncCompletions = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService);
+		const isAsyncCompletions = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAsyncCompletions, this._expService);
 		if (isAsyncCompletions || this._pendingStatelessNextEditRequest === null) {
 			return;
 		}
@@ -209,7 +209,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		} else {
 			tracer.trace(`fetching next edit with shouldExpandEditWindow=${shouldExpandEditWindow}`);
-			const providerRequestStartDateTime = (this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService)
+			const providerRequestStartDateTime = (this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsDebounceUseCoreRequestTime, this._expService)
 				? (context.requestIssuedDateTime ?? undefined)
 				: undefined);
 			req = new NextEditFetchRequest(context.requestUuid, logContext, providerRequestStartDateTime);
@@ -323,7 +323,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			const lineWithCode = documentAtInvocationTime.getLineAt(editPosition.startLineNumber);
 			const trimmedLineWithCode = lineWithCode.trimStart();
 			const shortenedLineWithCode = trimmedLineWithCode.slice(0, 40);
-			const label = ['.ts', '.tsx', '.js', '.jsx'].includes(docId.extension) && this._configService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.InlineEditsNextCursorPredictionDisplayLine, this._expService)
+			const label = ['.ts', '.tsx', '.js', '.jsx'].includes(docId.extension) && this._configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsNextCursorPredictionDisplayLine, this._expService)
 				? `Jump to line ${editPosition.startLineNumber} | ${shortenedLineWithCode.length === trimmedLineWithCode.length ? shortenedLineWithCode : trimmedLineWithCode + '...'}`
 				: `Jump to line ${editPosition.startLineNumber}`;
 			const displayLocation: INextEditDisplayLocation = {
@@ -366,7 +366,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	private determineNesConfigs(telemetryBuilder: LlmNESTelemetryBuilder, logContext: InlineEditRequestLogContext): INesConfigs {
 		const nesConfigs: INesConfigs = {
-			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
+			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAsyncCompletions, this._expService),
 		};
 
 		telemetryBuilder.setNESConfigs({ ...nesConfigs });
@@ -523,7 +523,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const firstEdit = new DeferredPromise<Result<CachedOrRebasedEdit, NoNextEditReason>>();
 
 		const nLinesEditWindow = (shouldExpandEditWindow
-			? this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAutoExpandEditWindowLines, this._expService)
+			? this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, this._expService)
 			: undefined);
 
 		const nextEditRequest = new StatelessNextEditRequest(
@@ -755,9 +755,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	private computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit }: { triggerTime: number; isRebasedCachedEdit: boolean; isSubsequentCachedEdit: boolean }, tracer: ITracer): number {
 
-		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
-		const rebasedCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRebasedCacheDelay, this._expService);
-		const subsequentCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsSubsequentCacheDelay, this._expService);
+		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsCacheDelay, this._expService);
+		const rebasedCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsRebasedCacheDelay, this._expService);
+		const subsequentCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSubsequentCacheDelay, this._expService);
 
 		let minimumResponseDelay = cacheDelay;
 		if (isRebasedCachedEdit && rebasedCacheDelay !== undefined) {

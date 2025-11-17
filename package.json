@@ -3468,7 +3468,10 @@
 					"github.copilot.chat.notebook.alternativeFormat": {
 						"type": "string",
 						"default": "xml",
-						"enum": ["xml", "markdown"],
+						"enum": [
+							"xml",
+							"markdown"
+						],
 						"markdownDescription": "%github.copilot.config.notebook.alternativeFormat%",
 						"tags": [
 							"advanced",
@@ -3493,24 +3496,6 @@
 							"type": "string"
 						},
 						"markdownDescription": "%github.copilot.config.debugTerminalCommandPatterns%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.editSourceTracking.showDecorations": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.editSourceTracking.showDecorations%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.editSourceTracking.showStatusBar": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.editSourceTracking.showStatusBar%",
 						"tags": [
 							"advanced",
 							"experimental"
@@ -3544,6 +3529,25 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.debug.requestLogger.maxEntries": {
+						"type": "number",
+						"default": 100,
+						"markdownDescription": "%github.copilot.config.debug.requestLogger.maxEntries%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.inlineEdits.diagnosticsContextProvider.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.temporalContext.preferSameLang": {
 						"type": "boolean",
 						"default": false,
@@ -3564,7 +3568,10 @@
 						]
 					},
 					"github.copilot.chat.agent.temperature": {
-						"type": ["number", "null"],
+						"type": [
+							"number",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.agent.temperature%",
 						"tags": [
 							"advanced",
@@ -3601,7 +3608,10 @@
 						]
 					},
 					"github.copilot.chat.summarizeAgentConversationHistoryThreshold": {
-						"type": ["number", "null"],
+						"type": [
+							"number",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.summarizeAgentConversationHistoryThreshold%",
 						"tags": [
 							"advanced",
@@ -3609,7 +3619,10 @@
 						]
 					},
 					"github.copilot.chat.agentHistorySummarizationMode": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.agentHistorySummarizationMode%",
 						"tags": [
 							"advanced",
@@ -3674,28 +3687,11 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.virtualTools.embeddingRanking": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.virtualTools.embeddingRanking%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.multiReplaceStringGrok.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.multiReplaceStringGrok.enabled%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.claudeCode.enabled": {
-						"type": ["boolean", "string"],
+						"type": [
+							"boolean",
+							"string"
+						],
 						"default": false,
 						"markdownDescription": "%github.copilot.config.claudeCode.enabled%",
 						"tags": [
@@ -3732,7 +3728,10 @@
 						]
 					},
 					"github.copilot.chat.inlineEdits.triggerOnEditorChangeAfterSeconds": {
-						"type": ["number", "null"],
+						"type": [
+							"number",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.inlineEdits.triggerOnEditorChangeAfterSeconds%",
 						"tags": [
 							"advanced",
@@ -4793,6 +4792,7 @@
 				"order": 3,
 				"description": "The Claude Code Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
+				"canDelegate": false,
 				"capabilities": {
 					"supportsFileAttachments": true
 				},
@@ -5058,7 +5058,7 @@
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@vscode/copilot-api": "^0.1.13",
+		"@vscode/copilot-api": "^0.2.0",
 		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

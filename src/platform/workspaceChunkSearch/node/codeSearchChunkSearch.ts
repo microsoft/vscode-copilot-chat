@@ -317,7 +317,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private isCodeSearchEnabled() {
-		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.AdvancedExperimentalExperiments.WorkspaceEnableCodeSearch, this._experimentationService);
+		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.WorkspaceEnableCodeSearch, this._experimentationService);
 	}
 
 	getRemoteIndexState(): CodeSearchRemoteIndexState {
