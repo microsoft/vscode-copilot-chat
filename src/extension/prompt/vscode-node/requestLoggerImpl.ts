@@ -152,7 +152,7 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 				this.entry.chatEndpoint.urlOrRequestMetadata?.type : undefined,
 			model: this.entry.chatParams.model,
 			maxPromptTokens: this.entry.chatEndpoint.modelMaxPromptTokens,
-			maxResponseTokens: this.entry.chatParams.body?.max_tokens ?? this.entry.chatParams.body?.max_output_tokens,
+			maxResponseTokens: this.entry.chatParams.body?.max_tokens ?? this.entry.chatParams.body?.max_output_tokens ?? this.entry.chatParams.body?.max_completion_tokens,
 			location: this.entry.chatParams.location,
 			reasoning: this.entry.chatParams.body?.reasoning,
 			intent: this.entry.chatParams.intent,
