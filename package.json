@@ -3029,13 +3029,21 @@
 									"type": "string",
 									"markdownDescription": "URL endpoint for the Azure model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
 								},
-								"toolCalling": {
-									"type": "boolean",
-									"description": "Whether the model supports tool calling"
+								"deploymentName": {
+									"type": "string",
+									"description": "Azure deployment name for the model"
 								},
-								"vision": {
-									"type": "boolean",
-									"description": "Whether the model supports vision capabilities"
+								"deploymentType": {
+									"enum": [
+										"completions",
+										"responses"
+									],
+									"default": "completions",
+									"description": "Type of Azure deployment"
+								},
+								"apiVersion": {
+									"type": "string",
+									"description": "Azure OpenAI API version to use"
 								},
 								"maxInputTokens": {
 									"type": "number",
@@ -3045,10 +3053,37 @@
 									"type": "number",
 									"description": "Maximum number of output tokens supported by the model"
 								},
+								"toolCalling": {
+									"type": "boolean",
+									"description": "Whether the model supports tool calling"
+								},
+								"editTools": {
+									"type": "array",
+									"description": "List of edit tools supported by the model. If this is not configured, the editor will try multiple edit tools and pick the best one.\n\n- 'find-replace': Find and replace text in a document.\n- 'multi-find-replace': Find and replace text in a document.\n- 'apply-patch': A file-oriented diff format used by some OpenAI models\n- 'code-rewrite': A general but slower editing tool that allows the model to rewrite and code snippet and provide only the replacement to the editor.",
+									"items": {
+										"type": "string",
+										"enum": [
+											"find-replace",
+											"multi-find-replace",
+											"apply-patch",
+											"code-rewrite"
+										]
+									}
+								},
+								"temperature": {
+									"type": "number",
+									"description": "Temperature parameter for model responses (typically 0.0 to 2.0)",
+									"minimum": 0,
+									"maximum": 2
+								},
 								"thinking": {
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"vision": {
+									"type": "boolean",
+									"description": "Whether the model supports vision capabilities"
 								},
 								"requestHeaders": {
 									"type": "object",
@@ -3061,8 +3096,6 @@
 							"required": [
 								"name",
 								"url",
-								"toolCalling",
-								"vision",
 								"maxInputTokens",
 								"maxOutputTokens"
 							],
@@ -3091,23 +3124,6 @@
 									"type": "boolean",
 									"description": "Whether the model supports tool calling"
 								},
-								"vision": {
-									"type": "boolean",
-									"description": "Whether the model supports vision capabilities"
-								},
-								"maxInputTokens": {
-									"type": "number",
-									"description": "Maximum number of input tokens supported by the model"
-								},
-								"maxOutputTokens": {
-									"type": "number",
-									"description": "Maximum number of output tokens supported by the model"
-								},
-								"requiresAPIKey": {
-									"type": "boolean",
-									"description": "Whether the model requires an API key for authentication",
-									"default": true
-								},
 								"editTools": {
 									"type": "array",
 									"description": "List of edit tools supported by the model. If this is not configured, the editor will try multiple edit tools and pick the best one.\n\n- 'find-replace': Find and replace text in a document.\n- 'multi-find-replace': Find and replace text in a document.\n- 'apply-patch': A file-oriented diff format used by some OpenAI models\n- 'code-rewrite': A general but slower editing tool that allows the model to rewrite and code snippet and provide only the replacement to the editor.",
@@ -3121,10 +3137,28 @@
 										]
 									}
 								},
+								"temperature": {
+									"type": "number",
+									"description": "Temperature parameter for model responses (typically 0.0 to 2.0)",
+									"minimum": 0,
+									"maximum": 2
+								},
 								"thinking": {
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"vision": {
+									"type": "boolean",
+									"description": "Whether the model supports vision capabilities"
+								},
+								"maxInputTokens": {
+									"type": "number",
+									"description": "Maximum number of input tokens supported by the model"
+								},
+								"maxOutputTokens": {
+									"type": "number",
+									"description": "Maximum number of output tokens supported by the model"
 								},
 								"requestHeaders": {
 									"type": "object",
@@ -3132,13 +3166,16 @@
 									"additionalProperties": {
 										"type": "string"
 									}
+								},
+								"requiresAPIKey": {
+									"type": "boolean",
+									"description": "Whether the model requires an API key for authentication",
+									"default": true
 								}
 							},
 							"required": [
 								"name",
 								"url",
-								"toolCalling",
-								"vision",
 								"maxInputTokens",
 								"maxOutputTokens",
 								"requiresAPIKey"

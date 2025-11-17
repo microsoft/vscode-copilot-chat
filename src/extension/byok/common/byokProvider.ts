@@ -55,6 +55,7 @@ export interface BYOKModelCapabilities {
 	toolCalling: boolean;
 	vision: boolean;
 	thinking?: boolean;
+	temperature?: number;
 	editTools?: EndpointEditToolName[];
 	requestHeaders?: Record<string, string>;
 }
@@ -152,6 +153,9 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 	};
 	if (knownModelInfo?.requestHeaders && Object.keys(knownModelInfo.requestHeaders).length > 0) {
 		modelInfo.requestHeaders = { ...knownModelInfo.requestHeaders };
+	}
+	if (knownModelInfo?.temperature !== undefined) {
+		modelInfo.temperature = knownModelInfo.temperature;
 	}
 	return modelInfo;
 }

@@ -93,6 +93,7 @@ export type IChatModelInformation = IModelAPIResponse & {
 	capabilities: IChatModelCapabilities;
 	urlOrRequestMetadata?: string | RequestMetadata;
 	requestHeaders?: Readonly<Record<string, string>>;
+	temperature?: number;
 };
 
 export function isChatModelInformation(model: IModelAPIResponse): model is IChatModelInformation {

@@ -113,6 +113,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	private static readonly _maxCustomHeaderCount = 20;
 
 	private readonly _customHeaders: Record<string, string>;
+	private readonly _temperature: number | undefined;
 	constructor(
 		_modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
@@ -144,6 +145,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			logService
 		);
 		this._customHeaders = this._sanitizeCustomHeaders(_modelMetadata.requestHeaders);
+		this._temperature = _modelMetadata.temperature;
 	}
 
 	private _sanitizeCustomHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
@@ -289,13 +291,27 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		}
 
 		if (body) {
-			if (this.modelMetadata.capabilities.supports.thinking) {
-				delete body.temperature;
-				body['max_completion_tokens'] = body.max_tokens;
-				delete body.max_tokens;
+			// Apply temperature from config if specified (before thinking model checks)
+			if (this._temperature !== undefined) {
+				body.temperature = this._temperature;
 			}
-			// Removing max tokens defaults to the maximum which is what we want for BYOK
-			delete body.max_tokens;
+
+			if (this.modelMetadata.capabilities.supports.thinking) {
+				// Thinking models don't support temperature parameter
+				delete body.temperature;
+				// Thinking models use max_completion_tokens instead of max_tokens
+				if (typeof body.max_tokens !== 'undefined') {
+					body['max_completion_tokens'] = body.max_tokens;
+					delete body.max_tokens;
+				}
+			}
+			else {
+				// For non-thinking models, removing max_tokens defaults to the maximum allowed value, which is what we want for BYOK
+				if (typeof body.max_tokens !== 'undefined') {
+					delete body.max_tokens;
+				}
+			}
+
 			if (!this.useResponsesApi && body.stream) {
 				body['stream_options'] = { 'include_usage': true };
 			}
