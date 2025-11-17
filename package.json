@@ -4341,6 +4341,7 @@
 				"order": 3,
 				"description": "The Claude Code Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
+				"canDelegate": false,
 				"capabilities": {
 					"supportsFileAttachments": true
 				},
