@@ -342,10 +342,11 @@ export interface IStatelessNextEditTelemetry {
 	readonly noNextEditReasonMessage: string | undefined;
 
 	/* next cursor line info */
-
-	readonly nextCursorLineError: string | undefined;
-	/** nextCursorLineNumber - currentCursorLineNumber */
-	readonly nextCursorLineDistance: number | undefined;
+	readonly nextCursorPrediction: {
+		nextCursorLineError: string | undefined;
+		/** nextCursorLineNumber - currentCursorLineNumber */
+		nextCursorLineDistance: number | undefined;
+	};
 }
 
 export type FetchResultWithStats = {
@@ -414,8 +415,7 @@ export class StatelessNextEditTelemetryBuilder {
 			response: this._response,
 			nEditsSuggested: this._nEditsSuggested,
 			nextEditLogprob: this._nextEditLogProb,
-			nextCursorLineError: this._nextCursorLineError,
-			nextCursorLineDistance: this._nextCursorLineDistance,
+			nextCursorPrediction: this._nextCursorPrediction,
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
 		};
 	}
@@ -520,18 +520,21 @@ export class StatelessNextEditTelemetryBuilder {
 		return this;
 	}
 
-	private _nextCursorLineError: string | undefined;
+	private _nextCursorPrediction: IStatelessNextEditTelemetry['nextCursorPrediction'] = {
+		nextCursorLineError: undefined,
+		nextCursorLineDistance: undefined
+	};
+
 	public setNextCursorLineError(error: string): this {
-		this._nextCursorLineError = error;
+		this._nextCursorPrediction.nextCursorLineError = error;
 		return this;
 	}
 
-	private _nextCursorLineDistance: number | undefined;
 	/**
 	 * nextCursorLineNumber - currentCursorLineNumber
 	 */
 	public setNextCursorLineDistance(distance: number): this {
-		this._nextCursorLineDistance = distance;
+		this._nextCursorPrediction.nextCursorLineDistance = distance;
 		return this;
 	}
 }
