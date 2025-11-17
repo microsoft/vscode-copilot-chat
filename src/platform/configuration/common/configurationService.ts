@@ -867,6 +867,9 @@ export namespace ConfigKey {
 
 	export const CompletionsFetcher = defineSetting<FetcherId | undefined>('chat.completionsFetcher', ConfigType.ExperimentBased, undefined);
 	export const NextEditSuggestionsFetcher = defineSetting<FetcherId | undefined>('chat.nesFetcher', ConfigType.ExperimentBased, undefined);
+
+	export const GitHubMcpEnabled = defineSetting<boolean>('chat.githubMcpServer.enabled', ConfigType.ExperimentBased, false);
+	export const GitHubMcpToolsets = defineSetting<string[]>('chat.githubMcpServer.toolsets', ConfigType.Simple, ['default']);
 }
 
 export function getAllConfigKeys(): string[] {

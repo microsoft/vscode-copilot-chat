@@ -107,6 +107,7 @@
 		"terminalSelection",
 		"terminalQuickFixProvider",
 		"mappedEditsProvider",
+		"mcpToolDefinitions",
 		"aiRelatedInformation",
 		"aiSettingsSearch",
 		"chatParticipantAdditions",
@@ -3785,6 +3786,27 @@
 							"advanced",
 							"experimental"
 						]
+					},
+					"github.copilot.chat.githubMcpServer.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.githubMcpServer.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.githubMcpServer.toolsets": {
+						"type": "array",
+						"default": ["default"],
+						"markdownDescription": "%github.copilot.config.githubMcpServer.toolsets%",
+						"items": {
+							"type": "string"
+						},
+						"tags": [
+							"advanced",
+							"experimental"
+						]
 					}
 				}
 			}
@@ -3811,6 +3833,12 @@
 				"id": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 				"label": "Export All Logs as JSON",
 				"icon": "$(file-export)"
+			}
+		],
+		"mcpServerDefinitionProviders": [
+			{
+				"id": "github",
+				"label": "GitHub"
 			}
 		],
 		"menus": {
