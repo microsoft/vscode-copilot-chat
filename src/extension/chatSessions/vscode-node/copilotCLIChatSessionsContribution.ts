@@ -234,12 +234,13 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			this.copilotCLIModels.getDefaultModel()
 		]);
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
+		const isUntitled = copilotcliSessionId.startsWith('untitled-');
 		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
 		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
 
 		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
+		const existingSession = isUntitled ? undefined : await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
 		const selectedModelId = await existingSession?.object?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
 		const options: Record<string, string> = {
