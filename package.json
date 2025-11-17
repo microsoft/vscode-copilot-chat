@@ -3498,24 +3498,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.editSourceTracking.showDecorations": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.editSourceTracking.showDecorations%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.editSourceTracking.showStatusBar": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.editSourceTracking.showStatusBar%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.localWorkspaceRecording.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -3553,7 +3535,7 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.advanced.inlineEdits.diagnosticsContextProvider.enabled": {
+					"github.copilot.chat.inlineEdits.diagnosticsContextProvider.enabled": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
@@ -3687,26 +3669,6 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.tools.defaultToolsGrouped%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.virtualTools.embeddingRanking": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.virtualTools.embeddingRanking%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.multiReplaceStringGrok.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.multiReplaceStringGrok.enabled%",
 						"tags": [
 							"advanced",
 							"experimental",
