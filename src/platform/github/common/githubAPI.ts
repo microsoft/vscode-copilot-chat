@@ -83,7 +83,6 @@ export interface ClosePullRequestResponse {
 	state: string;
 }
 
-
 export async function makeGitHubAPIRequest(
 	fetcherService: IFetcherService,
 	logService: ILogService,
