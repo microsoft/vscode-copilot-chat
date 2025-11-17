@@ -54,8 +54,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			prId,
 			authToken,
 		);
-		const { sessions } = response;
-		return sessions;
+		if (!response) {
+			return [];
+		}
+		const sessionsResponse = response as { sessions: SessionInfo[] };
+		return sessionsResponse.sessions;
 	}
 
 	async getSessionLogs(sessionId: string): Promise<string> {
@@ -67,7 +70,10 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			sessionId,
 			authToken,
 		);
-		return response;
+		if (!response) {
+			return '';
+		}
+		return response as string;
 	}
 
 	async getSessionInfo(sessionId: string): Promise<SessionInfo> {
@@ -79,10 +85,21 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			sessionId,
 			authToken,
 		);
-		if (typeof response === 'string') {
-			return JSON.parse(response) as SessionInfo;
+		if (!response) {
+			throw new Error('No session info response received');
 		}
-		return response;
+
+		// The response might be a string (JSON) or already parsed
+		let parsedResponse: SessionInfo = response as SessionInfo;
+		if (typeof response === 'string') {
+			try {
+				parsedResponse = JSON.parse(response) as SessionInfo;
+			} catch (e) {
+				throw new Error('Failed to parse session info response');
+			}
+		}
+
+		return parsedResponse;
 	}
 
 	async postCopilotAgentJob(owner: string, name: string, apiVersion: string, payload: RemoteAgentJobPayload): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode> {
@@ -90,7 +107,12 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
-		return this.postCopilotAgentJobWithToken(owner, name, apiVersion, 'vscode-copilot-chat', payload, authToken);
+		const response = await this.postCopilotAgentJobWithToken(owner, name, apiVersion, 'vscode-copilot-chat', payload, authToken);
+		if (!response) {
+			throw new Error('No response received from post copilot agent job');
+		}
+
+		return response as RemoteAgentJobResponse | ErrorResponseWithStatusCode;
 	}
 
 	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo> {
