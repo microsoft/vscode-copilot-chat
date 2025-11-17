@@ -3,35 +3,35 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IValidator, vArray, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
+import { IValidator, vArray, vNumber, vObj, vString } from '../../configuration/common/validator';
 import { CustomAgentListItem, JobInfo } from './githubService';
 
 // Validator for Actor (used in JobInfo)
 const vActor = () => vObj({
-	id: vRequired(vNumber()),
-	login: vRequired(vString()),
+	id: vNumber(),
+	login: vString(),
 });
 
 // Validator for JobInfo
 export const vJobInfo = (): IValidator<JobInfo> => vObj({
-	job_id: vRequired(vString()),
-	session_id: vRequired(vString()),
-	problem_statement: vRequired(vString()),
+	job_id: vString(),
+	session_id: vString(),
+	problem_statement: vString(),
 	content_filter_mode: vString(),
-	status: vRequired(vString()),
+	status: vString(),
 	result: vString(),
-	actor: vRequired(vActor()),
-	created_at: vRequired(vString()),
-	updated_at: vRequired(vString()),
-	pull_request: vRequired(vObj({
-		id: vRequired(vNumber()),
-		number: vRequired(vNumber()),
-	})),
+	actor: vActor(),
+	created_at: vString(),
+	updated_at: vString(),
+	pull_request: vObj({
+		id: vNumber(),
+		number: vNumber(),
+	}),
 	workflow_run: vObj({
-		id: vRequired(vNumber()),
+		id: vNumber(),
 	}),
 	error: vObj({
-		message: vRequired(vString()),
+		message: vString(),
 	}),
 	event_type: vString(),
 	event_url: vString(),
@@ -40,15 +40,15 @@ export const vJobInfo = (): IValidator<JobInfo> => vObj({
 
 // Validator for CustomAgentListItem
 export const vCustomAgentListItem = (): IValidator<CustomAgentListItem> => vObj({
-	name: vRequired(vString()),
-	repo_owner_id: vRequired(vNumber()),
-	repo_owner: vRequired(vString()),
-	repo_id: vRequired(vNumber()),
-	repo_name: vRequired(vString()),
-	display_name: vRequired(vString()),
-	description: vRequired(vString()),
-	tools: vRequired(vArray(vString())),
-	version: vRequired(vString()),
+	name: vString(),
+	repo_owner_id: vNumber(),
+	repo_owner: vString(),
+	repo_id: vNumber(),
+	repo_name: vString(),
+	display_name: vString(),
+	description: vString(),
+	tools: vArray(vString()),
+	version: vString(),
 });
 
 // Validator for GetCustomAgentsResponse
@@ -57,5 +57,5 @@ export interface GetCustomAgentsResponse {
 }
 
 export const vGetCustomAgentsResponse = (): IValidator<GetCustomAgentsResponse> => vObj({
-	agents: vRequired(vArray(vCustomAgentListItem())),
+	agents: vArray(vCustomAgentListItem()),
 });

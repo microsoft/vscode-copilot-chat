@@ -278,26 +278,6 @@ export function vLiteral<T extends string>(value: T): IValidator<T> {
 	};
 }
 
-const vNullValidator = {
-	validate(content: unknown): { content: null; error: undefined } | { content: undefined; error: ValidationError } {
-		if (content !== null) {
-			return { content: undefined, error: { message: "Expected null" } };
-		}
-
-		return { content: null, error: undefined };
-	},
-
-	toSchema(): JsonSchema {
-		return {
-			type: "null" as any,
-		};
-	}
-};
-
-export function vNull(): IValidator<null> {
-	return vNullValidator;
-}
-
 export function vLazy<T>(fn: () => IValidator<T>): IValidator<T> {
 	return {
 		validate(content: unknown): { content: any; error: undefined } | { content: undefined; error: ValidationError } {

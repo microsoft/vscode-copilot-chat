@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { vBoolean, vNull, vNumber, vObj, vRequired, vString, vUnion } from '../../common/validator';
+import { vBoolean, vNumber, vObj, vRequired, vString } from '../../common/validator';
 
 describe('vRequired', () => {
 	it('should mark a field as required', () => {
@@ -158,50 +158,5 @@ describe('vRequired', () => {
 		// null for optional field when optional field is present should validate as wrong type
 		const result2 = validator.validate({ requiredField: "test", optionalField: null });
 		expect(result2.error).toBeDefined();
-	});
-});
-
-describe('vNull', () => {
-	it('should validate null values', () => {
-		const validator = vNull();
-
-		const result = validator.validate(null);
-		expect(result.error).toBeUndefined();
-		expect(result.content).toBe(null);
-	});
-
-	it('should reject non-null values', () => {
-		const validator = vNull();
-
-		const result1 = validator.validate(undefined);
-		expect(result1.error).toBeDefined();
-		expect(result1.error?.message).toContain("Expected null");
-
-		const result2 = validator.validate("string");
-		expect(result2.error).toBeDefined();
-
-		const result3 = validator.validate(0);
-		expect(result3.error).toBeDefined();
-	});
-
-	it('should work with vUnion for nullable fields', () => {
-		const validator = vObj({
-			name: vRequired(vUnion(vString(), vNull())),
-			age: vNumber(),
-		});
-
-		// null value should be valid
-		const result1 = validator.validate({ name: null, age: 25 });
-		expect(result1.error).toBeUndefined();
-		expect(result1.content).toEqual({ name: null, age: 25 });
-
-		// string value should also be valid
-		const result2 = validator.validate({ name: "John", age: 25 });
-		expect(result2.error).toBeUndefined();
-		expect(result2.content).toEqual({ name: "John", age: 25 });
-
-		// other types should fail
-		const result3 = validator.validate({ name: 123, age: 25 });
-		expect(result3.error).toBeDefined();
 	});
 });
