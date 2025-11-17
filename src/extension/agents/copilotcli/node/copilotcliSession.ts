@@ -9,6 +9,7 @@ import { IAuthenticationService } from '../../../../platform/authentication/comm
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { raceCancellation, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -144,15 +145,15 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		try {
 			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
 			const [currentModel, authInfo] = await Promise.all([
-				modelId ? (this._lastUsedModel ?? this._sdkSession.getSelectedModel()) : undefined,
-				getAuthInfo(this.authenticationService)
+				modelId ? (this._lastUsedModel ?? raceCancellation(this._sdkSession.getSelectedModel(), token)) : undefined,
+				raceCancellation(getAuthInfo(this.authenticationService), token)
 			]);
 			if (authInfo) {
 				this._sdkSession.setAuthInfo(authInfo);
 			}
-			if (modelId && modelId !== currentModel) {
+			if (modelId && modelId !== currentModel && !token.isCancellationRequested) {
 				this._lastUsedModel = modelId;
-				await this._sdkSession.setSelectedModel(modelId);
+				await raceCancellationError(this._sdkSession.setSelectedModel(modelId), token);
 			}
 
 			disposables.add(toDisposable(this._sdkSession.on('*', (event) => this.logService.trace(`[CopilotCLISession]CopilotCLI Event: ${JSON.stringify(event, null, 2)}`))));
@@ -209,10 +210,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this._stream?.markdown(`\n\n❌ Error: (${event.data.errorType}) ${event.data.message}`);
 			})));
 
-			await this._sdkSession.send({ prompt, attachments, abortController });
+			if (!token.isCancellationRequested) {
+				await this._sdkSession.send({ prompt, attachments, abortController });
+			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
-			if (this._options.isolationEnabled) {
+			if (this._options.isolationEnabled && !token.isCancellationRequested) {
 				// When isolation is enabled and we are using a git workspace, stage
 				// all changes in the working directory when the session is completed
 				const workingDirectory = this._options.toSessionOptions().workingDirectory;

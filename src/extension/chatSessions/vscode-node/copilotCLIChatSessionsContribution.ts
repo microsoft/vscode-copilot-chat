@@ -13,6 +13,7 @@ import { toGitUri } from '../../../platform/git/common/utils';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -374,7 +375,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			]);
 
 			const session = await this.getOrCreateSession(request, chatSessionContext, prompt, modelId, stream, disposables, token);
-			if (!session) {
+			if (!session || token.isCancellationRequested) {
 				return {};
 			}
 			if (isUntitled) {
@@ -396,10 +397,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await session.object.handleRequest(prompt, attachments, modelId, token);
 			}
 
-			if (isUntitled) {
+			if (isUntitled && !token.isCancellationRequested) {
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt ?? 'CopilotCLI' });
 			}
 			return {};
+		} catch (ex) {
+			if (isCancellationError(ex)) {
+				return {};
+			}
+			throw ex;
 		}
 		finally {
 			disposables.dispose();
