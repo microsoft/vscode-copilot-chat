@@ -74,6 +74,10 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				No need to ask permission before using a tool.<br />
 				NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.CoreRunInTerminal} tool, say "I'll run the command in a terminal".<br />
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
+				{tools[ToolName.DocumentSymbols] && <>When you already know which file matters, start with {ToolName.DocumentSymbols} to understand its structure. The tool caches results and paginates them—request additional symbols with "page" or adjust "pageSize", and set "reset": true to refresh from the beginning.
+					{tools[ToolName.Definitions] && <> Use {ToolName.Definitions} when you have a line and symbol name to jump directly to the relevant definition.</>}
+					{tools[ToolName.Implementations] && <> Use {ToolName.Implementations} to list concrete implementations or overrides for the symbol at that position.</>}
+					{tools[ToolName.References] && <> Use {ToolName.References} to gather usages from the same position.</>}<br /></>}
 				{tools[ToolName.ReadFile] && <>When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br /></>}
 				{tools[ToolName.Codebase] && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
@@ -228,6 +232,10 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 				No need to ask permission before using a tool.<br />
 				NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.CoreRunInTerminal} tool, say "I'll run the command in a terminal".<br />
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
+				{tools[ToolName.DocumentSymbols] && <>When you already know which file matters, start with {ToolName.DocumentSymbols} to understand its structure. The tool caches results and paginates them—request additional symbols with "page" or adjust "pageSize", and set "reset": true to refresh from the beginning.<br /></>}
+				{tools[ToolName.Definitions] && <> Use {ToolName.Definitions} when you have a line and symbol name to jump directly to the relevant definition, like a developer would have used f12.<br /></>}
+				{tools[ToolName.Implementations] && <> Use {ToolName.Implementations} to list concrete implementations or overrides for the symbol at that position.<br /></>}
+				{tools[ToolName.References] && <> Use {ToolName.References} to gather usages for a symbol at that position.<br /></>}
 				{tools[ToolName.ReadFile] && <>When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br /></>}
 				{tools[ToolName.Codebase] && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
@@ -331,6 +339,7 @@ export class McpToolInstructions extends PromptElement<{ tools: readonly Languag
  */
 export class CodesearchModeInstructions extends PromptElement<DefaultAgentPromptProps> {
 	render(state: void, sizing: PromptSizing) {
+		const tools = detectToolCapabilities(this.props.availableTools);
 		return <>
 			<Tag name='codeSearchInstructions'>
 				These instructions only apply when the question is about the user's workspace.<br />
@@ -350,6 +359,11 @@ export class CodesearchModeInstructions extends PromptElement<DefaultAgentPrompt
 				Unless it is clear that the user's question relates to the current workspace, you should avoid using the code search tools and instead prefer to answer the user's question directly.<br />
 				Remember that you can call multiple tools in one response.<br />
 				Use {ToolName.Codebase} to search for high level concepts or descriptions of functionality in the user's question. This is the best place to start if you don't know where to look or the exact strings found in the codebase.<br />
+				Always prefer symbolic navigation when applicable.
+				Use {ToolName.DocumentSymbols} After you have a likely file, call {ToolName.DocumentSymbols} to review its structure. Page through results with the "page" and "pageSize" options, or set "reset": true to rebuild the cache before paging. <br />
+				Use {ToolName.Definitions} When you know where you are in the file, use {ToolName.Definitions} to navigate straight to the target symbol, just like a developer would use f12.<br />
+				Call {ToolName.Implementations} to enumerate concrete implementations when working or modifying with interfaces and you need to recognize their usages<br />
+				Call {ToolName.References} to find referenced usages of a symbol across the codeobase. very useful when modifying public functions signatures or data structures<br />
 				Prefer {ToolName.SearchWorkspaceSymbols} over {ToolName.FindTextInFiles} when you have precise code identifiers to search for.<br />
 				Prefer {ToolName.FindTextInFiles} over {ToolName.Codebase} when you have precise keywords to search for.<br />
 				The tools {ToolName.FindFiles}, {ToolName.FindTextInFiles}, and {ToolName.GetScmChanges} are deterministic and comprehensive, so do not repeatedly invoke them with the same arguments.<br />

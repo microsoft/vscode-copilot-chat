@@ -187,6 +187,170 @@
 				}
 			},
 			{
+				"name": "copilot_documentSymbols",
+				"toolReferenceName": "documentSymbols",
+				"displayName": "%copilot.tools.documentSymbols.name%",
+				"icon": "$(symbol-structure)",
+				"userDescription": "%copilot.documentSymbols.tool.description%",
+				"modelDescription": "List symbols defined within a specific file using language services. Prefer this tool when the user needs an overview of a file's structure before navigating or editing.",
+				"tags": [
+					"vscode_codesearch"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "Path to the file to inspect for document symbols."
+						},
+						"pageSize": {
+							"type": "number",
+							"description": "Number of symbols per page (defaults to 40 and caps at 200)."
+						},
+						"page": {
+							"type": "number",
+							"description": "1-based page number to retrieve. Defaults to 1."
+						},
+						"reset": {
+							"type": "boolean",
+							"description": "Set to true to refresh cached symbols before paging."
+						}
+					},
+					"required": [
+						"filePath"
+					]
+				}
+			},
+				{
+					"name": "copilot_getDefinitions",
+					"toolReferenceName": "definitions",
+					"displayName": "%copilot.tools.getDefinitions.name%",
+					"icon": "$(go-to-file)",
+					"userDescription": "%copilot.getDefinitions.tool.description%",
+					"modelDescription": "Locate symbol definitions in a file using a specific line and symbol name. Use this tool to jump directly to the declaration the user is focused on.",
+					"tags": [
+						"vscode_codesearch"
+					],
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"filePath": {
+								"type": "string",
+								"description": "Path to the file that contains the definition."
+							},
+							"line": {
+								"type": "number",
+								"description": "1-based line number near the symbol to inspect."
+							},
+							"symbolName": {
+								"type": "string",
+								"description": "Name of the symbol located on the specified line."
+							},
+							"expectedKind": {
+								"type": "string",
+								"description": "The expected kind of symbol to disambiguate when multiple symbols with the same name exist on the line. Valid values: 'Type', 'Property', 'Method', 'Field', 'Local', 'Parameter', 'Namespace', 'Class', 'Interface', 'Enum', 'Function', 'Variable', 'Constant'.",
+								"enum": ["Type", "Property", "Method", "Field", "Local", "Parameter", "Namespace", "Class", "Interface", "Enum", "Function", "Variable", "Constant"]
+							},
+							"symbolId": {
+								"type": "string",
+								"description": "Optional. A stable symbol identifier returned from a previous ambiguous response. When provided, this directly identifies the exact symbol to query, bypassing name-based resolution."
+							}
+						},
+						"required": [
+							"filePath",
+							"line",
+							"symbolName",
+							"expectedKind"
+						]
+					}
+				},
+				{
+					"name": "copilot_findImplementations",
+					"toolReferenceName": "implementations",
+					"displayName": "%copilot.tools.findImplementations.name%",
+					"icon": "$(symbol-class)",
+					"userDescription": "%copilot.findImplementations.tool.description%",
+					"modelDescription": "Locate implementations of an interface, abstract member, or virtual method at a specific position in a file. Use this tool to jump to concrete implementations when you have a line and symbol name for the target.",
+					"tags": [
+						"vscode_codesearch"
+					],
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"filePath": {
+								"type": "string",
+								"description": "Path to the file containing the symbol to inspect."
+							},
+							"line": {
+								"type": "number",
+								"description": "The 1-based line number of the symbol to inspect."
+							},
+							"symbolName": {
+								"type": "string",
+								"description": "Name of the symbol located on the specified line."
+							},
+							"expectedKind": {
+								"type": "string",
+								"description": "The expected kind of symbol to disambiguate when multiple symbols with the same name exist on the line. Valid values: 'Type', 'Property', 'Method', 'Field', 'Local', 'Parameter', 'Namespace', 'Class', 'Interface', 'Enum', 'Function', 'Variable', 'Constant'.",
+								"enum": ["Type", "Property", "Method", "Field", "Local", "Parameter", "Namespace", "Class", "Interface", "Enum", "Function", "Variable", "Constant"]
+							},
+							"symbolId": {
+								"type": "string",
+								"description": "Optional. A stable symbol identifier returned from a previous ambiguous response. When provided, this directly identifies the exact symbol to query, bypassing name-based resolution."
+							}
+						},
+						"required": [
+							"filePath",
+							"line",
+							"symbolName",
+							"expectedKind"
+						]
+					}
+				},
+				{
+					"name": "copilot_findReferences",
+					"toolReferenceName": "references",
+					"displayName": "%copilot.tools.findReferences.name%",
+					"icon": "$(references)",
+					"userDescription": "%copilot.findReferences.tool.description%",
+					"modelDescription": "List references for a symbol at a specific position in a file. Use this tool to understand the usage surface when you have a line and symbol name for the symbol.",
+					"tags": [
+						"vscode_codesearch"
+					],
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"filePath": {
+								"type": "string",
+								"description": "Path to the file containing the symbol to inspect."
+							},
+							"line": {
+								"type": "number",
+								"description": "The 1-based line number of the symbol to inspect."
+							},
+							"symbolName": {
+								"type": "string",
+								"description": "Name of the symbol located on the specified line."
+							},
+							"expectedKind": {
+								"type": "string",
+								"description": "The expected kind of symbol to disambiguate when multiple symbols with the same name exist on the line. Valid values: 'Type', 'Property', 'Method', 'Field', 'Local', 'Parameter', 'Namespace', 'Class', 'Interface', 'Enum', 'Function', 'Variable', 'Constant'.",
+								"enum": ["Type", "Property", "Method", "Field", "Local", "Parameter", "Namespace", "Class", "Interface", "Enum", "Function", "Variable", "Constant"]
+							},
+							"symbolId": {
+								"type": "string",
+								"description": "Optional. A stable symbol identifier returned from a previous ambiguous response. When provided, this directly identifies the exact symbol to query, bypassing name-based resolution."
+							}
+						},
+						"required": [
+							"filePath",
+							"line",
+							"symbolName",
+							"expectedKind"
+						]
+					}
+				},
+			{
 				"name": "copilot_listCodeUsages",
 				"toolReferenceName": "usages",
 				"displayName": "%copilot.tools.listCodeUsages.name%",
@@ -1162,6 +1326,10 @@
 					"textSearch",
 					"listDirectory",
 					"readFile",
+					"documentSymbols",
+					"definitions",
+					"references",
+					"implementations",
 					"codebase",
 					"searchResults"
 				]
