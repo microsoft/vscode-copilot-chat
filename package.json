@@ -2665,6 +2665,25 @@
 			{
 				"id": "experimental",
 				"properties": {
+					"github.copilot.chat.githubMcpServer.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.githubMcpServer.enabled%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.githubMcpServer.toolsets": {
+						"type": "array",
+						"default": ["default"],
+						"markdownDescription": "%github.copilot.config.githubMcpServer.toolsets%",
+						"items": {
+							"type": "string"
+						},
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.imageUpload.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3857,27 +3876,6 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.mcp.enabled%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.githubMcpServer.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.githubMcpServer.enabled%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.githubMcpServer.toolsets": {
-						"type": "array",
-						"default": ["default"],
-						"markdownDescription": "%github.copilot.config.githubMcpServer.toolsets%",
-						"items": {
-							"type": "string"
-						},
 						"tags": [
 							"advanced",
 							"experimental"
