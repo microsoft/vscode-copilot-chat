@@ -4,8 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { McpHttpServerDefinition2, McpServerDefinitionProvider } from 'vscode';
-import { GITHUB_SCOPE_ALIGNED } from '../../../platform/authentication/common/authentication';
-import { authProviderId } from '../../../platform/authentication/vscode-node/session';
+import { authProviderId, GITHUB_SCOPE_ALIGNED } from '../../../platform/authentication/common/authentication';
 import { AuthProviderId, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';

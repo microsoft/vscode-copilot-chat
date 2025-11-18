@@ -12,7 +12,7 @@ import { TestingServiceCollection } from '../../../../platform/test/node/service
 import { raceTimeout } from '../../../../util/vs/base/common/async';
 import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { GitHubMcpDefinitionProvider } from '../githubMcpDefinitionProvider';
+import { GitHubMcpDefinitionProvider } from '../../common/githubMcpDefinitionProvider';
 
 describe('GitHubMcpDefinitionProvider', () => {
 	let disposables: DisposableStore;

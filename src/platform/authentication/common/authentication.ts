@@ -7,7 +7,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived } from '../../../util/vs/base/common/observableInternal';
-import { AuthPermissionMode, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { AuthPermissionMode, AuthProviderId, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { CopilotToken } from './copilotToken';
 import { ICopilotTokenManager } from './copilotTokenManager';
@@ -304,4 +304,12 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 		}
 		this._logService.debug('Finished handling auth change event.');
 	}
+}
+
+export function authProviderId(configurationService: IConfigurationService): AuthProviderId {
+	return (
+		configurationService.getConfig(ConfigKey.Shared.AuthProvider) === AuthProviderId.GitHubEnterprise
+			? AuthProviderId.GitHubEnterprise
+			: AuthProviderId.GitHub
+	);
 }
