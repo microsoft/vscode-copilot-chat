@@ -31,7 +31,6 @@ export const enum Intent {
 	SearchPanel = 'searchPanel',
 	SearchKeywords = 'searchKeywords',
 	AskAgent = 'askAgent',
-	ChatReplay = 'chatReplay'
 }
 
 export const GITHUB_PLATFORM_AGENT = 'github.copilot-dynamic.platform';
@@ -63,9 +62,6 @@ export const agentsToCommands: Partial<Record<Intent, Record<string, Intent>>> =
 		'tests': Intent.Tests,
 		'edit': Intent.Edit,
 		'generate': Intent.Generate
-	},
-	[Intent.ChatReplay]: {
-		'chatReplay': Intent.ChatReplay
 	}
 };
 

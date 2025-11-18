@@ -31,7 +31,7 @@ import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/defaultAgentInstructions';
 import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -417,7 +417,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;
 			const isNotebook = editEntires.length === 1 ? handledNotebookUris.size === 1 : undefined;
 			this.sendApplyPatchTelemetry('success', options, undefined, !!healed, isNotebook);
-			return new LanguageModelToolResult([
+			const result = new ExtendedLanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(
 						this.instantiationService,
@@ -431,13 +431,17 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					),
 				)
 			]);
+			result.hasError = files.some(f => f.error);
+			return result;
 		} catch (error) {
 			const isNotebook = Object.values(docText).length === 1 ? (!!mapFindFirst(Object.values(docText), v => v.notebookUri)) : undefined;
 			// TODO parser.ts could annotate DiffError with a telemetry detail if we want
 			this.sendApplyPatchTelemetry('error', options, undefined, false, isNotebook, error);
-			return new LanguageModelToolResult([
+			const result = new ExtendedLanguageModelToolResult([
 				new LanguageModelTextPart('Applying patch failed with error: ' + error.message),
 			]);
+			result.hasError = true;
+			return result;
 		}
 	}
 

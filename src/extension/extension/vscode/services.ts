@@ -39,6 +39,7 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { GitExtensionServiceImpl } from '../../../platform/git/vscode/gitExtensionServiceImpl';
 import { GitServiceImpl } from '../../../platform/git/vscode/gitServiceImpl';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
+import { NullBaseOctoKitService } from '../../../platform/github/common/nullOctokitServiceImpl';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { IInteractiveSessionService } from '../../../platform/interactive/common/interactiveSessionService';
 import { InteractiveSessionServiceImpl } from '../../../platform/interactive/vscode/interactiveSessionServiceImpl';
@@ -143,7 +144,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITasksService, new SyncDescriptor(TasksService));
 	builder.define(IGitExtensionService, new SyncDescriptor(GitExtensionServiceImpl));
 	builder.define(IGitService, new SyncDescriptor(GitServiceImpl));
-	builder.define(IOctoKitService, new SyncDescriptor(OctoKitService));
+	builder.define(IOctoKitService, isScenarioAutomation ? new SyncDescriptor(NullBaseOctoKitService) : new SyncDescriptor(OctoKitService));
 	builder.define(IReviewService, new SyncDescriptor(ReviewServiceImpl));
 	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(LanguageDiagnosticsServiceImpl));
 	builder.define(ILanguageFeaturesService, new SyncDescriptor(LanguageFeaturesServiceImpl));

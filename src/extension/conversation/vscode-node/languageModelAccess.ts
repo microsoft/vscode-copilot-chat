@@ -44,7 +44,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 	readonly id = 'languageModelAccess';
 
-	readonly activationBlocker?: Promise<unknown>;
+	readonly activationBlocker?: Promise<void>;
 
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	private _currentModels: vscode.LanguageModelChatInformation[] = []; // Store current models for reference
@@ -76,7 +76,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		this.activationBlocker = Promise.all([
 			this._registerChatProvider(),
 			this._registerEmbeddings(),
-		]);
+		]).then(() => { });
 	}
 
 	override dispose(): void {
@@ -109,7 +109,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];
-		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
+		const chatEndpoints = (await this._endpointProvider.getAllChatEndpoints()).filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
 		chatEndpoints.push(autoEndpoint);
 		let defaultChatEndpoint: IChatEndpoint | undefined;

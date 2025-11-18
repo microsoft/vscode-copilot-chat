@@ -707,7 +707,7 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 	}
 
 	private getMaxFilesToIndex(): number {
-		return this._configurationService.getExperimentBasedConfig<number>(ConfigKey.Internal.WorkspaceMaxLocalIndexSize, this._expService);
+		return this._configurationService.getExperimentBasedConfig<number>(ConfigKey.Advanced.WorkspaceMaxLocalIndexSize, this._expService);
 	}
 
 	private async getWorkspaceFilesToIndex(maxResults: number, token: CancellationToken): Promise<Iterable<URI>> {

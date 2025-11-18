@@ -24,12 +24,14 @@ import * as glob from '../../../util/vs/base/common/glob';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
-import { extUriBiasedIgnorePathCase, normalizePath, relativePath } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase, normalizePath } from '../../../util/vs/base/common/resources';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
+import { formatUriForFileWidget } from '../common/toolUtils';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -189,10 +191,10 @@ function calculateSimilarity(str1: string, str2: string): number {
 
 interface MatchResultCommon {
 	type: string;
-	/** Replacement text */
+	/** Resulting document text */
 	text: string;
 	/** Array of [startIndex, endIndex] to replace in the file content */
-	editPosition: [number, number][];
+	editPosition: { start: number; end: number; text: string }[];
 	/** Model suggestion to correct a fialing match */
 	suggestion?: string;
 }
@@ -272,12 +274,19 @@ function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResul
 		return { text, editPosition: [], type: 'none' };
 	}
 
+	const identical = getIdenticalChars(oldStr, newStr);
+	const editPosition = matchPositions.map(idx => ({
+		start: idx + identical.leading,
+		end: idx + oldStr.length - identical.trailing,
+		text: newStr.slice(identical.leading, newStr.length - identical.trailing)
+	}));
+
 	// Check for multiple exact occurrences.
 	if (matchPositions.length > 1) {
 		return {
 			text,
 			type: 'multiple',
-			editPosition: matchPositions.map(idx => [idx, idx + oldStr.length]),
+			editPosition,
 			strategy: 'exact',
 			matchPositions,
 			suggestion: "Multiple exact matches found. Make your search string more specific."
@@ -289,7 +298,7 @@ function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResul
 	return {
 		text: replaced,
 		type: 'exact',
-		editPosition: [[firstExactIdx, firstExactIdx + oldStr.length]],
+		editPosition,
 	};
 }
 
@@ -298,7 +307,8 @@ function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResul
  */
 function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string, eol: string): MatchResult {
 	const haystack = text.split(eol).map(line => line.trim());
-	const needle = oldStr.trim().split(eol).map(line => line.trim());
+	const oldLines = oldStr.trim().split(eol);
+	const needle = oldLines.map(line => line.trim());
 	needle.push(''); // trailing newline to match until the end of a line
 
 	const convert = new OffsetLineColumnConverter(text);
@@ -318,26 +328,35 @@ function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string
 		};
 	}
 
-	const positions = matchedLines.map(match => convert.positionToOffset(new EditorPosition(match + 1, 1)));
+
+	const newLines = newStr.trim().split(eol);
+	const identical = getIndenticalLines(oldLines, newLines);
+	const positions = matchedLines.map(match => {
+		const start = new EditorPosition(match + identical.leading + 1, 1);
+		const end = start.delta(oldLines.length - identical.trailing);
+		return { start, end };
+	});
 
 	if (matchedLines.length > 1) {
 		return {
 			text,
 			type: 'multiple',
 			editPosition: [],
-			matchPositions: positions,
+			matchPositions: positions.map(p => convert.positionToOffset(p.start)),
 			suggestion: "Multiple matches found with flexible whitespace. Make your search string more unique.",
 			strategy: 'whitespace',
 		};
 	}
 
-	// Exactly one whitespace-flexible match found
-	const startIdx = positions[0];
-	const endIdx = convert.positionToOffset(new EditorPosition(matchedLines[0] + 1 + needle.length, 1));
-	const replaced = text.slice(0, startIdx) + newStr + eol + text.slice(endIdx);
+	const { start, end } = positions[0];
+	const startIdx = convert.positionToOffset(start);
+	const endIdx = convert.positionToOffset(end) - 1; // -1 to include the last EOL
+
+	const minimizedNewStr = newLines.slice(identical.leading, newLines.length - identical.trailing).join(eol);
+	const replaced = text.slice(0, startIdx) + minimizedNewStr + text.slice(endIdx);
 	return {
 		text: replaced,
-		editPosition: [[startIdx, endIdx]],
+		editPosition: [{ start: startIdx, end: endIdx, text: minimizedNewStr }],
 		type: 'whitespace',
 	};
 }
@@ -354,11 +373,11 @@ function tryFuzzyMatch(text: string, oldStr: string, newStr: string, eol: string
 
 	// Build a regex pattern where each line is matched exactly
 	// but allows for trailing spaces/tabs and flexible newline formats
-	const lines = oldStr.split(eol);
-	const pattern = lines
+	const oldLines = oldStr.split(eol);
+	const pattern = oldLines
 		.map((line, i) => {
 			const escaped = escapeRegex(line);
-			return i < lines.length - 1 || hasTrailingLF
+			return i < oldLines.length - 1 || hasTrailingLF
 				? `${escaped}[ \\t]*\\r?\\n`
 				: `${escaped}[ \\t]*`;
 		})
@@ -393,15 +412,23 @@ function tryFuzzyMatch(text: string, oldStr: string, newStr: string, eol: string
 	return {
 		text: replaced,
 		type: 'fuzzy',
-		editPosition: [[startIdx, endIdx]],
+		editPosition: [{ start: startIdx, end: endIdx, text: newStr }],
 	};
+}
+
+let defaultSimilaryMatchThreshold = 0.95;
+
+export function setSimilarityMatchThresholdForTests(threshold: number) {
+	const old = defaultSimilaryMatchThreshold;
+	defaultSimilaryMatchThreshold = threshold;
+	return old;
 }
 
 /**
  * Tries to match based on overall string similarity as a last resort.
  * Only works for relatively small strings to avoid performance issues.
  */
-function trySimilarityMatch(text: string, oldStr: string, newStr: string, eol: string, threshold: number = 0.95): MatchResult {
+function trySimilarityMatch(text: string, oldStr: string, newStr: string, eol: string, threshold: number = defaultSimilaryMatchThreshold): MatchResult {
 	// Skip similarity matching for very large strings or too many lines
 	if (oldStr.length > 1000 || oldStr.split(eol).length > 20) {
 		return { text, editPosition: [], type: 'none' };
@@ -415,6 +442,9 @@ function trySimilarityMatch(text: string, oldStr: string, newStr: string, eol: s
 		return { text, editPosition: [], type: 'none' };
 	}
 
+	const newLines = newStr.split(eol);
+	const identical = getIndenticalLines(oldLines, newLines);
+
 	let bestMatch = { startLine: -1, startOffset: 0, oldLength: 0, similarity: 0 };
 	let startOffset = 0;
 
@@ -424,15 +454,29 @@ function trySimilarityMatch(text: string, oldStr: string, newStr: string, eol: s
 		let oldLength = 0;
 
 		// Calculate similarity for each line in the window
+		let startOffsetIdenticalIncr = 0;
+		let endOffsetIdenticalIncr = 0;
 		for (let j = 0; j < oldLines.length; j++) {
 			const similarity = calculateSimilarity(oldLines[j], lines[i + j]);
 			totalSimilarity += similarity;
 			oldLength += lines[i + j].length;
+
+			if (j < identical.leading) {
+				startOffsetIdenticalIncr += lines[i + j].length + eol.length;
+			}
+			if (j >= oldLines.length - identical.trailing) {
+				endOffsetIdenticalIncr += lines[i + j].length + eol.length;
+			}
 		}
 
 		const avgSimilarity = totalSimilarity / oldLines.length;
 		if (avgSimilarity > threshold && avgSimilarity > bestMatch.similarity) {
-			bestMatch = { startLine: i, startOffset, similarity: avgSimilarity, oldLength: oldLength + (oldLines.length - 1) * eol.length };
+			bestMatch = {
+				startLine: i + identical.leading,
+				startOffset: startOffset + startOffsetIdenticalIncr,
+				similarity: avgSimilarity,
+				oldLength: oldLength + (oldLines.length - 1) * eol.length - startOffsetIdenticalIncr - endOffsetIdenticalIncr,
+			};
 		}
 
 		startOffset += lines[i].length + eol.length;
@@ -443,16 +487,24 @@ function trySimilarityMatch(text: string, oldStr: string, newStr: string, eol: s
 	}
 
 	// Replace the matched section
-	const newLines = [
+	const newStrMinimized = newLines.slice(identical.leading, newLines.length - identical.trailing).join(eol);
+	const matchStart = bestMatch.startLine - identical.leading;
+	const afterIdx = matchStart + oldLines.length - identical.trailing;
+
+	const newText = [
 		...lines.slice(0, bestMatch.startLine),
-		...newStr.split(eol),
-		...lines.slice(bestMatch.startLine + oldLines.length)
-	];
+		...newLines.slice(identical.leading, newLines.length - identical.trailing),
+		...lines.slice(afterIdx),
+	].join(eol);
 
 	return {
-		text: newLines.join(eol),
+		text: newText,
 		type: 'similarity',
-		editPosition: [[bestMatch.startOffset, bestMatch.startOffset + bestMatch.oldLength]],
+		editPosition: [{
+			start: bestMatch.startOffset,
+			end: bestMatch.startOffset + bestMatch.oldLength,
+			text: newStrMinimized,
+		}],
 		similarity: bestMatch.similarity,
 		suggestion: `Used similarity matching (${(bestMatch.similarity * 100).toFixed(1)}% similar). Verify the replacement.`
 	};
@@ -468,6 +520,39 @@ function getPatch({ fileContents, oldStr, newStr }: { fileContents: string; oldS
 		newLines: (newStr.match(/\n/g) || []).length + 1,
 		lines: []
 	}];
+}
+
+/** Gets the number of identical leading and trailing lines between two arrays of strings */
+function getIndenticalLines(a: string[], b: string[]) {
+	let leading = 0;
+	let trailing = 0;
+	while (leading < a.length &&
+		leading < b.length &&
+		a[leading] === b[leading]) {
+		leading++;
+	}
+	while (trailing + leading < a.length &&
+		trailing + leading < b.length &&
+		a[a.length - 1 - trailing] === b[b.length - 1 - trailing]) {
+		trailing++;
+	}
+
+	return { leading, trailing };
+}
+
+/** Gets the number of identical leading and trailing characters between two strings */
+function getIdenticalChars(oldString: string, newString: string) {
+	let leading = 0;
+	let trailing = 0;
+
+	while (leading < oldString.length && leading < newString.length && oldString[leading] === newString[leading]) {
+		leading++;
+	}
+	while (trailing + leading < oldString.length && trailing + leading < newString.length &&
+		oldString[oldString.length - trailing - 1] === newString[newString.length - trailing - 1]) {
+		trailing++;
+	}
+	return { leading, trailing };
 }
 
 // Apply string edit function
@@ -516,7 +601,7 @@ export async function applyEdit(
 						updatedFile = originalFile.replace(old_string + eol, new_string);
 
 						if (result.editPosition.length) {
-							const [start, end] = result.editPosition[0];
+							const { start, end } = result.editPosition[0];
 							const range = new Range(document.positionAt(start), document.positionAt(end));
 							edits.push(TextEdit.delete(range));
 						}
@@ -537,7 +622,7 @@ export async function applyEdit(
 					updatedFile = result.text;
 
 					if (result.editPosition.length) {
-						const [start, end] = result.editPosition[0];
+						const { start, end } = result.editPosition[0];
 						const range = new Range(document.positionAt(start), document.positionAt(end));
 						edits.push(TextEdit.delete(range));
 					}
@@ -562,9 +647,9 @@ export async function applyEdit(
 					updatedFile = result.text;
 
 					if (result.editPosition.length) {
-						const [start, end] = result.editPosition[0];
+						const { start, end, text } = result.editPosition[0];
 						const range = new Range(document.positionAt(start), document.positionAt(end));
-						edits.push(TextEdit.replace(range, new_string));
+						edits.push(TextEdit.replace(range, text));
 					}
 
 					// If we used similarity matching, add a warning
@@ -618,16 +703,20 @@ const ALWAYS_CHECKED_EDIT_PATTERNS: Readonly<Record<string, boolean>> = {
 	'**/.vscode/*.json': false,
 };
 
-const allPlatformPatterns = [homedir() + '/.*', homedir() + '/.*/**'];
+const allPlatformPatterns: (glob.ParsedPattern | string)[] = [
+	glob.parse(homedir() + '/.*'),
+	glob.parse(homedir() + '/.*/**'),
+];
+
+const specializedPatterns: (glob.ParsedPattern | string | undefined)[] =
+	isWindows
+		? [process.env.APPDATA, process.env.LOCALAPPDATA]
+		: isMacintosh
+			? [homedir() + '/Library']
+			: [];
 
 // Path prefixes under which confirmation is unconditionally required
-const platformConfirmationRequiredPaths = (
-	isWindows
-		? [process.env.APPDATA + '/**', process.env.LOCALAPPDATA + '/**']
-		: isMacintosh
-			? [homedir() + '/Library/**']
-			: []
-).concat(allPlatformPatterns).map(p => glob.parse(p));
+const platformConfirmationRequiredPaths = specializedPatterns.filter(isDefined).concat(allPlatformPatterns);
 
 /**
  * Validates that a path doesn't contain suspicious characters that could be used
@@ -691,7 +780,7 @@ export function assertPathIsSafe(fsPath: string, _isWindows = isWindows): void {
 	}
 }
 
-const enum ConfirmationCheckResult {
+export const enum ConfirmationCheckResult {
 	NoConfirmation,
 	NoPermissions,
 	Sensitive,
@@ -703,7 +792,7 @@ const enum ConfirmationCheckResult {
  * Returns a function that returns whether a URI is approved for editing without
  * further user confirmation.
  */
-function makeUriConfirmationChecker(configuration: IConfigurationService, workspaceService: IWorkspaceService, customInstructionsService: ICustomInstructionsService) {
+export function makeUriConfirmationChecker(configuration: IConfigurationService, workspaceService: IWorkspaceService, customInstructionsService: ICustomInstructionsService) {
 	const patterns = configuration.getNonExtensionConfig<Record<string, boolean>>('chat.tools.edits.autoApprove');
 
 	const checks = new ResourceMap<{ patterns: { pattern: glob.ParsedPattern; isApproved: boolean }[]; ignoreCasing: boolean }>();
@@ -738,7 +827,21 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 
 		assertPathIsSafe(fsPath);
 
-		if (platformConfirmationRequiredPaths.some(p => p(fsPath))) {
+		const platformCheckFailed = platformConfirmationRequiredPaths.some(p => {
+			if (typeof p === 'function') {
+				return p(fsPath);
+			}
+
+			const parentURI = URI.file(p);
+			if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, parentURI)) {
+				// If the workspace is opened in the restricted folder, still allow edits within that workspace
+				return workspaceFolder && extUriBiasedIgnorePathCase.isEqualOrParent(workspaceFolder, parentURI) ? false : true;
+			}
+
+			return false;
+		});
+
+		if (platformCheckFailed) {
 			return ConfirmationCheckResult.SystemFile;
 		}
 
@@ -780,7 +883,6 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 
 export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>): Promise<PreparedToolInvocation> {
 	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService), accessor.get(IWorkspaceService), accessor.get(ICustomInstructionsService));
-	const workspaceService = accessor.get(IWorkspaceService);
 	const needsConfirmation = (await Promise.all(uris
 		.map(async uri => ({ uri, reason: await checker(uri) }))
 	)).filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation);
@@ -789,10 +891,7 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 		return { presentation: 'hidden' };
 	}
 
-	const fileParts = needsConfirmation.map(({ uri }) => {
-		const wf = workspaceService.getWorkspaceFolder(uri);
-		return '`' + (wf ? relativePath(wf, uri) : uri.fsPath) + '`';
-	}).join(', ');
+	const fileParts = needsConfirmation.map(({ uri }) => formatUriForFileWidget(uri)).join(', ');
 
 	let message: string;
 	if (needsConfirmation.some(r => r.reason === ConfirmationCheckResult.NoPermissions)) {

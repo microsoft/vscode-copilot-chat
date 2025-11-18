@@ -29,7 +29,8 @@ import { summarizeDocuments, SummarizeDocumentsItem } from '../../prompts/node/i
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { formatUriForFileWidget } from '../common/toolUtils';
+import { checkCancellation, resolveToolInputPath } from './toolUtils';
 
 
 interface IFindTestFilesToolsParams {

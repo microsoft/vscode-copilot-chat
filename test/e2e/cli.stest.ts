@@ -10,6 +10,7 @@ import { CopilotCLIModels, CopilotCLISDK, ICopilotCLIModels, ICopilotCLISDK } fr
 import { CopilotCLIPromptResolver } from '../../src/extension/agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/agents/copilotcli/node/copilotcliSessionService';
+import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension/agents/copilotcli/node/mcpHandler';
 import { PermissionRequest } from '../../src/extension/agents/copilotcli/node/permissionHelpers';
 import { ILanguageModelServer, LanguageModelServer } from '../../src/extension/agents/node/langModelServer';
 import { MockChatResponseStream, TestChatRequest } from '../../src/extension/test/node/testHelpers';
@@ -24,7 +25,7 @@ import { ssuite, stest } from '../base/stest';
 
 function registerChatServices(testingServiceCollection: TestingServiceCollection) {
 	class TestCopilotCLISDK extends CopilotCLISDK {
-		override async ensureNodePtyShim(): Promise<void> {
+		override async ensureShims(): Promise<void> {
 			// Override to do nothing in tests
 		}
 	}
@@ -38,6 +39,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	testingServiceCollection.define(ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels));
 	testingServiceCollection.define(ICopilotCLISDK, new SyncDescriptor(TestCopilotCLISDK));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(LanguageModelServer));
+	testingServiceCollection.define(ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler));
 
 	const accessor = testingServiceCollection.createTestingAccessor();
 	const copilotCLISessionService = accessor.get(ICopilotCLISessionService);

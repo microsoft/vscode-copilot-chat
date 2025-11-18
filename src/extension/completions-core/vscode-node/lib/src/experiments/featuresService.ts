@@ -31,7 +31,6 @@ export interface ICompletionsFeaturesService {
 		telemetryData?: TelemetryData
 	): Promise<TelemetryWithExp>;
 	getFallbackExpAndFilters(): Promise<{ filters: FilterSettings; exp: ExpConfig }>;
-	disableLogProb(telemetryWithExp: TelemetryWithExp): boolean;
 	overrideBlockMode(telemetryWithExp: TelemetryWithExp): BlockMode | undefined;
 	customEngine(telemetryWithExp: TelemetryWithExp): string;
 	customEngineTargetEngine(telemetryWithExp: TelemetryWithExp): string | undefined;
@@ -58,7 +57,6 @@ export interface ICompletionsFeaturesService {
 	enableElectronFetcher(telemetryWithExp: TelemetryWithExp): boolean;
 	enableFetchFetcher(telemetryWithExp: TelemetryWithExp): boolean;
 	asyncCompletionsTimeout(telemetryWithExp: TelemetryWithExp): number;
-	enablePromptContextProxyField(telemetryWithExp: TelemetryWithExp): boolean;
 	enableProgressiveReveal(telemetryWithExp: TelemetryWithExp): boolean;
 	modelAlwaysTerminatesSingleline(telemetryWithExp: TelemetryWithExp): boolean;
 	longLookaheadSize(telemetryWithExp: TelemetryWithExp): number;

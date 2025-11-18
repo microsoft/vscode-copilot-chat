@@ -33,7 +33,6 @@ export class ChatAgentService implements IChatAgentService {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) { }
-
 	public debugGetCurrentChatAgents(): ChatAgents | undefined {
 		return this._lastChatAgents;
 	}
@@ -87,7 +86,6 @@ class ChatAgents implements IDisposable {
 		this._disposables.add(this.registerVSCodeAgent());
 		this._disposables.add(this.registerTerminalAgent());
 		this._disposables.add(this.registerTerminalPanelAgent());
-		this._disposables.add(this.registerReplayAgent());
 	}
 
 	private createAgent(name: string, defaultIntentIdOrGetter: IntentOrGetter, options?: { id?: string }): vscode.ChatParticipant {
@@ -196,7 +194,7 @@ class ChatAgents implements IDisposable {
 
 	private registerDefaultAgent(): IDisposable {
 		const intentGetter = (request: vscode.ChatRequest) => {
-			if (this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.AskAgent, this.experimentationService) && request.model.capabilities.supportsToolCalling && this.configurationService.getNonExtensionConfig('chat.agent.enabled')) {
+			if (this.configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AskAgent, this.experimentationService) && request.model.capabilities.supportsToolCalling && this.configurationService.getNonExtensionConfig('chat.agent.enabled')) {
 				return Intent.AskAgent;
 			}
 			return Intent.Unknown;
@@ -245,13 +243,6 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private registerNotebookDefaultAgent(): IDisposable {
 		const defaultAgent = this.createAgent(notebookEditorAgentName, Intent.notebookEditor);
-		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
-
-		return defaultAgent;
-	}
-
-	private registerReplayAgent(): IDisposable {
-		const defaultAgent = this.createAgent('chatReplay', Intent.ChatReplay);
 		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
 
 		return defaultAgent;

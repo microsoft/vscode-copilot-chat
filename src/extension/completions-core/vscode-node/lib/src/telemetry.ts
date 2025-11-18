@@ -2,14 +2,15 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { IEnvService } from '../../../../../platform/env/common/envService';
 import { createServiceIdentifier } from '../../../../../util/common/services';
 import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
 import {
+	BuildInfo,
 	dumpForTelemetry,
-	formatNameAndVersion,
-	ICompletionsBuildInfoService, ICompletionsEditorAndPluginInfo, ICompletionsEditorSessionService
+	formatNameAndVersion, ICompletionsEditorAndPluginInfo
 } from './config';
 import { ExpConfig } from './experiments/expConfig';
 import { ICompletionsFeaturesService } from './experiments/featuresService';
@@ -129,17 +130,16 @@ export class TelemetryData {
 	}
 
 	extendWithEditorAgnosticFields(accessor: ServicesAccessor): void {
-		const editorSession = accessor.get(ICompletionsEditorSessionService);
-		const buildInfo = accessor.get(ICompletionsBuildInfoService);
+		const envService = accessor.get(IEnvService);
 		const editorAndPluginInfo = accessor.get(ICompletionsEditorAndPluginInfo);
 
 		this.properties['editor_version'] = formatNameAndVersion(editorAndPluginInfo.getEditorInfo());
 		this.properties['editor_plugin_version'] = formatNameAndVersion(
 			editorAndPluginInfo.getEditorPluginInfo()
 		);
-		this.properties['client_machineid'] = editorSession.machineId;
-		this.properties['client_sessionid'] = editorSession.sessionId;
-		this.properties['copilot_version'] = `copilot/${buildInfo.getVersion()}`;
+		this.properties['client_machineid'] = envService.machineId;
+		this.properties['client_sessionid'] = envService.sessionId;
+		this.properties['copilot_version'] = `copilot/${BuildInfo.getVersion()}`;
 		if (typeof process !== 'undefined') {
 			this.properties['runtime_version'] = `node/${process.versions.node}`;
 		}
@@ -156,10 +156,9 @@ export class TelemetryData {
 	 * e.g. { 'copilot.autocompletion.count': 3 }
 	 */
 	extendWithConfigProperties(accessor: ServicesAccessor): void {
-		const buildInfo = accessor.get(ICompletionsBuildInfoService);
 		const configProperties: { [key: string]: string } = dumpForTelemetry(accessor);
-		configProperties['copilot.build'] = buildInfo.getBuild();
-		configProperties['copilot.buildType'] = buildInfo.getBuildType();
+		configProperties['copilot.build'] = BuildInfo.getBuild();
+		configProperties['copilot.buildType'] = BuildInfo.getBuildType();
 
 		// By being the second argument, configProperties will always override
 		this.properties = { ...this.properties, ...configProperties };
@@ -366,11 +365,19 @@ function sendTelemetryEvent(
 	data: { properties: TelemetryProperties; measurements: TelemetryMeasurements }
 ): void {
 	const properties = TelemetryData.maybeRemoveRepoInfoFromProperties(store, data.properties);
-	completionsTelemetryService.sendGHTelemetryEvent(
-		name,
-		properties,
-		data.measurements
-	);
+	if (!isEnhanced(store)) {
+		completionsTelemetryService.sendGHTelemetryEvent(
+			name,
+			properties,
+			data.measurements
+		);
+	} else {
+		completionsTelemetryService.sendEnhancedGHTelemetryEvent(
+			name,
+			properties,
+			data.measurements
+		);
+	}
 }
 
 function sendTelemetryErrorEvent(
@@ -397,13 +404,13 @@ function sendFTTelemetryEvent(
 	if (!shouldSendFinetuningTelemetry(accessor)) {
 		return;
 	}
-	const completionsTelemetryService = accessor.get(ICompletionsTelemetryService);
-	const properties = TelemetryData.maybeRemoveRepoInfoFromProperties(store, data.properties);
-	completionsTelemetryService.sendGHTelemetryEvent(
-		name,
-		properties,
-		data.measurements
-	);
+	// const completionsTelemetryService = accessor.get(ICompletionsTelemetryService);
+	// const properties = TelemetryData.maybeRemoveRepoInfoFromProperties(store, data.properties);
+	// completionsTelemetryService.sendGHFTTelemetryEvent(
+	// 	name,
+	// 	properties,
+	// 	data.measurements
+	// );
 }
 
 /**

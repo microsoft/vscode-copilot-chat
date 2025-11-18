@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken } from '../../types/src';
-import { apiVersion, editorVersionHeaders, ICompletionsEditorSessionService } from './config';
+import { apiVersion, editorVersionHeaders } from './config';
 import { telemetry, TelemetryData } from './telemetry';
 
 /**
@@ -38,6 +38,7 @@ export * from './networkingTypes';
 
 // Import what we need locally for this module's implementation
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../../../platform/env/common/envService';
 import { IFetcherService } from '../../../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 import { createServiceIdentifier } from '../../../../../util/common/services';
@@ -117,8 +118,8 @@ export function postRequest(
 	if (modelProviderName === undefined) {
 		headers['Openai-Organization'] = 'github-copilot';
 		headers['X-Request-Id'] = requestId;
-		headers['VScode-SessionId'] = accessor.get(ICompletionsEditorSessionService).sessionId;
-		headers['VScode-MachineId'] = accessor.get(ICompletionsEditorSessionService).machineId;
+		headers['VScode-SessionId'] = accessor.get(IEnvService).sessionId;
+		headers['VScode-MachineId'] = accessor.get(IEnvService).machineId;
 		headers['X-GitHub-Api-Version'] = apiVersion;
 	}
 

@@ -44,7 +44,7 @@ export class ReviewServiceImpl implements IReviewService {
 				vscode.commands.executeCommand('setContext', ConfigKey.CodeFeedback.fullyQualifiedId, this.isCodeFeedbackEnabled());
 			}
 			if (e.affectsConfiguration('github.copilot.advanced') || e.affectsConfiguration('github.copilot.advanced.review.intent')) {
-				vscode.commands.executeCommand('setContext', ConfigKey.Internal.ReviewIntent.fullyQualifiedId, this.isIntentEnabled());
+				vscode.commands.executeCommand('setContext', ConfigKey.Advanced.ReviewIntent.fullyQualifiedId, this.isIntentEnabled());
 			}
 		}));
 		this._disposables.add(this._authenticationService.onDidAuthenticationChange(() => {
@@ -97,7 +97,7 @@ export class ReviewServiceImpl implements IReviewService {
 	updateContextValues(): void {
 		vscode.commands.executeCommand('setContext', ConfigKey.CodeFeedback.fullyQualifiedId, this.isCodeFeedbackEnabled());
 		vscode.commands.executeCommand('setContext', reviewDiffContextKey, this.isReviewDiffEnabled());
-		vscode.commands.executeCommand('setContext', ConfigKey.Internal.ReviewIntent.fullyQualifiedId, this.isIntentEnabled());
+		vscode.commands.executeCommand('setContext', ConfigKey.Advanced.ReviewIntent.fullyQualifiedId, this.isIntentEnabled());
 	}
 
 	isCodeFeedbackEnabled() {
@@ -110,7 +110,7 @@ export class ReviewServiceImpl implements IReviewService {
 	}
 
 	isIntentEnabled(): boolean {
-		return this._configurationService.getConfig(ConfigKey.Internal.ReviewIntent);
+		return this._configurationService.getConfig(ConfigKey.Advanced.ReviewIntent);
 	}
 
 	getDiagnosticCollection(): ReviewDiagnosticCollection {

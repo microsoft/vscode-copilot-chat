@@ -28,10 +28,11 @@ import { processFullRewrite, processFullRewriteNewNotebook } from '../../prompts
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
+import { formatUriForFileWidget } from '../common/toolUtils';
 import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
 import { createEditConfirmation, formatDiffAsUnified } from './editFileToolUtils';
-import { assertFileNotContentExcluded, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
 export interface ICreateFileParams {
 	filePath: string;

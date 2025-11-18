@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
+import * as vscode from 'vscode';
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -15,7 +16,6 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { localize } from '../../../util/vs/nls';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from '../common/anthropicMessageConverter';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart } from '../common/byokProvider';
 import { IBYOKStorageService } from './byokStorageService';
@@ -35,31 +35,14 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		@IExperimentationService private readonly _experimentationService: IExperimentationService
 	) { }
 
-	/**
-	 * Checks if a model supports extended thinking based on its model ID.
-	 * Extended thinking is supported by:
-	 * - Claude Sonnet 4.5 (claude-sonnet-4-5-*)
-	 * - Claude Sonnet 4 (claude-sonnet-4-*)
-	 * - Claude Sonnet 3.7 (claude-3-7-sonnet-*)
-	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
-	 * - Claude Opus 4.1 (claude-opus-4-1-*)
-	 * - Claude Opus 4 (claude-opus-4-*)
-	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
-	 */
 	private _enableThinking(modelId: string): boolean {
-
-		const thinkingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingEnabled, this._experimentationService);
-		if (!thinkingEnabled) {
+		const thinkingEnabledInConfig = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingEnabled, this._experimentationService);
+		if (!thinkingEnabledInConfig) {
 			return false;
 		}
 
-		const normalized = modelId.toLowerCase();
-		return normalized.startsWith('claude-sonnet-4-5') ||
-			normalized.startsWith('claude-sonnet-4') ||
-			normalized.startsWith('claude-3-7-sonnet') ||
-			normalized.startsWith('claude-haiku-4-5') ||
-			normalized.startsWith('claude-opus-4-1') ||
-			normalized.startsWith('claude-opus-4');
+		const modelCapabilities = this._knownModels?.[modelId];
+		return modelCapabilities?.thinking ?? false;
 	}
 
 	/**
@@ -104,7 +87,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						maxOutputTokens: 16000,
 						name: model.display_name,
 						toolCalling: true,
-						vision: false
+						vision: false,
+						thinking: false
 					};
 				}
 			}
@@ -119,12 +103,14 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName) !== undefined);
 		if (this._apiKey) {
 			await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+			this._anthropicAPIClient = undefined;
 		}
 	}
 
 	async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove' = 'update', modelId?: string): Promise<void> {
 		if (action === 'remove') {
 			this._apiKey = undefined;
+			this._anthropicAPIClient = undefined;
 			await this._byokStorageService.deleteAPIKey(AnthropicLMProvider.providerName, this.authType, modelId);
 			this._logService.info(`BYOK: API key removed for provider ${AnthropicLMProvider.providerName}`);
 			return;
@@ -137,6 +123,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 		this._apiKey = apiKey;
 		await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, apiKey, this.authType, modelId);
+		this._anthropicAPIClient = undefined;
 		this._logService.info(`BYOK: API key updated for provider ${AnthropicLMProvider.providerName} from environment variable ${envVarName}`);
 	}
 
@@ -157,7 +144,20 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					return [];
 				}
 			}
-		} catch {
+		} catch (error) {
+			if (error instanceof Error && error.message.includes('invalid x-api-key')) {
+				if (options.silent) {
+					return [];
+				}
+				await this.updateAPIKey();
+				if (this._apiKey) {
+					try {
+						return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
+					} catch (retryError) {
+						this._logService.error(`Error after re-prompting for API key: ${toErrorMessage(retryError, true)}`);
+					}
+				}
+			}
 			return [];
 		}
 	}
@@ -194,14 +194,14 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				},
 			});
 
-		// Check if memory tool is present
-		const hasMemoryTool = (options.tools ?? []).some(tool => tool.name === 'memory');
+		let hasMemoryTool = false;
 
 		// Build tools array, handling both standard tools and native Anthropic tools
 		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
 
 			// Handle native Anthropic memory tool
-			if (hasMemoryTool && this._enableMemory(model.id)) {
+			if (tool.name === 'memory' && this._enableMemory(model.id)) {
+				hasMemoryTool = true;
 				return {
 					name: 'memory',
 					type: 'memory_20250818'
@@ -278,22 +278,18 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			betas.push('context-management-2025-06-27');
 		}
 
-		const baseParams = {
+		const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
 			model: model.id,
 			messages: convertedMessages,
 			max_tokens: model.maxOutputTokens,
 			stream: true,
 			system: [system],
 			tools: tools.length > 0 ? tools : undefined,
-		};
-
-		const params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming = betas.length > 0 ? {
-			...baseParams,
 			thinking: thinkingEnabled ? {
 				type: 'enabled',
 				budget_tokens: this._calculateThinkingBudget(model.maxOutputTokens)
 			} : undefined
-		} as Anthropic.Beta.Messages.MessageCreateParamsStreaming : baseParams as Anthropic.Messages.MessageCreateParamsStreaming;
+		};
 
 		const wrappedProgress = new RecordedProgress(progress);
 
@@ -369,19 +365,17 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Messages.MessageCreateParamsStreaming | Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
 		if (!this._anthropicAPIClient) {
 			return { ttft: undefined, usage: undefined };
 		}
 		const start = Date.now();
 		let ttft: number | undefined;
 
-		const stream = betas.length > 0
-			? await this._anthropicAPIClient.beta.messages.create({
-				...(params as Anthropic.Beta.Messages.MessageCreateParamsStreaming),
-				betas
-			})
-			: await this._anthropicAPIClient.messages.create(params as Anthropic.Messages.MessageCreateParamsStreaming);
+		const stream = await this._anthropicAPIClient.beta.messages.create({
+			...params,
+			...(betas.length > 0 && { betas })
+		});
 
 		let pendingToolCall: {
 			toolId?: string;
@@ -499,7 +493,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 							};
 
 							// Format citation as readable blockquote with source link
-							const referenceText = `\n> "${citation.cited_text}" — [${localize('anthropic.citation.source', 'Source')}](${citation.url})\n\n`;
+							const referenceText = `\n> "${citation.cited_text}" — [${vscode.l10n.t('Source')}](${citation.url})\n\n`;
 
 							// Report formatted reference text to user
 							progress.report(new LanguageModelTextPart(referenceText));

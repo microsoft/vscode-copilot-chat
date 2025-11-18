@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Session } from '@github/copilot/sdk';
+import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthenticationSession } from 'vscode';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
@@ -96,8 +96,8 @@ describe('CopilotCLISession', () => {
 			}
 		}();
 		sdkSession = new MockSdkSession();
-		sessionOptions = new CopilotCLISessionOptions({}, logger);
 		workspaceService = createWorkspaceService('/workspace');
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0].fsPath }, logger);
 		instaService = services.seal();
 	});
 
@@ -183,55 +183,53 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission inside workspace without external handler', async () => {
-		// Keep session active while requesting permission
-		let resolveSend: () => void;
-		sdkSession.send = async ({ prompt }: any) => new Promise<void>(r => { resolveSend = r; }).then(() => {
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// Mid way through, make it look like the sdk requested permission while emitting other messages.
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workspace', 'file.ts'), intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
-		});
+		};
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		const handlePromise = session.handleRequest('Test', [], undefined, CancellationToken.None);
 
 		// Path must be absolute within workspace, should auto-approve
-		const result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workspace', 'file.ts'), intention: 'Read file' });
-		resolveSend!();
-		await handlePromise;
+		await session.handleRequest('Test', [], undefined, CancellationToken.None);
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
-		// Keep session active while requesting permission
-		let resolveSend: () => void;
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
 		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: '/workingDirectory' }, logger);
-		sdkSession.send = async ({ prompt }: any) => new Promise<void>(r => { resolveSend = r; }).then(() => {
+		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// Mid way through, make it look like the sdk requested permission while emitting other messages.
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
-		});
+		};
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		const handlePromise = session.handleRequest('Test', [], undefined, CancellationToken.None);
 
 		// Path must be absolute within workspace, should auto-approve
-		const result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
-		resolveSend!();
-		await handlePromise;
+		await session.handleRequest('Test', [], undefined, CancellationToken.None);
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
 	it('requires read permission outside workspace and working directory', async () => {
-		// Keep session active while requesting permission
-		let resolveSend: () => void;
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
 		let askedForPermission: PermissionRequest | undefined = undefined;
-		sdkSession.send = async ({ prompt }: any) => new Promise<void>(r => { resolveSend = r; }).then(() => {
+		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// Mid way through, make it look like the sdk requested permission while emitting other messages.
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
+
 			sdkSession.emit('assistant.turn_end', {});
-		});
+		};
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
@@ -240,13 +238,10 @@ describe('CopilotCLISession', () => {
 			askedForPermission = permission;
 			return Promise.resolve(false);
 		}));
-		const handlePromise = session.handleRequest('Test', [], undefined, CancellationToken.None);
 
 		// Path must be absolute within workspace, should auto-approve
+		await session.handleRequest('Test', [], undefined, CancellationToken.None);
 		const file = path.join('/workingDirectory', 'file.ts');
-		const result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: file, intention: 'Read file' });
-		resolveSend!();
-		await handlePromise;
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
 		expect(askedForPermission).not.toBeUndefined();
 		expect(askedForPermission!.kind).toBe('read');
@@ -254,60 +249,58 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('approves write permission when handler returns true', async () => {
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
 		const session = await createSession();
 		// Register approval handler
 		disposables.add(session.attachPermissionHandler(async () => true));
-		let resolveSend: () => void;
-		sdkSession.send = async ({ prompt }: any) => new Promise<void>(r => { resolveSend = r; }).then(() => {
+		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// Mid way through, make it look like the sdk requested permission while emitting other messages.
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'a.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
-		});
+		};
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		const handlePromise = session.handleRequest('Write', [], undefined, CancellationToken.None);
 
-		const result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'a.ts', intention: 'Update file', diff: '' });
-		resolveSend!();
-		await handlePromise;
+		await session.handleRequest('Write', [], undefined, CancellationToken.None);
+
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
 	it('denies write permission when handler returns false', async () => {
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
 		const session = await createSession();
 		session.attachPermissionHandler(async () => false);
-		let resolveSend: () => void;
-		sdkSession.send = async ({ prompt }: any) => new Promise<void>(r => { resolveSend = r; }).then(() => {
+		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// Mid way through, make it look like the sdk requested permission while emitting other messages.
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'b.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
-		});
+		};
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		const handlePromise = session.handleRequest('Write', [], undefined, CancellationToken.None);
+		await session.handleRequest('Write', [], undefined, CancellationToken.None);
 
-		const result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'b.ts', intention: 'Update file', diff: '' });
-		resolveSend!();
-		await handlePromise;
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
 	});
 
 	it('denies write permission when handler throws', async () => {
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
 		const session = await createSession();
 		session.attachPermissionHandler(async () => { throw new Error('oops'); });
-		let resolveSend: () => void;
-		sdkSession.send = async ({ prompt }: any) => new Promise<void>(r => { resolveSend = r; }).then(() => {
+		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// Mid way through, make it look like the sdk requested permission while emitting other messages.
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'err.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
-		});
+		};
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		const handlePromise = session.handleRequest('Write', [], undefined, CancellationToken.None);
+		await session.handleRequest('Write', [], undefined, CancellationToken.None);
 
-		const result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'err.ts', intention: 'Update file', diff: '' });
-		resolveSend!();
-		await handlePromise;
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
 	});
 

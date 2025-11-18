@@ -16,7 +16,6 @@ export enum ExpTreatmentVariables {
 
 	OverrideBlockMode = 'copilotoverrideblockmode',
 	SuffixPercent = 'CopilotSuffixPercent', // the percentage of the prompt tokens to allocate to the suffix
-	disableLogProb = 'copilotdisablelogprob', // disable logprobs
 	CppHeadersEnableSwitch = 'copilotcppheadersenableswitch', // whether to enable the inclusion of C++ headers as neighbors in the prompt
 	UseSubsetMatching = 'copilotsubsetmatching', // whether to use subset matching instead of jaccard similarity experiment
 

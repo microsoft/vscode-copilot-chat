@@ -194,6 +194,10 @@ Add 1-2 sentences targeting the specific issue:
 
 This approach keeps instructions targeted and avoids over-specification.
 
+## Step 4: Testing
+
+Add your model family to the list at the top of [`agentPrompt.spec.tsx`](../src/extension/prompts/node/agent/test/agentPrompt.spec.tsx). That will render the prompt for your model with some different input scenarios and validate the prompt output against snapshots. This is really useful for checking the final rendered form of your prompt, ensuring any model-specific customizations have been applied correctly, and avoiding regressions. You can add test cases to cover any new dynamic logic in your prompt as needed.
+
 ---
 
 ## Expected Behaviors

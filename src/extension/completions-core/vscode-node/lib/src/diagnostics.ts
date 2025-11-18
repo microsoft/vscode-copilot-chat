@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsBuildInfoService, ICompletionsEditorAndPluginInfo } from './config';
+import { BuildInfo, ICompletionsEditorAndPluginInfo } from './config';
 import { TelemetryData } from './telemetry';
 
 const os = {
@@ -47,7 +47,7 @@ export function collectCompletionDiagnostics(accessor: ServicesAccessor, telemet
 			{
 				name: 'Copilot Extension',
 				items: {
-					Version: accessor.get(ICompletionsBuildInfoService).getVersion(),
+					Version: BuildInfo.getVersion(),
 					Editor: getEditorDisplayVersion(accessor),
 					...telemetryItems,
 				},

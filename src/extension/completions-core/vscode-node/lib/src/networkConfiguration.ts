@@ -6,7 +6,7 @@ import { IAuthenticationService } from '../../../../../platform/authentication/c
 import { ICAPIClientService } from '../../../../../platform/endpoint/common/capiClient';
 import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotToken } from './auth/copilotTokenManager';
-import { ConfigKey, ConfigKeyType, getConfig, ICompletionsBuildInfoService } from './config';
+import { BuildInfo, ConfigKey, ConfigKeyType, getConfig } from './config';
 import { ICompletionsRuntimeModeService } from './util/runtimeMode';
 import { joinPath } from './util/uri';
 
@@ -57,7 +57,7 @@ function getEndpointOverrideUrl(accessor: ServicesAccessor, endpoint: keyof Serv
 				[ConfigKey.DebugTestOverrideProxyUrl, ConfigKey.DebugTestOverrideProxyUrlLegacy]
 			);
 		case 'origin-tracker':
-			if (!accessor.get(ICompletionsBuildInfoService).isProduction()) {
+			if (!BuildInfo.isProduction()) {
 				return urlConfigOverride(accessor, [ConfigKey.DebugSnippyOverrideUrl]);
 			}
 	}
