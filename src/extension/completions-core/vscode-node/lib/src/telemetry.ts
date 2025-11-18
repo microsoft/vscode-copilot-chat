@@ -415,13 +415,6 @@ function sendFTTelemetryEvent(
 	if (!shouldSendFinetuningTelemetry(accessor)) {
 		return;
 	}
-	const completionsTelemetryService = accessor.get(ICompletionsTelemetryService);
-	const properties = TelemetryData.maybeRemoveRepoInfoFromProperties(store, data.properties);
-	completionsTelemetryService.sendGHTelemetryEvent(
-		name,
-		properties,
-		data.measurements
-	);
 }
 
 /**
