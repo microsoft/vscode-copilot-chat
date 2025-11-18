@@ -846,7 +846,7 @@ export class TelemetrySender implements IDisposable {
 				notebookType,
 				notebookId,
 				notebookCellLines,
-				nextCursorLineError: telemetry.nextCursorLineError,
+				nextCursorLineError: telemetry.nextCursorPrediction?.nextCursorLineError,
 			},
 			{
 				requestN,
@@ -901,7 +901,7 @@ export class TelemetrySender implements IDisposable {
 				diagnosticDistanceToUnknownDiagnostic: diagnosticDistanceToUnknownDiagnostic,
 				diagnosticDistanceToAlternativeDiagnostic: diagnosticDistanceToAlternativeDiagnostic,
 				diagnosticHasAlternativeDiagnosticForSameRange: this._boolToNum(diagnosticHasAlternativeDiagnosticForSameRange),
-				nextCursorLineDistance: telemetry.nextCursorLineDistance,
+				nextCursorLineDistance: telemetry.nextCursorPrediction?.nextCursorLineDistance,
 			}
 		);
 	}

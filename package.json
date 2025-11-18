@@ -3529,7 +3529,10 @@
 					"github.copilot.chat.notebook.alternativeFormat": {
 						"type": "string",
 						"default": "xml",
-						"enum": ["xml", "markdown"],
+						"enum": [
+							"xml",
+							"markdown"
+						],
 						"markdownDescription": "%github.copilot.config.notebook.alternativeFormat%",
 						"tags": [
 							"advanced",
@@ -3626,7 +3629,10 @@
 						]
 					},
 					"github.copilot.chat.agent.temperature": {
-						"type": ["number", "null"],
+						"type": [
+							"number",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.agent.temperature%",
 						"tags": [
 							"advanced",
@@ -3663,7 +3669,10 @@
 						]
 					},
 					"github.copilot.chat.summarizeAgentConversationHistoryThreshold": {
-						"type": ["number", "null"],
+						"type": [
+							"number",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.summarizeAgentConversationHistoryThreshold%",
 						"tags": [
 							"advanced",
@@ -3671,7 +3680,10 @@
 						]
 					},
 					"github.copilot.chat.agentHistorySummarizationMode": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.agentHistorySummarizationMode%",
 						"tags": [
 							"advanced",
@@ -3737,7 +3749,10 @@
 						]
 					},
 					"github.copilot.chat.claudeCode.enabled": {
-						"type": ["boolean", "string"],
+						"type": [
+							"boolean",
+							"string"
+						],
 						"default": false,
 						"markdownDescription": "%github.copilot.config.claudeCode.enabled%",
 						"tags": [
@@ -3774,7 +3789,10 @@
 						]
 					},
 					"github.copilot.chat.inlineEdits.triggerOnEditorChangeAfterSeconds": {
-						"type": ["number", "null"],
+						"type": [
+							"number",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.inlineEdits.triggerOnEditorChangeAfterSeconds%",
 						"tags": [
 							"advanced",
@@ -5101,7 +5119,7 @@
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@vscode/copilot-api": "^0.1.13",
+		"@vscode/copilot-api": "^0.2.0",
 		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
