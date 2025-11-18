@@ -1,0 +1,141 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { promises as fs } from 'fs';
+import { isBinaryFile } from 'isbinaryfile';
+import * as path from 'path';
+import { describe, it } from 'vitest';
+
+describe('CopilotCLI SDK Upgrade', function () {
+	const copilotSDKPath = path.join(__dirname, '..', '..', '..', '..', '..', 'node_modules', '@github', 'copilot');
+	it('should not contain new native binaries nor removed native binaries', async function () {
+		// This is a very basic check to ensure that when the Copilot CLI SDK is upgraded,
+		// we are aware of any changes to the native binaries it contains.
+		// Such changes may require us to update our extension packaging or other handling.
+		const existingBinaries = new Set(await findAllBinaries(copilotSDKPath));
+		const knownBinaries = new Set([
+			// node-pty related files (already accounted for in SDK, using VS Code node-pty).
+			path.join('prebuilds', 'darwin-arm64', 'keytar.node'),
+			path.join('prebuilds', 'darwin-arm64', 'pty.node'),
+			path.join('prebuilds', 'darwin-x64', 'pty.node'),
+			path.join('prebuilds', 'linux-arm64', 'pty.node'),
+			path.join('prebuilds', 'linux-x64', 'pty.node'),
+			path.join('prebuilds', 'win32-arm64', 'conpty', 'OpenConsole.exe'),
+			path.join('prebuilds', 'win32-arm64', 'conpty', 'conpty.dll'),
+			path.join('prebuilds', 'win32-arm64', 'conpty.node'),
+			path.join('prebuilds', 'win32-arm64', 'conpty.pdb'),
+			path.join('prebuilds', 'win32-arm64', 'conpty_console_list.node'),
+			path.join('prebuilds', 'win32-arm64', 'conpty_console_list.pdb'),
+			path.join('prebuilds', 'win32-arm64', 'pty.node'),
+			path.join('prebuilds', 'win32-arm64', 'pty.pdb'),
+			path.join('prebuilds', 'win32-arm64', 'winpty-agent.exe'),
+			path.join('prebuilds', 'win32-arm64', 'winpty-agent.pdb'),
+			path.join('prebuilds', 'win32-arm64', 'winpty.dll'),
+			path.join('prebuilds', 'win32-arm64', 'winpty.pdb'),
+			path.join('prebuilds', 'win32-x64', 'conpty', 'OpenConsole.exe'),
+			path.join('prebuilds', 'win32-x64', 'conpty', 'conpty.dll'),
+			path.join('prebuilds', 'win32-x64', 'conpty.node'),
+			path.join('prebuilds', 'win32-x64', 'conpty.pdb'),
+			path.join('prebuilds', 'win32-x64', 'conpty_console_list.node'),
+			path.join('prebuilds', 'win32-x64', 'conpty_console_list.pdb'),
+			path.join('prebuilds', 'win32-x64', 'pty.node'),
+			path.join('prebuilds', 'win32-x64', 'pty.pdb'),
+			path.join('prebuilds', 'win32-x64', 'winpty-agent.exe'),
+			path.join('prebuilds', 'win32-x64', 'winpty-agent.pdb'),
+			path.join('prebuilds', 'win32-x64', 'winpty.dll'),
+			path.join('prebuilds', 'win32-x64', 'winpty.pdb'),
+			// keytar used by sdk for auth, not required as extension provides the auth token info.
+			path.join('prebuilds', 'darwin-x64', 'keytar.node'),
+			path.join('prebuilds', 'linux-arm', 'keytar.node'),
+			path.join('prebuilds', 'linux-arm64', 'keytar.node'),
+			path.join('prebuilds', 'linux-armv7l', 'keytar.node'),
+			path.join('prebuilds', 'linux-ia32', 'keytar.node'),
+			path.join('prebuilds', 'linux-x64', 'keytar.node'),
+			path.join('prebuilds', 'linuxmusl-arm', 'keytar.node'),
+			path.join('prebuilds', 'linuxmusl-arm64', 'keytar.node'),
+			path.join('prebuilds', 'linuxmusl-x64', 'keytar.node'),
+			path.join('prebuilds', 'win32-arm64', 'keytar.node'),
+			path.join('prebuilds', 'win32-ia32', 'keytar.node'),
+			path.join('prebuilds', 'win32-x64', 'keytar.node'),
+			// ripgrep
+			path.join('ripgrep', 'bin', 'win32-arm64', 'rg.exe'),
+			path.join('ripgrep', 'bin', 'win32-x64', 'rg.exe'),
+			path.join('prebuilds', 'darwin-arm64', 'spawn-helper'),
+			path.join('prebuilds', 'darwin-x64', 'spawn-helper'),
+			path.join('ripgrep', 'bin', 'darwin-arm64', 'rg'),
+			path.join('ripgrep', 'bin', 'darwin-x64', 'rg'),
+			path.join('ripgrep', 'bin', 'linux-x64', 'rg'),
+			path.join('ripgrep', 'bin', 'linux-arm64', 'rg'),
+			// sharp related files
+			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-linux-arm64', 'lib', 'libvips-cpp.so.8.17.3'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-linux-x64', 'lib', 'libvips-cpp.so.8.17.3'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-darwin-arm64', 'lib', 'sharp-darwin-arm64.node'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-darwin-x64', 'lib', 'sharp-darwin-x64.node'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-darwin-arm64', 'lib', 'libvips-cpp.8.17.3.dylib'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-darwin-x64', 'lib', 'libvips-cpp.8.17.3.dylib'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-linux-arm64', 'lib', 'sharp-linux-arm64.node'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-linux-x64', 'lib', 'sharp-linux-x64.node'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-win32-arm64', 'lib', 'libvips-42.dll'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-win32-arm64', 'lib', 'libvips-cpp-8.17.3.dll'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-win32-arm64', 'lib', 'sharp-win32-arm64.node'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-win32-x64', 'lib', 'libvips-42.dll'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-win32-x64', 'lib', 'libvips-cpp-8.17.3.dll'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-win32-x64', 'lib', 'sharp-win32-x64.node'),
+			// parsing commands for shell.
+			'tree-sitter-bash.wasm',
+			'tree-sitter-powershell.wasm',
+			'tree-sitter.wasm',
+		].map(p => path.join(copilotSDKPath, p)));
+
+		const errors: string[] = [];
+		// Look for new binaries
+		for (const binary of existingBinaries) {
+			if (!knownBinaries.has(binary)) {
+				errors.push(`Unexpected native binary found in Copilot CLI SDK: ${path.relative(copilotSDKPath, binary)}`);
+			}
+		}
+		// Look for removed binaries.
+		for (const binary of knownBinaries) {
+			if (!existingBinaries.has(binary)) {
+				errors.push(`Expected native binary missing from Copilot CLI SDK: ${path.relative(copilotSDKPath, binary)}`);
+			}
+		}
+
+		if (errors.length > 0) {
+			throw new Error(errors.join('\n'));
+		}
+	});
+});
+
+async function findAllBinaries(dir: string): Promise<string[]> {
+	const binaryFiles: string[] = [];
+	const filesToIgnore = ['.DS_Store'];
+	async function findFilesRecursively(dir: string): Promise<void> {
+		try {
+			await fs.access(dir);
+		} catch {
+			return;
+		}
+
+		const entries = await fs.readdir(dir, { withFileTypes: true });
+		await Promise.all(entries.map(async (entry) => {
+			const fullPath = path.join(dir, entry.name);
+			if (filesToIgnore.includes(entry.name)) {
+				return;
+			}
+			if (entry.isDirectory()) {
+				await findFilesRecursively(fullPath);
+			} else if (entry.isFile()) {
+				const isBinary = await isBinaryFile(fullPath);
+				if (isBinary) {
+					binaryFiles.push(fullPath);
+				}
+			}
+		}));
+	}
+
+	await findFilesRecursively(dir);
+	return binaryFiles;
+}

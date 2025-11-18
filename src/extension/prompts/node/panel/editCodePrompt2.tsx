@@ -40,7 +40,7 @@ export class EditCodePrompt2 extends PromptElement<AgentPromptProps> {
 			{hasFilesInWorkingSet
 				? <>The user has a request for modifying one or more files.</>
 				: <>If the user asks a question, then answer it.<br />
-					If you need to change existing files and it's not clear which files should be changed, then refuse and answer with "Please add the files to be modified to the working set{(this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Internal.CodeSearchAgentEnabled)) ? ", or use `#codebase` in your request to automatically discover working set files." : ""}".<br />
+					If you need to change existing files and it's not clear which files should be changed, then refuse and answer with "Please add the files to be modified to the working set{(this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Advanced.CodeSearchAgentEnabled)) ? ", or use `#codebase` in your request to automatically discover working set files." : ""}".<br />
 					The only exception is if you need to create new files. In that case, follow the following instructions.</>}
 		</>;
 		const hasReplaceStringTool = this.toolsService.getTool(ToolName.ReplaceString) !== undefined;
@@ -135,7 +135,7 @@ class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 
 	async render(state: void, sizing: PromptSizing) {
 		const { query, chatVariables } = this.props.promptContext;
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.ProjectLabelsChat, this.experimentationService);
+		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsChat, this.experimentationService);
 		const hasReplaceStringTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.ReplaceString);
 		const hasEditFileTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.EditFile);
 		const hasMultiReplaceStringTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.MultiReplaceString);

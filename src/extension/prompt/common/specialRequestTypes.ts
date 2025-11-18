@@ -10,7 +10,7 @@ export interface IToolCallIterationIncrease {
 	copilotRequestedRoundLimit: number;
 }
 
-const isToolCallIterationIncrease = (c: any): c is IToolCallIterationIncrease => c && typeof c.copilotRequestedRoundLimit === 'number';
+const isToolCallIterationIncrease = (c: unknown): c is IToolCallIterationIncrease => !!(c && typeof (c as IToolCallIterationIncrease).copilotRequestedRoundLimit === 'number');
 
 export const getRequestedToolCallIterationLimit = (request: ChatRequest) => request.acceptedConfirmationData?.find(isToolCallIterationIncrease)?.copilotRequestedRoundLimit;
 

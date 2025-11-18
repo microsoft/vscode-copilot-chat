@@ -42,7 +42,7 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 	) {
 		super();
 
-		this.canReport = this._configurationService.getConfigObservable(ConfigKey.Internal.DebugReportFeedback);
+		this.canReport = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.DebugReportFeedback);
 	}
 
 	private _findChatParamsForTurn(turn: Turn): ILoggedPendingRequest | undefined {
@@ -252,7 +252,7 @@ export function generateInlineChatSTest(turn: Turn): string[] | undefined {
 		return undefined;
 	}
 	const fileName = basename(requestInfo.uri);
-	const str = (val: any) => JSON.stringify(val);
+	const str = (val: unknown) => JSON.stringify(val);
 
 	return [
 		`stest({ description: 'Issue #XXXXX', language: ${str(requestInfo.languageId)}, model }, (testingServiceCollection) => {`,

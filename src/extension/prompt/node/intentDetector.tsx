@@ -90,7 +90,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 						return undefined;
 					}
 
-					if (this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.AskAgent, this.experimentationService)
+					if (this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.TeamInternal.AskAgent, this.experimentationService)
 						&& chatRequest.model.capabilities.supportsToolCalling) {
 						return undefined;
 					}
