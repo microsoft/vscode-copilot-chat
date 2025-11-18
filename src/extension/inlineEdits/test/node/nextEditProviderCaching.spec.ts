@@ -20,8 +20,11 @@ import { ILogService, LogServiceImpl } from '../../../../platform/log/common/log
 import { ISnippyService, NullSnippyService } from '../../../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { mockNotebookService } from '../../../../platform/test/common/testNotebookService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { Result } from '../../../../util/common/result';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
@@ -30,9 +33,6 @@ import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRan
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { NextEditProvider } from '../../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
-import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 
 describe('NextEditProvider Caching', () => {
 
@@ -88,7 +88,7 @@ describe('NextEditProvider Caching', () => {
 			}
 		};
 
-		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, configService, snippyService, logService, expService);
+		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, undefined, configService, snippyService, logService, expService);
 
 		const doc = obsWorkspace.addDocument({
 			id: DocumentId.create(URI.file('/test/test.ts').toString()),

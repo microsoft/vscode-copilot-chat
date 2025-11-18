@@ -40,3 +40,7 @@ export class NextEditResult implements INextEditResult {
 		} | undefined,
 	) { }
 }
+
+export interface IRenameSymbolRecorder {
+	proposeRenameRefactoring(result: NextEditResult): void;
+}

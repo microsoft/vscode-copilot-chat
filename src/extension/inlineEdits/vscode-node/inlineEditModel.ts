@@ -24,6 +24,7 @@ import { createNextEditProvider } from '../node/createNextEditProvider';
 import { DebugRecorder } from '../node/debugRecorder';
 import { NextEditProvider } from '../node/nextEditProvider';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
+import { RenameSymbolRecorder } from './features/renameSymbolTracker';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 
 const TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT = 10000; // 10 seconds
@@ -55,7 +56,8 @@ export class InlineEditModel extends Disposable {
 		this._predictor = createNextEditProvider(this._predictorId, this._instantiationService);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
 		const xtabHistoryTracker = new NesXtabHistoryTracker(this.workspace, xtabDiffNEntries);
-		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, xtabHistoryTracker, this.debugRecorder);
+		const renameSymbolRecorder = this._register(new RenameSymbolRecorder());
+		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, xtabHistoryTracker, this.debugRecorder, renameSymbolRecorder);
 
 		if (this._predictor.dependsOnSelection) {
 			this._register(this._instantiationService.createInstance(InlineEditTriggerer, this.workspace, this.nextEditProvider, this.onChange));

@@ -160,7 +160,7 @@ export class InlineEditTester {
 
 		const nextEditProviderId = configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsProviderId, expService);
 		const statelessNextEditProvider = createNextEditProvider(nextEditProviderId, instaService);
-		const nextEditProvider = instaService.createInstance(NextEditProvider, workspace, statelessNextEditProvider, historyContextProvider, nesXtabHistoryTracker, debugRecorder);
+		const nextEditProvider = instaService.createInstance(NextEditProvider, workspace, statelessNextEditProvider, historyContextProvider, nesXtabHistoryTracker, debugRecorder, undefined);
 
 		const historyContext = historyContextProvider.getHistoryContext(docId)!;
 		const activeDocument = historyContext.getMostRecentDocument(); // TODO
