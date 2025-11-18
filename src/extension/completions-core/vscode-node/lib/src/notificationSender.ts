@@ -21,7 +21,6 @@ export class ExtensionNotificationSender implements ICompletionsNotificationSend
 	declare _serviceBrand: undefined;
 
 	constructor(@INotificationService private readonly notificationService: INotificationService) {
-		super();
 	}
 
 	async showWarningMessage(message: string, ...actions: ActionItem[]): Promise<ActionItem | undefined> {
