@@ -3012,6 +3012,18 @@
 						],
 						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
+					"github.copilot.chat.azureAuthType": {
+						"type": "string",
+						"enum": [
+							"entraId",
+							"apiKey"
+						],
+						"default": "entraId",
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "Authentication method for Azure OpenAI models. Use `entraId` for Entra ID (Azure AD) authentication or `apiKey` for API key authentication. Entra ID is recommended for enterprise security and uses your Azure credentials."
+					},
 					"github.copilot.chat.azureModels": {
 						"type": "object",
 						"default": {},
