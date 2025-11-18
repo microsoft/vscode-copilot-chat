@@ -7,7 +7,7 @@ import { lm } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
-import { GitHubMcpDefinitionProvider } from '../common/githubMcpDefinitionProvider';
+import { GitHubMcpDefinitionProvider } from './githubMcpDefinitionProvider';
 
 export class GitHubMcpContrib extends Disposable {
 	private disposable?: IDisposable;
