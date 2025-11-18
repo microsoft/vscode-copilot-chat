@@ -12,6 +12,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
 import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from './bridge/src/completionsTelemetryServiceBridge';
 import { LoggingCitationManager } from './extension/src/codeReferencing/citationManager';
+import { CompletionsObservableWorkspace } from './extension/src/completionsObservableWorkspace';
 import { disableCompletions, enableCompletions, toggleCompletions, VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
 import { CMDDisableCompletionsChat, CMDDisableCompletionsClient, CMDEnableCompletionsChat, CMDEnableCompletionsClient, CMDOpenDocumentationClient, CMDOpenLogsClient, CMDOpenModelPickerChat, CMDOpenModelPickerClient, CMDToggleCompletionsChat, CMDToggleCompletionsClient, CMDToggleStatusMenuChat, CMDToggleStatusMenuClient } from './extension/src/constants';
 import { contextProviderMatch } from './extension/src/contextProviderMatch';
@@ -27,7 +28,7 @@ import { ExtensionTextDocumentManager } from './extension/src/textDocumentManage
 import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from './lib/src/auth/copilotTokenManager';
 import { ICompletionsCitationManager } from './lib/src/citationManager';
 import { CompletionNotifier, ICompletionsNotifierService } from './lib/src/completionNotifier';
-import { CompletionsObservableWorkspace, ICompletionsObservableWorkspace } from './lib/src/completionsObservableWorkspace';
+import { ICompletionsObservableWorkspace } from './lib/src/completionsObservableWorkspace';
 import { ICompletionsConfigProvider, ICompletionsEditorAndPluginInfo } from './lib/src/config';
 import { registerDocumentTracker } from './lib/src/documentTracker';
 import { ICompletionsUserErrorNotifierService, UserErrorNotifier } from './lib/src/error/userErrorNotifier';
