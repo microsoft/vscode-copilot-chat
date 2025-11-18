@@ -110,8 +110,11 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		const models: vscode.LanguageModelChatInformation[] = [];
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
-		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
-		chatEndpoints.push(autoEndpoint);
+		let autoEndpoint: IChatEndpoint | undefined;
+		if (session.isEditorPreviewFeaturesEnabled()) {
+			autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
+			chatEndpoints.push(autoEndpoint);
+		}
 		let defaultChatEndpoint: IChatEndpoint | undefined;
 		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
 		if (this._authenticationService.copilotToken?.isNoAuthUser) {
