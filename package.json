@@ -1198,7 +1198,9 @@
 				"description": "%copilot.toolSet.read.description%",
 				"icon": "$(eye)",
 				"tools": [
-					"readFile"
+					"getNotebookSummary",
+					"readFile",
+					"readNotebookCellOutput"
 				]
 			},
 			{
