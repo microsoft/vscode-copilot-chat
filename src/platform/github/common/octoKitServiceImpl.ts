@@ -218,7 +218,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 			throw new Error('Invalid response format');
 		} catch (e) {
-			this._logService.error('[OctoKitService] getAllOpenSessions failed', e);
+			this._logService.error(e);
 			return [];
 		}
 	}
