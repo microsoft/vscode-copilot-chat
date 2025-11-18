@@ -6,9 +6,9 @@
 import * as vscode from 'vscode';
 import { IDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { renameSymbolCommandId } from '../../common/renameSymbol';
-import { NextEditResult, type IRenameSymbolRecorder } from '../../node/nextEditResult';
+import { NextEditResult } from '../../node/nextEditResult';
 
-export class RenameSymbolRecorder implements IDisposable, IRenameSymbolRecorder {
+export class RenameSymbolRecorder implements IDisposable {
 
 	private changeListener: IDisposable;
 
@@ -30,7 +30,7 @@ export class RenameSymbolRecorder implements IDisposable, IRenameSymbolRecorder 
 		this.changeListener.dispose();
 	}
 
-	public proposeRenameRefactoring(result: NextEditResult): void {
+	public proposeRenameRefactoring(document: vscode.TextDocument, position: vscode.Position, result: NextEditResult): void {
 		if (result.result === undefined) {
 			return;
 		}

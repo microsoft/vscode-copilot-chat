@@ -88,7 +88,7 @@ describe('NextEditProvider Caching', () => {
 			}
 		};
 
-		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, undefined, configService, snippyService, logService, expService);
+		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, configService, snippyService, logService, expService);
 
 		const doc = obsWorkspace.addDocument({
 			id: DocumentId.create(URI.file('/test/test.ts').toString()),

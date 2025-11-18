@@ -41,7 +41,7 @@ import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
-import { INextEditDisplayLocation, INextEditResult, NextEditResult, type IRenameSymbolRecorder } from './nextEditResult';
+import { INextEditDisplayLocation, INextEditResult, NextEditResult } from './nextEditResult';
 
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
@@ -92,7 +92,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		private readonly _historyContextProvider: IHistoryContextProvider,
 		private readonly _xtabHistoryTracker: NesXtabHistoryTracker,
 		private readonly _debugRecorder: DebugRecorder | undefined,
-		private readonly _renameSymbolRecorder: IRenameSymbolRecorder | undefined,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@ISnippyService private readonly _snippyService: ISnippyService,
 		@ILogService private readonly _logService: ILogService,
@@ -148,9 +147,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		this._lastNextEditResult = result;
 
-		if (this._renameSymbolRecorder) {
-			this._renameSymbolRecorder.proposeRenameRefactoring(result);
-		}
 		return result;
 	}
 

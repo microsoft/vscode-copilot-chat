@@ -32,6 +32,7 @@ import { INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
+import { RenameSymbolRecorder } from './features/renameSymbolRecorder';
 import { InlineEditModel } from './inlineEditModel';
 import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
 import { isInlineSuggestion } from './isInlineSuggestion';
@@ -99,6 +100,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	public readonly displayName = 'Inline Suggestion';
 
 	private readonly _tracer: ITracer;
+	private readonly renameSymbolRecorder: RenameSymbolRecorder;
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
 	private readonly _displayNextEditorNES: boolean;
@@ -121,6 +123,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
+		this.renameSymbolRecorder = new RenameSymbolRecorder();
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -188,6 +191,10 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			const hasCompletionAtCursor = completionAtCursor && completionAtCursor.result !== undefined;
 			const hasNonEmptyLlmNes = providerSuggestion && providerSuggestion.result !== undefined;
+
+			if (hasNonEmptyLlmNes) {
+				this.renameSymbolRecorder.proposeRenameRefactoring(document, position, providerSuggestion);
+			}
 
 			const shouldGiveMoreTimeToDiagnostics = !hasCompletionAtCursor && !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider;
 
