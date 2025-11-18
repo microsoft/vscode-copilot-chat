@@ -277,7 +277,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			promptOptions,
 			XtabProvider.computeTokens,
-			{ includeLineNumbers: false }
+			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: false } }
 		);
 
 		if (taggedCurrentFileContentResult.isError()) {
@@ -377,7 +377,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		promptOptions: xtabPromptOptions.PromptOptions,
 		computeTokens: (s: string) => number,
 		opts: {
-			includeLineNumbers: boolean;
+			includeLineNumbers: { areaAroundCodeToEdit: boolean; currentFileContent: boolean };
 		}
 	) {
 		const contentWithCursorAsLinesOriginal = (() => {
@@ -388,7 +388,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx}| ${line}`);
 
-		const contentWithCursorAsLines = opts.includeLineNumbers
+		const contentWithCursorAsLines = opts.includeLineNumbers.areaAroundCodeToEdit
 			? addLineNumbers(contentWithCursorAsLinesOriginal)
 			: contentWithCursorAsLinesOriginal;
 
@@ -404,19 +404,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			PromptTags.AREA_AROUND.end
 		].join('\n');
 
-		const currentFileContentLines = opts.includeLineNumbers
+		const currentFileContentWithCursorLines = opts.includeLineNumbers.currentFileContent
+			? addLineNumbers(contentWithCursorAsLinesOriginal)
+			: contentWithCursorAsLinesOriginal;
+		const currentFileContentLines = opts.includeLineNumbers.currentFileContent
 			? addLineNumbers(currentDocument.lines)
 			: currentDocument.lines;
 
 		let areaAroundCodeToEditForCurrentFile: string;
-		if (promptOptions.currentFile.includeTags) {
+		if (promptOptions.currentFile.includeTags && opts.includeLineNumbers.currentFileContent === opts.includeLineNumbers.areaAroundCodeToEdit) {
 			areaAroundCodeToEditForCurrentFile = areaAroundCodeToEdit;
 		} else {
 			const editWindowLines = currentFileContentLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
 			areaAroundCodeToEditForCurrentFile = [
-				...contentWithCursorAsLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
+				...currentFileContentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
 				...editWindowLines,
-				...contentWithCursorAsLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
+				...currentFileContentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
 			].join('\n');
 		}
 
@@ -1153,7 +1156,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				}
 			},
 			XtabProvider.computeTokens,
-			{ includeLineNumbers: true }
+			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: true } }
 		);
 
 		if (currentFileContentR.isError()) {
