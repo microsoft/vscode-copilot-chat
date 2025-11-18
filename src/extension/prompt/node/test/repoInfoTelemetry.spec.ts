@@ -86,6 +86,8 @@ suite('RepoInfoTelemetry', () => {
 			fetch: vi.fn(),
 			getMergeBase: vi.fn(),
 			add: vi.fn(),
+			createWorktree: vi.fn(),
+			deleteWorktree: vi.fn(),
 			dispose: vi.fn()
 		};
 		services.define(IGitService, mockGitService);
