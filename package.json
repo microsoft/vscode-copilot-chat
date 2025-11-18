@@ -1770,6 +1770,12 @@
 				"when": "!github.copilot.interactiveSession.disabled"
 			}
 		],
+		"mcpServerDefinitionProviders": [
+			{
+				"id": "github",
+				"label": "GitHub"
+			}
+		],
 		"viewsWelcome": [
 			{
 				"view": "debug",
@@ -3906,12 +3912,6 @@
 				"id": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 				"label": "Export All Logs as JSON",
 				"icon": "$(file-export)"
-			}
-		],
-		"mcpServerDefinitionProviders": [
-			{
-				"id": "github",
-				"label": "GitHub"
 			}
 		],
 		"menus": {
