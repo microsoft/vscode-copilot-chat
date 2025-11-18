@@ -118,13 +118,7 @@ export function createContext(serviceAccessor: ServicesAccessor, store: Disposab
 	serviceCollection.set(ICompletionsPromiseQueueService, new PromiseQueue());
 	serviceCollection.set(ICompletionsCitationManager, new SyncDescriptor(LoggingCitationManager));
 	serviceCollection.set(ICompletionsContextProviderService, new ContextProviderStatistics());
-
-	try {
-		serviceCollection.set(ICompletionsPromptFactoryService, new SyncDescriptor(CompletionsPromptFactory));
-	} catch (e) {
-		console.log(e);
-	}
-
+	serviceCollection.set(ICompletionsPromptFactoryService, new SyncDescriptor(CompletionsPromptFactory));
 	serviceCollection.set(ICompletionsFetcherService, new SyncDescriptor(CompletionsFetcher));
 	serviceCollection.set(ICompletionsDefaultContextProviders, new DefaultContextProvidersContainer());
 

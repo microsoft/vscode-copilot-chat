@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.107.0",
+		"vscode": "^1.107.20251119",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -268,7 +268,7 @@
 				"name": "copilot_findTextInFiles",
 				"toolReferenceName": "textSearch",
 				"displayName": "%copilot.tools.findTextInFiles.name%",
-				"modelDescription": "Do a fast text search in the workspace. Use this tool when you want to search with an exact string or regex. If you are not sure what words will appear in the workspace, prefer using regex patterns with alternation (|) or character classes to search for multiple potential words at once instead of making separate searches. For example, use 'function|method|procedure' to look for all of those words at once. Use includePattern to search within files matching a specific pattern, or in a specific file, using a relative path. Use this tool when you want to see an overview of a particular file, instead of using read_file many times to look for code within a file.",
+				"modelDescription": "Do a fast text search in the workspace. Use this tool when you want to search with an exact string or regex. If you are not sure what words will appear in the workspace, prefer using regex patterns with alternation (|) or character classes to search for multiple potential words at once instead of making separate searches. For example, use 'function|method|procedure' to look for all of those words at once. Use includePattern to search within files matching a specific pattern, or in a specific file, using a relative path. Use 'includeIgnoredFiles' to include files normally ignored by .gitignore, other ignore files, and `files.exclude` and `search.exclude` settings. Warning: using this may cause the search to be slower, only set it when you want to search in ignored folders like node_modules or build outputs. Use this tool when you want to see an overview of a particular file, instead of using read_file many times to look for code within a file.",
 				"tags": [
 					"vscode_codesearch"
 				],
@@ -290,6 +290,10 @@
 						"maxResults": {
 							"type": "number",
 							"description": "The maximum number of results to return. Do not use this unless necessary, it can slow things down. By default, only some matches are returned. If you use this and don't see what you're looking for, you can try again with a more specific query or a larger maxResults."
+						},
+						"includeIgnoredFiles": {
+							"type": "boolean",
+							"description": "Whether to include files that would normally be ignored according to .gitignore, other ignore files and `files.exclude` and `search.exclude` settings. Warning: using this may cause the search to be slower. Only set it when you want to search in ignored folders like node_modules or build outputs."
 						}
 					},
 					"required": [
@@ -1235,9 +1239,80 @@
 				"fullName": "GitHub Copilot",
 				"description": "%copilot.edits.description%",
 				"isDefault": true,
-				"when": "config.inlineChat.enableV2",
 				"locations": [
 					"editor"
+				],
+				"commands": [
+					{
+						"name": "generate",
+						"when": "!config.chat.edits2.enabled",
+						"description": "%copilot.workspace.generate.description%",
+						"disambiguation": [
+							{
+								"category": "generate",
+								"description": "Generate new code",
+								"examples": [
+									"Add a function that returns the sum of two numbers"
+								]
+							}
+						]
+					},
+					{
+						"name": "edit",
+						"when": "!config.chat.edits2.enabled",
+						"description": "%copilot.workspace.edit.inline.description%",
+						"disambiguation": [
+							{
+								"category": "edit",
+								"description": "Make changes to existing code",
+								"examples": [
+									"Change this method to use async/await"
+								]
+							}
+						]
+					},
+					{
+						"name": "doc",
+						"when": "!config.chat.edits2.enabled",
+						"description": "%copilot.workspace.doc.description%",
+						"disambiguation": [
+							{
+								"category": "doc",
+								"description": "Add documentation comment for this symbol",
+								"examples": [
+									"Add jsdoc to this method"
+								]
+							}
+						]
+					},
+					{
+						"name": "fix",
+						"when": "!config.chat.edits2.enabled",
+						"description": "%copilot.workspace.fix.description%",
+						"disambiguation": [
+							{
+								"category": "fix",
+								"description": "Propose a fix for the problems in the selected code",
+								"examples": [
+									"There is a problem in this code. Rewrite the code to show it with the bug fixed."
+								]
+							}
+						]
+					},
+					{
+						"name": "tests",
+						"when": "!config.chat.edits2.enabled",
+						"description": "%copilot.workspace.tests.description%",
+						"disambiguation": [
+							{
+								"category": "tests",
+								"description": "Generate unit tests for the selected code. The user does not want to fix their existing tests.",
+								"examples": [
+									"Write a set of detailed unit test functions for the code above."
+								]
+							}
+						]
+					}
 				]
 			},
 			{
@@ -1289,7 +1364,7 @@
 				"locations": [
 					"editor"
 				],
-				"when": "!config.inlineChat.enableV2",
+				"when": "never && !config.inlineChat.enableV2",
 				"disambiguation": [
 					{
 						"category": "unknown",

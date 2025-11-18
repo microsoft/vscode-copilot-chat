@@ -1837,12 +1837,6 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				return;
 			}
 
-			const copilotAPI = await this.getCopilotApi();
-			if (copilotAPI === undefined) {
-				logService.warn('Copilot API is undefined, unable to register context provider.');
-				return;
-			}
-
 			if (this.registrations !== undefined) {
 				this.registrations.dispose();
 				this.registrations = undefined;
@@ -1939,7 +1933,14 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				selector: { scheme: 'file', language: 'typescript' },
 				resolver: resolver
 			};
-			this.registrations.add(copilotAPI.registerContextProvider(provider));
+
+			// For legacy register with the copilot API
+			const copilotAPI = await this.getCopilotApi();
+			if (copilotAPI !== undefined) {
+				this.registrations.add(copilotAPI.registerContextProvider(provider));
+			}
+
+			// Register with chat always.
 			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider));
 			this.telemetrySender.sendInlineCompletionProviderTelemetry(KnownSources.completion, true);
 			logService.info('Registered TypeScript context provider with Copilot inline completions.');
