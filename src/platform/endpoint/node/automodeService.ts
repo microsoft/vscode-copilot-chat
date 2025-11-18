@@ -81,10 +81,11 @@ class AutoModeTokenBank extends Disposable {
 		this._logService.trace(`Fetched auto model for ${this.debugName} in ${Date.now() - startTime}ms.`);
 		this._token = data;
 		// Trigger a refresh 5 minutes before expiration
-		this._refreshTimer.cancelAndSet(this._fetchToken.bind(this), (data.expires_at * 1000) - Date.now() - 5 * 60 * 1000);
+		if (!this._store.isDisposed) {
+			this._refreshTimer.cancelAndSet(this._fetchToken.bind(this), (data.expires_at * 1000) - Date.now() - 5 * 60 * 1000);
+		}
 		this._fetchTokenPromise = undefined;
 	}
-
 }
 
 export const IAutomodeService = createServiceIdentifier<IAutomodeService>('IAutomodeService');
