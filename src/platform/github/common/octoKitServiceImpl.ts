@@ -67,6 +67,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 			throw new Error('Invalid response format');
 		} catch (e) {
+			this._logService.error(e);
 			return [];
 		}
 	}
@@ -88,6 +89,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 			return response.text();
 		} catch (e) {
+			this._logService.error(e);
 			return '';
 		}
 	}
@@ -113,6 +115,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 			throw new Error('Invalid response format');
 		} catch (e) {
+			this._logService.error(e);
 			return undefined;
 		}
 	}
@@ -137,6 +140,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 			return await response.json() as RemoteAgentJobResponse;
 		} catch (e) {
+			this._logService.error(e);
 			return undefined;
 		}
 	}
@@ -158,6 +162,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 			return await response.json() as JobInfo;
 		} catch (e) {
+			this._logService.error(e);
 			return undefined;
 		}
 	}
@@ -179,6 +184,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 			return await response.json() as JobInfo;
 		} catch (e) {
+			this._logService.error(e);
 			return undefined;
 		}
 	}
@@ -212,6 +218,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 			throw new Error('Invalid response format');
 		} catch (e) {
+			this._logService.error('[OctoKitService] getAllOpenSessions failed', e);
 			return [];
 		}
 	}
@@ -243,10 +250,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 				agents?: CustomAgentListItem[];
 			};
 			if (data && Array.isArray(data.agents)) {
-				return [];
+				return data.agents;
 			}
 			throw new Error('Invalid response format');
 		} catch (e) {
+			this._logService.error(e);
 			return [];
 		}
 	}
