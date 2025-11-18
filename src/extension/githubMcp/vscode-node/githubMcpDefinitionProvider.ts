@@ -45,7 +45,7 @@ export class GitHubMcpDefinitionProvider extends Disposable implements McpServer
 		if (!uri) {
 			throw new Error('GitHub Enterprise URI is not configured.');
 		}
-		return URI.parse(uri);
+		return URI.parse(uri).with({ path: '/mcp/' });
 	}
 
 	provideMcpServerDefinitions(): McpHttpServerDefinition2[] {
