@@ -604,7 +604,7 @@
 				"name": "copilot_createNewJupyterNotebook",
 				"displayName": "Create New Jupyter Notebook",
 				"icon": "$(notebook)",
-				"toolReferenceName": "newJupyterNotebook",
+				"toolReferenceName": "createJupyterNotebook",
 				"legacyToolReferenceFullNames": [
 					"newJupyterNotebook"
 				],
@@ -811,6 +811,7 @@
 			{
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
+				"icon": "$(pencil)",
 				"displayName": "%copilot.tools.editNotebook.name%",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
 				"tags": [
@@ -1187,9 +1188,9 @@
 				"tools": [
 					"createDirectory",
 					"createFile",
+					"createJupyterNotebook",
 					"editFiles",
-					"editNotebook",
-					"newJupyterNotebook"
+					"editNotebook"
 				]
 			},
 			{
@@ -1197,8 +1198,7 @@
 				"description": "%copilot.toolSet.read.description%",
 				"icon": "$(eye)",
 				"tools": [
-					"readFile",
-					"usages"
+					"readFile"
 				]
 			},
 			{
@@ -1210,7 +1210,8 @@
 					"fileSearch",
 					"listDirectory",
 					"searchResults",
-					"textSearch"
+					"textSearch",
+					"usages"
 				]
 			},
 			{
