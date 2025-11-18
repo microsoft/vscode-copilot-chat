@@ -7,10 +7,12 @@ import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -21,12 +23,14 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatRequestEditorData, ChatResponseTextEditPart } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
 import { getAgentTools } from '../../intents/node/agentIntent';
+import { IIntentService } from '../../intents/node/intentService';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { Conversation } from '../../prompt/common/conversation';
+import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IToolCall } from '../../prompt/common/intents';
 import { ToolCallRound } from '../../prompt/common/toolCallRound';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IntentInvocationMetadata } from '../../prompt/node/conversation';
+import { DefaultIntentRequestHandler } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent } from '../../prompt/node/intents';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -64,9 +68,11 @@ export class InlineChatIntent implements IIntent {
 		@IToolsService private readonly _toolsService: IToolsService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
+		@IIntentService private readonly _intentService: IIntentService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) { }
 
-	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, _agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 
 		assertType(request.location2 instanceof ChatRequestEditorData);
 		assertType(documentContext);
@@ -88,6 +94,64 @@ export class InlineChatIntent implements IIntent {
 				}
 			};
 		}
+
+		if (this._configurationService.getNonExtensionConfig('inlineChat.enableV2')) {
+			return this._handleRequestWithEditTools(endpoint, conversation, request, stream, token, documentContext, chatTelemetry);
+		} else {
+			return this._handleRequestWithOldWorld(conversation, request, stream, token, documentContext, chatTelemetry, onPaused);
+		}
+	}
+
+	// --- OLD world
+
+	private async _handleRequestWithOldWorld(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+		// OLD world
+		let didEmitEdits = false;
+		stream = ChatResponseStreamImpl.spy(stream, part => {
+			if (part instanceof ChatResponseTextEditPart) {
+				didEmitEdits = true;
+			}
+		});
+
+		const intent = await this._selectIntent(conversation.turns, documentContext, request);
+		const handler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, conversation, request, stream, token, documentContext, ChatLocation.Editor, chatTelemetry, undefined, onPaused);
+		const result = await handler.getResult();
+
+		if (!didEmitEdits) {
+			// BAILOUT: when no edits were emitted, invoke the exit tool manually
+			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+		}
+		return result;
+	}
+
+	private async _selectIntent(history: readonly Turn[], documentContext: IDocumentContext, request: vscode.ChatRequest): Promise<IIntent> {
+
+		if (request.command) {
+			const result = this._intentService.getIntent(request.command, ChatLocation.Editor);
+			if (result) {
+				return result;
+			}
+		}
+
+		let preferredIntent: Intent | undefined;
+		if (documentContext && request.attempt === 0 && history.length === 1) {
+			if (documentContext.selection.isEmpty && documentContext.document.lineAt(documentContext.selection.start.line).text.trim() === '') {
+				preferredIntent = Intent.Generate;
+			} else if (!documentContext.selection.isEmpty && documentContext.selection.start.line !== documentContext.selection.end.line) {
+				preferredIntent = Intent.Edit;
+			}
+		}
+		if (preferredIntent) {
+			return this._intentService.getIntent(preferredIntent, ChatLocation.Editor) ?? this._intentService.unknownIntent;
+		}
+		return this._intentService.unknownIntent;
+	}
+
+	// --- NEW world
+
+	async _handleRequestWithEditTools(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<vscode.ChatResult> {
+		assertType(request.location2 instanceof ChatRequestEditorData);
+		assertType(documentContext);
 
 		const inlineChatTools = await this._getAvailableTools(request);
 
