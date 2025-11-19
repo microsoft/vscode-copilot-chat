@@ -675,10 +675,23 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return {};
 	}
 
+	private hasHistoryToSummarize(history: readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[]): boolean {
+		if (!history || history.length === 0) {
+			return false;
+		}
+		const allResponsesEmpty = history.every(turn => {
+			if (turn instanceof vscode.ChatResponseTurn) {
+				return turn.response.length === 0;
+			}
+			return true;
+		});
+		return !allResponsesEmpty;
+	}
+
 	async createDelegatedChatSession(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<PullRequestInfo | undefined> {
 		const { prompt, references } = metadata;
 		let history: string | undefined;
-		if (metadata.chatContext?.history.length > 0) {
+		if (this.hasHistoryToSummarize(metadata.chatContext.history)) {
 			stream.progress(vscode.l10n.t('Analyzing chat history'));
 			history = await this._summarizer.provideChatSummary(metadata.chatContext, token);
 		}
