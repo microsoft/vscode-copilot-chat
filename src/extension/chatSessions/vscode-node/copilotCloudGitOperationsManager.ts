@@ -43,7 +43,7 @@ export class CopilotCloudGitOperationsManager {
 		} catch (error) {
 			const commitSuccessful = await this.handleInteractiveCommit(repository);
 			if (!commitSuccessful) {
-				throw new Error(vscode.l10n.t('Exclude your uncommitted changes and try again.'));
+				throw new Error(vscode.l10n.t('Failed to commit changes. Please commit or stash your changes manually before using the cloud agent.'));
 			}
 		}
 	}
