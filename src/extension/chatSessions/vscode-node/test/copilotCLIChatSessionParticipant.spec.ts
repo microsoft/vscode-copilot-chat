@@ -82,7 +82,6 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 			chatSessionItem: { resource: vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` }), label: 'temp' } as vscode.ChatSessionItem,
 			isUntitled
 		} as vscode.ChatSessionContext,
-		chatSummary: undefined
 	} as vscode.ChatContext;
 }
 
@@ -278,7 +277,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 	it('invokes handlePushConfirmationData without existing chatSessionContext (summary via summarizer)', async () => {
 		const request = new TestChatRequest('Push this');
-		const context = { chatSessionContext: undefined, chatSummary: undefined } as unknown as vscode.ChatContext;
+		const context = { chatSessionContext: undefined } as unknown as vscode.ChatContext;
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 		const summarySpy = vi.spyOn(summarizer, 'provideChatSummary');
@@ -293,23 +292,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(execSpy).toHaveBeenCalledTimes(2);
 		expect(execSpy.mock.calls[0]).toEqual(['vscode.open', expect.any(Object)]);
 		expect(String(execSpy.mock.calls[0].at(1))).toContain(`copilotcli:/${sessionId}`);
-		expect(execSpy.mock.calls[1]).toEqual(['workbench.action.chat.submit', { inputValue: expectedPrompt }]);
-	});
-	it('invokes handlePushConfirmationData using existing chatSummary and skips summarizer', async () => {
-		const request = new TestChatRequest('Push that');
-		const context = { chatSessionContext: undefined, chatSummary: { history: 'precomputed history' } } as unknown as vscode.ChatContext;
-		const stream = new MockChatResponseStream();
-		const token = disposables.add(new CancellationTokenSource()).token;
-		const summarySpy = vi.spyOn(summarizer, 'provideChatSummary');
-		const execSpy = vi.spyOn(commandExecutionService, 'executeCommand');
-
-		await participant.createHandler()(request, context, stream, token);
-
-		expect(manager.sessions.size).toBe(1);
-		const expectedPrompt = 'Push that\n**Summary**\nprecomputed history';
-		expect(summarySpy).not.toHaveBeenCalled();
-		expect(execSpy).toHaveBeenCalledTimes(2);
-		expect(execSpy.mock.calls[0].at(0)).toBe('vscode.open');
 		expect(execSpy.mock.calls[1]).toEqual(['workbench.action.chat.submit', { inputValue: expectedPrompt }]);
 	});
 
