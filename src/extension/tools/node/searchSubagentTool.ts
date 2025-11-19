@@ -16,7 +16,7 @@ import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
 export interface ISearchSubagentParams {
-	// TODO: maybe we should remove the user query from the inputs. Consider ablation study to see impact?
+
 	/** Natural language query describing what to search for */
 	query: string;
 	/** User-visible description shown while invoking */
@@ -30,8 +30,6 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) { }
-	// TODO what are the specific instructions we want to give? the windsurf prompt?
-	// TODO put the correct names of the tools in (like in the Agent prompt)
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISearchSubagentParams>, token: vscode.CancellationToken) {
 		const searchInstruction = [
 			`Search objective: ${options.input.query}`,
@@ -40,7 +38,20 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			'- semantic_search: Broad semantic retrieval. Use first for general or conceptual queries.',
 			'- file_search: Discover candidate files/directories via glob patterns.',
 			'- grep_search: Precise pattern or symbol matching; gather surrounding lines for verification.',
-			'Format the results of the context search in a concise summary that can be used by the main agent to answer the user query.',
+			'',
+			'After completing your search, return ONLY a valid JSON array of the most relevant code contexts in this exact format:',
+			'[',
+			'  {',
+			'    "file_path": "/absolute/path/to/file",',
+			'    "line_start": 10,',
+			'    "line_end": 20',
+			'  }',
+			']',
+			'',
+			'Include only the most relevant contexts that would help answer the search objective.',
+			'Use line_end: -1 to indicate an entire file.',
+			'Return an empty array [] if no relevant contexts are found.',
+			'Do not include any explanation or additional text, only the JSON array.',
 			''
 		].join('\n');
 
@@ -50,7 +61,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			request: this._inputContext!.request!,
 			location: this._inputContext!.request!.location,
 			promptText: options.input.query,
-			allowedTools: new Set([ToolName.Codebase, ToolName.FindFiles, ToolName.FindTextInFiles]),
+			allowedTools: new Set([ToolName.Codebase, ToolName.FindFiles, ToolName.FindTextInFiles, ToolName.ReadFile]),
 			customPromptClass: SearchSubagentPrompt,
 		});
 
@@ -60,14 +71,15 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		);
 
 		const loopResult = await loop.run(stream, token);
-		let subagentSummary = '';
+
+		let subagentResponse = '';
 		if (loopResult.response.type === ChatFetchResponseType.Success) {
-			subagentSummary = loopResult.toolCallRounds.at(-1)?.response ?? loopResult.round.response ?? '';
+			subagentResponse = loopResult.toolCallRounds.at(-1)?.response ?? loopResult.round.response ?? '';
 		} else {
-			subagentSummary = `The search subagent request failed with this message:\n${loopResult.response.type}: ${loopResult.response.reason}`;
+			subagentResponse = `The search subagent request failed with this message:\n${loopResult.response.type}: ${loopResult.response.reason}`;
 		}
 
-		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(subagentSummary)]);
+		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(subagentResponse)]);
 		return result;
 	}
 
