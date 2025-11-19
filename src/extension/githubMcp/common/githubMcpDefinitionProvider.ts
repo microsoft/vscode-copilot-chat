@@ -9,6 +9,7 @@ import { AuthProviderId, ConfigKey, IConfigurationService } from '../../../platf
 import { ILogService } from '../../../platform/log/common/logService';
 import { Event } from '../../../util/vs/base/common/event';
 import { URI } from '../../../util/vs/base/common/uri';
+import * as l10n from '@vscode/l10n';
 
 const EnterpriseURLConfig = 'github-enterprise.uri';
 
@@ -91,12 +92,13 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		];
 	}
 
-	resolveMcpServerDefinition(server: McpHttpServerDefinition, token: CancellationToken): McpHttpServerDefinition | undefined {
-		if (!this.authenticationService.permissiveGitHubSession) {
-			this.logService.trace('GitHubMcpDefinitionProvider: No permissive GitHub session available to resolve MCP server definition.');
-			return undefined;
-		}
-		server.headers['Authorization'] = `Bearer ${this.authenticationService.permissiveGitHubSession.accessToken}`;
+	async resolveMcpServerDefinition(server: McpHttpServerDefinition, token: CancellationToken): Promise<McpHttpServerDefinition | undefined> {
+		const session = await this.authenticationService.getPermissiveGitHubSession({
+			createIfNone: {
+				detail: l10n.t('Additional permissions are required to use GitHub MCP Server'),
+			},
+		});
+		server.headers['Authorization'] = `Bearer ${session!.accessToken}`;
 		return server;
 	}
 }
