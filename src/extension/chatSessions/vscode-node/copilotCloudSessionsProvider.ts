@@ -1387,15 +1387,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			currentRepository?.upstreamRemote ??
 			repo.state.remotes?.[0]?.name;
 
-		if (!remoteName) {
-			return {
-				error: vscode.l10n.t('Unable to determine a Git remote for this repository. Configure an upstream remote and try again.'),
-				state: 'error'
-			};
-		}
-
 		const hasChanges = repo.state.workingTreeChanges.length > 0 || repo.state.indexChanges.length > 0;
 		if (hasChanges && autoPushAndCommit) {
+			if (!remoteName) {
+				return {
+					error: vscode.l10n.t('Unable to determine a Git remote for this repository. Configure an upstream remote and try again.'),
+					state: 'error'
+				};
+			}
 			try {
 				chatStream?.progress(vscode.l10n.t('Waiting for local changes'));
 				head_ref = await this.gitOperationsManager.commitAndPushChanges({ repository: repo, remoteName, baseRef: base_ref });
