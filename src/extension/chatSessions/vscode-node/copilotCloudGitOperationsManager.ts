@@ -29,8 +29,8 @@ export class CopilotCloudGitOperationsManager {
 			return asyncBranch;
 		} catch (error) {
 			await this.rollbackToOriginalBranch(repository, baseRef);
-			this.logService.error(`Failed to auto-commit and push pending changes: ${error instanceof Error ? error.message : String(error)}`);
-			throw new Error(vscode.l10n.t('Could not auto-push pending changes. Manually commit or stash your changes and try again. ({0})', error instanceof Error ? error.message : String(error)));
+			this.logService.error(`Failed to automatically commit and push your changes: ${error instanceof Error ? error.message : String(error)}`);
+			throw new Error(vscode.l10n.t('Failed to automatically commit and push your changes. Please commit or stash your changes manually and try again.'));
 		}
 	}
 
