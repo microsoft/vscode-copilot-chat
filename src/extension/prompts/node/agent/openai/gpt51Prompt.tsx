@@ -12,6 +12,7 @@ import { ResponseTranslationRules } from '../../base/responseTranslationRules';
 import { Tag } from '../../base/tag';
 import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, McpToolInstructions } from '../defaultAgentInstructions';
+import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from '../promptRegistry';
 
 class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
@@ -219,9 +220,9 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				<br />
 				**Monospace**<br />
 				<br />
-				- Wrap all commands, file paths, env vars, and code identifiers in backticks (`` `...` ``).<br />
-				- Apply to inline examples and to bullet keywords if the keyword itself is a literal file/command.<br />
-				- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`) or inline code/path (`` ` ``).<br />
+				- Wrap all commands, env vars, and code identifiers in backticks (`` `...` ``). Do NOT backtick file paths when citing code; instead produce markdown links with line anchors (#Lstart or #Lstart-Lend) following file linkification rules.<br />
+				- Apply to inline examples and to bullet keywords if the keyword itself is a literal file/command (excluding file paths needing line anchors).<br />
+				- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`). File path links must not be bold or backticked.<br />
 				<br />
 				**Structure**<br />
 				<br />
@@ -260,6 +261,7 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
 			</Tag>
 			<ResponseTranslationRules />
+			<FileLinkificationInstructions />
 		</InstructionMessage >;
 	}
 }

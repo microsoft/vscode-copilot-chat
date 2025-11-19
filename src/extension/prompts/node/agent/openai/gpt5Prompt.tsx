@@ -12,6 +12,7 @@ import { ResponseTranslationRules } from '../../base/responseTranslationRules';
 import { Tag } from '../../base/tag';
 import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, McpToolInstructions } from '../defaultAgentInstructions';
+import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from '../promptRegistry';
 
 class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
@@ -183,9 +184,9 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Use consistent keyword phrasing and formatting across sections.<br />
 				<br />
 				Monospace:<br />
-				- Wrap all commands, file paths, env vars, and code identifiers in backticks (`` `...` ``).<br />
-				- Apply to inline examples and to bullet keywords if the keyword itself is a literal file/command.<br />
-				- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`) or inline code/path (`` ` ``).<br />
+				- Wrap all commands, env vars, and code identifiers in backticks (`` `...` ``). Do NOT backtick file paths when citing code; instead produce a markdown link with line anchors (#Lstart or #Lstart-Lend) per file linkification rules.<br />
+				- Apply to inline examples and to bullet keywords if the keyword itself is a literal file/command (excluding file paths needing line anchors).<br />
+				- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`). File path links must not be bold or backticked.<br />
 				<br />
 				Structure:<br />
 				- Place related bullets together; don't mix unrelated concepts in the same section.<br />
@@ -220,6 +221,7 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
+			<FileLinkificationInstructions />
 		</InstructionMessage>;
 	}
 }

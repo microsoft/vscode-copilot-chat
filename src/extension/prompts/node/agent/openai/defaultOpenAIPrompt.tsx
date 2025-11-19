@@ -13,6 +13,7 @@ import { EXISTING_CODE_MARKER } from '../../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { KeepGoingReminder } from '../agentPrompt';
 import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from '../defaultAgentInstructions';
+import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from '../promptRegistry';
 
 export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
@@ -108,6 +109,7 @@ export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptPr
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
+			<FileLinkificationInstructions />
 		</InstructionMessage>;
 	}
 }

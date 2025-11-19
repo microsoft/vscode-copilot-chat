@@ -10,6 +10,7 @@ import { InstructionMessage } from '../../base/instructionMessage';
 import { Tag } from '../../base/tag';
 import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { DefaultAgentPromptProps, detectToolCapabilities } from '../defaultAgentInstructions';
+import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from '../promptRegistry';
 
 /**
@@ -69,7 +70,7 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Markdown text. Use structure only when it helps scanability.<br />
 				- Headers: optional; short Title Case (1-3 words) wrapped in **…**; no blank line before the first bullet; add only if they truly help.<br />
 				- Bullets: use - ; merge related points; keep to one line when possible; 4-6 per list ordered by importance; keep phrasing consistent.<br />
-				- Monospace: backticks for commands/paths/env vars/code ids and inline examples; use for literal keyword bullets; never combine with **.<br />
+				- Monospace: backticks for commands, env vars, and code identifiers; DO NOT backtick file paths when citing code lines—use markdown links with #Lstart or #Lstart-Lend anchors per linkification rules; never combine with **.<br />
 				- Code samples or multi-line snippets should be wrapped in fenced code blocks; include an info string as often as possible.<br />
 				- Structure: group related bullets; order sections general → specific → supporting; for subsections, start with a bolded keyword bullet, then items; match complexity to the task.<br />
 				- Tone: collaborative, concise, factual; present tense, active voice; self-contained; no "above/below"; parallel wording.<br />
@@ -83,6 +84,7 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 				</Tag>
 				<MathIntegrationRules />
 			</Tag>
+			<FileLinkificationInstructions />
 		</InstructionMessage>;
 	}
 }
