@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
@@ -17,7 +18,6 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { CopilotCloudGitOperationsManager } from './copilotCloudGitOperationsManager';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
@@ -189,7 +189,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	private get autoCommitAndPushEnabled(): boolean {
-		return this.configurationService.getConfig(ConfigKey.CloudAutoCommitAndPush);
+		return this.configurationService.getConfig(ConfigKey.AgentDelegateAutoCommitAndPush);
 	}
 
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
