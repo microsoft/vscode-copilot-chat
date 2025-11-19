@@ -24,6 +24,8 @@ export class TestChatRequest implements ChatRequest {
 	public tools = new Map();
 	public id = generateUuid();
 	public sessionId = generateUuid();
+	public acceptedConfirmationData?: any[];
+	public rejectedConfirmationData?: any[];
 
 	constructor(
 		public prompt: string
@@ -40,6 +42,7 @@ export class MockChatResponseStream extends ChatResponseStreamImpl {
 
 	public output: string[] = [];
 	public uris: string[] = [];
+	public confirmations: Array<{ title: string; message: string; data: any; buttons?: string[] }> = [];
 
 	constructor() {
 		super(() => { }, () => { });
@@ -49,5 +52,8 @@ export class MockChatResponseStream extends ChatResponseStreamImpl {
 	}
 	override codeblockUri(uri: URI): void {
 		this.uris.push(uri.toString());
+	}
+	override confirmation(title: string, message: string, data: any, buttons?: string[]): void {
+		this.confirmations.push({ title, message, data, buttons });
 	}
 }
