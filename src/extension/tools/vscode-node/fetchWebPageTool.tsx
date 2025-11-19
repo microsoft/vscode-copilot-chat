@@ -109,7 +109,7 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 		const validTextContent: Array<{ readonly uri: URI; readonly content: string }> = [];
 		const imageResults: WebPageImageResult[] = [];
 
-		const processContent = (url: string, contentPart: any, isCandidate: boolean) => {
+		const processContent = (url: string, contentPart: LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart | unknown, isCandidate: boolean) => {
 			try {
 				const uri = URI.parse(url);
 
