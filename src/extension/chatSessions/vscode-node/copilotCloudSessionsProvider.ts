@@ -25,11 +25,8 @@ import { IPullRequestFileChangesService } from './pullRequestFileChangesService'
 
 export type ConfirmationResult = { step: string; accepted: boolean; metadata?: ConfirmationMetadata };
 export const UncommittedChangesStep = 'uncommitted-changes';
-const PUSH_CHANGES = vscode.l10n.t('Push changes');
-const CONTINUE_WITHOUT_PUSHING = vscode.l10n.t('Continue without pushing');
-const LEARN_MORE = vscode.l10n.t('Learn more');
 
-export interface ConfirmationMetadata {
+interface ConfirmationMetadata {
 	prompt: string;
 	history?: string;
 	references?: readonly vscode.ChatPromptReference[];
@@ -595,16 +592,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return state === 'MERGED' ? '$(git-merge)' : '$(git-pull-request)';
 	}
 
-	private async startSession(
-		stream: vscode.ChatResponseStream,
-		token: vscode.CancellationToken,
-		source: string,
-		prompt: string,
-		history?: string,
-		references?: readonly vscode.ChatPromptReference[],
-		customAgentName?: string,
-		autoPushAndCommit?: boolean
-	) {
+	private async startSession(stream: vscode.ChatResponseStream, token: vscode.CancellationToken, source: string, prompt: string, history?: string, references?: readonly vscode.ChatPromptReference[], customAgentName?: string, autoPushAndCommit?: boolean) {
 		/* __GDPR__
 			"copilot.codingAgent.editor.invoke" : {
 				"promptLength" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
@@ -763,15 +751,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const repoName = `${repoId.org}/${repoId.repo}`;
 				const message = vscode.l10n.t('Copilot cloud agent will continue your work in \'{0}\'.', repoName);
 				const detail = vscode.l10n.t('Choose how to handle your uncommitted changes before delegating to the cloud agent.');
+				const push_changes = vscode.l10n.t('Push changes');
+				const learn_more = vscode.l10n.t('Learn more');
+				const continue_without_pushing = vscode.l10n.t('Continue without pushing');
 				const modalResult = await vscode.window.showInformationMessage(
 					message,
 					{
 						modal: true,
 						detail,
 					},
-					PUSH_CHANGES,
-					CONTINUE_WITHOUT_PUSHING,
-					LEARN_MORE,
+					push_changes,
+					continue_without_pushing,
+					learn_more,
 				);
 
 				if (!modalResult) {
@@ -779,12 +770,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					return true;
 				}
 
-				if (modalResult === LEARN_MORE) {
+				if (modalResult === learn_more) {
 					await vscode.env.openExternal(vscode.Uri.parse('https://aka.ms/coding-agent-docs'));
 					return true;
 				}
 
-				metadata.autoPushAndCommit = modalResult === PUSH_CHANGES;
+				metadata.autoPushAndCommit = modalResult === push_changes;
 				return false;
 			}
 		} catch (error) {
@@ -874,13 +865,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (context.chatSessionContext?.isUntitled) {
 			/* Generate new cloud agent session from an 'untitled' session */
 
-			const metadata: ConfirmationMetadata = {
+			const handledUncommittedChanges = await this.tryHandleUncommittedChanges({
 				prompt: context.chatSummary?.prompt ?? request.prompt,
 				history: context.chatSummary?.history,
 				references: request.references,
 				chatContext: context
-			};
-			const handledUncommittedChanges = await this.tryHandleUncommittedChanges(metadata, stream, token);
+			}, stream, token);
 
 			// If uncommitted changes were detected and a confirmation was shown,
 			// don't proceed with creation yet - wait for user response
@@ -888,7 +878,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				return {};
 			}
 
-			await this.doUntitledCreation(metadata, stream, token);
+			await this.doUntitledCreation({
+				prompt: context.chatSummary?.prompt ?? request.prompt,
+				history: context.chatSummary?.history,
+				references: request.references,
+				chatContext: context
+			}, stream, token);
 
 		} else if (context.chatSessionContext) {
 			/* Follow up to an existing cloud agent session */
