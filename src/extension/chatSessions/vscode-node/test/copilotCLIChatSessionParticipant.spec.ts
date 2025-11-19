@@ -277,7 +277,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 	it('invokes handlePushConfirmationData without existing chatSessionContext (summary via summarizer)', async () => {
 		const request = new TestChatRequest('Push this');
-		const context = { chatSessionContext: undefined } as unknown as vscode.ChatContext;
+		const context = { chatSessionContext: undefined, chatSummary: undefined } as unknown as vscode.ChatContext;
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 		const summarySpy = vi.spyOn(summarizer, 'provideChatSummary');
