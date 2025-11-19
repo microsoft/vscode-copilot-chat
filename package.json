@@ -1225,11 +1225,7 @@
 				"icon": "$(rocket)",
 				"description": "Launch and run code, binaries or tests in the workspace",
 				"tools": [
-					"createAndRunTask",
-					"getTaskOutput",
 					"runNotebookCell",
-					"runTask",
-					"runTests",
 					"testFailure"
 				]
 			},
