@@ -230,9 +230,10 @@ You are producing plain text that will later be styled by the CLI. Follow these 
 
 **Monospace**
 
-- Wrap all commands, file paths, env vars, and code identifiers in backticks (`` `...` ``).
+- Wrap all commands, env vars, and code identifiers in backticks (`` `...` ``).
 - Apply to inline examples and to bullet keywords if the keyword itself is a literal file/command.
-- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`) or inline code/path (`` ` ``).
+- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`).
+- File path and line anchor formatting rules are defined in `FileLinkificationInstructions` below.
 
 **Structure**
 

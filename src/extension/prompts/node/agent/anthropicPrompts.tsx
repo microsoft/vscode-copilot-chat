@@ -99,11 +99,10 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				Use proper Markdown formatting. Backtick code symbols (classes, functions, variables, commands). For file paths and specific code locations, defer to the linking rules in `FileLinkificationInstructions` below (do not backtick paths; use markdown links with line anchors).<br />
 				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.<br />
-					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
-					You can find the configuration in `config/app.config.json`.
+					Use backticks for identifiers: `Person`, `calculateTotal`, `config`.<br />
+					See FileLinkificationInstructions for file path link and line anchor rules and examples.
 				</Tag>
 				<FileLinkificationInstructions />
 				<MathIntegrationRules />
@@ -196,11 +195,10 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				Use proper Markdown formatting. Backtick code identifiers (classes, methods, variables). For file paths and code locations, follow `FileLinkificationInstructions` (markdown links with line anchors; never backticks).<br />
 				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.<br />
-					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
-					You can find the configuration in `config/app.config.json`.
+					Identifiers in backticks: `Person`, `calculateTotal`, `AppConfig`.<br />
+					File path and line anchor formatting rules are defined in `FileLinkificationInstructions` below.
 				</Tag>
 				<FileLinkificationInstructions />
 				<MathIntegrationRules />

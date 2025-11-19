@@ -106,11 +106,10 @@ class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptPro
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				Use proper Markdown formatting. Backtick code identifiers (classes, functions, variables, commands). For file paths and specific code locations, do NOT use backticks — convert them to markdown links with line anchors as defined in `FileLinkificationInstructions` below.<br />
 				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.<br />
-					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
-					You can find the configuration in `config/app.config.json`.
+					Identifiers only: `Person`, `calculateTotal`, `AppConfig`.<br />
+					File path and line anchor formatting rules and examples are defined in `FileLinkificationInstructions` below.
 				</Tag>
 				<FileLinkificationInstructions />
 				<MathIntegrationRules />

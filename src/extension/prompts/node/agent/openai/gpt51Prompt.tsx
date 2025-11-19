@@ -220,9 +220,10 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				<br />
 				**Monospace**<br />
 				<br />
-				- Wrap all commands, env vars, and code identifiers in backticks (`` `...` ``). Do NOT backtick file paths when citing code; instead produce markdown links with line anchors (#Lstart or #Lstart-Lend) following file linkification rules.<br />
-				- Apply to inline examples and to bullet keywords if the keyword itself is a literal file/command (excluding file paths needing line anchors).<br />
-				- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`). File path links must not be bold or backticked.<br />
+				- Wrap all commands, env vars, and code identifiers in backticks (`` `...` ``).<br />
+				- Apply to inline examples and to bullet keywords if the keyword itself is a literal file/command.<br />
+				- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`).<br />
+				- File path and line anchor formatting rules are defined in `FileLinkificationInstructions` below.<br />
 				<br />
 				**Structure**<br />
 				<br />

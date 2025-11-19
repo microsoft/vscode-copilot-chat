@@ -100,11 +100,10 @@ export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptPr
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				Use proper Markdown formatting. Backtick code identifiers (classes, functions, variables, commands). For file paths or specific code locations, do NOT use backticks—convert them to markdown links with line anchors; file path and line anchor link rules are defined in `FileLinkificationInstructions` below. Avoid duplicating those examples here.<br />
 				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.<br />
-					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
-					You can find the configuration in `config/app.config.json`.
+					Identifiers only: `calculateTotal`, `Person`, `AppConfig`.<br />
+					File path link examples live in FileLinkificationInstructions.<br />
 				</Tag>
 				<MathIntegrationRules />
 			</Tag>
