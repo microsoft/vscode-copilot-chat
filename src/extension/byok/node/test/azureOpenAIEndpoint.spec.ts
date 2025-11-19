@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { IChatModelInformation, ModelSupportedEndpoint } from '../../../../platform/endpoint/common/endpointProvider';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { TokenizerType } from '../../../../util/common/tokenizer';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
@@ -29,7 +30,7 @@ describe('AzureOpenAIEndpoint', () => {
 			capabilities: {
 				type: 'chat',
 				family: 'openai',
-				tokenizer: 'o200k_base' as any,
+				tokenizer: TokenizerType.O200K,
 				supports: {
 					parallel_tool_calls: false,
 					streaming: true,

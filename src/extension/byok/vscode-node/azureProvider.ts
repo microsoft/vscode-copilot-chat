@@ -86,6 +86,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 					);
 				} catch (error) {
 					// If sign-in fails, don't show models in picker
+					this._logService.error('[AzureBYOKModelProvider] Authentication failed during Entra ID sign-in:', error);
 					return {};
 				}
 			}
@@ -108,11 +109,18 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 		const authType = this._configurationService.getConfig(ConfigKey.AzureAuthType);
 
 		if (authType === 'entraId') {
-			const session = await authentication.getSession(
-				'microsoft',
-				['https://cognitiveservices.azure.com/.default'],
-				{ createIfNone: true }
-			);
+			let session;
+			try {
+				session = await authentication.getSession(
+					'microsoft',
+					['https://cognitiveservices.azure.com/.default'],
+					{ createIfNone: true }
+				);
+			} catch (err) {
+				const errorMessage = 'Azure authentication failed. Please sign in to your Microsoft account and try again.';
+				this._logService.error('[AzureBYOKModelProvider] Authentication failed during chat request:', err);
+				throw new Error(errorMessage);
+			}
 
 			const modelInfo = await this.getModelInfo(model.id, undefined, {
 				maxInputTokens: model.maxInputTokens,
@@ -122,7 +130,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 				name: model.name,
 				url: model.url,
 				thinking: model.thinking,
-				editTools: model.capabilities.editTools?.filter(isEndpointEditToolName),
+				editTools: model.capabilities?.editTools?.filter(isEndpointEditToolName),
 				requestHeaders: model.requestHeaders,
 			});
 
