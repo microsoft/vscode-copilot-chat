@@ -2026,8 +2026,8 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 	private async getCopilotApi(): Promise<Copilot.ContextProviderApiV1 | undefined> {
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
-			this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
-			this.logService.error('Copilot extension not found');
+			// this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
+			// this.logService.error('Copilot extension not found');
 			return undefined;
 		}
 		try {
