@@ -1012,6 +1012,7 @@
 				"userDescription": "%github.copilot.tools.githubRepo.userDescription%",
 				"icon": "$(repo)",
 				"canBeReferencedInPrompt": true,
+				"when": "!config.github.copilot.chat.githubMcpServer.enabled",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
