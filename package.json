@@ -3239,6 +3239,15 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.useMessagesApi": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.useMessagesApi%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.responsesApiReasoningEffort": {
 						"type": "string",
 						"default": "default",

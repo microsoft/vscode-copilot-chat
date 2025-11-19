@@ -792,6 +792,8 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
+	/** Use the Messages API instead of Chat Completions when supported */
+	export const UseMessagesApi = defineSetting<boolean | undefined>('chat.useMessagesApi', ConfigType.ExperimentBased, false);
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
 	/** Enable extended thinking for Anthropic models that support it */
 	export const AnthropicThinkingEnabled = defineSetting<boolean>('chat.anthropic.thinking.enabled', ConfigType.ExperimentBased, false);
