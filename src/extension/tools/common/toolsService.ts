@@ -121,7 +121,7 @@ function ajvValidateForTool(toolName: string, fn: ValidateFunction, inputObj: un
 		let hasNestedJsonStrings = false;
 		for (const error of fn.errors) {
 			// Check if the error is about expecting an object but getting a string
-			const isObjError = error.keyword === 'type' && error.params?.type === 'object' && error.instancePath;
+			const isObjError = error.keyword === 'type' && (error.params?.type === 'object' || error.params?.type === 'array') && error.instancePath;
 			if (!isObjError) {
 				continue;
 			}
