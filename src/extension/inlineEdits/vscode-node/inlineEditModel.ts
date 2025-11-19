@@ -36,7 +36,7 @@ export class InlineEditModel extends Disposable {
 
 	private readonly _predictor: IStatelessNextEditProvider;
 
-	public readonly inlineEditsInlineCompletionsEnabled = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsInlineCompletionsEnabled);
+	public readonly inlineEditsInlineCompletionsEnabled = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsInlineCompletionsEnabled);
 
 	public readonly onChange = observableSignal(this);
 
@@ -53,7 +53,7 @@ export class InlineEditModel extends Disposable {
 		super();
 
 		this._predictor = createNextEditProvider(this._predictorId, this._instantiationService);
-		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffNEntries, this._expService);
+		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
 		const xtabHistoryTracker = new NesXtabHistoryTracker(this.workspace, xtabDiffNEntries);
 		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, xtabHistoryTracker, this.debugRecorder);
 
@@ -217,7 +217,7 @@ export class InlineEditTriggerer extends Disposable {
 
 			const selectionLine = range.start.line;
 
-			const triggerOnActiveEditorChange = this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
+			const triggerOnActiveEditorChange = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
 			// If we're in a notebook cell,
 			// Its possible user made changes in one cell and now is moving to another cell
 			// In such cases we should account for the possibility of the user wanting to edit the new cell and trigger suggestions.
@@ -245,7 +245,7 @@ export class InlineEditTriggerer extends Disposable {
 			mostRecentChange.documentTrigger = e.textEditor.document;
 			tracer.returns('triggering inline edit');
 
-			const debounceOnSelectionChange = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceOnSelectionChange, this._expService);
+			const debounceOnSelectionChange = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsDebounceOnSelectionChange, this._expService);
 			if (debounceOnSelectionChange === undefined) {
 				this._triggerInlineEdit();
 			} else {
@@ -264,7 +264,7 @@ export class InlineEditTriggerer extends Disposable {
 
 	private _maybeTriggerOnDocumentSwitch(e: vscode.TextEditorSelectionChangeEvent, isSameDoc: boolean, parentTracer: ITracer): boolean {
 		const tracer = parentTracer.subNoEntry('editorSwitch');
-		const triggerAfterSeconds = this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
+		const triggerAfterSeconds = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
 		if (triggerAfterSeconds === undefined) {
 			tracer.trace('document switch disabled');
 			return false;

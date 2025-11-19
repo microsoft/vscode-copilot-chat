@@ -45,6 +45,8 @@ export function div(A, b) {
   return A / b;
 }
 
+
+
 export function mul(a, b) {
 	return a * b;
 }

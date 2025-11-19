@@ -70,13 +70,10 @@ describe('Configurations', () => {
 		const otherConfigurationsInPackageJson = packageJson.contributes.configuration.filter(section => section.id !== 'advanced').flatMap(section => Object.keys(section.properties));
 
 		// Get keys from code
-		const internalKeys = Object.values(ConfigKey.Internal).map(setting => setting.fullyQualifiedId);
+		const internalKeys = Object.values(ConfigKey.TeamInternal).map(setting => setting.fullyQualifiedId);
 		const sharedKeys = Object.values(ConfigKey.Shared).map(setting => setting.fullyQualifiedId);
-		const advancedPublicKeys = [
-			...Object.values(ConfigKey.AdvancedExperimental).map(setting => setting.fullyQualifiedId),
-			...Object.values(ConfigKey.AdvancedExperimentalExperiments).map(setting => setting.fullyQualifiedId)
-		];
-		const otherPublicKeys = (Object.values(ConfigKey).filter(key => key !== ConfigKey.Internal && key !== ConfigKey.Shared && key !== ConfigKey.AdvancedExperimental && key !== ConfigKey.AdvancedExperimentalExperiments) as Config<any>[]).map(setting => setting.fullyQualifiedId);
+		const advancedPublicKeys = Object.values(ConfigKey.Advanced).map(setting => setting.fullyQualifiedId);
+		const otherPublicKeys = (Object.values(ConfigKey).filter(key => key !== ConfigKey.TeamInternal && key !== ConfigKey.Shared && key !== ConfigKey.Advanced) as Config<any>[]).map(setting => setting.fullyQualifiedId);
 		const registered = [...otherPublicKeys, ...advancedPublicKeys];
 		const unregistered = [...internalKeys, ...sharedKeys];
 

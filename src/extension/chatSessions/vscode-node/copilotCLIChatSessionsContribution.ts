@@ -13,6 +13,7 @@ import { toGitUri } from '../../../platform/git/common/utils';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -41,19 +42,24 @@ export class CopilotCLIWorktreeManager {
 	private _sessionIsolation: Map<string, boolean> = new Map();
 	private _sessionWorktrees: Map<string, string> = new Map();
 	constructor(
-		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
-		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService) { }
+		@IGitService private readonly gitService: IGitService,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext) { }
 
 	async createWorktree(stream: vscode.ChatResponseStream): Promise<string | undefined> {
 		return new Promise<string | undefined>((resolve) => {
 			stream.progress(vscode.l10n.t('Creating isolated worktree for Copilot CLI session...'), async progress => {
 				try {
-					const worktreePath = await this.commandExecutionService.executeCommand('git.createWorktreeWithDefaults') as string | undefined;
-					if (worktreePath) {
-						resolve(worktreePath);
-						return vscode.l10n.t('Created isolated worktree at {0}', worktreePath);
-					} else {
+					const repository = this.gitService.activeRepository.get();
+					if (!repository) {
 						progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+					} else {
+						const worktreePath = await this.gitService.createWorktree(repository.rootUri);
+						if (worktreePath) {
+							resolve(worktreePath);
+							return vscode.l10n.t('Created isolated worktree at {0}', worktreePath);
+						} else {
+							progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+						}
 					}
 				} catch (error) {
 					progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
@@ -234,19 +240,20 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			this.copilotCLIModels.getDefaultModel()
 		]);
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
+		const isUntitled = copilotcliSessionId.startsWith('untitled-');
 		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
 		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
 
 		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
-		const existingSession = await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
+		const existingSession = isUntitled ? undefined : await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
 		const selectedModelId = await existingSession?.object?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
 		const options: Record<string, string> = {
 			[MODELS_OPTION_ID]: _sessionModel.get(copilotcliSessionId)?.id ?? defaultModel.id,
 		};
 
-		if (!existingSession && this.configurationService.getConfig(ConfigKey.AdvancedExperimental.CLIIsolationEnabled)) {
+		if (!existingSession && this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
 		}
 		const history = existingSession?.object?.getChatHistory() || [];
@@ -374,7 +381,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			]);
 
 			const session = await this.getOrCreateSession(request, chatSessionContext, prompt, modelId, stream, disposables, token);
-			if (!session) {
+			if (!session || token.isCancellationRequested) {
 				return {};
 			}
 			if (isUntitled) {
@@ -396,10 +403,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await session.object.handleRequest(prompt, attachments, modelId, token);
 			}
 
-			if (isUntitled) {
+			if (isUntitled && !token.isCancellationRequested) {
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt ?? 'CopilotCLI' });
 			}
 			return {};
+		} catch (ex) {
+			if (isCancellationError(ex)) {
+				return {};
+			}
+			throw ex;
 		}
 		finally {
 			disposables.dispose();
@@ -466,16 +478,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			stream.warning(vscode.l10n.t('You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them.'));
 		}
 
-		const history = await this.summarizer.provideChatSummary(context, token);
 		const prompt = request.prompt.substring('/delegate'.length).trim();
 		if (!await this.cloudSessionProvider.tryHandleUncommittedChanges({
 			prompt: prompt,
-			history: history,
 			chatContext: context
 		}, stream, token)) {
 			const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
 				prompt,
-				history,
 				chatContext: context
 			}, stream, token);
 			if (prInfo) {
@@ -583,7 +592,11 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 				if (worktreePath) {
 					try {
-						await vscode.commands.executeCommand('git.deleteWorktree', Uri.file(worktreePath));
+						const repository = gitService.activeRepository.get();
+						if (!repository) {
+							throw new Error(vscode.l10n.t('No active repository found to delete worktree.'));
+						}
+						await gitService.deleteWorktree(repository.rootUri, worktreePath);
 					} catch (error) {
 						vscode.window.showErrorMessage(vscode.l10n.t('Failed to delete worktree: {0}', error instanceof Error ? error.message : String(error)));
 					}

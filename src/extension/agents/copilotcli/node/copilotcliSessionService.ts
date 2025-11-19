@@ -184,7 +184,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			timestamp: sdkSession.startTime
 		};
 		this._newActiveSessions.set(sdkSession.sessionId, newSession);
-		this.logService.trace(`[CopilotCLIAgentManager] Created new CopilotCLI session ${sdkSession.sessionId}.`);
+		this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
 
 
 		const session = this.createCopilotSession(sdkSession, options, sessionManager);
@@ -213,7 +213,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			{
 				const session = this._sessionWrappers.get(sessionId);
 				if (session) {
-					this.logService.trace(`[CopilotCLIAgentManager] Reusing CopilotCLI session ${sessionId}.`);
+					this.logService.trace(`[CopilotCLISession] Reusing CopilotCLI session ${sessionId}.`);
 					session.acquire();
 					return session;
 				}
@@ -227,7 +227,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
 			if (!sdkSession) {
-				this.logService.error(`[CopilotCLIAgentManager] CopilotCLI failed to get session ${sessionId}.`);
+				this.logService.error(`[CopilotCLISession] CopilotCLI failed to get session ${sessionId}.`);
 				return undefined;
 			}
 

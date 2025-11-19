@@ -23,7 +23,6 @@ export enum ToolName {
 	Codebase = 'semantic_search',
 	VSCodeAPI = 'get_vscode_api',
 	TestFailure = 'test_failure',
-	RunTests = 'run_tests',
 	FindFiles = 'file_search',
 	FindTextInFiles = 'grep_search',
 	ReadFile = 'read_file',
@@ -211,7 +210,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreTerminalLastCommand]: ToolCategory.VSCodeInteraction,
 
 	// Testing
-	[ToolName.RunTests]: ToolCategory.Testing,
 	[ToolName.TestFailure]: ToolCategory.Testing,
 	[ToolName.FindTestFiles]: ToolCategory.Testing,
 	[ToolName.CoreRunTest]: ToolCategory.Testing,

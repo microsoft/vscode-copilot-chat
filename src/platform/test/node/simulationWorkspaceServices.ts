@@ -274,10 +274,10 @@ export class SimulationReviewService implements IReviewService {
 	}
 
 	isIntentEnabled(): boolean {
-		if (ConfigValueValidators.isDefaultValueWithTeamValue(ConfigKey.AdvancedExperimental.ReviewIntent.defaultValue)) {
-			return ConfigKey.AdvancedExperimental.ReviewIntent.defaultValue.defaultValue;
+		if (ConfigValueValidators.isDefaultValueWithTeamValue(ConfigKey.Advanced.ReviewIntent.defaultValue)) {
+			return ConfigKey.Advanced.ReviewIntent.defaultValue.defaultValue;
 		}
-		return ConfigKey.AdvancedExperimental.ReviewIntent.defaultValue;
+		return ConfigKey.Advanced.ReviewIntent.defaultValue;
 	}
 
 	getDiagnosticCollection(): ReviewDiagnosticCollection {
@@ -756,6 +756,14 @@ export class TestingGitService implements IGitService {
 	async add(uri: URI, paths: string[]): Promise<void> {
 		return;
 	}
+
+	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
+		return undefined;
+	}
+
+	async deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void> {
+		return;
+	}
 }
 
 export class TestingTerminalService extends Disposable implements ITerminalService {
@@ -784,11 +792,13 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 
 	private readonly sessionTerminals = new Map<string, { terminal: vscode.Terminal; shellIntegrationQuality: ShellIntegrationQuality; id: string }[]>();
 
-	createTerminal(name?: string, shellPath?: string, shellArgs?: readonly string[] | string): vscode.Terminal;
+	createTerminal(name?: string, shellPath?: string, shellArgs?: string[] | string): vscode.Terminal;
 	createTerminal(options: vscode.TerminalOptions): vscode.Terminal;
 	createTerminal(options: vscode.ExtensionTerminalOptions): vscode.Terminal;
-	createTerminal(name?: any, shellPath?: any, shellArgs?: any): vscode.Terminal {
-		const options: vscode.TerminalOptions | vscode.ExtensionTerminalOptions = typeof name === 'string' ? { name, shellPath, shellArgs } : name;
+	createTerminal(nameOrOpts?: string | vscode.TerminalOptions | vscode.ExtensionTerminalOptions, shellPath?: string, shellArgs?: string[] | string): vscode.Terminal {
+		const options: vscode.TerminalOptions | vscode.ExtensionTerminalOptions = typeof nameOrOpts === 'string' || nameOrOpts === undefined ?
+			{ name: nameOrOpts, shellPath, shellArgs } satisfies vscode.TerminalOptions :
+			nameOrOpts;
 		if ('pty' in options) {
 			throw new Error('Not implemented');
 		}

@@ -59,6 +59,9 @@ export interface IGitService extends IDisposable {
 	diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;
 	getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined>;
+
+	createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined>;
+	deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void>;
 }
 
 /**

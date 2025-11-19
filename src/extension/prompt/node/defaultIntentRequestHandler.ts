@@ -146,7 +146,7 @@ export class DefaultIntentRequestHandler {
 			}
 
 			return chatResult;
-		} catch (err: any) {
+		} catch (err) {
 			if (err instanceof ToolCallCancelledError) {
 				this.turn.setResponse(TurnStatus.Cancelled, { message: err.message, type: 'meta' }, undefined, {});
 				return {};
@@ -318,7 +318,7 @@ export class DefaultIntentRequestHandler {
 		// src/extension/prompt/node/chatParticipantTelemetry.ts#L521-L522
 		//
 		// cc @lramos15
-		const responseHandlers: Promise<any>[] = [];
+		const responseHandlers: Promise<unknown>[] = [];
 		store.add(loop.onDidReceiveResponse(res => {
 			const promise = this._onDidReceiveResponse(res);
 			responseHandlers.push(promise);

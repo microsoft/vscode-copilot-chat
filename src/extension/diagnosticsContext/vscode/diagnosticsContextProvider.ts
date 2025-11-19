@@ -30,7 +30,7 @@ export class DiagnosticsContextContribution extends Disposable {
 		@ILanguageContextProviderService private readonly languageContextProviderService: ILanguageContextProviderService,
 	) {
 		super();
-		this._enableDiagnosticsContextProvider = configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.DiagnosticsContextProvider, experimentationService);
+		this._enableDiagnosticsContextProvider = configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.DiagnosticsContextProvider, experimentationService);
 		this._register(autorun(reader => {
 			if (this._enableDiagnosticsContextProvider.read(reader)) {
 				reader.store.add(this.register());
@@ -80,8 +80,8 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 
 		const requestedFileResource = URI.parse(request.documentContext.uri);
 		const cursor = new Position(request.documentContext.position.line + 1, request.documentContext.position.character + 1);
-		const linesAbove = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderNLinesAbove, this.experimentationService) ?? N_LINES_ABOVE;
-		const linesBelow = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderNLinesBelow, this.experimentationService) ?? N_LINES_BELOW;
+		const linesAbove = this.configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderNLinesAbove, this.experimentationService) ?? N_LINES_ABOVE;
+		const linesBelow = this.configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderNLinesBelow, this.experimentationService) ?? N_LINES_BELOW;
 		const editWindow = new Range(cursor.lineNumber - linesAbove, 1, cursor.lineNumber + linesBelow, Number.MAX_SAFE_INTEGER);
 
 		return this.getContext(requestedFileResource, cursor, {

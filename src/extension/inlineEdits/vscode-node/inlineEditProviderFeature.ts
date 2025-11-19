@@ -42,13 +42,13 @@ const useEnhancedNotebookNESContextKey = 'github.copilot.chat.enableEnhancedNote
 
 export class InlineEditProviderFeature extends Disposable implements IExtensionContribution {
 
-	private readonly _inlineEditsProviderId = makeSettable(this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsProviderId, this._expService));
+	private readonly _inlineEditsProviderId = makeSettable(this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsProviderId, this._expService));
 
-	private readonly _hideInternalInterface = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsHideInternalInterface);
+	private readonly _hideInternalInterface = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsHideInternalInterface);
 	private readonly _enableDiagnosticsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.InlineEditsEnableDiagnosticsProvider, this._expService);
-	private readonly _enableCompletionsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsEnableCompletionsProvider, this._expService);
-	private readonly _yieldToCopilot = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsYieldToCopilot, this._expService);
-	private readonly _excludedProviders = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsExcludedProviders, this._expService).map(v => v ? v.split(',').map(v => v.trim()).filter(v => v !== '') : []);
+	private readonly _enableCompletionsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsEnableCompletionsProvider, this._expService);
+	private readonly _yieldToCopilot = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsYieldToCopilot, this._expService);
+	private readonly _excludedProviders = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsExcludedProviders, this._expService).map(v => v ? v.split(',').map(v => v.trim()).filter(v => v !== '') : []);
 	private readonly _copilotToken = observableFromEvent(this, this._authenticationService.onDidAuthenticationChange, () => this._authenticationService.copilotToken);
 
 	public readonly inlineEditsEnabled = derived(this, (reader) => {
@@ -66,7 +66,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		return !!this._copilotToken.read(reader)?.isInternal && !this._hideInternalInterface.read(reader);
 	});
 
-	public readonly isInlineEditsLogFileEnabledObservable = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
+	public readonly isInlineEditsLogFileEnabledObservable = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsLogContextRecorderEnabled);
 
 	private readonly _workspace = derivedDisposable(this, _reader => {
 		return this._instantiationService.createInstance(VSCodeWorkspace);
@@ -87,7 +87,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.trace(s));
 		const constructorTracer = tracer.sub('constructor');
 		const hasUpdatedNesSettingKey = 'copilot.chat.nextEdits.hasEnabledNesInSettings';
-		const enableEnhancedNotebookNES = this._configurationService.getExperimentBasedConfig(ConfigKey.AdvancedExperimentalExperiments.UseAlternativeNESNotebookFormat, _experimentationService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, _experimentationService);
+		const enableEnhancedNotebookNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, _experimentationService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, _experimentationService);
 		const unificationState = unificationStateObservable(this);
 
 		commands.executeCommand('setContext', useEnhancedNotebookNESContextKey, enableEnhancedNotebookNES);

@@ -55,9 +55,9 @@ export class Delayer {
 	}
 
 	public createDelaySession(requestTime: number | undefined): DelaySession {
-		const baseDebounceTime = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounce, this._experimentationService);
+		const baseDebounceTime = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsDebounce, this._experimentationService);
 
-		const backoffDebounceEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsBackoffDebounceEnabled, this._experimentationService);
+		const backoffDebounceEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsBackoffDebounceEnabled, this._experimentationService);
 		const expectedTotalTime = backoffDebounceEnabled ? this._getExpectedTotalTime(baseDebounceTime) : undefined;
 
 		return new DelaySession(baseDebounceTime, expectedTotalTime, requestTime);

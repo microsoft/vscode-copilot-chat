@@ -43,17 +43,49 @@ export interface ITaskToolInput {
 	readonly prompt: string;
 }
 
+export interface IBashToolInput {
+	readonly command: string;
+}
+
+export interface IReadToolInput {
+	readonly file_path: string;
+}
+
+export interface IGlobToolInput {
+	readonly pattern: string;
+}
+
+export interface IGrepToolInput {
+	readonly pattern: string;
+}
+
+export interface ILSToolInput {
+	readonly path: string;
+}
+
+export interface IEditToolInput {
+	readonly file_path: string;
+}
+
+export interface IWriteToolInput {
+	readonly file_path: string;
+}
+
+export interface INotebookEditToolInput {
+	readonly notebook_path: string;
+}
+
 export const claudeEditTools: readonly string[] = [ClaudeToolNames.Edit, ClaudeToolNames.MultiEdit, ClaudeToolNames.Write, ClaudeToolNames.NotebookEdit];
 
 export function getAffectedUrisForEditTool(input: PreToolUseHookInput): URI[] {
 	switch (input.tool_name) {
 		case ClaudeToolNames.Edit:
 		case ClaudeToolNames.MultiEdit:
-			return [URI.file((input.tool_input as any).file_path)];
+			return [URI.file((input.tool_input as IEditToolInput).file_path)];
 		case ClaudeToolNames.Write:
-			return [URI.file((input.tool_input as any).file_path)];
+			return [URI.file((input.tool_input as IWriteToolInput).file_path)];
 		case ClaudeToolNames.NotebookEdit:
-			return [URI.file((input.tool_input as any).notebook_path)];
+			return [URI.file((input.tool_input as INotebookEditToolInput).notebook_path)];
 		default:
 			return [];
 	}

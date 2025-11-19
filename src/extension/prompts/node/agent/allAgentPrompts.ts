@@ -5,7 +5,10 @@
 
 import './anthropicPrompts';
 import './geminiPrompts';
-import './openAIPrompts';
+import './openai/gpt51Prompt';
+import './openai/gpt5Prompt';
+import './openai/gpt5CodexPrompt';
+import './openai/gpt51CodexPrompt';
+import './openai/defaultOpenAIPrompt';
 import './vscModelPrompts';
 import './xAIPrompts';
-

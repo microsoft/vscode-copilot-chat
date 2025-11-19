@@ -18,6 +18,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { CopilotCloudGitOperationsManager } from './copilotCloudGitOperationsManager';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
@@ -149,6 +151,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private cachedSessionsSize: number = 0;
 	private readonly plainTextRenderer = new PlainTextRenderer();
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService);
+	private readonly _summarizer: ChatSummarizerProvider;
 
 	constructor(
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
@@ -160,8 +163,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
+		this._summarizer = instantiationService.createInstance(ChatSummarizerProvider);
 		const interval = setInterval(async () => {
 			const repoId = await getRepoId(this._gitService);
 			if (repoId) {
@@ -642,10 +647,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 							stream.markdown(vscode.l10n.t('Cloud agent request cancelled.'));
 							return {};
 						}
-						if (!await this.tryHandleUncommittedChanges(data.metadata, stream, token)) {
+						if (!await this.tryHandleUncommittedChanges({ ...data.metadata, chatContext: context }, stream, token)) {
 							// We are NOT handling an uncommitted changes case, so no confirmation was pushed.
 							// This means we (the caller) should continue processing the request.
-							await this.createDelegatedChatSession(data.metadata, stream, token);
+							await this.createDelegatedChatSession({ ...data.metadata, chatContext: context }, stream, token);
 						}
 						break;
 					}
@@ -657,9 +662,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						}
 
 						if (data.metadata.chatContext?.chatSessionContext?.isUntitled) {
-							await this.doUntitledCreation(data.metadata, stream, token);
+							await this.doUntitledCreation({ ...data.metadata, chatContext: context }, stream, token);
 						} else {
-							await this.createDelegatedChatSession(data.metadata, stream, token);
+							await this.createDelegatedChatSession({ ...data.metadata, chatContext: context }, stream, token);
 						}
 						break;
 					}
@@ -672,7 +677,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	async createDelegatedChatSession(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<PullRequestInfo | undefined> {
-		const { prompt, history, references } = metadata;
+		const { prompt, references } = metadata;
+		let history = metadata.history;
+		if (!history && metadata.chatContext?.history.length > 0) {
+			stream.progress(vscode.l10n.t('Analyzing chat history'));
+			history = await this._summarizer.provideChatSummary(metadata.chatContext, token);
+		}
 		const number = await this.startSession(stream, token, 'chat', prompt, history, references, undefined, metadata.autoPushAndCommit);
 		if (!number) {
 			return undefined;
@@ -795,7 +805,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			token,
 			'untitledChatSession',
 			metadata.prompt,
-			metadata.history,
+			undefined,
 			metadata.references,
 			selectedAgent,
 			metadata.autoPushAndCommit,
@@ -880,7 +890,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			await this.doUntitledCreation({
 				prompt: context.chatSummary?.prompt ?? request.prompt,
-				history: context.chatSummary?.history,
 				references: request.references,
 				chatContext: context,
 			}, stream, token);
@@ -955,7 +964,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					step: 'create',
 					metadata: {
 						prompt: context.chatSummary?.prompt ?? request.prompt,
-						history: context.chatSummary?.history,
 						references: request.references,
 						chatContext: context,
 					} satisfies ConfirmationMetadata

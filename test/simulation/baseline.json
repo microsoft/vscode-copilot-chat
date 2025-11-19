@@ -3856,9 +3856,9 @@
   {
     "name": "intent [inline] -  using jest and react testing library",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [inline] -  vitest",
@@ -3912,9 +3912,9 @@
   {
     "name": "intent [inline] - add comment",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "intent [inline] - add comment, describe function",
@@ -4045,16 +4045,16 @@
   {
     "name": "intent [inline] - call function generatexml on click of this button",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - call timedelta with timestr",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - can i just use inheritdoc here instead of a full comment?",
@@ -4136,9 +4136,9 @@
   {
     "name": "intent [inline] - comment this",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
   },
   {
     "name": "intent [inline] - convert",
@@ -4192,9 +4192,9 @@
   {
     "name": "intent [inline] - create a readme in markdown that lists things that nodeservice is responsible for vs not responsible…",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - create a storybook test for the workflowmanagerrow.tsx component and create tests for the different …",
@@ -4206,9 +4206,9 @@
   {
     "name": "intent [inline] - create a vscode launch task",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "intent [inline] - create an 2d arrary where like is line and port are the address for and data i need 2d array",
@@ -4318,9 +4318,9 @@
   {
     "name": "intent [inline] - documentation",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - does && take precedence over ||",
@@ -4332,9 +4332,9 @@
   {
     "name": "intent [inline] - does this code send request to wordeditorframe?",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [inline] - does this line call the command and return execution to the next line in this batch file?",
@@ -4360,9 +4360,9 @@
   {
     "name": "intent [inline] - exaplain this",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - exit zen mode",
@@ -4444,9 +4444,9 @@
   {
     "name": "intent [inline] - filter the supportedentities where isasset is true",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "intent [inline] - fix all the errors",
@@ -4605,16 +4605,16 @@
   {
     "name": "intent [inline] - get matched skill group from pd for each intent groups",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - get the name of the computer",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [inline] - help me continue generate the code for all column like 3 line above",
@@ -4661,9 +4661,9 @@
   {
     "name": "intent [inline] - how to set the labels to action buttons",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "intent [inline] - i dont want code. i just want the hardcoded value",
@@ -4717,9 +4717,9 @@
   {
     "name": "intent [inline] - insert table with three columns and four rows",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - invalid hooks call in this file",
@@ -4738,16 +4738,16 @@
   {
     "name": "intent [inline] - issue #1126: change to GDPR",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - issue #1126: expand comments",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - log to console",
@@ -4780,9 +4780,9 @@
   {
     "name": "intent [inline] - make this bold and add a new line",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - make this div abusolute to the parent div",
@@ -4801,9 +4801,9 @@
   {
     "name": "intent [inline] - metadata_df will always contain just 1 row, is there a more efficient way to create new_row?",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - mock getflights in tests",
@@ -4829,9 +4829,9 @@
   {
     "name": "intent [inline] - modify visual settings so that cameras render the true colors of all objects without any shading or …",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - open blade link",
@@ -4941,9 +4941,9 @@
   {
     "name": "intent [inline] - to create oxygen style documentation for entire file.",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - translate to spanish",
@@ -5032,9 +5032,9 @@
   {
     "name": "intent [inline] - what doest the -r tag do here",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - what is .viewmodel here",
@@ -5081,9 +5081,9 @@
   {
     "name": "intent [inline] - what is the meaning of this?",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - what is the native version of this view",
@@ -5102,9 +5102,9 @@
   {
     "name": "intent [inline] - what is this?",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - what mean by runtime in .net?",

@@ -87,7 +87,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 
 		const diagnostics = findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, document.uri, selection, query);
 
-		const enableCodeMapper = this.configurationService.getConfig(ConfigKey.Internal.InlineChatUseCodeMapper);
+		const enableCodeMapper = this.configurationService.getConfig(ConfigKey.TeamInternal.InlineChatUseCodeMapper);
 
 		const replyInterpreter = enableCodeMapper ?
 			this.instantiationService.createInstance(CodeMapperFixReplyInterpreter, document.uri) :
