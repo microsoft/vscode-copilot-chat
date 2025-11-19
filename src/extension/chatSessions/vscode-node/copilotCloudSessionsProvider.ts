@@ -758,13 +758,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return {};
 		}
 		const selectedAgent = this.sessionAgentMap.get(metadata.chatContext.chatSessionContext.chatSessionItem.resource);
-		const history = await this._summarizer.provideChatSummary(metadata.chatContext, token);
 		const number = await this.startSession(
 			stream,
 			token,
 			'untitledChatSession',
 			metadata.prompt,
-			history,
+			undefined,
 			metadata.references,
 			selectedAgent,
 		);
