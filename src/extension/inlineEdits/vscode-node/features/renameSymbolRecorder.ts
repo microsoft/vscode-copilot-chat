@@ -19,8 +19,20 @@ export class RenameSymbolRecorder implements IDisposable {
 			if (event.contentChanges.length === 0) {
 				return;
 			}
-			if (this.previousRenames.length > 32) {
-				this.previousRenames.shift();
+			if (event.detailedReason !== undefined && event.detailedReason.source === 'rename') {
+				if (this.previousRenames.length > 32) {
+					this.previousRenames.shift();
+				}
+				const oldName = event.detailedReason.metadata.$$$oldName;
+				const newName = event.detailedReason.metadata.$$$newName;
+				if (this.previousRenames.length === 0) {
+					this.previousRenames.push({ oldName, newName });
+				} else {
+					const lastRename = this.previousRenames[this.previousRenames.length - 1];
+					if (lastRename.oldName !== oldName || lastRename.newName !== newName) {
+						this.previousRenames.push({ oldName, newName });
+					}
+				}
 			}
 		});
 	}

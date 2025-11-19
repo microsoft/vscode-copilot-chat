@@ -298,7 +298,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			};
 
 			if (hasNonEmptyLlmNes) {
-				this.renameSymbolRecorder.proposeRenameRefactoring(document, position, nesCompletionItem);
+				await this.renameSymbolRecorder.proposeRenameRefactoring(document, position, nesCompletionItem);
 			}
 
 			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
