@@ -473,16 +473,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			stream.warning(vscode.l10n.t('You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them.'));
 		}
 
-		const history = await this.summarizer.provideChatSummary(context, token);
 		const prompt = request.prompt.substring('/delegate'.length).trim();
 		if (!await this.cloudSessionProvider.tryHandleUncommittedChanges({
 			prompt: prompt,
-			history: history,
 			chatContext: context
 		}, stream, token)) {
 			const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
 				prompt,
-				history,
 				chatContext: context
 			}, stream, token);
 			if (prInfo) {
@@ -513,7 +510,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession({
 			prompt: uncommittedChangesData.metadata.prompt,
-			history: uncommittedChangesData.metadata.history,
 			chatContext: context
 		}, stream, token);
 		if (prInfo) {
