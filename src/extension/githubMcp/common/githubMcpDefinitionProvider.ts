@@ -3,52 +3,80 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { McpHttpServerDefinition2, McpServerDefinitionProvider } from 'vscode';
-import { authProviderId, GITHUB_SCOPE_ALIGNED } from '../../../platform/authentication/common/authentication';
+import type { CancellationToken, McpHttpServerDefinition, McpServerDefinitionProvider } from 'vscode';
+import { authProviderId, IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { AuthProviderId, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { Event } from '../../../util/vs/base/common/event';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
 
 const EnterpriseURLConfig = 'github-enterprise.uri';
 
-export class GitHubMcpDefinitionProvider extends Disposable implements McpServerDefinitionProvider<McpHttpServerDefinition2> {
+export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<McpHttpServerDefinition> {
 
 	readonly onDidChangeMcpServerDefinitions: Event<void>;
-	private _version = 0;
 
 	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@ILogService private readonly logService: ILogService
 	) {
-		super();
-		this.onDidChangeMcpServerDefinitions = Event.chain(configurationService.onDidChangeConfiguration, $ => $
-			.filter(e =>
+		const configurationEvent = Event.chain(configurationService.onDidChangeConfiguration, $ => $
+			.filter(e => {
 				// If they change the toolsets
-				e.affectsConfiguration(ConfigKey.GitHubMcpToolsets.fullyQualifiedId) ||
+				if (e.affectsConfiguration(ConfigKey.GitHubMcpToolsets.fullyQualifiedId)) {
+					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub MCP toolsets.');
+					return true;
+				}
 				// If they change to GHE or GitHub.com
-				e.affectsConfiguration(ConfigKey.Shared.AuthProvider.fullyQualifiedId) ||
+				if (e.affectsConfiguration(ConfigKey.Shared.AuthProvider.fullyQualifiedId)) {
+					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub auth provider.');
+					return true;
+				}
 				// If they change the GHE URL
-				e.affectsConfiguration(EnterpriseURLConfig)
-			)
+				if (e.affectsConfiguration(EnterpriseURLConfig)) {
+					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub Enterprise URL.');
+					return true;
+				}
+				return false;
+			})
 			// void event
 			.map(() => { })
 		);
+		let havePermissiveToken = !!this.authenticationService.permissiveGitHubSession;
+		const authEvent = Event.chain(this.authenticationService.onDidAuthenticationChange, $ => $
+			.filter(() => {
+				const hadToken = havePermissiveToken;
+				havePermissiveToken = !!this.authenticationService.permissiveGitHubSession;
+				return hadToken !== havePermissiveToken;
+			})
+			.map(() =>
+				this.logService.debug(`GitHubMcpDefinitionProvider: Permissive GitHub session availability changed: ${havePermissiveToken}`))
+		);
+		this.onDidChangeMcpServerDefinitions = Event.any(configurationEvent, authEvent);
 	}
 
 	private get toolsets(): string[] {
 		return this.configurationService.getConfig<string[]>(ConfigKey.GitHubMcpToolsets);
 	}
 
+	private get gheConfig(): string | undefined {
+		return this.configurationService.getNonExtensionConfig<string>(EnterpriseURLConfig);
+	}
+
 	private getGheUri(): URI {
-		const uri = this.configurationService.getNonExtensionConfig<string>(EnterpriseURLConfig);
+		const uri = this.gheConfig;
 		if (!uri) {
 			throw new Error('GitHub Enterprise URI is not configured.');
 		}
-		return URI.parse(uri).with({ path: '/mcp/' });
+		// Prefix with 'copilot-api.'
+		const url = URI.parse(uri).with({ path: '/mcp/' });
+		return url.with({ authority: `copilot-api.${url.authority}` });
 	}
 
-	provideMcpServerDefinitions(): McpHttpServerDefinition2[] {
+	provideMcpServerDefinitions(): McpHttpServerDefinition[] {
 		const providerId = authProviderId(this.configurationService);
+		const toolsets = this.toolsets.sort().join(',');
 		const basics = providerId === AuthProviderId.GitHubEnterprise
 			? { label: 'GitHub Enterprise', uri: this.getGheUri() }
 			: { label: 'GitHub', uri: URI.parse('https://api.githubcopilot.com/mcp/') };
@@ -56,14 +84,19 @@ export class GitHubMcpDefinitionProvider extends Disposable implements McpServer
 			{
 				...basics,
 				headers: {
-					'X-MCP-Toolsets': this.toolsets.join(',')
+					'X-MCP-Toolsets': toolsets
 				},
-				version: `1.${this._version++}`,
-				authentication: {
-					providerId,
-					scopes: GITHUB_SCOPE_ALIGNED
-				}
+				version: toolsets
 			}
 		];
+	}
+
+	resolveMcpServerDefinition(server: McpHttpServerDefinition, token: CancellationToken): McpHttpServerDefinition | undefined {
+		if (!this.authenticationService.permissiveGitHubSession) {
+			this.logService.trace('GitHubMcpDefinitionProvider: No permissive GitHub session available to resolve MCP server definition.');
+			return undefined;
+		}
+		server.headers['Authorization'] = `Bearer ${this.authenticationService.permissiveGitHubSession.accessToken}`;
+		return server;
 	}
 }

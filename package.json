@@ -107,7 +107,6 @@
 		"terminalSelection",
 		"terminalQuickFixProvider",
 		"mappedEditsProvider",
-		"mcpToolDefinitions",
 		"aiRelatedInformation",
 		"aiSettingsSearch",
 		"chatParticipantAdditions",

@@ -3,21 +3,70 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { GITHUB_SCOPE_ALIGNED } from '../../../../platform/authentication/common/authentication';
+import { beforeEach, describe, expect, test } from 'vitest';
+import type { AuthenticationGetSessionOptions, AuthenticationSession } from 'vscode';
+import { BaseAuthenticationService, IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
+import { ICopilotTokenManager } from '../../../../platform/authentication/common/copilotTokenManager';
+import { CopilotTokenStore, ICopilotTokenStore } from '../../../../platform/authentication/common/copilotTokenStore';
+import { SimulationTestCopilotTokenManager } from '../../../../platform/authentication/test/node/simulationTestCopilotTokenManager';
 import { AuthProviderId, ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
+import { ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
 import { TestingServiceCollection } from '../../../../platform/test/node/services';
 import { raceTimeout } from '../../../../util/vs/base/common/async';
-import { Event } from '../../../../util/vs/base/common/event';
-import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
+import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { GitHubMcpDefinitionProvider } from '../../common/githubMcpDefinitionProvider';
 
+/**
+ * Test implementation of authentication service that allows setting sessions dynamically
+ */
+class TestAuthenticationService extends BaseAuthenticationService {
+	private readonly _onDidChange = new Emitter<void>();
+
+	constructor(
+		@ILogService logService: ILogService,
+		@ICopilotTokenStore tokenStore: ICopilotTokenStore,
+		@ICopilotTokenManager tokenManager: ICopilotTokenManager,
+		@IConfigurationService configurationService: IConfigurationService
+	) {
+		super(logService, tokenStore, tokenManager, configurationService);
+		this._register(this._onDidChange);
+	}
+
+	setPermissiveGitHubSession(session: AuthenticationSession | undefined): void {
+		this._permissiveGitHubSession = session;
+		this._onDidAuthenticationChange.fire();
+	}
+
+	getAnyGitHubSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+		return Promise.resolve(this._anyGitHubSession);
+	}
+
+	getPermissiveGitHubSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+		return Promise.resolve(this._permissiveGitHubSession);
+	}
+
+	override getAnyAdoSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+		return Promise.resolve(undefined);
+	}
+
+	override getAdoAccessTokenBase64(_options?: AuthenticationGetSessionOptions): Promise<string | undefined> {
+		return Promise.resolve(undefined);
+	}
+
+	override async getCopilotToken(_force?: boolean): Promise<CopilotToken> {
+		return await super.getCopilotToken(_force);
+	}
+}
+
 describe('GitHubMcpDefinitionProvider', () => {
-	let disposables: DisposableStore;
-	let provider: GitHubMcpDefinitionProvider;
 	let configService: InMemoryConfigurationService;
+	let authService: TestAuthenticationService;
+	let provider: GitHubMcpDefinitionProvider;
 
 	/**
 	 * Helper to create a provider with specific configuration values.
@@ -26,9 +75,10 @@ describe('GitHubMcpDefinitionProvider', () => {
 		authProvider?: AuthProviderId;
 		gheUri?: string;
 		toolsets?: string[];
+		hasPermissiveToken?: boolean;
 	}): Promise<GitHubMcpDefinitionProvider> {
 		const serviceCollection = new TestingServiceCollection();
-		configService = disposables.add(new InMemoryConfigurationService(new DefaultsOnlyConfigurationService()));
+		configService = new InMemoryConfigurationService(new DefaultsOnlyConfigurationService());
 
 		// Set configuration values before creating the provider
 		if (configOverrides?.authProvider) {
@@ -42,19 +92,27 @@ describe('GitHubMcpDefinitionProvider', () => {
 		}
 
 		serviceCollection.define(IConfigurationService, configService);
+		serviceCollection.define(ICopilotTokenStore, new SyncDescriptor(CopilotTokenStore));
+		serviceCollection.define(ICopilotTokenManager, new SyncDescriptor(SimulationTestCopilotTokenManager));
+		serviceCollection.define(IAuthenticationService, new SyncDescriptor(TestAuthenticationService));
+		serviceCollection.define(ILogService, new LogServiceImpl([]));
 		const accessor = serviceCollection.createTestingAccessor();
-		return disposables.add(new GitHubMcpDefinitionProvider(
-			accessor.get(IConfigurationService)
-		));
+
+		// Get the auth service and set up permissive token if needed
+		authService = accessor.get(IAuthenticationService) as TestAuthenticationService;
+		if (configOverrides?.hasPermissiveToken !== false) {
+			authService.setPermissiveGitHubSession({ accessToken: 'test-token', id: 'test-id', account: { id: 'test-account', label: 'test' }, scopes: [] });
+		}
+
+		return new GitHubMcpDefinitionProvider(
+			accessor.get(IConfigurationService),
+			accessor.get(IAuthenticationService),
+			accessor.get(ILogService)
+		);
 	}
 
 	beforeEach(async () => {
-		disposables = new DisposableStore();
 		provider = await createProvider();
-	});
-
-	afterEach(() => {
-		disposables.dispose();
 	});
 
 	describe('provideMcpServerDefinitions', () => {
@@ -64,8 +122,6 @@ describe('GitHubMcpDefinitionProvider', () => {
 			expect(definitions).toHaveLength(1);
 			expect(definitions[0].label).toBe('GitHub');
 			expect(definitions[0].uri.toString()).toBe('https://api.githubcopilot.com/mcp/');
-			expect(definitions[0].authentication?.providerId).toBe(AuthProviderId.GitHub);
-			expect(definitions[0].authentication?.scopes).toBe(GITHUB_SCOPE_ALIGNED);
 		});
 
 		test('returns GitHub Enterprise configuration when auth provider is set to GHE', async () => {
@@ -79,10 +135,8 @@ describe('GitHubMcpDefinitionProvider', () => {
 
 			expect(definitions).toHaveLength(1);
 			expect(definitions[0].label).toBe('GitHub Enterprise');
-			// URI.parse adds a trailing slash to bare domain URIs
-			expect(definitions[0].uri.toString()).toBe(gheUri + '/mcp/');
-			expect(definitions[0].authentication?.providerId).toBe(AuthProviderId.GitHubEnterprise);
-			expect(definitions[0].authentication?.scopes).toBe(GITHUB_SCOPE_ALIGNED);
+			// Should include the copilot-api. prefix
+			expect(definitions[0].uri.toString()).toBe('https://copilot-api.github.enterprise.com/mcp/');
 		});
 
 		test('includes configured toolsets in headers', async () => {
@@ -102,14 +156,12 @@ describe('GitHubMcpDefinitionProvider', () => {
 			expect(definitions[0].headers['X-MCP-Toolsets']).toBe('');
 		});
 
-		test('increments version on each call', () => {
-			const def1 = provider.provideMcpServerDefinitions();
-			const def2 = provider.provideMcpServerDefinitions();
-			const def3 = provider.provideMcpServerDefinitions();
-
-			expect(def1[0].version).toBe('1.0');
-			expect(def2[0].version).toBe('1.1');
-			expect(def3[0].version).toBe('1.2');
+		test('version is the sorted toolset string', async () => {
+			const toolsets = ['pull_requests', 'code_search', 'issues'];
+			const providerWithToolsets = await createProvider({ toolsets });
+			const definitions = providerWithToolsets.provideMcpServerDefinitions();
+			// Sorted toolsets string
+			expect(definitions[0].version).toBe('code_search,issues,pull_requests');
 		});
 
 		test('throws when GHE is configured but URI is missing', async () => {
@@ -152,28 +204,79 @@ describe('GitHubMcpDefinitionProvider', () => {
 
 		test('does not fire for unrelated configuration changes', async () => {
 			let eventFired = false;
-			disposables.add(provider.onDidChangeMcpServerDefinitions(() => {
+			const handler = () => {
 				eventFired = true;
-			}));
+			};
+			const disposable = provider.onDidChangeMcpServerDefinitions(handler);
 
 			await configService.setNonExtensionConfig('some.unrelated.config', 'value');
 
-			const eventPromise = new Promise<void>(resolve => {
-				disposables.add(provider.onDidChangeMcpServerDefinitions(() => resolve()));
-			});
-			const result = await raceTimeout(eventPromise, 50);
+			await raceTimeout(Promise.resolve(), 50);
 
-			expect(result).toBeUndefined();
 			expect(eventFired).toBe(false);
+			disposable.dispose();
 		});
 	});
 
 	describe('edge cases', () => {
 		test('uses default toolsets value when not configured', () => {
 			const definitions = provider.provideMcpServerDefinitions();
-
 			expect(definitions).toHaveLength(1);
 			expect(definitions[0].headers['X-MCP-Toolsets']).toBe('default');
+			expect(definitions[0].version).toBe('default');
+		});
+	});
+
+	describe('resolveMcpServerDefinition', () => {
+		test('adds authorization header when permissive token is available', () => {
+			const definitions = provider.provideMcpServerDefinitions();
+			const resolved = provider.resolveMcpServerDefinition(definitions[0], CancellationToken.None);
+
+			expect(resolved).toBeDefined();
+			expect(resolved!.headers['Authorization']).toBe('Bearer test-token');
+		});
+
+		test('returns undefined when no permissive token is available', async () => {
+			const providerWithoutToken = await createProvider({ hasPermissiveToken: false });
+			const definitions = providerWithoutToken.provideMcpServerDefinitions();
+			const resolved = providerWithoutToken.resolveMcpServerDefinition(definitions[0], CancellationToken.None);
+
+			expect(resolved).toBeUndefined();
+		});
+	});
+
+	describe('authentication change events', () => {
+		test('fires onDidChangeMcpServerDefinitions when token becomes available', async () => {
+			const providerWithoutToken = await createProvider({ hasPermissiveToken: false });
+			const eventPromise = Event.toPromise(providerWithoutToken.onDidChangeMcpServerDefinitions);
+
+			authService.setPermissiveGitHubSession({ accessToken: 'new-token', id: 'new-id', account: { id: 'new-account', label: 'new' }, scopes: [] });
+
+			await eventPromise;
+		});
+
+		test('fires onDidChangeMcpServerDefinitions when token is removed', async () => {
+			const eventPromise = Event.toPromise(provider.onDidChangeMcpServerDefinitions);
+
+			authService.setPermissiveGitHubSession(undefined);
+
+			await eventPromise;
+		});
+
+		test('does not fire when token changes but availability remains the same', async () => {
+			let eventFired = false;
+			const handler = () => {
+				eventFired = true;
+			};
+			const disposable = provider.onDidChangeMcpServerDefinitions(handler);
+
+			// Change the token value but keep it defined
+			authService.setPermissiveGitHubSession({ accessToken: 'different-token', id: 'different-id', account: { id: 'different-account', label: 'different' }, scopes: [] });
+
+			await raceTimeout(Promise.resolve(), 50);
+
+			expect(eventFired).toBe(false);
+			disposable.dispose();
 		});
 	});
 });

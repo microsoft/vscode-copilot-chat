@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { lm } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { GitHubMcpDefinitionProvider } from '../common/githubMcpDefinitionProvider';
@@ -16,11 +18,13 @@ export class GitHubMcpContrib extends Disposable {
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@ILogService private readonly logService: ILogService
 	) {
 		super();
 		this._registerConfigurationListener();
 		if (this.enabled) {
-			this._registerGitHubMcpDefinitionProvider();
+			void this._registerGitHubMcpDefinitionProvider();
 		}
 	}
 
@@ -28,7 +32,7 @@ export class GitHubMcpContrib extends Disposable {
 		this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.GitHubMcpEnabled.fullyQualifiedId)) {
 				if (this.enabled) {
-					this._registerGitHubMcpDefinitionProvider();
+					void this._registerGitHubMcpDefinitionProvider();
 				} else {
 					this.disposable?.dispose();
 					this.disposable = undefined;
@@ -38,10 +42,10 @@ export class GitHubMcpContrib extends Disposable {
 		});
 	}
 
-	private _registerGitHubMcpDefinitionProvider() {
+	private async _registerGitHubMcpDefinitionProvider() {
 		if (!this.definitionProvider) {
 			// Register the GitHub MCP Definition Provider
-			this.definitionProvider = new GitHubMcpDefinitionProvider(this.configurationService);
+			this.definitionProvider = new GitHubMcpDefinitionProvider(this.configurationService, this.authenticationService, this.logService);
 			this.disposable = lm.registerMcpServerDefinitionProvider('github', this.definitionProvider);
 		}
 	}
