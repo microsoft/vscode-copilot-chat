@@ -4,8 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { expect, suite, test } from 'vitest';
+import { NullEnvService } from '../../../../platform/env/common/nullEnvService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { FileType } from '../../../../platform/filesystem/common/fileTypes';
+import { NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { Location, Position, Range } from '../../../../vscodeTypes';
 import { LinkifyLocationAnchor } from '../../common/linkifiedText';
+import { LinkifyService } from '../../common/linkifyService';
+import { ModelFilePathLinkifier } from '../../common/modelFilePathLinkifier';
 import { assertPartsEqual, createTestLinkifierService, linkify, workspaceFile } from './util';
 
 suite('Model File Path Linkifier', () => {
@@ -108,5 +116,70 @@ suite('Model File Path Linkifier', () => {
 		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(19, 0), new Position(24, 0))));
 		expect(anchor.title).toBe('src/file.ts#L20-L25');
 		assertPartsEqual([anchor], [expected]);
+	});
+});
+
+suite('Model File Path Linkifier Remote Workspace', () => {
+	function createRemoteService(root: URI, files: readonly URI[]): LinkifyService {
+		class MockFs implements IFileSystemService {
+			readonly _serviceBrand: undefined;
+			async stat(resource: URI) {
+				if (resource.toString() === root.toString()) {
+					return { ctime: 0, mtime: 0, size: 0, type: FileType.Directory };
+				}
+				const found = files.find(f => f.toString() === resource.toString());
+				if (!found) {
+					throw new Error('File not found: ' + resource.toString());
+				}
+				return { ctime: 0, mtime: 0, size: 0, type: found.path.endsWith('/') ? FileType.Directory : FileType.File };
+			}
+			readDirectory(): Promise<[string, FileType][]> { throw new Error('Not implemented'); }
+			createDirectory(): Promise<void> { throw new Error('Not implemented'); }
+			readFile(): Promise<Uint8Array> { throw new Error('Not implemented'); }
+			writeFile(): Promise<void> { throw new Error('Not implemented'); }
+			delete(): Promise<void> { throw new Error('Not implemented'); }
+			rename(): Promise<void> { throw new Error('Not implemented'); }
+			copy(): Promise<void> { throw new Error('Not implemented'); }
+			isWritableFileSystem(): boolean | undefined { return true; }
+			createFileSystemWatcher(): any { throw new Error('Not implemented'); }
+		}
+		const fs = new MockFs();
+		const workspaceService = new NullWorkspaceService([root]);
+		const service = new LinkifyService(fs, workspaceService, NullEnvService.Instance);
+		service.registerGlobalLinkifier({ create: () => new ModelFilePathLinkifier(fs, workspaceService) });
+		return service;
+	}
+
+	async function remoteLinkify(service: LinkifyService, text: string) {
+		const linkifier = service.createLinkifier({ requestId: undefined, references: [] }, []);
+		const initial = await linkifier.append(text, CancellationToken.None);
+		const flushed = await linkifier.flush(CancellationToken.None);
+		return flushed ? [...initial.parts, ...flushed.parts] : initial.parts;
+	}
+
+	const remoteRoot = URI.from({ scheme: 'test', authority: 'auth', path: '/home/user/project' });
+	const remoteFile = URI.from({ scheme: 'test', authority: 'auth', path: '/home/user/project/src/remote.ts' });
+
+	test('Should map absolute remote path preserving scheme', async () => {
+		const service = createRemoteService(remoteRoot, [remoteFile]);
+		const parts = await remoteLinkify(service, '[/home/user/project/src/remote.ts](/home/user/project/src/remote.ts)');
+		expect(parts.length).toBe(1);
+		const anchor = parts[0] as LinkifyLocationAnchor;
+		expect(anchor.value.toString()).toBe(remoteFile.toString());
+		expect(anchor.title).toBe('src/remote.ts');
+	});
+
+	test('Should parse line range anchor on remote absolute path', async () => {
+		const service = createRemoteService(remoteRoot, [remoteFile]);
+		const parts = await remoteLinkify(service, '[/home/user/project/src/remote.ts](/home/user/project/src/remote.ts#L3-5)');
+		expect(parts.length).toBe(1);
+		const anchor = parts[0] as LinkifyLocationAnchor;
+		// Anchor value is a Location when an anchor is present.
+		const location = anchor.value as Location;
+		expect(location.uri.toString()).toBe(remoteFile.toString());
+		const range = location.range;
+		expect(range.start.line).toBe(2);
+		expect(range.end.line).toBe(4);
+		expect(anchor.title).toBe('src/remote.ts#L3-L5');
 	});
 });

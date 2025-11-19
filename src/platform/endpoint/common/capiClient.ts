@@ -18,14 +18,12 @@ export interface ICAPIClientService extends CAPIClient {
 
 export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIClientService {
 	readonly _serviceBrand: undefined;
-	readonly integrationId: string | undefined;
 
 	constructor(
 		hmac: string | undefined,
 		integrationId: string | undefined,
 		fetcherService: IFetcherService,
-		envService: IEnvService,
-		forceDevMode?: boolean
+		envService: IEnvService
 	) {
 		super({
 			machineId: envService.machineId,
@@ -34,8 +32,7 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 			buildType: envService.getBuildType(),
 			name: envService.getName(),
 			version: envService.getVersion(),
-		}, LICENSE_AGREEMENT, fetcherService, hmac, forceDevMode);
-		this.integrationId = integrationId;
+		}, LICENSE_AGREEMENT, fetcherService, hmac, integrationId);
 	}
 }
 export const ICAPIClientService = createServiceIdentifier<ICAPIClientService>('ICAPIClientService');

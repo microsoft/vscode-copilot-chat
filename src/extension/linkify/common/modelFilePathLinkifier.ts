@@ -7,6 +7,7 @@ import { IFileSystemService } from '../../../platform/filesystem/common/fileSyst
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { normalizePath as normalizeUriPath } from '../../../util/vs/base/common/resources';
 import { Location, Position, Range, Uri } from '../../../vscodeTypes';
 import { coalesceParts, LinkifiedPart, LinkifiedText, LinkifyLocationAnchor } from './linkifiedText';
 import { IContributedLinkifier, LinkifierContext } from './linkifyService';
@@ -46,7 +47,7 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 			}
 
 			// Push promise to resolve in parallel with other matches
-			parts.push(this.resolveTarget(parsed.targetPath, workspaceFolders, parsed.preserveDirectorySlash).then(resolved => {
+			parts.push(this.resolveTarget(parsed.targetPath, workspaceFolders, parsed.preserveDirectorySlash, token).then(resolved => {
 				if (!resolved) {
 					return original;
 				}
@@ -129,31 +130,59 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 		return Boolean(workspaceFolders.length) && (textMatchesBase || textIsFilename || descriptiveWithAnchor);
 	}
 
-	private async resolveTarget(targetPath: string, workspaceFolders: readonly Uri[], preserveDirectorySlash: boolean): Promise<Uri | undefined> {
+	private async resolveTarget(targetPath: string, workspaceFolders: readonly Uri[], preserveDirectorySlash: boolean, token: CancellationToken): Promise<Uri | undefined> {
 		if (!workspaceFolders.length) {
 			return undefined;
 		}
 
-		const folderUris = workspaceFolders.map(folder => this.toVsUri(folder));
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
 
 		if (this.isAbsolutePath(targetPath)) {
-			const absoluteUri = this.tryCreateFileUri(targetPath);
-			if (!absoluteUri) {
-				return undefined;
-			}
+			// Choose URI construction strategy based on workspace folder schemes.
+			// For local (file:) workspaces we keep using Uri.file; for remote schemes we attempt
+			// to project the absolute path into the remote scheme preserving the folder URI's authority.
+			const normalizedAbs = targetPath.replace(/\\/g, '/');
 
-			for (const folderUri of folderUris) {
-				if (this.isEqualOrParentFs(absoluteUri, folderUri)) {
-					return this.tryStat(absoluteUri, preserveDirectorySlash);
+			for (const folderUri of workspaceFolders) {
+				if (token.isCancellationRequested) {
+					return undefined;
+				}
+				if (folderUri.scheme === 'file') {
+					const absoluteFileUri = this.tryCreateFileUri(targetPath);
+					if (!absoluteFileUri) {
+						continue;
+					}
+					if (this.isEqualOrParentFs(absoluteFileUri, folderUri)) {
+						const stat = await this.tryStat(absoluteFileUri, preserveDirectorySlash, token);
+						if (stat) {
+							return stat;
+						}
+					}
+					continue;
+				}
+
+				// Remote / virtual workspace: attempt to map the absolute path into the same scheme.
+				// Only consider it if the folder path is a prefix of the absolute path to avoid
+				// generating unrelated URIs.
+				const folderPath = folderUri.path.replace(/\\/g, '/');
+				const prefix = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+				if (normalizedAbs.startsWith(prefix)) {
+					const candidate = folderUri.with({ path: normalizedAbs });
+					const stat = await this.tryStat(candidate, preserveDirectorySlash, token);
+					if (stat) {
+						return stat;
+					}
 				}
 			}
 			return undefined;
 		}
 
 		const segments = targetPath.split('/').filter(Boolean);
-		for (const folderUri of folderUris) {
+		for (const folderUri of workspaceFolders) {
 			const candidate = Uri.joinPath(folderUri, ...segments);
-			const stat = await this.tryStat(candidate, preserveDirectorySlash);
+			const stat = await this.tryStat(candidate, preserveDirectorySlash, token);
 			if (stat) {
 				return stat;
 			}
@@ -170,29 +199,18 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 		}
 	}
 
-	private toVsUri(folder: Uri): Uri {
-		return Uri.parse(folder.toString());
-	}
 
 	private isEqualOrParentFs(target: Uri, folder: Uri): boolean {
-		const targetFs = this.normalizeFsPath(target);
-		const folderFs = this.normalizeFsPath(folder);
-		return targetFs === folderFs || targetFs.startsWith(folderFs.endsWith('/') ? folderFs : `${folderFs}/`);
-	}
-
-	private normalizeFsPath(resource: Uri): string {
-		// Convert Windows backslashes to forward slashes and remove duplicate separators for stable comparisons.
-		return resource.fsPath.replace(/\\/g, '/').replace(/\/+/g, '/').toLowerCase();
+		const targetPath = normalizeUriPath(target).path;
+		const folderPath = normalizeUriPath(folder).path;
+		return targetPath === folderPath || targetPath.startsWith(folderPath.endsWith('/') ? folderPath : `${folderPath}/`);
 	}
 
 	private parseAnchor(anchor: string | undefined): { readonly range: Range; readonly startLine: string; readonly endLine: string | undefined } | undefined {
-		// Ensure the anchor follows the #L123, #L123-456, or #L123-L456 format before parsing it.
-		if (!anchor || !/^L\d+(?:-L?\d+)?$/.test(anchor)) {
+		// Parse supported anchor formats: L123, L123-456, L123-L456
+		if (!anchor) {
 			return undefined;
 		}
-
-		// Capture the start (and optional end) line numbers from the anchor.
-		// Support both L123-456 and L123-L456 formats
 		const match = /^L(\d+)(?:-L?(\d+))?$/.exec(anchor);
 		if (!match) {
 			return undefined;
@@ -219,7 +237,10 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 		return /^[a-z]:/i.test(path) || path.startsWith('/');
 	}
 
-	private async tryStat(uri: Uri, preserveDirectorySlash: boolean): Promise<Uri | undefined> {
+	private async tryStat(uri: Uri, preserveDirectorySlash: boolean, token: CancellationToken): Promise<Uri | undefined> {
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
 		try {
 			const stat = await this.fileSystem.stat(uri);
 			if (stat.type === FileType.Directory) {
