@@ -6,7 +6,6 @@
 import * as vscode from 'vscode';
 import { IDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { renameSymbolCommandId } from '../../common/renameSymbol';
-import { NextEditResult } from '../../node/nextEditResult';
 
 export class RenameSymbolRecorder implements IDisposable {
 
@@ -30,15 +29,24 @@ export class RenameSymbolRecorder implements IDisposable {
 		this.changeListener.dispose();
 	}
 
-	public proposeRenameRefactoring(document: vscode.TextDocument, position: vscode.Position, result: NextEditResult): void {
-		if (result.result === undefined) {
+	public proposeRenameRefactoring(document: vscode.TextDocument, position: vscode.Position, completionItem: vscode.InlineCompletionItem): void {
+		const wordRange = document.getWordRangeAtPosition(position);
+		if (wordRange === undefined) {
 			return;
 		}
+		const oldName = document.getText(wordRange);
+		const range = completionItem.range;
+		if (range === undefined || range.start.line !== range.end.line) {
+			return;
+		}
+		const line = document.lineAt(range.start.line);
+		const newName = line.text.substring(range.start.character, range.end.character);
+
 		const command: vscode.Command = {
 			command: renameSymbolCommandId,
-			title: `Rename A to B`,
+			title: `Rename ${oldName} to ${newName}`,
 			arguments: []
 		};
-		result.result.action = command;
+		completionItem.command = command;
 	}
 }

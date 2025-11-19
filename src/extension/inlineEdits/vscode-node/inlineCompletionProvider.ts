@@ -192,10 +192,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			const hasCompletionAtCursor = completionAtCursor && completionAtCursor.result !== undefined;
 			const hasNonEmptyLlmNes = providerSuggestion && providerSuggestion.result !== undefined;
 
-			if (hasNonEmptyLlmNes) {
-				this.renameSymbolRecorder.proposeRenameRefactoring(document, position, providerSuggestion);
-			}
-
 			const shouldGiveMoreTimeToDiagnostics = !hasCompletionAtCursor && !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider;
 
 			if (shouldGiveMoreTimeToDiagnostics) {
@@ -300,6 +296,10 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				showInlineEditMenu: !serveAsCompletionsProvider,
 				wasShown: false
 			};
+
+			if (hasNonEmptyLlmNes) {
+				this.renameSymbolRecorder.proposeRenameRefactoring(document, position, nesCompletionItem);
+			}
 
 			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
 		} catch (e) {
