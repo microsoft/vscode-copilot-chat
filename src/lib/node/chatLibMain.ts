@@ -157,6 +157,7 @@ export interface ILogTarget {
 
 export interface ITelemetrySender {
 	sendTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void;
+	sendEnhancedTelemetryEvent?(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void;
 }
 
 export interface INESProviderOptions {
@@ -506,7 +507,9 @@ class SimpleTelemetryService implements ITelemetryService {
 	}
 
 	sendEnhancedGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
-		return;
+		if (this._telemetrySender.sendEnhancedTelemetryEvent) {
+			this._telemetrySender.sendEnhancedTelemetryEvent(eventName, eventPropertiesToSimpleObject(properties), measurements);
+		}
 	}
 	sendEnhancedGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
 		return;
@@ -645,6 +648,12 @@ class UnwrappingTelemetrySender implements ITelemetrySender {
 
 	sendTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void {
 		this.sender.sendTelemetryEvent(this.normalizeEventName(eventName), properties, measurements);
+	}
+
+	sendEnhancedTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void {
+		if (this.sender.sendEnhancedTelemetryEvent) {
+			this.sender.sendEnhancedTelemetryEvent(this.normalizeEventName(eventName), properties, measurements);
+		}
 	}
 
 	private normalizeEventName(eventName: string): string {
