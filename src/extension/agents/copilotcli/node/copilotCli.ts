@@ -92,6 +92,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
 		this._availableModels = new Lazy<Promise<ChatSessionProviderOptionItem[]>>(() => this._getAvailableModels());
 	}
@@ -118,7 +119,8 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 
 	private async _getAvailableModels(): Promise<ChatSessionProviderOptionItem[]> {
 		const { getAvailableModels } = await this.copilotCLISDK.getPackage();
-		const models = await getAvailableModels();
+		const authInfo = await getAuthInfo(this.authenticationService);
+		const models = await getAvailableModels(authInfo);
 		return models.map(model => ({
 			id: model.model,
 			name: model.label
