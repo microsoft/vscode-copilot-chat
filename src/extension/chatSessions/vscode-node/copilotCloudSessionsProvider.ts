@@ -1404,7 +1404,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				};
 			}
 			try {
-				chatStream?.progress(vscode.l10n.t('Waiting for local changes'));
+				chatStream?.progress(vscode.l10n.t('Committing and pushing local changes'));
 				head_ref = await this.gitOperationsManager.commitAndPushChanges({ repository: repo, remoteName, baseRef: base_ref });
 			} catch (error) {
 				return {
