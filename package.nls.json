@@ -234,7 +234,6 @@
 	"github.copilot.submenu.reviewComment.discardAndNext.label": "Discard and Go to Next",
 	"github.copilot.submenu.reviewComment.discard.label": "Discard",
 	"github.copilot.config.useProjectTemplates": "Use relevant GitHub projects as starter projects when using `/new`",
-	"github.copilot.config.agent.delegate.autoCommitAndPush": "When enabled, Copilot will automatically commit and push your pending changes before delegating work to the cloud agent.",
 	"github.copilot.chat.attachFile": "Add File to Chat",
 	"github.copilot.chat.attachSelection": "Add Selection to Chat",
 	"github.copilot.command.collectDiagnostics": "Chat Diagnostics",

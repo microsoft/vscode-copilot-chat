@@ -71,7 +71,6 @@ class FakeGitService extends mock<IGitService>() {
 
 // Cloud provider fake for delegate scenario
 class FakeCloudProvider extends mock<CopilotCloudSessionsProvider>() {
-	override tryHandleUncommittedChanges = vi.fn(async () => false);
 	override createDelegatedChatSession = vi.fn(async () => ({ uri: 'pr://1', title: 'PR Title', description: 'Desc', author: 'Me', linkTag: 'tag' })) as unknown as CopilotCloudSessionsProvider['createDelegatedChatSession'];
 }
 
@@ -230,6 +229,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = createChatContext(sessionId, false);
 		const stream = new MockChatResponseStream();
+		const confirmationSpy = vi.spyOn(stream, 'confirmation');
 		const token = disposables.add(new CancellationTokenSource()).token;
 		expect(cliSessions.length).toBe(0);
 
@@ -238,17 +238,10 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].sessionId).toBe(sessionId);
 		expect(cliSessions[0].requests.length).toBe(0);
-		expect(sdkSession.emittedEvents.length).toBe(2);
-		expect(sdkSession.emittedEvents[0].event).toBe('user.message');
-		expect(sdkSession.emittedEvents[0].content).toBe('/delegate Build feature');
-		expect(sdkSession.emittedEvents[1].event).toBe('assistant.message');
-		expect(sdkSession.emittedEvents[1].content).toContain('pr://1');
-		// Uncommitted changes warning surfaced
-		// Warning should appear (we emitted stream.warning). The mock stream only records markdown.
-		// Delegate path adds assistant PR metadata; ensure output contains PR metadata tag instead of relying on warning capture.
-		expect(sdkSession.emittedEvents[1].content).toMatch(/<pr_metadata uri="pr:\/\/1"/);
-		expect(cloudProvider.tryHandleUncommittedChanges).toHaveBeenCalled();
-		expect(cloudProvider.createDelegatedChatSession).toHaveBeenCalled();
+		// Should stop at confirmation
+		expect(sdkSession.emittedEvents.length).toBe(0);
+		expect(confirmationSpy).toHaveBeenCalled();
+		expect(cloudProvider.createDelegatedChatSession).not.toHaveBeenCalled();
 	});
 
 	it('handles /delegate command for new session', async () => {
@@ -257,23 +250,16 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = createChatContext('existing-delegate', true);
 		const stream = new MockChatResponseStream();
+		const confirmationSpy = vi.spyOn(stream, 'confirmation');
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(manager.sessions.size).toBe(1);
 		const sdkSession = Array.from(manager.sessions.values())[0];
-		expect(cloudProvider.tryHandleUncommittedChanges).toHaveBeenCalled();
-		expect(cloudProvider.createDelegatedChatSession).toHaveBeenCalled();
-		// PR metadata recorded
-		expect(sdkSession.emittedEvents.length).toBe(2);
-		expect(sdkSession.emittedEvents[0].event).toBe('user.message');
-		expect(sdkSession.emittedEvents[0].content).toBe('/delegate Build feature');
-		expect(sdkSession.emittedEvents[1].event).toBe('assistant.message');
-		expect(sdkSession.emittedEvents[1].content).toContain('pr://1');
-		// Warning should appear (we emitted stream.warning). The mock stream only records markdown.
-		// Delegate path adds assistant PR metadata; ensure output contains PR metadata tag instead of relying on warning capture.
-		expect(sdkSession.emittedEvents[1].content).toMatch(/<pr_metadata uri="pr:\/\/1"/);
+		expect(confirmationSpy).toHaveBeenCalled();
+		expect(cloudProvider.createDelegatedChatSession).not.toHaveBeenCalled();
+		expect(sdkSession.emittedEvents.length).toBe(0);
 	});
 
 	it('invokes handlePushConfirmationData without existing chatSessionContext (summary via summarizer)', async () => {
@@ -336,7 +322,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(sdkSession.emittedEvents[1].event).toBe('assistant.message');
 		expect(sdkSession.emittedEvents[1].content).toContain('pr://2');
 		// Cloud provider used with provided metadata
-		expect(cloudProvider.createDelegatedChatSession).toHaveBeenCalledWith({ prompt: 'delegate work', chatContext: context }, expect.anything(), token);
+		expect(cloudProvider.createDelegatedChatSession).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'delegate work', chatContext: context, autoPushAndCommit: true }), expect.anything(), token);
 	});
 
 	it('handleConfirmationData cancels when uncommitted-changes rejected', async () => {

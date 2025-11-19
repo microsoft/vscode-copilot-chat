@@ -474,28 +474,41 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const currentRepository = this.gitService.activeRepository.get();
 		const hasChanges = (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0);
 
-		if (hasChanges) {
-			stream.warning(vscode.l10n.t('You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them.'));
-		}
-
 		const prompt = request.prompt.substring('/delegate'.length).trim();
-		if (!await this.cloudSessionProvider.tryHandleUncommittedChanges({
-			prompt: prompt,
-			chatContext: context
-		}, stream, token)) {
-			const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
-				prompt,
-				chatContext: context
-			}, stream, token);
-			if (prInfo) {
-				await this.recordPushToSession(session, request.prompt, prInfo);
-			}
+
+		if (hasChanges) {
+			const detailMessage = vscode.l10n.t('You have uncommitted changes. The agent will work asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
+			stream.confirmation(
+				vscode.l10n.t('Delegate to cloud agent'),
+				detailMessage,
+				{
+					step: UncommittedChangesStep,
+					metadata: {
+						prompt: prompt,
+						chatContext: context,
+					}
+				},
+				[vscode.l10n.t('Push changes'), vscode.l10n.t('Don\'t push'), vscode.l10n.t('Cancel')]
+			);
+		} else {
+			stream.confirmation(
+				vscode.l10n.t('Delegate to cloud agent'),
+				vscode.l10n.t('The agent will work asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.'),
+				{
+					step: UncommittedChangesStep,
+					metadata: {
+						prompt: prompt,
+						chatContext: context,
+					}
+				},
+				[vscode.l10n.t('Delegate')]
+			);
 		}
 	}
 
 	private getAcceptedRejectedConfirmationData(request: vscode.ChatRequest): ConfirmationResult[] {
 		const results: ConfirmationResult[] = [];
-		results.push(...(request.acceptedConfirmationData?.map(data => ({ step: data.step, accepted: true, metadata: data?.metadata })) ?? []));
+		results.push(...(request.acceptedConfirmationData?.map((data, index) => ({ step: data.step, accepted: true, metadata: data?.metadata, buttonIndex: index })) ?? []));
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
 
 		return results;
@@ -513,11 +526,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return {};
 		}
 
+		const autoPushAndCommit = uncommittedChangesData.buttonIndex === 0;
+
 		const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession({
 			prompt: uncommittedChangesData.metadata.prompt,
 			history: uncommittedChangesData.metadata.history,
 			references: uncommittedChangesData.metadata.references,
-			autoPushAndCommit: uncommittedChangesData.metadata.autoPushAndCommit,
+			autoPushAndCommit: autoPushAndCommit,
 			chatContext: context
 		}, stream, token);
 		if (prInfo) {
