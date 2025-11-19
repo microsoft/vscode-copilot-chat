@@ -668,7 +668,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	async createDelegatedChatSession(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<PullRequestInfo | undefined> {
 		const { prompt, references } = metadata;
-		const history = metadata.chatContext.history ? await this._summarizer.provideChatSummary(metadata.chatContext, token) : undefined;
+		let history: string | undefined = undefined;
+		if (metadata.chatContext?.history.length > 0) {
+			stream.progress(vscode.l10n.t('Analyzing chat history'));
+			history = await this._summarizer.provideChatSummary(metadata.chatContext, token);
+		}
 		const number = await this.startSession(stream, token, 'chat', prompt, history, references);
 		if (!number) {
 			return undefined;
