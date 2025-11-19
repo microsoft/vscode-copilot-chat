@@ -69,8 +69,8 @@ export type CacheInfo = {
 }
 export namespace CacheInfo {
 	export type has = { cache: CacheInfo };
-	export function has(item: any): item is has {
-		return item.cache !== undefined;
+	export function has(item: unknown): item is has {
+		return (item as has).cache !== undefined;
 	}
 }
 export type CachedContextItem = {
