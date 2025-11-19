@@ -2,61 +2,66 @@
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-28) field is never used",
 		"requests": [
-			"454bc822b215471d7b9556af5fa999f88817ecbc97331ff1b1e74e195acddec2",
-			"6ca392891afa89f4826d931b0d9f852f786b3447ac97072a0581cd1efc25a815",
-			"af14b4434c2148f435b6887270fc4e225c248eca18fb1cb78bb61e90a71f6545",
-			"cb45da5423e8e9b62cb29ce2be3c21b6014fd14922e7717086a37452598feb73",
-			"dd12bf375f8fc6f9c42cf1c571ad8e1f4928a677f172920e813e4419a067d1b2",
-			"e2a589cc15e3f220e1ab4ac96c8cf4a98f2232c4b010cdc66e70fe2816c6a1b2",
-			"fa89a7b4b11c36037aa0d090f4bb1b26013036de7ea254bee9fa1a78145604b7"
+			"180f601c0756a597532b448af1be573550f0d44c87c14a910b48fbd8a52b47a6",
+			"1deb172d197192d0390f2142a23cd5695b020e38e530853cb21897f269dacd97",
+			"2f7671ec5b7a1502bf4e799a14ba9523a3d5149527ba6783c67205b07cbe4506",
+			"404bf7037c282877a1600fdcb7829279f47f9d8734b6133fe0d8e534e2abcfd1",
+			"4d0ed3ae8bbb76154aea684483fc7f611fee52c8d5d62798db5af210562cb9ac",
+			"69ef0974c9d71883c6f0c8bc097a8220e23975905fd8adc8a20e38142ee7f286",
+			"76cebe09ca0536930827f669cc59771f0084bb633ac3751f75520b4beba76b12",
+			"b62ea07883ca50e9d1889179535722c0525fbd0735155d63f6e404c9d17bb61c",
+			"c92771e2f53f2d3322d4eb14db694f758b1c82774b3970d8352d3354cccf5fde",
+			"f4f4219460a92c1fcb5e665bd95a9e276a1fa8716e37576b679ae62cc3d192c6"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-57) call is not awaited, execution continues",
 		"requests": [
-			"9bfcd1c99a0abd103737e3d3a918102712c2f5da0cf27e758f57d132bcf79ea5"
+			"b5fe48e496d40e0bcbf92491ab1741f0339791986222a20714250ee29a892b8e"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-17-3523) has same name as",
 		"requests": [
-			"5cb6936a379da436ceb98e2d5ae6774e45f8d144186659bc39d9d0fb1693fbd6"
+			"ec44d28f8a09d530d958900b4d5d1e2a415fe543fff2e6569d3026af0b274d82"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - does not contain a definition",
 		"requests": [
-			"2109f61813630b089df80b1ac0eb0162c15a2b972b43f32b30e19fd12f717c2a",
+			"1f441af34530624d2d4d40a7f72fe3add52a0ff528bdec1b797c039c98431d08",
+			"4316806b3cdab957e9f5ff99beb34392c7732295e499430faeb3200709130a69",
 			"45f3d34d2d1032a34bb42b26f8271c8b50be2d1eb2b8411254014e6b56bb3d40",
-			"5e9b3115e40ce3471a27b43c75a130cff96e4925b9c1f66489fd9326de3382d7",
-			"a6216a5b85c25bdeed6263fa86f8cab5806352d6a51e6f3803de6400b8034b00"
+			"5ba11fdfa49c9ba0038bea4ce23e338281065a05561c5ac7e48caa3916a5d902"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - does not exist",
 		"requests": [
-			"5486a8c6de9eb5bb165671672f7498e30c2ff682ef8ebea97a5e78f9c937ab32"
+			"d6f4617735688d7a1ed7ef23292c96af11559686aa969b1dff340143f1867004"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - missing using directive",
 		"requests": [
-			"4daf6ece1de3114819e94b874d3812dae97dd5cbdfd688d3b1dd6da96822a3b8",
-			"51ed64dcc974a380a851f870f04ae7992837ff5f3db95b45237104c13653ac54",
-			"6545111d03ead47355c984ca7fc48c4c5fb8718d437c632d814b1d471bf98cbe",
-			"d2b4926fb00e6864c2fc6e5a004d64ec39281ae725fdfbd24bc0dbe68487267f"
+			"1a6c1e3785233c646ca5afbecadb71ab4291b52c22c13834f10356b39915dc4d",
+			"20789f386a791cfcc470ab3346c2dfe5762e82e64af067c942910451f13e7cbb",
+			"4487618f8e7743fc1dff916eb5da25b02ca2dcdcf9b7307cc254843aff92c002",
+			"83a6118a7d1a52981fdac629a1b5798ebec2ff12c8a29d4b5cec0a6750dc7595",
+			"b2e3b4b1350b4f8424a0c8074cadb5dfd565f6d5632ca8f52a0642e5e314bd1f",
+			"e302edb778d7a0d734503148ded3f082a1a9f668d9254f654c92391f6b6344a4"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - no argument given",
 		"requests": [
-			"afdb49bf9250c10ba4783c11bd76eba87b9c5d75e6c6452b67a0e59058cbbba4"
+			"5dfb0dced8da316487d3f8864e02108c31c725bcb0518589e7c5c79011a1004d"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - semi-colon expected",
 		"requests": [
-			"9113a5a21a298b3cc0a903cc3f32f8dbd6f5b07414163bc2b4e0f4595612874b"
+			"ec51b2c57056b38679eef3671a6de6afcd18fe20c01fa3984dbd28e78280c259"
 		]
 	}
 ]
