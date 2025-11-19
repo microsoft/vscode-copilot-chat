@@ -211,6 +211,9 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	async diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
+		if (!repository?.diffIndexWithHEADShortStats) {
+			return undefined;
+		}
 		return await repository?.diffIndexWithHEADShortStats();
 	}
 
@@ -224,6 +227,18 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
 		return repository?.getMergeBase(ref1, ref2);
+	}
+
+	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.createWorktree(options);
+	}
+
+	async deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.deleteWorktree(path, options);
 	}
 
 	async initialize(): Promise<void> {

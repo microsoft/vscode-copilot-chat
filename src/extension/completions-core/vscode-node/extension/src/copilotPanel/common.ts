@@ -6,7 +6,6 @@
 import { Range, commands, window, type Disposable } from 'vscode';
 import { DisposableStore, IDisposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, type ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../../lib/src/context';
 import { CopilotNamedAnnotationList } from '../../../lib/src/openai/stream';
 import * as constants from '../constants';
 import { registerCommand } from '../telemetry';
@@ -56,7 +55,7 @@ export function registerPanelSupport(accessor: ServicesAccessor): Disposable {
 function commandOpenPanel(accessor: ServicesAccessor, suggestionsPanelManager: CopilotSuggestionsPanelManager) {
 	const editor = window.activeTextEditor;
 	if (!editor) { return; }
-	const wrapped = wrapDoc(accessor.get(ICompletionsContextService), editor.document);
+	const wrapped = wrapDoc(editor.document);
 	if (!wrapped) { return; }
 
 	const { line, character } = editor.selection.active;

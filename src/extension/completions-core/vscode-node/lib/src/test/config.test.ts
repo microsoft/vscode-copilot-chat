@@ -32,7 +32,7 @@ suite('getConfigKeyRecursively', function () {
 
 suite('InMemoryConfigProvider', function () {
 	test('allows setting and getting config values', function () {
-		const configProvider = new InMemoryConfigProvider(new DefaultsOnlyConfigProvider(), new Map());
+		const configProvider = new InMemoryConfigProvider(new DefaultsOnlyConfigProvider());
 		configProvider.setConfig(ConfigKey.DebugOverrideEngine, 'test');
 		assert.strictEqual(configProvider.getConfig(ConfigKey.DebugOverrideEngine), 'test');
 	});

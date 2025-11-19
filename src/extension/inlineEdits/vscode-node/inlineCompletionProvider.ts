@@ -26,7 +26,7 @@ import { CancellationTokenSource } from '../../../util/vs/base/common/cancellati
 import { Event } from '../../../util/vs/base/common/event';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LineCheck } from '../../inlineChat/vscode-node/inlineChatHint';
+import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
@@ -120,7 +120,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
-		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
+		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -143,7 +143,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
-		const unification = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUnification, this._expService);
+		const unification = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUnification, this._expService);
 
 		const isInlineEditsEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.InlineEditsEnabled, this._expService, { languageId: document.languageId });
 
@@ -366,7 +366,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			range: displayLocationRange,
 			label: result.displayLocation.label,
 			kind: InlineCompletionDisplayLocationKind.Code,
-			jumpToEdit: result.displayLocation.jumpToEdit
 		} : undefined;
 
 

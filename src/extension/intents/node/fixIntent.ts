@@ -46,7 +46,7 @@ export class FixIntent implements IIntent {
 		const attempt = request.attempt;
 		const endpoint = await this.endpointProvider.getChatEndpoint(request);
 
-		let prompt: PromptElementCtor<InlineFixProps, any>;
+		let prompt: PromptElementCtor<InlineFixProps, unknown>;
 		if (isNotebookCellOrNotebookChatInput(documentContext.document.uri)) {
 			prompt = InlineFixNotebookPrompt;
 		} else {

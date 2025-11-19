@@ -25,7 +25,8 @@ import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer'
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { assertFileOkForTool, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { formatUriForFileWidget } from '../common/toolUtils';
+import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
 
 export const readFileV2Description: vscode.LanguageModelToolInformation = {
 	name: ToolName.ReadFile,
@@ -183,7 +184,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	}
 
 	public alternativeDefinition(originTool: vscode.LanguageModelToolInformation): vscode.LanguageModelToolInformation {
-		if (this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.EnableReadFileV2, this.experimentationService)) {
+		if (this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.TeamInternal.EnableReadFileV2, this.experimentationService)) {
 			return readFileV2Description;
 		}
 

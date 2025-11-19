@@ -7,28 +7,25 @@
 
 import * as assert from 'assert';
 import dedent from 'ts-dedent';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { PromptSnapshotNode } from '../../../../../prompt/src/components/components';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { initializeTokenizers } from '../../../../../prompt/src/tokenization';
-import { ICompletionsContextService } from '../../../context';
 import { CompletionRequestDocument } from '../../../prompt/completionsPromptFactory/componentsCompletionsPromptFactory';
 import { SimilarFiles } from '../../../prompt/components/similarFiles';
 import { CodeSnippetWithId, TraitWithId } from '../../../prompt/contextProviders/contextItemSchemas';
 import { NeighborSource } from '../../../prompt/similarFiles/neighborFiles';
-import { RelatedFilesProvider, RelatedFileTrait } from '../../../prompt/similarFiles/relatedFiles';
-import { MockTraitsProvider } from '../../../prompt/test/relatedFiles';
 import { createCompletionRequestData } from '../../../test/completionsPrompt';
 import { createLibTestingContext } from '../../../test/context';
 import { querySnapshot } from '../../../test/snapshot';
 import { createTextDocument, TestTextDocumentManager } from '../../../test/textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
-import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsTextDocumentManagerService } from '../../../textDocumentManager';
 
 suite('Similar Files', function () {
 	let accessor: ServicesAccessor;
 
 	setup(async function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 		NeighborSource.reset();
 		await initializeTokenizers;
 	});
@@ -118,23 +115,13 @@ suite('Similar Files', function () {
 		codeSnippets?: CodeSnippetWithId[],
 		traits?: TraitWithId[],
 		turnOffSimilarFiles?: boolean,
-		legacyTraits?: RelatedFileTrait[]
 	) {
-		const ctx = accessor.get(ICompletionsContextService);
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
-		neighbors.forEach(n => tdm.setTextDocument(n.uri, n.detectedLanguageId, n.getText()));
+		const instantiationService = accessor.get(IInstantiationService);
+		const tdms = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
+		neighbors.forEach(n => tdms.setTextDocument(n.uri, n.detectedLanguageId, n.getText()));
 		const position = doc.positionAt(doc.getText().indexOf('|'));
 
-		if (legacyTraits !== undefined) {
-			// For legacy traits to work we need to:
-			// - set the document in the text document manager
-			// - initialize workspace folders
-			tdm.init([{ uri: 'file:///workspace' }]);
-			tdm.setTextDocument(doc.uri, doc.detectedLanguageId, doc.getText());
-			ctx.forceSet(RelatedFilesProvider, ctx.instantiationService.createInstance(MockTraitsProvider, legacyTraits));
-		}
-
-		const virtualPrompt = new VirtualPrompt(<SimilarFiles ctx={ctx} />);
+		const virtualPrompt = new VirtualPrompt(<SimilarFiles tdms={tdms} instantiationService={instantiationService} />);
 		const pipe = virtualPrompt.createPipe();
 		await pipe.pump(createCompletionRequestData(accessor, doc, position, codeSnippets, traits, turnOffSimilarFiles));
 		return virtualPrompt.snapshot().snapshot!;

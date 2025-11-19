@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IObservableDocument, ObservableWorkspace } from '../../../../../../../platform/inlineEdits/common/observableWorkspace';
+import { IObservableDocument } from '../../../../../../../platform/inlineEdits/common/observableWorkspace';
 import { autorunWithChanges } from '../../../../../../../platform/inlineEdits/common/utils/observable';
+import { createServiceIdentifier } from '../../../../../../../util/common/services';
 import { Disposable } from '../../../../../../../util/vs/base/common/lifecycle';
 import { mapObservableArrayCached } from '../../../../../../../util/vs/base/common/observableInternal';
-import { ICompletionsContextService } from '../../context';
+import { ICompletionsObservableWorkspace } from '../../completionsObservableWorkspace';
 import {
 	getAllRecentEditsByTimestamp,
 	RecentEdit,
@@ -16,11 +17,13 @@ import {
 	summarizeEdit,
 } from './recentEditsReducer';
 
-export abstract class RecentEditsProvider extends Disposable {
-	abstract isEnabled(): boolean;
-	abstract getRecentEdits(): RecentEdit[];
-	abstract getEditSummary(edit: RecentEdit): string | null;
-	abstract start(): void;
+export const ICompletionsRecentEditsProviderService = createServiceIdentifier<ICompletionsRecentEditsProviderService>('ICompletionsRecentEditsProviderService');
+export interface ICompletionsRecentEditsProviderService {
+	readonly _serviceBrand: undefined;
+	isEnabled(): boolean;
+	getRecentEdits(): RecentEdit[];
+	getEditSummary(edit: RecentEdit): string | null;
+	start(): void;
 }
 
 export interface RecentEditsConfig {
@@ -65,7 +68,9 @@ const RECENT_EDITS_DEFAULT_CONFIG: RecentEditsConfig = Object.freeze({
 	maxLinesPerEdit: 10,
 });
 
-export class FullRecentEditsProvider extends RecentEditsProvider {
+export class FullRecentEditsProvider extends Disposable implements ICompletionsRecentEditsProviderService {
+	declare _serviceBrand: undefined;
+
 	private _started: boolean = false;
 	private recentEditMap: RecentEditMap = {};
 	private recentEdits: RecentEdit[] = [];
@@ -75,7 +80,7 @@ export class FullRecentEditsProvider extends RecentEditsProvider {
 
 	constructor(
 		config: RecentEditsConfig | undefined,
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+		@ICompletionsObservableWorkspace private readonly observableWorkspace: ICompletionsObservableWorkspace,
 	) {
 		super();
 		this._config = config ?? Object.assign({}, RECENT_EDITS_DEFAULT_CONFIG);
@@ -119,7 +124,7 @@ export class FullRecentEditsProvider extends RecentEditsProvider {
 
 		mapObservableArrayCached(
 			this,
-			this.ctx.get(ObservableWorkspace).openDocuments,
+			this.observableWorkspace.openDocuments,
 			(doc: IObservableDocument, store) => {
 				store.add(
 					autorunWithChanges(

@@ -28,9 +28,10 @@ import { mapFindFirst } from '../../../util/vs/base/common/arraysFind';
 import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/defaultAgentInstructions';
 import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -42,9 +43,9 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
-import { ActionType, Commit, DiffError, FileChange, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
+import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { canExistingFileBeEdited, createEditConfirmation, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
+import { canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -61,6 +62,9 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	public static toolName = ToolName.ApplyPatch;
 
 	private _promptContext: IBuildPromptContext | undefined;
+
+	// Simple cache using stringified params as key to avoid WeakMap stability issues
+	private lastProcessed: { input: string; output: Promise<{ commit: Commit; docTexts: DocText; healed?: string }> } | undefined;
 
 	constructor(
 		@IPromptPathRepresentationService protected readonly promptPathRepresentationService: IPromptPathRepresentationService,
@@ -186,9 +190,22 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		let commit: Commit | undefined;
 		let healed: string | undefined;
 		const docText: DocText = {};
+
 		try {
-			({ commit, healed } = await this.buildCommitWithHealing(options.model, options.input.input, docText, options.input.explanation, token));
-			logEditToolResult(this.logService, options.chatRequestId, { input: options.input.input, success: true, healed });
+			if (this.lastProcessed?.input === options.input.input) {
+				const cached = await this.lastProcessed.output;
+				commit = cached.commit;
+				healed = cached.healed;
+				Object.assign(docText, cached.docTexts);
+				logEditToolResult(this.logService, options.chatRequestId, { input: options.input.input, success: true, healed });
+				this.lastProcessed = undefined;
+			}
+
+			// If not cached or cache failed, build with healing
+			if (!commit) {
+				({ commit, healed } = await this.buildCommitWithHealing(options.model, options.input.input, docText, options.input.explanation, token));
+				logEditToolResult(this.logService, options.chatRequestId, { input: options.input.input, success: true, healed });
+			}
 		} catch (error) {
 			if (error instanceof HealedError) {
 				healed = error.healedPatch;
@@ -400,7 +417,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;
 			const isNotebook = editEntires.length === 1 ? handledNotebookUris.size === 1 : undefined;
 			this.sendApplyPatchTelemetry('success', options, undefined, !!healed, isNotebook);
-			return new LanguageModelToolResult([
+			const result = new ExtendedLanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(
 						this.instantiationService,
@@ -414,13 +431,17 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					),
 				)
 			]);
+			result.hasError = files.some(f => f.error);
+			return result;
 		} catch (error) {
 			const isNotebook = Object.values(docText).length === 1 ? (!!mapFindFirst(Object.values(docText), v => v.notebookUri)) : undefined;
 			// TODO parser.ts could annotate DiffError with a telemetry detail if we want
 			this.sendApplyPatchTelemetry('error', options, undefined, false, isNotebook, error);
-			return new LanguageModelToolResult([
+			const result = new ExtendedLanguageModelToolResult([
 				new LanguageModelTextPart('Applying patch failed with error: ' + error.message),
 			]);
+			result.hasError = true;
+			return result;
 		}
 	}
 
@@ -512,7 +533,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		}
 	}
 
-	private async buildCommit(patch: string, docText: DocText): Promise<{ commit: Commit }> {
+	private async buildCommit(patch: string, docText: DocText): Promise<{ commit: Commit; docTexts: DocText }> {
 		const commit = await processPatch(patch, async (uri) => {
 			const vscodeUri = resolveToolInputPath(uri, this.promptPathRepresentationService);
 			if (this.notebookService.hasSupportedNotebooks(vscodeUri)) {
@@ -526,7 +547,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				return textDocument;
 			}
 		});
-		return { commit };
+		return { commit, docTexts: docText };
 	}
 
 	private async sendApplyPatchTelemetry(outcome: string, options: vscode.LanguageModelToolInvocationOptions<IApplyPatchToolParams>, file: string | undefined, healed: boolean, isNotebook: boolean | undefined, unexpectedError?: Error) {
@@ -574,12 +595,64 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return input;
 	}
 
-	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
+		const uris = [...identify_files_needed(options.input.input), ...identify_files_added(options.input.input)].map(f => URI.file(f));
+
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
-			identify_files_needed(options.input.input).map(f => URI.file(f)),
-			() => '```\n' + options.input.input + '\n```',
+			uris,
+			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token)
 		);
+	}
+
+	private async generatePatchConfirmationDetails(
+		options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>,
+		urisNeedingConfirmation: readonly URI[],
+		token: CancellationToken
+	): Promise<string> {
+		const instantiationService = this.instantiationService;
+		const promptPathRepresentationService = this.promptPathRepresentationService;
+
+		// Process the patch and cache it for later use in invoke()
+		const docTexts: DocText = {};
+		const processPromise = (async () => {
+			const { commit, healed } = await this.buildCommitWithHealing(
+				this._promptContext?.request?.model,
+				options.input.input,
+				docTexts,
+				options.input.explanation,
+				token
+			);
+			return { commit, docTexts, healed };
+		})();
+
+		// Cache using stringified params
+		this.lastProcessed = { input: options.input.input, output: processPromise };
+
+		const { commit } = await processPromise;
+
+		// Create a set of URIs needing confirmation for quick lookup
+		const urisNeedingConfirmationSet = new ResourceSet(urisNeedingConfirmation);
+
+		// Generate diffs for all file changes in parallel
+		const diffResults = await Promise.all(
+			Object.entries(commit.changes).map(async ([file, changes]) => {
+				const uri = resolveToolInputPath(file, promptPathRepresentationService);
+				if (!urisNeedingConfirmationSet.has(uri)) {
+					return;
+				}
+
+				return await instantiationService.invokeFunction(
+					formatDiffAsUnified,
+					uri,
+					changes.oldContent || '',
+					changes.newContent || ''
+				);
+			})
+		);
+
+		const diffParts = diffResults.filter(isDefined);
+		return diffParts.length > 0 ? diffParts.join('\n\n') : 'No changes detected.';
 	}
 }
 

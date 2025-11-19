@@ -5,24 +5,23 @@
 
 import * as assert from 'assert';
 
-import { ICompletionsContextService } from '../context';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
-	Fetcher,
-	postRequest,
+	ICompletionsFetcherService,
+	postRequest
 } from '../networking';
 import { createLibTestingContext } from './context';
 import { StaticFetcher, createFakeJsonResponse } from './fetcher';
-import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('Networking test Suite', function () {
 	let accessor: ServicesAccessor;
 	let fetcher: StaticFetcher;
 
 	setup(function () {
-		accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
+		const serviceCollection = createLibTestingContext();
 		fetcher = new StaticFetcher();
-		ctx.forceSet(Fetcher, fetcher);
+		serviceCollection.define(ICompletionsFetcherService, fetcher);
+		accessor = serviceCollection.createTestingAccessor();
 	});
 
 	test('each request contains editor info headers', async function () {

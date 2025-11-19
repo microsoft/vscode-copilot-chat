@@ -2,12 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
+import { ICAPIClientService } from '../../../../../platform/endpoint/common/capiClient';
 import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CompletionsCapiBridge } from '../../bridge/src/completionsCapiBridge';
 import { CopilotToken } from './auth/copilotTokenManager';
-import { getLastCopilotToken } from './auth/copilotTokenNotifier';
-import { ConfigKey, ConfigKeyType, getConfig, ICompletionsBuildInfoService } from './config';
-import { ICompletionsContextService } from './context';
+import { BuildInfo, ConfigKey, ConfigKeyType, getConfig } from './config';
 import { ICompletionsRuntimeModeService } from './util/runtimeMode';
 import { joinPath } from './util/uri';
 
@@ -17,11 +16,10 @@ type ServiceEndpoints = {
 };
 
 function getDefaultEndpoints(accessor: ServicesAccessor): ServiceEndpoints {
-	const ctx = accessor.get(ICompletionsContextService);
-	const capi = ctx.get(CompletionsCapiBridge);
+	const capi = accessor.get(ICAPIClientService);
 	return {
-		proxy: capi.capiClientService.proxyBaseURL,
-		'origin-tracker': capi.capiClientService.originTrackerURL,
+		proxy: capi.proxyBaseURL,
+		'origin-tracker': capi.originTrackerURL,
 	};
 }
 
@@ -35,7 +33,7 @@ function urlConfigOverride(
 	overrideKeys: ConfigKeyType[],
 	testOverrideKeys?: ConfigKeyType[]
 ): string | undefined {
-	if (testOverrideKeys && accessor.get(ICompletionsRuntimeModeService).isRunningInTest()) {
+	if (testOverrideKeys !== undefined && accessor.get(ICompletionsRuntimeModeService).isRunningInTest()) {
 		for (const overrideKey of testOverrideKeys) {
 			const override = getConfig<string>(accessor, overrideKey);
 			if (override) { return override; }
@@ -59,7 +57,7 @@ function getEndpointOverrideUrl(accessor: ServicesAccessor, endpoint: keyof Serv
 				[ConfigKey.DebugTestOverrideProxyUrl, ConfigKey.DebugTestOverrideProxyUrlLegacy]
 			);
 		case 'origin-tracker':
-			if (!accessor.get(ICompletionsBuildInfoService).isProduction()) {
+			if (!BuildInfo.isProduction()) {
 				return urlConfigOverride(accessor, [ConfigKey.DebugSnippyOverrideUrl]);
 			}
 	}
@@ -80,6 +78,6 @@ export function getEndpointUrl(
  * Generally you should be using token.endpoints or getEndpointUrl() instead.
  */
 export function getLastKnownEndpoints(accessor: ServicesAccessor) {
-	return getLastCopilotToken(accessor)?.endpoints ?? getDefaultEndpoints(accessor);
+	return accessor.get(IAuthenticationService).copilotToken?.endpoints ?? getDefaultEndpoints(accessor);
 }
 

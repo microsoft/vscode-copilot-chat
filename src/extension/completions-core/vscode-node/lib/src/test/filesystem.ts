@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { FileIdentifier, FileStat, FileSystem, FileType } from '../fileSystem';
-import { getFsPath } from '../util/uri';
 import { dirname, join, normalize } from 'path';
+import { FileIdentifier, FileStat, FileType, ICompletionsFileSystemService } from '../fileSystem';
+import { getFsPath } from '../util/uri';
 
 interface Exception extends Error {
 	errno?: unknown;
@@ -72,11 +72,12 @@ export type FakeFileSystemConfig = { [key: string]: string | FakeFileNode | Fake
  *   }
  * ```
  */
-export class FakeFileSystem extends FileSystem {
+export class FakeFileSystem implements ICompletionsFileSystemService {
+	declare _serviceBrand: undefined;
+
 	private root: FakeDir;
 
 	constructor(fileConfig: FakeFileSystemConfig) {
-		super();
 		this.root = new FakeDir({ ctime: 0, mtime: 0, size: 0, type: FileType.Directory });
 		this.createFiles('', fileConfig);
 	}

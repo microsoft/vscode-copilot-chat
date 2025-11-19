@@ -4,14 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from 'vscode-languageserver-protocol';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCompletionState } from '../../completionState';
-import { ICompletionsContextService } from '../../context';
 import { getGhostText } from '../../ghostText/ghostText';
 import { TelemetryWithExp } from '../../telemetry';
 import { IPosition, ITextDocument } from '../../textDocument';
-import { ContextProviderBridge } from '../components/contextProviderBridge';
+import { ICompletionsContextProviderBridgeService } from '../components/contextProviderBridge';
 import { extractPrompt, ExtractPromptOptions } from '../prompt';
-import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 export async function extractPromptInternal(
 	accessor: ServicesAccessor,
@@ -22,8 +21,8 @@ export async function extractPromptInternal(
 	promptOpts: ExtractPromptOptions = {}
 ) {
 	const completionState = createCompletionState(textDocument, position);
-	const ctx = accessor.get(ICompletionsContextService);
-	ctx.get(ContextProviderBridge).schedule(completionState, completionId, 'opId', telemetryWithExp);
+	const contextProviderBridge = accessor.get(ICompletionsContextProviderBridgeService);
+	contextProviderBridge.schedule(completionState, completionId, 'opId', telemetryWithExp);
 	return extractPrompt(accessor, completionId, completionState, telemetryWithExp, undefined, promptOpts);
 }
 

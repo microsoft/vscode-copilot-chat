@@ -9,19 +9,22 @@ import { IAuthenticationService } from '../../../../platform/authentication/comm
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { raceCancellation } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
 import { CopilotCLISessionOptions, getAuthInfo } from './copilotCli';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
-import { PermissionRequest } from './permissionHelpers';
+import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
 
 type PermissionHandler = (
 	permissionRequest: PermissionRequest,
+	toolCall: ToolCall | undefined,
 	token: CancellationToken,
 ) => Promise<boolean>;
 
@@ -66,13 +69,19 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private _permissionHandler?: PermissionHandler;
 	private readonly _permissionHandlerSet = this.add(new Emitter<void>());
 	private _stream?: vscode.ChatResponseStream;
+	public get sdkSession() {
+		return this._sdkSession;
+	}
+	private _lastUsedModel: string | undefined;
+
 	constructor(
 		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IAuthenticationService private readonly authenticationService: IAuthenticationService
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -120,7 +129,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const toolNames = new Map<string, string>();
 		const editToolIds = new Set<string>();
 		const editTracker = new ExternalEditTracker();
-		const editFilesAndToolCallIds = new ResourceMap<string[]>();
+		const editFilesAndToolCallIds = new ResourceMap<ToolCall[]>();
 		disposables.add(this._options.addPermissionHandler(async (permissionRequest) => {
 			// Need better API from SDK to correlate file edits in permission requests to tool invocations.
 			return await this.requestPermission(permissionRequest, editTracker,
@@ -134,15 +143,17 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}));
 
 		try {
+			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
 			const [currentModel, authInfo] = await Promise.all([
-				modelId ? this._sdkSession.getSelectedModel() : undefined,
-				getAuthInfo(this.authenticationService)
+				modelId ? (this._lastUsedModel ?? raceCancellation(this._sdkSession.getSelectedModel(), token)) : undefined,
+				raceCancellation(getAuthInfo(this.authenticationService), token)
 			]);
 			if (authInfo) {
 				this._sdkSession.setAuthInfo(authInfo);
 			}
-			if (modelId && modelId !== currentModel) {
-				await this._sdkSession.setSelectedModel(modelId);
+			if (modelId && modelId !== currentModel && !token.isCancellationRequested) {
+				this._lastUsedModel = modelId;
+				await raceCancellation(this._sdkSession.setSelectedModel(modelId), token);
 			}
 
 			disposables.add(toDisposable(this._sdkSession.on('*', (event) => this.logService.trace(`[CopilotCLISession]CopilotCLI Event: ${JSON.stringify(event, null, 2)}`))));
@@ -153,14 +164,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('tool.execution_start', (event) => {
 				toolNames.set(event.data.toolCallId, event.data.toolName);
-				if (isCopilotCliEditToolCall(event.data.toolName, event.data.arguments)) {
+				if (isCopilotCliEditToolCall(event.data)) {
 					editToolIds.add(event.data.toolCallId);
 					// Track edits for edit tools.
-					const editUris = getAffectedUrisForEditTool(event.data.toolName, event.data.arguments || {});
+					const editUris = getAffectedUrisForEditTool(event.data);
 					if (editUris.length) {
 						editUris.forEach(uri => {
 							const ids = editFilesAndToolCallIds.get(uri) || [];
-							ids.push(event.data.toolCallId);
+							ids.push(event.data as UnknownToolCall as ToolCall);
 							editFilesAndToolCallIds.set(uri, ids);
 							this.logService.trace(`[CopilotCLISession] Tracking for toolCallId ${event.data.toolCallId} of file ${uri.fsPath}`);
 						});
@@ -199,10 +210,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this._stream?.markdown(`\n\n❌ Error: (${event.data.errorType}) ${event.data.message}`);
 			})));
 
-			await this._sdkSession.send({ prompt, attachments, abortController });
+			if (!token.isCancellationRequested) {
+				await this._sdkSession.send({ prompt, attachments, abortController });
+			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
-			if (this._options.isolationEnabled) {
+			if (this._options.isolationEnabled && !token.isCancellationRequested) {
 				// When isolation is enabled and we are using a git workspace, stage
 				// all changes in the working directory when the session is completed
 				const workingDirectory = this._options.toSessionOptions().workingDirectory;
@@ -247,7 +260,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
 		editTracker: ExternalEditTracker,
-		getEditKeyForFile: (file: Uri) => string | undefined,
+		getEditKeyForFile: (file: Uri) => ToolCall | undefined,
 		workingDirectory: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
@@ -268,27 +281,33 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 		}
 
-		if (workingDirectory && permissionRequest.kind === 'write') {
+		const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
+		const toolCall = editFile ? getEditKeyForFile(editFile) : undefined;
+		if (workingDirectory && permissionRequest.kind === 'write' && editFile) {
 			// TODO:@rebornix @lszomoru
 			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
 			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
-			const editFile = Uri.file(permissionRequest.fileName);
 
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
 
-			if (isWorkspaceFile || isWorkingDirectoryFile) {
-				if (isWorkspaceFile) {
-					this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in workspace ${permissionRequest.fileName}`);
-				} else {
-					this.logService.trace(`[CopilotCLISession] Auto Approving request to write file in working directory ${permissionRequest.fileName}`);
-				}
-				const editKey = getEditKeyForFile(editFile);
+			let autoApprove = false;
+			// If isolation is enabled, we only auto-approve writes within the working directory.
+			if (this._options.isolationEnabled && isWorkingDirectoryFile) {
+				autoApprove = true;
+			}
+			// If its a workspace file, and not editing protected files, we auto-approve.
+			if (!autoApprove && isWorkspaceFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest))) {
+				autoApprove = true;
+			}
+
+			if (autoApprove) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request ${permissionRequest.fileName}`);
 
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
-				if (editKey && this._stream) {
-					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${editKey} & file ${editFile.fsPath}`);
-					await editTracker.trackEdit(editKey, [editFile], this._stream);
+				if (toolCall && this._stream) {
+					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
+					await editTracker.trackEdit(toolCall.toolCallId, [editFile], this._stream);
 				}
 
 				return { kind: 'approved' };
@@ -302,13 +321,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				return { kind: 'denied-interactively-by-user' };
 			}
 
-			if (await permissionHandler(permissionRequest, token)) {
+			if (await permissionHandler(permissionRequest, toolCall, token)) {
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
-				const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
-				const editKey = editFile ? getEditKeyForFile(editFile) : undefined;
-				if (editFile && editKey && this._stream) {
-					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${editKey} & file ${editFile.fsPath}`);
-					await editTracker.trackEdit(editKey, [editFile], this._stream);
+				if (editFile && toolCall && this._stream) {
+					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
+					await editTracker.trackEdit(toolCall.toolCallId, [editFile], this._stream);
 				}
 				return { kind: 'approved' };
 			}

@@ -7,7 +7,6 @@ import * as l10n from '@vscode/l10n';
 import { commands, env, ExtensionContext, ExtensionMode, l10n as vscodeL10n } from 'vscode';
 import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { isProduction } from '../../../platform/env/common/packagejson';
-import { IHeatmapService } from '../../../platform/heatmap/common/heatmapService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationServiceBuilder, InstantiationServiceBuilder } from '../../../util/common/services';
@@ -102,9 +101,6 @@ export function createInstantiationService(configuration: IExtensionActivationCo
 
 		// Does the initial read of ignore files, but don't block
 		accessor.get(IIgnoreService).init();
-
-		// force create heatmap service
-		accessor.get(IHeatmapService);
 	});
 
 	return instantiationService;

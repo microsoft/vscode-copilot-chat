@@ -21,7 +21,7 @@ suite('Completion Notifier', function () {
 	let clock: Sinon.SinonFakeTimers;
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 		const instantiationService = accessor.get(IInstantiationService);
 		notifier = instantiationService.createInstance(CompletionNotifier);
 

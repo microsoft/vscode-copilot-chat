@@ -20,7 +20,7 @@ namespace tss {
 		getSymbolId(symbol: tt.Symbol): SymbolId;
 	} & typeof ts;
 
-	const its = ts as any as InternalTypeScript;
+	const its = ts as unknown as InternalTypeScript;
 
 	export const getTokenAtPosition: (sourceFile: tt.SourceFile, position: number) => tt.Node = its.getTokenAtPosition;
 	export const getTouchingToken: (sourceFile: tt.SourceFile, position: number, includePrecedingTokenAtEndPosition?: (n: tt.Node) => boolean) => tt.Node = its.getTouchingToken;
@@ -547,7 +547,7 @@ namespace tss {
 			if (this.internalSymbolNames === undefined) {
 				this.internalSymbolNames = new Set();
 				for (const item in ts.InternalSymbolName) {
-					this.internalSymbolNames.add((ts.InternalSymbolName as any)[item]);
+					this.internalSymbolNames.add((ts.InternalSymbolName as Record<string, string>)[item]);
 				}
 			}
 			return this.internalSymbolNames.has(symbol.escapedName as string);

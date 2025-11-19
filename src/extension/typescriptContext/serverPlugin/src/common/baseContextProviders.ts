@@ -28,7 +28,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 	public static VersionTraitKey: string = Trait.createContextItemKey(TraitKind.Version);
 
 	// Traits to collect from the compiler options in the format of [trait kind, trait description, context key, CompilerOptions.enumType (if applicable)]
-	public static traitsToCollect: [TraitKind, string, ContextItemKey, any][] = [
+	public static traitsToCollect: [TraitKind, string, ContextItemKey, unknown | undefined][] = [
 		[TraitKind.Module, 'The TypeScript module system used in this project is ', Trait.createContextItemKey(TraitKind.Module), ts.ModuleKind],
 		[TraitKind.ModuleResolution, 'The TypeScript module resolution strategy used in this project is ', Trait.createContextItemKey(TraitKind.ModuleResolution), ts.ModuleResolutionKind],
 		[TraitKind.Target, 'The target version of JavaScript for this project is ', Trait.createContextItemKey(TraitKind.Target), ts.ScriptTarget],
@@ -55,14 +55,14 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 		if (!result.addFromKnownItems(CompilerOptionsRunnable.VersionTraitKey)) {
 			result.addTrait(TraitKind.Version, 'The TypeScript version used in this project is ', ts.version);
 		}
-		for (const [traitKind, trait, key, enumType,] of CompilerOptionsRunnable.traitsToCollect) {
+		for (const [traitKind, trait, key, enumType] of CompilerOptionsRunnable.traitsToCollect) {
 			if (result.addFromKnownItems(key)) {
 				continue;
 			}
 			let traitValue = compilerOptions[traitKind as keyof tt.CompilerOptions];
 			if (traitValue) {
 				if (typeof traitValue === "number") {
-					const enumName = CompilerOptionsRunnable.getEnumName(enumType, traitValue);
+					const enumName = CompilerOptionsRunnable.getEnumName(enumType as Record<string, unknown>, traitValue);
 					if (enumName) {
 						traitValue = enumName;
 					}
@@ -72,7 +72,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 		}
 	}
 
-	private static getEnumName(enumObj: any, value: any): string | undefined {
+	private static getEnumName(enumObj: Record<string, unknown>, value: unknown): string | undefined {
 		return Object.keys(enumObj).find(key => enumObj[key] === value);
 	}
 }

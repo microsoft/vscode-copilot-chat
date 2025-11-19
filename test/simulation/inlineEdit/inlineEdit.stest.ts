@@ -38,7 +38,7 @@ const testConfigs: TestConfiguration[] = [
 		providerName: "xtab",
 		extensionConfiguration: [
 			{
-				key: ConfigKey.Internal.InlineEditsProviderId,
+				key: ConfigKey.TeamInternal.InlineEditsProviderId,
 				value: XtabProvider.ID,
 			},
 			...commonXtabTestConfigurations,

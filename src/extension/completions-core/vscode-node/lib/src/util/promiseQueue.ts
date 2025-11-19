@@ -3,18 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { createDecorator } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { createServiceIdentifier } from '../../../../../../util/common/services';
 
-export const ICompletionsPromiseQueueService = createDecorator<ICompletionsPromiseQueueService>('completionsPromiseQueueService');
+export const ICompletionsPromiseQueueService = createServiceIdentifier<ICompletionsPromiseQueueService>('completionsPromiseQueueService');
 export interface ICompletionsPromiseQueueService {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	register(promise: Promise<unknown>): void;
 	flush(): Promise<void>;
 }
 
 export class PromiseQueue implements ICompletionsPromiseQueueService {
-	_serviceBrand: undefined;
+	declare _serviceBrand: undefined;
 
 	protected promises = new Set<Promise<unknown>>();
 	register(promise: Promise<unknown>) {

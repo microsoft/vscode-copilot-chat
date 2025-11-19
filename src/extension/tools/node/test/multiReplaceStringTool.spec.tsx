@@ -21,6 +21,7 @@ import { ToolName } from '../../common/toolNames';
 import { CopilotToolMode } from '../../common/toolsRegistry';
 import { IToolsService } from '../../common/toolsService';
 import { IMultiReplaceStringToolParams } from '../multiReplaceStringTool';
+import { toolResultToString } from './toolTestUtils';
 
 suite('MultiReplaceString', () => {
 	let accessor: ITestingServicesAccessor;
@@ -34,7 +35,8 @@ suite('MultiReplaceString', () => {
 			createTextDocumentData(URI.file('/workspace/empty.ts'), '', 'ts'),
 			createTextDocumentData(URI.file('/workspace/whitespace.ts'), ' \t\n', 'ts'),
 			createTextDocumentData(URI.file('/workspace/large.ts'), largeContent, 'ts'),
-			createTextDocumentData(URI.file('/workspace/multi-sr-bug.ts'), readFileSync(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-original.txt', 'utf-8'), 'ts')
+			createTextDocumentData(URI.file('/workspace/multi-sr-bug.ts'), readFileSync(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-original.txt', 'utf-8'), 'ts'),
+			createTextDocumentData(URI.file('/workspace/math.js'), readFileSync(__dirname + '/editFileToolUtilsFixtures/math-original.txt', 'utf-8'), 'js')
 		];
 		for (const doc of allDocs) {
 			documents.set(doc.document.uri, doc);
@@ -153,6 +155,98 @@ import { IFile } from '../../../../../base/node/zip.js';`
 		};
 
 		const r = await invoke(input);
-		expect(await applyEditsInMap(r.edits)).toMatchFileSnapshot(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-actual.txt');
+		await expect(await applyEditsInMap(r.edits)).toMatchFileSnapshot(__dirname + '/editFileToolUtilsFixtures/multi-sr-bug-actual.txt');
+	});
+
+	test('The multi_replace_string_in_file trashed my file due to overlapping replacements #277154', async () => {
+
+		const input: IMultiReplaceStringToolParams = {
+			"explanation": "Adding JSDoc comments to the div and mul functions",
+			"replacements": [
+				{
+					"filePath": "/workspace/math.js",
+					"oldString": `export function sumArray(a) {
+	return a.reduce((sum, num) => sum + num, 0);
+}
+
+export function div(a, b) {
+	// console.log fff fff
+	return a / b;
+}`,
+					"newString": `export function sumArray(a) {
+	return a.reduce((sum, num) => sum + num, 0);
+}
+
+/**
+ * Divides the first number by the second number.
+ *
+ * @param {number} a - The dividend.
+ * @param {number} b - The divisor.
+ * @returns {number} - The quotient of a divided by b.
+ */
+export function div(a, b) {
+	// console.log fff fff
+	return a / b;
+}`,
+					"explanation": "Add JSDoc to div function"
+				},
+				{
+					"filePath": "/workspace/math.js",
+					"oldString": `export function div(a, b) {
+	// console.log fff fff
+	return a / b;
+}
+
+export function mul(a, b) {
+	return a * b;
+}
+
+export function sumThreeFloats(a, b, c) {`,
+					"newString": `/**
+ * Divides the first number by the second number.
+ *
+ * @param {number} a - The dividend.
+ * @param {number} b - The divisor.
+ * @returns {number} - The quotient of a divided by b.
+ */
+export function div(a, b) {
+	// console.log fff fff
+	return a / b;
+}
+
+/**
+ * Multiplies two numbers together.
+ *
+ * @param {number} a - The first number.
+ * @param {number} b - The second number.
+ * @returns {number} - The product of a and b.
+ */
+export function mul(a, b) {
+	return a * b;
+}
+
+export function sumThreeFloats(a, b, c) {`,
+					"explanation": "Add JSDoc to mul function"
+				}
+			]
+		};
+
+		const r = await invoke(input);
+
+		expect(await toolResultToString(accessor, r.result)).toMatchInlineSnapshot(`
+			"The following files were successfully edited:
+			/workspace/math.js
+			Edit at index 1 conflicts with another replacement in /workspace/math.js. You can make another call to try again."
+		`);
+
+		const edits = Object.values(r.edits).flat(); //
+
+		edits.sort((a, b) => a.range.start.compareTo(b.range.start));
+
+		for (let i = 1; i < edits.length; i++) {
+			const e1 = edits[i - 1];
+			const e2 = edits[i];
+			expect(e1.range.end.isBeforeOrEqual(e2.range.start)).toBe(true);
+		}
 	});
 });

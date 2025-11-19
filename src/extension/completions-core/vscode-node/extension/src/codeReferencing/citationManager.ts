@@ -5,9 +5,11 @@
 
 import { commands } from 'vscode';
 import { CodeReference } from '.';
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
+import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
-import { CitationManager, IPDocumentCitation } from '../../../lib/src/citationManager';
+import { ICompletionsCitationManager, IPDocumentCitation } from '../../../lib/src/citationManager';
 import { OutputPaneShowCommand } from '../../../lib/src/snippy/constants';
 import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { notify } from './matchNotifier';
@@ -17,15 +19,19 @@ import { GitHubCopilotLogger } from './outputChannel';
  * Citation manager that logs citations to the VS Code log. On the first citation encountered,
  * the user gets a notification.
  */
-export class LoggingCitationManager extends CitationManager {
+export class LoggingCitationManager extends Disposable implements ICompletionsCitationManager {
+	declare _serviceBrand: undefined;
+
 	private logger?: GitHubCopilotLogger;
+	private readonly codeReference: CodeReference;
 
 	constructor(
-		private codeReference: CodeReference,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IAuthenticationService authenticationService: IAuthenticationService,
 	) {
 		super();
-		const disposable = instantiationService.invokeFunction(onCopilotToken, _ => {
+		this.codeReference = this._register(this.instantiationService.createInstance(CodeReference));
+		const disposable = onCopilotToken(authenticationService, _ => {
 			if (this.logger) {
 				return;
 			}
@@ -36,6 +42,10 @@ export class LoggingCitationManager extends CitationManager {
 			this.codeReference.addDisposable(initialNotificationCommand);
 		});
 		this.codeReference.addDisposable(disposable);
+	}
+
+	register() {
+		return this.codeReference.register();
 	}
 
 	async handleIPCodeCitation(citation: IPDocumentCitation): Promise<void> {

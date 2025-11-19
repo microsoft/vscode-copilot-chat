@@ -9,14 +9,14 @@ import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/
 import {
 	ConfigKey,
 	ConfigKeyType,
-	ConfigProvider,
-	EditorAndPluginInfo, getConfigDefaultForKey,
+	ConfigProvider, getConfigDefaultForKey,
 	getConfigKeyRecursively,
 	getOptionalConfigDefaultForKey,
+	ICompletionsConfigProvider,
+	ICompletionsEditorAndPluginInfo,
 	packageJson
 } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
-import { ICompletionsContextService } from '../../lib/src/context';
 import { Logger } from '../../lib/src/logger';
 import { transformEvent } from '../../lib/src/util/event';
 
@@ -74,7 +74,8 @@ const telemetryAllowedAuthorities = new Set([
 	'amlext',
 ]);
 
-export class VSCodeEditorInfo extends EditorAndPluginInfo {
+export class VSCodeEditorInfo implements ICompletionsEditorAndPluginInfo {
+	declare _serviceBrand: undefined;
 	getEditorInfo() {
 		let devName = vscode.env.uriScheme;
 		if (vscode.version.endsWith('-insider')) {
@@ -125,8 +126,8 @@ export class VSCodeEditorInfo extends EditorAndPluginInfo {
 type EnabledConfigKeyType = { [key: string]: boolean };
 
 function getEnabledConfigObject(accessor: ServicesAccessor): EnabledConfigKeyType {
-	const ctx = accessor.get(ICompletionsContextService);
-	return { '*': true, ...(ctx.get(ConfigProvider).getConfig<EnabledConfigKeyType>(ConfigKey.Enable) ?? {}) };
+	const configProvider = accessor.get(ICompletionsConfigProvider);
+	return { '*': true, ...(configProvider.getConfig<EnabledConfigKeyType>(ConfigKey.Enable) ?? {}) };
 }
 
 function getEnabledConfig(accessor: ServicesAccessor, languageId: string): boolean {

@@ -4,29 +4,36 @@
  *--------------------------------------------------------------------------------------------*/
 // The following code was moved from config.ts into here to break the cyclic dependencies
 
-import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { createServiceIdentifier } from '../../../../../../util/common/services';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { BlockMode } from "../../../../../completions/common/config";
 import { isSupportedLanguageId } from '../../../prompt/src/parse';
 import { ConfigKey, getConfig } from '../config';
-import { ICompletionsContextService } from '../context';
-import { Features } from "../experiments/features";
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
 import { TelemetryWithExp } from "../telemetry";
 import { BlockTrimmer } from './blockTrimmer';
 import { StatementTree } from "./statementTree";
 
-export abstract class BlockModeConfig {
-	abstract forLanguage(accessor: ServicesAccessor, languageId: string, telemetryData: TelemetryWithExp): BlockMode;
+export const ICompletionsBlockModeConfig = createServiceIdentifier<ICompletionsBlockModeConfig>('ICompletionsBlockModeConfig');
+export interface ICompletionsBlockModeConfig {
+	readonly _serviceBrand: undefined;
+	forLanguage(languageId: string, telemetryData: TelemetryWithExp): BlockMode;
 }
 
-export class ConfigBlockModeConfig extends BlockModeConfig {
-	forLanguage(accessor: ServicesAccessor, languageId: string, telemetryData: TelemetryWithExp): BlockMode {
-		const ctx = accessor.get(ICompletionsContextService);
-		const overrideBlockMode = ctx.get(Features).overrideBlockMode(telemetryData);
+export class ConfigBlockModeConfig implements ICompletionsBlockModeConfig {
+	declare _serviceBrand: undefined;
+	constructor(
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICompletionsFeaturesService private readonly featuresService: ICompletionsFeaturesService,
+	) { }
+
+	forLanguage(languageId: string, telemetryData: TelemetryWithExp): BlockMode {
+		const overrideBlockMode = this.featuresService.overrideBlockMode(telemetryData);
 		if (overrideBlockMode) {
 			return toApplicableBlockMode(overrideBlockMode, languageId);
 		}
-		const progressiveReveal = ctx.get(Features).enableProgressiveReveal(telemetryData);
-		const config = getConfig(accessor, ConfigKey.AlwaysRequestMultiline);
+		const progressiveReveal = this.featuresService.enableProgressiveReveal(telemetryData);
+		const config = this.instantiationService.invokeFunction(getConfig, ConfigKey.AlwaysRequestMultiline);
 		if (config ?? progressiveReveal) {
 			return toApplicableBlockMode(BlockMode.MoreMultiline, languageId);
 		}

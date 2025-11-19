@@ -152,7 +152,7 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 				this.entry.chatEndpoint.urlOrRequestMetadata?.type : undefined,
 			model: this.entry.chatParams.model,
 			maxPromptTokens: this.entry.chatEndpoint.modelMaxPromptTokens,
-			maxResponseTokens: this.entry.chatParams.body?.max_tokens,
+			maxResponseTokens: this.entry.chatParams.body?.max_tokens ?? this.entry.chatParams.body?.max_output_tokens ?? this.entry.chatParams.body?.max_completion_tokens,
 			location: this.entry.chatParams.location,
 			reasoning: this.entry.chatParams.body?.reasoning,
 			intent: this.entry.chatParams.intent,
@@ -370,7 +370,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	private _shouldLog(entry: LoggedRequest) {
 		// don't log cancelled requests by XTabProviderId (because it triggers and cancels lots of requests)
 		if (entry.debugName === XTabProviderId &&
-			!this._configService.getConfig(ConfigKey.Internal.InlineEditsLogCancelledRequests) &&
+			!this._configService.getConfig(ConfigKey.TeamInternal.InlineEditsLogCancelledRequests) &&
 			entry.type === LoggedRequestKind.ChatMLCancelation
 		) {
 			return false;
@@ -389,8 +389,8 @@ export class RequestLogger extends AbstractRequestLogger {
 
 
 		this._entries.push(entry);
-		// keep at most 100 entries
-		if (this._entries.length > 100) {
+		const maxEntries = this._configService.getConfig(ConfigKey.Advanced.RequestLoggerMaxEntries);
+		if (this._entries.length > maxEntries) {
 			this._entries.shift();
 		}
 		this._onDidChangeRequests.fire();
@@ -522,15 +522,6 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 
 		const durationMs = entry.endTime.getTime() - entry.startTime.getTime();
-		let responseTokensPerSecond: string | undefined;
-		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
-			const completionTokens = entry.usage?.completion_tokens;
-			if (completionTokens && durationMs > 0) {
-				const tokensPerSecond = completionTokens / (durationMs / 1000);
-				responseTokensPerSecond = tokensPerSecond.toFixed(2);
-			}
-		}
-
 		const tocItems: string[] = [];
 		tocItems.push(`- [Request Messages](#request-messages)`);
 		tocItems.push(`  - [System](#system)`);
@@ -557,7 +548,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 		result.push(`model            : ${entry.chatParams.model}`);
 		result.push(`maxPromptTokens  : ${entry.chatEndpoint.modelMaxPromptTokens}`);
-		result.push(`maxResponseTokens: ${entry.chatParams.body?.max_tokens}`);
+		result.push(`maxResponseTokens: ${entry.chatParams.body?.max_tokens ?? entry.chatParams.body?.max_output_tokens ?? entry.chatParams.body?.max_completion_tokens}`);
 		result.push(`location         : ${entry.chatParams.location}`);
 		result.push(`otherOptions     : ${JSON.stringify(otherOptions)}`);
 		if (entry.chatParams.body?.reasoning) {
@@ -567,9 +558,6 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`startTime        : ${entry.startTime.toJSON()}`);
 		result.push(`endTime          : ${entry.endTime.toJSON()}`);
 		result.push(`duration         : ${durationMs}ms`);
-		if (responseTokensPerSecond) {
-			result.push(`response rate    : ${responseTokensPerSecond} tokens/s`);
-		}
 		result.push(`ourRequestId     : ${entry.chatParams.ourRequestId}`);
 
 		const ignoreStatefulMarker = entry.chatParams.ignoreStatefulMarker;

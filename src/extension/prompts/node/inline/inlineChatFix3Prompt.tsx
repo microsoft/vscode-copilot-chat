@@ -6,7 +6,6 @@ import * as l10n from '@vscode/l10n';
 import { PromptElement, PromptReference, PromptSizing, SystemMessage, TextChunk, UserMessage } from '@vscode/prompt-tsx';
 import type { CancellationToken, ChatResponseStream, ChatVulnerability, MarkdownString } from 'vscode';
 import { IResponsePart } from '../../../../platform/chat/common/chatMLFetcher';
-import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
@@ -44,7 +43,6 @@ import { InlineChatWorkspaceSearch } from './inlineChatWorkspaceSearch';
 import { LanguageServerContextPrompt } from './languageServerContextPrompt';
 import { ProjectedDocument } from './summarizedDocument/summarizeDocument';
 import { summarizeDocumentSync } from './summarizedDocument/summarizeDocumentHelpers';
-import { TemporalContext } from './temporalContext';
 
 export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 
@@ -89,7 +87,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 
 		const diagnostics = findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, document.uri, selection, query);
 
-		const enableCodeMapper = this.configurationService.getConfig(ConfigKey.Internal.InlineChatUseCodeMapper);
+		const enableCodeMapper = this.configurationService.getConfig(ConfigKey.TeamInternal.InlineChatUseCodeMapper);
 
 		const replyInterpreter = enableCodeMapper ?
 			this.instantiationService.createInstance(CodeMapperFixReplyInterpreter, document.uri) :
@@ -122,7 +120,6 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 				<UserMessage priority={700}>
 					<CustomInstructions /*priority={700}*/ languageId={language.languageId} chatVariables={chatVariables} />
 					<LanguageServerContextPrompt priority={700} document={document} position={selection.start} requestId={this.props.promptContext.requestId} source={KnownSources.fix} />
-					<TemporalContext context={[document]} location={ChatLocation.Editor} />
 					<CompositeElement priority={750} >{...renderedChatVariables}</CompositeElement>
 					<CompositeElement priority={600} >
 						{

@@ -5,9 +5,13 @@
 
 import type { SessionOptions } from '@github/copilot/sdk';
 import type { CancellationToken, ChatParticipantToolToken } from 'vscode';
+import { URI } from '../../../../util/vs/base/common/uri';
+import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { createEditConfirmation, formatDiffAsUnified } from '../../../tools/node/editFileToolUtils';
+import { ToolCall } from '../common/copilotCLITools';
 
 type CoreTerminalConfirmationToolParams = {
 	tool: ToolName.CoreTerminalConfirmationTool;
@@ -28,24 +32,95 @@ type CoreConfirmationToolParams = {
 }
 
 export async function requestPermission(
+	instaService: IInstantiationService,
 	permissionRequest: PermissionRequest,
+	toolCall: ToolCall | undefined,
 	toolsService: IToolsService,
 	toolInvocationToken: ChatParticipantToolToken,
 	token: CancellationToken,
 ): Promise<boolean> {
 
-	const { tool, input } = getConfirmationToolParams(permissionRequest);
+	const toolParams = await getConfirmationToolParams(instaService, permissionRequest, toolCall);
+	if (!toolParams) {
+		return true;
+	}
+	const { tool, input } = toolParams;
 	const result = await toolsService.invokeTool(tool, { input, toolInvocationToken }, token);
 
 	const firstResultPart = result.content.at(0);
 	return (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes');
 }
 
+export async function requiresFileEditconfirmation(instaService: IInstantiationService, permissionRequest: PermissionRequest): Promise<boolean> {
+	const confirmationInfo = await getFileEditConfirmationToolParams(instaService, permissionRequest);
+	return confirmationInfo !== undefined;
+}
+
+async function getFileEditConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall | undefined): Promise<CoreConfirmationToolParams | undefined> {
+	if (permissionRequest.kind !== 'write') {
+		return;
+	}
+	const file = permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined;
+	if (!file) {
+		return;
+	}
+	const details = async (accessor: ServicesAccessor) => {
+		if (!toolCall) {
+			return '';
+		} else if (toolCall.toolName === 'str_replace_editor' && toolCall.arguments.path) {
+			if (toolCall.arguments.command === 'edit' || toolCall.arguments.command === 'str_replace') {
+				return getDetailsForFileEditPermissionRequest(accessor, toolCall.arguments);
+			} else if (toolCall.arguments.command === 'create') {
+				return getDetailsForFileCreatePermissionRequest(accessor, toolCall.arguments);
+			} else if (toolCall.arguments.command === 'insert') {
+				return getDetailsForFileInsertPermissionRequest(accessor, toolCall.arguments);
+			}
+		} else if (toolCall.toolName === 'edit') {
+			return getDetailsForFileEditPermissionRequest(accessor, toolCall.arguments);
+		} else if (toolCall.toolName === 'create') {
+			return getDetailsForFileCreatePermissionRequest(accessor, toolCall.arguments);
+		} else if (toolCall.toolName === 'insert') {
+			return getDetailsForFileInsertPermissionRequest(accessor, toolCall.arguments);
+		}
+	};
+
+	const getDetails = () => instaService.invokeFunction(details).then(d => d || '');
+	const confirmationInfo = await instaService.invokeFunction(createEditConfirmation, [file], getDetails);
+	const confirmationMessage = confirmationInfo.confirmationMessages;
+	if (!confirmationMessage) {
+		return;
+	}
+
+	return {
+		tool: ToolName.CoreConfirmationTool,
+		input: {
+			title: confirmationMessage.title,
+			message: typeof confirmationMessage.message === 'string' ? confirmationMessage.message : confirmationMessage.message.value,
+			confirmationType: 'basic'
+		}
+	};
+}
+
+async function getDetailsForFileInsertPermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'insert' }>['arguments']): Promise<string | undefined> {
+	if (args.path && args.new_str) {
+		return formatDiffAsUnified(accessor, URI.file(args.path), '', args.new_str);
+	}
+}
+async function getDetailsForFileCreatePermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'create' }>['arguments']): Promise<string | undefined> {
+	if (args.path && args.file_text) {
+		return formatDiffAsUnified(accessor, URI.file(args.path), '', args.file_text);
+	}
+}
+async function getDetailsForFileEditPermissionRequest(accessor: ServicesAccessor, args: Extract<ToolCall, { toolName: 'edit' | 'str_replace' }>['arguments']): Promise<string | undefined> {
+	if (args.path && (args.new_str || args.old_str)) {
+		return formatDiffAsUnified(accessor, URI.file(args.path), args.old_str ?? '', args.new_str ?? '');
+	}
+}
 /**
  * Pure function mapping a Copilot CLI permission request -> tool invocation params.
  * Keeps logic out of session class for easier unit testing.
  */
-export function getConfirmationToolParams(permissionRequest: PermissionRequest): CoreTerminalConfirmationToolParams | CoreConfirmationToolParams {
+export async function getConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall): Promise<CoreTerminalConfirmationToolParams | CoreConfirmationToolParams | undefined> {
 	if (permissionRequest.kind === 'shell') {
 		return {
 			tool: ToolName.CoreTerminalConfirmationTool,
@@ -58,14 +133,7 @@ export function getConfirmationToolParams(permissionRequest: PermissionRequest):
 	}
 
 	if (permissionRequest.kind === 'write') {
-		return {
-			tool: ToolName.CoreConfirmationTool,
-			input: {
-				title: permissionRequest.intention || 'Copilot CLI Permission Request',
-				message: permissionRequest.fileName ? `Edit ${permissionRequest.fileName}` : codeBlock(permissionRequest),
-				confirmationType: 'basic'
-			}
-		};
+		return getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall);
 	}
 
 	if (permissionRequest.kind === 'mcp') {

@@ -5,33 +5,31 @@
 
 import assert from 'assert';
 import Sinon from 'sinon';
+import { SyncDescriptor } from '../../../../../../util/vs/platform/instantiation/common/descriptors';
 import { ResultType } from '../ghostText/ghostText';
 import { telemetryShown } from '../ghostText/telemetry';
 import { getInlineCompletions } from '../inlineCompletion';
-import { Fetcher, FetchOptions, Response } from '../networking';
-import { CompletionRequest, LiveOpenAIFetcher, OpenAIFetcher } from '../openai/fetch';
+import { FetchOptions, ICompletionsFetcherService, Response } from '../networking';
+import { CompletionRequest, ICompletionsOpenAIFetcherService, LiveOpenAIFetcher } from '../openai/fetch';
 import { LocationFactory } from '../textDocument';
 import { Deferred, delay } from '../util/async';
 import { createLibTestingContext } from './context';
 import { createFakeCompletionResponse, StaticFetcher } from './fetcher';
 import { withInMemoryTelemetry } from './telemetry';
 import { createTextDocument } from './textDocument';
-import { ICompletionsContextService } from '../context';
-import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 
 suite('getInlineCompletions()', function () {
 	function setupCompletion(
-		fetcher: Fetcher,
+		fetcher: ICompletionsFetcherService,
 		docText = 'function example() {\n\n}',
 		position = LocationFactory.position(1, 0),
 		languageId = 'typescript'
 	) {
-		const accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
+		const serviceCollection = createLibTestingContext();
 		const doc = createTextDocument('file:///example.ts', languageId, 1, docText);
-		ctx.forceSet(Fetcher, fetcher);
-		ctx.set(OpenAIFetcher, new LiveOpenAIFetcher(accessor.get(IInstantiationService), accessor.get(ICompletionsContextService), accessor.get(ICompletionsRuntimeModeService))); // gets results from static fetcher
+		serviceCollection.define(ICompletionsFetcherService, fetcher);
+		serviceCollection.define(ICompletionsOpenAIFetcherService, new SyncDescriptor(LiveOpenAIFetcher)); // gets results from static fetcher
+		const accessor = serviceCollection.createTestingAccessor();
 
 		// Setup closures with the state as default
 		function requestInlineCompletions(textDoc = doc, pos = position) {
@@ -40,7 +38,6 @@ suite('getInlineCompletions()', function () {
 
 		return {
 			accessor,
-			ctx,
 			doc,
 			position,
 			requestInlineCompletions,

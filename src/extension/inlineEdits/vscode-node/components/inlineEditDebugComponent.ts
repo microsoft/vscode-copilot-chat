@@ -105,10 +105,10 @@ export class InlineEditDebugComponent extends Disposable {
 
 			this._inlineEditsProviderId.set(selectedProvider, undefined);
 
-			const pick = await window.showWarningMessage(`Inline edits provider set to ${selectedProvider}. Reloading will undo this change. Set "github.copilot.${ConfigKey.Internal.InlineEditsProviderId.id}": "${selectedProvider}" in your settings file to make the change persistent.`, 'Open settings (JSON)');
+			const pick = await window.showWarningMessage(`Inline edits provider set to ${selectedProvider}. Reloading will undo this change. Set "github.copilot.${ConfigKey.TeamInternal.InlineEditsProviderId.id}": "${selectedProvider}" in your settings file to make the change persistent.`, 'Open settings (JSON)');
 			if (!pick) { return; }
 
-			await commands.executeCommand('workbench.action.openSettingsJson', { revealSetting: { key: `github.copilot.${ConfigKey.Internal.InlineEditsProviderId.id}`, edit: true } });
+			await commands.executeCommand('workbench.action.openSettingsJson', { revealSetting: { key: `github.copilot.${ConfigKey.TeamInternal.InlineEditsProviderId.id}`, edit: true } });
 		}));
 	}
 

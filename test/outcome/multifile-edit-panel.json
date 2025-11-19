@@ -81,12 +81,6 @@
 		]
 	},
 	{
-		"name": "multifile-edit [panel] [html] - Edits keeps editing files that are NOT attached due to temporal context #9130",
-		"requests": [
-			"3c02ac8cd974275d86b4021a12690a0e76a71a5fa44af4ad05fa7bbf24f0ac20"
-		]
-	},
-	{
 		"name": "multifile-edit [panel] [typescript] - add a command and dependency to a VS Code extension",
 		"requests": [
 			"09b5e04b5144b7cf4550850e25f818786066f0abf865541f903a54470608bb16",

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
-import { ICompletionsContextService } from '../../context';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { withInMemoryTelemetry } from '../../test/telemetry';
@@ -11,23 +11,19 @@ import { createTextDocument } from '../../test/textDocument';
 import { CopilotCompletion } from '../copilotCompletion';
 import { ResultType } from '../ghostText';
 import {
-	LastGhostText,
-	handleGhostTextPostInsert,
+	ICompletionsLastGhostText, handleGhostTextPostInsert,
 	handleGhostTextShown,
 	handlePartialGhostTextPostInsert,
 	rejectLastShown,
-	setLastShown,
+	setLastShown
 } from '../last';
-import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('Isolated LastGhostText tests', function () {
 	let accessor: ServicesAccessor;
-	let last: LastGhostText;
+	let last: ICompletionsLastGhostText;
 	setup(function () {
-		accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
-		last = new LastGhostText();
-		ctx.forceSet(LastGhostText, last);
+		accessor = createLibTestingContext().createTestingAccessor();
+		last = accessor.get(ICompletionsLastGhostText);
 	});
 
 	function makeCompletion(index = 0, text = 'foo', offset = 0): CopilotCompletion {

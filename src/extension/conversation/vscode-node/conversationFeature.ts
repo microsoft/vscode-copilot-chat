@@ -62,7 +62,7 @@ export class ConversationFeature implements IExtensionContribution {
 	private _settingsSearchProviderRegistered = false;
 
 	readonly id = 'conversationFeature';
-	readonly activationBlocker?: Promise<any>;
+	readonly activationBlocker?: Promise<void>;
 
 	constructor(
 		@IInstantiationService private instantiationService: IInstantiationService,
@@ -199,7 +199,7 @@ export class ConversationFeature implements IExtensionContribution {
 			if (settingsSearchDisposable) {
 				disposables.add(settingsSearchDisposable);
 			}
-		} catch (err: any) {
+		} catch (err) {
 			this.logService.error(err, 'Registration of interactive providers failed');
 		}
 		return disposables;

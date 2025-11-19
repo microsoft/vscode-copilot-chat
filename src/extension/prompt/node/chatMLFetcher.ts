@@ -32,11 +32,11 @@ import { createRequestHMAC } from '../../../util/common/crypto';
 import * as errorsUtil from '../../../util/common/errors';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
+import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatMLFetcherTelemetrySender as Telemetry } from './chatMLFetcherTelemetry';
-import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 
 export interface IMadeChatRequestEvent {
 	readonly messages: Raw.ChatMessage[];
@@ -436,7 +436,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		};
 	}
 
-	async _fetchWithInstrumentation(
+	private async _fetchWithInstrumentation(
 		chatEndpoint: IChatEndpoint,
 		ourRequestId: string,
 		request: IEndpointBody,
@@ -548,7 +548,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			});
 	}
 
-	async _handleError(
+	private async _handleError(
 		telemetryData: TelemetryData,
 		response: Response,
 		requestId: string
@@ -569,6 +569,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		} catch {
 			// JSON parsing failed, it's not json content.
 		}
+
+		const reasonNoText = `Server error: ${response.status}`;
+		const reason = `${reasonNoText} ${text}`;
+		this._logService.error(reason);
 
 		if (400 <= response.status && response.status < 500) {
 
@@ -677,7 +681,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					type: FetchResponseKind.Failed,
 					modelRequestId: modelRequestIdObj,
 					failKind: ChatFailKind.ContentFilter,
-					reason: 'Filtered by Responsible AI Service'
+					reason: 'Filtered by Responsible AI Service\n\n' + text,
 				};
 			}
 
@@ -757,9 +761,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				};
 			}
 
-			const reasonNoText = `Server error: ${response.status}`;
-			const reason = `${reasonNoText} ${text}`;
-			this._logService.error(reason);
 			// HTTP 5xx Server Error
 			return {
 				type: FetchResponseKind.Failed,
@@ -1018,6 +1019,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	}
 
 	private scrubErrorDetail(errorDetail: string) {
+		errorDetail = errorDetail.replaceAll(/(logged in as )([^\s]+)/ig, '$1<login>');
 		const username = this._authenticationService.copilotToken?.username;
 		if (!username) {
 			return errorDetail;

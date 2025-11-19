@@ -8,10 +8,9 @@ import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { IInstantiationService, type ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCompletionState } from '../../../../lib/src/completionState';
 import { BlockMode } from '../../../../lib/src/config';
-import { ICompletionsContextService } from '../../../../lib/src/context';
-import { Features } from '../../../../lib/src/experiments/features';
-import { BlockModeConfig } from '../../../../lib/src/ghostText/configBlockMode';
-import { LogTarget, type Logger } from '../../../../lib/src/logger';
+import { ICompletionsFeaturesService } from '../../../../lib/src/experiments/featuresService';
+import { ICompletionsBlockModeConfig } from '../../../../lib/src/ghostText/configBlockMode';
+import { ICompletionsLogTargetService, type Logger } from '../../../../lib/src/logger';
 import { getEngineRequestInfo } from '../../../../lib/src/openai/config';
 import { CompletionHeaders, CompletionRequestExtra, PostOptions } from '../../../../lib/src/openai/fetch';
 import { APIChoice, FinishedCallback } from '../../../../lib/src/openai/openai';
@@ -146,11 +145,11 @@ export async function setupPromptAndTelemetry(
 		{}
 	);
 
-	const ctx = accessor.get(ICompletionsContextService);
+	const featuresService = accessor.get(ICompletionsFeaturesService);
 	const instantiationService = accessor.get(IInstantiationService);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 	// Update telemetry with experiment values
-	solutionManager.savedTelemetryData = await ctx
-		.get(Features)
+	solutionManager.savedTelemetryData = await featuresService
 		.fetchTokenAndUpdateExPValuesAndAssignments(
 			{ uri: document.uri, languageId: document.detectedLanguageId },
 			tempTelemetry
@@ -213,7 +212,7 @@ export async function setupPromptAndTelemetry(
 		}
 	);
 
-	solutionsLogger.debug(ctx.get(LogTarget), 'prompt:', prompt);
+	solutionsLogger.debug(logTarget, 'prompt:', prompt);
 	instantiationService.invokeFunction(telemetry, 'solution.requested', solutionManager.savedTelemetryData);
 
 	return {
@@ -247,7 +246,7 @@ export function setupCompletionParams(
 	telemetryData: TelemetryWithExp
 ): CompletionSetupResult {
 	// Compute block mode
-	const blockMode = accessor.get(ICompletionsContextService).get(BlockModeConfig).forLanguage(accessor, document.detectedLanguageId, telemetryData);
+	const blockMode = accessor.get(ICompletionsBlockModeConfig).forLanguage(document.detectedLanguageId, telemetryData);
 	const isSupportedLanguage = isSupportedLanguageId(document.detectedLanguageId);
 
 	const contextIndent = contextIndentation(document, position);

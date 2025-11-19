@@ -77,7 +77,7 @@ export class EditLogService implements IEditLogService {
 	) { }
 
 	private _isEnabled() {
-		return this._configurationService.getConfig(ConfigKey.Internal.EditRecordingEnabled);
+		return this._configurationService.getConfig(ConfigKey.Advanced.EditRecordingEnabled);
 	}
 
 	logEditChatRequest(turnId: string, prompt: ReadonlyArray<Raw.ChatMessage>, response: string): void {

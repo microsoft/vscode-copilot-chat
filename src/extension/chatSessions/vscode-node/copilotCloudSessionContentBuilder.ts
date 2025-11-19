@@ -109,6 +109,7 @@ export class ChatSessionContentBuilder {
 		sessions: SessionInfo[],
 		pullRequest: PullRequestSearchItem,
 		getLogsForSession: (id: string) => Promise<string>,
+		initialReferences?: readonly vscode.ChatPromptReference[],
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
 		const history: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
@@ -119,11 +120,12 @@ export class ChatSessionContentBuilder {
 
 				const turns: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
-				// Create request turn
+				// Create request turn with references for the first session
+				const references = sessionIndex === 0 && initialReferences ? Array.from(initialReferences) : [];
 				turns.push(new ChatRequestTurn2(
 					problemStatement || session.name,
 					undefined, // command
-					[], // references
+					references, // references
 					this.type,
 					[], // toolReferences
 					[]
