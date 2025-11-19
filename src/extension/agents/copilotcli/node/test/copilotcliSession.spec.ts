@@ -5,8 +5,6 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AuthenticationSession } from 'vscode';
-import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
@@ -81,7 +79,6 @@ describe('CopilotCLISession', () => {
 	let logger: ILogService;
 	let gitService: IGitService;
 	let sessionOptions: CopilotCLISessionOptions;
-	let authService: IAuthenticationService;
 	let instaService: IInstantiationService;
 	let sdk: ICopilotCLISDK;
 	beforeEach(async () => {
@@ -98,13 +95,6 @@ describe('CopilotCLISession', () => {
 				};
 			}
 		};
-		authService = new class extends mock<IAuthenticationService>() {
-			override async getAnyGitHubSession() {
-				return {
-					accessToken: '',
-				} satisfies Partial<AuthenticationSession> as AuthenticationSession;
-			}
-		}();
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
 		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0].fsPath }, logger);
