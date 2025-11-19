@@ -330,6 +330,7 @@
 					"search/readFile"
 				],
 				"displayName": "%copilot.tools.readFile.name%",
+				"userDescription": "Read the contents of a file. You must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads.",
 				"modelDescription": "Read the contents of a file.\n\nYou must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads.",
 				"tags": [
 					"vscode_codesearch"
@@ -813,6 +814,7 @@
 				"toolReferenceName": "editNotebook",
 				"icon": "$(pencil)",
 				"displayName": "%copilot.tools.editNotebook.name%",
+				"userDescription": "Edit a notebook file in the workspace",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
 				"tags": [
 					"enable_other_tool_copilot_getNotebookSummary"
@@ -1208,26 +1210,37 @@
 				"description": "%copilot.toolSet.search.description%",
 				"icon": "$(search)",
 				"tools": [
+					"changes",
 					"codebase",
 					"fileSearch",
 					"listDirectory",
+					"problems",
 					"searchResults",
 					"textSearch",
 					"usages"
 				]
 			},
 			{
+				"name": "launch",
+				"icon": "$(rocket)",
+				"description": "Launch and run code, binaries or tests in the workspace",
+				"tools": [
+					"createAndRunTask",
+					"getTaskOutput",
+					"runNotebookCell",
+					"runTask",
+					"runTests",
+					"testFailure"
+				]
+			},
+			{
 				"name": "vscode",
 				"tools": [
-					"changes",
 					"getProjectSetupInfo",
 					"installExtension",
 					"newWorkspace",
 					"openSimpleBrowser",
-					"problems",
-					"runNotebookCell",
 					"runCommand",
-					"testFailure",
 					"vscodeAPI"
 				]
 			},
