@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Session, SessionEvent, internal } from '@github/copilot/sdk';
+import type { Session, SessionEvent, SessionOptions, internal } from '@github/copilot/sdk';
 import type { CancellationToken, ChatRequest } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -174,7 +174,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	public async createSession(prompt: string, { model, workingDirectory, isolationEnabled }: { model?: string; workingDirectory?: string; isolationEnabled?: boolean }, token: CancellationToken): Promise<RefCountedSession> {
 		const mcpServers = await this.mcpHandler.loadMcpConfig(workingDirectory);
-		const options = new CopilotCLISessionOptions({ model, workingDirectory, isolationEnabled, mcpServers }, this.logService);
+		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers });
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 		const sdkSession = await sessionManager.createSession(options.toSessionOptions());
 		const label = labelFromPrompt(prompt);
@@ -197,6 +197,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			}
 		}));
 		return session;
+	}
+
+	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
+		return new CopilotCLISessionOptions(options, this.logService);
 	}
 
 	public async getSession(sessionId: string, { model, workingDirectory, isolationEnabled, readonly }: { model?: string; workingDirectory?: string; isolationEnabled?: boolean; readonly: boolean }, token: CancellationToken): Promise<RefCountedSession | undefined> {
@@ -223,7 +227,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				raceCancellationError(this.getSessionManager(), token),
 				this.mcpHandler.loadMcpConfig(workingDirectory)
 			]);
-			const options = new CopilotCLISessionOptions({ model, workingDirectory, isolationEnabled, mcpServers }, this.logService);
+			const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers });
 
 			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
 			if (!sdkSession) {

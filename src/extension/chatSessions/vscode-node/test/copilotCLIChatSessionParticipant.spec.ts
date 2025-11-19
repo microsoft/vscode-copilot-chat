@@ -6,7 +6,6 @@
 import { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { MockRunCommandExecutionService } from '../../../../platform/commands/common/mockRunCommandExecutionService';
 import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
@@ -140,7 +139,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
 		workspaceService = new NullWorkspaceService();
 		commandExecutionService = new MockRunCommandExecutionService();
-		const authService = new class extends mock<IAuthenticationService>() { }();
 		const logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
@@ -153,7 +151,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				return fn(accessor, ...args);
 			},
 			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
-				const session = new TestCopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService, instantiationService);
+				const session = new TestCopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService);
 				cliSessions.push(session);
 				return disposables.add(session);
 			}

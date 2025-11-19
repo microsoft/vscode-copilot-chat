@@ -20,7 +20,7 @@ import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
-import { CopilotCLISessionOptions } from '../copilotCli';
+import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 
@@ -83,11 +83,21 @@ describe('CopilotCLISession', () => {
 	let sessionOptions: CopilotCLISessionOptions;
 	let authService: IAuthenticationService;
 	let instaService: IInstantiationService;
+	let sdk: ICopilotCLISDK;
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logger = accessor.get(ILogService);
 		gitService = accessor.get(IGitService);
+		sdk = new class extends mock<ICopilotCLISDK>() {
+			override async getAuthInfo(): Promise<SessionOptions['authInfo']> {
+				return {
+					type: 'token',
+					token: '',
+					host: 'https://github.com'
+				};
+			}
+		};
 		authService = new class extends mock<IAuthenticationService>() {
 			override async getAnyGitHubSession() {
 				return {
@@ -114,7 +124,7 @@ describe('CopilotCLISession', () => {
 			gitService,
 			logger,
 			workspaceService,
-			authService,
+			sdk,
 			instaService
 		));
 	}

@@ -136,6 +136,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 export interface ICopilotCLISDK {
 	readonly _serviceBrand: undefined;
 	getPackage(): Promise<typeof import('@github/copilot/sdk')>;
+	getAuthInfo(): Promise<SessionOptions['authInfo']>;
 }
 
 export class CopilotCLISDK implements ICopilotCLISDK {
@@ -145,6 +146,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService private readonly logService: ILogService,
+		@IAuthenticationService private readonly authentService: IAuthenticationService,
 	) { }
 
 	public async getPackage(): Promise<typeof import('@github/copilot/sdk')> {
@@ -164,13 +166,13 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 			ensureRipgrepShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService)
 		]);
 	}
-}
 
-export async function getAuthInfo(authentService: IAuthenticationService): Promise<SessionOptions['authInfo']> {
-	const copilotToken = await authentService.getAnyGitHubSession();
-	return {
-		type: 'token',
-		token: copilotToken?.accessToken ?? '',
-		host: 'https://github.com'
-	};
+	public async getAuthInfo(): Promise<SessionOptions['authInfo']> {
+		const copilotToken = await this.authentService.getAnyGitHubSession();
+		return {
+			type: 'token',
+			token: copilotToken?.accessToken ?? '',
+			host: 'https://github.com'
+		};
+	}
 }
