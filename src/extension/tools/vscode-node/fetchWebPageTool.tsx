@@ -82,7 +82,14 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 		}
 		const { urls } = options.input;
 
-		// Generate candidates
+		/**
+		 * For each input URL, generate possible llms.txt/llms-full.txt candidates.
+		 * Deduplicate with Set, and filter out any candidate URLs that are already present in the original `urls` array.
+		 * This ensures:
+		 *   - If a user explicitly provides a `llms.txt` or `llms-full.txt` URL, it is only fetched as an original URL, not as a candidate.
+		 *   - If the same URL appears multiple times in the input, only one candidate is generated and fetched.
+		 *   - This logic prevents redundant fetches and avoids surprising behavior if the user explicitly requests a candidate URL.
+		 */
 		const candidateUrls = [...new Set(urls.flatMap(url => getLlmTxtCandidates(url)))].filter(u => !urls.includes(u));
 
 		const [originalResult, candidateResult] = await Promise.all([
