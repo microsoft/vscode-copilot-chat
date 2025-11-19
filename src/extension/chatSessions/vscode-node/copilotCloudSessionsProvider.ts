@@ -875,7 +875,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			/* Generate new cloud agent session from an 'untitled' session */
 
 			const handledUncommittedChanges = await this.tryHandleUncommittedChanges({
-				prompt: context.chatSummary?.prompt ?? request.prompt,
+				prompt: request.prompt,
 				references: request.references,
 				chatContext: context
 			}, stream, token);
@@ -886,9 +886,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				return {};
 			}
 
+			const { prompt, references } = request;
 			await this.doUntitledCreation({
-				prompt: context.chatSummary?.prompt ?? request.prompt,
-				references: request.references,
+				prompt,
+				references,
 				chatContext: context,
 			}, stream, token);
 
@@ -961,7 +962,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				{
 					step: 'create',
 					metadata: {
-						prompt: context.chatSummary?.prompt ?? request.prompt,
+						prompt: request.prompt,
 						references: request.references,
 						chatContext: context,
 					} satisfies ConfirmationMetadata

@@ -531,7 +531,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult | void> {
 		const prompt = request.prompt;
-		const history = context.chatSummary?.history ?? await this.summarizer.provideChatSummary(context, token);
+		const history = await this.summarizer.provideChatSummary(context, token);
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
 		const session = await this.sessionService.createSession(requestPrompt, {}, token);
