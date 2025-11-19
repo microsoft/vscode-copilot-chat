@@ -1408,7 +1408,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				head_ref = await this.gitOperationsManager.commitAndPushChanges({ repository: repo, remoteName, baseRef: base_ref });
 			} catch (error) {
 				return {
-					error: vscode.l10n.t('Failed to commit and push changes. Please try again later.'),
+					error: vscode.l10n.t('Failed to commit and push changes: {0}. Please commit or stash your changes manually and try again.', error instanceof Error ? error.message : String(error)),
 					innerError: error instanceof Error ? error.message : String(error),
 					state: 'error'
 				};
