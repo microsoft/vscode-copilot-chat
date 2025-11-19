@@ -3,18 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement, PromptElementProps, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
+import { PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ChatRequest, ChatRequestEditorData } from '../../../../vscodeTypes';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
-import { ITextDocumentWorkingSetEntry, IWorkingSet, WorkingSetEntryState } from '../../../prompt/common/intents';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { ChatVariables, UserQuery } from '../panel/chatVariables';
-import { WorkingSet } from '../panel/editCodePrompt';
+import { CodeBlock } from '../panel/safeElements';
 
 
 export type InlineChat2PromptProps = PromptElementProps<{
@@ -35,18 +34,20 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 
 	override render(state: void, sizing: PromptSizing): Promise<any> {
 
-		const workingSet: IWorkingSet = [{
-			document: TextDocumentSnapshot.create(this.props.data.document),
-			isMarkedReadonly: false,
-			state: WorkingSetEntryState.Initial,
-			range: this.props.data.selection
-		} satisfies ITextDocumentWorkingSetEntry];
+		const snapshot = TextDocumentSnapshot.create(this.props.data.document);
+
+		// the full lines of the selection
+		// TODO@jrieken
+		// * if the selection is empty and if the line with the selection is empty we could hint to add code and
+		//   generally with empty selections we could allow the model to be a bit more creative
+		// * use the true selected text (now we extend to full lines)
+		const selectedLines = snapshot.getText(this.props.data.selection.with({
+			start: this.props.data.selection.start.with({ character: 0 }),
+			end: this.props.data.selection.end.with({ character: Number.MAX_SAFE_INTEGER }),
+		}));
 
 		const variables = new ChatVariablesCollection(this.props.request.references);
-		const filepath = this._promptPathRepresentationService.getFilePath(this.props.data.document.uri);
-
-		// TODO@jrieken: if the selection is empty and if the line with the selection is empty we could hint to add code and
-		// generally with empty selections we could allow the model to be a bit more creative
+		const filepath = this._promptPathRepresentationService.getFilePath(snapshot.uri);
 
 		// TODO@jrieken APPLY_PATCH_INSTRUCTIONS
 		return (
@@ -62,7 +63,15 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					<cacheBreakpoint type={CacheType} />
 				</SystemMessage>
 				<UserMessage>
-					<WorkingSet flexGrow={1} priority={950} workingSet={workingSet} />
+					<>
+						This is the file you are editing:
+					</>
+					<Tag name='file'>
+						<CodeBlock includeFilepath={false} languageId={snapshot.languageId} uri={snapshot.uri} references={[new PromptReference(snapshot.uri, undefined, undefined)]} code={snapshot.getText()} />
+					</Tag>
+					<Tag name='file-selection'>
+						<CodeBlock includeFilepath={false} languageId={snapshot.languageId} uri={snapshot.uri} references={[new PromptReference(snapshot.uri, undefined, undefined)]} code={selectedLines} />
+					</Tag>
 					<ChatVariables flexGrow={3} priority={898} chatVariables={variables} useFixCookbook={true} />
 					<Tag name='reminder'>
 						If there is a user selection, focus on it, and try to make changes to the selected code and its context.<br />

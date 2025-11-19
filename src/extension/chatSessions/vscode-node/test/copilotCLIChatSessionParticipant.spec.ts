@@ -82,7 +82,6 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 			chatSessionItem: { resource: vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` }), label: 'temp' } as vscode.ChatSessionItem,
 			isUntitled
 		} as vscode.ChatSessionContext,
-		chatSummary: undefined
 	} as vscode.ChatContext;
 }
 
@@ -295,23 +294,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(String(execSpy.mock.calls[0].at(1))).toContain(`copilotcli:/${sessionId}`);
 		expect(execSpy.mock.calls[1]).toEqual(['workbench.action.chat.submit', { inputValue: expectedPrompt }]);
 	});
-	it('invokes handlePushConfirmationData using existing chatSummary and skips summarizer', async () => {
-		const request = new TestChatRequest('Push that');
-		const context = { chatSessionContext: undefined, chatSummary: { history: 'precomputed history' } } as unknown as vscode.ChatContext;
-		const stream = new MockChatResponseStream();
-		const token = disposables.add(new CancellationTokenSource()).token;
-		const summarySpy = vi.spyOn(summarizer, 'provideChatSummary');
-		const execSpy = vi.spyOn(commandExecutionService, 'executeCommand');
-
-		await participant.createHandler()(request, context, stream, token);
-
-		expect(manager.sessions.size).toBe(1);
-		const expectedPrompt = 'Push that\n**Summary**\nprecomputed history';
-		expect(summarySpy).not.toHaveBeenCalled();
-		expect(execSpy).toHaveBeenCalledTimes(2);
-		expect(execSpy.mock.calls[0].at(0)).toBe('vscode.open');
-		expect(execSpy.mock.calls[1]).toEqual(['workbench.action.chat.submit', { inputValue: expectedPrompt }]);
-	});
 
 	it('handleConfirmationData accepts uncommitted-changes and records push', async () => {
 		// Existing session (non-untitled) so confirmation path is hit
@@ -319,7 +301,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
 		const request = new TestChatRequest('Apply');
-		(request as any).acceptedConfirmationData = [{ step: 'uncommitted-changes', metadata: { prompt: 'delegate work', history: 'hist' } }];
+		(request as any).acceptedConfirmationData = [{ step: 'uncommitted-changes', metadata: { prompt: 'delegate work' } }];
 		const context = createChatContext(sessionId, false);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
@@ -336,7 +318,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(sdkSession.emittedEvents[1].event).toBe('assistant.message');
 		expect(sdkSession.emittedEvents[1].content).toContain('pr://2');
 		// Cloud provider used with provided metadata
-		expect(cloudProvider.createDelegatedChatSession).toHaveBeenCalledWith({ prompt: 'delegate work', history: 'hist', chatContext: context }, expect.anything(), token);
+		expect(cloudProvider.createDelegatedChatSession).toHaveBeenCalledWith({ prompt: 'delegate work', chatContext: context }, expect.anything(), token);
 	});
 
 	it('handleConfirmationData cancels when uncommitted-changes rejected', async () => {

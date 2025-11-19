@@ -69,8 +69,8 @@ export type CacheInfo = {
 }
 export namespace CacheInfo {
 	export type has = { cache: CacheInfo };
-	export function has(item: any): item is has {
-		return item.cache !== undefined;
+	export function has(item: unknown): item is has {
+		return (item as has).cache !== undefined;
 	}
 }
 export type CachedContextItem = {
@@ -288,7 +288,7 @@ export type ContextRunnableResult = {
 	speculativeKind: SpeculativeKind;
 
 	/**
-	 * A human readable path to ease debugging.
+	 * A human readable path to the signature to ease debugging.
 	 */
 	debugPath?: ContextRunnableResultId | undefined;
 }
@@ -441,10 +441,10 @@ export namespace ComputeContextResponse {
 	}
 
 	export function isOk(response: ComputeContextResponse): response is tt.server.protocol.Response & { body: OK } {
-		return response.type === 'response' && (response.body as any).state !== undefined;
+		return response.type === 'response' && (response.body as OK).state !== undefined;
 	}
 	export function isError(response: ComputeContextResponse): response is tt.server.protocol.Response & { body: Failed } {
-		return response.type === 'response' && (response.body as any).error !== undefined;
+		return response.type === 'response' && (response.body as Failed).error !== undefined;
 	}
 }
 

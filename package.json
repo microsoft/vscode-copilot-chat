@@ -2524,6 +2524,11 @@
 						"default": true,
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
+					"github.copilot.chat.agent.delegate.autoCommitAndPush": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agent.delegate.autoCommitAndPush%"
+					},
 					"github.copilot.enable": {
 						"type": "object",
 						"scope": "window",
@@ -2988,7 +2993,7 @@
 							"fillHalf",
 							"fill"
 						],
-						"default": "minimal",
+						"default": "double",
 						"scope": "resource",
 						"tags": [
 							"experimental",
@@ -3234,6 +3239,15 @@
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "%github.copilot.config.useResponsesApi%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.useMessagesApi": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.useMessagesApi%",
 						"tags": [
 							"experimental",
 							"onExp"
@@ -5085,9 +5099,9 @@
 		"eslint-plugin-jsdoc": "^51.3.4",
 		"eslint-plugin-no-only-tests": "^3.3.0",
 		"fastq": "^1.19.1",
-		"glob": "^11.0.3",
+		"glob": "^11.1.0",
 		"husky": "^9.1.7",
-		"js-yaml": "^4.1.0",
+		"js-yaml": "^4.1.1",
 		"keyv": "^5.3.2",
 		"lint-staged": "15.2.9",
 		"minimist": "^1.2.8",
@@ -5133,7 +5147,7 @@
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@vscode/copilot-api": "^0.2.0",
+		"@vscode/copilot-api": "^0.2.2",
 		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

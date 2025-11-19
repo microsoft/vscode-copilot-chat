@@ -281,13 +281,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 		}
 
-		let toolCall: ToolCall | undefined;
-		if (workingDirectory && permissionRequest.kind === 'write') {
+		const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
+		const toolCall = editFile ? getEditKeyForFile(editFile) : undefined;
+		if (workingDirectory && permissionRequest.kind === 'write' && editFile) {
 			// TODO:@rebornix @lszomoru
 			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
 			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
-			const editFile = Uri.file(permissionRequest.fileName);
-			toolCall = getEditKeyForFile(editFile);
 
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
@@ -324,7 +323,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			if (await permissionHandler(permissionRequest, toolCall, token)) {
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
-				const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
 				if (editFile && toolCall && this._stream) {
 					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
 					await editTracker.trackEdit(toolCall.toolCallId, [editFile], this._stream);

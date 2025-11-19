@@ -34,7 +34,7 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>
 			<Tag name='tool_use'>
 				- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
-				{tools[ToolName.RunTests] && <>- Use the {ToolName.RunTests} tool to run tests instead of running terminal commands.<br /></>}
+				{tools[ToolName.CoreRunTest] && <>- Use the {ToolName.CoreRunTest} tool to run tests instead of running terminal commands.<br /></>}
 				{tools[ToolName.CoreManageTodoList] && <>
 					<br />
 					## {ToolName.CoreManageTodoList} tool<br />

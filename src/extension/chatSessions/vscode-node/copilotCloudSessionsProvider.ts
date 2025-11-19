@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
@@ -17,7 +18,10 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
+import { CopilotCloudGitOperationsManager } from './copilotCloudGitOperationsManager';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 
@@ -26,9 +30,9 @@ export const UncommittedChangesStep = 'uncommitted-changes';
 
 interface ConfirmationMetadata {
 	prompt: string;
-	history?: string;
 	references?: readonly vscode.ChatPromptReference[];
 	chatContext: vscode.ChatContext;
+	autoPushAndCommit?: boolean;
 }
 
 export interface PullRequestInfo {
@@ -145,6 +149,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	);
 	private cachedSessionsSize: number = 0;
 	private readonly plainTextRenderer = new PlainTextRenderer();
+	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService);
+	private readonly _summarizer: ChatSummarizerProvider;
 
 	constructor(
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
@@ -155,8 +161,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
+		this._summarizer = instantiationService.createInstance(ChatSummarizerProvider);
 		const interval = setInterval(async () => {
 			const repoId = await getRepoId(this._gitService);
 			if (repoId) {
@@ -178,6 +187,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	public refresh(): void {
 		this._onDidChangeChatSessionItems.fire();
+	}
+
+	private get autoCommitAndPushEnabled(): boolean {
+		return this.configurationService.getConfig(ConfigKey.AgentDelegateAutoCommitAndPush);
 	}
 
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
@@ -583,7 +596,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return state === 'MERGED' ? '$(git-merge)' : '$(git-pull-request)';
 	}
 
-	private async startSession(stream: vscode.ChatResponseStream, token: vscode.CancellationToken, source: string, prompt: string, history?: string, references?: readonly vscode.ChatPromptReference[], customAgentName?: string) {
+	private async startSession(stream: vscode.ChatResponseStream, token: vscode.CancellationToken, source: string, prompt: string, history?: string, references?: readonly vscode.ChatPromptReference[], customAgentName?: string, autoPushAndCommit?: boolean) {
 		/* __GDPR__
 			"copilot.codingAgent.editor.invoke" : {
 				"promptLength" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
@@ -605,7 +618,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				history
 			].join('\n\n').trim(),
 			token,
-			false,
+			autoPushAndCommit ?? false,
 			stream,
 			customAgentName,
 		);
@@ -633,10 +646,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 							stream.markdown(vscode.l10n.t('Cloud agent request cancelled.'));
 							return {};
 						}
-						if (!await this.tryHandleUncommittedChanges(data.metadata, stream, token)) {
+						if (!await this.tryHandleUncommittedChanges({ ...data.metadata, chatContext: context }, stream, token)) {
 							// We are NOT handling an uncommitted changes case, so no confirmation was pushed.
 							// This means we (the caller) should continue processing the request.
-							await this.createDelegatedChatSession(data.metadata, stream, token);
+							await this.createDelegatedChatSession({ ...data.metadata, chatContext: context }, stream, token);
 						}
 						break;
 					}
@@ -648,9 +661,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						}
 
 						if (data.metadata.chatContext?.chatSessionContext?.isUntitled) {
-							await this.doUntitledCreation(data.metadata, stream, token);
+							await this.doUntitledCreation({ ...data.metadata, chatContext: context }, stream, token);
 						} else {
-							await this.createDelegatedChatSession(data.metadata, stream, token);
+							await this.createDelegatedChatSession({ ...data.metadata, chatContext: context }, stream, token);
 						}
 						break;
 					}
@@ -663,8 +676,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	async createDelegatedChatSession(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<PullRequestInfo | undefined> {
-		const { prompt, history, references } = metadata;
-		const number = await this.startSession(stream, token, 'chat', prompt, history, references);
+		const { prompt, references } = metadata;
+		let history: string | undefined;
+		if (metadata.chatContext?.history.length > 0) {
+			stream.progress(vscode.l10n.t('Analyzing chat history'));
+			history = await this._summarizer.provideChatSummary(metadata.chatContext, token);
+		}
+		const number = await this.startSession(stream, token, 'chat', prompt, history, references, undefined, metadata.autoPushAndCommit);
 		if (!number) {
 			return undefined;
 		}
@@ -724,7 +742,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			// Check for uncommitted changes and prompt user if checking is enabled
 			const hasChanges = repo.state.workingTreeChanges.length > 0 || repo.state.indexChanges.length > 0;
-			if (hasChanges) {
+			if (hasChanges && !this.autoCommitAndPushEnabled) {
 				this.logService.warn('Uncommitted changes detected, prompting user for confirmation.');
 				stream.confirmation(
 					vscode.l10n.t('Uncommitted changes detected'),
@@ -736,6 +754,38 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					['Proceed', 'Cancel']
 				);
 				return true; // A confirmation was pushed, meaning a new request will be sent to handleConfirmationData(). The caller should STOP processing.
+			}
+
+			if (hasChanges) {
+				const repoName = `${repoId.org}/${repoId.repo}`;
+				const message = vscode.l10n.t('Copilot cloud agent will continue your work in \'{0}\'.', repoName);
+				const detail = vscode.l10n.t('Choose how to handle your uncommitted changes before delegating to the cloud agent.');
+				const push_changes = vscode.l10n.t('Push changes');
+				const learn_more = vscode.l10n.t('Learn more');
+				const continue_without_pushing = vscode.l10n.t('Continue without pushing');
+				const modalResult = await vscode.window.showInformationMessage(
+					message,
+					{
+						modal: true,
+						detail,
+					},
+					push_changes,
+					continue_without_pushing,
+					learn_more,
+				);
+
+				if (!modalResult) {
+					stream.markdown(vscode.l10n.t('Cloud agent request cancelled due to uncommitted changes.'));
+					return true;
+				}
+
+				if (modalResult === learn_more) {
+					await vscode.env.openExternal(vscode.Uri.parse('https://aka.ms/coding-agent-docs'));
+					return true;
+				}
+
+				metadata.autoPushAndCommit = modalResult === push_changes;
+				return false;
 			}
 		} catch (error) {
 			this.logService.warn(`Skipping detection of uncommitted changes due to error: ${error}`);
@@ -754,9 +804,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			token,
 			'untitledChatSession',
 			metadata.prompt,
-			metadata.history,
+			undefined,
 			metadata.references,
 			selectedAgent,
+			metadata.autoPushAndCommit,
 		);
 		if (!number) {
 			return {};
@@ -824,8 +875,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			/* Generate new cloud agent session from an 'untitled' session */
 
 			const handledUncommittedChanges = await this.tryHandleUncommittedChanges({
-				prompt: context.chatSummary?.prompt ?? request.prompt,
-				history: context.chatSummary?.history,
+				prompt: request.prompt,
+				references: request.references,
 				chatContext: context
 			}, stream, token);
 
@@ -835,10 +886,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				return {};
 			}
 
+			const { prompt, references } = request;
 			await this.doUntitledCreation({
-				prompt: context.chatSummary?.prompt ?? request.prompt,
-				history: context.chatSummary?.history,
-				references: request.references,
+				prompt,
+				references,
 				chatContext: context,
 			}, stream, token);
 
@@ -911,8 +962,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				{
 					step: 'create',
 					metadata: {
-						prompt: context.chatSummary?.prompt ?? request.prompt,
-						history: context.chatSummary?.history,
+						prompt: request.prompt,
 						references: request.references,
 						chatContext: context,
 					} satisfies ConfirmationMetadata
@@ -1337,13 +1387,32 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (!base_ref) {
 			return { error: vscode.l10n.t('Unable to determine the current branch.'), state: 'error' };
 		}
-		let head_ref: string | undefined; // TODO: UNUSED! This is the ref cloud agent starts work from (omitted unless we push local changes)
+		let head_ref: string | undefined;
 
-		// TODO: Make this automatic instead of a fatal error.
 		const remoteName =
-			repo?.state.HEAD?.upstream?.remote ??
+			repo.state.HEAD?.upstream?.remote ??
 			currentRepository?.upstreamRemote ??
-			repo?.state.remotes?.[0]?.name;
+			repo.state.remotes?.[0]?.name;
+
+		const hasChanges = repo.state.workingTreeChanges.length > 0 || repo.state.indexChanges.length > 0;
+		if (hasChanges && autoPushAndCommit) {
+			if (!remoteName) {
+				return {
+					error: vscode.l10n.t('Unable to determine a Git remote for this repository. Configure an upstream remote and try again.'),
+					state: 'error'
+				};
+			}
+			try {
+				chatStream?.progress(vscode.l10n.t('Committing and pushing local changes'));
+				head_ref = await this.gitOperationsManager.commitAndPushChanges({ repository: repo, remoteName, baseRef: base_ref });
+			} catch (error) {
+				return {
+					error: vscode.l10n.t('Failed to commit and push changes: {0}. Please commit or stash your changes manually and try again.', error instanceof Error ? error.message : String(error)),
+					innerError: error instanceof Error ? error.message : String(error),
+					state: 'error'
+				};
+			}
+		}
 
 		if (repo && remoteName && base_ref) {
 			try {
@@ -1371,11 +1440,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				});
 
 				if (!hasRemoteBranch) {
-					this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote.`);
-					return {
-						error: vscode.l10n.t('The branch \'{0}\' does not exist on remote \'{1}\'. Please push the branch and try again.', base_ref, remoteName),
-						state: 'error'
-					};
+					if (this.autoCommitAndPushEnabled) {
+						this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote. Auto-pushing because autoCommitAndPush is enabled.`);
+						await repo.push(remoteName, base_ref, true);
+					} else {
+						this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote.`);
+						return {
+							error: vscode.l10n.t('The branch \'{0}\' does not exist on remote \'{1}\'. Please push the branch and try again.', base_ref, remoteName),
+							state: 'error'
+						};
+					}
 				}
 			} catch (error) {
 				this.logService.error(`Failed to verify remote branch for cloud agent: ${error instanceof Error ? error.message : String(error)}`);
