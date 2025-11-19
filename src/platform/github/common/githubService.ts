@@ -280,7 +280,7 @@ export class BaseOctoKitService {
 	constructor(
 		protected readonly _capiClientService: ICAPIClientService,
 		private readonly _fetcherService: IFetcherService,
-		private readonly _logService: ILogService,
+		protected readonly _logService: ILogService,
 		private readonly _telemetryService: ITelemetryService
 	) { }
 
