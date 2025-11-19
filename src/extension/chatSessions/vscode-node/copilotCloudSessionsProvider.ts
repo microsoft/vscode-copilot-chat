@@ -733,21 +733,21 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			// Check for uncommitted changes and prompt user if checking is enabled
 			const hasChanges = repo.state.workingTreeChanges.length > 0 || repo.state.indexChanges.length > 0;
-			if (hasChanges) {
-				if (!this.autoCommitAndPushEnabled) {
-					this.logService.warn('Uncommitted changes detected, prompting user for confirmation.');
-					stream.confirmation(
-						vscode.l10n.t('Uncommitted changes detected'),
-						vscode.l10n.t('You have uncommitted changes in your workspace. Consider committing them if you would like to include them in the cloud agent\'s work.'),
-						{
-							step: UncommittedChangesStep,
-							metadata: metadata satisfies ConfirmationMetadata, // Forward metadata
-						},
-						['Proceed', 'Cancel']
-					);
-					return true; // A confirmation was pushed, meaning a new request will be sent to handleConfirmationData(). The caller should STOP processing.
-				}
+			if (hasChanges && !this.autoCommitAndPushEnabled) {
+				this.logService.warn('Uncommitted changes detected, prompting user for confirmation.');
+				stream.confirmation(
+					vscode.l10n.t('Uncommitted changes detected'),
+					vscode.l10n.t('You have uncommitted changes in your workspace. Consider committing them if you would like to include them in the cloud agent\'s work.'),
+					{
+						step: UncommittedChangesStep,
+						metadata: metadata satisfies ConfirmationMetadata, // Forward metadata
+					},
+					['Proceed', 'Cancel']
+				);
+				return true; // A confirmation was pushed, meaning a new request will be sent to handleConfirmationData(). The caller should STOP processing.
+			}
 
+			if (hasChanges) {
 				const repoName = `${repoId.org}/${repoId.repo}`;
 				const message = vscode.l10n.t('Copilot cloud agent will continue your work in \'{0}\'.', repoName);
 				const detail = vscode.l10n.t('Choose how to handle your uncommitted changes before delegating to the cloud agent.');
@@ -882,7 +882,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				prompt: context.chatSummary?.prompt ?? request.prompt,
 				history: context.chatSummary?.history,
 				references: request.references,
-				chatContext: context
+				chatContext: context,
 			}, stream, token);
 
 		} else if (context.chatSessionContext) {
@@ -1374,6 +1374,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			};
 		}
 
+		// NOTE: This is as unobtrusive as possible with the current high-level APIs.
+		// Get the current branch as base_ref (the ref the PR will merge into)
+		const base_ref = repo.state.HEAD?.name;
+		if (!base_ref) {
+			return { error: vscode.l10n.t('Unable to determine the current branch.'), state: 'error' };
+		}
+		let head_ref: string | undefined;
+
 		const remoteName =
 			repo.state.HEAD?.upstream?.remote ??
 			currentRepository?.upstreamRemote ??
@@ -1386,13 +1394,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			};
 		}
 
-		// NOTE: This is as unobtrusive as possible with the current high-level APIs.
-		// Get the current branch as base_ref (the ref the PR will merge into)
-		const base_ref = repo.state.HEAD?.name;
-		if (!base_ref) {
-			return { error: vscode.l10n.t('Unable to determine the current branch.'), state: 'error' };
-		}
-		let head_ref: string | undefined;
 		const hasChanges = repo.state.workingTreeChanges.length > 0 || repo.state.indexChanges.length > 0;
 		if (hasChanges && autoPushAndCommit) {
 			try {
@@ -1407,49 +1408,51 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
-		try {
-			const remoteBranches =
-				(await repo.getBranches({ remote: true }))
-					.filter(b => b.remote); // Has an associated remote
-			const expectedRemoteBranch = `${remoteName}/${base_ref}`;
-			const alternateNames = new Set<string>([
-				expectedRemoteBranch,
-				`refs/remotes/${expectedRemoteBranch}`,
-				base_ref
-			]);
-			const hasRemoteBranch = remoteBranches.some(branch => {
-				if (!branch.name) {
-					return false;
-				}
-				if (branch.remote && branch.remote !== remoteName) {
-					return false;
-				}
-				const candidateName =
-					(branch.remote && branch.name.startsWith(branch.remote + '/'))
-						? branch.name
-						: `${branch.remote}/${branch.name}`;
-				return alternateNames.has(candidateName);
-			});
+		if (repo && remoteName && base_ref) {
+			try {
+				const remoteBranches =
+					(await repo.getBranches({ remote: true }))
+						.filter(b => b.remote); // Has an associated remote
+				const expectedRemoteBranch = `${remoteName}/${base_ref}`;
+				const alternateNames = new Set<string>([
+					expectedRemoteBranch,
+					`refs/remotes/${expectedRemoteBranch}`,
+					base_ref
+				]);
+				const hasRemoteBranch = remoteBranches.some(branch => {
+					if (!branch.name) {
+						return false;
+					}
+					if (branch.remote && branch.remote !== remoteName) {
+						return false;
+					}
+					const candidateName =
+						(branch.remote && branch.name.startsWith(branch.remote + '/'))
+							? branch.name
+							: `${branch.remote}/${branch.name}`;
+					return alternateNames.has(candidateName);
+				});
 
-			if (!hasRemoteBranch) {
-				if (!this.autoCommitAndPushEnabled) {
-					this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote.`);
-					return {
-						error: vscode.l10n.t('The branch \'{0}\' does not exist on remote \'{1}\'. Please push the branch and try again.', base_ref, remoteName),
-						state: 'error'
-					};
+				if (!hasRemoteBranch) {
+					if (this.autoCommitAndPushEnabled) {
+						this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote. Auto-pushing because autoCommitAndPush is enabled.`);
+						await repo.push(remoteName, base_ref, true);
+					} else {
+						this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote.`);
+						return {
+							error: vscode.l10n.t('The branch \'{0}\' does not exist on remote \'{1}\'. Please push the branch and try again.', base_ref, remoteName),
+							state: 'error'
+						};
+					}
 				}
-
-				this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote. Auto-pushing because autoCommitAndPush is enabled.`);
-				await repo.push(remoteName, base_ref, true);
+			} catch (error) {
+				this.logService.error(`Failed to verify remote branch for cloud agent: ${error instanceof Error ? error.message : String(error)}`);
+				return {
+					error: vscode.l10n.t('Unable to verify that branch \'{0}\' exists on remote \'{1}\'. Please ensure the remote branch is available and try again.', base_ref, remoteName),
+					innerError: error instanceof Error ? error.message : undefined,
+					state: 'error'
+				};
 			}
-		} catch (error) {
-			this.logService.error(`Failed to verify remote branch for cloud agent: ${error instanceof Error ? error.message : String(error)}`);
-			return {
-				error: vscode.l10n.t('Unable to verify that branch \'{0}\' exists on remote \'{1}\'. Please ensure the remote branch is available and try again.', base_ref, remoteName),
-				innerError: error instanceof Error ? error.message : undefined,
-				state: 'error'
-			};
 		}
 
 		const title = extractTitle(prompt, problemContext);
