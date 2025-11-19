@@ -30,7 +30,6 @@ export const UncommittedChangesStep = 'uncommitted-changes';
 
 interface ConfirmationMetadata {
 	prompt: string;
-	history?: string;
 	references?: readonly vscode.ChatPromptReference[];
 	chatContext: vscode.ChatContext;
 	autoPushAndCommit?: boolean;
@@ -678,8 +677,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	async createDelegatedChatSession(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<PullRequestInfo | undefined> {
 		const { prompt, references } = metadata;
-		let history = metadata.history;
-		if (!history && metadata.chatContext?.history.length > 0) {
+		let history: string | undefined;
+		if (metadata.chatContext?.history.length > 0) {
 			stream.progress(vscode.l10n.t('Analyzing chat history'));
 			history = await this._summarizer.provideChatSummary(metadata.chatContext, token);
 		}
@@ -877,7 +876,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			const handledUncommittedChanges = await this.tryHandleUncommittedChanges({
 				prompt: context.chatSummary?.prompt ?? request.prompt,
-				history: context.chatSummary?.history,
 				references: request.references,
 				chatContext: context
 			}, stream, token);
