@@ -17,19 +17,17 @@ import {
 	workspace,
 } from 'vscode';
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
-import { CompletionsTelemetryServiceBridge } from '../../bridge/src/completionsTelemetryServiceBridge';
-import { isPreRelease } from '../../lib/src/config';
+import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
+import { BuildInfo } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
-import { ICompletionsContextService } from '../../lib/src/context';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
-import { telemetry, TelemetryData } from '../../lib/src/telemetry';
 import { Deferred } from '../../lib/src/util/async';
 import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
-import { CopilotExtensionStatus } from './extensionStatus';
+import { ICompletionsExtensionStatus } from './extensionStatus';
 import { GhostTextProvider } from './ghostText/ghostText';
-import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 
 const logger = new Logger('inlineCompletionItemProvider');
 
@@ -38,7 +36,7 @@ function quickSuggestionsDisabled() {
 	return qs.get('other') !== 'on' && qs.get('comments') !== 'on' && qs.get('strings') !== 'on';
 }
 
-function exception(ctx: ICompletionsContextService, error: unknown, origin: string, logger?: Logger) {
+export function exception(accessor: ServicesAccessor, error: unknown, origin: string, logger?: Logger) {
 	if (error instanceof Error && error.name === 'Canceled') {
 		// these are VS Code cancellations
 		return;
@@ -47,8 +45,9 @@ function exception(ctx: ICompletionsContextService, error: unknown, origin: stri
 		// expected errors from VS Code
 		return;
 	}
-	ctx.get(CompletionsTelemetryServiceBridge).sendGHTelemetryException(error, 'codeUnification.completions.exception');
-	handleException(ctx, error, origin, logger);
+	const telemetryService = accessor.get(ICompletionsTelemetryService);
+	telemetryService.sendGHTelemetryException(error, 'codeUnification.completions.exception');
+	handleException(accessor, error, origin, logger);
 }
 
 /** @public */
@@ -59,8 +58,9 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 	pendingRequests: Set<Promise<unknown>> = new Set();
 
 	constructor(
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICompletionsTelemetryService private readonly telemetryService: ICompletionsTelemetryService,
+		@ICompletionsExtensionStatus private readonly extensionStatusService: ICompletionsExtensionStatus,
 	) {
 		super();
 		this.copilotCompletionFeedbackTracker = this._register(this.instantiationService.createInstance(CopilotCompletionFeedbackTracker));
@@ -83,20 +83,10 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<InlineCompletionItem[] | InlineCompletionList | undefined> {
-		telemetry(this.ctx, 'codeUnification.completions.invoked', TelemetryData.createAndMarkAsIssued({
-			languageId: doc.languageId,
-			lineCount: String(doc.lineCount),
-			currentLine: String(position.line),
-			isCycling: String(context.triggerKind === InlineCompletionTriggerKind.Invoke),
-			completionsActive: String(context.selectedCompletionInfo !== undefined),
-		}));
-
 		try {
 			return await this._provideInlineCompletionItems(doc, position, context, token);
 		} catch (e) {
-			this.ctx.get(CompletionsTelemetryServiceBridge).sendGHTelemetryException(e, 'codeUnification.completions.exception');
-		} finally {
-			telemetry(this.ctx, 'codeUnification.completions.returned', TelemetryData.createAndMarkAsIssued());
+			this.telemetryService.sendGHTelemetryException(e, 'codeUnification.completions.exception');
 		}
 	}
 
@@ -110,10 +100,10 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		this.pendingRequests.add(pendingRequestDeferred.promise);
 
 		if (context.triggerKind === InlineCompletionTriggerKind.Automatic) {
-			if (!isCompletionEnabledForDocument(this.ctx, doc)) {
+			if (!this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {
 				return;
 			}
-			if (this.ctx.get(CopilotExtensionStatus).kind === 'Error') {
+			if (this.extensionStatusService.kind === 'Error') {
 				return;
 			}
 		}
@@ -123,7 +113,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		// match it, VS Code won't show it to the user unless the completion dropdown is dismissed. Historically we've
 		// chosen to favor completion quality, but this option allows opting into or out of generating a completion that
 		// VS Code will actually show.
-		if (!copilotConfig.get('respectSelectedCompletionInfo', quickSuggestionsDisabled() || isPreRelease(this.ctx))) {
+		if (!copilotConfig.get('respectSelectedCompletionInfo', quickSuggestionsDisabled() || BuildInfo.isPreRelease())) {
 			context = { ...context, selectedCompletionInfo: undefined };
 		}
 		try {
@@ -148,7 +138,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 				commands: [sendCompletionFeedbackCommand],
 			};
 		} catch (e) {
-			exception(this.ctx, e, '.provideInlineCompletionItems', logger);
+			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
 	}
 
@@ -157,7 +147,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 			this.copilotCompletionFeedbackTracker.trackItem(item);
 			return this.delegate.handleDidShowCompletionItem?.(item, updatedInsertText);
 		} catch (e) {
-			exception(this.ctx, e, '.provideInlineCompletionItems', logger);
+			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
 	}
 
@@ -168,7 +158,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		try {
 			return this.delegate.handleDidPartiallyAcceptCompletionItem?.(item, acceptedLengthOrInfo);
 		} catch (e) {
-			exception(this.ctx, e, '.provideInlineCompletionItems', logger);
+			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
 	}
 
@@ -176,7 +166,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		try {
 			return this.delegate.handleEndOfLifetime?.(completionItem, reason);
 		} catch (e) {
-			exception(this.ctx, e, '.handleEndOfLifetime', logger);
+			this.instantiationService.invokeFunction(exception, e, '.handleEndOfLifetime', logger);
 		}
 	}
 }

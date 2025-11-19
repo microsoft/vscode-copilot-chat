@@ -18,6 +18,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { commands, type WorkspaceFolder } from 'vscode';
 import { ChatReplayResponses, ChatStep } from '../common/chatReplayResponses';
+import { parseReplay } from '../node/replayParser';
+
+interface launchArgs extends DebugProtocol.LaunchRequestArguments { stopOnEntry: boolean; program: string }
 
 export class ChatReplayDebugSession extends LoggingDebugSession {
 
@@ -28,7 +31,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	private _chatSteps: ChatStep[] = [];
 	private _currentIndex = -1;
 	private _stopOnEntry = true;
-	private _variableHandles = new Handles<any>();
+	private _variableHandles = new Handles<{ step: ChatStep }>();
 	private _replay = ChatReplayResponses.getInstance();
 
 	constructor(workspaceFolder: WorkspaceFolder | undefined) {
@@ -50,7 +53,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	}
 
 	// Launch the session: read and parse the markdown file and stop on the first header if requested
-	protected override async launchRequest(response: DebugProtocol.LaunchResponse, args: any): Promise<void> {
+	protected override async launchRequest(response: DebugProtocol.LaunchResponse, args: launchArgs): Promise<void> {
 		try {
 			this._stopOnEntry = !!args.stopOnEntry;
 			const programArg: string = args.program;
@@ -64,7 +67,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 				: path.join(this._workspaceFolder?.uri.fsPath || process.cwd(), programArg);
 
 			const content = fs.readFileSync(this._program, 'utf8');
-			this._chatSteps = this.parseReplay(content);
+			this._chatSteps = parseReplay(content);
 
 			this.sendResponse(response);
 
@@ -81,7 +84,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			if (this._stopOnEntry) {
 				this.sendEvent(new StoppedEvent('entry', ChatReplayDebugSession.THREAD_ID));
 			}
-		} catch (err: any) {
+		} catch (err) {
 			this.sendErrorResponse(response, 3002, `Failed to launch: ${err?.message || String(err)}`);
 		}
 	}
@@ -173,7 +176,6 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 		this.sendEvent(new StoppedEvent('next', ChatReplayDebugSession.THREAD_ID));
 	}
 
-
 	protected override pauseRequest(response: DebugProtocol.PauseResponse, args: DebugProtocol.PauseArguments): void {
 		// Stay on current header and report stopped
 		this.sendResponse(response);
@@ -187,75 +189,6 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 
 		this._currentIndex++;
 		return undefined;
-	}
-
-	private parsePrompt(prompt: { [key: string]: any }) {
-		const steps: ChatStep[] = [];
-		steps.push({
-			kind: 'userQuery',
-			query: prompt.prompt,
-			line: 0,
-		});
-
-		for (const log of prompt.logs) {
-			if (log.kind === 'toolCall') {
-				steps.push({
-					kind: 'toolCall',
-					id: log.id,
-					line: 0,
-					toolName: log.tool,
-					args: JSON.parse(log.args),
-					edits: log.edits,
-					results: log.response
-				});
-			} else if (log.kind === 'request') {
-				steps.push({
-					kind: 'request',
-					id: log.id,
-					line: 0,
-					prompt: log.messages,
-					result: log.response.message
-				});
-			}
-		}
-
-		return steps;
-	}
-
-	private parseReplay(content: string): ChatStep[] {
-		const parsed = JSON.parse(content);
-		const prompts = (parsed.prompts && Array.isArray(parsed.prompts) ? parsed.prompts : [parsed]) as { [key: string]: any }[];
-		if (prompts.filter(p => !p.prompt).length) {
-			throw new Error('Invalid replay content: expected a prompt object or an array of prompts in the base JSON structure.');
-		}
-
-		const steps: ChatStep[] = [];
-		for (const prompt of prompts) {
-			steps.push(...this.parsePrompt(prompt));
-		}
-
-		let stepIx = 0;
-		const lines = content.split('\n');
-		lines.forEach((line, index) => {
-			if (stepIx < steps.length) {
-				const step = steps[stepIx];
-				if (step.kind === 'userQuery') {
-					const match = line.match(`"prompt": "${step.query.trim()}`);
-					if (match) {
-						step.line = index + 1;
-						stepIx++;
-					}
-				} else {
-					const match = line.match(`"id": "${step.id}"`);
-					if (match) {
-						step.line = index + 1;
-						stepIx++;
-					}
-				}
-
-			}
-		});
-		return steps;
 	}
 }
 

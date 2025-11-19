@@ -5,24 +5,27 @@
 
 import assert from 'assert';
 import os from 'os';
-import { CopilotContentExclusionManager } from '../../../contentExclusion/contentExclusionManager';
-import { ICompletionsContextService } from '../../../context';
-import { FileSystem } from '../../../fileSystem';
+import { IIgnoreService } from '../../../../../../../../platform/ignore/common/ignoreService';
+import { TestingServiceCollection } from '../../../../../../../../platform/test/node/services';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsFileSystemService } from '../../../fileSystem';
 import { createLibTestingContext } from '../../../test/context';
 import { FakeFileSystem } from '../../../test/filesystem';
-import { BlockingContentExclusionManager } from '../../../test/testContentExclusion';
+import { MockIgnoreService } from '../../../test/testContentExclusion';
 import { SimpleTestTextDocumentManager, TestTextDocumentManager } from '../../../test/textDocument';
 import { TextDocumentIdentifier, TextDocumentValidation } from '../../../textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../../textDocumentManager';
 import { ResolvedContextItem } from '../../contextProviderRegistry';
-import { ContextProviderStatistics } from '../../contextProviderStatistics';
+import { ContextProviderStatistics, ICompletionsContextProviderService } from '../../contextProviderStatistics';
 import { TestContextProviderStatistics } from '../../test/contextProviderStatistics';
 import { getCodeSnippetsFromContextItems } from '../codeSnippets';
 import { CodeSnippetWithId } from '../contextItemSchemas';
 
 suite('codeSnippetsContextProvider', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
+	let serviceCollection: TestingServiceCollection;
 	let tdm: TestTextDocumentManager;
+	let ignoreService: MockIgnoreService;
 	const resolvedContextItems: ResolvedContextItem<CodeSnippetWithId>[] = [
 		{
 			providerId: 'testCodeSnippetsProvider1',
@@ -65,9 +68,12 @@ suite('codeSnippetsContextProvider', function () {
 	];
 
 	setup(function () {
-		ctx = createLibTestingContext();
-		tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		serviceCollection = createLibTestingContext();
+		serviceCollection.define(IIgnoreService, new MockIgnoreService());
+		accessor = serviceCollection.createTestingAccessor();
 
+		ignoreService = accessor.get(IIgnoreService) as MockIgnoreService;
+		tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.setTextDocument('file:///foo.js', 'javascript', 'doesntmatter');
 		tdm.setTextDocument('file:///bar.js', 'javascript', 'doesntmatter');
 		tdm.setTextDocument('file:///baz.js', 'javascript', 'doesntmatter');
@@ -76,24 +82,26 @@ suite('codeSnippetsContextProvider', function () {
 
 	test('can get code snippets from context text providers and flattens them', async function () {
 		const codeSnippets = await getCodeSnippetsFromContextItems(
-			ctx,
+			accessor,
 			'COMPLETION_ID',
 			resolvedContextItems,
 			'javascript'
 		);
 
-		assert.deepStrictEqual(codeSnippets.length, 4);
+		assert.deepStrictEqual(codeSnippets.length, 5);
 		assert.deepStrictEqual(
 			codeSnippets.map(t => t.value),
-			['foovalue', 'barvalue', 'anotherbarvalue', 'bazvalue']
+			['foovalue', 'barvalue', 'anotherbarvalue', 'bazvalue', 'maybevalue']
 		);
 	});
 
 	test('set expectations for contextProviderStatistics', async function () {
 		const statistics = new TestContextProviderStatistics();
-		ctx.forceSet(ContextProviderStatistics, new ContextProviderStatistics(() => statistics));
+		const serviceCollectionClone = serviceCollection.clone();
+		serviceCollectionClone.define(ICompletionsContextProviderService, new ContextProviderStatistics(() => statistics));
+		const accessor = serviceCollectionClone.createTestingAccessor();
 
-		await getCodeSnippetsFromContextItems(ctx, 'COMPLETION_ID', resolvedContextItems, 'javascript');
+		await getCodeSnippetsFromContextItems(accessor, 'COMPLETION_ID', resolvedContextItems, 'javascript');
 
 		assert.deepStrictEqual(statistics.expectations.size, 2);
 
@@ -118,7 +126,7 @@ suite('codeSnippetsContextProvider', function () {
 		assert.ok(expectations2);
 		assert.deepStrictEqual(expectations2, [
 			[{ uri: 'file:///baz.js', value: 'bazvalue', id: '4', type: 'CodeSnippet' }, 'included'],
-			[{ uri: 'file:///maybe.js', value: 'maybevalue', id: '5', type: 'CodeSnippet' }, 'content_excluded'],
+			[{ uri: 'file:///maybe.js', value: 'maybevalue', id: '5', type: 'CodeSnippet' }, 'included'],
 		]);
 	});
 
@@ -127,7 +135,7 @@ suite('codeSnippetsContextProvider', function () {
 		tdm.setTextDocument('file:///maybe.js', 'javascript', 'doesntmatter');
 
 		const codeSnippets = await getCodeSnippetsFromContextItems(
-			ctx,
+			accessor,
 			'COMPLETION_ID',
 			resolvedContextItems,
 			'javascript'
@@ -137,9 +145,9 @@ suite('codeSnippetsContextProvider', function () {
 		assert.ok(codeSnippets.map(t => t.uri).includes('file:///maybe.js'));
 
 		// If it's content excluded, it's not returned
-		ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(BlockingContentExclusionManager, ['file:///maybe.js']));
+		ignoreService.setBlockListUris(['file:///maybe.js']);
 		const codeSnippetsAfterExclusion = await getCodeSnippetsFromContextItems(
-			ctx,
+			accessor,
 			'COMPLETION_ID',
 			resolvedContextItems,
 			'javascript'
@@ -154,16 +162,18 @@ suite('codeSnippetsContextProvider', function () {
 		// entry depending on the OS to test the normalization of the URI.
 		const drive = os.platform() === 'win32' ? 'c:' : '';
 		const uriPrefix = os.platform() === 'win32' ? 'file:///c:' : 'file://';
-		ctx.forceSet(
-			FileSystem,
+		const serviceCollectionClone = serviceCollection.clone();
+		serviceCollectionClone.define(
+			ICompletionsFileSystemService,
 			new FakeFileSystem({
 				[`${drive}/fake2.js`]: 'content',
 			})
 		);
 
 		// Use a SimpleTestTextDocumentManager to read from the FakeFileSystem
-		const tdm = ctx.instantiationService.createInstance(SimpleTestTextDocumentManager);
-		ctx.forceSet(TextDocumentManager, tdm);
+		const tdm = accessor.get(IInstantiationService).createInstance(SimpleTestTextDocumentManager);
+		serviceCollectionClone.define(ICompletionsTextDocumentManagerService, tdm);
+		const accessorClone = serviceCollectionClone.createTestingAccessor();
 
 		const additionalUri = `${uriPrefix}/fake2.js`;
 
@@ -190,7 +200,7 @@ suite('codeSnippetsContextProvider', function () {
 		];
 
 		const codeSnippets = await getCodeSnippetsFromContextItems(
-			ctx,
+			accessorClone,
 			'COMPLETION_ID',
 			resolvedContextItems,
 			'javascript'
@@ -200,26 +210,27 @@ suite('codeSnippetsContextProvider', function () {
 	});
 
 	test('content exclusion does not check multiple times', async function () {
-		const tdm = ctx.instantiationService.createInstance(FakeTextDocumentManager);
-		ctx.forceSet(TextDocumentManager, tdm);
+		const serviceCollectionClone = serviceCollection.clone();
+		const tdm = accessor.get(IInstantiationService).createInstance(FakeTextDocumentManager);
+		serviceCollectionClone.define(ICompletionsTextDocumentManagerService, tdm);
+		const accessorClone = serviceCollectionClone.createTestingAccessor();
 
-		await getCodeSnippetsFromContextItems(ctx, 'COMPLETION_ID', resolvedContextItems, 'javascript');
-
+		await getCodeSnippetsFromContextItems(accessorClone, 'COMPLETION_ID', resolvedContextItems, 'javascript');
 		const uris = resolvedContextItems.map(t => t.data.flatMap(d => [d.uri, ...(d.additionalUris ?? [])])).flat();
 		assert.ok(uris.length > tdm.checkedUris.length);
 		assert.deepStrictEqual(tdm.checkedUris.length, new Set(tdm.checkedUris).size);
 	});
 
 	test('files are not returned if any of their additionalUris are excluded', async function () {
-		ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(BlockingContentExclusionManager, ['file:///foo2.js']));
+		ignoreService.setBlockListUris(['file:///foo2.js']);
 		const codeSnippets = await getCodeSnippetsFromContextItems(
-			ctx,
+			accessor,
 			'COMPLETION_ID',
 			resolvedContextItems,
 			'javascript'
 		);
 
-		assert.deepStrictEqual(codeSnippets.length, 3);
+		assert.deepStrictEqual(codeSnippets.length, 4);
 		assert.ok(!codeSnippets.map(t => t.uri).includes('file:///foo.js'));
 	});
 
@@ -227,7 +238,7 @@ suite('codeSnippetsContextProvider', function () {
 		tdm.setDiskContents('file:///maybe.js', 'doesntmatter');
 
 		const codeSnippets = await getCodeSnippetsFromContextItems(
-			ctx,
+			accessor,
 			'COMPLETION_ID',
 			resolvedContextItems,
 			'javascript'

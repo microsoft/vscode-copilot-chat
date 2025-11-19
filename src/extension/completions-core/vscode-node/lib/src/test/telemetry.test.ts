@@ -5,13 +5,16 @@
 
 import * as assert from 'assert';
 import Sinon from 'sinon';
-import { telemetryCatch, TelemetryData, TelemetryReporters, TelemetryStore, TelemetryUserConfig } from '../telemetry';
+import { ICompletionsTelemetryService } from '../../../bridge/src/completionsTelemetryServiceBridge';
+import { ICompletionsTelemetryReporters, telemetryCatch, TelemetryData, TelemetryStore } from '../telemetry';
+import { ICompletionsTelemetryUserConfigService } from '../telemetry/userConfig';
+import { ICompletionsPromiseQueueService } from '../util/promiseQueue';
 import { createLibTestingContext } from './context';
 import { NoopCopilotTelemetryReporter } from './noopTelemetry';
 import { withInMemoryTelemetry } from './telemetry';
 
 suite('Telemetry unit tests', function () {
-	const ctx = createLibTestingContext();
+	const accessor = createLibTestingContext().createTestingAccessor();
 	let clock: Sinon.SinonFakeTimers;
 
 	setup(function () {
@@ -25,7 +28,7 @@ suite('Telemetry unit tests', function () {
 	test('Adds additional fields', async function () {
 		const telemetry = TelemetryData.createAndMarkAsIssued();
 
-		await telemetry.makeReadyForSending(ctx, TelemetryStore.Standard, 'SkipExp', 2000);
+		await telemetry.makeReadyForSending(accessor, TelemetryStore.Standard, 'SkipExp', 2000);
 
 		assert.ok(telemetry.properties.copilot_build);
 		assert.ok(telemetry.properties.copilot_buildType);
@@ -39,7 +42,6 @@ suite('Telemetry unit tests', function () {
 		assert.ok(telemetry.properties.common_extname);
 		assert.ok(telemetry.properties.common_extversion);
 		assert.ok(telemetry.properties.common_vscodeversion);
-		assert.ok(telemetry.properties.fetcher);
 		// assert.ok(telemetry.properties.proxy_enabled);
 		// assert.ok(telemetry.properties.proxy_auth);
 		// assert.ok(telemetry.properties.proxy_kerberos_spn);
@@ -48,8 +50,8 @@ suite('Telemetry unit tests', function () {
 	});
 
 	test('Telemetry user config has undefined tracking id', function () {
-		const ctx = createLibTestingContext();
-		const config = ctx.instantiationService.createInstance(TelemetryUserConfig);
+		const accessor = createLibTestingContext().createTestingAccessor();
+		const config = accessor.get(ICompletionsTelemetryUserConfigService);
 
 		assert.strictEqual(config.trackingId, undefined);
 	});
@@ -82,14 +84,14 @@ suite('Telemetry unit tests', function () {
 	});
 
 	test('telemetryCatch', async function () {
-		const { enhancedReporter } = await withInMemoryTelemetry(ctx, ctx => {
+		const { enhancedReporter } = await withInMemoryTelemetry(accessor, accessor => {
 			telemetryCatch(
-				ctx,
+				accessor.get(ICompletionsTelemetryService),
+				accessor.get(ICompletionsPromiseQueueService),
 				() => {
 					throw new Error('boom!');
 				},
-				'exceptionTest',
-				{ testKey: 'testValue' }
+				'exceptionTest'
 			)();
 		});
 
@@ -101,11 +103,8 @@ suite('Telemetry unit tests', function () {
 		assert.ok(enhancedEvent);
 
 		// assert.deepStrictEqual(standardEvent.properties.message, 'boom!');
-		// assert.deepStrictEqual(standardEvent.properties.testKey, 'testValue');
 
 		assert.deepStrictEqual(enhancedEvent.properties.message, 'boom!');
-		// Chat has no properties when logging exceptions.
-		// assert.deepStrictEqual(enhancedEvent.properties.testKey, 'testValue');
 
 		// assert.ok(standardEvent.properties.restricted_unique_id);
 		// assert.deepStrictEqual(enhancedEvent.properties.unique_id, standardEvent.properties.restricted_unique_id);
@@ -114,16 +113,16 @@ suite('Telemetry unit tests', function () {
 
 suite('TelemetryReporters unit tests', function () {
 	test('deactivate is safe to call synchronously', async function () {
-		const ctx = createLibTestingContext();
+		const accessor = createLibTestingContext().createTestingAccessor();
 		const oldRepoter = new NoopCopilotTelemetryReporter();
 		const oldRestrictedReporter = new NoopCopilotTelemetryReporter();
-		const reporters = ctx.get(TelemetryReporters);
+		const reporters = accessor.get(ICompletionsTelemetryReporters);
 		reporters.setReporter(oldRepoter);
 		reporters.setEnhancedReporter(oldRestrictedReporter);
 
 		const asyncWork = reporters.deactivate();
-		const updatedReporter = reporters.getReporter(ctx); // snapshot these before awaiting the result
-		const updatedEnhancedReporter = reporters.getEnhancedReporter(ctx);
+		const updatedReporter = reporters.getReporter(accessor); // snapshot these before awaiting the result
+		const updatedEnhancedReporter = reporters.getEnhancedReporter(accessor);
 		await asyncWork;
 
 		assert.strictEqual(updatedReporter, undefined);

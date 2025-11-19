@@ -2,13 +2,14 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { RequestType } from '@vscode/copilot-api';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -31,18 +32,8 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return await this.getCurrentAuthedUserWithToken(authToken);
 	}
 
-	async getTeamMembership(teamId: number): Promise<any | undefined> {
-		const session = (await this._authService.getAnyGitHubSession());
-		const token = session?.accessToken;
-		const username = session?.account.label;
-		if (!token || !username) {
-			return undefined;
-		}
-		return await this.getTeamMembershipWithToken(teamId, token, username);
-	}
-
 	async getCopilotPullRequestsForUser(owner: string, repo: string): Promise<PullRequestSearchItem[]> {
-		const auth = (await this._authService.getAnyGitHubSession());
+		const auth = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }));
 		if (!auth?.accessToken) {
 			return [];
 		}
@@ -56,71 +47,150 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getCopilotSessionsForPR(prId: string): Promise<SessionInfo[]> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotSessions, prId });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch copilot sessions for PR ${prId}: ${response.statusText}`);
+			}
+			const data = await response.json() as { sessions?: SessionInfo[] };
+			if (data && Array.isArray(data.sessions)) {
+				return data.sessions;
+			}
+			throw new Error('Invalid response format');
+		} catch (e) {
+			this._logService.error(e);
 			return [];
 		}
-		const response = await this.getCopilotSessionsForPRWithToken(
-			prId,
-			authToken,
-		);
-		const { sessions } = response;
-		return sessions;
 	}
 
 	async getSessionLogs(sessionId: string): Promise<string> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotSessionLogs, sessionId });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch session logs for session ${sessionId}: ${response.statusText}`);
+			}
+			return response.text();
+		} catch (e) {
+			this._logService.error(e);
 			return '';
 		}
-		const response = await this.getSessionLogsWithToken(
-			sessionId,
-			authToken,
-		);
-		return response;
 	}
 
-	async getSessionInfo(sessionId: string): Promise<SessionInfo> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
-			throw new Error('No authentication token available');
+	async getSessionInfo(sessionId: string): Promise<SessionInfo | undefined> {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotSessionDetails, sessionId });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch session info for session ${sessionId}: ${response.statusText}`);
+			}
+			const responseData = await response.text();
+			if (typeof responseData === 'string') {
+				return JSON.parse(responseData) as SessionInfo;
+			}
+			throw new Error('Invalid response format');
+		} catch (e) {
+			this._logService.error(e);
+			return undefined;
 		}
-		const response = await this.getSessionInfoWithToken(
-			sessionId,
-			authToken,
-		);
-		if (typeof response === 'string') {
-			return JSON.parse(response) as SessionInfo;
-		}
-		return response;
 	}
 
-	async postCopilotAgentJob(owner: string, name: string, apiVersion: string, payload: RemoteAgentJobPayload): Promise<RemoteAgentJobResponse> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
-			throw new Error('No authentication token available');
+	async postCopilotAgentJob(owner: string, name: string, apiVersion: string, payload: RemoteAgentJobPayload): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode | undefined> {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'POST',
+				body: JSON.stringify(payload),
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotAgentJob, owner, repo: name, apiVersion, payload });
+			if (!response.ok) {
+				return {
+					status: response.status,
+				};
+			}
+			return await response.json() as RemoteAgentJobResponse;
+		} catch (e) {
+			this._logService.error(e);
+			return undefined;
 		}
-		return this.postCopilotAgentJobWithToken(owner, name, apiVersion, 'vscode-copilot-chat', payload, authToken);
 	}
 
-	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
-			throw new Error('No authentication token available');
+	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo | undefined> {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotAgentJob, owner, repo, jobId });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch job info for job ${jobId}: ${response.statusText}`);
+			}
+			return await response.json() as JobInfo;
+		} catch (e) {
+			this._logService.error(e);
+			return undefined;
 		}
-		return this.getJobByJobIdWithToken(owner, repo, jobId, userAgent, authToken);
 	}
 
-	async getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string): Promise<JobInfo> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
-			throw new Error('No authentication token available');
+	async getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string): Promise<JobInfo | undefined> {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotAgentJob, owner, repo, sessionId });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch job info for session ${sessionId}: ${response.statusText}`);
+			}
+			return await response.json() as JobInfo;
+		} catch (e) {
+			this._logService.error(e);
+			return undefined;
 		}
-		return this.getJobBySessionIdWithToken(owner, repo, sessionId, userAgent, authToken);
 	}
 
 	async addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
@@ -128,15 +198,33 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getAllOpenSessions(nwo: string): Promise<SessionInfo[]> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotSessions, nwo });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch copilot sessions for ${nwo}: ${response.statusText}`);
+			}
+			const data = await response.json() as { sessions?: SessionInfo[] };
+			if (data && Array.isArray(data.sessions)) {
+				return data.sessions;
+			}
+			throw new Error('Invalid response format');
+		} catch (e) {
+			this._logService.error(e);
 			return [];
 		}
-		return this.getAllOpenSessionsWithToken(nwo, authToken);
 	}
 
 	async getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
@@ -144,27 +232,35 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getCustomAgents(owner: string, repo: string): Promise<CustomAgentListItem[]> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotCustomAgents, owner, repo });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch custom agents for ${owner} ${repo}: ${response.statusText}`);
+			}
+			const data = await response.json() as {
+				agents?: CustomAgentListItem[];
+			};
+			if (data && Array.isArray(data.agents)) {
+				return data.agents;
+			}
+			throw new Error('Invalid response format');
+		} catch (e) {
+			this._logService.error(e);
 			return [];
 		}
-		const { agents } = await this.getCustomAgentsWithToken(owner, repo, authToken);
-		if (!Array.isArray(agents)) {
-			return [];
-		}
-		return agents;
-	}
-
-	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
-		if (!authToken) {
-			return undefined;
-		}
-		return this.getCustomAgentDetailsWithToken(owner, repo, agentName, authToken, version);
 	}
 
 	async getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<PullRequestFile[]> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			return [];
 		}
@@ -172,10 +268,18 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async closePullRequest(owner: string, repo: string, pullNumber: number): Promise<boolean> {
-		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			return false;
 		}
 		return this.closePullRequestWithToken(owner, repo, pullNumber, authToken);
+	}
+
+	async getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string> {
+		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+		if (!authToken) {
+			throw new Error('No GitHub authentication available');
+		}
+		return this.getFileContentWithToken(owner, repo, ref, path, authToken);
 	}
 }

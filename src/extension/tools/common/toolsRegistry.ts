@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from './toolNames';
@@ -25,7 +26,7 @@ export enum CopilotToolMode {
 	FullContext,
 }
 
-export interface ICopilotTool<T> extends vscode.LanguageModelTool<T> {
+export interface ICopilotToolExtension<T> {
 	/**
 	 * Called when edits are made in a tool call response. The tool can return
 	 * a confirmation that will be shown to the user before edits are applied.
@@ -49,21 +50,36 @@ export interface ICopilotTool<T> extends vscode.LanguageModelTool<T> {
 
 	/**
 	 * Optionally get a programmatic override for the LM tool information. This
-	 * can be driven by EXP for example. ⚠️ A tool using an alternative
-	 * definition MUST still accept its default parameters because the
-	 * alternative definition will only be applied within the Copilot extension,
-	 * not other extensions' usages via `vscode.lm.tools`.
+	 * can be driven by EXP for example, or customized based on the current model.
+	 * ⚠️ A tool using an alternative definition MUST still accept its default
+	 * parameters because the alternative definition will only be applied within
+	 * the Copilot extension, not other extensions' usages via `vscode.lm.tools`.
+	 *
+	 * @param tool The original tool definition.
+	 * @param endpoint Optional information about the currently selected language model endpoint.
+	 *                 If provided, allows customizing the tool definition per endpoint.
+	 *
+	 * @return An overridden tool definition.
 	 */
-	alternativeDefinition?(): vscode.LanguageModelToolInformation | undefined;
+	alternativeDefinition?(tool: vscode.LanguageModelToolInformation, endpoint?: IChatEndpoint): vscode.LanguageModelToolInformation;
+}
+
+export interface ICopilotTool<T> extends vscode.LanguageModelTool<T>, ICopilotToolExtension<T> {
 }
 
 export interface ICopilotToolCtor {
 	readonly toolName: ToolName;
-	new(...args: any[]): ICopilotTool<any>;
+	new(...args: never[]): ICopilotTool<unknown>;
+}
+
+export interface ICopilotToolExtensionCtor {
+	readonly toolName: ToolName;
+	new(...args: never[]): ICopilotToolExtension<unknown>;
 }
 
 export const ToolRegistry = new class {
-	private _tools: ICopilotToolCtor[] = [];
+	private _tools: Array<ICopilotToolCtor> = [];
+	private _toolExtensions: Array<ICopilotToolExtensionCtor> = [];
 
 	public registerTool(tool: ICopilotToolCtor) {
 		this._tools.push(tool);
@@ -71,5 +87,13 @@ export const ToolRegistry = new class {
 
 	public getTools(): readonly ICopilotToolCtor[] {
 		return this._tools;
+	}
+
+	public registerToolExtension(tool: ICopilotToolExtensionCtor) {
+		this._toolExtensions.push(tool);
+	}
+
+	public getToolExtensions(): readonly ICopilotToolExtensionCtor[] {
+		return this._toolExtensions;
 	}
 }();

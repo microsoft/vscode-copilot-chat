@@ -35,7 +35,7 @@ import { ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, 
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { PauseController } from '../../intents/node/pauseController';
-import { EmptyPromptError, isToolCallLimitCancellation, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
+import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
@@ -51,6 +51,7 @@ import { IDocumentContext } from './documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation, IResponseProcessor } from './intents';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, sendModelMessageTelemetry } from './telemetry';
 import { RunOnceScheduler } from '../../../util/vs/base/common/async';
+import { isToolCallLimitCancellation } from '../common/specialRequestTypes';
 
 export interface IDefaultIntentRequestHandlerOptions {
 	maxToolCallIterations: number;
@@ -146,7 +147,7 @@ export class DefaultIntentRequestHandler {
 			}
 
 			return chatResult;
-		} catch (err: any) {
+		} catch (err) {
 			if (err instanceof ToolCallCancelledError) {
 				this.turn.setResponse(TurnStatus.Cancelled, { message: err.message, type: 'meta' }, undefined, {});
 				return {};
@@ -321,7 +322,7 @@ export class DefaultIntentRequestHandler {
 		// src/extension/prompt/node/chatParticipantTelemetry.ts#L521-L522
 		//
 		// cc @lramos15
-		const responseHandlers: Promise<any>[] = [];
+		const responseHandlers: Promise<unknown>[] = [];
 		store.add(loop.onDidReceiveResponse(res => {
 			const promise = this._onDidReceiveResponse(res);
 			responseHandlers.push(promise);
@@ -852,9 +853,12 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 	protected override async fetch(opts: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const messageSourcePrefix = this.options.location === ChatLocation.Editor ? 'inline' : 'chat';
+		const debugName = this.options.request.isSubagent ?
+			`tool/runSubagent` :
+			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`;
 		return this.options.invocation.endpoint.makeChatRequest2({
 			...opts,
-			debugName: `${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`,
+			debugName,
 			finishedCb: (text, index, delta) => {
 				this.telemetry.markReceivedToken();
 				this._doMirroredCallWithVirtualTools(delta, opts.messages, opts.requestOptions!);

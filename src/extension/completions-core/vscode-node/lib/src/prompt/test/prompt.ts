@@ -4,16 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from 'vscode-languageserver-protocol';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCompletionState } from '../../completionState';
-import { ICompletionsContextService } from '../../context';
 import { getGhostText } from '../../ghostText/ghostText';
 import { TelemetryWithExp } from '../../telemetry';
 import { IPosition, ITextDocument } from '../../textDocument';
-import { ContextProviderBridge } from '../components/contextProviderBridge';
+import { ICompletionsContextProviderBridgeService } from '../components/contextProviderBridge';
 import { extractPrompt, ExtractPromptOptions } from '../prompt';
 
 export async function extractPromptInternal(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	completionId: string,
 	textDocument: ITextDocument,
 	position: IPosition,
@@ -21,15 +21,16 @@ export async function extractPromptInternal(
 	promptOpts: ExtractPromptOptions = {}
 ) {
 	const completionState = createCompletionState(textDocument, position);
-	ctx.get(ContextProviderBridge).schedule(completionState, completionId, 'opId', telemetryWithExp);
-	return extractPrompt(ctx, completionId, completionState, telemetryWithExp, undefined, promptOpts);
+	const contextProviderBridge = accessor.get(ICompletionsContextProviderBridgeService);
+	contextProviderBridge.schedule(completionState, completionId, 'opId', telemetryWithExp);
+	return extractPrompt(accessor, completionId, completionState, telemetryWithExp, undefined, promptOpts);
 }
 
 export async function getGhostTextInternal(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	textDocument: ITextDocument,
 	position: IPosition,
 	token?: CancellationToken
 ) {
-	return getGhostText(ctx, createCompletionState(textDocument, position), token, { opportunityId: 'opId' });
+	return getGhostText(accessor, createCompletionState(textDocument, position), token, { opportunityId: 'opId' });
 }

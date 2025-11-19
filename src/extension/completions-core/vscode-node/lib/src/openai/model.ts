@@ -3,31 +3,45 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { ICompletionModelInformation, IEndpointProvider } from '../../../../../../platform/endpoint/common/endpointProvider';
-import { CompletionsEndpointProviderBridge } from '../../../bridge/src/completionsEndpointProviderBridge';
+import { createServiceIdentifier } from '../../../../../../util/common/services';
+import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { TokenizerName } from '../../../prompt/src/tokenization';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
 import { ConfigKey, getConfig } from '../config';
-import { ICompletionsContextService } from '../context';
-import { Features } from '../experiments/features';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
 import { TelemetryWithExp } from '../telemetry';
 import { CompletionHeaders } from './fetch';
 
-const FallbackModelId = 'gpt-4o-copilot';
-export class AvailableModelsManager {
+export const ICompletionsModelManagerService = createServiceIdentifier<ICompletionsModelManagerService>('ICompletionsModelManagerService');
+export interface ICompletionsModelManagerService {
+	readonly _serviceBrand: undefined;
+	getGenericCompletionModels(): ModelItem[];
+	getDefaultModelId(): string;
+	getTokenizerForModel(modelId: string): TokenizerName;
+	getCurrentModelRequestInfo(featureSettings?: TelemetryWithExp): ModelRequestInfo;
+}
 
+const FallbackModelId = 'gpt-4o-copilot';
+export class AvailableModelsManager extends Disposable implements ICompletionsModelManagerService {
+	declare _serviceBrand: undefined;
 	fetchedModelData: ICompletionModelInformation[] = [];
 	customModels: string[] = [];
 	editorPreviewFeaturesDisabled: boolean = false;
-	private readonly _endpointProvider: IEndpointProvider;
 
 	constructor(
 		shouldFetch: boolean = true,
-		@ICompletionsContextService private _ctx: ICompletionsContextService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ICompletionsFeaturesService private readonly _featuresService: ICompletionsFeaturesService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
+		@IAuthenticationService authenticationService: IAuthenticationService,
 	) {
-		this._endpointProvider = this._ctx.get(CompletionsEndpointProviderBridge).endpointProvider;
+		super();
+
 		if (shouldFetch) {
-			onCopilotToken(this._ctx, () => this.refreshAvailableModels());
+			this._register(onCopilotToken(authenticationService, () => this.refreshAvailableModels()));
 		}
 	}
 
@@ -113,14 +127,14 @@ export class AvailableModelsManager {
 		const defaultModelId = this.getDefaultModelId();
 
 		const debugOverride =
-			getConfig<string>(this._ctx, ConfigKey.DebugOverrideEngine) ||
-			getConfig<string>(this._ctx, ConfigKey.DebugOverrideEngineLegacy);
+			this._instantiationService.invokeFunction(getConfig<string>, ConfigKey.DebugOverrideEngine) ||
+			this._instantiationService.invokeFunction(getConfig<string>, ConfigKey.DebugOverrideEngineLegacy);
 
 		if (debugOverride) {
 			return new ModelRequestInfo(debugOverride, 'override');
 		}
 
-		const customEngine = featureSettings ? this._ctx.get(Features).customEngine(featureSettings) : '';
+		const customEngine = featureSettings ? this._featuresService.customEngine(featureSettings) : '';
 		if (customEngine) {
 			return new ModelRequestInfo(customEngine, 'exp');
 		}
@@ -133,7 +147,7 @@ export class AvailableModelsManager {
 	}
 }
 
-interface ModelItem {
+export interface ModelItem {
 	modelId: string;
 	label: string;
 	preview: boolean;

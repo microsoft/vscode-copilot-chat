@@ -5,20 +5,23 @@
 
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
-import { CopilotContentExclusionManager, StatusBarEvent } from '../../contentExclusion/contentExclusionManager';
-import { ICompletionsContextService } from '../../context';
-import { logger } from '../../logger';
+import { ICompletionsLogTargetService, logger } from '../../logger';
 
+import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
+import { URI } from '../../../../../../../util/vs/base/common/uri';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsTelemetryService } from '../../../../bridge/src/completionsTelemetryServiceBridge';
 import { DataPipe, VirtualPrompt } from '../../../../prompt/src/components/virtualPrompt';
 import { TokenizerName } from '../../../../prompt/src/tokenization';
 import { CancellationToken, Position } from '../../../../types/src';
 import { CompletionState } from '../../completionState';
 import { telemetryException, TelemetryWithExp } from '../../telemetry';
 import { TextDocumentContents } from '../../textDocument';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import { CodeSnippets } from '../components/codeSnippets';
 import { CompletionsContext } from '../components/completionsContext';
 import { CompletionsPromptOk, CompletionsPromptRenderer } from '../components/completionsPromptRenderer';
-import { ContextProviderBridge } from '../components/contextProviderBridge';
+import { ICompletionsContextProviderBridgeService } from '../components/contextProviderBridge';
 import { CurrentFile } from '../components/currentFile';
 import { DocumentMarker } from '../components/marker';
 import { RecentEdits } from '../components/recentEdits';
@@ -40,7 +43,7 @@ import {
 	TraitWithId,
 } from '../contextProviders/contextItemSchemas';
 import { getTraitsFromContextItems, ReportTraitsTelemetry } from '../contextProviders/traits';
-import { componentStatisticsToPromptMatcher, ContextProviderStatistics } from '../contextProviderStatistics';
+import { componentStatisticsToPromptMatcher, ICompletionsContextProviderService } from '../contextProviderStatistics';
 import {
 	_contextTooShort,
 	_copilotContentExclusion,
@@ -51,11 +54,11 @@ import {
 	PromptResponse,
 	trimLastLine,
 } from '../prompt';
+import { ICompletionsRecentEditsProviderService } from '../recentEdits/recentEditsProvider';
 import { isIncludeNeighborFilesActive } from '../similarFiles/neighborFiles';
 import {
-	CompletionsPromptFactory,
-	CompletionsPromptOptions,
-	PromptOpts,
+	CompletionsPromptOptions, IPromptFactory,
+	PromptOpts
 } from './completionsPromptFactory';
 
 export type CompletionRequestDocument = TextDocumentContents;
@@ -120,32 +123,40 @@ const availableDeclarativePrompts: AvailableDeclarativePrompts = {
 };
 
 // The weights mimic the PromptPriorityList from prompt/src/wishlist.ts
-function defaultCompletionsPrompt(ctx: ICompletionsContextService) {
+function defaultCompletionsPrompt(accessor: ServicesAccessor) {
+	const tdms = accessor.get(ICompletionsTextDocumentManagerService);
+	const instantiationService = accessor.get(IInstantiationService);
+	const recentEditsProvider = accessor.get(ICompletionsRecentEditsProviderService);
 	return (
 		<>
 			<CompletionsContext>
-				<DocumentMarker ctx={ctx} weight={0.7} />
+				<DocumentMarker tdms={tdms} weight={0.7} />
 				<Traits weight={0.6} />
-				<CodeSnippets ctx={ctx} weight={0.9} />
-				<SimilarFiles ctx={ctx} weight={0.8} />
-				<RecentEdits ctx={ctx} weight={0.99} />
+				<CodeSnippets tdms={tdms} weight={0.9} />
+				<SimilarFiles tdms={tdms} instantiationService={instantiationService} weight={0.8} />
+				<RecentEdits tdms={tdms} recentEditsProvider={recentEditsProvider} weight={0.99} />
 			</CompletionsContext>
 			<CurrentFile weight={1} />
 		</>
 	);
 }
 
-// Exported for testing
-export class ComponentsCompletionsPromptFactory implements CompletionsPromptFactory {
+abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory {
+	declare _serviceBrand: undefined;
 	private virtualPrompt: VirtualPrompt;
 	private pipe: DataPipe;
 	private renderer: CompletionsPromptRenderer;
 	private promptOrdering: PromptOrdering;
 
 	constructor(
-		virtualPrompt: VirtualPrompt | undefined = undefined,
-		ordering: PromptOrdering | undefined = undefined,
-		@ICompletionsContextService private readonly ctx: ICompletionsContextService,
+		virtualPrompt: VirtualPrompt | undefined,
+		ordering: PromptOrdering | undefined,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICompletionsTelemetryService private readonly completionsTelemetryService: ICompletionsTelemetryService,
+		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@ICompletionsContextProviderBridgeService private readonly contextProviderBridge: ICompletionsContextProviderBridgeService,
+		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
+		@ICompletionsContextProviderService private readonly contextProviderStatistics: ICompletionsContextProviderService,
 	) {
 		this.promptOrdering = ordering ?? PromptOrdering.Default;
 		this.virtualPrompt = virtualPrompt ?? new VirtualPrompt(this.completionsPrompt());
@@ -165,8 +176,7 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 		{ completionId, completionState, telemetryData, promptOpts }: CompletionsPromptOptions,
 		cancellationToken?: CancellationToken
 	): Promise<PromptResponse> {
-		const { maxPromptLength, suffixPercent, suffixMatchThreshold } = getPromptOptions(
-			this.ctx,
+		const { maxPromptLength, suffixPercent, suffixMatchThreshold } = this.instantiationService.invokeFunction(getPromptOptions,
 			telemetryData,
 			completionState.textDocument.detectedLanguageId
 		);
@@ -243,15 +253,15 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 		const renderedTrimmed = { ...rendered, prefix };
 
 		let contextProvidersTelemetry: ContextProviderTelemetry[] | undefined = undefined;
-		if (useContextProviderAPI(this.ctx, telemetryData)) {
+		const languageId = completionState.textDocument.detectedLanguageId;
+		if (this.instantiationService.invokeFunction(useContextProviderAPI, languageId, telemetryData)) {
 			const promptMatcher = componentStatisticsToPromptMatcher(rendered.metadata.componentStatistics);
-			this.ctx
-				.get(ContextProviderStatistics)
+			this.contextProviderStatistics
 				.getStatisticsForCompletion(completionId)
 				.computeMatch(promptMatcher);
-			contextProvidersTelemetry = telemetrizeContextItems(this.ctx, completionId, resolvedContextItems);
+			contextProvidersTelemetry = telemetrizeContextItems(this.contextProviderStatistics, completionId, resolvedContextItems);
 			// To support generating context provider metrics of completion in COffE.
-			logger.debug(this.ctx, `Context providers telemetry: '${JSON.stringify(contextProvidersTelemetry)}'`);
+			logger.debug(this.logTarget, `Context providers telemetry: '${JSON.stringify(contextProvidersTelemetry)}'`);
 		}
 		const end = performance.now();
 		this.resetIfEmpty(rendered);
@@ -303,29 +313,27 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 		let traits: TraitWithId[] | undefined;
 		let codeSnippets: CodeSnippetWithId[] | undefined;
 		let turnOffSimilarFiles = false;
-		if (useContextProviderAPI(this.ctx, telemetryData)) {
-			resolvedContextItems = await this.ctx.get(ContextProviderBridge).resolution(completionId);
+		if (this.instantiationService.invokeFunction(useContextProviderAPI, completionState.textDocument.detectedLanguageId, telemetryData)) {
+			resolvedContextItems = await this.contextProviderBridge.resolution(completionId);
 			const { textDocument } = completionState;
 			// Turn off neighboring files if:
 			// - it's not explicitly enabled via EXP flag
 			// - there are matched context providers
 			const matchedContextItems = resolvedContextItems.filter(matchContextItems);
-			if (!similarFilesEnabled(this.ctx, textDocument.detectedLanguageId, matchedContextItems, telemetryData)) {
+			if (!this.instantiationService.invokeFunction(similarFilesEnabled, textDocument.detectedLanguageId, matchedContextItems, telemetryData)) {
 				turnOffSimilarFiles = true;
 			}
 
-			traits = getTraitsFromContextItems(this.ctx, completionId, matchedContextItems);
-			void ReportTraitsTelemetry(
+			traits = await this.instantiationService.invokeFunction(getTraitsFromContextItems, completionId, matchedContextItems);
+			void this.instantiationService.invokeFunction(ReportTraitsTelemetry,
 				`contextProvider.traits`,
-				this.ctx,
 				traits,
 				textDocument.detectedLanguageId,
 				textDocument.detectedLanguageId, // TextDocumentContext does not have clientLanguageId
 				telemetryData
 			);
 
-			codeSnippets = await getCodeSnippetsFromContextItems(
-				this.ctx,
+			codeSnippets = await this.instantiationService.invokeFunction(getCodeSnippetsFromContextItems,
 				completionId,
 				matchedContextItems,
 				textDocument.detectedLanguageId
@@ -343,13 +351,7 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 		if (cancellationToken?.isCancellationRequested) {
 			return _promptCancelled;
 		}
-		if (
-			(
-				await this.ctx
-					.get(CopilotContentExclusionManager)
-					.evaluate(textDocument.uri, textDocument.getText(), StatusBarEvent.UPDATE)
-			).isBlocked
-		) {
+		if (await this.ignoreService.isCopilotIgnored(URI.parse(textDocument.uri))) {
 			return _copilotContentExclusion;
 		}
 
@@ -420,7 +422,7 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 	}
 
 	private errorPrompt(error: Error): PromptResponse {
-		telemetryException(this.ctx, error, 'PromptComponents.CompletionsPromptFactory');
+		telemetryException(this.completionsTelemetryService, error, 'PromptComponents.CompletionsPromptFactory');
 		this.reset();
 		return _promptError;
 	}
@@ -441,7 +443,7 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 	private completionsPrompt() {
 		const promptFunction =
 			availableDeclarativePrompts[this.promptOrdering]?.promptFunction ?? defaultCompletionsPrompt;
-		return promptFunction(this.ctx);
+		return this.instantiationService.invokeFunction(promptFunction);
 	}
 
 	private getRenderer() {
@@ -451,19 +453,43 @@ export class ComponentsCompletionsPromptFactory implements CompletionsPromptFact
 	}
 }
 
+export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletionsPromptFactory {
+	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
+		@ICompletionsTelemetryService completionsTelemetryService: ICompletionsTelemetryService,
+		@IIgnoreService ignoreService: IIgnoreService,
+		@ICompletionsContextProviderBridgeService contextProviderBridge: ICompletionsContextProviderBridgeService,
+		@ICompletionsLogTargetService logTarget: ICompletionsLogTargetService,
+		@ICompletionsContextProviderService contextProviderStatistics: ICompletionsContextProviderService,
+	) {
+		super(
+			undefined,
+			undefined,
+			instantiationService,
+			completionsTelemetryService,
+			ignoreService,
+			contextProviderBridge,
+			logTarget,
+			contextProviderStatistics
+		);
+	}
+}
+
+export class TestComponentsCompletionsPromptFactory extends BaseComponentsCompletionsPromptFactory { }
+
 // Similar files is enabled if:
 // - the languageId is C/C++.
 // - it's explicitly enabled via EXP flag or config.
 // - no code snippets are provided (which includes the case when all providers error).
 function similarFilesEnabled(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	detectedLanguageId: string,
 	matchedContextItems: ResolvedContextItem<SupportedContextItemWithId>[],
 	telemetryData: TelemetryWithExp
 ) {
 	const cppLanguageIds = ['cpp', 'c'];
 	const includeNeighboringFiles =
-		isIncludeNeighborFilesActive(ctx, telemetryData) || cppLanguageIds.includes(detectedLanguageId);
+		isIncludeNeighborFilesActive(accessor, detectedLanguageId, telemetryData) || cppLanguageIds.includes(detectedLanguageId);
 	return (
 		includeNeighboringFiles || !matchedContextItems.some(ci => ci.data.some(item => item.type === 'CodeSnippet'))
 	);

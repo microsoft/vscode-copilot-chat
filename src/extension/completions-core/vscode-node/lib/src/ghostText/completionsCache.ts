@@ -2,6 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { LRURadixTrie } from '../helpers/radix';
 import { APIChoice } from '../openai/openai';
 
@@ -12,8 +13,23 @@ interface CompletionsCacheContents {
 	}[];
 }
 
+export const ICompletionsCacheService = createServiceIdentifier<ICompletionsCacheService>('ICompletionsCacheService');
+export interface ICompletionsCacheService {
+	readonly _serviceBrand: undefined;
+
+	/** Given a document prefix and suffix, return all of the completions that match. */
+	findAll(prefix: string, suffix: string): APIChoice[];
+
+	/** Add cached completions for a given prefix. */
+	append(prefix: string, suffix: string, choice: APIChoice): void;
+
+	clear(): void;
+}
+
 /** Caches recent completions by document prefix. */
-export class CompletionsCache {
+export class CompletionsCache implements ICompletionsCacheService {
+	readonly _serviceBrand: undefined;
+
 	private cache = new LRURadixTrie<CompletionsCacheContents>(100);
 
 	/** Given a document prefix and suffix, return all of the completions that match. */

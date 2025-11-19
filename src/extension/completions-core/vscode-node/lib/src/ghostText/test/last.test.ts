@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
-import { ICompletionsContextService } from '../../context';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { withInMemoryTelemetry } from '../../test/telemetry';
@@ -11,21 +11,19 @@ import { createTextDocument } from '../../test/textDocument';
 import { CopilotCompletion } from '../copilotCompletion';
 import { ResultType } from '../ghostText';
 import {
-	LastGhostText,
-	handleGhostTextPostInsert,
+	ICompletionsLastGhostText, handleGhostTextPostInsert,
 	handleGhostTextShown,
 	handlePartialGhostTextPostInsert,
 	rejectLastShown,
-	setLastShown,
+	setLastShown
 } from '../last';
 
 suite('Isolated LastGhostText tests', function () {
-	let ctx: ICompletionsContextService;
-	let last: LastGhostText;
+	let accessor: ServicesAccessor;
+	let last: ICompletionsLastGhostText;
 	setup(function () {
-		ctx = createLibTestingContext();
-		last = new LastGhostText();
-		ctx.forceSet(LastGhostText, last);
+		accessor = createLibTestingContext().createTestingAccessor();
+		last = accessor.get(ICompletionsLastGhostText);
 	});
 
 	function makeCompletion(index = 0, text = 'foo', offset = 0): CopilotCompletion {
@@ -46,9 +44,9 @@ suite('Isolated LastGhostText tests', function () {
 	test('full completion flow: show, accept, reset', function () {
 		last.setState({ uri: 'file:///test' }, { line: 0, character: 0 });
 		const cmp = makeCompletion(1, 'full completion', 0);
-		handleGhostTextShown(ctx, cmp);
+		handleGhostTextShown(accessor, cmp);
 		assert.strictEqual(last.shownCompletions.length, 1);
-		handleGhostTextPostInsert(ctx, cmp);
+		handleGhostTextPostInsert(accessor, cmp);
 		assert.strictEqual(last.shownCompletions.length, 0);
 		assert.strictEqual(last.position, undefined);
 		assert.strictEqual(last.uri, undefined);
@@ -57,9 +55,9 @@ suite('Isolated LastGhostText tests', function () {
 	test('partial completion flow: show, partial accept, state', function () {
 		last.setState({ uri: 'file:///test' }, { line: 0, character: 0 });
 		const cmp = makeCompletion(2, 'partial completion', 0);
-		handleGhostTextShown(ctx, cmp);
+		handleGhostTextShown(accessor, cmp);
 		assert.strictEqual(last.shownCompletions.length, 1);
-		handlePartialGhostTextPostInsert(ctx, cmp, 7); // accept first 7 chars
+		handlePartialGhostTextPostInsert(accessor, cmp, 7); // accept first 7 chars
 		assert.strictEqual(last.partiallyAcceptedLength, 7);
 		// State is not reset by partial accept
 		assert.strictEqual(last.shownCompletions.length, 1);
@@ -68,9 +66,9 @@ suite('Isolated LastGhostText tests', function () {
 	test('reject after show clears completions', function () {
 		last.setState({ uri: 'file:///test' }, { line: 0, character: 0 });
 		const cmp = makeCompletion(3, 'reject me', 0);
-		handleGhostTextShown(ctx, cmp);
+		handleGhostTextShown(accessor, cmp);
 		assert.strictEqual(last.shownCompletions.length, 1);
-		rejectLastShown(ctx, 0);
+		rejectLastShown(accessor, 0);
 		assert.strictEqual(last.shownCompletions.length, 0);
 	});
 
@@ -78,17 +76,17 @@ suite('Isolated LastGhostText tests', function () {
 		last.setState({ uri: 'file:///test' }, { line: 0, character: 0 });
 		last.shownCompletions.push(makeCompletion(4, 'baz', 0));
 		const doc = createTextDocument('file:///other', 'plaintext', 1, '');
-		setLastShown(ctx, doc, { line: 1, character: 1 }, ResultType.Network);
+		setLastShown(accessor, doc, { line: 1, character: 1 }, ResultType.Network);
 		assert.strictEqual(last.shownCompletions.length, 0);
 	});
 
 	test('full acceptance sends total number of lines with telemetry', async function () {
 		last.setState({ uri: 'file:///test' }, { line: 0, character: 0 });
 		const cmp = makeCompletion(0, 'line1\nline2\nline3', 0);
-		handleGhostTextShown(ctx, cmp);
+		handleGhostTextShown(accessor, cmp);
 
-		const { reporter } = await withInMemoryTelemetry(ctx, () => {
-			handleGhostTextPostInsert(ctx, cmp);
+		const { reporter } = await withInMemoryTelemetry(accessor, () => {
+			handleGhostTextPostInsert(accessor, cmp);
 		});
 
 		const event = reporter.events.find(e => e.name === 'ghostText.accepted');
@@ -99,10 +97,10 @@ suite('Isolated LastGhostText tests', function () {
 	test('partial acceptance for VS Code sends total number of lines accepted with telemetry', async function () {
 		last.setState({ uri: 'file:///test' }, { line: 0, character: 0 });
 		const cmp = makeCompletion(0, 'line1\nline2\nline3', 0);
-		handleGhostTextShown(ctx, cmp);
+		handleGhostTextShown(accessor, cmp);
 
-		const { reporter } = await withInMemoryTelemetry(ctx, () => {
-			handlePartialGhostTextPostInsert(ctx, cmp, 'line1'.length, undefined, undefined);
+		const { reporter } = await withInMemoryTelemetry(accessor, () => {
+			handlePartialGhostTextPostInsert(accessor, cmp, 'line1'.length, undefined, undefined);
 		});
 
 		const event = reporter.events.find(e => e.name === 'ghostText.accepted');
@@ -113,12 +111,12 @@ suite('Isolated LastGhostText tests', function () {
 	test('additional partial acceptance for VS Code sends total number of lines accepted with telemetry', async function () {
 		last.setState({ uri: 'file:///test' }, { line: 0, character: 0 });
 		const cmp = makeCompletion(0, 'line1\nline2\nline3', 0);
-		handleGhostTextShown(ctx, cmp);
-		handlePartialGhostTextPostInsert(ctx, cmp, 'line1'.length, undefined, undefined);
+		handleGhostTextShown(accessor, cmp);
+		handlePartialGhostTextPostInsert(accessor, cmp, 'line1'.length, undefined, undefined);
 		cmp.displayText = 'line2\nline3'; // Simulate the display text being updated after accepting the first line
 
-		const { reporter } = await withInMemoryTelemetry(ctx, () => {
-			handlePartialGhostTextPostInsert(ctx, cmp, 'line2'.length, undefined, undefined);
+		const { reporter } = await withInMemoryTelemetry(accessor, () => {
+			handlePartialGhostTextPostInsert(accessor, cmp, 'line2'.length, undefined, undefined);
 		});
 
 		const event = reporter.events.reverse().find(e => e.name === 'ghostText.accepted');

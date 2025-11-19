@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { PromptMetadata } from '../../../prompt/src/components/components';
 import { commentBlockAsSingles } from '../../../prompt/src/languageMarker';
 import { PromptOptions } from '../../../prompt/src/prompt';
@@ -10,14 +11,13 @@ import { SimilarFilesOptions } from '../../../prompt/src/snippetInclusion/simila
 import { TokenizerName } from '../../../prompt/src/tokenization';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { CompletionState } from '../completionState';
-import { ICompletionsContextService } from '../context';
-import { Features } from '../experiments/features';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
 import { getNumberOfSnippets, getSimilarFilesOptions } from '../experiments/similarFileOptionsProvider';
 import { getMaxSolutionTokens } from '../openai/openai';
 import { TelemetryWithExp } from '../telemetry';
 import { INotebookCell, INotebookDocument, IntelliSenseInsertion } from '../textDocument';
-import { TextDocumentManager } from '../textDocumentManager';
-import { CompletionsPromptFactory } from './completionsPromptFactory/completionsPromptFactory';
+import { ICompletionsTextDocumentManagerService } from '../textDocumentManager';
+import { ICompletionsPromptFactoryService } from './completionsPromptFactory/completionsPromptFactory';
 import { ContextProviderTelemetry } from './contextProviderRegistry';
 import { NeighboringFileType, considerNeighborFile } from './similarFiles/neighborFiles';
 
@@ -96,24 +96,24 @@ export function trimLastLine(source: string): [string, string] {
 }
 
 export function extractPrompt(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	completionId: string,
 	completionState: CompletionState,
 	telemetryData: TelemetryWithExp,
 	cancellationToken?: ICancellationToken,
 	promptOpts: ExtractPromptOptions = {}
 ): Promise<PromptResponse> {
-	const workspace = ctx.get(TextDocumentManager);
-	const notebook = workspace.findNotebook(completionState.textDocument);
+	const textDocumentManagerService = accessor.get(ICompletionsTextDocumentManagerService);
+	const notebook = textDocumentManagerService.findNotebook(completionState.textDocument);
 	const activeCell = notebook?.getCellFor(completionState.textDocument);
 	if (notebook && activeCell) {
 		completionState = applyEditsForNotebook(completionState, notebook, activeCell);
 	}
 
-	telemetryData.extendWithConfigProperties(ctx);
+	telemetryData.extendWithConfigProperties(accessor);
 	telemetryData.sanitizeKeys();
 	const separateContext = true;
-	const promptFactory = ctx.get(CompletionsPromptFactory);
+	const promptFactory = accessor.get(ICompletionsPromptFactoryService);
 	return promptFactory.prompt(
 		{
 			completionId,
@@ -155,16 +155,17 @@ function applyEditsForNotebook(state: CompletionState, notebook: INotebookDocume
 	return state.applyEdits([{ newText, range: { start: top, end: top } }]);
 }
 
-export function getPromptOptions(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp, languageId: string): PromptOptions {
+export function getPromptOptions(accessor: ServicesAccessor, telemetryData: TelemetryWithExp, languageId: string): PromptOptions {
 	// Note: the default values of the EXP flags currently overwrite the default `PromptOptions`
-	const maxTokens = ctx.get(Features).maxPromptCompletionTokens(telemetryData);
-	const maxPromptLength = maxTokens - getMaxSolutionTokens(ctx);
+	const featuresService = accessor.get(ICompletionsFeaturesService);
+	const maxTokens = featuresService.maxPromptCompletionTokens(telemetryData);
+	const maxPromptLength = maxTokens - getMaxSolutionTokens();
 
 	const numberOfSnippets = getNumberOfSnippets(telemetryData, languageId);
-	const similarFilesOptions: SimilarFilesOptions = getSimilarFilesOptions(ctx, telemetryData, languageId);
+	const similarFilesOptions: SimilarFilesOptions = getSimilarFilesOptions(accessor, telemetryData, languageId);
 
-	const suffixPercent = ctx.get(Features).suffixPercent(telemetryData);
-	const suffixMatchThreshold = ctx.get(Features).suffixMatchThreshold(telemetryData);
+	const suffixPercent = featuresService.suffixPercent(telemetryData);
+	const suffixMatchThreshold = featuresService.suffixMatchThreshold(telemetryData);
 
 	if (suffixPercent < 0 || suffixPercent > 100) {
 		throw new Error(`suffixPercent must be between 0 and 100, but was ${suffixPercent}`);

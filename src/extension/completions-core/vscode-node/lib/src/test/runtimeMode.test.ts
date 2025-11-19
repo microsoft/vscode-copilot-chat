@@ -4,13 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { Context } from '../context';
 import {
-	RuntimeMode,
-	isDebugEnabled,
-	isRunningInTest,
-	isVerboseLoggingEnabled,
-	shouldFailForDebugPurposes,
+	RuntimeMode
 } from '../util/runtimeMode';
 
 suite('RuntimeMode', function () {
@@ -37,16 +32,12 @@ suite('RuntimeMode', function () {
 
 	[true, false].forEach(inTest => {
 		test(`isRunningInTest is set to ${inTest}`, function () {
-			const ctx = new Context();
-			ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(inTest));
-			assert.strictEqual(isRunningInTest(ctx), inTest);
+			assert.strictEqual(RuntimeMode.fromEnvironment(inTest).isRunningInTest(), inTest);
 		});
 	});
 
 	test('shouldFailForDebugPurposes is enabled by isRunningInTest', function () {
-		const ctx = new Context();
-		ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(true));
-		assert.strictEqual(shouldFailForDebugPurposes(ctx), true);
+		assert.strictEqual(RuntimeMode.fromEnvironment(true).shouldFailForDebugPurposes(), true);
 	});
 
 	suite('isVerboseLoggingEnabled', function () {
@@ -59,23 +50,17 @@ suite('RuntimeMode', function () {
 		].forEach(key => {
 			['1', 'true', 'TRUE'].forEach(value => {
 				test(`is enabled by ${key}=${value}`, function () {
-					const ctx = new Context();
-					ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(false, [], { [key]: value }));
-					assert.strictEqual(isVerboseLoggingEnabled(ctx), true);
+					assert.strictEqual(RuntimeMode.fromEnvironment(false, [], { [key]: value }).isVerboseLoggingEnabled(), true);
 				});
 			});
 		});
 
 		test('is enabled by --debug flag', function () {
-			const ctx = new Context();
-			ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(false, ['--debug'], {}));
-			assert.strictEqual(isVerboseLoggingEnabled(ctx), true);
+			assert.strictEqual(RuntimeMode.fromEnvironment(false, ['--debug'], {}).isVerboseLoggingEnabled(), true);
 		});
 
 		test('is disabled by default', function () {
-			const ctx = new Context();
-			ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(false, [], {}));
-			assert.strictEqual(isVerboseLoggingEnabled(ctx), false);
+			assert.strictEqual(RuntimeMode.fromEnvironment(false, [], {}).isVerboseLoggingEnabled(), false);
 		});
 	});
 
@@ -83,23 +68,17 @@ suite('RuntimeMode', function () {
 		['GH_COPILOT_DEBUG', 'GITHUB_COPILOT_DEBUG'].forEach(key => {
 			['1', 'true', 'TRUE'].forEach(value => {
 				test(`is enabled by ${key}=${value}`, function () {
-					const ctx = new Context();
-					ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(false, [], { [key]: value }));
-					assert.strictEqual(isDebugEnabled(ctx), true);
+					assert.strictEqual(RuntimeMode.fromEnvironment(false, [], { [key]: value }).isDebugEnabled(), true);
 				});
 			});
 		});
 
 		test('is enabled by --debug flag', function () {
-			const ctx = new Context();
-			ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(false, ['--debug'], {}));
-			assert.strictEqual(isDebugEnabled(ctx), true);
+			assert.strictEqual(RuntimeMode.fromEnvironment(false, ['--debug'], {}).isDebugEnabled(), true);
 		});
 
 		test('is disabled by default', function () {
-			const ctx = new Context();
-			ctx.set(RuntimeMode, RuntimeMode.fromEnvironment(false, [], {}));
-			assert.strictEqual(isDebugEnabled(ctx), false);
+			assert.strictEqual(RuntimeMode.fromEnvironment(false, [], {}).isDebugEnabled(), false);
 		});
 	});
 });

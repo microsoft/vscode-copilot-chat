@@ -21,13 +21,12 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { findCell, findNotebook, isNotebookCell } from '../../../util/common/notebooks';
 import { ITracer, createTracer } from '../../../util/common/tracing';
-import { softAssert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LineCheck } from '../../inlineChat/vscode-node/inlineChatHint';
+import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
@@ -121,12 +120,12 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
-		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
+		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
 	private _isCompletionsEnabled(document: TextDocument): boolean {
-		const enabledLanguages = this._configurationService.getConfig(ConfigKey.Shared.Enable);
+		const enabledLanguages = this._configurationService.getConfig(ConfigKey.Enable);
 		const enabledLanguagesMap = new Map(Object.entries(enabledLanguages));
 		if (!enabledLanguagesMap.has('*')) {
 			enabledLanguagesMap.set('*', false);
@@ -144,7 +143,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
-		const unification = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUnification, this._expService);
+		const unification = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUnification, this._expService);
 
 		const isInlineEditsEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.InlineEditsEnabled, this._expService, { languageId: document.languageId });
 
@@ -367,7 +366,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			range: displayLocationRange,
 			label: result.displayLocation.label,
 			kind: InlineCompletionDisplayLocationKind.Code,
-			jumpToEdit: result.displayLocation.jumpToEdit
 		} : undefined;
 
 
@@ -424,7 +422,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				const supersededBy = reason.supersededBy ? (reason.supersededBy as NesCompletionItem) : undefined;
 				tracer.trace(`Superseded by: ${supersededBy?.info.requestUuid || 'none'}, was shown: ${item.wasShown}`);
 				if (supersededBy) {
-					softAssert(item.info.requestUuid !== supersededBy.info.requestUuid, 'An inline edit cannot supersede itself.');
 					/* __GDPR__
 						"supersededInlineEdit" : {
 							"owner": "ulugbekna",
@@ -472,7 +469,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		// Assumption: The user cannot edit the document while the inline edit is being applied
 		let userEdits = StringEdit.empty;
-		softAssert(docAfterEdits === userEdits.apply(item.document.getText()));
+		// softAssert(docAfterEdits === userEdits.apply(item.document.getText())); // TODO@hediet
 
 		const diffedNextEdit = await stringEditFromDiff(docBeforeEdits, docAfterEdits, this._diffService);
 		const recordedEdits = recorder.getEdits();

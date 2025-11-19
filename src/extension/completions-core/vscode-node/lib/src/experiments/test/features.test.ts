@@ -4,28 +4,28 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { ICompletionsContextService } from '../../context';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { extractRepoInfoInBackground } from '../../prompt/repository';
 import { TelemetryData } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { makeFsUri } from '../../util/uri';
-import { Features } from './../features';
+import { ICompletionsFeaturesService } from '../featuresService';
 
 suite('updateExPValuesAndAssignments', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 
 	const filenameUri = makeFsUri(__filename);
 
 	setup(async function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 		// Trigger extractRepoInfoInBackground early + add a sleep to force repo info to be available
-		extractRepoInfoInBackground(ctx, filenameUri);
+		extractRepoInfoInBackground(accessor, filenameUri);
 		await new Promise(resolve => setTimeout(resolve, 100));
 	});
 
 	test('If no options are provided, repo filters should be empty and there should be no telemetry properties or measurements', async function () {
-		const features = ctx.get(Features);
-		const telemetry = await features.updateExPValuesAndAssignments();
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		const telemetry = await featuresService.updateExPValuesAndAssignments();
 
 		assert.deepStrictEqual(telemetry.properties, {});
 		assert.deepStrictEqual(telemetry.measurements, {});
@@ -38,8 +38,8 @@ suite('updateExPValuesAndAssignments', function () {
 	test('If telemetry data is passed as a parameter, it should be used in the resulting telemetry object', async function () {
 		const telemetryData = TelemetryData.createAndMarkAsIssued({ foo: 'bar' }, { baz: 42 });
 
-		const features = ctx.get(Features);
-		const telemetry = await features.updateExPValuesAndAssignments(undefined, telemetryData);
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		const telemetry = await featuresService.updateExPValuesAndAssignments(undefined, telemetryData);
 
 		assert.deepStrictEqual(telemetry.properties, { foo: 'bar' });
 		assert.deepStrictEqual(telemetry.measurements, { baz: 42 });

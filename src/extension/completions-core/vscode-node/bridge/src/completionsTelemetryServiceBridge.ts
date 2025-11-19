@@ -5,10 +5,24 @@
 
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../../../platform/telemetry/common/telemetry';
 import { wrapEventNameForPrefixRemoval } from '../../../../../platform/telemetry/node/azureInsightsReporter';
+import { createServiceIdentifier } from '../../../../../util/common/services';
 import { TelemetryMeasurements, TelemetryProperties, TelemetryStore } from '../../lib/src/telemetry';
 import type { TelemetrySpy } from '../../lib/src/test/telemetrySpy';
 
-export class CompletionsTelemetryServiceBridge {
+export const ICompletionsTelemetryService = createServiceIdentifier<ICompletionsTelemetryService>('completionsTelemetryService');
+export interface ICompletionsTelemetryService {
+	readonly _serviceBrand: undefined;
+
+	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void;
+	sendEnhancedGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void;
+	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void;
+	sendGHTelemetryException(maybeError: unknown, origin: string, store?: TelemetryStore): void;
+	setSpyReporters(reporter: TelemetrySpy, enhancedReporter: TelemetrySpy): void;
+	clearSpyReporters(): void;
+}
+
+export class CompletionsTelemetryServiceBridge implements ICompletionsTelemetryService {
+	declare _serviceBrand: undefined;
 
 	private reporter: TelemetrySpy | undefined;
 	private enhancedReporter: TelemetrySpy | undefined;
@@ -20,13 +34,14 @@ export class CompletionsTelemetryServiceBridge {
 		this.enhancedReporter = undefined;
 	}
 
-	public getTelemetryService(): ITelemetryService {
-		return this.telemetryService;
-	}
-
 	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void {
 		this.telemetryService.sendGHTelemetryEvent(wrapEventNameForPrefixRemoval(`copilot/${eventName}`), properties, measurements);
 		this.getSpyReporters(store ?? TelemetryStore.Standard)?.sendTelemetryEvent(eventName, properties as TelemetryProperties, measurements as TelemetryMeasurements);
+	}
+
+	sendEnhancedGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void {
+		this.telemetryService.sendEnhancedGHTelemetryEvent(wrapEventNameForPrefixRemoval(`copilot/${eventName}`), properties, measurements);
+		this.getSpyReporters(store ?? TelemetryStore.Enhanced)?.sendTelemetryEvent(eventName, properties as TelemetryProperties, measurements as TelemetryMeasurements);
 	}
 
 	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements, store?: TelemetryStore): void {

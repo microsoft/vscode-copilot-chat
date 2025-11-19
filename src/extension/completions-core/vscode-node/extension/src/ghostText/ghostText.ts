@@ -19,7 +19,7 @@ import {
 	TextDocument,
 	window,
 } from 'vscode';
-import { ICompletionsContextService } from '../../../lib/src/context';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
 import { getInlineCompletions } from '../../../lib/src/inlineCompletion';
@@ -29,7 +29,7 @@ import { wrapDoc } from '../textDocumentManager';
 const postInsertCmdName = '_github.copilot.ghostTextPostInsert2';
 
 export class GhostTextProvider implements InlineCompletionItemProvider {
-	constructor(@ICompletionsContextService private readonly ctx: ICompletionsContextService) { }
+	constructor(@IInstantiationService private readonly instantiationService: IInstantiationService) { }
 
 	async provideInlineCompletionItems(
 		vscodeDoc: TextDocument,
@@ -37,7 +37,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<InlineCompletionList | undefined> {
-		const textDocument = wrapDoc(this.ctx, vscodeDoc);
+		const textDocument = wrapDoc(vscodeDoc);
 		if (!textDocument) {
 			return;
 		}
@@ -50,7 +50,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 
 		const formattingOptions = window.visibleTextEditors.find(e => e.document.uri === vscodeDoc.uri)?.options;
 
-		const rawCompletions = await getInlineCompletions(this.ctx, textDocument, position, token, {
+		const rawCompletions = await this.instantiationService.invokeFunction(getInlineCompletions, textDocument, position, token, {
 			isCycling: context.triggerKind === InlineCompletionTriggerKind.Invoke,
 			selectedCompletionInfo: context.selectedCompletionInfo,
 			formattingOptions,
@@ -76,7 +76,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 
 	handleDidShowCompletionItem(item: InlineCompletionItem) {
 		const cmp = item.command!.arguments![0] as CopilotCompletion;
-		handleGhostTextShown(this.ctx, cmp);
+		this.instantiationService.invokeFunction(handleGhostTextShown, cmp);
 	}
 
 	handleDidPartiallyAcceptCompletionItem(item: InlineCompletionItem, info: number | PartialAcceptInfo) {
@@ -84,7 +84,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 			return; // deprecated API
 		}
 		const cmp = item.command!.arguments![0] as CopilotCompletion;
-		handlePartialGhostTextPostInsert(this.ctx, cmp, info.acceptedLength, info.kind);
+		this.instantiationService.invokeFunction(handlePartialGhostTextPostInsert, cmp, info.acceptedLength, info.kind);
 	}
 
 	handleEndOfLifetime(completionItem: InlineCompletionItem, reason: InlineCompletionEndOfLifeReason) {
@@ -96,14 +96,15 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 		if (!cmp) {
 			return;
 		}
-		telemetry(this.ctx, 'ghostText.dismissed', cmp.telemetry);
+		this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', cmp.telemetry);
 	}
 }
 
 /** Registers the commands necessary to use GhostTextProvider (but not GhostTextProvider itself) */
-export function registerGhostTextDependencies(ctx: ICompletionsContextService) {
+export function registerGhostTextDependencies(accessor: ServicesAccessor) {
+	const instantiationService = accessor.get(IInstantiationService);
 	const postCmdHandler = commands.registerCommand(postInsertCmdName, async (e: CopilotCompletion) => {
-		handleGhostTextPostInsert(ctx, e);
+		instantiationService.invokeFunction(handleGhostTextPostInsert, e);
 		try {
 			await commands.executeCommand('github.copilot.survey.signalUsage', 'completions');
 		} catch (e) {

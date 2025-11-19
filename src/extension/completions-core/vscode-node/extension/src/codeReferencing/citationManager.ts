@@ -5,9 +5,11 @@
 
 import { commands } from 'vscode';
 import { CodeReference } from '.';
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
+import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
-import { CitationManager, IPDocumentCitation } from '../../../lib/src/citationManager';
-import { ICompletionsContextService } from '../../../lib/src/context';
+import { ICompletionsCitationManager, IPDocumentCitation } from '../../../lib/src/citationManager';
 import { OutputPaneShowCommand } from '../../../lib/src/snippy/constants';
 import { copilotOutputLogTelemetry } from '../../../lib/src/snippy/telemetryHandlers';
 import { notify } from './matchNotifier';
@@ -17,16 +19,23 @@ import { GitHubCopilotLogger } from './outputChannel';
  * Citation manager that logs citations to the VS Code log. On the first citation encountered,
  * the user gets a notification.
  */
-export class LoggingCitationManager extends CitationManager {
-	private logger?: GitHubCopilotLogger;
+export class LoggingCitationManager extends Disposable implements ICompletionsCitationManager {
+	declare _serviceBrand: undefined;
 
-	constructor(private codeReference: CodeReference) {
+	private logger?: GitHubCopilotLogger;
+	private readonly codeReference: CodeReference;
+
+	constructor(
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IAuthenticationService authenticationService: IAuthenticationService,
+	) {
 		super();
-		const disposable = onCopilotToken(codeReference.ctx, _ => {
+		this.codeReference = this._register(this.instantiationService.createInstance(CodeReference));
+		const disposable = onCopilotToken(authenticationService, _ => {
 			if (this.logger) {
 				return;
 			}
-			this.logger = codeReference.ctx.instantiationService.createInstance(GitHubCopilotLogger);
+			this.logger = instantiationService.createInstance(GitHubCopilotLogger);
 			const initialNotificationCommand = commands.registerCommand(OutputPaneShowCommand, () =>
 				this.logger?.forceShow()
 			);
@@ -35,7 +44,11 @@ export class LoggingCitationManager extends CitationManager {
 		this.codeReference.addDisposable(disposable);
 	}
 
-	async handleIPCodeCitation(ctx: ICompletionsContextService, citation: IPDocumentCitation): Promise<void> {
+	register() {
+		return this.codeReference.register();
+	}
+
+	async handleIPCodeCitation(citation: IPDocumentCitation): Promise<void> {
 		if (!this.codeReference.enabled || !this.logger || citation.details.length === 0) {
 			return;
 		}
@@ -52,7 +65,7 @@ export class LoggingCitationManager extends CitationManager {
 			const { license, url } = detail;
 			this.logger.info(`License: ${license.replace('NOASSERTION', 'unknown')}, URL: ${url}`);
 		}
-		copilotOutputLogTelemetry.handleWrite({ context: ctx });
-		await notify(ctx);
+		copilotOutputLogTelemetry.handleWrite({ instantiationService: this.instantiationService });
+		await this.instantiationService.invokeFunction(notify);
 	}
 }

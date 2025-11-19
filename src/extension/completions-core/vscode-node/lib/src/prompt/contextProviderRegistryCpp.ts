@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ICompletionsContextService } from '../context';
-import { Features } from '../experiments/features';
-import { logger } from '../logger';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
+import { ICompletionsLogTargetService, logger } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
 import { ActiveExperiments } from './contextProviderRegistry';
 
@@ -24,7 +24,7 @@ const cppContextProviderParamsDefault: CppContextProviderParams = {
 const VSCodeCppContextProviderId = 'ms-vscode.cpptools';
 
 export function fillInCppVSCodeActiveExperiments(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	matchedContextProviders: string[],
 	activeExperiments: ActiveExperiments,
 	telemetryData: TelemetryWithExp
@@ -33,23 +33,30 @@ export function fillInCppVSCodeActiveExperiments(
 		(matchedContextProviders.length === 1 && matchedContextProviders[0] === '*') ||
 		matchedContextProviders.includes(VSCodeCppContextProviderId)
 	) {
-		addActiveExperiments(ctx, activeExperiments, telemetryData);
+		addActiveExperiments(accessor, activeExperiments, telemetryData);
 	}
 }
 
-function addActiveExperiments(ctx: ICompletionsContextService, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
+function addActiveExperiments(accessor: ServicesAccessor, activeExperiments: ActiveExperiments, telemetryData: TelemetryWithExp) {
 	try {
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		const logTarget = accessor.get(ICompletionsLogTargetService);
 		let params = cppContextProviderParamsDefault;
-		const cppContextProviderParams = ctx.get(Features).cppContextProviderParams(telemetryData);
+		const cppContextProviderParams = featuresService.cppContextProviderParams(telemetryData);
 		if (cppContextProviderParams) {
 			try {
 				params = JSON.parse(cppContextProviderParams) as CppContextProviderParams;
 			} catch (e) {
-				logger.error(ctx, 'Failed to parse cppContextProviderParams', e);
+				logger.error(logTarget, 'Failed to parse cppContextProviderParams', e);
+			}
+		} else {
+			const langSpecific = featuresService.getContextProviderExpSettings('cpp')?.params;
+			if (langSpecific) {
+				params = { ...langSpecific };
 			}
 		}
 		for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
 	} catch (e) {
-		logger.exception(ctx, e, 'fillInCppActiveExperiments');
+		logger.exception(accessor, e, 'fillInCppActiveExperiments');
 	}
 }

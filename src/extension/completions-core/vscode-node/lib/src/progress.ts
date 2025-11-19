@@ -2,6 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { createServiceIdentifier } from '../../../../../util/common/services';
 import { Command, StatusKind } from '../../types/src';
 
 export interface StatusChangedEvent {
@@ -11,7 +12,25 @@ export interface StatusChangedEvent {
 	command?: Command;
 }
 
-export abstract class StatusReporter {
+export const ICompletionsStatusReporter = createServiceIdentifier<ICompletionsStatusReporter>('ICompletionsStatusReporter');
+export interface ICompletionsStatusReporter {
+	readonly _serviceBrand: undefined;
+
+	busy: boolean;
+
+	withProgress<T>(callback: () => Promise<T>): Promise<T>;
+
+	forceStatus(kind: StatusKind, message?: string, command?: Command): void;
+	forceNormal(): void;
+	setError(message: string, command?: Command): void;
+	setWarning(message: string): void;
+	setInactive(message: string): void;
+	clearInactive(): void;
+}
+
+export abstract class StatusReporter implements ICompletionsStatusReporter {
+	declare _serviceBrand: undefined;
+
 	#inProgressCount = 0;
 	#kind: StatusKind = 'Normal';
 	#message: string | undefined;

@@ -81,7 +81,7 @@ export class CompletionsProvider extends Disposable {
 
 		const blockMode = BlockMode.ParsingAndServer;
 
-		const url = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCompletionsUrl, this.expService);
+		const url = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsCompletionsUrl, this.expService);
 
 		if (!url) {
 			this.tracer.throws('No completions URL configured');

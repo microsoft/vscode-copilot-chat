@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { AdoRepoId, getAdoRepoIdFromFetchUrl, getGithubRepoIdFromFetchUrl, GithubRepoId, parseRemoteUrl } from '../../../../../../platform/git/common/gitService';
-import { ICompletionsContextService } from '../context';
-import { FileIdentifier, FileSystem } from '../fileSystem';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { FileIdentifier, ICompletionsFileSystemService } from '../fileSystem';
 import { LRUCacheMap } from '../helpers/cache';
 import { dirname, getFsUri, joinPath } from '../util/uri';
 
@@ -55,9 +55,9 @@ export function tryGetGitHubNWO(repoInfo: MaybeRepoInfo): string | undefined {
  *  - If a file from this path has been looked at before, and no repository has been identified, returns undefined.
  *  - If a file from this path has been looked at before, and a repository has been identified, returns the repo info.
  */
-export function extractRepoInfoInBackground(ctx: ICompletionsContextService, uri: FileIdentifier): MaybeRepoInfo {
+export function extractRepoInfoInBackground(accessor: ServicesAccessor, uri: FileIdentifier): MaybeRepoInfo {
 	const baseFolder = dirname(uri);
-	return backgroundRepoInfo(ctx, baseFolder);
+	return backgroundRepoInfo(accessor, baseFolder);
 }
 
 // Note that we assume that the same filesystem path always returns the same repository information.
@@ -76,15 +76,16 @@ const backgroundRepoInfo = computeInBackgroundAndMemoize<RepoInfo | undefined, [
  * If it does appear to be part of a git repository, but its information is not parsable,
  * it returns a RepoInfo object with hostname, user and repo set to "".
  */
-export async function extractRepoInfo(ctx: ICompletionsContextService, uri: FileIdentifier): Promise<RepoInfo | undefined> {
+export async function extractRepoInfo(accessor: ServicesAccessor, uri: FileIdentifier): Promise<RepoInfo | undefined> {
+	const fs = accessor.get(ICompletionsFileSystemService);
+
 	const fsUri = getFsUri(uri);
 	if (!fsUri) { return undefined; }
 
-	const baseUri = await getRepoBaseUri(ctx, fsUri);
+	const baseUri = await getRepoBaseUri(fs, fsUri);
 	if (!baseUri) {
 		return undefined;
 	}
-	const fs = ctx.get(FileSystem);
 	const configUri = joinPath(baseUri, '.git', 'config');
 	let gitConfig;
 	try {
@@ -118,16 +119,15 @@ function parseRepoUrl(
  * Returns the base folder of the git repository containing the file, or undefined if none is found.
  * Will search recursively for a .git folder containing a config file.
  */
-async function getRepoBaseUri(ctx: ICompletionsContextService, uri: string): Promise<string | undefined> {
+async function getRepoBaseUri(fileSystemService: ICompletionsFileSystemService, uri: string): Promise<string | undefined> {
 	// to make sure the while loop terminates, we make sure the path variable decreases in length
 	let previousUri = uri + '_add_to_make_longer';
-	const fs = ctx.get(FileSystem);
 	while (uri !== 'file:///' && uri.length < previousUri.length) {
 		const configUri = joinPath(uri, '.git', 'config');
 		let result = false;
 
 		try {
-			await fs.stat(configUri);
+			await fileSystemService.stat(configUri);
 			result = true;
 		} catch (reason) {
 			result = false;
@@ -245,12 +245,12 @@ class CompletedComputation<T> {
  * @returns The memoized function, which returns ComputationStatus.PENDING until the first computation is complete.
  */
 function computeInBackgroundAndMemoize<S, P extends unknown[]>(
-	fct: (ctx: ICompletionsContextService, ...args: P) => Promise<S>,
+	fct: (accessor: ServicesAccessor, ...args: P) => Promise<S>,
 	cacheSize: number
-): (ctx: ICompletionsContextService, ...args: P) => S | ComputationStatus {
+): (accessor: ServicesAccessor, ...args: P) => S | ComputationStatus {
 	const resultsCache = new LRUCacheMap<string, CompletedComputation<S>>(cacheSize);
 	const inComputation: Set<string> = new Set();
-	return (ctx: ICompletionsContextService, ...args: P) => {
+	return (accessor: ServicesAccessor, ...args: P) => {
 		const key = JSON.stringify(args);
 		const memorizedComputation = resultsCache.get(key);
 		if (memorizedComputation) {
@@ -260,7 +260,7 @@ function computeInBackgroundAndMemoize<S, P extends unknown[]>(
 			// already being computed from a different call
 			return ComputationStatus.PENDING;
 		}
-		const computation = fct(ctx, ...args);
+		const computation = fct(accessor, ...args);
 		inComputation.add(key);
 		void computation.then(computedResult => {
 			// remove from inComputation

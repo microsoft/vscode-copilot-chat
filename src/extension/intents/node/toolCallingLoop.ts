@@ -38,6 +38,7 @@ import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { PauseController } from './pauseController';
+import { cancelText, IToolCallIterationIncrease } from '../../prompt/common/specialRequestTypes';
 
 
 export const enum ToolCallLimitBehavior {
@@ -128,7 +129,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const { request } = this.options;
 		const chatVariables = new ChatVariablesCollection(request.references);
 
-		const isContinuation = isToolCallLimitAcceptance(this.options.request) || isContinueOnError(this.options.request);
+		const isContinuation = this.turn.isContinuation;
 		const query = isContinuation ?
 			'Please continue' :
 			this.turn.request.message;
@@ -462,7 +463,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: iterationNumber === 0 && !isContinuation
+			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.isSubagent
 		}, token);
 
 		fetchStreamSource?.resolve();
@@ -681,22 +682,3 @@ export interface IToolCallLoopResult extends IToolCallSingleResult {
 	toolCallRounds: IToolCallRound[];
 	toolCallResults: Record<string, LanguageModelToolResult2>;
 }
-
-interface IToolCallIterationIncrease {
-	copilotRequestedRoundLimit: number;
-}
-
-const isToolCallIterationIncrease = (c: any): c is IToolCallIterationIncrease => c && typeof c.copilotRequestedRoundLimit === 'number';
-
-export const getRequestedToolCallIterationLimit = (request: ChatRequest) => request.acceptedConfirmationData?.find(isToolCallIterationIncrease)?.copilotRequestedRoundLimit;
-// todo@connor4312 improve with the choices API
-export const isToolCallLimitCancellation = (request: ChatRequest) => !!getRequestedToolCallIterationLimit(request) && request.prompt.includes(cancelText());
-export const isToolCallLimitAcceptance = (request: ChatRequest) => !!getRequestedToolCallIterationLimit(request) && !isToolCallLimitCancellation(request);
-export interface IContinueOnErrorConfirmation {
-	copilotContinueOnError: true;
-}
-function isContinueOnErrorConfirmation(c: unknown): c is IContinueOnErrorConfirmation {
-	return !!(c && (c as IContinueOnErrorConfirmation).copilotContinueOnError === true);
-}
-export const isContinueOnError = (request: ChatRequest) => !!(request.acceptedConfirmationData?.some(isContinueOnErrorConfirmation));
-const cancelText = () => l10n.t('Pause');

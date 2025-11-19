@@ -2,6 +2,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+import { createServiceIdentifier } from '../../../../../util/common/services';
+
 /**
  * `FileType` identifies the type of a file. `SymbolicLink` may be combined
  * with other types, e.g. `FileType.Directory | FileType.SymbolicLink`.
@@ -54,27 +57,11 @@ export interface FileStat {
 
 export type FileIdentifier = string | { readonly uri: string };
 
-/**
- * A basic file-system interface for reading files and checking their mtime.
- */
-export abstract class FileSystem {
-	/**
-	 * Read the entire contents of the given file.
-	 *
-	 * cf https://nodejs.org/api/fs.html#fs_fspromises_readfile_path_options
-	 */
-	abstract readFileString(uri: FileIdentifier): Promise<string>;
+export const ICompletionsFileSystemService = createServiceIdentifier<ICompletionsFileSystemService>('ICompletionsFileSystemService');
+export interface ICompletionsFileSystemService {
+	readonly _serviceBrand: undefined;
 
-	/**
-	 * Returns the meta data for the resource. In the case of a symbolic link,
-	 * the stats are the state of the target, but type will include `FileType.SymbolicLink`.
-	 */
-	abstract stat(uri: FileIdentifier): Promise<FileStat>;
-
-	/**
-	 * Read the contents of a directory.
-	 * @param uri The URI of the directory to read
-	 * @returns A promise that resolves to an array of [name, type] pairs
-	 */
-	abstract readDirectory(uri: FileIdentifier): Promise<[string, FileType][]>;
+	readFileString(uri: FileIdentifier): Promise<string>;
+	stat(uri: FileIdentifier): Promise<FileStat>;
+	readDirectory(uri: FileIdentifier): Promise<[string, FileType][]>;
 }

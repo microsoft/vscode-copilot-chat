@@ -3,19 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../../../../platform/authentication/common/copilotToken';
-import { CompletionsAuthenticationServiceBridge } from '../../../bridge/src/completionsAuthenticationServiceBridge';
-import { ICompletionsContextService } from '../context';
 
-export function onCopilotToken(ctx: ICompletionsContextService, listener: (token: Omit<CopilotToken, "token">) => unknown) {
-	return ctx.get(CompletionsAuthenticationServiceBridge).authenticationService.onDidAuthenticationChange(() => {
-		const copilotToken = getLastCopilotToken(ctx);
+export function onCopilotToken(authService: IAuthenticationService, listener: (token: Omit<CopilotToken, "token">) => unknown) {
+	return authService.onDidAuthenticationChange(() => {
+		const copilotToken = authService.copilotToken;
 		if (copilotToken) {
 			listener(copilotToken);
 		}
 	});
-}
-
-export function getLastCopilotToken(ctx: ICompletionsContextService): Omit<CopilotToken, "token"> | undefined {
-	return ctx.get(CompletionsAuthenticationServiceBridge).authenticationService.copilotToken;
 }

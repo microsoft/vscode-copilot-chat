@@ -3,84 +3,67 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CompletionsAuthenticationServiceBridge } from '../../../bridge/src/completionsAuthenticationServiceBridge';
-import { CompletionsEndpointProviderBridge } from '../../../bridge/src/completionsEndpointProviderBridge';
-import { CompletionsExperimentationServiceBridge } from '../../../bridge/src/completionsExperimentationServiceBridge';
-import { CompletionsIgnoreServiceBridge } from '../../../bridge/src/completionsIgnoreServiceBridge';
-import { CompletionsTelemetryServiceBridge } from '../../../bridge/src/completionsTelemetryServiceBridge';
-import { CopilotTokenManager } from '../auth/copilotTokenManager';
-import { CitationManager, NoOpCitationManager } from '../citationManager';
-import { CompletionNotifier } from '../completionNotifier';
-import {
-	BuildInfo,
-	ConfigProvider,
-	DefaultsOnlyConfigProvider,
-	EditorAndPluginInfo,
-	EditorSession,
-	InMemoryConfigProvider,
-} from '../config';
-import { CopilotContentExclusionManager } from '../contentExclusion/contentExclusionManager';
-import { Context, ICompletionsContextService } from '../context';
-import { UserErrorNotifier } from '../error/userErrorNotifier';
-import { Features } from '../experiments/features';
-import { FileReader } from '../fileReader';
-import { FileSystem } from '../fileSystem';
-import { AsyncCompletionManager } from '../ghostText/asyncCompletions';
-import { CompletionsCache } from '../ghostText/completionsCache';
-import { BlockModeConfig, ConfigBlockModeConfig } from '../ghostText/configBlockMode';
-import { CurrentGhostText } from '../ghostText/current';
-import { ForceMultiLine } from '../ghostText/ghostText';
-import { LastGhostText } from '../ghostText/last';
-import { SpeculativeRequestCache } from '../ghostText/speculativeRequestCache';
-import { LocalFileSystem } from '../localFileSystem';
-import { LogTarget, TelemetryLogSender } from '../logger';
-import { TelemetryLogSenderImpl } from '../logging/telemetryLogSender';
-import { Fetcher } from '../networking';
-import { NotificationSender } from '../notificationSender';
-import { AvailableModelsManager } from '../openai/model';
-import { NoOpStatusReporter, StatusReporter } from '../progress';
-import {
-	CompletionsPromptFactory,
-	createCompletionsPromptFactory,
-} from '../prompt/completionsPromptFactory/completionsPromptFactory';
-import { ContextProviderBridge } from '../prompt/components/contextProviderBridge';
-import {
-	ContextProviderRegistry,
-	DefaultContextProviders,
-	DefaultContextProvidersContainer,
-	getContextProviderRegistry,
-} from '../prompt/contextProviderRegistry';
-import { ContextProviderStatistics } from '../prompt/contextProviderStatistics';
-import { EmptyRecentEditsProvider } from '../prompt/recentEdits/emptyRecentEditsProvider';
-import { RecentEditsProvider } from '../prompt/recentEdits/recentEditsProvider';
-import { TelemetryReporters, TelemetryUserConfig } from '../telemetry';
-import { TextDocumentManager } from '../textDocumentManager';
-import { UrlOpener } from '../util/opener';
-import { PromiseQueue } from '../util/promiseQueue';
-import { RuntimeMode } from '../util/runtimeMode';
-import { NoFetchFetcher } from './fetcher';
-import { TestNotificationSender, TestUrlOpener } from './testHelpers';
-import { TestTextDocumentManager } from './textDocument';
-
+import { DocumentSelector } from 'vscode-languageserver-protocol/lib/common/protocol';
 import { ILanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
 import { NullLanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/nullLanguageContextProviderService';
-import { IInstantiationService, type ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ServiceCollection } from '../../../../../../util/vs/platform/instantiation/common/serviceCollection';
+import { TestingServiceCollection } from '../../../../../../platform/test/node/services';
+import { SyncDescriptor } from '../../../../../../util/vs/platform/instantiation/common/descriptors';
 import { createExtensionTestingServices } from '../../../../../test/vscode-node/services';
-import { CompletionsCapiBridge } from '../../../bridge/src/completionsCapiBridge';
+import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from '../../../bridge/src/completionsTelemetryServiceBridge';
+import { DocumentContext } from '../../../types/src';
+import { ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
+import { ICompletionsCitationManager, NoOpCitationManager } from '../citationManager';
+import { CompletionNotifier, ICompletionsNotifierService } from '../completionNotifier';
+import {
+	DefaultsOnlyConfigProvider, ICompletionsConfigProvider,
+	ICompletionsEditorAndPluginInfo,
+	InMemoryConfigProvider
+} from '../config';
+import { ICompletionsUserErrorNotifierService, UserErrorNotifier } from '../error/userErrorNotifier';
+import { Features } from '../experiments/features';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
+import { FileReader, ICompletionsFileReaderService } from '../fileReader';
+import { ICompletionsFileSystemService } from '../fileSystem';
+import { AsyncCompletionManager, ICompletionsAsyncManagerService } from '../ghostText/asyncCompletions';
+import { CompletionsCache, ICompletionsCacheService } from '../ghostText/completionsCache';
+import { ConfigBlockModeConfig, ICompletionsBlockModeConfig } from '../ghostText/configBlockMode';
+import { CurrentGhostText, ICompletionsCurrentGhostText } from '../ghostText/current';
+import { ICompletionsLastGhostText, LastGhostText } from '../ghostText/last';
+import { ICompletionsSpeculativeRequestCache, SpeculativeRequestCache } from '../ghostText/speculativeRequestCache';
+import { LocalFileSystem } from '../localFileSystem';
+import { ICompletionsLogTargetService } from '../logger';
+import { ICompletionsFetcherService } from '../networking';
+import { ICompletionsNotificationSender } from '../notificationSender';
+import { AvailableModelsManager, ICompletionsModelManagerService } from '../openai/model';
+import { ICompletionsStatusReporter, NoOpStatusReporter } from '../progress';
+import {
+	CompletionsPromptFactory, ICompletionsPromptFactoryService
+} from '../prompt/completionsPromptFactory/completionsPromptFactory';
+import { ContextProviderBridge, ICompletionsContextProviderBridgeService } from '../prompt/components/contextProviderBridge';
+import {
+	CachedContextProviderRegistry,
+	DefaultContextProvidersContainer, ICompletionsContextProviderRegistryService,
+	ICompletionsDefaultContextProviders,
+	MutableContextProviderRegistry
+} from '../prompt/contextProviderRegistry';
+import { ContextProviderStatistics, ICompletionsContextProviderService } from '../prompt/contextProviderStatistics';
+import { EmptyRecentEditsProvider } from '../prompt/recentEdits/emptyRecentEditsProvider';
+import { ICompletionsRecentEditsProviderService } from '../prompt/recentEdits/recentEditsProvider';
+import { ICompletionsTelemetryReporters, TelemetryReporters } from '../telemetry';
+import { ICompletionsTelemetryUserConfigService, TelemetryUserConfig } from '../telemetry/userConfig';
+import { ICompletionsTextDocumentManagerService } from '../textDocumentManager';
+import { ICompletionsPromiseQueueService } from '../util/promiseQueue';
+import { ICompletionsRuntimeModeService, RuntimeMode } from '../util/runtimeMode';
 import { FakeCopilotTokenManager } from './copilotTokenManager';
+import { NoFetchFetcher } from './fetcher';
+import { TestPromiseQueue } from './telemetry';
+import { TestNotificationSender } from './testHelpers';
+import { TestTextDocumentManager } from './textDocument';
 
-class NullLog extends LogTarget {
+class NullLog implements ICompletionsLogTargetService {
+	declare _serviceBrand: undefined;
 	logIt(..._: unknown[]) { }
 }
-
-const bridges: any[] = [];
-bridges.push(CompletionsEndpointProviderBridge);
-bridges.push(CompletionsAuthenticationServiceBridge);
-bridges.push(CompletionsIgnoreServiceBridge);
-bridges.push(CompletionsExperimentationServiceBridge);
-bridges.push(CompletionsTelemetryServiceBridge);
-bridges.push(CompletionsCapiBridge);
 
 /**
  * Baseline for a context. Tests should prefer the specific variants outlined below.
@@ -89,94 +72,75 @@ bridges.push(CompletionsCapiBridge);
  * @see createExtensionTestingContext
  * @see createAgentTestingContext
  */
-export function _createBaselineContext(serviceAccessor: ServicesAccessor, configProvider: InMemoryConfigProvider): ICompletionsContextService {
-	const ctx = new Context();
-
-	const serviceCollection = new ServiceCollection();
+export function _createBaselineContext(serviceCollection: TestingServiceCollection, configProvider: InMemoryConfigProvider): TestingServiceCollection {
 	serviceCollection.set(ILanguageContextProviderService, new NullLanguageContextProviderService());
-	serviceCollection.set(ICompletionsContextService, ctx);
-	const instantiationService = serviceAccessor.get(IInstantiationService).createChild(serviceCollection);
 
-	ctx.setInstantiationService(instantiationService);
+	serviceCollection.define(ICompletionsLogTargetService, new NullLog());
+	serviceCollection.define(ICompletionsCacheService, new CompletionsCache());
+	serviceCollection.define(ICompletionsConfigProvider, configProvider);
+	serviceCollection.define(ICompletionsRuntimeModeService, new RuntimeMode({ debug: false, verboseLogging: false, testMode: true, simulation: false }));
+	serviceCollection.define(ICompletionsSpeculativeRequestCache, new SpeculativeRequestCache());
+	serviceCollection.define(ICompletionsLastGhostText, new LastGhostText());
+	serviceCollection.define(ICompletionsCurrentGhostText, new CurrentGhostText());
+	serviceCollection.define(ICompletionsStatusReporter, new NoOpStatusReporter());
+	serviceCollection.define(ICompletionsCitationManager, new NoOpCitationManager());
+	serviceCollection.define(ICompletionsNotificationSender, new TestNotificationSender());
+	serviceCollection.define(ICompletionsTelemetryReporters, new TelemetryReporters());
+	serviceCollection.define(ICompletionsCopilotTokenManager, new FakeCopilotTokenManager());
+	serviceCollection.define(ICompletionsFeaturesService, new SyncDescriptor(Features));
+	serviceCollection.define(ICompletionsTelemetryService, new SyncDescriptor(CompletionsTelemetryServiceBridge));
+	serviceCollection.define(ICompletionsNotifierService, new SyncDescriptor(CompletionNotifier));
+	serviceCollection.define(ICompletionsBlockModeConfig, new SyncDescriptor(ConfigBlockModeConfig));
+	serviceCollection.define(ICompletionsRecentEditsProviderService, new EmptyRecentEditsProvider());
+	serviceCollection.define(ICompletionsUserErrorNotifierService, new SyncDescriptor(UserErrorNotifier));
 
-	for (const bridge of bridges) {
-		ctx.set(bridge, instantiationService.createInstance(bridge));
-	}
+	serviceCollection.define(ICompletionsFileReaderService, new SyncDescriptor(FileReader));
+	serviceCollection.define(ICompletionsTelemetryUserConfigService, new SyncDescriptor(TelemetryUserConfig));
+	serviceCollection.define(ICompletionsModelManagerService, new SyncDescriptor(AvailableModelsManager, [false]));
+	serviceCollection.define(ICompletionsAsyncManagerService, new SyncDescriptor(AsyncCompletionManager));
+	serviceCollection.define(ICompletionsContextProviderBridgeService, new SyncDescriptor(ContextProviderBridge));
+	serviceCollection.define(ICompletionsPromiseQueueService, new TestPromiseQueue());
 
-	ctx.set(ConfigProvider, configProvider);
-	ctx.set(InMemoryConfigProvider, configProvider);
-	ctx.set(BuildInfo, new BuildInfo());
-	ctx.set(RuntimeMode, new RuntimeMode({ debug: false, verboseLogging: false, testMode: true, simulation: false }));
-	ctx.set(CopilotTokenManager, instantiationService.createInstance(FakeCopilotTokenManager));
-	// Notifications from the monolith when fetching a token can trigger behavior that require these objects.
-	ctx.set(TelemetryReporters, new TelemetryReporters());
-	ctx.set(NotificationSender, new TestNotificationSender());
-	ctx.set(UrlOpener, new TestUrlOpener());
-	ctx.set(TelemetryLogSender, new TelemetryLogSenderImpl());
-	ctx.set(TelemetryUserConfig, instantiationService.createInstance(TelemetryUserConfig));
-	ctx.set(LogTarget, new NullLog());
-	ctx.set(UserErrorNotifier, new UserErrorNotifier());
-	ctx.set(EditorSession, new EditorSession('test-session', 'test-machine'));
-	ctx.set(Features, instantiationService.createInstance(Features));
-	ctx.set(CompletionsCache, new CompletionsCache());
-	ctx.set(BlockModeConfig, new ConfigBlockModeConfig());
-	ctx.set(StatusReporter, new NoOpStatusReporter());
-	ctx.set(PromiseQueue, new PromiseQueue());
-	ctx.set(CompletionNotifier, instantiationService.createInstance(CompletionNotifier));
 	//ctx.set(FileSearch, new TestingFileSearch());
-	ctx.set(CompletionsPromptFactory, createCompletionsPromptFactory(instantiationService));
-	ctx.set(LastGhostText, new LastGhostText());
-	ctx.set(CurrentGhostText, new CurrentGhostText());
-	ctx.set(ForceMultiLine, ForceMultiLine.default);
-	ctx.set(AvailableModelsManager, instantiationService.createInstance(AvailableModelsManager, false));
-	ctx.set(FileReader, instantiationService.createInstance(FileReader));
-	ctx.set(CitationManager, new NoOpCitationManager());
-	ctx.set(ContextProviderStatistics, new ContextProviderStatistics());
-	ctx.set(
-		ContextProviderRegistry,
-		getContextProviderRegistry(instantiationService, (_, documentSelector, documentContext) => {
+	serviceCollection.define(ICompletionsPromptFactoryService, new SyncDescriptor(CompletionsPromptFactory));
+	serviceCollection.define(ICompletionsContextProviderService, new ContextProviderStatistics());
+	serviceCollection.define(ICompletionsContextProviderRegistryService,
+		new SyncDescriptor(CachedContextProviderRegistry, [MutableContextProviderRegistry, (_: unknown, documentSelector: DocumentSelector, documentContext: DocumentContext) => {
 			if (documentSelector.find(ds => ds === '*')) {
 				return 1;
 			}
 			return documentSelector.find(ds => typeof ds !== 'string' && ds.language === documentContext.languageId)
 				? 10
 				: 0;
-		}, true)
+		}])
 	);
-	ctx.set(ContextProviderBridge, instantiationService.createInstance(ContextProviderBridge));
-	ctx.set(AsyncCompletionManager, instantiationService.createInstance(AsyncCompletionManager));
-	ctx.set(RecentEditsProvider, new EmptyRecentEditsProvider());
-	ctx.set(SpeculativeRequestCache, new SpeculativeRequestCache());
 
-	return ctx;
+	return serviceCollection;
 }
 
 /**
  * @returns a context suitable for `lib` tests.
  */
 export function createLibTestingContext() {
-	const services = createExtensionTestingServices();
-	const accessor = services.createTestingAccessor();
-	const ctx = _createBaselineContext(accessor, new InMemoryConfigProvider(new DefaultsOnlyConfigProvider(), new Map()));
+	let serviceCollection = createExtensionTestingServices();
+	serviceCollection = _createBaselineContext(serviceCollection, new InMemoryConfigProvider(new DefaultsOnlyConfigProvider()));
 
-	ctx.set(Fetcher, new NoFetchFetcher());
-	ctx.set(EditorAndPluginInfo, new LibTestsEditorInfo());
-	ctx.set(TextDocumentManager, ctx.instantiationService.createInstance(TestTextDocumentManager));
-	ctx.set(FileSystem, new LocalFileSystem());
-	ctx.set(CopilotContentExclusionManager, ctx.instantiationService.createInstance(CopilotContentExclusionManager));
-	ctx.set(DefaultContextProviders, new DefaultContextProvidersContainer());
+	serviceCollection.define(ICompletionsFetcherService, new NoFetchFetcher());
+	serviceCollection.define(ICompletionsEditorAndPluginInfo, new LibTestsEditorInfo());
+	serviceCollection.define(ICompletionsTextDocumentManagerService, new SyncDescriptor(TestTextDocumentManager));
+	serviceCollection.define(ICompletionsFileSystemService, new LocalFileSystem());
+	serviceCollection.define(ICompletionsDefaultContextProviders, new DefaultContextProvidersContainer());
 
-	return ctx;
+	return serviceCollection;
 }
 
-export class LibTestsEditorInfo extends EditorAndPluginInfo {
+export class LibTestsEditorInfo implements ICompletionsEditorAndPluginInfo {
+	declare _serviceBrand: undefined;
 	constructor(
 		readonly editorPluginInfo = { name: 'lib-tests-plugin', version: '2' },
 		readonly editorInfo = { name: 'lib-tests-editor', version: '1' },
 		readonly relatedPluginInfo = [{ name: 'lib-tests-related-plugin', version: '3' }]
-	) {
-		super();
-	}
+	) { }
 	getEditorInfo() {
 		return this.editorInfo;
 	}

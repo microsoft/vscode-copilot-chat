@@ -17,7 +17,8 @@ import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer'
 import { GitChanges } from '../../prompts/node/git/gitChanges';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { checkCancellation, formatUriForFileWidget } from './toolUtils';
+import { formatUriForFileWidget } from '../common/toolUtils';
+import { checkCancellation } from './toolUtils';
 
 interface IGetScmChangesToolParams {
 	repositoryPath?: string;

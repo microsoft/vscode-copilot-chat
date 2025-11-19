@@ -4,16 +4,21 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { ICompletionsContextService } from '../../../context';
+import { IIgnoreService } from '../../../../../../../../platform/ignore/common/ignoreService';
+import { SyncDescriptor } from '../../../../../../../../util/vs/platform/instantiation/common/descriptors';
+import { IInstantiationService } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { accessTimes } from '../../../documentTracker';
 import { ExpTreatmentVariables } from '../../../experiments/expConfig';
+import { ICompletionsFileSystemService } from '../../../fileSystem';
+import { ICompletionsLogTargetService } from '../../../logger';
 import { TelemetryWithExp } from '../../../telemetry';
 import { createLibTestingContext } from '../../../test/context';
 import { TestTextDocumentManager } from '../../../test/textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../../textDocumentManager';
 import { NeighboringFileType, NeighborSource } from '../neighborFiles';
 import { OpenTabFiles } from '../openTabFiles';
 import {
+	ICompletionsRelatedFilesProviderService,
 	RelatedFilesDocumentInfo,
 	RelatedFilesProvider,
 	RelatedFilesResponse,
@@ -113,11 +118,10 @@ const DEFAULT_FILE_LANGUAGE = 'python';
 
 suite('neighbor files tests', function () {
 	this.timeout(TIMEOUT);
-	const ctx = createLibTestingContext();
-	const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+	const accessor = createLibTestingContext().createTestingAccessor();
+	const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 
-
-	const workspaceTextDocumentManager = ctx.instantiationService.createInstance(TestTextDocumentManager);
+	const workspaceTextDocumentManager = accessor.get(IInstantiationService).createInstance(TestTextDocumentManager);
 	for (const file of WORKSPACE_FILES_FOR_TEST) {
 		workspaceTextDocumentManager.setDiskContents(file.uri, file.text);
 	}
@@ -219,32 +223,16 @@ suite('NeighborSource.getRelativePath tests', function () {
 });
 
 suite('Neighbor files exclusion tests', function () {
-	const ctx = createLibTestingContext();
-	const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
-	tdm.init([{ uri: WKS_ROOTFOLDER }]);
-
-	for (const file of OPEN_FILES_FOR_TEST) {
-		accessTimes.set(file.uri, file.timestamp);
-	}
-
-	const workspaceTextDocumentManager = ctx.instantiationService.createInstance(TestTextDocumentManager);
-	for (const file of WORKSPACE_FILES_FOR_TEST) {
-		workspaceTextDocumentManager.setDiskContents(file.uri, file.text);
-	}
-
-	workspaceTextDocumentManager.setTextDocument(FILE_I, DEFAULT_FILE_LANGUAGE, FILE_I_TEXT);
-
-	for (const file of OPEN_FILES_FOR_TEST) {
-		tdm.setTextDocument(file.uri, file.language, file.text);
-	}
-
 	class MockedRelatedFilesProvider extends RelatedFilesProvider {
 		constructor(
-			context: ICompletionsContextService,
 			private readonly relatedFiles: RelatedFilesResponseEntry[],
-			private readonly traits: RelatedFileTrait[] = [{ name: 'testTraitName', value: 'testTraitValue' }]
+			private readonly traits: RelatedFileTrait[] = [{ name: 'testTraitName', value: 'testTraitValue' }],
+			@IInstantiationService instantiationService: IInstantiationService,
+			@IIgnoreService ignoreService: IIgnoreService,
+			@ICompletionsLogTargetService logTarget: ICompletionsLogTargetService,
+			@ICompletionsFileSystemService fileSystemService: ICompletionsFileSystemService,
 		) {
-			super(context);
+			super(instantiationService, ignoreService, logTarget, fileSystemService);
 		}
 
 		async getRelatedFilesResponse(
@@ -263,13 +251,34 @@ suite('Neighbor files exclusion tests', function () {
 		}
 	}
 
+	const serviceCollection = createLibTestingContext();
+	serviceCollection.define(ICompletionsRelatedFilesProviderService, new SyncDescriptor(MockedRelatedFilesProvider, [[], [{ name: 'testTraitName', value: 'testTraitValue' }]]));
+
+	const accessor = serviceCollection.createTestingAccessor();
+	const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
+	tdm.init([{ uri: WKS_ROOTFOLDER }]);
+
+	for (const file of OPEN_FILES_FOR_TEST) {
+		accessTimes.set(file.uri, file.timestamp);
+	}
+
+	const workspaceTextDocumentManager = accessor.get(IInstantiationService).createInstance(TestTextDocumentManager);
+	for (const file of WORKSPACE_FILES_FOR_TEST) {
+		workspaceTextDocumentManager.setDiskContents(file.uri, file.text);
+	}
+
+	workspaceTextDocumentManager.setTextDocument(FILE_I, DEFAULT_FILE_LANGUAGE, FILE_I_TEXT);
+
+	for (const file of OPEN_FILES_FOR_TEST) {
+		tdm.setTextDocument(file.uri, file.language, file.text);
+	}
+
 	test('Test with related files excluded', async function () {
 		NeighborSource.reset();
-		ctx.forceSet(RelatedFilesProvider, new MockedRelatedFilesProvider(ctx, []));
 		const telemetryWithExp = TelemetryWithExp.createEmptyConfigForTesting();
 		telemetryWithExp.filtersAndExp.exp.variables[ExpTreatmentVariables.ExcludeRelatedFiles] = true;
 		const { docs, neighborSource, traits } = await NeighborSource.getNeighborFilesAndTraits(
-			ctx,
+			accessor,
 			FILE_J,
 			'javascript',
 			telemetryWithExp,

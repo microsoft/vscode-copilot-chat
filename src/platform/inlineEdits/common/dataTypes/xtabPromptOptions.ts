@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { assertNever } from '../../../../util/vs/base/common/assert';
 import { vBoolean, vEnum, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
 
 export type RecentlyViewedDocumentsOptions = {
@@ -57,6 +58,30 @@ export enum PromptingStrategy {
 	Xtab275 = 'xtab275',
 }
 
+export enum ResponseFormat {
+	CodeBlock = 'codeBlock',
+	UnifiedWithXml = 'unifiedWithXml',
+	EditWindowOnly = 'editWindowOnly',
+}
+
+export namespace ResponseFormat {
+	export function fromPromptingStrategy(strategy: PromptingStrategy | undefined): ResponseFormat {
+		switch (strategy) {
+			case PromptingStrategy.UnifiedModel:
+			case PromptingStrategy.Codexv21NesUnified:
+			case PromptingStrategy.Nes41Miniv3:
+				return ResponseFormat.UnifiedWithXml;
+			case PromptingStrategy.Xtab275:
+				return ResponseFormat.EditWindowOnly;
+			case PromptingStrategy.SimplifiedSystemPrompt:
+			case undefined:
+				return ResponseFormat.CodeBlock;
+			default:
+				assertNever(strategy);
+		}
+	}
+}
+
 export const DEFAULT_OPTIONS: PromptOptions = {
 	promptingStrategy: undefined,
 	currentFile: {
@@ -89,7 +114,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 export const LANGUAGE_CONTEXT_ENABLED_LANGUAGES: LanguageContextLanguages = {
 	'prompt': true,
 	'instructions': true,
-	'chatmode': true,
+	'chatagent': true,
 };
 
 export interface ModelConfiguration {

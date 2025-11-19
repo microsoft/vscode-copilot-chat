@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
-import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
+import * as vscode from 'vscode';
+import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -34,27 +35,30 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		@IExperimentationService private readonly _experimentationService: IExperimentationService
 	) { }
 
-	/**
-	 * Checks if a model supports extended thinking based on its model ID.
-	 * Extended thinking is supported by:
-	 * - Claude Sonnet 4.5 (claude-sonnet-4-5-*)
-	 * - Claude Sonnet 4 (claude-sonnet-4-*)
-	 * - Claude Sonnet 3.7 (claude-3-7-sonnet-*)
-	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
-	 * - Claude Opus 4.1 (claude-opus-4-1-*)
-	 * - Claude Opus 4 (claude-opus-4-*)
-	 */
 	private _enableThinking(modelId: string): boolean {
-
-		const thinkingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.EnableAnthropicThinking, this._experimentationService);
-		if (!thinkingEnabled) {
+		const thinkingEnabledInConfig = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingEnabled, this._experimentationService);
+		if (!thinkingEnabledInConfig) {
 			return false;
 		}
 
+		const modelCapabilities = this._knownModels?.[modelId];
+		return modelCapabilities?.thinking ?? false;
+	}
+
+	/**
+	 * Checks if a model supports memory based on its model ID.
+	 * Memory is supported by:
+	 * - Claude Sonnet 4.5 (claude-sonnet-4-5-*)
+	 * - Claude Sonnet 4 (claude-sonnet-4-*)
+	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
+	 * - Claude Opus 4.1 (claude-opus-4-1-*)
+	 * - Claude Opus 4 (claude-opus-4-*)
+	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
+	 */
+	private _enableMemory(modelId: string): boolean {
 		const normalized = modelId.toLowerCase();
 		return normalized.startsWith('claude-sonnet-4-5') ||
 			normalized.startsWith('claude-sonnet-4') ||
-			normalized.startsWith('claude-3-7-sonnet') ||
 			normalized.startsWith('claude-haiku-4-5') ||
 			normalized.startsWith('claude-opus-4-1') ||
 			normalized.startsWith('claude-opus-4');
@@ -83,7 +87,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						maxOutputTokens: 16000,
 						name: model.display_name,
 						toolCalling: true,
-						vision: false
+						vision: false,
+						thinking: false
 					};
 				}
 			}
@@ -98,12 +103,14 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName) !== undefined);
 		if (this._apiKey) {
 			await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+			this._anthropicAPIClient = undefined;
 		}
 	}
 
 	async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove' = 'update', modelId?: string): Promise<void> {
 		if (action === 'remove') {
 			this._apiKey = undefined;
+			this._anthropicAPIClient = undefined;
 			await this._byokStorageService.deleteAPIKey(AnthropicLMProvider.providerName, this.authType, modelId);
 			this._logService.info(`BYOK: API key removed for provider ${AnthropicLMProvider.providerName}`);
 			return;
@@ -116,6 +123,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 		this._apiKey = apiKey;
 		await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, apiKey, this.authType, modelId);
+		this._anthropicAPIClient = undefined;
 		this._logService.info(`BYOK: API key updated for provider ${AnthropicLMProvider.providerName} from environment variable ${envVarName}`);
 	}
 
@@ -136,12 +144,25 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					return [];
 				}
 			}
-		} catch {
+		} catch (error) {
+			if (error instanceof Error && error.message.includes('invalid x-api-key')) {
+				if (options.silent) {
+					return [];
+				}
+				await this.updateAPIKey();
+				if (this._apiKey) {
+					try {
+						return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
+					} catch (retryError) {
+						this._logService.error(`Error after re-prompting for API key: ${toErrorMessage(retryError, true)}`);
+					}
+				}
+			}
 			return [];
 		}
 	}
 
-	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<any> {
+	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
 		if (!this._anthropicAPIClient) {
 			return;
 		}
@@ -161,17 +182,32 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				messages: anthropicMessagesToRawMessagesForLogging(convertedMessages, system),
 				ourRequestId: requestId,
 				location: ChatLocation.Other,
-				tools: options.tools?.map((tool): OpenAiFunctionTool => ({
-					type: 'function',
-					function: {
-						name: tool.name,
-						description: tool.description,
-						parameters: tool.inputSchema
-					}
-				})),
+				body: {
+					tools: options.tools?.map((tool): OpenAiFunctionTool => ({
+						type: 'function',
+						function: {
+							name: tool.name,
+							description: tool.description,
+							parameters: tool.inputSchema
+						}
+					}))
+				},
 			});
 
-		const tools: Anthropic.Messages.Tool[] = (options.tools ?? []).map(tool => {
+		let hasMemoryTool = false;
+
+		// Build tools array, handling both standard tools and native Anthropic tools
+		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
+
+			// Handle native Anthropic memory tool
+			if (tool.name === 'memory' && this._enableMemory(model.id)) {
+				hasMemoryTool = true;
+				return {
+					name: 'memory',
+					type: 'memory_20250818'
+				} as Anthropic.Beta.BetaMemoryTool20250818;
+			}
+
 			if (!tool.inputSchema) {
 				return {
 					name: tool.name,
@@ -196,9 +232,53 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			};
 		});
 
+		// Check if web search is enabled and append web_search tool if not already present.
+		// We need to do this because there is no local web_search tool definition we can replace.
+		const webSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicWebSearchToolEnabled, this._experimentationService);
+		if (webSearchEnabled && !tools.some(tool => tool.name === 'web_search')) {
+			const maxUses = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchMaxUses);
+			const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
+			const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);
+			const userLocation = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchUserLocation);
+
+			const webSearchTool: Anthropic.Beta.BetaWebSearchTool20250305 = {
+				name: 'web_search',
+				type: 'web_search_20250305',
+				max_uses: maxUses
+			};
+
+			// Add domain filtering if configured
+			// Cannot use both allowed and blocked domains simultaneously
+			if (allowedDomains && allowedDomains.length > 0) {
+				webSearchTool.allowed_domains = allowedDomains;
+			} else if (blockedDomains && blockedDomains.length > 0) {
+				webSearchTool.blocked_domains = blockedDomains;
+			}
+
+			// Add user location if configured
+			// Note: All fields are optional according to Anthropic docs
+			if (userLocation && (userLocation.city || userLocation.region || userLocation.country || userLocation.timezone)) {
+				webSearchTool.user_location = {
+					type: 'approximate',
+					...userLocation
+				};
+			}
+
+			tools.push(webSearchTool);
+		}
+
 		const thinkingEnabled = this._enableThinking(model.id);
 
-		const params: Anthropic.MessageCreateParamsStreaming = {
+		// Build betas array for beta API features
+		const betas: string[] = [];
+		if (thinkingEnabled) {
+			betas.push('interleaved-thinking-2025-05-14');
+		}
+		if (hasMemoryTool) {
+			betas.push('context-management-2025-06-27');
+		}
+
+		const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
 			model: model.id,
 			messages: convertedMessages,
 			max_tokens: model.maxOutputTokens,
@@ -214,7 +294,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		const wrappedProgress = new RecordedProgress(progress);
 
 		try {
-			const result = await this._makeRequest(wrappedProgress, params, token);
+			const result = await this._makeRequest(wrappedProgress, params, betas, token);
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
@@ -226,14 +306,26 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				value: ['value'],
 				resolvedModel: model.id
 			}, wrappedProgress.items.map((i): IResponseDelta => {
-				return {
-					text: i instanceof LanguageModelTextPart ? i.value : '',
-					copilotToolCalls: i instanceof LanguageModelToolCallPart ? [{
-						name: i.name,
-						arguments: JSON.stringify(i.input),
-						id: i.callId
-					}] : undefined,
-				};
+				if (i instanceof LanguageModelTextPart) {
+					return { text: i.value };
+				} else if (i instanceof LanguageModelToolCallPart) {
+					return {
+						text: '',
+						copilotToolCalls: [{
+							name: i.name,
+							arguments: JSON.stringify(i.input),
+							id: i.callId
+						}]
+					};
+				} else if (i instanceof LanguageModelToolResultPart) {
+					// Handle tool results - extract text from content
+					const resultText = i.content.map(c => c instanceof LanguageModelTextPart ? c.value : '').join('');
+					return {
+						text: `[Tool Result ${i.callId}]: ${resultText}`
+					};
+				} else {
+					return { text: '' };
+				}
 			}));
 		} catch (err) {
 			this._logService.error(`BYOK Anthropic error: ${toErrorMessage(err, true)}`);
@@ -243,14 +335,26 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				serverRequestId: requestId,
 				reason: err.message
 			}, wrappedProgress.items.map((i): IResponseDelta => {
-				return {
-					text: i instanceof LanguageModelTextPart ? i.value : '',
-					copilotToolCalls: i instanceof LanguageModelToolCallPart ? [{
-						name: i.name,
-						arguments: JSON.stringify(i.input),
-						id: i.callId
-					}] : undefined,
-				};
+				if (i instanceof LanguageModelTextPart) {
+					return { text: i.value };
+				} else if (i instanceof LanguageModelToolCallPart) {
+					return {
+						text: '',
+						copilotToolCalls: [{
+							name: i.name,
+							arguments: JSON.stringify(i.input),
+							id: i.callId
+						}]
+					};
+				} else if (i instanceof LanguageModelToolResultPart) {
+					// Handle tool results - extract text from content
+					const resultText = i.content.map(c => c instanceof LanguageModelTextPart ? c.value : '').join('');
+					return {
+						text: `[Tool Result ${i.callId}]: ${resultText}`
+					};
+				} else {
+					return { text: '' };
+				}
 			}));
 			throw err;
 		}
@@ -261,16 +365,16 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: Progress<LMResponsePart>, params: Anthropic.MessageCreateParamsStreaming, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
 		if (!this._anthropicAPIClient) {
 			return { ttft: undefined, usage: undefined };
 		}
 		const start = Date.now();
 		let ttft: number | undefined;
-		// Use beta API for interleaved thinking (Claude 4 models only)
+
 		const stream = await this._anthropicAPIClient.beta.messages.create({
 			...params,
-			betas: ['interleaved-thinking-2025-05-14']
+			...(betas.length > 0 && { betas })
 		});
 
 		let pendingToolCall: {
@@ -281,6 +385,15 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		let pendingThinking: {
 			thinking?: string;
 			signature?: string;
+		} | undefined;
+		let pendingRedactedThinking: {
+			data: string;
+		} | undefined;
+		let pendingServerToolCall: {
+			toolId?: string;
+			name?: string;
+			jsonInput?: string;
+			type?: string;
 		} | undefined;
 		let usage: APIUsage | undefined;
 
@@ -302,11 +415,61 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						name: chunk.content_block.name,
 						jsonInput: ''
 					};
+				} else if ('content_block' in chunk && chunk.content_block.type === 'server_tool_use') {
+					// Handle server-side tool use (e.g., web_search)
+					pendingServerToolCall = {
+						toolId: chunk.content_block.id,
+						name: chunk.content_block.name,
+						jsonInput: '',
+						type: chunk.content_block.name
+					};
+					progress.report(new LanguageModelTextPart('\n'));
+
 				} else if ('content_block' in chunk && chunk.content_block.type === 'thinking') {
 					pendingThinking = {
 						thinking: '',
 						signature: ''
 					};
+				} else if ('content_block' in chunk && chunk.content_block.type === 'redacted_thinking') {
+					const redactedBlock = chunk.content_block as Anthropic.Messages.RedactedThinkingBlock;
+					pendingRedactedThinking = {
+						data: redactedBlock.data
+					};
+				} else if ('content_block' in chunk && chunk.content_block.type === 'web_search_tool_result') {
+					if (!pendingServerToolCall || !pendingServerToolCall.toolId) {
+						continue;
+					}
+
+					const resultBlock = chunk.content_block as Anthropic.Messages.WebSearchToolResultBlock;
+					// Handle potential error in web search
+					if (!Array.isArray(resultBlock.content)) {
+						this._logService.error(`Web search error: ${(resultBlock.content as Anthropic.Messages.WebSearchToolResultError).error_code}`);
+						continue;
+					}
+
+					const results = resultBlock.content.map((result: Anthropic.Messages.WebSearchResultBlock) => ({
+						type: 'web_search_result',
+						url: result.url,
+						title: result.title,
+						page_age: result.page_age,
+						encrypted_content: result.encrypted_content
+					}));
+
+					// Format according to Anthropic's web_search_tool_result specification
+					const toolResult = {
+						type: 'web_search_tool_result',
+						tool_use_id: pendingServerToolCall.toolId,
+						content: results
+					};
+
+					const searchResults = JSON.stringify(toolResult, null, 2);
+
+					// TODO: @bhavyaus - instead of just pushing text, create a specialized WebSearchResult part
+					progress.report(new LanguageModelToolResultPart(
+						pendingServerToolCall.toolId!,
+						[new LanguageModelTextPart(searchResults)]
+					));
+					pendingServerToolCall = undefined;
 				}
 				continue;
 			}
@@ -315,9 +478,37 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				if (chunk.delta.type === 'text_delta') {
 					progress.report(new LanguageModelTextPart(chunk.delta.text || ''));
 					hasText ||= chunk.delta.text?.length > 0;
+				} else if (chunk.delta.type === 'citations_delta') {
+					if ('citation' in chunk.delta) {
+						// TODO: @bhavyaus - instead of just pushing text, create a specialized Citation part
+						const citation = chunk.delta.citation as Anthropic.Messages.CitationsWebSearchResultLocation;
+						if (citation.type === 'web_search_result_location') {
+							// Format citation according to Anthropic specification
+							const citationData = {
+								type: 'web_search_result_location',
+								url: citation.url,
+								title: citation.title,
+								encrypted_index: citation.encrypted_index,
+								cited_text: citation.cited_text
+							};
+
+							// Format citation as readable blockquote with source link
+							const referenceText = `\n> "${citation.cited_text}" — [${vscode.l10n.t('Source')}](${citation.url})\n\n`;
+
+							// Report formatted reference text to user
+							progress.report(new LanguageModelTextPart(referenceText));
+
+							// Store the citation data in the correct format for multi-turn conversations
+							progress.report(new LanguageModelToolResultPart(
+								'citation',
+								[new LanguageModelTextPart(JSON.stringify(citationData, null, 2))]
+							));
+						}
+					}
 				} else if (chunk.delta.type === 'thinking_delta') {
 					if (pendingThinking) {
 						pendingThinking.thinking = (pendingThinking.thinking || '') + (chunk.delta.thinking || '');
+						progress.report(new LanguageModelThinkingPart(chunk.delta.thinking || ''));
 					}
 				} else if (chunk.delta.type === 'signature_delta') {
 					// Accumulate signature
@@ -340,6 +531,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						// JSON is not complete yet, continue accumulating
 						continue;
 					}
+				} else if (chunk.delta.type === 'input_json_delta' && pendingServerToolCall) {
+					pendingServerToolCall.jsonInput = (pendingServerToolCall.jsonInput || '') + (chunk.delta.partial_json || '');
 				}
 			}
 
@@ -359,14 +552,17 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					}
 					pendingToolCall = undefined;
 				} else if (pendingThinking) {
-					progress.report(
-						new LanguageModelThinkingPart(
-							pendingThinking.thinking || '',
-							undefined, // id
-							{ signature: pendingThinking.signature || '' }
-						)
-					);
+					if (pendingThinking.signature) {
+						const finalThinkingPart = new LanguageModelThinkingPart('');
+						finalThinkingPart.metadata = {
+							signature: pendingThinking.signature,
+							_completeThinking: pendingThinking.thinking
+						};
+						progress.report(finalThinkingPart);
+					}
 					pendingThinking = undefined;
+				} else if (pendingRedactedThinking) {
+					pendingRedactedThinking = undefined;
 				}
 			}
 

@@ -4,16 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { ICompletionsContextService } from '../../../context';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createLibTestingContext } from '../../../test/context';
 import { ResolvedContextItem } from '../../contextProviderRegistry';
-import { ContextProviderStatistics } from '../../contextProviderStatistics';
+import { ContextProviderStatistics, ICompletionsContextProviderService } from '../../contextProviderStatistics';
 import { TestContextProviderStatistics } from '../../test/contextProviderStatistics';
 import { TraitWithId } from './../contextItemSchemas';
 import { getTraitsFromContextItems } from './../traits';
 
 suite('traitsContextProvider', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 	const resolvedContextItems: ResolvedContextItem<TraitWithId>[] = [
 		{
 			providerId: 'testTraitsProvider',
@@ -48,11 +48,16 @@ suite('traitsContextProvider', function () {
 	];
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(
+			ICompletionsContextProviderService,
+			new ContextProviderStatistics(() => new TestContextProviderStatistics())
+		);
+		accessor = serviceCollection.createTestingAccessor();
 	});
 
 	test('can get traits from context text providers and flattens them', function () {
-		const traits = getTraitsFromContextItems(ctx, 'COMPLETION_ID', resolvedContextItems);
+		const traits = getTraitsFromContextItems(accessor, 'COMPLETION_ID', resolvedContextItems);
 		assert.deepStrictEqual(traits.length, 3);
 		assert.deepStrictEqual(
 			traits.map(t => t.name),
@@ -61,15 +66,11 @@ suite('traitsContextProvider', function () {
 	});
 
 	test('set expectations for contextProviderStatistics', function () {
-		ctx.forceSet(
-			ContextProviderStatistics,
-			new ContextProviderStatistics(() => new TestContextProviderStatistics())
-		);
 
-		getTraitsFromContextItems(ctx, 'COMPLETION_ID', resolvedContextItems);
+		getTraitsFromContextItems(accessor, 'COMPLETION_ID', resolvedContextItems);
 
-		const statistics = ctx
-			.get(ContextProviderStatistics)
+		const statistics = accessor
+			.get(ICompletionsContextProviderService)
 			.getStatisticsForCompletion('COMPLETION_ID') as TestContextProviderStatistics;
 		// Prompt components expectations
 		assert.deepStrictEqual(statistics.expectations.size, 2);

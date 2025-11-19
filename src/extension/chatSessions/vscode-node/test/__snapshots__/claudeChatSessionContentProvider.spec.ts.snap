@@ -30,7 +30,7 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
   {
     "parts": [
       {
-        "invocationMessage": "Searched text for \`ClaudeAgentManager\`",
+        "invocationMessage": "Searched for regex \`ClaudeAgentManager\`",
         "isError": undefined,
         "toolCallId": "toolu_01FqdrDGdxXUWRRLziM7gS2R",
         "toolName": "Grep",

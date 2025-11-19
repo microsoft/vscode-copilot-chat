@@ -36,7 +36,7 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IExperimentationService experimentationService: IExperimentationService,
 		@ILogService logService: ILogService,
 	) {
-		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? CHAT_MODEL.GPT4OPROXY;
+		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.TeamInternal.InstantApplyModelName, experimentationService) ?? CHAT_MODEL.GPT4OPROXY;
 
 		const modelInfo: IChatModelInformation = {
 			id: model,
@@ -72,7 +72,7 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		);
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {};
 		if (this.authService.speculativeDecodingEndpointToken) {
 			headers['Copilot-Edits-Session'] = this.authService.speculativeDecodingEndpointToken;

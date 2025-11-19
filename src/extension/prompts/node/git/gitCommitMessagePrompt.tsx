@@ -14,6 +14,8 @@ import { FilePathMode, FileVariable } from '../panel/fileVariable';
 import { UnsafeCodeBlock } from '../panel/unsafeElements';
 
 export interface GitCommitMessagePromptProps extends BasePromptElementProps {
+	readonly repositoryName: string;
+	readonly branchName: string;
 	readonly changes: Diff[];
 	readonly recentCommitMessages: RecentCommitMessages;
 }
@@ -28,6 +30,11 @@ export class GitCommitMessagePrompt extends PromptElement<GitCommitMessagePrompt
 					<ResponseTranslationRules />
 				</SystemMessage>
 				<UserMessage>
+					<Tag priority={850} name='repository-context'>
+						# REPOSITORY DETAILS:<br />
+						Repository name: {this.props.repositoryName}<br />
+						Branch name: {this.props.branchName}<br />
+					</Tag>
 					{this.props.recentCommitMessages.user.length > 0 && (
 						<Tag priority={700} name='user-commits'>
 							# RECENT USER COMMITS (For reference only, do not copy!):<br />

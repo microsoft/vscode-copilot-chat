@@ -6,6 +6,8 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import dedent from 'ts-dedent';
+import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	DEFAULT_MAX_COMPLETION_LENGTH,
 	DEFAULT_MAX_PROMPT_LENGTH,
@@ -15,25 +17,26 @@ import {
 	PromptOptions,
 } from '../../../../prompt/src/prompt';
 import { defaultSimilarFilesOptions } from '../../../../prompt/src/snippetInclusion/similarFiles';
-import { CopilotContentExclusionManager } from '../../contentExclusion/contentExclusionManager';
-import { ICompletionsContextService } from '../../context';
 import { ExpTreatmentVariables } from '../../experiments/expConfig';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
+import { MockIgnoreService } from '../../test/testContentExclusion';
 import { createTextDocument, InMemoryNotebookDocument, TestTextDocumentManager } from '../../test/textDocument';
 import { INotebookCell, IPosition } from '../../textDocument';
-import { TextDocumentManager } from '../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import { CompletionsPromptRenderer } from '../components/completionsPromptRenderer';
 import { _copilotContentExclusion, _promptError, getPromptOptions } from '../prompt';
 import { extractPromptInternal } from './prompt';
 
 suite('Prompt unit tests', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 	let sandbox: sinon.SinonSandbox;
 
 	setup(function () {
 		sandbox = sinon.createSandbox();
-		ctx = createLibTestingContext();
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(IIgnoreService, new MockIgnoreService());
+		accessor = serviceCollection.createTestingAccessor();
 	});
 
 	teardown(function () {
@@ -51,7 +54,7 @@ suite('Prompt unit tests', function () {
 		const rendererStub = sandbox.stub(CompletionsPromptRenderer.prototype, 'render').throws('unspecified error');
 
 		const prompt = await extractPromptInternal(
-			ctx,
+			accessor,
 			'COMPLETION_ID',
 			sourceDoc,
 			cursorPosition,
@@ -68,7 +71,7 @@ suite('Prompt unit tests', function () {
 	});
 
 	test('default EXP prompt options are the same as default PromptOptions object', function () {
-		const promptOptionsFromExp = getPromptOptions(ctx, TelemetryWithExp.createEmptyConfigForTesting(), '');
+		const promptOptionsFromExp = getPromptOptions(accessor, TelemetryWithExp.createEmptyConfigForTesting(), '');
 		const defaultPromptOptions: PromptOptions = {
 			maxPromptLength: DEFAULT_MAX_PROMPT_LENGTH,
 			numberOfSnippets: DEFAULT_NUM_SNIPPETS,
@@ -82,7 +85,7 @@ suite('Prompt unit tests', function () {
 
 	test('default C++ EXP prompt options use tuned values', function () {
 		const promptOptionsFromExp: PromptOptions = getPromptOptions(
-			ctx,
+			accessor,
 			TelemetryWithExp.createEmptyConfigForTesting(),
 			'cpp'
 		);
@@ -107,7 +110,7 @@ suite('Prompt unit tests', function () {
 			[ExpTreatmentVariables.UseSubsetMatching]: true,
 		});
 
-		const promptOptionsFromExp = getPromptOptions(ctx, telemetryWithExp, 'java');
+		const promptOptionsFromExp = getPromptOptions(accessor, telemetryWithExp, 'java');
 		assert.deepStrictEqual(promptOptionsFromExp.similarFilesOptions, {
 			snippetLength: 60,
 			threshold: 0.0,
@@ -121,10 +124,7 @@ suite('Prompt unit tests', function () {
 	});
 
 	test('should return without a prompt if the file blocked by repository control', async function () {
-		const evaluateStub = sandbox.stub(CopilotContentExclusionManager.prototype, 'evaluate');
-		evaluateStub.callsFake(_ => {
-			return Promise.resolve({ isBlocked: true });
-		});
+		(accessor.get(IIgnoreService) as MockIgnoreService).setAlwaysIgnore();
 
 		const content = 'function add()\n';
 		const sourceDoc = createTextDocument('file:///foo.js', 'javascript', 0, content);
@@ -133,7 +133,7 @@ suite('Prompt unit tests', function () {
 			character: 13,
 		};
 		const response = await extractPromptInternal(
-			ctx,
+			accessor,
 			'COMPLETION_ID',
 			sourceDoc,
 			cursorPosition,
@@ -145,7 +145,7 @@ suite('Prompt unit tests', function () {
 
 	test('prompt for ipython notebooks, using only the current cell language as shebang', async function () {
 		await assertPromptForCell(
-			ctx,
+			accessor,
 			cells[4],
 			dedent(
 				`import math
@@ -161,7 +161,7 @@ def product(c, d):`
 
 	test('prompt for ipython notebooks, using only the current cell language for known language', async function () {
 		await assertPromptForCell(
-			ctx,
+			accessor,
 			cells[5],
 			dedent(
 				`def product(c, d):`
@@ -171,7 +171,7 @@ def product(c, d):`
 	});
 
 	test('prompt for ipython notebooks, using only the current cell language for unknown language', async function () {
-		await assertPromptForCell(ctx, cells[6], dedent(`foo bar baz`), ['Language: unknown-great-language']);
+		await assertPromptForCell(accessor, cells[6], dedent(`foo bar baz`), ['Language: unknown-great-language']);
 	});
 
 	test('exception telemetry', async function () {
@@ -182,7 +182,7 @@ def product(c, d):`
 				return Promise.reject(new Error('test error'));
 			}
 		}
-		const tdm = ctx.instantiationService.createInstance(TestExceptionTextDocumentManager);
+		const tdm = accessor.get(IInstantiationService).createInstance(TestExceptionTextDocumentManager);
 		tdm.setTextDocument('file:///a/1.py', 'python', 'import torch');
 		ctx.forceSet(TextDocumentManager, tdm);
 		NeighborSource.reset();
@@ -215,18 +215,18 @@ def product(c, d):`
 	});
 });
 
-async function assertPromptForCell(ctx: ICompletionsContextService, sourceCell: INotebookCell, expectedPrefix: string, expectedContext?: string[]) {
+async function assertPromptForCell(accessor: ServicesAccessor, sourceCell: INotebookCell, expectedPrefix: string, expectedContext?: string[]) {
 	const notebook = new InMemoryNotebookDocument(cells);
 	const sourceDoc = sourceCell.document;
 
-	(ctx.get(TextDocumentManager) as TestTextDocumentManager).setNotebookDocument(sourceDoc, notebook);
+	(accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager).setNotebookDocument(sourceDoc, notebook);
 
 	const cursorPosition: IPosition = {
 		line: 0,
 		character: sourceDoc.getText().length,
 	};
 	const response = await extractPromptInternal(
-		ctx,
+		accessor,
 		'COMPLETION_ID',
 		sourceDoc,
 		cursorPosition,

@@ -5,12 +5,12 @@
 
 import { languages, workspace } from 'vscode';
 import { DocumentSelector } from 'vscode-languageserver-protocol';
-import { ICompletionsContextService } from '../../lib/src/context';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { isDocumentValid } from '../../lib/src/util/documentEvaluation';
 import { DocumentContext } from '../../types/src';
 
 export async function contextProviderMatch(
-	ctx: ICompletionsContextService,
+	instantiationService: IInstantiationService,
 	documentSelector: DocumentSelector,
 	documentContext: DocumentContext
 ): Promise<number> {
@@ -19,7 +19,7 @@ export async function contextProviderMatch(
 		return 0;
 	}
 
-	const result = await isDocumentValid(ctx, documentContext, vscDoc.getText());
+	const result = await instantiationService.invokeFunction(isDocumentValid, documentContext);
 	if (result.status !== 'valid') {
 		return 0;
 	}

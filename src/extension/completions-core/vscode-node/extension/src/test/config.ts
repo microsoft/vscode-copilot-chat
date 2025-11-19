@@ -13,7 +13,7 @@ export class ExtensionTestConfigProvider extends InMemoryConfigProvider {
 	private readonly vscConfigProvider = new VSCodeConfigProvider();
 
 	constructor() {
-		super(new DefaultsOnlyConfigProvider(), new Map());
+		super(new DefaultsOnlyConfigProvider());
 	}
 
 	override getConfig<T>(key: ConfigKeyType): T {

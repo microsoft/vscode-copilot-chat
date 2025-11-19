@@ -300,7 +300,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 		return headers['x-api-key'] as string | undefined;
 	}
 
-	private formatEventData(data: any): string {
+	private formatEventData(data: unknown): string {
 		return JSON.stringify(data).replace(/\n/g, '\\n');
 	}
 }

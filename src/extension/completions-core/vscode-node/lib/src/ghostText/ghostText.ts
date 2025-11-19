@@ -2,34 +2,32 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry';
 import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
-import { CompletionsTelemetryServiceBridge } from '../../../bridge/src/completionsTelemetryServiceBridge';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { isSupportedLanguageId } from '../../../prompt/src/parse';
 import { initializeTokenizers } from '../../../prompt/src/tokenization';
 import { CancellationTokenSource, CancellationToken as ICancellationToken } from '../../../types/src';
-import { CompletionNotifier } from '../completionNotifier';
+import { ICompletionsNotifierService } from '../completionNotifier';
 import { CompletionState } from '../completionState';
 import { BlockMode, ConfigKey, getConfig, shouldDoServerTrimming } from '../config';
-import { ICompletionsContextService } from '../context';
-import { UserErrorNotifier } from '../error/userErrorNotifier';
-import { Features } from '../experiments/features';
-import { Logger } from '../logger';
+import { ICompletionsUserErrorNotifierService } from '../error/userErrorNotifier';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
+import { ICompletionsLogTargetService, Logger } from '../logger';
 import { isAbortError } from '../networking';
 import { EngineRequestInfo, getEngineRequestInfo } from '../openai/config';
 import {
 	CompletionHeaders,
 	CompletionRequestExtra,
 	CopilotUiKind,
-	FinishedCallback,
-	OpenAIFetcher,
-	PostOptions,
+	FinishedCallback, ICompletionsOpenAIFetcherService, PostOptions
 } from '../openai/fetch';
 import { APIChoice, getTemperatureForSamples } from '../openai/openai';
 import { CopilotNamedAnnotationList } from '../openai/stream';
-import { StatusReporter } from '../progress';
-import { ContextProviderBridge } from '../prompt/components/contextProviderBridge';
-import { ContextProviderStatistics } from '../prompt/contextProviderStatistics';
+import { ICompletionsStatusReporter } from '../progress';
+import { ICompletionsContextProviderBridgeService } from '../prompt/components/contextProviderBridge';
+import { ICompletionsContextProviderService } from '../prompt/contextProviderStatistics';
 import {
 	ContextIndentation,
 	contextIndentation,
@@ -50,12 +48,12 @@ import {
 } from '../telemetry';
 import { IPosition, LocationFactory, TextDocumentContents } from '../textDocument';
 import { delay } from '../util/async';
-import { isRunningInTest, shouldFailForDebugPurposes } from '../util/runtimeMode';
-import { AsyncCompletionManager } from './asyncCompletions';
+import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
+import { ICompletionsAsyncManagerService } from './asyncCompletions';
 import { BlockPositionType, BlockTrimmer, getBlockPositionType } from './blockTrimmer';
-import { CompletionsCache } from './completionsCache';
-import { BlockModeConfig } from './configBlockMode';
-import { CurrentGhostText } from './current';
+import { ICompletionsCacheService } from './completionsCache';
+import { ICompletionsBlockModeConfig } from './configBlockMode';
+import { ICompletionsCurrentGhostText } from './current';
 import { requestMultilineScore } from './multilineModel';
 import { StreamedCompletionSplitter } from './streamedCompletionSplitter';
 import {
@@ -97,7 +95,7 @@ export enum ResultType {
 const maxSinglelineTokens = 20;
 
 async function genericGetCompletionsFromNetwork<T>(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	requestContext: RequestContext,
 	baseTelemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
@@ -109,14 +107,20 @@ async function genericGetCompletionsFromNetwork<T>(
 		choicesStream: AsyncIterable<APIChoice>
 	) => Promise<GhostTextResultWithTelemetry<T>>
 ): Promise<GhostTextResultWithTelemetry<T>> {
-	ghostTextLogger.debug(ctx, `Getting ${what} from network`);
+	const featuresService = accessor.get(ICompletionsFeaturesService);
+	const fetcherService = accessor.get(ICompletionsOpenAIFetcherService);
+	const runtimeMode = accessor.get(ICompletionsRuntimeModeService);
+	const instantiationService = accessor.get(IInstantiationService);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const userErrorNotifier = accessor.get(ICompletionsUserErrorNotifierService);
+	ghostTextLogger.debug(logTarget, `Getting ${what} from network`);
 
 	// copy the base telemetry data
 	baseTelemetryData = baseTelemetryData.extendedBy();
 
 	// Request one choice for automatic requests, three for invoked (cycling) requests.
 	const n = requestContext.isCycling ? 3 : 1;
-	const temperature = getTemperatureForSamples(ctx, n);
+	const temperature = getTemperatureForSamples(runtimeMode, n);
 	const extra: CompletionRequestExtra = {
 		language: requestContext.languageId,
 		next_indent: requestContext.indentation.next ?? 0,
@@ -126,7 +130,7 @@ async function genericGetCompletionsFromNetwork<T>(
 	};
 	const postOptions: PostOptions = { n, temperature, code_annotations: false };
 	const modelTerminatesSingleline =
-		ctx.get(Features).modelAlwaysTerminatesSingleline(baseTelemetryData);
+		featuresService.modelAlwaysTerminatesSingleline(baseTelemetryData);
 	const simulateSingleline =
 		requestContext.blockMode === BlockMode.MoreMultiline &&
 		BlockTrimmer.isSupported(requestContext.languageId) &&
@@ -172,19 +176,17 @@ async function genericGetCompletionsFromNetwork<T>(
 			headers: requestContext.headers,
 			extra,
 		};
-		const res = await ctx
-			.get(OpenAIFetcher)
-			.fetchAndStreamCompletions(ctx, completionParams, baseTelemetryData, finishedCb, cancellationToken);
+		const res = await fetcherService.fetchAndStreamCompletions(completionParams, baseTelemetryData, finishedCb, cancellationToken);
 		if (res.type === 'failed') {
 			return {
 				type: 'failed',
 				reason: res.reason,
-				telemetryData: mkBasicResultTelemetry(baseTelemetryData, ctx),
+				telemetryData: mkBasicResultTelemetry(baseTelemetryData),
 			};
 		}
 
 		if (res.type === 'canceled') {
-			ghostTextLogger.debug(ctx, 'Cancelled after awaiting fetchCompletions');
+			ghostTextLogger.debug(logTarget, 'Cancelled after awaiting fetchCompletions');
 			return {
 				type: 'canceled',
 				reason: res.reason,
@@ -204,16 +206,16 @@ async function genericGetCompletionsFromNetwork<T>(
 				}),
 			};
 		} else {
-			ghostTextLogger.exception(ctx, err, `Error on ghost text request`);
-			ctx.get(UserErrorNotifier).notifyUser(ctx, err);
-			if (shouldFailForDebugPurposes(ctx)) {
+			instantiationService.invokeFunction(acc => ghostTextLogger.exception(acc, err, `Error on ghost text request`));
+			userErrorNotifier.notifyUser(err);
+			if (runtimeMode.shouldFailForDebugPurposes()) {
 				throw err;
 			}
 			// not including err in this result because it'll end up in standard telemetry
 			return {
 				type: 'failed',
 				reason: 'non-abort error on ghost text request',
-				telemetryData: mkBasicResultTelemetry(baseTelemetryData, ctx),
+				telemetryData: mkBasicResultTelemetry(baseTelemetryData),
 			};
 		}
 	}
@@ -244,14 +246,17 @@ export type GetNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice,
  *  Copies from the base telemetry data are used as the basis for each choice's telemetry.
  */
 async function getCompletionsFromNetwork(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	requestContext: RequestContext,
 	baseTelemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
 	finishedCb: FinishedCallback
 ): Promise<GetNetworkCompletionsType> {
+	const instantiationService = accessor.get(IInstantiationService);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const runtimeMode = accessor.get(ICompletionsRuntimeModeService);
 	return genericGetCompletionsFromNetwork(
-		ctx,
+		accessor,
 		requestContext,
 		baseTelemetryData,
 		cancellationToken,
@@ -263,15 +268,15 @@ async function getCompletionsFromNetwork(
 			const firstRes = await choicesIterator.next();
 
 			if (firstRes.done) {
-				ghostTextLogger.debug(ctx, 'All choices redacted');
+				ghostTextLogger.debug(logTarget, 'All choices redacted');
 				return {
 					type: 'empty',
 					reason: 'all choices redacted',
-					telemetryData: mkBasicResultTelemetry(baseTelemetryData, ctx),
+					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
 				};
 			}
 			if (cancellationToken?.isCancellationRequested) {
-				ghostTextLogger.debug(ctx, 'Cancelled after awaiting redactedChoices iterator');
+				ghostTextLogger.debug(logTarget, 'Cancelled after awaiting redactedChoices iterator');
 				return {
 					type: 'canceled',
 					reason: 'after awaiting redactedChoices iterator',
@@ -283,23 +288,22 @@ async function getCompletionsFromNetwork(
 
 			if (firstChoice === undefined) {
 				// This is probably unreachable given the firstRes.done check above
-				ghostTextLogger.debug(ctx, 'Got undefined choice from redactedChoices iterator');
+				ghostTextLogger.debug(logTarget, 'Got undefined choice from redactedChoices iterator');
 				return {
 					type: 'empty',
 					reason: 'got undefined choice from redactedChoices iterator',
-					telemetryData: mkBasicResultTelemetry(baseTelemetryData, ctx),
+					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
 				};
 			}
 
-			telemetryPerformance(ctx, 'performance', firstChoice, requestStart, processingTime);
+			instantiationService.invokeFunction(telemetryPerformance, 'performance', firstChoice, requestStart, processingTime);
 
-			ghostTextLogger.debug(ctx, `Awaited first result, id:  ${firstChoice.choiceIndex}`);
+			ghostTextLogger.debug(logTarget, `Awaited first result, id:  ${firstChoice.choiceIndex}`);
 			// Adds first result to cache
 			const processedFirstChoice = postProcessChoices(firstChoice, requestContext);
 			if (processedFirstChoice) {
-				appendToCache(ctx, requestContext, processedFirstChoice);
-				ghostTextLogger.debug(
-					ctx,
+				instantiationService.invokeFunction(appendToCache, requestContext, processedFirstChoice);
+				ghostTextLogger.debug(logTarget,
 					`GhostText first completion (index ${processedFirstChoice?.choiceIndex}): ${JSON.stringify(processedFirstChoice?.completionText)}`
 				);
 			}
@@ -308,17 +312,16 @@ async function getCompletionsFromNetwork(
 				const apiChoices: APIChoice[] = processedFirstChoice !== undefined ? [processedFirstChoice] : [];
 				for await (const choice of choicesStream) {
 					if (choice === undefined) { continue; }
-					ghostTextLogger.debug(
-						ctx,
+					ghostTextLogger.debug(logTarget,
 						`GhostText later completion (index ${choice?.choiceIndex}): ${JSON.stringify(choice.completionText)}`
 					);
 					const processedChoice = postProcessChoices(choice, requestContext, apiChoices);
 					if (!processedChoice) { continue; }
 					apiChoices.push(processedChoice);
-					appendToCache(ctx, requestContext, processedChoice);
+					instantiationService.invokeFunction(appendToCache, requestContext, processedChoice);
 				}
 			})();
-			if (isRunningInTest(ctx)) {
+			if (runtimeMode.isRunningInTest()) {
 				await cacheDone;
 			}
 			if (processedFirstChoice) {
@@ -326,7 +329,7 @@ async function getCompletionsFromNetwork(
 				return {
 					type: 'success',
 					value: [makeGhostAPIChoice(processedFirstChoice, { forceSingleLine: false }), cacheDone],
-					telemetryData: mkBasicResultTelemetry(baseTelemetryData, ctx),
+					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
 					telemetryBlob: baseTelemetryData,
 					resultType: ResultType.Network,
 				};
@@ -334,7 +337,7 @@ async function getCompletionsFromNetwork(
 				return {
 					type: 'empty',
 					reason: 'got undefined processedFirstChoice',
-					telemetryData: mkBasicResultTelemetry(baseTelemetryData, ctx),
+					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
 				};
 			}
 		}
@@ -348,14 +351,16 @@ type GetAllNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice[], P
  *  Copies from the base telemetry data are used as the basis for each choice's telemetry.
  */
 async function getAllCompletionsFromNetwork(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	requestContext: RequestContext,
 	baseTelemetryData: TelemetryWithExp,
 	cancellationToken: ICancellationToken | undefined,
 	finishedCb: FinishedCallback
 ): Promise<GetAllNetworkCompletionsType> {
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const instantiationService = accessor.get(IInstantiationService);
 	return genericGetCompletionsFromNetwork(
-		ctx,
+		accessor,
 		requestContext,
 		baseTelemetryData,
 		cancellationToken,
@@ -365,7 +370,7 @@ async function getAllCompletionsFromNetwork(
 			const apiChoices: APIChoice[] = [];
 			for await (const choice of choicesStream) {
 				if (cancellationToken?.isCancellationRequested) {
-					ghostTextLogger.debug(ctx, 'Cancelled after awaiting choices iterator');
+					ghostTextLogger.debug(logTarget, 'Cancelled after awaiting choices iterator');
 					return {
 						type: 'canceled',
 						reason: 'after awaiting choices iterator',
@@ -379,15 +384,15 @@ async function getAllCompletionsFromNetwork(
 			//Append results to current completions cache, and network cache
 			if (apiChoices.length > 0) {
 				for (const choice of apiChoices) {
-					appendToCache(ctx, requestContext, choice);
+					instantiationService.invokeFunction(appendToCache, requestContext, choice);
 				}
 
-				telemetryPerformance(ctx, 'cyclingPerformance', apiChoices[0], requestStart, processingTime);
+				instantiationService.invokeFunction(telemetryPerformance, 'cyclingPerformance', apiChoices[0], requestStart, processingTime);
 			}
 			return {
 				type: 'success',
 				value: [apiChoices, Promise.resolve()],
-				telemetryData: mkBasicResultTelemetry(baseTelemetryData, ctx),
+				telemetryData: mkBasicResultTelemetry(baseTelemetryData),
 				telemetryBlob: baseTelemetryData,
 				resultType: ResultType.Cycling,
 			};
@@ -430,7 +435,7 @@ function takeNLines(n: number): FinishedCallback {
 }
 
 async function getGhostTextStrategy(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	completionState: CompletionState,
 	prefix: string,
 	prompt: PromptResponsePresent,
@@ -439,10 +444,11 @@ async function getGhostTextStrategy(
 	hasAcceptedCurrentCompletion: boolean,
 	preIssuedTelemetryData: TelemetryWithExp
 ): Promise<GhostTextStrategy> {
-	const multilineAfterAcceptLines = ctx.get(Features).multilineAfterAcceptLines(preIssuedTelemetryData);
-	const blockMode = ctx
-		.get(BlockModeConfig)
-		.forLanguage(ctx, completionState.textDocument.detectedLanguageId, preIssuedTelemetryData);
+	const instantiationService = accessor.get(IInstantiationService);
+	const featuresService = accessor.get(ICompletionsFeaturesService);
+	const blockModeConfig = accessor.get(ICompletionsBlockModeConfig);
+	const multilineAfterAcceptLines = featuresService.multilineAfterAcceptLines(preIssuedTelemetryData);
+	const blockMode = blockModeConfig.forLanguage(completionState.textDocument.detectedLanguageId, preIssuedTelemetryData);
 	switch (blockMode) {
 		case BlockMode.Server:
 			// Override the server-side trimming after accepting a completion
@@ -467,8 +473,7 @@ async function getGhostTextStrategy(
 			// we shouldn't drop through to here, but in case we do, be explicit about the behaviour
 			let requestMultiline: MultilineDetermination;
 			try {
-				requestMultiline = await shouldRequestMultiline(
-					ctx,
+				requestMultiline = await instantiationService.invokeFunction(shouldRequestMultiline,
 					blockMode,
 					completionState.textDocument,
 					completionState.position,
@@ -483,7 +488,7 @@ async function getGhostTextStrategy(
 			if (
 				!hasAcceptedCurrentCompletion &&
 				requestMultiline.requestMultiline &&
-				ctx.get(Features).singleLineUnlessAccepted(preIssuedTelemetryData)
+				featuresService.singleLineUnlessAccepted(preIssuedTelemetryData)
 			) {
 				requestMultiline.requestMultiline = false;
 			}
@@ -505,8 +510,7 @@ async function getGhostTextStrategy(
 				return {
 					blockMode: blockMode,
 					requestMultiline: true,
-					...buildFinishedCallback(
-						ctx,
+					...instantiationService.invokeFunction(buildFinishedCallback,
 						blockMode,
 						completionState.textDocument,
 						adjustedPosition,
@@ -536,8 +540,7 @@ async function getGhostTextStrategy(
 			return {
 				blockMode: blockMode,
 				requestMultiline: false,
-				...buildFinishedCallback(
-					ctx,
+				...instantiationService.invokeFunction(buildFinishedCallback,
 					blockMode,
 					completionState.textDocument,
 					completionState.position,
@@ -553,7 +556,7 @@ async function getGhostTextStrategy(
 }
 
 function buildFinishedCallback(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	blockMode: BlockMode,
 	document: TextDocumentContents,
 	position: IPosition,
@@ -563,13 +566,15 @@ function buildFinishedCallback(
 	prompt: Prompt,
 	telemetryData: TelemetryWithExp
 ): { finishedCb: FinishedCallback; maxTokens?: number } {
+	const featuresService = accessor.get(ICompletionsFeaturesService);
+	const instantiationService = accessor.get(IInstantiationService);
 	if (multiline && blockMode === BlockMode.MoreMultiline && BlockTrimmer.isSupported(document.detectedLanguageId)) {
 		const lookAhead =
 			positionType === BlockPositionType.EmptyBlock || positionType === BlockPositionType.BlockEnd
-				? ctx.get(Features).longLookaheadSize(telemetryData)
-				: ctx.get(Features).shortLookaheadSize(telemetryData);
+				? featuresService.longLookaheadSize(telemetryData)
+				: featuresService.shortLookaheadSize(telemetryData);
 
-		const finishedCb = ctx.instantiationService.createInstance(StreamedCompletionSplitter,
+		const finishedCb = instantiationService.createInstance(StreamedCompletionSplitter,
 			prefix,
 			document.detectedLanguageId,
 			false,
@@ -579,13 +584,13 @@ function buildFinishedCallback(
 					prefix: prefix + extraPrefix,
 					prompt: { ...prompt, prefix: prompt.prefix + extraPrefix },
 				};
-				appendToCache(ctx, cacheContext, item);
+				instantiationService.invokeFunction(appendToCache, cacheContext, item);
 			}
 		).getFinishedCallback();
 
 		return {
 			finishedCb,
-			maxTokens: ctx.get(Features).maxMultilineTokens(telemetryData),
+			maxTokens: featuresService.maxMultilineTokens(telemetryData),
 		};
 	}
 
@@ -620,10 +625,11 @@ const defaultOptions: GetGhostTextOptions = {
 	isSpeculative: false,
 };
 
-function getRemainingDebounceMs(ctx: ICompletionsContextService, opts: GetGhostTextOptions, telemetry: TelemetryWithExp): number {
+function getRemainingDebounceMs(accessor: ServicesAccessor, opts: GetGhostTextOptions, telemetry: TelemetryWithExp): number {
+	const featuresService = accessor.get(ICompletionsFeaturesService);
 	const debounce =
-		getConfig<number | undefined>(ctx, ConfigKey.CompletionsDebounce) ??
-		ctx.get(Features).completionsDebounce(telemetry) ??
+		getConfig<number | undefined>(accessor, ConfigKey.CompletionsDebounce) ??
+		featuresService.completionsDebounce(telemetry) ??
 		opts.debounceMs;
 	if (debounce === undefined) { return 0; }
 	const elapsed = now() - telemetry.issuedTime;
@@ -631,15 +637,15 @@ function getRemainingDebounceMs(ctx: ICompletionsContextService, opts: GetGhostT
 }
 
 function inlineCompletionRequestCancelled(
-	ctx: ICompletionsContextService,
+	currentGhostText: ICompletionsCurrentGhostText,
 	requestId: string,
 	cancellationToken?: ICancellationToken
 ): boolean {
-	return cancellationToken?.isCancellationRequested || requestId !== ctx.get(CurrentGhostText).currentRequestId;
+	return cancellationToken?.isCancellationRequested || requestId !== currentGhostText.currentRequestId;
 }
 
 async function getGhostTextWithoutAbortHandling(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	completionState: CompletionState,
 	ourRequestId: string,
 	preIssuedTelemetryDataWithExp: TelemetryWithExp,
@@ -655,30 +661,34 @@ async function getGhostTextWithoutAbortHandling(
 		start = next;
 	}
 	recordPerformance('telemetry');
-	const features = ctx.get(Features);
+	const instantiationService = accessor.get(IInstantiationService);
+	const featuresService = accessor.get(ICompletionsFeaturesService);
+	const asyncCompletionManager = accessor.get(ICompletionsAsyncManagerService);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const currentGhostText = accessor.get(ICompletionsCurrentGhostText);
+	const statusReporter = accessor.get(ICompletionsStatusReporter);
 
-	if (inlineCompletionRequestCancelled(ctx, ourRequestId, cancellationToken)) {
+	if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
 		return {
 			type: 'abortedBeforeIssued',
 			reason: 'cancelled before extractPrompt',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp, ctx),
+			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 		};
 	}
 
 	const inlineSuggestion = isInlineSuggestion(completionState.textDocument, completionState.position);
 	if (inlineSuggestion === undefined) {
-		ghostTextLogger.debug(ctx, 'Breaking, invalid middle of the line');
+		ghostTextLogger.debug(logTarget, 'Breaking, invalid middle of the line');
 		return {
 			type: 'abortedBeforeIssued',
 			reason: 'Invalid middle of the line',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp, ctx),
+			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 		};
 	}
 
-	const engineInfo = getEngineRequestInfo(ctx, preIssuedTelemetryDataWithExp);
+	const engineInfo = instantiationService.invokeFunction(getEngineRequestInfo, preIssuedTelemetryDataWithExp);
 	const ghostTextOptions = { ...defaultOptions, ...options, tokenizer: engineInfo.tokenizer };
-	const prompt = await extractPrompt(
-		ctx,
+	const prompt = await instantiationService.invokeFunction(extractPrompt,
 		ourRequestId,
 		completionState,
 		preIssuedTelemetryDataWithExp,
@@ -687,29 +697,29 @@ async function getGhostTextWithoutAbortHandling(
 	);
 	recordPerformance('prompt');
 	if (prompt.type === 'copilotContentExclusion') {
-		ghostTextLogger.debug(ctx, 'Copilot not available, due to content exclusion');
+		ghostTextLogger.debug(logTarget, 'Copilot not available, due to content exclusion');
 		return {
 			type: 'abortedBeforeIssued',
 			reason: 'Copilot not available due to content exclusion',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp, ctx),
+			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 		};
 	}
 
 	if (prompt.type === 'contextTooShort') {
-		ghostTextLogger.debug(ctx, 'Breaking, not enough context');
+		ghostTextLogger.debug(logTarget, 'Breaking, not enough context');
 		return {
 			type: 'abortedBeforeIssued',
 			reason: 'Not enough context',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp, ctx),
+			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 		};
 	}
 
 	if (prompt.type === 'promptError') {
-		ghostTextLogger.debug(ctx, 'Error while building the prompt');
+		ghostTextLogger.debug(logTarget, 'Error while building the prompt');
 		return {
 			type: 'abortedBeforeIssued',
 			reason: 'Error while building the prompt',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp, ctx),
+			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 		};
 	}
 
@@ -718,60 +728,55 @@ async function getGhostTextWithoutAbortHandling(
 	}
 
 	if (prompt.type === 'promptCancelled') {
-		ghostTextLogger.debug(ctx, 'Cancelled during extractPrompt');
+		ghostTextLogger.debug(logTarget, 'Cancelled during extractPrompt');
 		return {
 			type: 'abortedBeforeIssued',
 			reason: 'Cancelled during extractPrompt',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp, ctx),
+			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 		};
 	}
 
 	if (prompt.type === 'promptTimeout') {
-		ghostTextLogger.debug(ctx, 'Timeout during extractPrompt');
+		ghostTextLogger.debug(logTarget, 'Timeout during extractPrompt');
 		return {
 			type: 'abortedBeforeIssued',
 			reason: 'Timeout',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp, ctx),
+			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 		};
 	}
 
 	if (prompt.prompt.prefix.length === 0 && prompt.prompt.suffix.length === 0) {
-		ghostTextLogger.debug(ctx, 'Error empty prompt');
+		ghostTextLogger.debug(logTarget, 'Error empty prompt');
 		return {
 			type: 'abortedBeforeIssued',
 			reason: 'Empty prompt',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp, ctx),
+			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 		};
 	}
 
-	const debounce = getRemainingDebounceMs(ctx, ghostTextOptions, preIssuedTelemetryDataWithExp);
+	const debounce = instantiationService.invokeFunction(getRemainingDebounceMs, ghostTextOptions, preIssuedTelemetryDataWithExp);
 	if (debounce > 0) {
-		ghostTextLogger.debug(ctx, `Debouncing ghost text request for ${debounce}ms`);
+		ghostTextLogger.debug(logTarget, `Debouncing ghost text request for ${debounce}ms`);
 		await delay(debounce);
-		if (inlineCompletionRequestCancelled(ctx, ourRequestId, cancellationToken)) {
+		if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
 			return {
 				type: 'abortedBeforeIssued',
 				reason: 'cancelled after debounce',
-				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp, ctx),
+				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 			};
 		}
 	}
 
-	const statusBarItem = ctx.get(StatusReporter);
-
-	return statusBarItem.withProgress(async () => {
+	return statusReporter.withProgress(async () => {
 		const [prefix] = trimLastLine(
 			completionState.textDocument.getText(
 				LocationFactory.range(LocationFactory.position(0, 0), completionState.position)
 			)
 		);
 
-		const hasAcceptedCurrentCompletion = ctx
-			.get(CurrentGhostText)
-			.hasAcceptedCurrentCompletion(prefix, prompt.prompt.suffix);
+		const hasAcceptedCurrentCompletion = currentGhostText.hasAcceptedCurrentCompletion(prefix, prompt.prompt.suffix);
 		const originalPrompt = prompt.prompt;
-		const ghostTextStrategy = await getGhostTextStrategy(
-			ctx,
+		const ghostTextStrategy = await instantiationService.invokeFunction(getGhostTextStrategy,
 			completionState,
 			prefix,
 			prompt,
@@ -782,9 +787,9 @@ async function getGhostTextWithoutAbortHandling(
 		);
 		recordPerformance('strategy');
 
-		let choices = getLocalInlineSuggestion(ctx, prefix, originalPrompt, ghostTextStrategy.requestMultiline);
+		let choices = instantiationService.invokeFunction(getLocalInlineSuggestion, prefix, originalPrompt, ghostTextStrategy.requestMultiline);
 		recordPerformance('cache');
-		const repoInfo = extractRepoInfoInBackground(ctx, completionState.textDocument.uri);
+		const repoInfo = instantiationService.invokeFunction(extractRepoInfoInBackground, completionState.textDocument.uri);
 		const requestContext: RequestContext = {
 			blockMode: ghostTextStrategy.blockMode,
 			languageId: completionState.textDocument.detectedLanguageId,
@@ -809,8 +814,7 @@ async function getGhostTextWithoutAbortHandling(
 		};
 
 		// this will be used as basis for the choice telemetry data
-		const telemetryData = telemetryIssued(
-			ctx,
+		const telemetryData = instantiationService.invokeFunction(telemetryIssued,
 			completionState.textDocument,
 			requestContext,
 			completionState.position,
@@ -826,29 +830,27 @@ async function getGhostTextWithoutAbortHandling(
 		if (
 			choices === undefined &&
 			!ghostTextOptions.isCycling &&
-			ctx.get(AsyncCompletionManager).shouldWaitForAsyncCompletions(prefix, prompt.prompt)
+			asyncCompletionManager.shouldWaitForAsyncCompletions(prefix, prompt.prompt)
 		) {
-			const choice = await ctx
-				.get(AsyncCompletionManager)
-				.getFirstMatchingRequestWithTimeout(
-					ourRequestId,
-					prefix,
-					prompt.prompt,
-					ghostTextOptions.isSpeculative,
-					telemetryData
-				);
+			const choice = await asyncCompletionManager.getFirstMatchingRequestWithTimeout(
+				ourRequestId,
+				prefix,
+				prompt.prompt,
+				ghostTextOptions.isSpeculative,
+				telemetryData
+			);
 			recordPerformance('asyncWait');
 			if (choice) {
 				const forceSingleLine = !ghostTextStrategy.requestMultiline;
 				const trimmedChoice = makeGhostAPIChoice(choice[0], { forceSingleLine });
 				choices = [[trimmedChoice], ResultType.Async];
 			}
-			if (inlineCompletionRequestCancelled(ctx, ourRequestId, cancellationToken)) {
-				ghostTextLogger.debug(ctx, 'Cancelled before requesting a new completion');
+			if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
+				ghostTextLogger.debug(logTarget, 'Cancelled before requesting a new completion');
 				return {
 					type: 'abortedBeforeIssued',
 					reason: 'Cancelled after waiting for async completion',
-					telemetryData: mkBasicResultTelemetry(telemetryData, ctx),
+					telemetryData: mkBasicResultTelemetry(telemetryData),
 				};
 			}
 		}
@@ -860,8 +862,7 @@ async function getGhostTextWithoutAbortHandling(
 			// Post-process any cached choices before deciding whether to issue a network request
 			choices[0] = choices[0]
 				.map(c =>
-					postProcessChoiceInContext(
-						ctx,
+					instantiationService.invokeFunction(postProcessChoiceInContext,
 						completionState.textDocument,
 						completionState.position,
 						c,
@@ -873,11 +874,11 @@ async function getGhostTextWithoutAbortHandling(
 		}
 
 		if (choices !== undefined && choices[0].length === 0) {
-			ghostTextLogger.debug(ctx, `Found empty inline suggestions locally via ${resultTypeToString(choices[1])}`);
+			ghostTextLogger.debug(logTarget, `Found empty inline suggestions locally via ${resultTypeToString(choices[1])}`);
 			return {
 				type: 'empty',
 				reason: 'cached results empty after post-processing',
-				telemetryData: mkBasicResultTelemetry(telemetryData, ctx),
+				telemetryData: mkBasicResultTelemetry(telemetryData),
 			};
 		}
 		if (
@@ -886,12 +887,11 @@ async function getGhostTextWithoutAbortHandling(
 			// If it's a cycling request, need to show multiple choices
 			(!ghostTextOptions.isCycling || choices[0].length > 1)
 		) {
-			ghostTextLogger.debug(ctx, `Found inline suggestions locally via ${resultTypeToString(choices[1])}`);
+			ghostTextLogger.debug(logTarget, `Found inline suggestions locally via ${resultTypeToString(choices[1])}`);
 		} else {
 			// No local choices, go to network
 			if (ghostTextOptions.isCycling) {
-				const networkChoices = await getAllCompletionsFromNetwork(
-					ctx,
+				const networkChoices = await instantiationService.invokeFunction(getAllCompletionsFromNetwork,
 					requestContext,
 					telemetryData,
 					cancellationToken,
@@ -926,35 +926,30 @@ async function getGhostTextWithoutAbortHandling(
 				// Wrap an observer around the finished callback to update the
 				// async manager as the request streams in.
 				const finishedCb: FinishedCallback = (text, delta) => {
-					ctx.get(AsyncCompletionManager).updateCompletion(ourRequestId, text);
+					asyncCompletionManager.updateCompletion(ourRequestId, text);
 					return ghostTextStrategy.finishedCb(text, delta);
 				};
 
 				const asyncCancellationTokenSource = new CancellationTokenSource();
-				const requestPromise = getCompletionsFromNetwork(
-					ctx,
+				const requestPromise = instantiationService.invokeFunction(getCompletionsFromNetwork,
 					requestContext,
 					telemetryData,
 					asyncCancellationTokenSource.token,
 					finishedCb
 				);
-				void ctx
-					.get(AsyncCompletionManager)
-					.queueCompletionRequest(
-						ourRequestId,
-						prefix,
-						prompt.prompt,
-						asyncCancellationTokenSource,
-						requestPromise
-					);
-				const c = await ctx
-					.get(AsyncCompletionManager)
-					.getFirstMatchingRequest(ourRequestId, prefix, prompt.prompt, ghostTextOptions.isSpeculative);
+				void asyncCompletionManager.queueCompletionRequest(
+					ourRequestId,
+					prefix,
+					prompt.prompt,
+					asyncCancellationTokenSource,
+					requestPromise
+				);
+				const c = await asyncCompletionManager.getFirstMatchingRequest(ourRequestId, prefix, prompt.prompt, ghostTextOptions.isSpeculative);
 				if (c === undefined) {
 					return {
 						type: 'empty',
 						reason: 'received no results from async completions',
-						telemetryData: mkBasicResultTelemetry(telemetryData, ctx),
+						telemetryData: mkBasicResultTelemetry(telemetryData),
 					};
 				}
 				choices = [[c[0]], ResultType.Async];
@@ -965,15 +960,14 @@ async function getGhostTextWithoutAbortHandling(
 			return {
 				type: 'failed',
 				reason: 'internal error: choices should be defined after network call',
-				telemetryData: mkBasicResultTelemetry(telemetryData, ctx),
+				telemetryData: mkBasicResultTelemetry(telemetryData),
 			};
 		}
 		const [choicesArray, resultType] = choices;
 
 		const postProcessedChoicesArray = choicesArray
 			.map(c =>
-				postProcessChoiceInContext(
-					ctx,
+				instantiationService.invokeFunction(postProcessChoiceInContext,
 					completionState.textDocument,
 					completionState.position,
 					c,
@@ -987,15 +981,15 @@ async function getGhostTextWithoutAbortHandling(
 		// telemetryWithAddData call since the time_to_produce_ms is computed
 		// there
 		const completionsDelay =
-			getConfig<number | undefined>(ctx, ConfigKey.CompletionsDelay) ??
-			features.completionsDelay(preIssuedTelemetryDataWithExp);
+			instantiationService.invokeFunction(getConfig<number>, ConfigKey.CompletionsDelay) ??
+			featuresService.completionsDelay(preIssuedTelemetryDataWithExp);
 		const elapsed = now() - preIssuedTelemetryDataWithExp.issuedTime;
 		const remainingDelay = Math.max(completionsDelay - elapsed, 0);
 		if (resultType !== ResultType.TypingAsSuggested && !ghostTextOptions.isCycling && remainingDelay > 0) {
-			ghostTextLogger.debug(ctx, `Waiting ${remainingDelay}ms before returning completion`);
+			ghostTextLogger.debug(logTarget, `Waiting ${remainingDelay}ms before returning completion`);
 			await delay(remainingDelay);
-			if (inlineCompletionRequestCancelled(ctx, ourRequestId, cancellationToken)) {
-				ghostTextLogger.debug(ctx, 'Cancelled after completions delay');
+			if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
+				ghostTextLogger.debug(logTarget, 'Cancelled after completions delay');
 				return {
 					type: 'canceled',
 					reason: 'after completions delay',
@@ -1008,7 +1002,6 @@ async function getGhostTextWithoutAbortHandling(
 		for (const choice of postProcessedChoicesArray) {
 			// Do this to get a new object for each choice
 			const choiceTelemetryData = telemetryWithAddData(
-				ctx,
 				completionState.textDocument,
 				requestContext,
 				choice,
@@ -1041,11 +1034,11 @@ async function getGhostTextWithoutAbortHandling(
 		// If reading from the cache or async, capture the look back offset used
 		telemetryData.measurements.foundOffset = results?.[0]?.telemetry?.measurements?.foundOffset ?? -1;
 		ghostTextLogger.debug(
-			ctx,
+			logTarget,
 			`Produced ${results.length} results from ${resultTypeToString(resultType)} at ${telemetryData.measurements.foundOffset} offset`
 		);
 
-		if (inlineCompletionRequestCancelled(ctx, ourRequestId, cancellationToken)) {
+		if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
 			return {
 				type: 'canceled',
 				reason: 'after post processing completions',
@@ -1055,7 +1048,7 @@ async function getGhostTextWithoutAbortHandling(
 
 		if (!ghostTextOptions.isSpeculative) {
 			// Update the current ghost text with the new response before returning for the "typing as suggested" UX
-			ctx.get(CurrentGhostText).setGhostText(prefix, prompt.prompt.suffix, postProcessedChoicesArray, resultType);
+			currentGhostText.setGhostText(prefix, prompt.prompt.suffix, postProcessedChoicesArray, resultType);
 		}
 
 		recordPerformance('complete');
@@ -1063,7 +1056,7 @@ async function getGhostTextWithoutAbortHandling(
 		return {
 			type: 'success',
 			value: [results, resultType],
-			telemetryData: mkBasicResultTelemetry(telemetryData, ctx),
+			telemetryData: mkBasicResultTelemetry(telemetryData),
 			telemetryBlob: telemetryData,
 			resultType,
 			performanceMetrics,
@@ -1072,21 +1065,27 @@ async function getGhostTextWithoutAbortHandling(
 }
 
 export async function getGhostText(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	completionState: CompletionState,
 	token?: ICancellationToken,
 	options?: Partial<GetGhostTextOptions>
 ): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
 	const id = generateUuid();
-	ctx.get(CurrentGhostText).currentRequestId = id;
-	const telemetryData = await createTelemetryWithExp(ctx, completionState.textDocument, id, options);
+	const instantiationService = accessor.get(IInstantiationService);
+	const telemetryService = accessor.get(ITelemetryService);
+	const notifierService = accessor.get(ICompletionsNotifierService);
+	const contextProviderBridge = accessor.get(ICompletionsContextProviderBridgeService);
+	const currentGhostText = accessor.get(ICompletionsCurrentGhostText);
+	const contextproviderStatistics = accessor.get(ICompletionsContextProviderService);
+	currentGhostText.currentRequestId = id;
+	const telemetryData = await createTelemetryWithExp(accessor, completionState.textDocument, id, options);
 	// A CLS consumer has an LSP bug where it erroneously makes method requests before `initialize` has returned, which
 	// means we can't use `initialize` to actually initialize anything expensive.  This the primary user of the
 	// tokenizer, so settle for initializing here instead.  We don't use waitForTokenizers() because in the event of a
 	// tokenizer load failure, that would spam handleException() on every request.
 	await initializeTokenizers.catch(() => { });
 	try {
-		ctx.get(ContextProviderBridge).schedule(
+		contextProviderBridge.schedule(
 			completionState,
 			id,
 			options?.opportunityId ?? '',
@@ -1094,11 +1093,10 @@ export async function getGhostText(
 			token,
 			options
 		);
-		ctx.get(CompletionNotifier).notifyRequest(completionState, id, telemetryData, token, options);
-		const result = await getGhostTextWithoutAbortHandling(ctx, completionState, id, telemetryData, token, options);
-		const statistics = ctx.get(ContextProviderStatistics).getStatisticsForCompletion(id);
+		notifierService.notifyRequest(completionState, id, telemetryData, token, options);
+		const result = await instantiationService.invokeFunction(getGhostTextWithoutAbortHandling, completionState, id, telemetryData, token, options);
+		const statistics = contextproviderStatistics.getStatisticsForCompletion(id);
 		const opportunityId = options?.opportunityId ?? 'unknown';
-		const telemetryService = ctx.get(CompletionsTelemetryServiceBridge).getTelemetryService();
 		for (const [providerId, statistic] of statistics.getAllUsageStatistics()) {
 			/* __GDPR__
 				"context-provider.completion-stats" : {
@@ -1150,13 +1148,14 @@ export async function getGhostText(
  *  2. If we have a previously cached inline suggestion for this prompt and requestMultiline.
  */
 function getLocalInlineSuggestion(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	prefix: string,
 	prompt: Prompt,
 	requestMultiline: boolean
 ): [APIChoice[], ResultType] | undefined {
-	const choicesTyping = ctx.get(CurrentGhostText).getCompletionsForUserTyping(prefix, prompt.suffix);
-	const choicesCache = getCompletionsFromCache(ctx, prefix, prompt.suffix, requestMultiline);
+	const currentGhostText = accessor.get(ICompletionsCurrentGhostText);
+	const choicesTyping = currentGhostText.getCompletionsForUserTyping(prefix, prompt.suffix);
+	const choicesCache = getCompletionsFromCache(accessor, prefix, prompt.suffix, requestMultiline);
 
 	if (choicesTyping && choicesTyping.length > 0) {
 		// Append cached choices to choicesTyping, if any. Ensure typing choices
@@ -1270,7 +1269,7 @@ type MultilineDetermination = {
 };
 
 async function shouldRequestMultiline(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	blockMode: BlockMode,
 	document: TextDocumentContents,
 	position: IPosition,
@@ -1278,15 +1277,12 @@ async function shouldRequestMultiline(
 	afterAccept: boolean,
 	prompt: PromptResponsePresent
 ): Promise<MultilineDetermination> {
-	if (ctx.get(ForceMultiLine).requestMultilineOverride) {
-		return { requestMultiline: true };
-	}
 
 	// Parsing long files for multiline completions is slow, so we only do
 	// it for files with less than 8000 lines
 	if (document.lineCount >= 8000) {
 		telemetry(
-			ctx,
+			accessor,
 			'ghostText.longFileMultilineSkip',
 			TelemetryData.createAndMarkAsIssued({
 				languageId: document.detectedLanguageId,
@@ -1336,8 +1332,8 @@ async function shouldRequestMultiline(
 }
 
 /** Appends completions to existing entry in cache or creates new entry. */
-function appendToCache(ctx: ICompletionsContextService, requestContext: CacheContext, choice: APIChoice) {
-	ctx.get(CompletionsCache).append(requestContext.prefix, requestContext.prompt.suffix, choice);
+function appendToCache(accessor: ServicesAccessor, requestContext: CacheContext, choice: APIChoice) {
+	accessor.get(ICompletionsCacheService).append(requestContext.prefix, requestContext.prompt.suffix, choice);
 }
 
 function adjustLeadingWhitespace(index: number, text: string, ws: string): GhostCompletion {
@@ -1385,34 +1381,35 @@ function adjustLeadingWhitespace(index: number, text: string, ws: string): Ghost
  * remaining current prefix.
  */
 function getCompletionsFromCache(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	prefix: string,
 	suffix: string,
 	multiline: boolean
 ): APIChoice[] | undefined {
-	const choices = ctx.get(CompletionsCache).findAll(prefix, suffix);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const choices = accessor.get(ICompletionsCacheService).findAll(prefix, suffix);
 	if (choices.length === 0) {
-		ghostTextLogger.debug(ctx, `Found no completions in cache`);
+		ghostTextLogger.debug(logTarget, `Found no completions in cache`);
 		return [];
 	}
-	ghostTextLogger.debug(ctx, `Found ${choices.length} completions in cache`);
+	ghostTextLogger.debug(logTarget, `Found ${choices.length} completions in cache`);
 	return choices.map(choice => makeGhostAPIChoice(choice, { forceSingleLine: !multiline }));
 }
 
 /** Create a TelemetryWithExp instance for a ghost text request. */
 async function createTelemetryWithExp(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	document: TextDocumentContents,
 	headerRequestId: string,
 	options?: Partial<GetGhostTextOptions>
 ): Promise<TelemetryWithExp> {
+	const featuresService = accessor.get(ICompletionsFeaturesService);
 	const properties: TelemetryProperties = { headerRequestId };
 	if (options?.opportunityId) { properties.opportunityId = options.opportunityId; }
 	if (options?.selectedCompletionInfo?.text) { properties.completionsActive = 'true'; }
 	if (options?.isSpeculative) { properties.reason = 'speculative'; }
 	const telemetryData = TelemetryData.createAndMarkAsIssued(properties);
-	const features = ctx.get(Features);
-	const telemetryWithExp = await features.updateExPValuesAndAssignments(
+	const telemetryWithExp = await featuresService.updateExPValuesAndAssignments(
 		{ uri: document.uri, languageId: document.detectedLanguageId },
 		telemetryData
 	);
@@ -1421,7 +1418,6 @@ async function createTelemetryWithExp(
 
 /** Return a copy of the choice's telemetry data with extra information added */
 function telemetryWithAddData(
-	ctx: ICompletionsContextService,
 	document: TextDocumentContents,
 	requestContext: RequestContext,
 	choice: APIChoice,
@@ -1458,7 +1454,7 @@ function telemetryWithAddData(
 
 /** Create new telemetry data based on baseTelemetryData and send `ghostText.issued` event  */
 function telemetryIssued(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	document: TextDocumentContents,
 	requestContext: RequestContext,
 	position: IPosition,
@@ -1533,7 +1529,7 @@ function telemetryIssued(
 	const telemetryDataToSend = telemetryData.extendedBy(extendedProperties, extendedMeasurements);
 
 	// telemetrize the issued event
-	telemetry(ctx, 'ghostText.issued', telemetryDataToSend);
+	telemetry(accessor, 'ghostText.issued', telemetryDataToSend);
 
 	return telemetryData;
 }
@@ -1544,7 +1540,7 @@ function addDocumentTelemetry(telemetry: TelemetryWithExp, document: TextDocumen
 }
 
 function telemetryPerformance(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	performanceKind: string,
 	choice: APIChoice,
 	requestStart: number,
@@ -1566,5 +1562,5 @@ function telemetryPerformance(
 		}
 	);
 	telemetryData.extendWithRequestId(choice.requestId);
-	telemetry(ctx, `ghostText.${performanceKind}`, telemetryData);
+	telemetry(accessor, `ghostText.${performanceKind}`, telemetryData);
 }

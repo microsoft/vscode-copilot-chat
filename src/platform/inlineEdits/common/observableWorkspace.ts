@@ -113,10 +113,6 @@ export class MutableObservableWorkspace extends ObservableWorkspace {
 
 	private readonly _documents = new Map<DocumentId, MutableObservableDocument>();
 
-	constructor() {
-		super();
-	}
-
 	/**
 	 * Dispose to remove.
 	*/

@@ -5,8 +5,10 @@
 import assert from 'assert';
 import Sinon from 'sinon';
 import dedent from 'ts-dedent';
-import { Fetcher } from '../../networking';
-import { CompletionResults, CopilotUiKind, LiveOpenAIFetcher, OpenAIFetcher } from '../../openai/fetch';
+import { SyncDescriptor } from '../../../../../../../util/vs/platform/instantiation/common/descriptors';
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsFetcherService } from '../../networking';
+import { CompletionResults, CopilotUiKind, ICompletionsOpenAIFetcherService, LiveOpenAIFetcher } from '../../openai/fetch';
 import { APIChoice } from '../../openai/openai';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
@@ -14,10 +16,13 @@ import { createFakeCompletionResponse, fakeCodeReference, StaticFetcher } from '
 import { StreamedCompletionSplitter } from '../streamedCompletionSplitter';
 
 suite('StreamedCompletionSplitter', function () {
-	function setupSplitter(fetcher: Fetcher, docPrefix = 'function example(arg) {\n', languageId = 'javascript') {
-		const ctx = createLibTestingContext();
-		ctx.forceSet(Fetcher, fetcher);
-		ctx.set(OpenAIFetcher, new LiveOpenAIFetcher()); // gets results from static fetcher
+	function setupSplitter(fetcher: ICompletionsFetcherService, docPrefix = 'function example(arg) {\n', languageId = 'javascript') {
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(ICompletionsFetcherService, fetcher);
+		serviceCollection.define(ICompletionsOpenAIFetcherService, new SyncDescriptor(LiveOpenAIFetcher)); // gets results from static fetcher
+		const accessor = serviceCollection.createTestingAccessor();
+
+		const fetcherService = accessor.get(ICompletionsOpenAIFetcherService);
 		const telemetry = TelemetryWithExp.createEmptyConfigForTesting();
 		const params = {
 			prompt: {
@@ -35,13 +40,11 @@ suite('StreamedCompletionSplitter', function () {
 			extra: {},
 		};
 		const cacheFunction = Sinon.stub<[string, APIChoice], void>();
-		const splitter = ctx.instantiationService.createInstance(StreamedCompletionSplitter, docPrefix, languageId, true, 7, cacheFunction);
+		const splitter = accessor.get(IInstantiationService).createInstance(StreamedCompletionSplitter, docPrefix, languageId, true, 7, cacheFunction);
 		const fetchAndStreamCompletions = async function () {
-			return await ctx
-				.get(OpenAIFetcher)
-				.fetchAndStreamCompletions(ctx, params, telemetry, splitter.getFinishedCallback());
+			return await fetcherService.fetchAndStreamCompletions(params, telemetry, splitter.getFinishedCallback());
 		};
-		return { ctx, splitter, cacheFunction, fetchAndStreamCompletions };
+		return { splitter, cacheFunction, fetchAndStreamCompletions };
 	}
 
 	async function readChoices(result: CompletionResults): Promise<APIChoice[]> {

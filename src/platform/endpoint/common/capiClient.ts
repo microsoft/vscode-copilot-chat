@@ -21,7 +21,7 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 
 	constructor(
 		hmac: string | undefined,
-		forceDevMode: boolean,
+		integrationId: string | undefined,
 		fetcherService: IFetcherService,
 		envService: IEnvService
 	) {
@@ -32,7 +32,7 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 			buildType: envService.getBuildType(),
 			name: envService.getName(),
 			version: envService.getVersion(),
-		}, LICENSE_AGREEMENT, fetcherService, hmac, forceDevMode);
+		}, LICENSE_AGREEMENT, fetcherService, hmac, integrationId);
 	}
 }
 export const ICAPIClientService = createServiceIdentifier<ICAPIClientService>('ICAPIClientService');

@@ -2,11 +2,12 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { CopilotToken, ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
 import { editorVersionHeaders } from '../config';
-import type { ICompletionsContextService } from '../context';
+import { ICompletionsLogTargetService } from '../logger';
 import { getEndpointUrl } from '../networkConfiguration';
-import { Fetcher, type IAbortSignal, type Response } from '../networking';
+import { ICompletionsFetcherService, type IAbortSignal, type Response } from '../networking';
 import { ConnectionState } from './connectionState';
 import {
 	createErrorResponse,
@@ -22,21 +23,23 @@ type Config<Req> = { method: 'GET' } | { method: 'POST'; body: Req };
 type SnippyResponse<Res> = ({ kind: 'success' } & Res) | FormattedSnippyError;
 
 export async function call<Res, Req = unknown>(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	endpoint: string,
 	config: Config<Req>,
 	signal?: IAbortSignal
 ): Promise<SnippyResponse<Res>> {
 	let token: CopilotToken;
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const instantiationService = accessor.get(IInstantiationService);
+	const tokenManager = accessor.get(ICompletionsCopilotTokenManager);
 	try {
-		const tokenManager = ctx.get(CopilotTokenManager);
 		token = tokenManager.token ?? await tokenManager.getToken();
 	} catch (e) {
 		ConnectionState.setDisconnected();
 		return createErrorResponse(401, ErrorMessages[ErrorReasons.Unauthorized]);
 	}
 
-	codeReferenceLogger.info(ctx, `Calling ${endpoint}`);
+	codeReferenceLogger.info(logTarget, `Calling ${endpoint}`);
 
 	if (ConnectionState.isRetrying()) {
 		return createErrorResponse(600, 'Attempting to reconnect to the public code matching service.');
@@ -48,18 +51,18 @@ export async function call<Res, Req = unknown>(
 
 	let res: InstanceType<typeof Response>;
 	try {
-		res = await ctx.get(Fetcher).fetch(getEndpointUrl(ctx, token, 'origin-tracker', endpoint), {
+		res = await instantiationService.invokeFunction(acc => acc.get(ICompletionsFetcherService).fetch(getEndpointUrl(acc, token, 'origin-tracker', endpoint), {
 			method: config.method,
 			body: config.method === 'POST' ? JSON.stringify(config.body) : undefined,
 			headers: {
 				'content-type': 'application/json',
 				authorization: `Bearer ${token.token}`,
-				...editorVersionHeaders(ctx),
+				...editorVersionHeaders(acc),
 			},
 			signal,
-		});
+		}));
 	} catch (e) {
-		ConnectionState.enableRetry(ctx);
+		instantiationService.invokeFunction(ConnectionState.enableRetry);
 		return createErrorResponse(602, 'Network error detected. Check your internet connection.');
 	}
 
@@ -69,7 +72,7 @@ export async function call<Res, Req = unknown>(
 	} catch (e) {
 		const message = (e as Error).message;
 		snippyTelemetry.handleUnexpectedError({
-			context: ctx,
+			instantiationService,
 			origin: 'snippyNetwork',
 			reason: message,
 		});
@@ -106,11 +109,11 @@ export async function call<Res, Req = unknown>(
 			return createErrorResponse(code, fallbackMsg, meta);
 		}
 		case ErrorReasons.RateLimit: {
-			ConnectionState.enableRetry(ctx, 60 * 1000);
+			instantiationService.invokeFunction(acc => ConnectionState.enableRetry(acc, 60 * 1000));
 			return createErrorResponse(code, ErrorMessages.RateLimitError, meta);
 		}
 		case ErrorReasons.InternalError: {
-			ConnectionState.enableRetry(ctx);
+			instantiationService.invokeFunction(acc => ConnectionState.enableRetry(acc));
 			return createErrorResponse(code, ErrorMessages[ErrorReasons.InternalError], meta);
 		}
 		default: {

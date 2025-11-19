@@ -3,12 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { normalizeLanguageId, SimilarFileInfo } from '../../../../prompt/src/prompt';
 import { CancellationToken as ICancellationToken } from '../../../../types/src';
-import { ICompletionsContextService } from '../../context';
-import { Features } from '../../experiments/features';
+import { ICompletionsFeaturesService } from '../../experiments/featuresService';
+import { ICompletionsLogTargetService } from '../../logger';
 import { TelemetryWithExp } from '../../telemetry';
-import { TextDocumentManager } from '../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import { OpenTabFiles } from './openTabFiles';
 import { getRelatedFilesAndTraits, relatedFilesLogger, RelatedFileTrait } from './relatedFiles';
 
@@ -78,7 +79,7 @@ export class NeighborSource {
 	}
 
 	static async getNeighborFilesAndTraits(
-		ctx: ICompletionsContextService,
+		accessor: ServicesAccessor,
 		uri: string,
 		fileType: string,
 		telemetryData: TelemetryWithExp,
@@ -90,9 +91,12 @@ export class NeighborSource {
 		neighborSource: Map<NeighboringFileType, string[]>;
 		traits: RelatedFileTrait[];
 	}> {
-		const docManager = ctx.get(TextDocumentManager);
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		const logTarget = accessor.get(ICompletionsLogTargetService);
+		const instantiationService = accessor.get(IInstantiationService);
+		const docManager = accessor.get(ICompletionsTextDocumentManagerService);
 		if (NeighborSource.instance === undefined) {
-			NeighborSource.instance = new OpenTabFiles(docManager);
+			NeighborSource.instance = instantiationService.createInstance(OpenTabFiles);
 		}
 
 		const result = {
@@ -100,12 +104,11 @@ export class NeighborSource {
 			traits: [] as RelatedFileTrait[],
 		};
 
-		if (isExcludeRelatedFilesActive(ctx, telemetryData)) { return result; }
+		if (featuresService.excludeRelatedFiles(fileType, telemetryData)) { return result; }
 
 		const doc = await docManager.getTextDocument({ uri });
 		if (!doc) {
-			relatedFilesLogger.debug(
-				ctx,
+			relatedFilesLogger.debug(logTarget,
 				'neighborFiles.getNeighborFilesAndTraits',
 				`Failed to get the related files: failed to get the document ${uri}`
 			);
@@ -114,16 +117,14 @@ export class NeighborSource {
 
 		const wksFolder = docManager.getWorkspaceFolder(doc);
 		if (!wksFolder) {
-			relatedFilesLogger.debug(
-				ctx,
+			relatedFilesLogger.debug(logTarget,
 				'neighborFiles.getNeighborFilesAndTraits',
 				`Failed to get the related files: ${uri} is not under the workspace folder`
 			);
 			return result;
 		}
 
-		const relatedFiles = await getRelatedFilesAndTraits(
-			ctx,
+		const relatedFiles = await instantiationService.invokeFunction(getRelatedFilesAndTraits,
 			doc,
 			telemetryData,
 			cancellationToken,
@@ -132,8 +133,7 @@ export class NeighborSource {
 		);
 
 		if (relatedFiles.entries.size === 0) {
-			relatedFilesLogger.debug(
-				ctx,
+			relatedFilesLogger.debug(logTarget,
 				'neighborFiles.getNeighborFilesAndTraits',
 				`0 related files found for ${uri}`
 			);
@@ -186,10 +186,7 @@ export class NeighborSource {
 	}
 }
 
-function isExcludeRelatedFilesActive(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp): boolean {
-	return ctx.get(Features).excludeRelatedFiles(telemetryData);
-}
-
-export function isIncludeNeighborFilesActive(ctx: ICompletionsContextService, telemetryData: TelemetryWithExp): boolean {
-	return ctx.get(Features).includeNeighboringFiles(telemetryData);
+export function isIncludeNeighborFilesActive(accessor: ServicesAccessor, languageId: string, telemetryData: TelemetryWithExp): boolean {
+	const featuresService = accessor.get(ICompletionsFeaturesService);
+	return featuresService.includeNeighboringFiles(languageId, telemetryData);
 }

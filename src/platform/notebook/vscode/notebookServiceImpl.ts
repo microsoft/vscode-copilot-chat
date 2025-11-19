@@ -46,7 +46,7 @@ export class NotebookService implements INotebookService {
 		@ILogService private readonly _logger: ILogService,
 	) {
 		this._isVariableFilteringEnabled = this._experimentationService.getTreatmentVariable('copilotchat.notebookVariableFiltering')
-			|| this._configurationService.getConfig(ConfigKey.Internal.NotebookVariableFilteringEnabled);
+			|| this._configurationService.getConfig(ConfigKey.Advanced.NotebookVariableFilteringEnabled);
 		this._registerExecutionListener();
 	}
 

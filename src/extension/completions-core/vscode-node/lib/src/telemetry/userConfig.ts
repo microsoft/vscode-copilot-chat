@@ -3,9 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../../../../platform/authentication/common/copilotToken';
+import { createServiceIdentifier } from '../../../../../../util/common/services';
+import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
-import { ICompletionsContextService } from '../context';
 
 interface UserConfigProperties {
 	copilot_trackingId: string;
@@ -30,13 +32,27 @@ function propertiesFromCopilotToken(copilotToken: Omit<CopilotToken, "token">): 
 	return props;
 }
 
-export class TelemetryUserConfig {
+export const ICompletionsTelemetryUserConfigService = createServiceIdentifier<ICompletionsTelemetryUserConfigService>('ICompletionsTelemetryUserConfigService');
+export interface ICompletionsTelemetryUserConfigService {
+	readonly _serviceBrand: undefined;
+	getProperties(): Partial<UserConfigProperties>;
+	trackingId: string | undefined;
+	optedIn: boolean;
+	ftFlag: string;
+}
+
+export class TelemetryUserConfig extends Disposable implements ICompletionsTelemetryUserConfigService {
+	declare _serviceBrand: undefined;
 	#properties: Partial<UserConfigProperties> = {};
 	optedIn = false;
 	ftFlag = '';
 
-	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
-		onCopilotToken(ctx, copilotToken => this.updateFromToken(copilotToken));
+	constructor(
+		@IAuthenticationService authenticationService: IAuthenticationService
+	) {
+		super();
+
+		this._register(onCopilotToken(authenticationService, copilotToken => this.updateFromToken(copilotToken)));
 	}
 
 	getProperties() {

@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { packageJson } from '../../../../../platform/env/common/packagejson';
+import { createServiceIdentifier } from '../../../../../util/common/services';
+import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotConfigPrefix } from './constants';
-import { ICompletionsContextService } from './context';
 import { Filter } from './experiments/filters';
 import { Emitter, Event } from './util/event';
 
@@ -114,7 +115,18 @@ export enum BuildType {
 	NIGHTLY = 'nightly',
 }
 
-export abstract class ConfigProvider {
+export const ICompletionsConfigProvider = createServiceIdentifier<ICompletionsConfigProvider>('ICompletionsConfigProvider');
+export interface ICompletionsConfigProvider {
+	readonly _serviceBrand: undefined;
+
+	getConfig<T>(key: ConfigKeyType): T;
+	getOptionalConfig<T>(key: ConfigKeyType): T | undefined;
+	dumpForTelemetry(): { [key: string]: string };
+	onDidChangeCopilotSettings: Event<ConfigProvider>;
+}
+
+export abstract class ConfigProvider implements ICompletionsConfigProvider {
+	declare _serviceBrand: undefined;
 	abstract getConfig<T>(key: ConfigKeyType): T;
 	abstract getOptionalConfig<T>(key: ConfigKeyType): T | undefined;
 	abstract dumpForTelemetry(): { [key: string]: string };
@@ -160,11 +172,20 @@ export class DefaultsOnlyConfigProvider extends ConfigProvider {
 export class InMemoryConfigProvider extends ConfigProvider {
 	protected readonly copilotEmitter = new Emitter<this>();
 	readonly onDidChangeCopilotSettings = this.copilotEmitter.event;
+	private overrides: Map<ConfigKeyType, unknown> = new Map();
+
 	constructor(
 		private readonly baseConfigProvider: ConfigProvider,
-		private readonly overrides: Map<ConfigKeyType, unknown>
 	) {
 		super();
+	}
+
+	setOverrides(overrides: Map<ConfigKeyType, unknown>): void {
+		this.overrides = overrides;
+	}
+
+	clearOverrides(): void {
+		this.overrides.clear();
 	}
 
 	protected getOptionalOverride<T>(key: ConfigKeyType): T | undefined {
@@ -210,6 +231,8 @@ export class InMemoryConfigProvider extends ConfigProvider {
 		}
 		return config;
 	}
+
+
 }
 
 export function getConfigKeyRecursively<T>(config: Record<string, unknown>, key: string): T | undefined {
@@ -285,13 +308,13 @@ const configDefaults = new Map<ConfigKeyType, unknown>([
 	[ConfigKey.DebugFilterLogCategories, []],
 ]);
 
-export function getConfig<T>(ctx: ICompletionsContextService, key: ConfigKeyType): T {
-	return ctx.get(ConfigProvider).getConfig(key);
+export function getConfig<T>(accessor: ServicesAccessor, key: ConfigKeyType): T {
+	return accessor.get(ICompletionsConfigProvider).getConfig(key);
 }
 
-export function dumpForTelemetry(ctx: ICompletionsContextService) {
+export function dumpForTelemetry(accessor: ServicesAccessor) {
 	try {
-		return ctx.get(ConfigProvider).dumpForTelemetry();
+		return accessor.get(ICompletionsConfigProvider).dumpForTelemetry();
 	} catch (e) {
 		console.error(`Error dumping config for telemetry: ${e}`);
 		return {};
@@ -299,80 +322,30 @@ export function dumpForTelemetry(ctx: ICompletionsContextService) {
 }
 
 export class BuildInfo {
-	// TODO for now this is just initialised from `packageJson` which is the same across agent/extension.
-	// Consider reworking this.
-	private packageJson = packageJson;
-	constructor() { }
 
-	/**
-	 * @returns true if this is a build for end users.
-	 * (for the VSCode extension this is currently either the normal extension or the nightly release)
-	 */
-
-	isPreRelease(): boolean {
+	static isPreRelease(): boolean {
 		return this.getBuildType() === BuildType.NIGHTLY;
 	}
 
-	isProduction(): boolean {
+	static isProduction(): boolean {
 		return this.getBuildType() !== BuildType.DEV;
 	}
 
-	getBuildType(): BuildType {
-		const buildType = <'dev' | 'prod'>this.packageJson.buildType;
+	static getBuildType(): BuildType {
+		const buildType = <'dev' | 'prod'>packageJson.buildType;
 		if (buildType === 'prod') {
-			return this.getVersion().length === 15 ? BuildType.NIGHTLY : BuildType.PROD;
+			return BuildInfo.getVersion().length === 15 ? BuildType.NIGHTLY : BuildType.PROD;
 		}
 		return BuildType.DEV;
 	}
 
-	getVersion(): string {
-		return this.packageJson.version;
+	static getVersion(): string {
+		return packageJson.version;
 	}
 
-	getDisplayVersion(): string {
-		if (this.getBuildType() === BuildType.DEV) {
-			return `${this.getVersion()}-dev`;
-		} else {
-			return this.getVersion();
-		}
+	static getBuild(): string {
+		return packageJson.build;
 	}
-
-	getBuild(): string {
-		return this.packageJson.build;
-	}
-
-	getName(): string {
-		return this.packageJson.name;
-	}
-}
-
-export function isPreRelease(ctx: ICompletionsContextService): boolean {
-	return ctx.get(BuildInfo).isPreRelease();
-}
-
-export function isProduction(ctx: ICompletionsContextService): boolean {
-	return ctx.get(BuildInfo).isProduction();
-}
-
-export function getBuildType(ctx: ICompletionsContextService): BuildType {
-	return ctx.get(BuildInfo).getBuildType();
-}
-
-export function getBuild(ctx: ICompletionsContextService): string {
-	return ctx.get(BuildInfo).getBuild();
-}
-
-export function getVersion(ctx: ICompletionsContextService): string {
-	return ctx.get(BuildInfo).getVersion();
-}
-
-export class EditorSession {
-	constructor(
-		readonly sessionId: string,
-		readonly machineId: string,
-		readonly remoteName = 'none',
-		readonly uiKind = 'desktop'
-	) { }
 }
 
 type NameAndVersion = {
@@ -395,16 +368,13 @@ export function formatNameAndVersion({ name, version }: NameAndVersion): string 
 	return `${name}/${version}`;
 }
 
-export abstract class EditorAndPluginInfo {
-	abstract getEditorInfo(): EditorInfo;
-	abstract getEditorPluginInfo(): EditorPluginInfo;
-	abstract getRelatedPluginInfo(): EditorPluginInfo[];
-	getCopilotIntegrationId(): string | undefined {
-		return undefined;
-	}
-	getEditorPluginSpecificFilters(): EditorPluginFilter[] {
-		return [];
-	}
+export const ICompletionsEditorAndPluginInfo = createServiceIdentifier<ICompletionsEditorAndPluginInfo>('ICompletionsEditorAndPluginInfo');
+export interface ICompletionsEditorAndPluginInfo {
+	readonly _serviceBrand: undefined;
+
+	getEditorInfo(): EditorInfo;
+	getEditorPluginInfo(): EditorPluginInfo;
+	getRelatedPluginInfo(): EditorPluginInfo[];
 }
 
 /**
@@ -414,11 +384,11 @@ export abstract class EditorAndPluginInfo {
  */
 export const apiVersion = '2025-05-01';
 
-export function editorVersionHeaders(ctx: ICompletionsContextService): { [key: string]: string } {
-	const info = ctx.get(EditorAndPluginInfo);
+export function editorVersionHeaders(accessor: ServicesAccessor): { [key: string]: string } {
+	const info = accessor.get(ICompletionsEditorAndPluginInfo);
 	return {
 		'Editor-Version': formatNameAndVersion(info.getEditorInfo()),
 		'Editor-Plugin-Version': formatNameAndVersion(info.getEditorPluginInfo()),
-		'Copilot-Language-Server-Version': getVersion(ctx),
+		'Copilot-Language-Server-Version': BuildInfo.getVersion(),
 	};
 }

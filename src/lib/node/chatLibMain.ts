@@ -50,13 +50,14 @@ import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequest
 import { IRequestLogger } from '../../platform/requestLogger/node/requestLogger';
 import { ISimulationTestContext, NulSimulationTestContext } from '../../platform/simulationTestContext/common/simulationTestContext';
 import { ISnippyService, NullSnippyService } from '../../platform/snippy/common/snippyService';
-import { IExperimentationService, NullExperimentationService } from '../../platform/telemetry/common/nullExperimentationService';
+import { IExperimentationService, TreatmentsChangeEvent } from '../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
 import { CancellationToken } from '../../util/vs/base/common/cancellation';
+import { Emitter } from '../../util/vs/base/common/event';
 import { Disposable } from '../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
@@ -113,6 +114,11 @@ export interface INESProviderOptions {
 	readonly copilotTokenManager: ICopilotTokenManager;
 	readonly telemetrySender: ITelemetrySender;
 	readonly logTarget?: ILogTarget;
+	/**
+	 * If true, the provider will wait for treatment variables to be set.
+	 * INESProvider.updateTreatmentVariables() must be called to unblock.
+	 */
+	readonly waitForTreatmentVariables?: boolean;
 }
 
 export interface INESResult {
@@ -132,6 +138,7 @@ export interface INESProvider<T extends INESResult = INESResult> {
 	handleAcceptance(suggestion: T): void;
 	handleRejection(suggestion: T): void;
 	handleIgnored(suggestion: T, supersededByRequestUuid: T | undefined): void;
+	updateTreatmentVariables(variables: Record<string, boolean | number | string>): void;
 	dispose(): void;
 }
 
@@ -163,7 +170,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		const statelessNextEditProvider = instantiationService.createInstance(XtabProvider);
 		const git = instantiationService.createInstance(ObservableGit);
 		const historyContextProvider = new NesHistoryContextProvider(this._options.workspace, git);
-		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffNEntries, this._expService);
+		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
 		const xtabHistoryTracker = new NesXtabHistoryTracker(this._options.workspace, xtabDiffNEntries);
 		this._debugRecorder = this._register(new DebugRecorder(this._options.workspace));
 
@@ -264,13 +271,20 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 			throw e;
 		}
 	}
+
+	updateTreatmentVariables(variables: Record<string, boolean | number | string>) {
+		if (this._expService instanceof SimpleExperimentationService) {
+			this._expService.updateTreatmentVariables(variables);
+		}
+	}
+
 }
 
 function setupServices(options: INESProviderOptions) {
 	const { fetcher, copilotTokenManager, telemetrySender, logTarget } = options;
 	const builder = new InstantiationServiceBuilder();
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
-	builder.define(IExperimentationService, new SyncDescriptor(NullExperimentationService));
+	builder.define(IExperimentationService, new SyncDescriptor(SimpleExperimentationService, [options.waitForTreatmentVariables]));
 	builder.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	builder.define(IWorkspaceService, new SyncDescriptor(NullWorkspaceService));
 	builder.define(IDiffService, new SyncDescriptor(DiffServiceImpl, [false]));
@@ -301,6 +315,65 @@ function setupServices(options: INESProviderOptions) {
 		rejectionMessage: 'Sorry, but I can only assist with programming related questions.',
 	});
 	return builder.seal();
+}
+
+export class SimpleExperimentationService extends Disposable implements IExperimentationService {
+
+	declare readonly _serviceBrand: undefined;
+
+	private readonly variables: Record<string, boolean | number | string> = {};
+	private readonly _onDidTreatmentsChange = this._register(new Emitter<TreatmentsChangeEvent>());
+	readonly onDidTreatmentsChange = this._onDidTreatmentsChange.event;
+
+	private readonly waitFor: Promise<void>;
+	private readonly resolveWaitFor: () => void;
+
+	constructor(
+		waitForTreatmentVariables: boolean | undefined,
+	) {
+		super();
+		if (waitForTreatmentVariables) {
+			let resolveWaitFor: () => void;
+			this.waitFor = new Promise<void>(resolve => {
+				resolveWaitFor = resolve;
+			});
+			this.resolveWaitFor = resolveWaitFor!;
+		} else {
+			this.waitFor = Promise.resolve();
+			this.resolveWaitFor = () => { };
+		}
+	}
+
+	async hasTreatments(): Promise<void> {
+		return this.waitFor;
+	}
+
+	getTreatmentVariable<T extends boolean | number | string>(name: string): T | undefined {
+		return this.variables[name] as T | undefined;
+	}
+
+	async setCompletionsFilters(_filters: Map<string, string>): Promise<void> { }
+
+	updateTreatmentVariables(variables: Record<string, boolean | number | string>): void {
+		const changedVariables: string[] = [];
+		for (const [key, value] of Object.entries(variables)) {
+			const existing = this.variables[key];
+			if (existing !== value) {
+				this.variables[key] = value;
+				changedVariables.push(key);
+			}
+		}
+		for (const key of Object.keys(this.variables)) {
+			if (!Object.hasOwn(variables, key)) {
+				delete this.variables[key];
+				changedVariables.push(key);
+			}
+		}
+		if (changedVariables.length > 0) {
+			this._onDidTreatmentsChange.fire({ affectedTreatmentVariables: changedVariables });
+		}
+		this.resolveWaitFor();
+	}
 }
 
 class SingleFetcherService implements IFetcherService {

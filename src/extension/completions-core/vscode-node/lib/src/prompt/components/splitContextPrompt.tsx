@@ -5,7 +5,9 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
 
-import { ICompletionsContextService } from '../../context';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
+import { ICompletionsRecentEditsProviderService } from '../recentEdits/recentEditsProvider';
 import { CodeSnippets } from './codeSnippets';
 import { AdditionalCompletionsContext, StableCompletionsContext } from './completionsContext';
 import { DocumentPrefix, DocumentSuffix } from './currentFile';
@@ -18,18 +20,21 @@ import { Traits } from './traits';
  * Function that returns the prompt structure for a code completion request following the split context prompt design
  * that optimizes for cache hits.
  */
-export function splitContextCompletionsPrompt(ctx: ICompletionsContextService) {
+export function splitContextCompletionsPrompt(accessor: ServicesAccessor) {
+	const instantiationService = accessor.get(IInstantiationService);
+	const tdms = accessor.get(ICompletionsTextDocumentManagerService);
+	const recentEditsProvider = accessor.get(ICompletionsRecentEditsProviderService);
 	return (
 		<>
 			<StableCompletionsContext>
-				<DocumentMarker ctx={ctx} weight={0.7} />
+				<DocumentMarker tdms={tdms} weight={0.7} />
 				<Traits weight={0.6} />
-				<CodeSnippets ctx={ctx} weight={0.9} />
-				<SimilarFiles ctx={ctx} weight={0.8} />
+				<CodeSnippets tdms={tdms} weight={0.9} />
+				<SimilarFiles tdms={tdms} instantiationService={instantiationService} weight={0.8} />
 			</StableCompletionsContext>
 			<DocumentSuffix weight={1} />
 			<AdditionalCompletionsContext>
-				<RecentEdits ctx={ctx} weight={0.99} />
+				<RecentEdits tdms={tdms} recentEditsProvider={recentEditsProvider} weight={0.99} />
 			</AdditionalCompletionsContext>
 			<DocumentPrefix weight={1} />
 		</>

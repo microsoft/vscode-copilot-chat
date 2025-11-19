@@ -22,11 +22,13 @@ export class DelaySession {
 
 	getDebounceTime() {
 		const expectedDebounceTime = this.expectedTotalTime === undefined
-			? this.baseDebounceTime + this.extraDebounce
-			: Math.min(this.baseDebounceTime + this.extraDebounce, this.expectedTotalTime);
+			? this.baseDebounceTime
+			: Math.min(this.baseDebounceTime, this.expectedTotalTime);
+
+		const expectedDebounceTimeWithExtras = expectedDebounceTime + this.extraDebounce;
 
 		const timeAlreadySpent = Date.now() - this.providerInvocationTime;
-		const actualDebounceTime = Math.max(0, expectedDebounceTime - timeAlreadySpent);
+		const actualDebounceTime = Math.max(0, expectedDebounceTimeWithExtras - timeAlreadySpent);
 
 		return actualDebounceTime;
 	}
@@ -53,9 +55,9 @@ export class Delayer {
 	}
 
 	public createDelaySession(requestTime: number | undefined): DelaySession {
-		const baseDebounceTime = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounce, this._experimentationService);
+		const baseDebounceTime = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsDebounce, this._experimentationService);
 
-		const backoffDebounceEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsBackoffDebounceEnabled, this._experimentationService);
+		const backoffDebounceEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsBackoffDebounceEnabled, this._experimentationService);
 		const expectedTotalTime = backoffDebounceEnabled ? this._getExpectedTotalTime(baseDebounceTime) : undefined;
 
 		return new DelaySession(baseDebounceTime, expectedTotalTime, requestTime);

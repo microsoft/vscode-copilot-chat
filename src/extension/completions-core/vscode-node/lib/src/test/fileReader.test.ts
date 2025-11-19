@@ -5,31 +5,30 @@
 
 import * as assert from 'assert';
 import * as sinon from 'sinon';
-import { CopilotContentExclusionManager } from '../contentExclusion/contentExclusionManager';
-import { ICompletionsContextService } from '../context';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { FileReader } from '../fileReader';
-import { FileSystem } from '../fileSystem';
-import { TextDocumentManager } from '../textDocumentManager';
+import { ICompletionsFileSystemService } from '../fileSystem';
+import { ICompletionsTextDocumentManagerService } from '../textDocumentManager';
 import { createLibTestingContext } from './context';
 import { FakeFileSystem } from './filesystem';
-import { AlwaysBlockingCopilotContentRestrictions } from './testContentExclusion';
 import { TestTextDocumentManager } from './textDocument';
 
 suite('File Reader', function () {
 	let sandbox: sinon.SinonSandbox;
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 
 	setup(function () {
 		sandbox = sinon.createSandbox();
-		ctx = createLibTestingContext();
-		ctx.forceSet(
-			FileSystem,
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(
+			ICompletionsFileSystemService,
 			new FakeFileSystem({
 				'/test.ts': FakeFileSystem.file('const foo', { ctime: 0, mtime: 0, size: 0.1 * 1024 * 1024 }), // .1MB
 				'/empty.ts': '',
 				'/large.ts': FakeFileSystem.file('very large file', { ctime: 0, mtime: 0, size: 1.1 * 1024 * 1024 }), // 1.1MB
 			})
 		);
+		accessor = serviceCollection.createTestingAccessor();
 	});
 
 	teardown(function () {
@@ -37,9 +36,9 @@ suite('File Reader', function () {
 	});
 
 	test('reads file from text document manager', async function () {
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.setTextDocument('file:///test.js', 'javascript', 'const abc =');
-		const reader = ctx.instantiationService.createInstance(FileReader);
+		const reader = accessor.get(IInstantiationService).createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///test.js' });
 
@@ -49,7 +48,7 @@ suite('File Reader', function () {
 	});
 
 	test('reads file from file system', async function () {
-		const reader = ctx.instantiationService.createInstance(FileReader);
+		const reader = accessor.get(IInstantiationService).createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///test.ts' });
 
@@ -59,7 +58,7 @@ suite('File Reader', function () {
 	});
 
 	test('reads notfound from non existing file', async function () {
-		const reader = ctx.instantiationService.createInstance(FileReader);
+		const reader = accessor.get(IInstantiationService).createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///UNKNOWN.ts' });
 
@@ -68,7 +67,7 @@ suite('File Reader', function () {
 	});
 
 	test('reads notfound for file too large', async function () {
-		const reader = ctx.instantiationService.createInstance(FileReader);
+		const reader = accessor.get(IInstantiationService).createInstance(FileReader);
 
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///large.ts' });
 
@@ -76,32 +75,11 @@ suite('File Reader', function () {
 		assert.deepStrictEqual(docResult.message, 'File too large');
 	});
 
-	test('reads invalid from blocked file', async function () {
-		ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(AlwaysBlockingCopilotContentRestrictions));
-		const reader = ctx.instantiationService.createInstance(FileReader);
-
-		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///test.ts' });
-
-		assert.deepStrictEqual(docResult.status, 'invalid');
-		assert.deepStrictEqual(docResult.reason, 'Document is blocked by repository policy');
-	});
-
 	test('reads empty files', async function () {
-		const reader = ctx.instantiationService.createInstance(FileReader);
-
+		const reader = accessor.get(IInstantiationService).createInstance(FileReader);
 		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///empty.ts' });
 
 		assert.deepStrictEqual(docResult.status, 'valid');
 		assert.deepStrictEqual(docResult.document.getText(), '');
-	});
-
-	test('empty files can be blocked', async function () {
-		ctx.forceSet(CopilotContentExclusionManager, ctx.instantiationService.createInstance(AlwaysBlockingCopilotContentRestrictions));
-		const reader = ctx.instantiationService.createInstance(FileReader);
-
-		const docResult = await reader.getOrReadTextDocument({ uri: 'file:///empty.ts' });
-
-		assert.deepStrictEqual(docResult.status, 'invalid');
-		assert.deepStrictEqual(docResult.reason, 'Document is blocked by repository policy');
 	});
 });

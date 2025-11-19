@@ -43,6 +43,18 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 	return response;
 }
 
+/**
+ * Checks to see if a given endpoint is a BYOK model.
+ * @param endpoint The endpoint to check if it's a BYOK model
+ * @returns 1 if client side byok, 2 if server side byok, -1 if not a byok model
+ */
+export function isBYOKModel(endpoint: IChatEndpoint | undefined): number {
+	if (!endpoint) {
+		return -1;
+	}
+	return endpoint instanceof OpenAIEndpoint ? 1 : (endpoint.customModel ? 2 : -1);
+}
+
 export class OpenAIEndpoint extends ChatEndpoint {
 	// Reserved headers that cannot be overridden for security and functionality reasons
 	// Including forbidden request headers: https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header
@@ -102,7 +114,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	private readonly _customHeaders: Record<string, string>;
 	constructor(
-		protected readonly modelMetadata: IChatModelInformation,
+		_modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
 		protected readonly _modelUrl: string,
 		@IFetcherService fetcherService: IFetcherService,
@@ -118,7 +130,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@ILogService protected logService: ILogService
 	) {
 		super(
-			modelMetadata,
+			_modelMetadata,
 			domainService,
 			capiClientService,
 			fetcherService,
@@ -131,7 +143,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			expService,
 			logService
 		);
-		this._customHeaders = this._sanitizeCustomHeaders(modelMetadata.requestHeaders);
+		this._customHeaders = this._sanitizeCustomHeaders(_modelMetadata.requestHeaders);
 	}
 
 	private _sanitizeCustomHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
@@ -284,7 +296,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;
-			if (!this.useResponsesApi) {
+			if (!this.useResponsesApi && body.stream) {
 				body['stream_options'] = { 'include_usage': true };
 			}
 		}
@@ -294,7 +306,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		return this._modelUrl;
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json"
 		};

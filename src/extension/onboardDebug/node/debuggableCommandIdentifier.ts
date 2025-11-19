@@ -130,7 +130,7 @@ export class DebuggableCommandIdentifier extends Disposable implements IDebuggab
 	}
 
 	private getSpecificTreatment(command: string): boolean | undefined {
-		const patterns = this.configurationService.getConfig(ConfigKey.Internal.TerminalToDebuggerPatterns);
+		const patterns = this.configurationService.getConfig(ConfigKey.Advanced.TerminalToDebuggerPatterns);
 		for (const pattern of patterns) {
 			if (pattern.startsWith('!') && this.commandIncludes(command, pattern)) {
 				return false;

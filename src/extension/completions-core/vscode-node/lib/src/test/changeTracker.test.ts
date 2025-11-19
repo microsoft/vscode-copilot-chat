@@ -5,12 +5,13 @@
 
 import * as assert from 'assert';
 import * as sinon from 'sinon';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChangeTracker } from '../changeTracker';
 import { createLibTestingContext } from './context';
 import { createTextDocument } from './textDocument';
 
 suite('ChangeTracker test suite', function () {
-	const ctx = createLibTestingContext();
+	const accessor = createLibTestingContext().createTestingAccessor();
 	let clock: sinon.SinonFakeTimers;
 	setup(function () {
 		clock = sinon.useFakeTimers();
@@ -20,7 +21,7 @@ suite('ChangeTracker test suite', function () {
 	});
 	test('It calls pushed actions after the timeout', async function () {
 		const document = createTextDocument('file:///foo.ts', 'typescript', 0, '');
-		const tracker = ctx.instantiationService.createInstance(ChangeTracker, document.uri, 100);
+		const tracker = accessor.get(IInstantiationService).createInstance(ChangeTracker, document.uri, 100);
 		let called = false;
 		tracker.push(() => {
 			called = true;
@@ -32,7 +33,7 @@ suite('ChangeTracker test suite', function () {
 
 	test('It refuses new actions if already disposed', async function () {
 		const document = createTextDocument('file:///foo.ts', 'typescript', 0, '');
-		const tracker = ctx.instantiationService.createInstance(ChangeTracker, document.uri, 100);
+		const tracker = accessor.get(IInstantiationService).createInstance(ChangeTracker, document.uri, 100);
 		let called = 0;
 		tracker.push(() => {
 			called = 1;

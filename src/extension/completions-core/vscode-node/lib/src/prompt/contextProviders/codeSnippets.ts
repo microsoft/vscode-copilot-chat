@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ICompletionsContextService } from '../../context';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { TextDocumentValidation } from '../../textDocument';
-import { TextDocumentManager } from '../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import { ResolvedContextItem } from '../contextProviderRegistry';
-import { ContextProviderStatistics, PromptExpectation } from '../contextProviderStatistics';
+import { ICompletionsContextProviderService, PromptExpectation } from '../contextProviderStatistics';
 import { CodeSnippetWithId, filterContextItemsByType } from './contextItemSchemas';
 
 const CONTENT_EXCLUDED_EXPECTATION: PromptExpectation = 'content_excluded';
@@ -18,7 +18,7 @@ type SnippetWithProviderInfo = {
 };
 
 export async function getCodeSnippetsFromContextItems(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	completionId: string,
 	resolvedContextItems: ResolvedContextItem[],
 	languageId: string
@@ -40,7 +40,8 @@ export async function getCodeSnippetsFromContextItems(
 	);
 
 	// Validate all URIs at once: we already know they are distinct
-	const tdm = ctx.get(TextDocumentManager);
+	const contextProviderStatistics = accessor.get(ICompletionsContextProviderService);
+	const tdm = accessor.get(ICompletionsTextDocumentManagerService);
 	const validationMap = new Map<string, TextDocumentValidation>();
 	await Promise.all(
 		Array.from(allUris).map(async uri => {
@@ -49,7 +50,7 @@ export async function getCodeSnippetsFromContextItems(
 	);
 
 	// Process only valid snippets
-	const statistics = ctx.get(ContextProviderStatistics).getStatisticsForCompletion(completionId);
+	const statistics = contextProviderStatistics.getStatisticsForCompletion(completionId);
 	return mappedSnippets
 		.filter(snippet => {
 			const urisToCheck = [snippet.data.uri, ...(snippet.data.additionalUris ?? [])];
@@ -70,10 +71,9 @@ export async function getCodeSnippetsFromContextItems(
 export type CodeSnippetWithRelativePath = { snippet: CodeSnippetWithId; relativePath?: string };
 
 export function addRelativePathToCodeSnippets(
-	ctx: ICompletionsContextService,
+	tdm: ICompletionsTextDocumentManagerService,
 	codeSnippets: CodeSnippetWithId[]
 ): CodeSnippetWithRelativePath[] {
-	const tdm = ctx.get(TextDocumentManager);
 	return codeSnippets.map(codeSnippet => {
 		return {
 			snippet: codeSnippet,

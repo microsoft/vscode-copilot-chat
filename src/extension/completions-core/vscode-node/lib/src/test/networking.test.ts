@@ -5,26 +5,27 @@
 
 import * as assert from 'assert';
 
-import { ICompletionsContextService } from '../context';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
-	Fetcher,
-	postRequest,
+	ICompletionsFetcherService,
+	postRequest
 } from '../networking';
 import { createLibTestingContext } from './context';
 import { StaticFetcher, createFakeJsonResponse } from './fetcher';
 
 suite('Networking test Suite', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 	let fetcher: StaticFetcher;
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		const serviceCollection = createLibTestingContext();
 		fetcher = new StaticFetcher();
-		ctx.forceSet(Fetcher, fetcher);
+		serviceCollection.define(ICompletionsFetcherService, fetcher);
+		accessor = serviceCollection.createTestingAccessor();
 	});
 
 	test('each request contains editor info headers', async function () {
-		await postRequest(ctx, 'http://localhost:8080/', '', undefined, 'id');
+		await postRequest(accessor, 'http://localhost:8080/', '', undefined, 'id');
 
 		assert.strictEqual(fetcher.headerBuffer!['VScode-SessionId'], 'test-session');
 		assert.strictEqual(fetcher.headerBuffer!['VScode-MachineId'], 'test-machine');
@@ -34,7 +35,7 @@ suite('Networking test Suite', function () {
 	});
 
 	test('additional headers can be specified per-request', async function () {
-		await postRequest(ctx, 'http://localhost:8080/', '', undefined, 'id', undefined, undefined, {
+		await postRequest(accessor, 'http://localhost:8080/', '', undefined, 'id', undefined, undefined, {
 			'X-Custom-Model': 'disable',
 		});
 

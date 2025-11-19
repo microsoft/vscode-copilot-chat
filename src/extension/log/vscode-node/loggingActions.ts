@@ -47,6 +47,7 @@ interface ProxyAgentLog {
 
 interface ProxyAgentParams {
 	log: ProxyAgentLog;
+	loadSystemCertificatesFromNode: () => boolean | undefined;
 }
 
 interface ProxyAgent {
@@ -68,9 +69,9 @@ export class LoggingActionsContrib {
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', async () => {
 			const document = await vscode.workspace.openTextDocument({ language: 'markdown' });
 			const editor = await vscode.window.showTextDocument(document);
-			const electronConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.Internal.DebugExpUseElectronFetcher);
-			const nodeConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.Internal.DebugExpUseNodeFetcher);
-			const nodeFetchConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.Internal.DebugExpUseNodeFetchFetcher);
+			const electronConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.TeamInternal.DebugExpUseElectronFetcher);
+			const nodeConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.TeamInternal.DebugExpUseNodeFetcher);
+			const nodeFetchConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.TeamInternal.DebugExpUseNodeFetchFetcher);
 			const ext = vscode.extensions.getExtension(EXTENSION_ID);
 			const product = require(path.join(vscode.env.appRoot, 'product.json'));
 			await appendText(editor, `## GitHub Copilot Chat
@@ -92,7 +93,8 @@ User Settings:
 \`\`\`${getProxyEnvVariables()}
 `);
 			const proxyAgent = loadVSCodeModule<ProxyAgent>('@vscode/proxy-agent');
-			const osCertificates = proxyAgent?.loadSystemCertificates ? await loadSystemCertificates(proxyAgent.loadSystemCertificates, this.logService) : undefined;
+			const loadSystemCertificatesFromNode = this.configurationService.getNonExtensionConfig<boolean>('http.systemCertificatesNode');
+			const osCertificates = proxyAgent?.loadSystemCertificates ? await loadSystemCertificates(proxyAgent.loadSystemCertificates, loadSystemCertificatesFromNode, this.logService) : undefined;
 			const urls = [
 				this.capiClientService.dotcomAPIURL,
 				this.capiClientService.capiPingURL,
@@ -289,7 +291,7 @@ function loadVSCodeModule<T>(moduleName: string): T | undefined {
 	return undefined;
 }
 
-async function loadSystemCertificates(load: NonNullable<ProxyAgent['loadSystemCertificates']>, logService: ILogService): Promise<(string | Buffer)[] | undefined> {
+async function loadSystemCertificates(load: NonNullable<ProxyAgent['loadSystemCertificates']>, loadSystemCertificatesFromNode: boolean | undefined, logService: ILogService): Promise<(string | Buffer)[] | undefined> {
 	try {
 		const certificates = await load({
 			log: {
@@ -308,7 +310,8 @@ async function loadSystemCertificates(load: NonNullable<ProxyAgent['loadSystemCe
 				error(message: string | Error, ..._args: any[]) {
 					logService.error(typeof message === 'string' ? message : String(message));
 				},
-			} satisfies ProxyAgentLog
+			} satisfies ProxyAgentLog,
+			loadSystemCertificatesFromNode: () => loadSystemCertificatesFromNode,
 		});
 		return Array.isArray(certificates) ? certificates : undefined;
 	} catch (err) {
@@ -379,6 +382,7 @@ function getNonDefaultSettings() {
 		'http.proxyKerberosServicePrincipal',
 		'http.systemCertificates',
 		'http.experimental.systemCertificatesV2',
+		'http.systemCertificatesNode',
 	].map(key => {
 		const i = configuration.inspect(key);
 		const v = configuration.get(key, i?.defaultValue);
@@ -415,7 +419,7 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 		return;
 	}
 
-	if (!configurationService.getExperimentBasedConfig(ConfigKey.Internal.DebugCollectFetcherTelemetry, expService)) {
+	if (!configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.DebugCollectFetcherTelemetry, expService)) {
 		return;
 	}
 

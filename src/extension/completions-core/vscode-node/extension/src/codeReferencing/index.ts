@@ -4,22 +4,26 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from 'vscode';
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
+import { IDisposable } from '../../../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotToken } from '../../../lib/src/auth/copilotTokenManager';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
-import { ICompletionsContextService } from '../../../lib/src/context';
+import { ICompletionsLogTargetService } from '../../../lib/src/logger';
 import { codeReferenceLogger } from '../../../lib/src/snippy/logger';
-import { isRunningInTest } from '../../../lib/src/util/runtimeMode';
-import { registerCodeRefEngagementTracker } from './codeReferenceEngagementTracker';
-import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsRuntimeModeService } from '../../../lib/src/util/runtimeMode';
+import { CodeRefEngagementTracker } from './codeReferenceEngagementTracker';
 
-export class CodeReference {
+export class CodeReference implements IDisposable {
 	subscriptions: Disposable | undefined;
 	event?: Disposable;
 	enabled: boolean = false;
 
 	constructor(
-		@ICompletionsContextService readonly ctx: ICompletionsContextService,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ICompletionsRuntimeModeService readonly _runtimeMode: ICompletionsRuntimeModeService,
+		@ICompletionsLogTargetService private readonly _logTarget: ICompletionsLogTargetService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 	) { }
 
 	dispose() {
@@ -28,8 +32,8 @@ export class CodeReference {
 	}
 
 	register() {
-		if (!isRunningInTest(this.ctx)) {
-			this.event = onCopilotToken(this.ctx, this.onCopilotToken);
+		if (!this._runtimeMode.isRunningInTest()) {
+			this.event = onCopilotToken(this._authenticationService, (t) => this.onCopilotToken(t));
 		}
 		return this;
 	}
@@ -47,12 +51,11 @@ export class CodeReference {
 		if (!token.codeQuoteEnabled) {
 			this.subscriptions?.dispose();
 			this.subscriptions = undefined;
-			codeReferenceLogger.debug(this.ctx, 'Public code references are disabled.');
+			codeReferenceLogger.debug(this._logTarget, 'Public code references are disabled.');
 			return;
 		}
 
-		codeReferenceLogger.info(this.ctx, 'Public code references are enabled.');
-
-		this.addDisposable(registerCodeRefEngagementTracker(this._instantiationService));
+		codeReferenceLogger.info(this._logTarget, 'Public code references are enabled.');
+		this.addDisposable(this._instantiationService.createInstance(CodeRefEngagementTracker));
 	};
 }

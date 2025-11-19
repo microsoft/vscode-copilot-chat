@@ -59,7 +59,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	}
 
 	private async initialize(): Promise<void> {
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
+		const enabled = this.configurationService.getConfig(ConfigKey.Advanced.CopilotCLIEnabled);
 		if (!enabled) {
 			return;
 		}
@@ -70,7 +70,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		}
 
 		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli');
-		this.terminalService.contributePath('copilot-cli', storageLocation, 'Enables use of the `copilot` command in the terminal.', true);
+		this.terminalService.contributePath('copilot-cli', storageLocation, { command: COPILOT_CLI_COMMAND }, true);
 
 		await fs.mkdir(storageLocation, { recursive: true });
 
@@ -161,8 +161,8 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 	private async sendCommandToTerminal(terminal: Terminal, command: string, waitForPythonActivation: boolean, shellInfo: IShellInfo | undefined = undefined): Promise<void> {
 		// Wait for shell integration to be available
 		const shellIntegrationTimeout = 3000;
-		let shellIntegrationAvailable = false;
-		const integrationPromise = new Promise<void>((resolve) => {
+		let shellIntegrationAvailable = terminal.shellIntegration ? true : false;
+		const integrationPromise = shellIntegrationAvailable ? Promise.resolve() : new Promise<void>((resolve) => {
 			const disposable = this._register(this.terminalService.onDidChangeTerminalShellIntegration(e => {
 				if (e.terminal === terminal && e.shellIntegration) {
 					shellIntegrationAvailable = true;
@@ -187,7 +187,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, delay))); // Wait a bit to ensure the terminal is ready
 		}
 
-		if (shellIntegrationAvailable && terminal.shellIntegration) {
+		if (terminal.shellIntegration) {
 			terminal.shellIntegration.executeCommand(command);
 		} else {
 			terminal.sendText(command);
@@ -308,7 +308,10 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 	const session = await authenticationService.getAnyGitHubSession();
 	if (session) {
 		options.env = {
-			GH_TOKEN: session.accessToken
+			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)
+			GH_TOKEN: session.accessToken,
+			// New Token name for Copilot
+			COPILOT_GITHUB_TOKEN: session.accessToken
 		};
 	}
 	return options;

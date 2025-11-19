@@ -89,7 +89,15 @@ suite('FindTextInFiles', () => {
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		const prepared = await tool.prepareInvocation({ input: { query: 'hello `world`' }, }, CancellationToken.None);
-		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching text for \`\` hello \`world\` \`\`"`);
+		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching for regex \`\` hello \`world\` \`\`"`);
+	});
+
+	test('prepares invocation message with text for literal search', async () => {
+		setup(new RelativePattern(URI.file(workspaceFolder), ''), false);
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		const prepared = await tool.prepareInvocation({ input: { query: 'hello', isRegexp: false }, }, CancellationToken.None);
+		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching for text \`hello\`"`);
 	});
 
 	test('retries with plain text when regex yields no results', async () => {

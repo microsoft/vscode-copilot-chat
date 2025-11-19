@@ -58,8 +58,16 @@ export interface ITerminalService {
 	 * @param pathLocation The path to add to PATH
 	 * @param description Optional description for the PATH contribution
 	 * @param prepend Whether to prepend (true) or append (false) the path. Defaults to false (append).
-	 */
+	*/
 	contributePath(contributor: string, pathLocation: string, description?: string, prepend?: boolean): void;
+	/**
+	 * Contributes a path to the terminal PATH environment variable.
+	 * @param contributor Unique identifier for the contributor
+	 * @param pathLocation The path to add to PATH
+	 * @param description Optional command thats contributed in the Terminal.
+	 * @param prepend Whether to prepend (true) or append (false) the path. Defaults to false (append).
+	*/
+	contributePath(contributor: string, pathLocation: string, description?: { command: string }, prepend?: boolean): void;
 
 	/**
 	 * Removes a path contribution from the terminal PATH environment variable.
@@ -150,9 +158,12 @@ export class NullTerminalService extends Disposable implements ITerminalService 
 		return undefined;
 	}
 
-	contributePath(contributor: string, pathLocation: string, description?: string): void {
+	contributePath(contributor: string, pathLocation: string, description?: string, prepend?: boolean): void;
+	contributePath(contributor: string, pathLocation: string, description?: { command: string }, prepend?: boolean): void;
+	contributePath(contributor: unknown, pathLocation: unknown, description?: unknown, prepend?: unknown): void {
 		// No-op for null service
 	}
+
 
 	removePathContribution(contributor: string): void {
 		// No-op for null service

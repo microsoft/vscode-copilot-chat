@@ -5,7 +5,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../../prompt/jsx-runtime/ */
 
-import { ICompletionsContextService } from '../../../context';
 import { CompletionRequestData } from '../../completionsPromptFactory/componentsCompletionsPromptFactory';
 import { CodeSnippetWithId } from '../../contextProviders/contextItemSchemas';
 import { CodeSnippets } from '../codeSnippets';
@@ -13,6 +12,7 @@ import { CodeSnippets } from '../codeSnippets';
 import * as assert from 'assert';
 import dedent from 'ts-dedent';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { PromptSnapshotNode } from '../../../../../prompt/src/components/components';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { extractNodesWitPath } from '../../../../../prompt/src/test/components/testHelpers';
@@ -20,18 +20,18 @@ import { TelemetryWithExp } from '../../../telemetry';
 import { createLibTestingContext } from '../../../test/context';
 import { querySnapshot } from '../../../test/snapshot';
 import { createTextDocument, TestTextDocumentManager } from '../../../test/textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../../textDocumentManager';
 
 suite('Code Snippets Component', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 
 	setup(function () {
-		ctx = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 	});
 
 	test('Renders nothing if there are no code snippets', async function () {
 		try {
-			const snapshot = await renderCodeSnippets(ctx);
+			const snapshot = await renderCodeSnippets(accessor);
 			querySnapshot(snapshot.snapshot!, 'CodeSnippets');
 		} catch (e) {
 			assert.ok((e as Error).message.startsWith('No children found at path segment '));
@@ -40,7 +40,7 @@ suite('Code Snippets Component', function () {
 
 	test('Renders nothing if the code snippets array is empty', async function () {
 		try {
-			const snapshot = await renderCodeSnippets(ctx, []);
+			const snapshot = await renderCodeSnippets(accessor, []);
 			querySnapshot(snapshot.snapshot!, 'CodeSnippets');
 		} catch (e) {
 			assert.ok((e as Error).message.startsWith('No children found at path segment '));
@@ -61,7 +61,7 @@ suite('Code Snippets Component', function () {
 			},
 		];
 
-		const snapshot = await renderCodeSnippets(ctx, codeSnippets);
+		const snapshot = await renderCodeSnippets(accessor, codeSnippets);
 
 		const chunks = querySnapshot(snapshot.snapshot!, 'CodeSnippets[*]') as PromptSnapshotNode[];
 		assert.deepStrictEqual(chunks.length, 1);
@@ -104,10 +104,10 @@ suite('Code Snippets Component', function () {
 			},
 		];
 
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.init([{ uri: 'file:///c:/root' }]);
 
-		const snapshot = await renderCodeSnippets(ctx, codeSnippets);
+		const snapshot = await renderCodeSnippets(accessor, codeSnippets);
 		const chunks = querySnapshot(snapshot.snapshot!, 'CodeSnippets[*]') as PromptSnapshotNode[];
 		assert.deepStrictEqual(chunks.length, 2);
 
@@ -148,7 +148,7 @@ suite('Code Snippets Component', function () {
 			},
 		];
 
-		const snapshot = await renderCodeSnippets(ctx, codeSnippets);
+		const snapshot = await renderCodeSnippets(accessor, codeSnippets);
 
 		const snippets = querySnapshot(snapshot.snapshot!, 'CodeSnippets[*]') as PromptSnapshotNode[];
 		assert.deepStrictEqual(snippets.length, 2);
@@ -188,7 +188,7 @@ suite('Code Snippets Component', function () {
 			},
 		];
 
-		const snapshot = await renderCodeSnippets(ctx, codeSnippets);
+		const snapshot = await renderCodeSnippets(accessor, codeSnippets);
 		const result = querySnapshot(snapshot.snapshot!, 'CodeSnippets[*]') as PromptSnapshotNode[];
 		assert.deepStrictEqual(result.length, 1);
 
@@ -239,7 +239,7 @@ suite('Code Snippets Component', function () {
 			},
 		];
 
-		const snapshot = await renderCodeSnippets(ctx, codeSnippets);
+		const snapshot = await renderCodeSnippets(accessor, codeSnippets);
 
 		const result = querySnapshot(snapshot.snapshot!, 'CodeSnippets[*]') as PromptSnapshotNode[];
 		assert.deepStrictEqual(result.length, 2);
@@ -264,7 +264,7 @@ suite('Code Snippets Component', function () {
 	});
 });
 
-async function renderCodeSnippets(ctx: ICompletionsContextService, codeSnippets?: CodeSnippetWithId[]) {
+async function renderCodeSnippets(accessor: ServicesAccessor, codeSnippets?: CodeSnippetWithId[]) {
 	const document = createTextDocument(
 		'file:///path/foo.ts',
 		'typescript',
@@ -277,7 +277,8 @@ async function renderCodeSnippets(ctx: ICompletionsContextService, codeSnippets?
 	);
 	const position = document.positionAt(document.getText().indexOf('|'));
 
-	const virtualPrompt = new VirtualPrompt(<CodeSnippets ctx={ctx} />);
+	const tdms = accessor.get(ICompletionsTextDocumentManagerService);
+	const virtualPrompt = new VirtualPrompt(<CodeSnippets tdms={tdms} />);
 	const pipe = virtualPrompt.createPipe();
 
 	const completionRequestData: CompletionRequestData = {

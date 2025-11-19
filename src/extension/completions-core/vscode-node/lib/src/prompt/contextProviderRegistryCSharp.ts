@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ICompletionsContextService } from '../context';
-import { Features } from '../experiments/features';
-import { logger } from '../logger';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
+import { ICompletionsLogTargetService, logger } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
 import { ActiveExperiments } from './contextProviderRegistry';
 
@@ -14,18 +14,25 @@ interface ContextProviderParams {
 }
 
 export function fillInCSharpActiveExperiments(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	activeExperiments: ActiveExperiments,
 	telemetryData: TelemetryWithExp
 ): boolean {
+	const featuresService = accessor.get(ICompletionsFeaturesService);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 	try {
-		const csharpContextProviderParams = ctx.get(Features).csharpContextProviderParams(telemetryData);
+		const csharpContextProviderParams = featuresService.csharpContextProviderParams(telemetryData);
 		if (csharpContextProviderParams) {
 			const params = JSON.parse(csharpContextProviderParams) as ContextProviderParams;
 			for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
+		} else {
+			const params = featuresService.getContextProviderExpSettings('csharp')?.params;
+			if (params) {
+				for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
+			}
 		}
 	} catch (e) {
-		logger.debug(ctx, `Failed to get the active C# experiments for the Context Provider API`, e);
+		logger.debug(logTarget, `Failed to get the active C# experiments for the Context Provider API`, e);
 		return false;
 	}
 	return true;

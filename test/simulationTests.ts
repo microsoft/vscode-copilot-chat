@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import './codeMapper/codeMapper.stest';
+import './e2e/cli.stest';
 import './e2e/edit.stest';
 import './e2e/explain.stest';
 import './e2e/fetchWebPageTool.stest';
 import './e2e/findFilesTool.stest';
 import './e2e/markdown.stest';
 import './e2e/newWorkspace.stest';
-import './e2e/notebook.stest';
 import './e2e/notebookTools.stest';
 import './e2e/pythonFix.stest';
 import './e2e/search.stest';

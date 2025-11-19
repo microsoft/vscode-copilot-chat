@@ -3,10 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../../types/src';
 import { ConfigKey, getConfig } from '../../config';
-import { ICompletionsContextService } from '../../context';
-import { Features } from '../../experiments/features';
+import { ICompletionsFeaturesService } from '../../experiments/featuresService';
+import { ICompletionsFileSystemService } from '../../fileSystem';
+import { ICompletionsLogTargetService } from '../../logger';
 import { TelemetryWithExp } from '../../telemetry';
 import { NeighboringFileType } from './neighborFiles';
 import {
@@ -46,8 +49,14 @@ export class CompositeRelatedFilesProvider extends RelatedFilesProvider {
 	protected providers: Map<string, Map<string, Provider>> = new Map();
 	protected telemetrySent = false;
 	private reportedUnknownProviders = new Set<string>();
-	constructor(@ICompletionsContextService context: ICompletionsContextService) {
-		super(context);
+	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IIgnoreService ignoreService: IIgnoreService,
+		@ICompletionsFeaturesService private featuresService: ICompletionsFeaturesService,
+		@ICompletionsLogTargetService logTarget: ICompletionsLogTargetService,
+		@ICompletionsFileSystemService fileSystemService: ICompletionsFileSystemService,
+	) {
+		super(instantiationService, ignoreService, logTarget, fileSystemService);
 	}
 	override async getRelatedFilesResponse(
 		docInfo: RelatedFilesDocumentInfo,
@@ -59,13 +68,13 @@ export class CompositeRelatedFilesProvider extends RelatedFilesProvider {
 		const fileType = getNeighboringFileType(languageId);
 		if (fileType === NeighboringFileType.RelatedOther && !this.reportedUnknownProviders.has(languageId)) {
 			this.reportedUnknownProviders.add(languageId);
-			relatedFilesLogger.warn(this.context, `unknown language ${languageId}`);
+			relatedFilesLogger.warn(this.logTarget, `unknown language ${languageId}`);
 		}
 		this.relatedFilesTelemetry(telemetryData);
 
-		relatedFilesLogger.debug(this.context, `Fetching related files for ${docInfo.uri}`);
+		relatedFilesLogger.debug(this.logTarget, `Fetching related files for ${docInfo.uri}`);
 		if (!this.isActive(languageId, telemetryData)) {
-			relatedFilesLogger.debug(this.context, 'language-server related-files experiment is not active.');
+			relatedFilesLogger.debug(this.logTarget, 'language-server related-files experiment is not active.');
 			return EmptyRelatedFilesResponse;
 		}
 
@@ -108,7 +117,7 @@ export class CompositeRelatedFilesProvider extends RelatedFilesProvider {
 				}
 				for (const entry of response.entries) {
 					for (const uri of entry.uris) {
-						relatedFilesLogger.debug(this.context, uri.toString());
+						relatedFilesLogger.debug(this.logTarget, uri.toString());
 					}
 				}
 			}
@@ -140,22 +149,22 @@ export class CompositeRelatedFilesProvider extends RelatedFilesProvider {
 	isActive(languageId: string, telemetryData: TelemetryWithExp): boolean {
 		if (csharpLanguageIds.includes(languageId)) {
 			return (
-				this.context.get(Features).relatedFilesVSCodeCSharp(telemetryData) ||
-				getConfig(this.context, ConfigKey.RelatedFilesVSCodeCSharp)
+				this.featuresService.relatedFilesVSCodeCSharp(telemetryData) ||
+				this.instantiationService.invokeFunction(getConfig<boolean>, ConfigKey.RelatedFilesVSCodeCSharp)
 			);
 		} else if (typescriptLanguageIds.includes(languageId)) {
 			return (
-				this.context.get(Features).relatedFilesVSCodeTypeScript(telemetryData) ||
-				getConfig(this.context, ConfigKey.RelatedFilesVSCodeTypeScript)
+				this.featuresService.relatedFilesVSCodeTypeScript(telemetryData) ||
+				this.instantiationService.invokeFunction(getConfig<boolean>, ConfigKey.RelatedFilesVSCodeTypeScript)
 			);
 		} else if (cppLanguageIds.includes(languageId)) {
 			return (
-				this.context.get(Features).cppHeadersEnableSwitch(telemetryData)
+				this.featuresService.cppHeadersEnableSwitch(telemetryData)
 			);
 		}
 		return (
-			this.context.get(Features).relatedFilesVSCode(telemetryData) ||
-			getConfig(this.context, ConfigKey.RelatedFilesVSCode)
+			this.featuresService.relatedFilesVSCode(telemetryData) ||
+			this.instantiationService.invokeFunction(getConfig<boolean>, ConfigKey.RelatedFilesVSCode)
 		);
 	}
 	relatedFilesTelemetry(telemetryData: TelemetryWithExp) { }

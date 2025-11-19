@@ -5,35 +5,17 @@
 
 import assert from 'assert';
 import path from 'path';
-import { Context } from '../../context';
-import { FileSystem } from '../../fileSystem';
 import { createLibTestingContext } from '../../test/context';
-import { FakeFileSystem } from '../../test/filesystem';
 import { makeFsUri } from '../../util/uri';
-import { ComputationStatus, extractRepoInfo, extractRepoInfoInBackground } from '../repository';
+import { extractRepoInfo } from '../repository';
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('Extract repo info tests', function () {
 	const baseFolder = { uri: makeFsUri(path.resolve(__dirname, '../../../../../../../../')) };
 
-	class Nested {
-		nested: Nested | undefined;
-	}
-
-	test('avoid using context as cache key', function () {
-		const ctx = new Context();
-		ctx.set(FileSystem, new FakeFileSystem({}));
-		const n = new Nested();
-		ctx.set(Nested, n);
-		n.nested = n;
-
-		const maybe = extractRepoInfoInBackground(ctx, makeFsUri(__filename));
-
-		assert.deepStrictEqual(maybe, ComputationStatus.PENDING);
-	});
-
 	test('Extract repo info', async function () {
-		const ctx = createLibTestingContext();
-		const info = await extractRepoInfo(ctx, baseFolder.uri);
+		const accessor = createLibTestingContext().createTestingAccessor();
+		const info = await extractRepoInfo(accessor, baseFolder.uri);
 
 		assert.ok(info);
 
@@ -59,14 +41,15 @@ suite('Extract repo info tests', function () {
 		);
 		assert.ok(pathname.startsWith('/github/vscode-copilot-chat') || pathname.startsWith('/microsoft/vscode-copilot-chat'));
 
-		assert.deepStrictEqual(await extractRepoInfo(ctx, 'file:///tmp/does/not/exist/.git/config'), undefined);
+		assert.deepStrictEqual(await extractRepoInfo(accessor, 'file:///tmp/does/not/exist/.git/config'), undefined);
 	});
 
 	test('Extract repo info - Jupyter Notebook vscode-notebook-cell ', async function () {
 		const cellUri = baseFolder.uri.replace(/^file:/, 'vscode-notebook-cell:');
 		assert.ok(cellUri.startsWith('vscode-notebook-cell:'));
-		const ctx = createLibTestingContext();
-		const info = await extractRepoInfo(ctx, cellUri);
+		const accessor = createLibTestingContext().createTestingAccessor();
+		const instantiationService = accessor.get(IInstantiationService);
+		const info = await extractRepoInfo(accessor, cellUri);
 
 		assert.ok(info);
 
@@ -92,6 +75,6 @@ suite('Extract repo info tests', function () {
 		);
 		assert.ok(pathname.startsWith('/github/vscode-copilot-chat') || pathname.startsWith('/microsoft/vscode-copilot-chat'));
 
-		assert.deepStrictEqual(await extractRepoInfo(ctx, 'file:///tmp/does/not/exist/.git/config'), undefined);
+		assert.deepStrictEqual(await instantiationService.invokeFunction(extractRepoInfo, 'file:///tmp/does/not/exist/.git/config'), undefined);
 	});
 });

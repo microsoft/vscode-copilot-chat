@@ -17,8 +17,8 @@ export class DocumentFilter {
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService
 	) {
-		this._enabledLanguagesObs = this._configurationService.getConfigObservable(ConfigKey.Shared.Enable);
-		this._ignoreCompletionsDisablement = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsIgnoreCompletionsDisablement);
+		this._enabledLanguagesObs = this._configurationService.getConfigObservable(ConfigKey.Enable);
+		this._ignoreCompletionsDisablement = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsIgnoreCompletionsDisablement);
 	}
 
 	public async isTrackingEnabled(document: TextDocument | NotebookDocument): Promise<boolean> {

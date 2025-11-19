@@ -59,6 +59,7 @@ export namespace JSX {
 	}
 
 	/* any type necessary for component prop types */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	export type ElementType<P = any> = FunctionComponent<P>;
 	export type Element = PromptElement;
 

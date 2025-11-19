@@ -7,9 +7,9 @@ import * as Sinon from 'sinon';
 import { Disposable, ExtensionContext } from 'vscode';
 import { CodeReference } from '..';
 import { CopilotToken } from '../../../../../../../platform/authentication/common/copilotToken';
-import type { ICompletionsContextService } from '../../../../lib/src/context';
+import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ConnectionState } from '../../../../lib/src/snippy/connectionState';
-import { Extension } from '../../extensionContext';
 import { createExtensionTestingContext } from '../../test/context';
 
 function testExtensionContext() {
@@ -20,13 +20,13 @@ function testExtensionContext() {
 
 suite('CodeReference', function () {
 	let extensionContext: ExtensionContext;
-	let context: ICompletionsContextService;
+	let instantiationService: IInstantiationService;
 	let sub: Disposable | undefined;
 
 	setup(function () {
-		context = createExtensionTestingContext();
+		const accessor = createExtensionTestingContext().createTestingAccessor();
+		instantiationService = accessor.get(IInstantiationService);
 		extensionContext = testExtensionContext() as unknown as ExtensionContext;
-		context.set(Extension, new Extension(extensionContext));
 	});
 
 	teardown(function () {
@@ -39,15 +39,15 @@ suite('CodeReference', function () {
 
 	suite('subscriptions', function () {
 		test('should be undefined by default', function () {
-			const result = context.instantiationService.createInstance(CodeReference);
+			const result = instantiationService.createInstance(CodeReference);
 			sub = result.subscriptions;
 			assert.ok(!sub);
 		});
 
 		test('should be updated correctly when token change events received', function () {
-			const codeQuote = context.instantiationService.createInstance(CodeReference);
-			const enabledToken = new CopilotToken({ token: this._completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: true });
-			const disabledToken = new CopilotToken({ token: this._completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: false });
+			const codeQuote = instantiationService.createInstance(CodeReference);
+			const enabledToken = new CopilotToken({ token: `test token ${generateUuid()}`, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: true });
+			const disabledToken = new CopilotToken({ token: `test token ${generateUuid()}`, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown', code_quote_enabled: false });
 
 			codeQuote.onCopilotToken(enabledToken);
 

@@ -39,7 +39,7 @@ export class GitRelatedFilesProvider extends Disposable implements vscode.ChatRe
 	) {
 		super();
 
-		if (this._configurationService.getConfig(ConfigKey.Internal.GitHistoryRelatedFilesUsingEmbeddings)) {
+		if (this._configurationService.getConfig(ConfigKey.Advanced.GitHistoryRelatedFilesUsingEmbeddings)) {
 			// Index the latest 200 commits in the background
 			// TODO@joyceerhl reindex incrementally when repository state changes
 			// TODO@joyceerhl use only the changes from main branch?
@@ -69,7 +69,7 @@ export class GitRelatedFilesProvider extends Disposable implements vscode.ChatRe
 			return this.getCommitsForPromptWithoutFiles(chatRequest, token);
 		}
 
-		if (this._configurationService.getConfig(ConfigKey.Internal.GitHistoryRelatedFilesUsingEmbeddings)) {
+		if (this._configurationService.getConfig(ConfigKey.Advanced.GitHistoryRelatedFilesUsingEmbeddings)) {
 			return this.computeRelevantCommits(chatRequest, token);
 		}
 

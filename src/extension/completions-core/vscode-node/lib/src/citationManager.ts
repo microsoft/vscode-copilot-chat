@@ -2,7 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ICompletionsContextService } from './context';
+import { createServiceIdentifier } from '../../../../../util/common/services';
+import { Disposable, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IRange } from './textDocument';
 
 export interface IPCitationDetail {
@@ -20,12 +21,20 @@ export interface IPDocumentCitation {
 	details: IPCitationDetail[];
 }
 
-export abstract class CitationManager {
-	abstract handleIPCodeCitation(ctx: ICompletionsContextService, citation: IPDocumentCitation): Promise<void>;
+export const ICompletionsCitationManager = createServiceIdentifier<ICompletionsCitationManager>('ICompletionsCitationManager');
+export interface ICompletionsCitationManager {
+	readonly _serviceBrand: undefined;
+
+	register(): IDisposable;
+	handleIPCodeCitation(citation: IPDocumentCitation): Promise<void>;
 }
 
-export class NoOpCitationManager extends CitationManager {
-	async handleIPCodeCitation(ctx: ICompletionsContextService, citation: IPDocumentCitation): Promise<void> {
+export class NoOpCitationManager implements ICompletionsCitationManager {
+	declare _serviceBrand: undefined;
+
+	register() { return Disposable.None; }
+
+	async handleIPCodeCitation(citation: IPDocumentCitation): Promise<void> {
 		// Do nothing
 	}
 }

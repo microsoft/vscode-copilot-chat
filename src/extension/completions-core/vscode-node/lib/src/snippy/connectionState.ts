@@ -2,9 +2,10 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ICompletionsContextService } from '../context';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsLogTargetService } from '../logger';
 import { getLastKnownEndpoints } from '../networkConfiguration';
-import { Fetcher } from '../networking';
+import { ICompletionsFetcherService } from '../networking';
 import { codeReferenceLogger } from './logger';
 
 type ConnectionAPI = {
@@ -13,7 +14,7 @@ type ConnectionAPI = {
 	setRetrying: () => void;
 	setDisconnected: () => void;
 	setDisabled: () => void;
-	enableRetry: (ctx: ICompletionsContextService, initialTimeout?: number) => void;
+	enableRetry: (accessor: ServicesAccessor, initialTimeout?: number) => void;
 	isConnected: () => boolean;
 	isDisconnected: () => boolean;
 	isRetrying: () => boolean;
@@ -112,32 +113,33 @@ function registerConnectionState(): ConnectionAPI {
 		}
 	}
 
-	function enableRetry(ctx: ICompletionsContextService, initialTimeout = InitialTimeout) {
+	function enableRetry(accessor: ServicesAccessor, initialTimeout = InitialTimeout) {
 		if (isRetrying()) {
 			return;
 		}
 
 		setRetrying();
 		setInitialWait(true);
-		void attemptToPing(ctx, initialTimeout);
+		void attemptToPing(accessor, initialTimeout);
 	}
 
 	function isInitialWait() {
 		return state.initialWait;
 	}
 
-	async function attemptToPing(ctx: ICompletionsContextService, initialTimeout: number) {
-		codeReferenceLogger.info(ctx, `Attempting to reconnect in ${initialTimeout}ms.`);
+	async function attemptToPing(accessor: ServicesAccessor, initialTimeout: number) {
+		const logTarget = accessor.get(ICompletionsLogTargetService);
+		const fetcher = accessor.get(ICompletionsFetcherService);
+		const instantiationService = accessor.get(IInstantiationService);
+		codeReferenceLogger.info(logTarget, `Attempting to reconnect in ${initialTimeout}ms.`);
 
 		// Initial 3 second delay before attempting to reconnect to Snippy.
 		await timeout(initialTimeout);
 		setInitialWait(false);
 
-		const fetcher = ctx.get(Fetcher);
-
-		function succeedOrRetry(time: number, ctx: ICompletionsContextService) {
+		function succeedOrRetry(time: number) {
 			if (time > MaxRetryTime) {
-				codeReferenceLogger.info(ctx, 'Max retry time reached, disabling.');
+				codeReferenceLogger.info(logTarget, 'Max retry time reached, disabling.');
 				setDisabled();
 				return;
 			}
@@ -146,9 +148,9 @@ function registerConnectionState(): ConnectionAPI {
 				state.retryAttempts = Math.min(state.retryAttempts + 1, MaxAttempts);
 
 				try {
-					codeReferenceLogger.info(ctx, `Pinging service after ${time} second(s)`);
+					codeReferenceLogger.info(logTarget, `Pinging service after ${time} second(s)`);
 					const response = await fetcher.fetch(
-						new URL('_ping', getLastKnownEndpoints(ctx)['origin-tracker']).href,
+						new URL('_ping', instantiationService.invokeFunction(getLastKnownEndpoints)['origin-tracker']).href,
 						{
 							method: 'GET',
 							headers: {
@@ -158,22 +160,22 @@ function registerConnectionState(): ConnectionAPI {
 					);
 
 					if (response.status !== 200 || !response.ok) {
-						succeedOrRetry(time ** 2, ctx);
+						succeedOrRetry(time ** 2);
 					} else {
-						codeReferenceLogger.info(ctx, 'Successfully reconnected.');
+						codeReferenceLogger.info(logTarget, 'Successfully reconnected.');
 						setConnected();
 						return;
 					}
 				} catch (e) {
-					succeedOrRetry(time ** 2, ctx);
+					succeedOrRetry(time ** 2);
 				}
 			};
 			setTimeout(() => void tryAgain(), time * 1000);
 		}
 
-		codeReferenceLogger.info(ctx, 'Attempting to reconnect.');
+		codeReferenceLogger.info(logTarget, 'Attempting to reconnect.');
 
-		succeedOrRetry(BaseRetryTime, ctx);
+		succeedOrRetry(BaseRetryTime);
 	}
 
 	const timeout = (ms: number) => {

@@ -4,74 +4,47 @@
  *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert';
 import sinon from 'sinon';
-import { ExtensionContext, ExtensionMode, commands, env } from 'vscode';
-import { ICompletionsContextService } from '../../../../lib/src/context';
-import { NotificationSender } from '../../../../lib/src/notificationSender';
+import { commands, env } from 'vscode';
+import { IVSCodeExtensionContext } from '../../../../../../../platform/extContext/common/extensionContext';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsNotificationSender } from '../../../../lib/src/notificationSender';
 import { OutputPaneShowCommand } from '../../../../lib/src/snippy/constants';
 import { withInMemoryTelemetry } from '../../../../lib/src/test/telemetry';
 import { TestNotificationSender } from '../../../../lib/src/test/testHelpers';
-import { Extension } from '../../extensionContext';
 import { createExtensionTestingContext } from '../../test/context';
 import { notify } from '../matchNotifier';
 
-/**
- * Minimal fake implementation of the VS Code globalState object.
- */
-class FakeGlobalState {
-	#state = new Map<string, unknown>();
-
-	get(key: string) {
-		return this.#state.get(key);
-	}
-
-	async update(key: string, value: unknown) {
-		return new Promise(resolve => {
-			this.#state.set(key, value);
-			resolve(void 0);
-		});
-	}
-}
-
 suite('.match', function () {
-	let ctx: ICompletionsContextService;
+	let accessor: ServicesAccessor;
 
 	setup(function () {
-		ctx = createExtensionTestingContext();
-		ctx.forceSet(
-			Extension,
-			new Extension({
-				extensionMode: ExtensionMode.Test,
-				subscriptions: [] as { dispose(): void }[],
-				extension: { id: 'copilot.extension-test' },
-				globalState: new FakeGlobalState(),
-			} as unknown as ExtensionContext)
-		);
+		accessor = createExtensionTestingContext().createTestingAccessor();
 	});
 
 	test('populates the globalState object', async function () {
-		const extensionContext = ctx.get(Extension);
-		const globalState = extensionContext.context.globalState;
+		const extensionContext = accessor.get(IVSCodeExtensionContext);
+		const globalState = extensionContext.globalState;
 
-		await notify(ctx);
+		await notify(accessor);
 
 		assert.ok(globalState.get('codeReference.notified'));
 	});
 
 	test('notifies the user', async function () {
-		const testNotificationSender = ctx.get(NotificationSender) as TestNotificationSender;
+		const testNotificationSender = accessor.get(ICompletionsNotificationSender) as TestNotificationSender;
 		testNotificationSender.performAction('View reference');
 
-		await notify(ctx);
+		await notify(accessor);
 
 		assert.strictEqual(testNotificationSender.sentMessages.length, 1);
 	});
 
 	test('sends a telemetry event on view reference action', async function () {
-		const testNotificationSender = ctx.get(NotificationSender) as TestNotificationSender;
+		const testNotificationSender = accessor.get(ICompletionsNotificationSender) as TestNotificationSender;
 		testNotificationSender.performAction('View reference');
 
-		const telemetry = await withInMemoryTelemetry(ctx, async ctx => {
-			await notify(ctx);
+		const telemetry = await withInMemoryTelemetry(accessor, async accessor => {
+			await notify(accessor);
 		});
 
 		assert.strictEqual(telemetry.reporter.events.length, 1);
@@ -80,10 +53,10 @@ suite('.match', function () {
 
 	test('executes the output panel display command on view reference action', async function () {
 		const spy = sinon.spy(commands, 'executeCommand');
-		const testNotificationSender = ctx.get(NotificationSender) as TestNotificationSender;
+		const testNotificationSender = accessor.get(ICompletionsNotificationSender) as TestNotificationSender;
 		testNotificationSender.performAction('View reference');
 
-		await notify(ctx);
+		await notify(accessor);
 
 		await testNotificationSender.waitForMessages();
 
@@ -95,10 +68,10 @@ suite('.match', function () {
 
 	test('opens the settings page on change setting action', async function () {
 		const stub = sinon.stub(env, 'openExternal');
-		const testNotificationSender = ctx.get(NotificationSender) as TestNotificationSender;
+		const testNotificationSender = accessor.get(ICompletionsNotificationSender) as TestNotificationSender;
 		testNotificationSender.performAction('Change setting');
 
-		await notify(ctx);
+		await notify(accessor);
 
 		await testNotificationSender.waitForMessages();
 
@@ -117,11 +90,11 @@ suite('.match', function () {
 	});
 
 	test('sends a telemetry event on notification dismissal', async function () {
-		const testNotificationSender = ctx.get(NotificationSender) as TestNotificationSender;
+		const testNotificationSender = accessor.get(ICompletionsNotificationSender) as TestNotificationSender;
 		testNotificationSender.performDismiss();
 
-		const telemetry = await withInMemoryTelemetry(ctx, async ctx => {
-			await notify(ctx);
+		const telemetry = await withInMemoryTelemetry(accessor, async accessor => {
+			await notify(accessor);
 		});
 
 		await testNotificationSender.waitForMessages();
@@ -131,14 +104,15 @@ suite('.match', function () {
 	});
 
 	test('does not notify if already notified', async function () {
-		const extensionContext = ctx.get(Extension);
-		const globalState = extensionContext.context.globalState;
-		const testNotificationSender = ctx.get(NotificationSender) as TestNotificationSender;
+		const extensionContext = accessor.get(IVSCodeExtensionContext);
+		const instantiationService = accessor.get(IInstantiationService);
+		const globalState = extensionContext.globalState;
+		const testNotificationSender = accessor.get(ICompletionsNotificationSender) as TestNotificationSender;
 		testNotificationSender.performAction('View reference');
 
 		await globalState.update('codeReference.notified', true);
 
-		await notify(ctx);
+		await instantiationService.invokeFunction(notify);
 
 		await testNotificationSender.waitForMessages();
 

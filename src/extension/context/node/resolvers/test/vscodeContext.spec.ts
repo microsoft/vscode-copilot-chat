@@ -130,7 +130,7 @@ describe('parseSettingsAndCommands', () => {
 		expect(result[0].commandToRun?.arguments).toEqual(['@id:editor.fontSize ']);
 	});
 
-	it('returns empty array for unknown command', async () => {
+	it('returns empty quickOpen for unknown command', async () => {
 		const mockService = new MockWorkbenchService({}, [
 			{ label: 'Show All Commands', command: 'workbench.action.showCommands', keybinding: 'Ctrl+Shift+P' }
 		]);
@@ -146,7 +146,10 @@ describe('parseSettingsAndCommands', () => {
 \`\`\``;
 
 		const result = await parseSettingsAndCommands(mockService, codeBlock);
-		expect(result).toEqual([]);
+		expect(result).toHaveLength(1);
+		expect(result[0].commandToRun?.command).toBe('workbench.action.quickOpen');
+		expect(result[0].commandToRun?.arguments).toEqual(['>']);
+		expect(result[0].commandToRun?.title).toBe('Open Command Palette');
 	});
 
 	it('processes extension search command', async () => {

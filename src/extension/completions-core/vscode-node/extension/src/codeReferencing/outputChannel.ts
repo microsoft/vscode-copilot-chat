@@ -3,10 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, window, type OutputChannel } from 'vscode';
+import { window, type OutputChannel } from 'vscode';
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
+import { Disposable, IDisposable, MutableDisposable } from '../../../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotToken } from '../../../lib/src/auth/copilotTokenManager';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
-import { ICompletionsContextService } from '../../../lib/src/context';
 
 interface GitHubLogger extends Disposable {
 	info(...messages: string[]): void;
@@ -27,7 +29,7 @@ function getCurrentTimestamp() {
 	)}.${toThreeDigits(currentTime.getMilliseconds())}`;
 }
 
-class CodeReferenceOutputChannel {
+class CodeReferenceOutputChannel implements IDisposable {
 	constructor(private output: OutputChannel) { }
 
 	info(...messages: string[]) {
@@ -43,39 +45,33 @@ class CodeReferenceOutputChannel {
 	}
 }
 
-export class GitHubCopilotLogger implements GitHubLogger {
-	private output: CodeReferenceOutputChannel;
-	#event: Disposable;
+export class GitHubCopilotLogger extends Disposable implements GitHubLogger {
 
-	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
-		this.#event = onCopilotToken(ctx, t => this.checkCopilotToken(t));
+	private output = this._register(new MutableDisposable<CodeReferenceOutputChannel>());
 
-		this.output = this.createChannel();
+	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IAuthenticationService authenticationService: IAuthenticationService
+	) {
+		super();
+		this._register(onCopilotToken(authenticationService, t => this.checkCopilotToken(t)));
+
+		this.createChannel();
 	}
 
 	private checkCopilotToken = (token: Omit<CopilotToken, "token">) => {
 		if (token.codeQuoteEnabled) {
-			this.output = this.createChannel();
+			this.createChannel();
 		} else {
-			this.output?.dispose();
+			this.removeChannel();
 		}
 	};
 
-	private createChannel() {
-		if (this.output) {
-			return this.output;
-		}
-
-		return new CodeReferenceOutputChannel(window.createOutputChannel(citationsChannelName, 'code-referencing'));
-	}
-
 	private log(type: 'info', ...messages: string[]) {
-		if (!this.output) {
-			this.output = this.createChannel();
-		}
+		const output = this.createChannel();
 
 		const [base, ...rest] = messages;
-		this.output[type](base, ...rest);
+		output[type](base, ...rest);
 	}
 
 	info(...messages: string[]) {
@@ -84,11 +80,23 @@ export class GitHubCopilotLogger implements GitHubLogger {
 
 	forceShow() {
 		// Preserve focus in the editor
-		this.output?.show(true);
+		this.getChannel()?.show(true);
 	}
 
-	dispose() {
-		this.output?.dispose();
-		this.#event.dispose();
+	private createChannel(): CodeReferenceOutputChannel {
+		if (this.output.value) {
+			return this.output.value;
+		}
+
+		this.output.value = new CodeReferenceOutputChannel(window.createOutputChannel(citationsChannelName, 'code-referencing'));
+		return this.output.value;
+	}
+
+	private getChannel(): CodeReferenceOutputChannel | undefined {
+		return this.output.value;
+	}
+
+	private removeChannel() {
+		this.output.value = undefined;
 	}
 }

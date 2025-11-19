@@ -7,13 +7,12 @@
 
 import { Chunk, ComponentContext, PromptElementProps, Text } from '../../../../prompt/src/components/components';
 import { newLineEnded } from '../../../../prompt/src/languageMarker';
-import { ICompletionsContextService } from '../../context';
-import { TextDocumentManager } from '../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import {
 	CompletionRequestData,
 	isCompletionRequestData,
 } from '../completionsPromptFactory/componentsCompletionsPromptFactory';
-import { FullRecentEditsProvider, RecentEditsProvider } from '../recentEdits/recentEditsProvider';
+import { FullRecentEditsProvider, ICompletionsRecentEditsProviderService } from '../recentEdits/recentEditsProvider';
 import { RecentEdit } from '../recentEdits/recentEditsReducer';
 
 export function editIsTooCloseToCursor(
@@ -46,7 +45,8 @@ export function editIsTooCloseToCursor(
 }
 
 type RecentEditsProps = {
-	ctx: ICompletionsContextService;
+	tdms: ICompletionsTextDocumentManagerService;
+	recentEditsProvider: ICompletionsRecentEditsProviderService;
 } & PromptElementProps;
 
 /**
@@ -61,7 +61,7 @@ export const RecentEdits = (props: RecentEditsProps, context: ComponentContext) 
 	context.useData(isCompletionRequestData, async (request: CompletionRequestData) => {
 		if (!request.document) { return; }
 
-		const recentEditProvider = props.ctx.get(RecentEditsProvider);
+		const recentEditProvider = props.recentEditsProvider;
 
 		if (recentEditProvider.isEnabled()) {
 			recentEditProvider.start();
@@ -73,7 +73,7 @@ export const RecentEdits = (props: RecentEditsProps, context: ComponentContext) 
 		const recentEdits = recentEditProvider.getRecentEdits();
 
 		const filesIncluded = new Set<string>();
-		const tdm = props.ctx.get(TextDocumentManager);
+		const tdm = props.tdms;
 		const editSummaries: string[] = [];
 
 		// Walk backwards through the recent edits (most recent first) until we hit the max files or max edits, whichever comes first

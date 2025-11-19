@@ -2,18 +2,18 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ICompletionsContextService } from '../context';
 import type { IAbortSignal } from '../networking';
 import { assertShape } from '../util/typebox';
 
-import { CompletionsCapiBridge } from '../../../bridge/src/completionsCapiBridge';
+import { ICAPIClientService } from '../../../../../../platform/endpoint/common/capiClient';
+import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import * as Network from './network';
 import * as Schema from './snippy.proto';
 
-export async function Match(ctx: ICompletionsContextService, source: string, signal?: IAbortSignal) {
+export async function Match(accessor: ServicesAccessor, source: string, signal?: IAbortSignal) {
 	const result = await Network.call<typeof Schema.MatchResponse>(
-		ctx,
-		ctx.get(CompletionsCapiBridge).capiClientService.snippyMatchPath,
+		accessor,
+		accessor.get(ICAPIClientService).snippyMatchPath,
 		{
 			method: 'POST',
 			body: assertShape(Schema.MatchRequest, { source }),
@@ -26,10 +26,10 @@ export async function Match(ctx: ICompletionsContextService, source: string, sig
 	return payload;
 }
 
-export async function FilesForMatch(ctx: ICompletionsContextService, { cursor }: Schema.FileMatchRequest, signal?: IAbortSignal) {
+export async function FilesForMatch(accessor: ServicesAccessor, { cursor }: Schema.FileMatchRequest, signal?: IAbortSignal) {
 	const result = await Network.call<typeof Schema.FileMatchResponse>(
-		ctx,
-		ctx.get(CompletionsCapiBridge).capiClientService.snippyFilesForMatchPath,
+		accessor,
+		accessor.get(ICAPIClientService).snippyFilesForMatchPath,
 		{
 			method: 'POST',
 			body: assertShape(Schema.FileMatchRequest, { cursor }),

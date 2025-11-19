@@ -26,8 +26,12 @@ export interface PullRequestSearchItem {
 	};
 	additions: number;
 	deletions: number;
+	files: {
+		totalCount: number;
+	};
 	fullDatabaseId: number;
-	headRefOid: number;
+	headRefOid: string;
+	baseRefOid?: string;
 	body: string;
 }
 
@@ -82,11 +86,12 @@ export async function makeGitHubAPIRequest(
 	routeSlug: string,
 	method: 'GET' | 'POST',
 	token: string | undefined,
-	body?: { [key: string]: any },
+	body?: unknown,
 	version?: string,
 	type: 'json' | 'text' = 'json',
-	userAgent?: string) {
-	const headers: any = {
+	userAgent?: string,
+	returnStatusCodeOnError: boolean = false) {
+	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
 	if (token) {
@@ -105,6 +110,10 @@ export async function makeGitHubAPIRequest(
 		body: body ? JSON.stringify(body) : undefined
 	});
 	if (!response.ok) {
+		logService.error(`[GitHubAPI] ${method} ${host}/${routeSlug} - Status: ${response?.status}`);
+		if (returnStatusCodeOnError) {
+			return { status: response.status };
+		}
 		return undefined;
 	}
 
@@ -125,8 +134,8 @@ export async function makeGitHubAPIRequest(
 	}
 }
 
-export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: { [key: string]: any }) {
-	const headers: any = {
+export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown) {
+	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 		'Content-Type': 'application/json',
 	};
@@ -184,6 +193,7 @@ export async function makeSearchGraphQLRequest(
 						id
 						fullDatabaseId
 						headRefOid
+						baseRefOid
 						title
 						state
 						url
@@ -191,6 +201,9 @@ export async function makeSearchGraphQLRequest(
 						updatedAt
 						additions
 						deletions
+						files {
+							totalCount
+						}
 						author {
 							login
 						}
@@ -240,6 +253,7 @@ export async function getPullRequestFromGlobalId(
 					id
 					fullDatabaseId
 					headRefOid
+					baseRefOid
 					title
 					state
 					url
@@ -247,6 +261,9 @@ export async function getPullRequestFromGlobalId(
 					updatedAt
 					additions
 					deletions
+					files {
+						totalCount
+					}
 					author {
 						login
 					}

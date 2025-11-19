@@ -3,7 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ICompletionsContextService } from '../../context';
+import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsFileSystemService } from '../../fileSystem';
+import { ICompletionsLogTargetService } from '../../logger';
 import { TelemetryWithExp } from '../../telemetry';
 import {
 	RelatedFilesDocumentInfo,
@@ -19,9 +22,12 @@ export class MockTraitsProvider extends RelatedFilesProvider {
 			{ name: 'TargetFrameworks', value: 'net8' },
 			{ name: 'LanguageVersion', value: '12' },
 		],
-		@ICompletionsContextService context: ICompletionsContextService,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IIgnoreService ignoreService: IIgnoreService,
+		@ICompletionsLogTargetService logTarget: ICompletionsLogTargetService,
+		@ICompletionsFileSystemService fileSystemService: ICompletionsFileSystemService,
 	) {
-		super(context);
+		super(instantiationService, ignoreService, logTarget, fileSystemService);
 	}
 
 	async getRelatedFilesResponse(

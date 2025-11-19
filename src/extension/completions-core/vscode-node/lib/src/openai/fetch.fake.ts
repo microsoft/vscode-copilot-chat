@@ -4,12 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { CancellationToken } from 'vscode';
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { getTokenizer } from '../../../prompt/src/tokenization';
-import { CopilotTokenManager } from '../auth/copilotTokenManager';
-import { ICompletionsContextService } from '../context';
+import { ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
+import { ICompletionsLogTargetService } from '../logger';
 import { Response } from '../networking';
+import { ICompletionsStatusReporter } from '../progress';
 import { TelemetryData, TelemetryWithExp } from '../telemetry';
+import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 import {
 	CompletionError,
 	CompletionParams,
@@ -120,12 +124,14 @@ function fakeResponse(
 export class SyntheticCompletions extends OpenAIFetcher {
 	private _wasCalled = false;
 
-	constructor(private readonly _completions: string[]) {
+	constructor(
+		private readonly _completions: string[],
+		@ICompletionsCopilotTokenManager private readonly copilotTokenManager: ICompletionsCopilotTokenManager,
+	) {
 		super();
 	}
 
 	async fetchAndStreamCompletions(
-		ctx: ICompletionsContextService,
 		params: CompletionParams,
 		baseTelemetryData: TelemetryWithExp,
 		finishedCb: FinishedCallback,
@@ -133,7 +139,7 @@ export class SyntheticCompletions extends OpenAIFetcher {
 		teletryProperties?: { [key: string]: string }
 	): Promise<CompletionResults | CompletionError> {
 		// check we have a valid token - ignore the result
-		void ctx.get(CopilotTokenManager).getToken();
+		void this.copilotTokenManager.getToken();
 		if (cancel?.isCancellationRequested) {
 			return { type: 'canceled', reason: 'canceled during test' };
 		}
@@ -155,18 +161,32 @@ export class SyntheticCompletions extends OpenAIFetcher {
 export class ErrorReturningFetcher extends LiveOpenAIFetcher {
 	lastSpeculationParams?: CompletionParams | SpeculationFetchParams;
 
-	constructor(private readonly response: Response) {
-		super();
+	private response: Response | 'not-sent' = 'not-sent';
+
+	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
+		@ICompletionsRuntimeModeService runtimeModeService: ICompletionsRuntimeModeService,
+		@ICompletionsLogTargetService logTargetService: ICompletionsLogTargetService,
+		@ICompletionsCopilotTokenManager copilotTokenManager: ICompletionsCopilotTokenManager,
+		@ICompletionsStatusReporter statusReporter: ICompletionsStatusReporter,
+		@IAuthenticationService authenticationService: IAuthenticationService,
+	) {
+		super(instantiationService, runtimeModeService, logTargetService, copilotTokenManager, statusReporter, authenticationService);
+	}
+
+	setResponse(response: Response | 'not-sent') {
+		this.response = response;
 	}
 
 	override fetchWithParameters(
-		ctx: ICompletionsContextService,
 		endpoint: string,
 		params: CompletionParams,
 		_copilotToken: unknown,
 		telemetryData: TelemetryData,
 		cancel?: CancellationToken
 	): Promise<Response | 'not-sent'> {
-		return Promise.resolve(this.response);
+		const response = this.response;
+		this.response = 'not-sent';
+		return Promise.resolve(response);
 	}
 }

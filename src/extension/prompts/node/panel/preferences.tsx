@@ -22,7 +22,7 @@ export class UserPreferences extends PromptElement<UserPreferencesProps> {
 		super(props);
 	}
 	override async render(state: void, sizing: PromptSizing) {
-		if (!this.configurationService.getConfig(ConfigKey.Internal.EnableUserPreferences)) {
+		if (!this.configurationService.getConfig(ConfigKey.Advanced.EnableUserPreferences)) {
 			return undefined;
 		}
 

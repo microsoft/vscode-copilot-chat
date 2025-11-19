@@ -3,14 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken, Position, Range } from 'vscode-languageserver-protocol';
+import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CompletionState, createCompletionState } from './completionState';
-import { ICompletionsContextService } from './context';
 import { completionsFromGhostTextResults, CopilotCompletion } from './ghostText/copilotCompletion';
 import { getGhostText, GetGhostTextOptions, ResultType } from './ghostText/ghostText';
 import { setLastShown } from './ghostText/last';
 import { ITextEditorOptions } from './ghostText/normalizeIndent';
-import { SpeculativeRequestCache } from './ghostText/speculativeRequestCache';
+import { ICompletionsSpeculativeRequestCache } from './ghostText/speculativeRequestCache';
 import { GhostTextResultWithTelemetry, handleGhostTextResultTelemetry, logger } from './ghostText/telemetry';
+import { ICompletionsLogTargetService } from './logger';
 import { ITextDocument, TextDocumentContents } from './textDocument';
 
 type GetInlineCompletionsOptions = Partial<GetGhostTextOptions> & {
@@ -18,11 +19,13 @@ type GetInlineCompletionsOptions = Partial<GetGhostTextOptions> & {
 };
 
 async function getInlineCompletionsResult(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	completionState: CompletionState,
 	token?: CancellationToken,
 	options: GetInlineCompletionsOptions = {}
 ): Promise<GhostTextResultWithTelemetry<CopilotCompletion[]>> {
+	const instantiationService = accessor.get(IInstantiationService);
+	const speculativeRequestCache = accessor.get(ICompletionsSpeculativeRequestCache);
 	let lineLengthIncrease = 0;
 	// The golang.go extension (and quite possibly others) uses snippets for function completions, which collapse down
 	// to look like empty function calls (e.g., `foo()`) in selectedCompletionInfo.text.  Injecting that directly into
@@ -32,7 +35,7 @@ async function getInlineCompletionsResult(
 		lineLengthIncrease = completionState.position.character - options.selectedCompletionInfo.range.end.character;
 	}
 
-	const result = await getGhostText(ctx, completionState, token, options);
+	const result = await instantiationService.invokeFunction(getGhostText, completionState, token, options);
 	if (result.type !== 'success') { return result; }
 	const [resultArray, resultType] = result.value;
 
@@ -44,10 +47,9 @@ async function getInlineCompletionsResult(
 		};
 	}
 
-	const index = setLastShown(ctx, completionState.textDocument, completionState.position, resultType);
+	const index = instantiationService.invokeFunction(setLastShown, completionState.textDocument, completionState.position, resultType);
 
 	const completions = completionsFromGhostTextResults(
-		ctx,
 		resultArray,
 		resultType,
 		completionState.textDocument,
@@ -72,8 +74,8 @@ async function getInlineCompletionsResult(
 
 		// Cache speculative request to be triggered when telemetryShown is called
 		const specOpts = { isSpeculative: true, opportunityId: options.opportunityId };
-		const fn = () => getGhostText(ctx, completionState, undefined, specOpts);
-		ctx.get(SpeculativeRequestCache).set(completions[0].clientCompletionId, fn);
+		const fn = () => instantiationService.invokeFunction(getGhostText, completionState, undefined, specOpts);
+		speculativeRequestCache.set(completions[0].clientCompletionId, fn);
 	}
 
 	const value = completions.map(completion => {
@@ -85,19 +87,20 @@ async function getInlineCompletionsResult(
 }
 
 export async function getInlineCompletions(
-	ctx: ICompletionsContextService,
+	accessor: ServicesAccessor,
 	textDocument: ITextDocument,
 	position: Position,
 	token?: CancellationToken,
 	options: Exclude<Partial<GetInlineCompletionsOptions>, 'promptOnly'> = {}
 ): Promise<CopilotCompletion[] | undefined> {
-	logCompletionLocation(ctx, textDocument, position);
+	const instantiationService = accessor.get(IInstantiationService);
+	logCompletionLocation(accessor.get(ICompletionsLogTargetService), textDocument, position);
 
-	const result = await getInlineCompletionsResult(ctx, createCompletionState(textDocument, position), token, options);
-	return handleGhostTextResultTelemetry(ctx, result);
+	const result = await getInlineCompletionsResult(accessor, createCompletionState(textDocument, position), token, options);
+	return instantiationService.invokeFunction(handleGhostTextResultTelemetry, result);
 }
 
-function logCompletionLocation(ctx: ICompletionsContextService, textDocument: TextDocumentContents, position: Position) {
+function logCompletionLocation(logTarget: ICompletionsLogTargetService, textDocument: TextDocumentContents, position: Position) {
 	const prefix = textDocument.getText({
 		start: { line: Math.max(position.line - 1, 0), character: 0 },
 		end: position,
@@ -111,7 +114,7 @@ function logCompletionLocation(ctx: ICompletionsContextService, textDocument: Te
 	});
 
 	logger.debug(
-		ctx,
+		logTarget,
 		`Requesting for ${textDocument.uri} at ${position.line}:${position.character}`,
 		`between ${JSON.stringify(prefix)} and ${JSON.stringify(suffix)}.`
 	);

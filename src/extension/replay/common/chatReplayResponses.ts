@@ -20,23 +20,23 @@ export type FileEdits = {
 	};
 }
 
-type ToolStep = {
+export type ToolStep = {
 	kind: 'toolCall';
 	id: string;
 	line: number;
-	args: { [key: string]: any };
+	args: { [key: string]: unknown };
 	toolName: string;
 	edits: FileEdits[];
 	results: string[];
 };
 
-type UserQuery = {
+export type UserQuery = {
 	kind: 'userQuery';
 	line: number;
 	query: string;
 };
 
-type Request = {
+export type ModelRequest = {
 	kind: 'request';
 	id: string;
 	line: number;
@@ -44,7 +44,7 @@ type Request = {
 	result: string;
 }
 
-export type ChatStep = UserQuery | Request | ToolStep;
+export type ChatStep = UserQuery | ModelRequest | ToolStep;
 
 export class ChatReplayResponses {
 	private pendingRequests: DeferredPromise<ChatStep | 'finished'>[] = [];
