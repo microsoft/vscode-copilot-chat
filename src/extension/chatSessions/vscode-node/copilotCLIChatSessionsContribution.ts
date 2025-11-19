@@ -178,7 +178,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		return diskSessions;
 	}
 
-	private async _toChatSessionItem(session: { id: string; label: string; timestamp: Date; status?: vscode.ChatSessionStatus }): Promise<vscode.ChatSessionItem> {
+	private async _toChatSessionItem(session: { id: string; label: string; startTime: Date; endTime?: Date; status?: vscode.ChatSessionStatus }): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(session.id);
 		const worktreePath = this.worktreeManager.getWorktreePath(session.id);
 		const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.id);
@@ -206,7 +206,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			label,
 			description,
 			tooltip: tooltipLines.join('\n'),
-			timing: { startTime: session.timestamp.getTime() },
+			timing: { startTime: session.startTime.getTime(), endTime: session.endTime?.getTime() },
 			statistics,
 			status
 		} satisfies vscode.ChatSessionItem;
