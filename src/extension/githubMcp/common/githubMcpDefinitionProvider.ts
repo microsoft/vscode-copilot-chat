@@ -92,7 +92,7 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		];
 	}
 
-	async resolveMcpServerDefinition(server: McpHttpServerDefinition, token: CancellationToken): Promise<McpHttpServerDefinition | undefined> {
+	async resolveMcpServerDefinition(server: McpHttpServerDefinition, token: CancellationToken): Promise<McpHttpServerDefinition> {
 		const session = await this.authenticationService.getPermissiveGitHubSession({
 			createIfNone: {
 				detail: l10n.t('Additional permissions are required to use GitHub MCP Server'),

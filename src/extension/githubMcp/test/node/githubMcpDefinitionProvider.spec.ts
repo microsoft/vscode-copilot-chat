@@ -46,7 +46,10 @@ class TestAuthenticationService extends BaseAuthenticationService {
 		return Promise.resolve(this._anyGitHubSession);
 	}
 
-	getPermissiveGitHubSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+	getPermissiveGitHubSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+		if (options?.createIfNone && !this._permissiveGitHubSession) {
+			throw new Error('No permissive GitHub session available');
+		}
 		return Promise.resolve(this._permissiveGitHubSession);
 	}
 
@@ -228,20 +231,21 @@ describe('GitHubMcpDefinitionProvider', () => {
 	});
 
 	describe('resolveMcpServerDefinition', () => {
-		test('adds authorization header when permissive token is available', () => {
+		test('adds authorization header when permissive token is available', async () => {
 			const definitions = provider.provideMcpServerDefinitions();
-			const resolved = provider.resolveMcpServerDefinition(definitions[0], CancellationToken.None);
+			const resolved = await provider.resolveMcpServerDefinition(definitions[0], CancellationToken.None);
 
 			expect(resolved).toBeDefined();
-			expect(resolved!.headers['Authorization']).toBe('Bearer test-token');
+			expect(resolved.headers['Authorization']).toBe('Bearer test-token');
 		});
 
-		test('returns undefined when no permissive token is available', async () => {
+		test('throws when no permissive token is available and session cannot be created', async () => {
 			const providerWithoutToken = await createProvider({ hasPermissiveToken: false });
 			const definitions = providerWithoutToken.provideMcpServerDefinitions();
-			const resolved = providerWithoutToken.resolveMcpServerDefinition(definitions[0], CancellationToken.None);
 
-			expect(resolved).toBeUndefined();
+			// Since the mock returns undefined and the implementation uses session!.accessToken,
+			// this will throw when trying to access accessToken on undefined
+			await expect(providerWithoutToken.resolveMcpServerDefinition(definitions[0], CancellationToken.None)).rejects.toThrow();
 		});
 	});
 
