@@ -2993,7 +2993,7 @@
 							"fillHalf",
 							"fill"
 						],
-						"default": "minimal",
+						"default": "double",
 						"scope": "resource",
 						"tags": [
 							"experimental",
