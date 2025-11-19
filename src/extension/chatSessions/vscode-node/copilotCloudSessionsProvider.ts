@@ -26,13 +26,16 @@ import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 
 export type ConfirmationResult = { step: string; accepted: boolean; metadata?: ConfirmationMetadata };
-export const UncommittedChangesStep = 'uncommitted-changes';
+export const UncommittedChangesStep = 'uncommitted-changes'; // Deprecated: kept for backward compatibility
+export const DelegateConfirmationStep = 'delegate';
 
 interface ConfirmationMetadata {
 	prompt: string;
 	references?: readonly vscode.ChatPromptReference[];
 	chatContext: vscode.ChatContext;
 	autoPushAndCommit?: boolean;
+	hasUncommittedChanges?: boolean;
+	needsAuthUpgrade?: boolean;
 }
 
 export interface PullRequestInfo {
@@ -640,8 +643,49 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		results.push(...((request.rejectedConfirmationData ?? []).filter(data => !results.some(r => r.step === data.step)).map(data => ({ step: data.step, accepted: false, metadata: data?.metadata }))));
 		for (const data of results) {
 			switch (data.step) {
+				case DelegateConfirmationStep:
+					{
+						if (!data.accepted || !data.metadata) {
+							stream.markdown(vscode.l10n.t('Cloud agent request cancelled.'));
+							return {};
+						}
+
+						// Extract button text from request.prompt which has format: "ButtonText: \"ConfirmationTitle\""
+						const promptLower = request.prompt.toLowerCase();
+						const needsAuthAction = promptLower.includes('allow');
+						const needsCommitAction = promptLower.includes('commit') || promptLower.includes('push');
+
+						// Handle auth upgrade if button indicates it
+						if (needsAuthAction) {
+							try {
+								const accessToken = await this._authenticationService.getPermissiveGitHubSession({ createIfNone: true });
+								if (!accessToken) {
+									stream.markdown(vscode.l10n.t('Cloud agent authentication requirements not met. Please allow access to proceed.'));
+									return {};
+								}
+							} catch (error) {
+								this.logService.error(`Failed to get permissive GitHub session: ${error}`);
+								stream.markdown(vscode.l10n.t('Failed to authenticate. Please try again.'));
+								return {};
+							}
+						}
+
+						// Handle commit and push if button indicates it
+						if (needsCommitAction) {
+							data.metadata.autoPushAndCommit = true;
+						}
+
+						// Route to appropriate creation method
+						if (data.metadata.chatContext?.chatSessionContext?.isUntitled) {
+							await this.doUntitledCreation({ ...data.metadata, chatContext: context }, stream, token);
+						} else {
+							await this.createDelegatedChatSession({ ...data.metadata, chatContext: context }, stream, token);
+						}
+						break;
+					}
 				case 'create':
 					{
+						// Backward compatibility: keep old flow for existing sessions
 						if (!data.accepted || !data.metadata) {
 							stream.markdown(vscode.l10n.t('Cloud agent request cancelled.'));
 							return {};
@@ -655,6 +699,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					}
 				case UncommittedChangesStep:
 					{
+						// Backward compatibility: keep old flow for existing sessions
 						if (!data.accepted || !data.metadata) {
 							stream.markdown(vscode.l10n.t('Cloud agent request cancelled due to uncommitted changes.'));
 							return {};
@@ -712,6 +757,101 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			linkTag: `#${pullRequest.number}`,
 			number,
 		};
+	}
+
+	/**
+	 * Prepares and shows a single unified confirmation that checks all prerequisites upfront
+	 * (git state, auth state) and presents dynamic buttons based on the current state.
+	 * @returns 'true' if confirmation was pushed (caller should stop processing), 'false' otherwise
+	 */
+	async prepareAndShowDelegateConfirmation(metadata: ConfirmationMetadata, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<boolean> {
+		let hasUncommittedChanges = false;
+		let needsAuthUpgrade = false;
+
+		// Check git state for uncommitted changes
+		try {
+			const repoId = await getRepoId(this._gitService);
+			if (repoId) {
+				const currentRepository = this._gitService.activeRepository.get();
+				if (currentRepository) {
+					const git = this._gitExtensionService.getExtensionApi();
+					const repo = git?.getRepository(currentRepository?.rootUri);
+					if (repo) {
+						hasUncommittedChanges = repo.state.workingTreeChanges.length > 0 || repo.state.indexChanges.length > 0;
+					}
+				}
+			}
+		} catch (error) {
+			this.logService.warn(`Failed to check git state: ${error}`);
+		}
+
+		// Check auth state - determine if permissive session upgrade is needed
+		try {
+			needsAuthUpgrade = await this._authenticationUpgradeService.shouldRequestPermissiveSessionUpgrade();
+		} catch (error) {
+			this.logService.warn(`Failed to check auth state: ${error}`);
+		}
+
+		// If auto-commit is enabled and we have changes, skip git-related confirmation
+		if (hasUncommittedChanges && this.autoCommitAndPushEnabled) {
+			hasUncommittedChanges = false;
+			metadata.autoPushAndCommit = true;
+		}
+
+		// Build confirmation message and buttons based on state
+		let confirmationTitle: string;
+		let confirmationMessage: string;
+		let buttons: string[];
+
+		if (!hasUncommittedChanges && !needsAuthUpgrade) {
+			// Simple case: no special requirements
+			confirmationTitle = vscode.l10n.t('Delegate to cloud agent');
+			confirmationMessage = this.DELEGATE_MODAL_DETAILS;
+			buttons = [vscode.l10n.t('Delegate'), vscode.l10n.t('Cancel')];
+		} else if (hasUncommittedChanges && !needsAuthUpgrade) {
+			// Only uncommitted changes
+			confirmationTitle = vscode.l10n.t('Delegate to cloud agent');
+			confirmationMessage = vscode.l10n.t('You have uncommitted changes in your workspace. Consider committing them if you would like to include them in the cloud agent\'s work.');
+			buttons = [
+				vscode.l10n.t('Commit and Delegate'),
+				vscode.l10n.t('Delegate without committing'),
+				vscode.l10n.t('Cancel')
+			];
+		} else if (!hasUncommittedChanges && needsAuthUpgrade) {
+			// Only auth upgrade needed
+			confirmationTitle = vscode.l10n.t('Delegate to cloud agent');
+			confirmationMessage = vscode.l10n.t('GitHub Copilot Cloud Agent requires access to your repositories on GitHub for handling requests.');
+			buttons = [
+				vscode.l10n.t('Allow and Delegate'),
+				vscode.l10n.t('Cancel')
+			];
+		} else {
+			// Both uncommitted changes and auth upgrade needed
+			confirmationTitle = vscode.l10n.t('Delegate to cloud agent');
+			confirmationMessage = vscode.l10n.t('You have uncommitted changes and GitHub Copilot Cloud Agent requires access to your repositories.');
+			buttons = [
+				vscode.l10n.t('Commit and Allow'),
+				vscode.l10n.t('Allow without committing'),
+				vscode.l10n.t('Cancel')
+			];
+		}
+
+		// Store state in metadata for later processing
+		metadata.hasUncommittedChanges = hasUncommittedChanges;
+		metadata.needsAuthUpgrade = needsAuthUpgrade;
+
+		// Show unified confirmation
+		stream.confirmation(
+			confirmationTitle,
+			confirmationMessage,
+			{
+				step: DelegateConfirmationStep,
+				metadata: metadata satisfies ConfirmationMetadata,
+			},
+			buttons
+		);
+
+		return true; // Confirmation was pushed
 	}
 
 	/**
@@ -830,6 +970,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+		// Handle confirmation responses (both old and new flow)
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
 			const findAuthConfirmRequest = request.acceptedConfirmationData?.find(ref => ref?.authPermissionPrompted);
 			const findAuthRejectRequest = request.rejectedConfirmationData?.find(ref => ref?.authPermissionPrompted);
@@ -838,17 +979,20 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				return {};
 			}
 			if (findAuthConfirmRequest) {
+				// Backward compatibility: handle old auth confirmations
 				const result = await this._authenticationUpgradeService.handleConfirmationRequestWithContext(stream, request, context.history);
 				request = result.request;
 				context = result.context ?? context;
 			} else {
+				// Handle both new and old confirmation flows
 				return await this.handleConfirmationData(request, stream, context, token);
 			}
 		}
 
+		// Check if user has permissive token (only required for new sessions, not follow-ups)
 		const accessToken = this._authenticationService.permissiveGitHubSession;
-		if (!accessToken) {
-			// Otherwise, show the permissive session upgrade prompt because it's required
+		if (!accessToken && !context.chatSessionContext) {
+			// For new sessions without token, show auth upgrade in chat (old flow for backward compatibility)
 			this._authenticationUpgradeService.showPermissiveSessionUpgradeInChat(
 				stream,
 				request,
@@ -873,26 +1017,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		if (context.chatSessionContext?.isUntitled) {
 			/* Generate new cloud agent session from an 'untitled' session */
-
-			const handledUncommittedChanges = await this.tryHandleUncommittedChanges({
+			await this.prepareAndShowDelegateConfirmation({
 				prompt: request.prompt,
 				references: request.references,
 				chatContext: context
 			}, stream, token);
-
-			// If uncommitted changes were detected and a confirmation was shown,
-			// don't proceed with creation yet - wait for user response
-			if (handledUncommittedChanges) {
-				return {};
-			}
-
-			const { prompt, references } = request;
-			await this.doUntitledCreation({
-				prompt,
-				references,
-				chatContext: context,
-			}, stream, token);
-
+			return {};
 		} else if (context.chatSessionContext) {
 			/* Follow up to an existing cloud agent session */
 			try {
@@ -956,19 +1086,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		} else {
 			/* @copilot invoked from a 'normal' chat or 'cloud button' */
-			stream.confirmation(
-				vscode.l10n.t('Delegate to cloud agent'),
-				this.DELEGATE_MODAL_DETAILS,
-				{
-					step: 'create',
-					metadata: {
-						prompt: request.prompt,
-						references: request.references,
-						chatContext: context,
-					} satisfies ConfirmationMetadata
-				},
-				['Delegate', 'Cancel']
-			);
+			await this.prepareAndShowDelegateConfirmation({
+				prompt: request.prompt,
+				references: request.references,
+				chatContext: context
+			}, stream, token);
+			return {};
 		}
 	}
 
