@@ -319,7 +319,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
 		const request = new TestChatRequest('Apply');
-		(request as any).acceptedConfirmationData = [{ step: 'uncommitted-changes', metadata: { prompt: 'delegate work', history: 'hist' } }];
+		(request as any).acceptedConfirmationData = [{ step: 'uncommitted-changes', metadata: { prompt: 'delegate work' } }];
 		const context = createChatContext(sessionId, false);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
@@ -336,7 +336,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(sdkSession.emittedEvents[1].event).toBe('assistant.message');
 		expect(sdkSession.emittedEvents[1].content).toContain('pr://2');
 		// Cloud provider used with provided metadata
-		expect(cloudProvider.createDelegatedChatSession).toHaveBeenCalledWith({ prompt: 'delegate work', history: 'hist', chatContext: context }, expect.anything(), token);
+		expect(cloudProvider.createDelegatedChatSession).toHaveBeenCalledWith({ prompt: 'delegate work', chatContext: context }, expect.anything(), token);
 	});
 
 	it('handleConfirmationData cancels when uncommitted-changes rejected', async () => {
