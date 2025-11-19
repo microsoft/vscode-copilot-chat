@@ -8,7 +8,7 @@ import { DocumentSelector, Position } from 'vscode-languageserver-protocol';
 import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from '../../extension/completions-core/vscode-node/bridge/src/completionsTelemetryServiceBridge';
 import { CopilotExtensionStatus, ICompletionsExtensionStatus } from '../../extension/completions-core/vscode-node/extension/src/extensionStatus';
 import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from '../../extension/completions-core/vscode-node/lib/src/auth/copilotTokenManager';
-import { ICompletionsCitationManager, NoOpCitationManager } from '../../extension/completions-core/vscode-node/lib/src/citationManager';
+import { ICompletionsCitationManager, IPCitationDetail, IPDocumentCitation } from '../../extension/completions-core/vscode-node/lib/src/citationManager';
 import { CompletionNotifier, ICompletionsNotifierService } from '../../extension/completions-core/vscode-node/lib/src/completionNotifier';
 import { ICompletionsObservableWorkspace } from '../../extension/completions-core/vscode-node/lib/src/completionsObservableWorkspace';
 import { BuildInfo, BuildType, DefaultsOnlyConfigProvider, EditorInfo, EditorPluginInfo, ICompletionsConfigProvider, ICompletionsEditorAndPluginInfo, InMemoryConfigProvider } from '../../extension/completions-core/vscode-node/lib/src/config';
@@ -95,7 +95,7 @@ import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequest
 import { IRequestLogger } from '../../platform/requestLogger/node/requestLogger';
 import { ISimulationTestContext, NulSimulationTestContext } from '../../platform/simulationTestContext/common/simulationTestContext';
 import { ISnippyService, NullSnippyService } from '../../platform/snippy/common/snippyService';
-import { IExperimentationService, NullExperimentationService, TreatmentsChangeEvent } from '../../platform/telemetry/common/nullExperimentationService';
+import { IExperimentationService, TreatmentsChangeEvent } from '../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 import { unwrapEventNameFromPrefix } from '../../platform/telemetry/node/azureInsightsReporter';
@@ -104,7 +104,7 @@ import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspac
 import { InstantiationServiceBuilder } from '../../util/common/services';
 import { CancellationToken } from '../../util/vs/base/common/cancellation';
 import { Emitter } from '../../util/vs/base/common/event';
-import { Disposable } from '../../util/vs/base/common/lifecycle';
+import { Disposable, IDisposable } from '../../util/vs/base/common/lifecycle';
 import { IObservableWithChange } from '../../util/vs/base/common/observableInternal';
 import { URI } from '../../util/vs/base/common/uri';
 import { generateUuid } from '../../util/vs/base/common/uuid';
@@ -572,6 +572,12 @@ export interface INotificationSender {
 	showWarningMessage(message: string, ...actions: IActionItem[]): Promise<IActionItem | undefined>;
 }
 
+export type IIPCitationDetail = IPCitationDetail;
+export type IIPDocumentCitation = IPDocumentCitation;
+export interface IInlineCompletionsCitationHanlder {
+	handleIPCodeCitation(citation: IIPDocumentCitation): Promise<void>;
+}
+
 
 export interface IInlineCompletionsProviderOptions {
 	readonly fetcher: IFetcher;
@@ -591,9 +597,10 @@ export interface IInlineCompletionsProviderOptions {
 	readonly editorSession: IEditorSession;
 	readonly notificationSender: INotificationSender;
 	readonly ignoreService?: IIgnoreService;
-	readonly experimentationService?: IExperimentationService;
+	readonly waitForTreatmentVariables?: boolean;
 	readonly endpointProvider: IEndpointProvider;
 	readonly capiClientService: ICAPIClientService;
+	readonly citationHandler?: IInlineCompletionsCitationHanlder;
 }
 
 export type IGetInlineCompletionsOptions = Exclude<Partial<GetGhostTextOptions>, 'promptOnly'> & {
@@ -601,20 +608,31 @@ export type IGetInlineCompletionsOptions = Exclude<Partial<GetGhostTextOptions>,
 };
 
 export interface IInlineCompletionsProvider {
+	updateTreatmentVariables(variables: Record<string, boolean | number | string>): void;
 	getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined>;
 	dispose(): void;
 }
 
 export function createInlineCompletionsProvider(options: IInlineCompletionsProviderOptions): IInlineCompletionsProvider {
 	const svc = setupCompletionServices(options);
-	return new InlineCompletionsProvider(svc);
+	return svc.createInstance(InlineCompletionsProvider);
 }
 
 class InlineCompletionsProvider extends Disposable implements IInlineCompletionsProvider {
 
-	constructor(private _insta: IInstantiationService) {
+	constructor(
+		@IInstantiationService private _insta: IInstantiationService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
+
+	) {
 		super();
 		this._register(_insta);
+	}
+
+	updateTreatmentVariables(variables: Record<string, boolean | number | string>) {
+		if (this._expService instanceof SimpleExperimentationService) {
+			this._expService.updateTreatmentVariables(variables);
+		}
 	}
 
 	async getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined> {
@@ -659,7 +677,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(IAuthenticationService, authService);
 	builder.define(IIgnoreService, options.ignoreService || new NullIgnoreService());
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [new UnwrappingTelemetrySender(telemetrySender)]));
-	builder.define(IExperimentationService, options.experimentationService || new NullExperimentationService());
+	builder.define(IExperimentationService, new SyncDescriptor(SimpleExperimentationService, [options.waitForTreatmentVariables]));
 	builder.define(IEndpointProvider, options.endpointProvider);
 	builder.define(ICAPIClientService, options.capiClientService);
 	builder.define(ICompletionsTelemetryService, new SyncDescriptor(CompletionsTelemetryServiceBridge));
@@ -740,8 +758,15 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(ICompletionsFileSystemService, new LocalFileSystem());
 	builder.define(ICompletionsContextProviderRegistryService, new SyncDescriptor(CachedContextProviderRegistry, [CoreContextProviderRegistry, (_: IInstantiationService, sel: DocumentSelector, docCtx: DocumentContext) => options.contextProviderMatch(sel, docCtx)]));
 	builder.define(ICompletionsPromiseQueueService, new PromiseQueue());
-	// TODO: clients should be able to receive citations
-	builder.define(ICompletionsCitationManager, new NoOpCitationManager());
+	builder.define(ICompletionsCitationManager, new class implements ICompletionsCitationManager {
+		declare _serviceBrand: undefined;
+		register(): IDisposable { return Disposable.None; }
+		async handleIPCodeCitation(citation: IPDocumentCitation): Promise<void> {
+			if (options.citationHandler) {
+				return await options.citationHandler.handleIPCodeCitation(citation);
+			}
+		}
+	});
 	builder.define(ICompletionsContextProviderService, new ContextProviderStatistics());
 	try {
 		builder.define(ICompletionsPromptFactoryService, new SyncDescriptor(CompletionsPromptFactory));
