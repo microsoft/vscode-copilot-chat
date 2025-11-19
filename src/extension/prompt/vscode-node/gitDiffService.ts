@@ -114,18 +114,29 @@ export class GitDiffService implements IGitDiffService {
 		try {
 			const buffer = await workspace.fs.readFile(resource);
 			const relativePath = path.relative(repository.rootUri.fsPath, resource.fsPath);
+			const content = buffer.toString();
+			const lines = content.split('\n');
+			if (content.endsWith('\n')) {
+				// Prevent an extra empty line at the end
+				lines.pop();
+			}
 
 			// Header
 			patch.push(`diff --git a/${relativePath} b/${relativePath}`);
+			patch.push('new file mode 100644');
 
 			// Add original/modified file paths
 			patch.push('--- /dev/null', `+++ b/${relativePath}`);
 
 			// Add range header
-			patch.push(`@@ -0,0 +1,${buffer.length} @@`);
+			patch.push(`@@ -0,0 +1,${lines.length} @@`);
 
 			// Add content
-			patch.push(...buffer.toString().split('\n').map(line => `+${line}`));
+			patch.push(...lines.map(line => `+${line}`));
+
+			if (content.length > 0 && !content.endsWith('\n')) {
+				patch.push('\\ No newline at end of file');
+			}
 		} catch (err) {
 			console.error(err, `Failed to generate patch file for untracked file: ${resource.toString()}`);
 		}
