@@ -437,6 +437,7 @@ export default tseslint.config(
 			'./src/extension/test/vscode-node/sanity.sanity-test.ts',
 			'./src/extension/test/vscode-node/session.test.ts',
 			'./src/extension/tools/common/toolSchemaNormalizer.ts',
+			'./src/extension/tools/common/toolsService.ts',
 			'./src/extension/typescriptContext/common/serverProtocol.ts',
 			'./src/extension/typescriptContext/serverPlugin/src/common/baseContextProviders.ts',
 			'./src/extension/typescriptContext/serverPlugin/src/common/contextProvider.ts',
