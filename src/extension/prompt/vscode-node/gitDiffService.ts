@@ -141,6 +141,6 @@ export class GitDiffService implements IGitDiffService {
 			console.error(err, `Failed to generate patch file for untracked file: ${resource.toString()}`);
 		}
 
-		return patch.join('\n');
+		return patch.join('\n') + '\n';
 	}
 }
