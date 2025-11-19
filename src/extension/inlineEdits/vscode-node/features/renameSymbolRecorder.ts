@@ -29,18 +29,18 @@ export class RenameSymbolRecorder implements IDisposable {
 		this.changeListener.dispose();
 	}
 
-	public proposeRenameRefactoring(document: vscode.TextDocument, position: vscode.Position, completionItem: vscode.InlineCompletionItem): void {
-		const wordRange = document.getWordRangeAtPosition(position);
-		if (wordRange === undefined) {
+	public async proposeRenameRefactoring(document: vscode.TextDocument, position: vscode.Position, completionItem: vscode.InlineCompletionItem): Promise<void> {
+		const nesRange = completionItem.range;
+		if (nesRange === undefined || nesRange.start.line !== nesRange.end.line) {
 			return;
 		}
-		const oldName = document.getText(wordRange);
-		const range = completionItem.range;
-		if (range === undefined || range.start.line !== range.end.line) {
+		const tokenInfo = await vscode.languages.getTokenInformationAtPosition(document, nesRange.start);
+		if (tokenInfo.type !== vscode.StandardTokenType.Other) {
 			return;
 		}
-		const line = document.lineAt(range.start.line);
-		const newName = line.text.substring(range.start.character, range.end.character);
+		const oldName = document.getText(tokenInfo.range);
+		const line = document.lineAt(nesRange.start.line);
+		const newName = line.text.substring(nesRange.start.character, nesRange.end.character);
 
 		const command: vscode.Command = {
 			command: renameSymbolCommandId,
