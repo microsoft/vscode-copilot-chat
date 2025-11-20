@@ -71,7 +71,7 @@ class FakeGitService extends mock<IGitService>() {
 // Cloud provider fake for delegate scenario
 class FakeCloudProvider extends mock<CopilotCloudSessionsProvider>() {
 	override delegate = vi.fn(async () => ({
-		uri: vscode.Uri.parse('pr://1'),
+		uri: vscode.Uri.from({ scheme: 'copilot-cloud-agent', path: '/1' }),
 		title: 'PR Title',
 		description: 'PR Description',
 		author: 'Test Author',
