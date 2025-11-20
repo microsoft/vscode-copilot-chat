@@ -40,7 +40,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 		});
 	}
 
-	private readonly _copilotTools: Map<ToolName, Lazy<ICopilotTool<any>>>;
+	private readonly _copilotTools: Map<ToolName, Lazy<ICopilotTool<unknown>>>;
 	get copilotTools() {
 		return new Map(Iterable.map(this._copilotTools.entries(),
 			([name, tool]) => [name, tool.value]));
@@ -115,7 +115,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 		throw new Error('unknown tool: ' + name);
 	}
 
-	override getCopilotTool(name: string): ICopilotTool<any> | undefined {
+	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
 		const tool = this._copilotTools.get(name as ToolName)?.value;
 		return tool;
 	}

@@ -3,9 +3,25 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { OutputMode } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
-import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../../platform/networking/common/networking';
+import { ITokenizer as IUtilTokenizer, TokenizerType } from '../../../../util/common/tokenizer';
+
+/**
+ * Creates a mock tokenizer for testing
+ */
+function createMockTokenizer(): IUtilTokenizer {
+	const mockTokenizer: IUtilTokenizer = {
+		mode: OutputMode.Raw,
+		tokenLength: async () => 0,
+		countMessageTokens: async () => 0,
+		countMessagesTokens: async () => 0,
+		countToolTokens: async () => 0,
+	};
+	return mockTokenizer;
+}
 
 /**
  * Creates a mock endpoint provider for search tool tests
@@ -24,7 +40,20 @@ export function createMockEndpointProvider(modelFamily: string): IEndpointProvid
 		} as IChatEndpoint),
 		getAllChatEndpoints: async () => [],
 		getAllCompletionModels: async () => [],
-		getEmbeddingsEndpoint: async () => ({} as any),
+		getEmbeddingsEndpoint: async () => ({
+			urlOrRequestMetadata: 'https://mock-embeddings-endpoint',
+			acquireTokenizer: createMockTokenizer,
+			modelMaxPromptTokens: 1000,
+			modelMaxOutputTokens: 1000,
+			model: 'test-embeddings-model',
+			family: modelFamily,
+			showInModelPicker: true,
+			embeddingDimensions: 768,
+			maxBatchSize: 16,
+			name: 'Test Embeddings Model',
+			version: '1.0',
+			tokenizer: TokenizerType.CL100K
+		} as IEmbeddingsEndpoint),
 	} as IEndpointProvider;
 }
 

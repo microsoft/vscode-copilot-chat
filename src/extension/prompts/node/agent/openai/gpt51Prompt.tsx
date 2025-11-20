@@ -158,7 +158,7 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				- Do not use one-letter variable names unless explicitly requested.<br />
 				- NEVER output inline citations like "【F:README.md†L5-L14】" in your outputs. The UI is not able to render these so they will just be broken in the UI. Instead, if you output valid filepaths, users will be able to click on them to open the files in their editor.<br />
 				- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
-				{tools[ToolName.RunTests] && <>- Use the {ToolName.RunTests} tool to run tests instead of running terminal commands.<br /></>}
+				{tools[ToolName.CoreRunTest] && <>- Use the {ToolName.CoreRunTest} tool to run tests instead of running terminal commands.<br /></>}
 			</Tag>
 			<Tag name='validating_work'>
 				If the codebase has tests or the ability to build or run, consider using them to verify changes once your work is complete.<br />
