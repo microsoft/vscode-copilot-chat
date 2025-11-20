@@ -319,7 +319,7 @@ class TelemetrySender {
 		this.logService.debug(`TypeScript Copilot context request ${context.requestId} got cancelled.`);
 	}
 
-	public sendActivationTelemetry(response: protocol.PingResponse | undefined, error: any | undefined): void {
+	public sendActivationTelemetry(response: protocol.PingResponse | undefined, error: unknown | undefined): void {
 		if (response !== undefined) {
 			const body: protocol.PingResponse['body'] | undefined = response?.body;
 			if (body?.kind === 'ok') {
@@ -346,9 +346,10 @@ class TelemetrySender {
 				this.sendUnknownPingResponseTelemetry(ErrorLocation.Server, ErrorPart.ServerPlugin, response);
 			}
 		} else if (error !== undefined) {
-			if (TypeScriptServerError.is(error)) {
+			const isError = error instanceof Error;
+			if (isError && TypeScriptServerError.is(error)) {
 				this.sendActivationFailedTelemetry(ErrorLocation.Server, ErrorPart.ServerPlugin, error.response.message ?? error.message, undefined, error.version.displayName);
-			} else if (error instanceof Error) {
+			} else if (isError) {
 				this.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.ServerPlugin, error.message, error.stack);
 			} else {
 				this.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.ServerPlugin, 'Unknown error', undefined);
@@ -1822,7 +1823,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			} else {
 				this.unregister();
 			}
-		}).catch((error: any) => this.logService.error('Error checking TypeScript context provider registration:', error));
+		}).catch((error) => this.logService.error(error, 'Error checking TypeScript context provider registration'));
 	}
 
 	private async register(): Promise<void> {
@@ -1881,7 +1882,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 							convertedItems.push(converted);
 						}
 						return Promise.resolve(convertedItems);
-					} else if (typeof (items as any)[Symbol.asyncIterator] === 'function') {
+					} else if (typeof (items as AsyncIterable<ContextItem>)[Symbol.asyncIterator] === 'function') {
 						return mapAsyncIterable(items as AsyncIterable<ContextItem>, (item) => self.convertItem(item));
 					} else if (items instanceof Promise) {
 						return items.then((resolvedItems) => {
@@ -2025,8 +2026,8 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 	private async getCopilotApi(): Promise<Copilot.ContextProviderApiV1 | undefined> {
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
-			this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
-			this.logService.error('Copilot extension not found');
+			// this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
+			// this.logService.error('Copilot extension not found');
 			return undefined;
 		}
 		try {
