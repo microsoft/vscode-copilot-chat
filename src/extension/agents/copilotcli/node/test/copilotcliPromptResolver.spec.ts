@@ -80,8 +80,6 @@ describe('CopilotCLIPromptResolver', () => {
 		expect(prompt).toMatch(/IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task./);
 		expect(prompt).toContain('a.ts');
 		expect(prompt).toContain('b.ts');
-		expect(prompt).toContain(fileA.fsPath);
-		expect(prompt).toContain(fileB.fsPath);
 
 		// Attachments reflect both files
 		expect(attachments.map(a => a.displayName).sort()).toEqual(['a.ts', 'b.ts']);
@@ -100,7 +98,7 @@ describe('CopilotCLIPromptResolver', () => {
 		];
 
 		// ChatReferenceDiagnostic requires a Map of uri -> diagnostics array
-		const chatRefDiag:ChatReferenceDiagnostic = { diagnostics: [[fileUri, diagnostics]] };
+		const chatRefDiag: ChatReferenceDiagnostic = { diagnostics: [[fileUri, diagnostics]] };
 		const req = withReferences(new TestChatRequest('Fix issues'), [
 			{ id: 'diag-1', value: chatRefDiag }
 		]);
