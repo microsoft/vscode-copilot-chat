@@ -35,7 +35,7 @@ export class LanguageModelServer implements ILanguageModelServer {
 
 	private server: http.Server;
 	private config: ILanguageModelServerConfig;
-	private adapterFactories: Map<string, IProtocolAdapterFactory>;
+	protected adapterFactories: Map<string, IProtocolAdapterFactory>;
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -47,6 +47,8 @@ export class LanguageModelServer implements ILanguageModelServer {
 		};
 		this.adapterFactories = new Map();
 		this.adapterFactories.set('/v1/messages', new AnthropicAdapterFactory());
+		// Used only in stests.
+		// this.adapterFactories.set('/chat/completions', new OpenAIAdapterFactoryForSTests());
 
 		this.server = this.createServer();
 	}
@@ -93,6 +95,12 @@ export class LanguageModelServer implements ILanguageModelServer {
 			if (req.method === 'GET' && req.url === '/') {
 				res.writeHead(200);
 				res.end('Hello from LanguageModelServer');
+				return;
+			}
+
+			if (req.method === 'GET' && req.url === '/models') {
+				res.writeHead(200, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify({ data: [] }));
 				return;
 			}
 
@@ -224,7 +232,7 @@ export class LanguageModelServer implements ILanguageModelServer {
 						return undefined;
 					},
 					location: ChatLocation.Agent,
-					requestOptions: parsedRequest.options,
+					requestOptions: { ...parsedRequest.options, stream: false },
 					userInitiatedRequest,
 					telemetryProperties: {
 						messageSource: `lmServer-${adapter.name}`
