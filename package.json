@@ -2690,6 +2690,22 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.githubMcpServer.readonly": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.githubMcpServer.readonly%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.githubMcpServer.lockdown": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.githubMcpServer.lockdown%",
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.imageUpload.enabled": {
 						"type": "boolean",
 						"default": true,

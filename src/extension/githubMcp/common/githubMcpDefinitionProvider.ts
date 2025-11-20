@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type { CancellationToken, McpHttpServerDefinition, McpServerDefinitionProvider } from 'vscode';
 import { authProviderId, IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { AuthProviderId, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Event } from '../../../util/vs/base/common/event';
 import { URI } from '../../../util/vs/base/common/uri';
-import * as l10n from '@vscode/l10n';
 
 const EnterpriseURLConfig = 'github-enterprise.uri';
 
@@ -27,6 +27,16 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 				// If they change the toolsets
 				if (e.affectsConfiguration(ConfigKey.GitHubMcpToolsets.fullyQualifiedId)) {
 					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub MCP toolsets.');
+					return true;
+				}
+				// If they change readonly mode
+				if (e.affectsConfiguration(ConfigKey.GitHubMcpReadonly.fullyQualifiedId)) {
+					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub MCP readonly mode.');
+					return true;
+				}
+				// If they change lockdown mode
+				if (e.affectsConfiguration(ConfigKey.GitHubMcpLockdown.fullyQualifiedId)) {
+					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub MCP lockdown mode.');
 					return true;
 				}
 				// If they change to GHE or GitHub.com
@@ -61,6 +71,14 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		return this.configurationService.getConfig<string[]>(ConfigKey.GitHubMcpToolsets);
 	}
 
+	private get readonly(): boolean {
+		return this.configurationService.getConfig<boolean>(ConfigKey.GitHubMcpReadonly);
+	}
+
+	private get lockdown(): boolean {
+		return this.configurationService.getConfig<boolean>(ConfigKey.GitHubMcpLockdown);
+	}
+
 	private get gheConfig(): string | undefined {
 		return this.configurationService.getNonExtensionConfig<string>(EnterpriseURLConfig);
 	}
@@ -78,16 +96,33 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 	provideMcpServerDefinitions(): McpHttpServerDefinition[] {
 		const providerId = authProviderId(this.configurationService);
 		const toolsets = this.toolsets.sort().join(',');
+		const readonly = this.readonly;
+		const lockdown = this.lockdown;
+
 		const basics = providerId === AuthProviderId.GitHubEnterprise
 			? { label: 'GitHub Enterprise', uri: this.getGheUri() }
 			: { label: 'GitHub', uri: URI.parse('https://api.githubcopilot.com/mcp/') };
+
+		// Build headers object conditionally
+		const headers: Record<string, string> = {};
+		// Build version string with toolsets and flags
+		let version = toolsets ?? '0';
+		if (toolsets.length > 0) {
+			headers['X-MCP-Toolsets'] = toolsets;
+		}
+		if (readonly) {
+			headers['X-MCP-Readonly'] = 'true';
+			version += '|readonly';
+		}
+		if (lockdown) {
+			headers['X-MCP-Lockdown'] = 'true';
+			version += '|lockdown';
+		}
 		return [
 			{
 				...basics,
-				headers: {
-					'X-MCP-Toolsets': toolsets
-				},
-				version: toolsets
+				headers,
+				version
 			}
 		];
 	}

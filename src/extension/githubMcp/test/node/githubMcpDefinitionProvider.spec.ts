@@ -78,6 +78,8 @@ describe('GitHubMcpDefinitionProvider', () => {
 		authProvider?: AuthProviderId;
 		gheUri?: string;
 		toolsets?: string[];
+		readonly?: boolean;
+		lockdown?: boolean;
 		hasPermissiveToken?: boolean;
 	}): Promise<GitHubMcpDefinitionProvider> {
 		const serviceCollection = new TestingServiceCollection();
@@ -92,6 +94,12 @@ describe('GitHubMcpDefinitionProvider', () => {
 		}
 		if (configOverrides?.toolsets) {
 			await configService.setConfig(ConfigKey.GitHubMcpToolsets, configOverrides.toolsets);
+		}
+		if (configOverrides?.readonly !== undefined) {
+			await configService.setConfig(ConfigKey.GitHubMcpReadonly, configOverrides.readonly);
+		}
+		if (configOverrides?.lockdown !== undefined) {
+			await configService.setConfig(ConfigKey.GitHubMcpLockdown, configOverrides.lockdown);
 		}
 
 		serviceCollection.define(IConfigurationService, configService);
@@ -156,7 +164,7 @@ describe('GitHubMcpDefinitionProvider', () => {
 
 			const definitions = providerWithEmptyToolsets.provideMcpServerDefinitions();
 
-			expect(definitions[0].headers['X-MCP-Toolsets']).toBe('');
+			expect(definitions[0].headers['X-MCP-Toolsets']).toBeUndefined();
 		});
 
 		test('version is the sorted toolset string', async () => {
@@ -174,6 +182,88 @@ describe('GitHubMcpDefinitionProvider', () => {
 			});
 
 			expect(() => gheProviderWithoutUri.provideMcpServerDefinitions()).toThrow('GitHub Enterprise URI is not configured.');
+		});
+
+		test('includes X-MCP-Readonly header when readonly is true', async () => {
+			const readonlyProvider = await createProvider({ readonly: true });
+
+			const definitions = readonlyProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].headers['X-MCP-Readonly']).toBe('true');
+		});
+
+		test('does not include X-MCP-Readonly header when readonly is false', async () => {
+			const nonReadonlyProvider = await createProvider({ readonly: false });
+
+			const definitions = nonReadonlyProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].headers['X-MCP-Readonly']).toBeUndefined();
+		});
+
+		test('includes X-MCP-Lockdown header when lockdown is true', async () => {
+			const lockdownProvider = await createProvider({ lockdown: true });
+
+			const definitions = lockdownProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].headers['X-MCP-Lockdown']).toBe('true');
+		});
+
+		test('does not include X-MCP-Lockdown header when lockdown is false', async () => {
+			const nonLockdownProvider = await createProvider({ lockdown: false });
+
+			const definitions = nonLockdownProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].headers['X-MCP-Lockdown']).toBeUndefined();
+		});
+
+		test('includes both readonly and lockdown headers when both are true', async () => {
+			const bothProvider = await createProvider({ readonly: true, lockdown: true });
+
+			const definitions = bothProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].headers['X-MCP-Readonly']).toBe('true');
+			expect(definitions[0].headers['X-MCP-Lockdown']).toBe('true');
+		});
+
+		test('version includes readonly flag when readonly is true', async () => {
+			const readonlyProvider = await createProvider({ readonly: true });
+
+			const definitions = readonlyProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].version).toBe('default|readonly');
+		});
+
+		test('version includes lockdown flag when lockdown is true', async () => {
+			const lockdownProvider = await createProvider({ lockdown: true });
+
+			const definitions = lockdownProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].version).toBe('default|lockdown');
+		});
+
+		test('version includes both flags when both readonly and lockdown are true', async () => {
+			const bothProvider = await createProvider({ readonly: true, lockdown: true });
+
+			const definitions = bothProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].version).toBe('default|readonly|lockdown');
+		});
+
+		test('version is just toolsets when readonly and lockdown are false', async () => {
+			const toolsets = ['issues', 'pull_requests'];
+			const normalProvider = await createProvider({ toolsets, readonly: false, lockdown: false });
+
+			const definitions = normalProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].version).toBe('issues,pull_requests');
+		});
+
+		test('version with empty toolsets and readonly', async () => {
+			const readonlyEmptyProvider = await createProvider({ toolsets: [], readonly: true });
+
+			const definitions = readonlyEmptyProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].version).toBe('|readonly');
 		});
 	});
 
@@ -218,6 +308,22 @@ describe('GitHubMcpDefinitionProvider', () => {
 
 			expect(eventFired).toBe(false);
 			disposable.dispose();
+		});
+
+		test('fires when readonly configuration changes', async () => {
+			const eventPromise = Event.toPromise(provider.onDidChangeMcpServerDefinitions);
+
+			await configService.setConfig(ConfigKey.GitHubMcpReadonly, true);
+
+			await eventPromise;
+		});
+
+		test('fires when lockdown configuration changes', async () => {
+			const eventPromise = Event.toPromise(provider.onDidChangeMcpServerDefinitions);
+
+			await configService.setConfig(ConfigKey.GitHubMcpLockdown, true);
+
+			await eventPromise;
 		});
 	});
 

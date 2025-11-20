@@ -416,5 +416,7 @@
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
 	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes",
 	"github.copilot.config.githubMcpServer.enabled": "Enable built-in support for the GitHub MCP Server.",
-	"github.copilot.config.githubMcpServer.toolsets": "Specify toolsets to use from the GitHub MCP Server."
+	"github.copilot.config.githubMcpServer.toolsets": "Specify toolsets to use from the GitHub MCP Server.",
+	"github.copilot.config.githubMcpServer.readonly": "Enable read-only mode for the GitHub MCP Server. When enabled, only read tools are available.",
+	"github.copilot.config.githubMcpServer.lockdown": "Enable lockdown mode for the GitHub MCP Server. When enabled, hides public issue details created by users without push access."
 }
