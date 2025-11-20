@@ -46,37 +46,10 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 	}
 }
 
-export interface PullRequestInfo {
-	uri: string;
-	title: string;
-	description: string;
-	author: string;
-	linkTag: string;
-	number: number;
-}
-
-export interface ICommentResult {
-	id: number;
-	url: string;
-	body: string;
-	user?: {
-		login: string;
-		url: string;
-		avatarUrl: string;
-		email: string;
-		id: string;
-		name: string;
-		specialDisplayName?: string;
-		accountType: string;
-	};
-	createdAt: string;
-	htmlUrl: string;
-	graphNodeId: string;
-}
-
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
 const BACKGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
 /**
  * Custom renderer for markdown-it that converts markdown to plain text
@@ -622,14 +595,24 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		context: vscode.ChatContext,
 		token: vscode.CancellationToken,
 		metadata: ConfirmationMetadata,
-		customAgentName?: string,
 		head_ref?: string): Promise<{ uri: vscode.Uri; title: string; description: string; author: string; linkTag: string }> {
+
+
+		await this.gitOperationsManager.validateRemoteHasBaseRef(stream);
 
 		let history: string | undefined;
 
 		if (this.hasHistoryToSummarize(context.history)) {
 			stream.progress(vscode.l10n.t('Analyzing chat history'));
 			history = await this._summarizer.provideChatSummary(context, token);
+		}
+
+		let customAgentName: string | undefined;
+		if (metadata.chatContext.chatSessionContext?.chatSessionItem.resource) {
+			customAgentName = this.sessionAgentMap.get(metadata.chatContext.chatSessionContext.chatSessionItem.resource);
+			if (customAgentName) {
+				this.logService.debug(`Using custom agent '${customAgentName}' for session ${metadata.chatContext.chatSessionContext.chatSessionItem.resource}`);
+			}
 		}
 
 		const { number, sessionId } = await this.invokeRemoteAgent(
@@ -730,28 +713,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			try {
 				stream.progress(vscode.l10n.t('Committing and pushing local changes'));
 				head_ref = await this.gitOperationsManager.commitAndPushChanges();
-				stream.markdown(vscode.l10n.t('Local changes committed and pushed to remote branch `{0}`.', head_ref));
+				stream.markdown(vscode.l10n.t('Local changes pushed to remote branch `{0}`.', head_ref));
 			} catch (error) {
 				this.logService.error(`Commit and push failed: ${error}`);
 				throw vscode.l10n.t('{0}. Commit or stash your changes and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to commit and push changes.'));
 			}
 		}
 
-		// Verify that the correct branch is pushed to the remote
-		try {
-			stream.progress(vscode.l10n.t('Verifying branch status'));
-			await this.gitOperationsManager.validateRemoteHasBaseRef();
-		} catch (error) {
-			this.logService.error(`Remote branch validation failed: ${error}`);
-			throw new Error(vscode.l10n.t('{0}. Commit or stash your changes and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to .')));
-		}
-
-		// Get custom agent
-		const customAgentName = undefined;
-
 		// Now trigger delegation
 		try {
-			await this.delegate(request, stream, context, token, metadata, customAgentName, head_ref);
+			await this.delegate(request, stream, context, token, metadata, head_ref);
 		} catch (error) {
 			this.logService.error(`Failure in delegation: ${error}`);
 			throw new Error(vscode.l10n.t('{0}', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to start cloud agent session.')));
@@ -772,22 +743,23 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
 
 
-	// private setWorkspaceContext(key: string, value: string) {
-	// 	this._extensionContext.workspaceState.update(`${this.WORKSPACE_CONTEXT_PREFIX}.${key}`, value);
-	// }
+	private setWorkspaceContext(key: string, value: string) {
+		this._extensionContext.workspaceState.update(`${this.WORKSPACE_CONTEXT_PREFIX}.${key}`, value);
+	}
 
 	private getWorkspaceContext(key: string): string | undefined {
 		return this._extensionContext.workspaceState.get<string>(`${this.WORKSPACE_CONTEXT_PREFIX}.${key}`);
 	}
 
-	// private resetWorkspaceContext() {
-	// 	const keys =
-	// 		this._extensionContext.workspaceState.keys()
-	// 			.filter(key => key.startsWith(this.WORKSPACE_CONTEXT_PREFIX));
-	// 	for (const key of keys) {
-	// 		this._extensionContext.workspaceState.update(key, undefined);
-	// 	}
-	// }
+	resetWorkspaceContext() {
+		const keys =
+			this._extensionContext.workspaceState.keys()
+				.filter(key => key.startsWith(this.WORKSPACE_CONTEXT_PREFIX));
+		for (const key of keys) {
+			this.logService.debug(`[resetWorkspaceContext] ${key}`);
+			this._extensionContext.workspaceState.update(key, undefined);
+		}
+	}
 
 	private async detectedUncommittedChanges(): Promise<boolean> {
 		const currentRepository = this._gitService.activeRepository?.get();
@@ -836,7 +808,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			if (context.chatSessionContext?.isUntitled) {
 				return; // Don't show the confirmation
 			}
-			const seenDelegationPromptBefore = this.getWorkspaceContext('seenDelegationPromptBefore');
+			const seenDelegationPromptBefore = this.getWorkspaceContext(SEEN_DELEGATION_PROMPT_KEY);
 			if (seenDelegationPromptBefore) {
 				return; // Don't show the confirmation
 			}
@@ -854,7 +826,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
-			return await this.handleConfirmationData(request, stream, context, token);
+			await this.handleConfirmationData(request, stream, context, token);
+			this.setWorkspaceContext(SEEN_DELEGATION_PROMPT_KEY, 'yes');
+			return {};
 		}
 
 		/* __GDPR__
@@ -890,9 +864,21 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						chatContext: context,
 					} satisfies ConfirmationMetadata
 				},
-				buttons);
+				buttons
+			);
 		} else {
-			// TODO: call delegate();
+			// No confirmation
+			await this.delegate(
+				request,
+				stream,
+				context,
+				token,
+				{
+					prompt: request.prompt,
+					references: request.references,
+					chatContext: context
+				} satisfies ConfirmationMetadata
+			);
 		}
 	}
 

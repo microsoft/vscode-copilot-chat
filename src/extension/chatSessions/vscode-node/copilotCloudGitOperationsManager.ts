@@ -58,8 +58,9 @@ export class CopilotCloudGitOperationsManager {
 		};
 	}
 
-	async validateRemoteHasBaseRef(): Promise<void> {
+	async validateRemoteHasBaseRef(stream: vscode.ChatResponseStream): Promise<void> {
 		const { repository, remoteName, baseRef } = await this.repoInfo();
+		stream.progress(vscode.l10n.t('Verifying branch \'{0}\' exists on remote \'{1}\'', baseRef, remoteName));
 		if (repository && remoteName && baseRef) {
 			try {
 				const remoteBranches =
