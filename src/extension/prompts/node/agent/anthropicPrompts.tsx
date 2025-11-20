@@ -99,9 +99,8 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting. Backtick code symbols (classes, functions, variables, commands). For file paths and specific code locations, defer to the linking rules in `FileLinkificationInstructions` below (do not backtick paths; use markdown links with line anchors).<br />
+				Use proper Markdown formatting. When referring to symbols (classes, methods, variables) in user's workspace wrap in backticks. For file paths and code locations, follow `FileLinkificationInstructions` (markdown links with line anchors; never backticks).<br />
 				<Tag name='example'>
-					Use backticks for identifiers: `Person`, `calculateTotal`, `config`.<br />
 					See FileLinkificationInstructions for file path link and line anchor rules and examples.
 				</Tag>
 				<FileLinkificationInstructions />
