@@ -15,6 +15,15 @@ async function copyStaticAssets(srcpaths: string[], dst: string): Promise<void> 
 	}));
 }
 
+async function fileExists(filePath: string): Promise<boolean> {
+	try {
+		await fs.promises.access(filePath, fs.constants.F_OK);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 const treeSitterGrammars: string[] = [
 	'tree-sitter-c-sharp',
 	'tree-sitter-cpp',
@@ -31,8 +40,21 @@ const treeSitterGrammars: string[] = [
 
 const REPO_ROOT = path.join(__dirname, '..');
 
+async function platformDir(): Promise<string> {
+	const distPath = 'dist/src/_internal/platform';
+	const srcPath = 'src/_internal/platform';
+	if (await fileExists(path.join(REPO_ROOT, distPath))) {
+		return distPath;
+	} else if (await fileExists(path.join(REPO_ROOT, srcPath))) {
+		return srcPath;
+	} else {
+		throw new Error('Could not find the source directory for tokenizer files');
+	}
+}
+
 async function main() {
-	const vendoredTiktokenFiles = ['dist/src/_internal/platform/tokenizer/node/cl100k_base.tiktoken', 'dist/src/_internal/platform/tokenizer/node/o200k_base.tiktoken'];
+	const platform = await platformDir();
+	const vendoredTiktokenFiles = [`${platform}/tokenizer/node/cl100k_base.tiktoken`, `${platform}/tokenizer/node/o200k_base.tiktoken`];
 
 	// copy static assets to dist
 	await copyStaticAssets([
