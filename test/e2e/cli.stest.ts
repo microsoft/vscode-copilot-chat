@@ -58,7 +58,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 			});
 		}
 
-		public async getOptions(): Promise<Pick<SessionOptions, 'authInfo' | 'copilotUrl'>> {
+		public async getOptions(): Promise<Pick<SessionOptions, 'authInfo'>> {
 			const serverConfig = await this.langModelServerConfig.value;
 
 			const url = `http://localhost:${serverConfig.port}`;
@@ -76,23 +76,22 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 					token: ghToken,
 					host: url
 				},
-				copilotUrl: url,
 			};
 		}
 	}
 
 	class TestCopilotCLISessionOptions extends CopilotCLISessionOptions {
-		constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl' | 'enableStreaming'>) {
+		constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo'>) {
 			super(options, logger);
 		}
 		override toSessionOptions() {
 			const options = super.toSessionOptions();
 			const mutableOptions = options as Mutable<typeof options>;
 			mutableOptions.authInfo = this.testOptions.authInfo ?? options.authInfo;
-			mutableOptions.copilotUrl = this.testOptions.copilotUrl ?? options.copilotUrl;
-			mutableOptions.enableStreaming = true;
+			// mutableOptions.copilotUrl = this.testOptions.copilotUrl ?? options.copilotUrl;
+			// mutableOptions.enableStreaming = true;
 			mutableOptions.skipCustomInstructions = true;
-			mutableOptions.disableHttpLogging = true;
+			// mutableOptions.disableHttpLogging = true;
 			return options;
 		}
 	}
