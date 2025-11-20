@@ -869,7 +869,7 @@ export namespace ConfigKey {
 	export const EnableAlternateGptPrompt = defineSetting<boolean>('chat.alternateGptPrompt.enabled', ConfigType.ExperimentBased, false);
 
 	/** Enable custom agents from GitHub Enterprise/Organizations */
-	export const CustomAgentsEnabled = defineSetting<boolean>('chat.customAgents.enabled', ConfigType.Simple, true);
+	export const ShowOrganizationAndEnterpriseAgents = defineSetting<boolean>('chat.customAgents.showOrganizationAndEnterpriseAgents', ConfigType.Simple, true);
 
 	export const CompletionsFetcher = defineSetting<FetcherId | undefined>('chat.completionsFetcher', ConfigType.ExperimentBased, undefined);
 	export const NextEditSuggestionsFetcher = defineSetting<FetcherId | undefined>('chat.nesFetcher', ConfigType.ExperimentBased, undefined);

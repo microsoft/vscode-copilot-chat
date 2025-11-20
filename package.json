@@ -2519,10 +2519,10 @@
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					},
-					"github.copilot.chat.customAgents.enabled": {
+					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
 						"type": "boolean",
 						"default": true,
-						"description": "%github.copilot.config.customAgents.enabled%"
+						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%"
 					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",

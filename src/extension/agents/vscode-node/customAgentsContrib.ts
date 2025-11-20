@@ -20,7 +20,7 @@ export class CustomAgentsContribution extends Disposable implements IExtensionCo
 
 		if ('registerCustomAgentsProvider' in vscode.chat) {
 			// Only register the provider if the setting is enabled
-			if (configurationService.getConfig(ConfigKey.CustomAgentsEnabled)) {
+			if (configurationService.getConfig(ConfigKey.ShowOrganizationAndEnterpriseAgents)) {
 				const provider = instantiationService.createInstance(CustomAgentsProvider);
 				this._register(vscode.chat.registerCustomAgentsProvider(provider));
 			}
