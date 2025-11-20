@@ -703,9 +703,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return {};
 		}
 
-		// DEBUG
-		stream.markdown(`Handling confirmations '${selection}' data with metadata.`);
-
 		// -- Process each button press in order of precedence
 
 		if (!selection || selection === this.CANCEL.toUpperCase() || token.isCancellationRequested) {
