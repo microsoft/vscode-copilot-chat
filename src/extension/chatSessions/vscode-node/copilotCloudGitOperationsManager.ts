@@ -89,15 +89,15 @@ export class CopilotCloudGitOperationsManager {
 				if (!hasRemoteBranch) {
 					if (this.autoCommitAndPushEnabled) {
 						this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote. Auto-pushing because autoCommitAndPush is enabled.`);
+						stream.progress(vscode.l10n.t('Pushing branch \'{0}\'', baseRef, remoteName));
 						await repository.push(remoteName, baseRef, true);
 					} else {
-						this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote.`);
-						throw new Error(vscode.l10n.t('The branch \'{0}\' does not exist on remote \'{1}\'. Please push the branch and try again.', baseRef, remoteName));
+						throw new Error('autoCommitAndPush is disabled');
 					}
 				}
 			} catch (error) {
 				this.logService.error(`Failed to verify remote branch for cloud agent: ${error instanceof Error ? error.message : String(error)}`);
-				throw new Error(vscode.l10n.t('Unable to verify that branch \'{0}\' exists on remote \'{1}\'. Please ensure the remote branch is available and try again.', baseRef, remoteName));
+				throw new Error(vscode.l10n.t('Branch \'{0}\' does not exist on remote \'{1}\'. Push the branch manually or enable \'github.copilot.chat.agent.delegate.autoCommitAndPush\'', baseRef, remoteName));
 			}
 		}
 	}
