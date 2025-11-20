@@ -137,12 +137,42 @@ describe('GitDiffService', () => {
 
 			const diffs = await gitDiffService.getChangeDiffs(mockRepository as Repository, changes);
 
-			// Empty file case: split('') gives [''], so 1 line
+			// Empty file case: git omits range header and content for totally empty files
 			const patch = diffs[0].diff;
 			expect(patch).toContain('diff --git a/empty.txt b/empty.txt');
 			expect(patch).toContain('new file mode 100644');
+			expect(patch).toContain('--- /dev/null');
+			expect(patch).toContain('+++ b/empty.txt');
+			// No range header for empty files
+			expect(patch).not.toContain('@@');
+			// No content lines
+			expect(patch).not.toMatch(/^\+[^+]/m);
+		});
+
+		it('should handle file with single blank line', async () => {
+			const fileUri = Uri.file('/repo/blank-line.txt');
+			const fileContent = '\n'; // Single newline
+
+			readFileSpy.mockResolvedValue(Buffer.from(fileContent));
+
+			const changes: Change[] = [{
+				uri: fileUri,
+				originalUri: fileUri,
+				renameUri: undefined,
+				status: 7 /* UNTRACKED */
+			}];
+
+			const diffs = await gitDiffService.getChangeDiffs(mockRepository as Repository, changes);
+
+			// Single blank line: should have range header and one empty line addition
+			const patch = diffs[0].diff;
+			expect(patch).toContain('diff --git a/blank-line.txt b/blank-line.txt');
+			expect(patch).toContain('new file mode 100644');
+			expect(patch).toContain('--- /dev/null');
+			expect(patch).toContain('+++ b/blank-line.txt');
 			expect(patch).toContain('@@ -0,0 +1,1 @@');
-			expect(patch).toContain('+'); // One empty line addition
+			expect(patch).toContain('+'); // One empty line
+			expect(patch.endsWith('\n')).toBe(true);
 		});
 	});
 });
