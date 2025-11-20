@@ -43,31 +43,44 @@ export class CopilotCLIWorktreeManager {
 	private _sessionWorktrees: Map<string, string> = new Map();
 	constructor(
 		@IGitService private readonly gitService: IGitService,
-		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext) { }
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+	) { }
 
-	async createWorktree(stream: vscode.ChatResponseStream): Promise<string | undefined> {
+	async createWorktree(stream?: vscode.ChatResponseStream): Promise<string | undefined> {
+		if (!stream) {
+			return this.tryCreateWorktree();
+		}
+
 		return new Promise<string | undefined>((resolve) => {
 			stream.progress(vscode.l10n.t('Creating isolated worktree for Copilot CLI session...'), async progress => {
-				try {
-					const repository = this.gitService.activeRepository.get();
-					if (!repository) {
-						progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
-					} else {
-						const worktreePath = await this.gitService.createWorktree(repository.rootUri);
-						if (worktreePath) {
-							resolve(worktreePath);
-							return vscode.l10n.t('Created isolated worktree at {0}', worktreePath);
-						} else {
-							progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
-						}
-					}
-				} catch (error) {
-					progress.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
+				const result = await this.tryCreateWorktree(progress);
+				resolve(result);
+				if (result) {
+					return vscode.l10n.t('Created isolated worktree at {0}', result);
 				}
-
-				resolve(undefined);
+				return undefined;
 			});
 		});
+	}
+
+	private async tryCreateWorktree(progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<string | undefined> {
+		try {
+			const repository = this.gitService.activeRepository.get();
+			if (!repository) {
+				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+				return undefined;
+			}
+			const worktreePath = await this.gitService.createWorktree(repository.rootUri);
+			if (worktreePath) {
+				return worktreePath;
+			}
+			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+			return undefined;
+		} catch (error) {
+			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
+			return undefined;
+		}
 	}
 
 	async storeWorktreePath(sessionId: string, workingDirectory: string): Promise<void> {
@@ -101,9 +114,16 @@ export class CopilotCLIWorktreeManager {
 
 	}
 
+	getDefaultIsolationPreference(): boolean {
+		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
+			return false;
+		}
+		return this.extensionContext.globalState.get<boolean>(CopilotCLIWorktreeManager.COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, false);
+	}
+
 	getIsolationPreference(sessionId: string): boolean {
 		if (!this._sessionIsolation.has(sessionId)) {
-			const defaultIsolation = this.extensionContext.globalState.get<boolean>(CopilotCLIWorktreeManager.COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, false);
+			const defaultIsolation = this.getDefaultIsolationPreference();
 			this._sessionIsolation.set(sessionId, defaultIsolation);
 		}
 		return this._sessionIsolation.get(sessionId) ?? false;
@@ -534,7 +554,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const history = await this.summarizer.provideChatSummary(context, token);
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
-		const session = await this.sessionService.createSession(requestPrompt, {}, token);
+
+		const isolationEnabled = this.worktreeManager.getDefaultIsolationPreference();
+		const workingDirectory = isolationEnabled ? await this.worktreeManager.createWorktree(undefined) : await this.getDefaultWorkingDirectory();
+
+		const session = await this.sessionService.createSession(requestPrompt, { workingDirectory, isolationEnabled }, token);
+
+		if (workingDirectory) {
+			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory);
+		}
+
 		try {
 			await this.commandExecutionService.executeCommand('vscode.open', SessionIdForCLI.getResource(session.object.sessionId));
 			await this.commandExecutionService.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
