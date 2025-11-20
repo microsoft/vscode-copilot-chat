@@ -27,8 +27,7 @@ import { ICopilotCLIMCPHandler } from './mcpHandler';
 export interface ICopilotCLISessionItem {
 	readonly id: string;
 	readonly label: string;
-	readonly startTime: Date;
-	readonly endTime?: Date;
+	readonly timing: { startTime: number; endTime?: number };
 	readonly status?: ChatSessionStatus;
 }
 
@@ -123,8 +122,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return undefined;
 					}
 					const id = metadata.sessionId;
-					const startTime = metadata.startTime;
-					const endTime = metadata.modifiedTime;
+					const startTime = metadata.startTime.getTime();
+					const endTime = metadata.modifiedTime.getTime();
 					const label = metadata.summary ? labelFromPrompt(metadata.summary) : undefined;
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
@@ -133,8 +132,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
-							startTime,
-							endTime,
+							timing: { startTime, endTime },
 						} satisfies ICopilotCLISessionItem;
 					}
 					try {
@@ -151,8 +149,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
-							startTime,
-							endTime,
+							timing: { startTime, endTime },
 						} satisfies ICopilotCLISessionItem;
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
@@ -185,7 +182,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		const newSession: ICopilotCLISessionItem = {
 			id: sdkSession.sessionId,
 			label,
-			startTime: sdkSession.startTime
+			timing: { startTime: sdkSession.startTime.getTime() }
 		};
 		this._newActiveSessions.set(sdkSession.sessionId, newSession);
 		this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);

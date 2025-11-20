@@ -21,7 +21,7 @@ import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
-import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
+import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { PermissionRequest, requestPermission } from '../../agents/copilotcli/node/permissionHelpers';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IToolsService } from '../../tools/common/toolsService';
@@ -206,12 +206,12 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		return diskSessions;
 	}
 
-	private async _toChatSessionItem(session: { id: string; label: string; startTime: Date; endTime?: Date; status?: vscode.ChatSessionStatus }): Promise<vscode.ChatSessionItem> {
+	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(session.id);
 		const worktreePath = this.worktreeManager.getWorktreePath(session.id);
 		const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.id);
 
-		const label = session.label ?? vscode.l10n.t('Background Agent Session');
+		const label = session.label;
 		const tooltipLines = [vscode.l10n.t(`Background agent session: {0}`, label)];
 		let description: vscode.MarkdownString | undefined;
 		let statistics: { files: number; insertions: number; deletions: number } | undefined;
@@ -234,7 +234,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			label,
 			description,
 			tooltip: tooltipLines.join('\n'),
-			timing: { startTime: session.startTime.getTime(), endTime: session.endTime?.getTime() },
+			timing: session.timing,
 			statistics,
 			status
 		} satisfies vscode.ChatSessionItem;
