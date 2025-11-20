@@ -238,7 +238,7 @@ export async function makeSearchGraphQLRequest(
 
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
 
-	return result ? result.data?.search?.nodes : [];
+	return result.data?.search?.nodes ?? [];
 }
 
 export async function getPullRequestFromGlobalId(
