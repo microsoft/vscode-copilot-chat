@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { authentication, CancellationToken, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { AzureAuthMode, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -71,17 +71,17 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 	}
 
 	protected override async getModelsWithCredentials(silent: boolean): Promise<BYOKKnownModels> {
-		// Check user's authentication preference from settings github.copilot.chat.azureAuthType (default: 'entraId')
+		// Check user's authentication preference from settings github.copilot.chat.azureAuthType (default: AzureAuthMode.EntraId)
 		const authType = this._configurationService.getConfig(ConfigKey.AzureAuthType);
 
-		if (authType === 'entraId') {
+		if (authType === AzureAuthMode.EntraId) {
 			// Pre-authenticate during model enumeration (not when sending message)
 			// This mirrors API key behavior where user is prompted during enumeration
 			if (!silent) {
 				try {
 					await authentication.getSession(
-						'microsoft',
-						['https://cognitiveservices.azure.com/.default'],
+						AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
+						[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
 						{ createIfNone: true }
 					);
 				} catch (error) {
@@ -108,12 +108,12 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 	): Promise<void> {
 		const authType = this._configurationService.getConfig(ConfigKey.AzureAuthType);
 
-		if (authType === 'entraId') {
+		if (authType === AzureAuthMode.EntraId) {
 			let session;
 			try {
 				session = await authentication.getSession(
-					'microsoft',
-					['https://cognitiveservices.azure.com/.default'],
+					AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
+					[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
 					{ createIfNone: true }
 				);
 			} catch (err) {
