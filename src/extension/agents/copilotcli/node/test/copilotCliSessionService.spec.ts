@@ -54,7 +54,7 @@ export class MockCliSdkSessionManager {
 		return Promise.resolve(undefined);
 	}
 	listSessions() {
-		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime })));
+		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime, modifiedTime: s.startTime })));
 	}
 	deleteSession(id: string) { this.sessions.delete(id); return Promise.resolve(); }
 	closeSession(_id: string) { return Promise.resolve(); }
