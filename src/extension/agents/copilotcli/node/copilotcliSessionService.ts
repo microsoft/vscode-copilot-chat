@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Session, SessionEvent, internal } from '@github/copilot/sdk';
+import type { Session, SessionEvent, SessionOptions, internal } from '@github/copilot/sdk';
 import type { CancellationToken, ChatRequest } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -27,7 +27,7 @@ import { ICopilotCLIMCPHandler } from './mcpHandler';
 export interface ICopilotCLISessionItem {
 	readonly id: string;
 	readonly label: string;
-	readonly timestamp: Date;
+	readonly timing: { startTime: number; endTime?: number };
 	readonly status?: ChatSessionStatus;
 }
 
@@ -69,9 +69,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private sessionMutexForGetSession = new Map<string, Mutex>();
 
 	constructor(
-		@ILogService private readonly logService: ILogService,
+		@ILogService protected readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@INativeEnvService private readonly nativeEnv: INativeEnvService,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
@@ -122,7 +122,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return undefined;
 					}
 					const id = metadata.sessionId;
-					const timestamp = metadata.modifiedTime;
+					const startTime = metadata.startTime.getTime();
+					const endTime = metadata.modifiedTime.getTime();
 					const label = metadata.summary ? labelFromPrompt(metadata.summary) : undefined;
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
@@ -131,7 +132,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
-							timestamp,
+							timing: { startTime, endTime },
 						} satisfies ICopilotCLISessionItem;
 					}
 					try {
@@ -148,7 +149,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
-							timestamp,
+							timing: { startTime, endTime },
 						} satisfies ICopilotCLISessionItem;
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
@@ -174,14 +175,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	public async createSession(prompt: string, { model, workingDirectory, isolationEnabled }: { model?: string; workingDirectory?: string; isolationEnabled?: boolean }, token: CancellationToken): Promise<RefCountedSession> {
 		const mcpServers = await this.mcpHandler.loadMcpConfig(workingDirectory);
-		const options = new CopilotCLISessionOptions({ model, workingDirectory, isolationEnabled, mcpServers }, this.logService);
+		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers });
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 		const sdkSession = await sessionManager.createSession(options.toSessionOptions());
 		const label = labelFromPrompt(prompt);
 		const newSession: ICopilotCLISessionItem = {
 			id: sdkSession.sessionId,
 			label,
-			timestamp: sdkSession.startTime
+			timing: { startTime: sdkSession.startTime.getTime() }
 		};
 		this._newActiveSessions.set(sdkSession.sessionId, newSession);
 		this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
@@ -197,6 +198,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			}
 		}));
 		return session;
+	}
+
+	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
+		return new CopilotCLISessionOptions(options, this.logService);
 	}
 
 	public async getSession(sessionId: string, { model, workingDirectory, isolationEnabled, readonly }: { model?: string; workingDirectory?: string; isolationEnabled?: boolean; readonly: boolean }, token: CancellationToken): Promise<RefCountedSession | undefined> {
@@ -223,7 +228,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				raceCancellationError(this.getSessionManager(), token),
 				this.mcpHandler.loadMcpConfig(workingDirectory)
 			]);
-			const options = new CopilotCLISessionOptions({ model, workingDirectory, isolationEnabled, mcpServers }, this.logService);
+			const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers });
 
 			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
 			if (!sdkSession) {

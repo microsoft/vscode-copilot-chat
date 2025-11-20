@@ -12,6 +12,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { PermissionRequest } from './permissionHelpers';
@@ -54,10 +55,6 @@ export class CopilotCLISessionOptions {
 
 	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
 		const allOptions: SessionOptions = {
-			env: {
-				...process.env,
-				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
-			},
 			logger: this.logger,
 			requestPermission: async (request: PermissionRequest) => {
 				return await this.requestPermissionHandler(request);
@@ -136,6 +133,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 export interface ICopilotCLISDK {
 	readonly _serviceBrand: undefined;
 	getPackage(): Promise<typeof import('@github/copilot/sdk')>;
+	getAuthInfo(): Promise<SessionOptions['authInfo']>;
 }
 
 export class CopilotCLISDK implements ICopilotCLISDK {
@@ -145,6 +143,8 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService private readonly logService: ILogService,
+		@IInstantiationService protected readonly instantiationService: IInstantiationService,
+		@IAuthenticationService private readonly authentService: IAuthenticationService,
 	) { }
 
 	public async getPackage(): Promise<typeof import('@github/copilot/sdk')> {
@@ -164,13 +164,13 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 			ensureRipgrepShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService)
 		]);
 	}
-}
 
-export async function getAuthInfo(authentService: IAuthenticationService): Promise<SessionOptions['authInfo']> {
-	const copilotToken = await authentService.getAnyGitHubSession();
-	return {
-		type: 'token',
-		token: copilotToken?.accessToken ?? '',
-		host: 'https://github.com'
-	};
+	public async getAuthInfo(): Promise<SessionOptions['authInfo']> {
+		const copilotToken = await this.authentService.getAnyGitHubSession();
+		return {
+			type: 'token',
+			token: copilotToken?.accessToken ?? '',
+			host: 'https://github.com'
+		};
+	}
 }

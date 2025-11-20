@@ -15,7 +15,7 @@
 	},
 	"dependencies": {
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@vscode/copilot-api": "^0.1.13",
+		"@vscode/copilot-api": "^0.2.2",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
 		"jsonc-parser": "^3.3.1",
@@ -24,6 +24,7 @@
 		"yaml": "^2.8.0"
 	},
 	"devDependencies": {
+		"@anthropic-ai/sdk": "^0.68.0",
 		"@octokit/types": "^14.1.0",
 		"@types/node": "^22.16.3",
 		"@types/vscode": "^1.102.0",

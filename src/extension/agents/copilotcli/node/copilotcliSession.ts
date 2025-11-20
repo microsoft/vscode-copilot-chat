@@ -5,7 +5,6 @@
 
 import type { Attachment, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
-import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -19,7 +18,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
-import { CopilotCLISessionOptions, getAuthInfo } from './copilotCli';
+import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
 
 type PermissionHandler = (
@@ -80,7 +79,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super();
@@ -146,7 +145,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
 			const [currentModel, authInfo] = await Promise.all([
 				modelId ? (this._lastUsedModel ?? raceCancellation(this._sdkSession.getSelectedModel(), token)) : undefined,
-				raceCancellation(getAuthInfo(this.authenticationService), token)
+				raceCancellation(this.copilotCLISDK.getAuthInfo(), token)
 			]);
 			if (authInfo) {
 				this._sdkSession.setAuthInfo(authInfo);
@@ -281,13 +280,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 		}
 
-		let toolCall: ToolCall | undefined;
-		if (workingDirectory && permissionRequest.kind === 'write') {
+		const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
+		const toolCall = editFile ? getEditKeyForFile(editFile) : undefined;
+		if (workingDirectory && permissionRequest.kind === 'write' && editFile) {
 			// TODO:@rebornix @lszomoru
 			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
 			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
-			const editFile = Uri.file(permissionRequest.fileName);
-			toolCall = getEditKeyForFile(editFile);
 
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
@@ -324,7 +322,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			if (await permissionHandler(permissionRequest, toolCall, token)) {
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
-				const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
 				if (editFile && toolCall && this._stream) {
 					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
 					await editTracker.trackEdit(toolCall.toolCallId, [editFile], this._stream);
