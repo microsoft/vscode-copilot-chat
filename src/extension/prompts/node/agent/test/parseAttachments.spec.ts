@@ -97,10 +97,10 @@ suite('parsePromptAttachments', () => {
 
 		const tsFileRef = result.references.find(l => l.name === 'file:file.ts')!;
 		expect(tsFileRef.range).toEqual([20, 32]);
-		expect((tsFileRef.value as Uri).fsPath).toBe('/workspace/file.ts');
+		expect((tsFileRef.value as Uri).fsPath).toBe(URI.file('/workspace/file.ts').fsPath);
 
 		const pyFileRef = result.references.find(l => l.name === 'sample.py')!;
-		expect((pyFileRef.value as Uri).fsPath).toBe('/workspace/sample.py');
+		expect((pyFileRef.value as Uri).fsPath).toBe(URI.file('/workspace/sample.py').fsPath);
 	});
 
 	test('Folders are attached with just references', async () => {
@@ -122,7 +122,7 @@ suite('parsePromptAttachments', () => {
 		expect(result.references.length).toBe(1);
 		const folderRef = result.references[0];
 		expect(folderRef.name).toBe('file:folder');
-		expect((folderRef.value as Uri).fsPath).toBe('/workspace/folder');
+		expect((folderRef.value as Uri).fsPath).toBe(URI.file('/workspace/folder').fsPath);
 		expect(result.diagnostics.length).toBe(0);
 	});
 
@@ -147,7 +147,7 @@ suite('parsePromptAttachments', () => {
 		expect(result.diagnostics.length).toBe(1);
 		const diagTuples = result.diagnostics[0].value.diagnostics;
 		expect(diagTuples.length).toBe(1);
-		expect(diagTuples[0][0].fsPath).toBe('/workspace/file.py');
+		expect(diagTuples[0][0].fsPath).toBe(URI.file('/workspace/file.py').fsPath);
 		expect(diagTuples[0][1].length).toBe(1);
 		expect(diagTuples[0][1][0].message).toMatch(/Unterminated string/);
 		expect(diagTuples[0][1][0].code).toBe('E001');
@@ -195,7 +195,7 @@ suite('parsePromptAttachments', () => {
 		const result = extractChatPromptReferences(prompt);
 		let diagTuples = result.diagnostics[0].value.diagnostics;
 		expect(diagTuples.length).toBe(1);
-		expect(diagTuples[0][0].fsPath).toBe('/workspace/file.py');
+		expect(diagTuples[0][0].fsPath).toBe(URI.file('/workspace/file.py').fsPath);
 		expect(diagTuples[0][1].length).toBe(1);
 		expect(diagTuples[0][1][0].message).toMatch(/Msg1/);
 		expect(diagTuples[0][1][0].code).toBe('E001');
@@ -204,7 +204,7 @@ suite('parsePromptAttachments', () => {
 
 		diagTuples = result.diagnostics[1].value.diagnostics;
 		expect(diagTuples.length).toBe(1);
-		expect(diagTuples[0][0].fsPath).toBe('/workspace/file.py');
+		expect(diagTuples[0][0].fsPath).toBe(URI.file('/workspace/file.py').fsPath);
 		expect(diagTuples[0][1][0].message).toMatch(/MsgB/);
 		expect(diagTuples[0][1][0].code).toBe('E002');
 		expect(diagTuples[0][1][0].range.start.line).toBe(4);
@@ -212,7 +212,7 @@ suite('parsePromptAttachments', () => {
 
 		diagTuples = result.diagnostics[2].value.diagnostics;
 		expect(diagTuples.length).toBe(1);
-		expect(diagTuples[0][0].fsPath).toBe('/workspace/sample.py');
+		expect(diagTuples[0][0].fsPath).toBe(URI.file('/workspace/sample.py').fsPath);
 		expect(diagTuples[0][1].length).toBe(1);
 		expect(diagTuples[0][1][0].message).toMatch(/Msg2/);
 		expect(diagTuples[0][1][0].code).toBe('W001');
@@ -254,11 +254,11 @@ suite('parsePromptAttachments', () => {
 		const result = extractChatPromptReferences(prompt);
 		expect(result.references.length).toBe(2);
 		let loc = result.references[0].value as Location;
-		expect(loc.uri.fsPath).toBe('/workspace/file.ts');
+		expect(loc.uri.fsPath).toBe(URI.file('/workspace/file.ts').fsPath);
 		expect(loc.range.start.line).toBe(4); // line numbers are 0-based internally
 		expect(loc.range.end.line).toBe(4);
 		loc = result.references[1].value as Location;
-		expect(loc.uri.fsPath).toBe('/workspace/sample.py');
+		expect(loc.uri.fsPath).toBe(URI.file('/workspace/sample.py').fsPath);
 		expect(loc.range.start.line).toBe(3); // line numbers are 0-based internally
 		expect(loc.range.end.line).toBe(3);
 	});
@@ -269,7 +269,7 @@ suite('parsePromptAttachments', () => {
 		const result = extractChatPromptReferences(prompt);
 		expect(result.references.length).toBe(1);
 		const location = result.references[0].value as Location;
-		expect(location.uri.fsPath).toBe('/workspace/other.ts');
+		expect(location.uri.fsPath).toBe(URI.file('/workspace/other.ts').fsPath);
 		expect(location.range.start.line).toBe(2); // 3 -> zero-based
 		expect(location.range.end.line).toBe(3); // 4 -> zero-based
 	});
@@ -298,7 +298,7 @@ suite('parsePromptAttachments', () => {
 		expect(result.references.length).toBe(1);
 		const locObj = result.references[0];
 		const location = locObj.value as Location;
-		expect(location.uri.fsPath).toBe('/workspace/add.py');
+		expect(location.uri.fsPath).toBe(URI.file('/workspace/add.py').fsPath);
 		expect(locObj.name).toBe('sym:add');
 		expect(locObj.range).toEqual([8, 15]);
 		expect(location.range.start.line).toBe(1); // 2 -> zero-based
