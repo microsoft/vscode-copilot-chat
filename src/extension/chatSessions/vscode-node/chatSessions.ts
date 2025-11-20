@@ -153,6 +153,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			})
 		);
 		this.copilotCloudRegistrations.add(
+			vscode.commands.registerCommand('github.copilot.cloud.resetWorkspaceConfirmations', () => {
+				cloudSessionsProvider.resetWorkspaceContext();
+			})
+		);
+		this.copilotCloudRegistrations.add(
 			vscode.commands.registerCommand('github.copilot.cloud.sessions.openInBrowser', async (chatSessionItem: vscode.ChatSessionItem) => {
 				cloudSessionsProvider.openSessionsInBrowser(chatSessionItem);
 			})

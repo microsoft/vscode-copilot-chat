@@ -405,7 +405,7 @@ abstract class TreeContextRequest {
 		return markdown;
 	}
 
-	protected abstract createJson(): any;
+	protected abstract createJson(): {};
 
 	public abstract children(): (TreeRunnableResult | TreeYieldedContextItem)[];
 
@@ -423,7 +423,7 @@ class TreeCachePopulateContextRequest extends TreeContextRequest {
 		this.items = event.items;
 	}
 
-	protected createJson(): any {
+	protected createJson(): {} {
 		return {
 			document: this.document,
 			position: {
@@ -458,7 +458,7 @@ class TreeYieldContextRequest extends TreeContextRequest {
 		this.items = event.items;
 	}
 
-	protected createJson(): any {
+	protected createJson(): {} {
 		return {
 			document: this.document,
 			position: {

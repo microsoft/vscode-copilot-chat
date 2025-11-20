@@ -2,225 +2,236 @@
 	{
 		"name": "edit-InlineChatIntent [inline] [cpp] - edit for cpp",
 		"requests": [
-			"cc297f3dc1c1731de9eb179dc56da62d4db69c0f00338d36192b6f64fb00493f"
+			"784be3dd5c84974dc442e16ec4685ec10a38b5628bca9558649dda5a56023f13"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [cpp] - edit for macro",
 		"requests": [
-			"4547bdaa5826446891c18047f2a44b36018c8e117dda8f9e8f5d309d6d13cca6"
+			"02c872bf5dee13ed873cc1c3f1ab2d151d33605773fe829912544d1b5d069bb2",
+			"06f6fe00ef030f1977303cf91e15947476bded82131180f25000d865987a20d5",
+			"7351c23b5e260e770c13139802812310c514ca1c537f31dc197d7a9fc83e8939"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [csharp] - issue release#275: Inline Diff refinement causes massive duplication of code",
 		"requests": [
-			"2f610ee20822e0ce212e529e336478bb92e478979ef8f8f2c2948a3b8cab6ba7"
+			"5edf58f38fac23cadcb37fb3c5e547377f69cdf6c769a962e326baee536f666b"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [css] - issue #6469",
 		"requests": [
-			"89245bf13a874198e5e685cc73edaba37b2e68b4b43806c3d7ecd4570719a102"
+			"c23d1113954aefaa5c886b27c7d4315eb735268bffb73e625fd8055945ac857e"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [html] - issue #6614",
 		"requests": [
-			"198cf20a2d7cd6a0c3b60e297f55d5258627bbf1753281e2f97503508f115fe4",
-			"517ad2ec5080dff03efe93d183563e64de404eb94eda008cb1e9165b0ffcb8b2",
-			"9ba66f98ba77a96f5da70e1811f96103e98cafdf3cdc04e530c830e49d35aee7",
-			"acbde829d524d2019119b44b6cb8052cfe08fa2ef6ba50d96b7123f1978c3a8f"
+			"0801ccdb97da81aedb8d8d8b0a65ea62751a0381344f43788628885d2527621b",
+			"24a69dbba625619862baaae7b8fa9b378792c1aacde62e6cdc815c4be876336b",
+			"29d738475e33fb81c6b2b7c83c20779af42b4d5ef11d3a21c8a73973ff420a55",
+			"9b6e5c2188f6cc4bcc11172a387ab04feb327d4b6a4a63ba2d179ed777d83593",
+			"a65d29aaab1042ca0d44ff3b4283af879a144276bc88701efe4d626f7a8d1471"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [javascript] - issue #2946: Inline chat markers don't work",
 		"requests": [
-			"1d4906e36a08d2f60754350e4a98ce8aa3c5e1b5a0b66f9b7caa78b1adda5d87",
-			"1d6efc7b3d39c277efc7543411b8e1bafcf75969314f918ea70eaefbed36e61b"
+			"1d6efc7b3d39c277efc7543411b8e1bafcf75969314f918ea70eaefbed36e61b",
+			"c5d4a2689a6b49b8b4f88cd36724e315c5bc4d011ec5cbfe4bff0ebc5fb836d4"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [javascript] - issue #6329",
 		"requests": [
-			"4d9b5b3bb5776c62d9d3e0de30daa03d347f709d8bc463deb7e7aadc3d4d3661",
-			"5303e6a4062d0654ad72bb7f756a8e9b201ece5db8fed9203299b1a9afa44bdb",
-			"6b38326359e7a4fa73d4b243952068430691fc70de26a4d8ccac98c0256ec47a",
-			"7fde4d10eecfc6c495e6f1286441b9be91c1b85567010d6d80570513ba7e32c6",
-			"9e20c04b2fd70dce40af9b2db30b8bd3adbffc932c6dd41969bdabf39c5e61af",
-			"b113e346f0d253833757e57b13aca2ec28568b5fd7cc2802025bfa5b95613f12",
-			"c1b7c68bde76c1c5fa450dc0d41df60a3178dc2e03f7fcd5715352374880b3c8"
+			"28f9b8827367d2d841b80dfef65e1522adcbbdbc46bda1efd7072a39ee3a8c18",
+			"2e99c97bf4083a22ab0e54eb55156a62caec78d4b9b02d2710ce3321fe944e68",
+			"3974fc2b9f60acb80734eb30b56781ddc5fd0ee4e96f08254a79c388c1489000",
+			"80d417413558a2a7e813343e6258467ff8c7003d1b854de1c407664f0d5ee9f0",
+			"8ef73014f76c2fce814f039d141ca616b54bf56d9adecab31a66d5e1007f221e",
+			"ee77f28ac49784fef60fda9151878b6b4cdc2c83e2d9b5559a93b5566b02f205",
+			"f16520927c94d49e93576353dedb9ca09045028b86128f542d4eb286a5bd3b10",
+			"f5c60154f3bf29d4fb5dc614fc1271e02008c7979d5721264a5f5d38dcb83549"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [javascript] - issue #6956",
 		"requests": [
-			"05f383ab1cbb7a754804df38fd83d49d69e6b01193b226e5b52b0c91f20b3ba3",
-			"4ff793791f6c29e62795613b7d4fc6312a8e3f97e547267ec48631ca4a06366f",
-			"6c1c6d9223d385265554fde45d90b3cdfebb60ea4f6fe02e063eccc32b7bae98",
-			"78b21a6df3e1be591894dc57c7377649d7a153f167f7c5faa76e521446045241",
-			"acfda67e24b2e4e6cd364ba2fe0d1b36732816d6fff0e056397d2bb4d618e778",
-			"b21018fdaccc39af2954345c83c9a94b6adeffa6ba3997015ab199f5df51b765",
-			"ba0eeb3029e0fe2cf03d58fa683237ee0aa44b1c672004d23285a4437518a5d9",
-			"bd95d2aa7c8bdfad42b4e416d1e58a66eea557bf5a5f4bfb01ba868aef0493fb",
-			"e3403fac2a98ec4258d20443b814ae2ab90a2121210d9288fc0805f4b652b1ca",
-			"e70ad578e493a942639d86b1b55e7b1c09c852d37db107a8e9dd56608c5d6638"
+			"16edacf97aa16d9c9b7a4a677df5110e3f85970d19ac8a44d06592c877bdddf7",
+			"1decf22eb8acaba757ababa660e5c99df3301fc0c87a8909fb0fb4908cf86b03",
+			"26d925962129048427ac4cd72a8a977fed1ac210fbf78f519f010c101f9e0b4f",
+			"59bfa38344d1efff9c06b21c7187c5b2bb55ca58354dfa7a0a0f28cc7a7a3ee0",
+			"78509346a7c9bfe72ecff487c2a6a734e3f483d12c0181b47814a7b5e4d92f4b",
+			"7b8d0ef32d30f588888707e1a19bd362737a40c49e64cec965239eca709ad9e0",
+			"8b5e23d8cea06e3a1c81cd9593acf504440931c8c45ab124acd16a77eaae1510",
+			"b39a1b9325a6a581de7ca2f175a2ae838fe8e2b42e22f4ed622c777e065fff74",
+			"d5d6774d6ddc6583c9f1bb2114bb60a6e35d0e34c5d89265228b07a48ecd18cb",
+			"dfd851ef42005102e477008eb057c8f5d1098c685b9d192d60e1da7eebf00199"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [javascript] - Issue #7282",
 		"requests": [
-			"a8b36ce149f242c38cd4f4c9e8c788c2aa2ba5f85e765ab9118e6a869175c751",
-			"b3f51b4ed8c868eb99854b491890112fedf99f891357b6349c12fe3b9a17c041",
-			"e3b0c63c03b2d210399c569d848b8bdef0e6d2e3c88865610a2ed6018a7cdb03"
+			"d41fcf480601886bbb2c0cc86db8fbb944b3def002fa0ce61486bc722bffe69e"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [json] - Inline chat does not leak system prompt",
 		"requests": [
-			"7e2255e17937141845d18ed70472adbce79a5ad9befc934e7ad898101a2a91bb"
+			"c6ee1990923af963fffdcedfa1116de88e7defe97e0a2be549ac02f5c821c530"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [markdown] - issue #5899: make this code more efficient inside markdown",
 		"requests": [
-			"b6d9f28ec221485e80e2d582d36d45800df2aac7b2b01f90e1fb3db3d3d52f92"
+			"3248769fb720bcab5da7611c68d4c69797cdba90dbc275f7584fcd0fcaf68a87"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [markdown] - merge markdown sections",
 		"requests": [
-			"37324dd98f12b68761d84457128a3b696f73adf6b92f454f3183817830f9fff9"
+			"e70f3103a50884560a706448d3f5763787078b4a48b4138dac46770b5da452cf"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [python] - issue #1198: Multi-lingual queries throw off the inline response formatting",
 		"requests": [
-			"b826da85c8d3013c48882652e03055597d488e4f5349ee2fb06d131b79339f06"
+			"6912aa135e8ac78f7160b4ca4eebef250b9727beec2f1dbbd17590644d3160a1"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript between methods",
 		"requests": [
-			"1b4c059a80c1d133b46392c573fc8c01e2968c235c066842d318d4d336e2fe06"
+			"db4959276c2e6b0e4ad120b856406682fa6ee6cfb7168d2b1f989d737714769e"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript in method",
 		"requests": [
-			"1af224c35cbeb17577794b430e5953a3e7755c38d198dd0d52fccaf22eece49a",
-			"35ce4645c950812fac124754228706a878a9c34a775562476487d1c87f11ce89",
-			"5f5864b4a6cd47ae37cd2f7366dffb9499c47195fd780a1c2e6b7e6d6004c84b",
-			"d98af0d694e0cde6daf412a020a8131495759d5a8ddafcc70a7ea69a099eba2e"
+			"a2b6309207dd9c7f4eeac74a1f70a72aee7acf5fb47628767d67ddb477b31218"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - convert ternary to if/else in short function",
 		"requests": [
-			"3020828aebdbaab50e2d0ca16506344e17d9567f714026cf025cc58553e4bb39"
+			"4b4766eb5f4168282dec92609f6744f6ce943379ca2f95b966b9fe3222fa6454",
+			"d17d8a1dff67accf1d7ed713197e80073669dc827dd39199dbfa5a1aa5b4988e",
+			"fe0cbdfcab289948b1ec923b999a5975ca073a802a90ded9d3214cef1b05efbc"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - edit: add enum variant",
 		"requests": [
 			"428086c020766539a303e1f031dbe79be77f058b2a2175228ac0c2807aa5885d",
-			"93eb14ef0847b3fdeb501b67666289c9fbb9a909214d74a954cb068d8873b1f3",
-			"d0f0c193a89a82c8170de0be69c7b56c73676c4752c39d23036ef60be4d2a778",
-			"eff59bdec811d3967d03a3354e00b935a799d30882a7490522bd7b4ec727624c"
+			"5dfe665ba32e1fb879b4d772224712a1ea83966f4b2b12e4eccdf7aee2a1bab3",
+			"746a569e3374d8e75abc93c77b7b2254ed9aa2c113f96257df7aaca2d7bc9a2f",
+			"e173b96bf97cde6853d27495c7b80def173d7995c2aea7fa6d02bf8cae73284e",
+			"face3f11fc502a247b7bd925922c230986842a3af71336ff531ede8ff4f549d0"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - edit: add toString1",
 		"requests": [
-			"0c3e88cf3cfcf47676fd14d6a920bb2e7b1e4b8bdcb4017ba32f10a3223dfcdb",
-			"457486a625f8e6651f708daff46de01cfb45dcda78bb408b6b5c83d33fd43820",
-			"78ff92cae2885c0d965d01fc32c9a4ae82aa8ad6bc116b7df0b4bafba6d08bb3",
-			"8168464ffa4b3f3e46cb45e9207e1720c3fbd578416547fc87a3381df642c0eb",
-			"bf5d30d6a4bb3a018d337292e01a07f145220fd1c3bd9559bb29f07a8b222817",
-			"daf7e6cf37b3b65afe201402bdd05956f6ffea476d5fa42e9e04a401525429bf"
+			"8bf6f22e73698fc6dd08119bf855e2813c69d90f4ace038e41dc9710f871f7d5",
+			"fbbd20b412e445e070b3e41c20deb93714c4fa71b7efcc44bac17513403d8789"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - edit: add toString2",
 		"requests": [
-			"d59bcec58931dc021ea4a0bf0e2ec5bc45d1dbd2928664241bfd539f208992ec",
-			"e4329de6ae229839226822f31c702eda20ffad310fe3f521bd9853b8f00bba6f"
+			"1ba879153b42296bfa25dde6fb66f9b47f23cd261713005802761c4975773c15",
+			"1ec876a32ceb87d7f1f899b32f5e7f2ea21840b9dd7d2fa90107ce84e7cf7aec",
+			"2337f89a97102355d1b758931d765c1388b48614b922b8e2e22ef4a20e16db83",
+			"34288d81490c81eac42e1d8e7f5b087bec19fb8b5509032664a9af76a2c7d29d",
+			"4b619c7e9fe776a1e1e81de7b2fa7c2ad311411d57227ddcd456c0b7ca7c83d1",
+			"64e20e67a986799fcdbd86450c01eb3e25e496a42487a424beffe70be7e8cf4b",
+			"a4c12276bf97521a3f420e4d06badcd63450e6553d9942b277d045d6794cfc28",
+			"b5f331bcb4729c79883b986b6ca520abdc86984befa90509defce6f217a182ab",
+			"c0a14f50ac8f57d13d281c4a6fcbd4be084364b38a43d56de5bbe20bd88c2016",
+			"cbe545d406449377332cb2bcb5f359427c3f6f64619ab1577d534c978e2efc1e",
+			"e7c49d8f403d56d6feebe85632c63fa65afdee27a63af87e6176ae21be5b10b8"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - edit: import assert",
 		"requests": [
-			"6363425f000122fa1ee7990532a8746ed19c7482e59814d7f614a3750545c031",
-			"b8a2dbf2e114ad169628cf1e1199475f42372774d22824212ad6dbfa270612d3",
-			"c96146d14f37dabb4e71b1ebf9067682f5961d089fd6b8f44762c8343f2adc7d",
-			"d416a1f84a946e86a8df35dab7ec4c13089e1bfe7377315980b12250d64b0988"
+			"0e893eb4214912fb51503636dafd7c45dc1efc3a941db00d08a069558e70d211",
+			"3a48c0a43137c25a1b5419aaec4d4de93be29e74b2574b4878a980d0bbc230eb",
+			"48ede68722562931aa121c60208391a564e7080c25373a68096210ba2d619602",
+			"7dc770d3e027d2346a8dd7d7021c6dca7d2988175a978126cb1941cf3a345f4d",
+			"b7189d0023d000bc76ed8018c6c0a844c0887b5042e763afb2d0aeda89d745b4",
+			"b72f7e81b4e1d651173e5ead99f88e51fe43e3457e35cd9abe25625f076ecf44",
+			"c6f17b68fcd2eaf7475addc97dab49bc94789aeff7094145126ce404dfbb5c85",
+			"fc1434415f97dd7dac13902458fe5c58b622f411da5f3b6b6419a053c2c50b5d"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - edit: import assert 2",
 		"requests": [
-			"0f0f1f8e752ad22f622a1a4d10f83e00546f5ff8d48256cec30990437d2d305a",
-			"86c2c0820963b800aa82f741b59c042e69d0bc441a02f6d024b3efdbfc6499c2",
+			"28ae7724ff3d07d13a8bd5c666f680aee232626e1a5eb7a337515f9fdebc3673",
+			"30b31dd37d45890a877a5208e123808c0a4c3fc6c83083b4730ffec4190b9917",
+			"45b4b87c1abf8b56b4996a86b76265bb9bcd802de356489f5605ebfe2b9cecc5",
+			"4e964654357e62217b1061297b5a75ae5108e3d23b17f533dfcb098259b9bde4",
 			"8a081528063ecd58d0da5be1246da958bd7fbb0ee39a027b77c45041c47a3ef3",
-			"925f6de1f92bb8bc55e94b4f28603350bdefeb1e268277500d96a0075690c1e2",
-			"b9ca38e7618de6e40cb76756f187354f763428e81595b700d11e59ee57bcdcd4",
-			"e325993c6eb775797c19ef7cfb36a04052c55d71be0093fa2848ddfc1bd672be",
-			"f4271f75110954c6bcba2a573fc8772cd455b4d2faf4a395df7cbb1cf1cbd76d"
+			"9cce31cb02110a9d8e3f3c4ed8dff1b5d1118c9d30a1fe1f46d08b97288ab036",
+			"a876045d43a9bb3a28454317e401dc90e86c0e3fc92d12d1e51d9ef9574787a6"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Inline chat touching code outside of my selection #2988",
 		"requests": [
-			"edc10e9e09fa5720be0f2357e0c8216266408a3a6339367a76260e60a8ed3e78"
+			"26d2dff159edc73ed75ed487d3d8502870282ee9ad58b8245de78894e76e9f60",
+			"6643b8f29a93e052e64c1c6c2907345bc4d548fc4cc65239e04ae35beb2ecf8d",
+			"95e8f30d95c6556240da75658683f08364d2512ddfaddc3d170f570e5718c9fb",
+			"b0f82c8d069063dae8df65be31b94aa3a293028b04f2c8ce192786a95f034ff2",
+			"ebed110450ff85b447747c37a083f8ce4af09f420746f8ee4d1ac7378d006227"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Inline chat touching code outside of my selection #2988 with good selection",
 		"requests": [
-			"a90b285723b45c0b924f80b5406db5e47a8d43d9c7fa946cdda72ea6c4d6d273"
+			"1f118ade007a558ca796f5aeef389d0dd916441bf3258ff8e3464bdb0800aebb"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #2431: Inline Chat follow-up tweak ends up in noop text-only answer",
 		"requests": [
-			"0fca2f41ee2d44c4d1fc6ef29b329f7e3621206f5d983296e455589df4b5b47e",
-			"309bd7e9f9967a4174c03d2d9b96f4fa64659cccd0401441f716083a2891bc1a",
-			"77012e1db147f3b58c0e0c079fd18736f3437cebc766bf06bdd9643bb5b8f070",
-			"a30e023668c918e86d7b9d5319586e2ecbb86547761e47c41ed01892e19bfb30",
-			"b9f13a00556dda87696418442da5a035958985d309baa525ea6d4df82a07449e",
-			"be21de1e3b5a57a95c97ed987f045bdfc0dc8db9ff06a465c3bd2cd3af19dba1",
-			"ca96a87ab196583f032fe267359f7c8433c57fd02a57ddb8ef8396d4edd3c93e",
-			"d47461eb5eef31fecfe59f4cd2a336419388754404376913fd0555421a79e19b",
-			"e4303b22353458230b3fc27510335514fe1f2b848d1e2fceb32c8c8c94076c33",
-			"f7f80e90728d2458164013dd7087a4c66dc05cb311dca09565961ddfeced118c",
-			"fda45c7191fc27d2aa3b8a3640c85a2d7fd69cf9f4fb1df0d5aa07183dead62b"
+			"03a8a1a6a02b45cdf1ffee29e32d08ccbbde525add26625e95ce650d4a7754bb",
+			"285e5f4f4bfade07753fea9dc0f9e688977005eaaf5b10ad356c721e77fda2af",
+			"47b573a465d2ba87dc74a2543739fa82d224bb759bd51e49aca4fb318d97bdbc",
+			"5c74ff0c6888412e52c2bee8df993f45144263c6eca75f87dade3b39e64c043d",
+			"5f10981b5636d053bed682b4a1e83ddce4e3dc6cc3b8f659482217fbad41244b",
+			"b04ef3c31183b9c047d3ae31316ed65981d27a93a726c006e7ed60dea35228d8",
+			"b560434f47eb9f01a94f12eaf044cba6c29001762495924a461e0318588ae331",
+			"bb63506c8fe8e9a6e2f0227a6f3b1d909a9846af15632a768a6364618b9ff6fa",
+			"d4ff57a1273356cc53441bd526ca2bec0e0eed58a1fdbca29e3330c72d11bba6",
+			"e42fabead23796bdca52716b9b969392cefea38e71245ed2f5f6276d63268259",
+			"f8e837f69c5de15a32a01017aa4faf14ffd5ed8c564d6f69b36e20c4ada3a8fe",
+			"fe72722fb5a69cff12b32a955b4e5791f35ad98f8acc1c4e6cb6a04eb4af330a"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #246: Add comment sends request to sidebar",
 		"requests": [
-			"1a7ad62c0997917329ee23bdaa410b909f6fc895e84c86aa63c98ef6130e9a78"
+			"4c1bd282532ec249afcac59fbda1eb92662707c03d898859fa6bca560eb5f21c",
+			"8605439e67fe145e359d05fd3f35b130e02958573dbd4ac262b950d32b185733"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #3257: Inline chat ends up duplicating code",
 		"requests": [
-			"477698b9ab73ce15bc5cc4c0767ab444a2c7cf383ba3bad7fae7f4d850767c65",
-			"4ce77c39ba683552961f3b9e1c67ab7e01bf0a2f3c4df0cd75c25c05aa83a83e",
-			"5c34c6b4a7069f56b30c9a1cbc6fa902bb4b3d362a7a0f48af9b80a27da5549d",
-			"8db685dfaa006e0b5502324d489b864cfdc7d3228c5fa81d995df1c74cd15a71",
-			"91b501fcdfc77baa4b7c2371ecbab3b22bf19eb2017a8b46eb0060e004d27c2a",
-			"962d18c60430101524883de63c9bebbb047fbd3163acafc383d2d26dc46d727a",
-			"97317b0e6bdbda7d778bbeb3819e4344b5d6825d0dd3fe3e09fe74583897bd8d",
-			"9c994645405b5d97650e7f5504814dc45371dcbee95cb288f2f5c695ff6dac0b",
-			"bfc55948de4538ca3ecee0e1344fae0209b9693579cb000b8d07ca80af3baac5",
-			"d28c18b1fcc36761a407fbe602d32ddf7b83bc78d15ae78862cd94601965496f",
-			"da4f54dd6285f230dc710b93eb29c4872c8e111448d8aee7ee21c414fee9b570"
+			"078bace09f3fb8e31bc251fad193c93d7c4a9bbeeb3353f3d090b55867f297ac",
+			"0b58fae162590727d3256fdab4c66ac4e476bdf6a84259d4c5c29b111a56c783",
+			"24efd2ac2c8e33624e9aaaa1b91a351ce9f7336747df303de3818ce1f8fff956",
+			"889a476584d90ca08df8dca82a2772f7a354f03df374553e09baf225a2b15b31",
+			"fc16eac0acf6bfd7e61489216f978cce7606f619c9fc024bc7e38258d8e99ba7"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #3575: Inline Chat in function expands to delete whole file",
 		"requests": [
-			"76142f81746ff026167caaa3dde58cd57c6ab1898eeb19d9c528c76273c96f4d"
+			"17ff2df77ea71d17d85ca36f8c7f625fb0759a311254f3a79a9609dbc1d62c3f"
 		]
 	},
 	{
@@ -230,7 +241,7 @@
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #404: Add a cat to a comment",
 		"requests": [
-			"9116d98aa54bb62ed79069f448fed4c636592d51bd87b1e771e9b3e80e539c01"
+			"c06ccf36d61cb8fd4cadf4cdafa6cf1dbf4e21bbff38a544c8658f924df89c4b"
 		]
 	},
 	{
@@ -240,126 +251,126 @@
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #4149: If ChatGPT makes the request, send only the first 20 episodes",
 		"requests": [
-			"22d25f9b2008d8ebdcb5fa878bb3b814cd68ce1494b9bcc9192934f9d5c939e1",
-			"36c886ee35c4eea4d2441eeb23859b59017593630fe427c8bc5e2245b3aa46dd",
-			"861e659f27feae785dca7f09add67df103816a97d29c4fa38c3049fdb65f5f18",
-			"d277490fd5a107edd28337669d1c042ae41a5ed4f2dc508f2c7fcd39babf737c",
-			"e6a2e34f491405ebec3c81eff67ce0b10601bef1dba457fc20082e760d268281",
-			"f507231c0351f5f003b7beadf58b5a3089e81af7b5608dbd7a491411717e6461",
-			"fa18f1f173d03f577fd2a0f635cf92579d694ebdfa22c6e1839d655713f9d38e"
+			"052d5a98eec35970ffc06b2eb751ae81ddd16f56d6f72e39d9b21e733b34843f",
+			"2bf4fe818e224cc5e778461173c82d84527e72cdace5f9ba8581b3167949755f",
+			"61847e7f84d372ba105895e33655c4fc4a5961946e3ac2a1d06191537357e7f3",
+			"721c65b5a91fe03b827905952b0228580a0b6830278cc3e935e61f49316ac49d",
+			"92b5639bf2ff819070022805f55dea957b7115d5914c88ef96672bbf78b3b4d8",
+			"cc370f712d1e50edcef8bce4632d31d75c93385aae1c5b9c38817799fd7c0390",
+			"e9878577a3f7b9172410275cc66588700df0c848e65904b8484344c933386461",
+			"f967dd63849397dea57420b902fc0f335215bd8f14a37bdf944d137c6945fa1b"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #4151: Rewrite the selection to use async/await",
 		"requests": [
 			"4a14193e83e219f22c2d5cc39183bb6020695300ce00b8e36c352c1451cd7fec",
-			"c51b3c5d74b09801d717121e3e82706b0da538deabfa9705c00f065eecf04783"
+			"c2ef64f9390e64e1a9fbd2af14a8a1d771520d514b132b1265f6de05f603ecc5"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #4302: Code doesn't come with backticks",
 		"requests": [
-			"ce9d9f7585de8239ceb16a2687c818adaac1335d4fa8c3916f10e274b6a385fb"
+			"1bf6940ebe0f8b2215806ec82c8237afef32f05f442e145a941b3ba087192fbd"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #5710: Code doesn't come with backticks",
 		"requests": [
-			"bbc3d06e918d6011cca6eef61b3fc681f71a79e7b7edac75339904db76a0baf7"
+			"11472ac1206cf536390c9d35b09b4c8f5f1b16de8e6097e4b4c2b1832e349e8b"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #5755: Inline edits go outside the selection",
 		"requests": [
-			"ddea5019c110557709f043f35055ffc73a7949a24a62b27b4d409283d68eeb28"
+			"00a59ff37b976d5ffa4aae04f3f4daaec4ab2682fdf5645cb7efa69d9b356359"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #6059",
 		"requests": [
-			"85102bdf8998d3a2476e175a6774b7f0b38a5c8aa28230fd8a80c6b0aabd4fe8"
+			"782f4c975c99c2323c67a2c1b0ec6ece2cbdcc90d2f442222fbc21236a01b82c"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #6276",
 		"requests": [
-			"42f8db3851765b4ba7938034dea204fc210e6896b1e3c3f893839b6aa67b797a",
-			"4432a3fdb4ebaf5496c2d72449fece526303fed7edd2f333f321aa153941e9fc",
-			"67aa688136111ee392a559e532671fbbd67c720fafd84f980421582d05d7ee07",
-			"67d29f7954392099a07c4045d12024d251078badac7a422f5f82a52b8a0489e1",
-			"7f8c2db24ec95dc384ac37fc7bd3758dda8c0bd0934434cb097e878aa1f31844",
-			"849814e1502e90ae927cbc620086bf132549a51ca0d52b8f380c9697b5a51d37",
-			"f56a172ed91bb5b1f4509ac7a16c430a5e7d36556dbef2f3b5c7283baea04e0a",
-			"f89ae88c36a80ed066916090b14f70376991e103979e5b78dfc25f3ae9715529",
-			"fdd7d7e236318b714701f11cd4cb64bea09599c87865f38754c9d6d7234cef92"
+			"4929903d9d1e9ccf8d10b54c112b6573f2606da6e0b91abcc66737feaa440758"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #6973",
 		"requests": [
-			"0ad4339f913ad91aa8dd26c9679428038f66ba99dc938447b17af8daf60d09b0",
-			"487b490d842d87f15ce3a324d9d19d327d713c463266ca92a6aad7608434e105",
-			"c83bb3f64d852d866a71c86ba03d5f09b1af06f55565a42f96c594fa5f322087"
+			"8adf32a98dc07e3fc9e8e2035620326549854815438e74ca9bc2e6fd859536f4",
+			"9cfbe9f56aa38fe0bcf90a02f8a01fedcdf48d06969e12f1f3c4ff64a9184796"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #7202",
 		"requests": [
-			"976b78b5412bde6deaaeaeabc9385ee468b0f60db53a7ed8475128df1f38e7c8"
+			"6884220f8ea75ed888c392149e578c1948c55bb6df4f3d721459a17411cbd36b"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #7660",
 		"requests": [
-			"4536e10a0c80d70c4413504e1356eb4f45e002929484d15fb997e4a1bab4e14a"
+			"9b31de1bc1dc811bcd8960ece65a35429ac13e97f7c593370b6aa6f53deeaa8e"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Issue #7996 - use entire context window",
 		"requests": [
-			"803d0ce2795a87b1085cf8f79c8d6d42bc15b7711b1d0d8c24aa9d2a4a96bb80"
+			"43cd1468a5101adb36f29dc44ca2252ec5c2fb810ae2e44a408b15a089862a7a"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Issue #8129 (no errors)",
 		"requests": [
-			"1c745f211a5e7ed72268654b7288c6de0f61e26299045d88804916121a7f1b5b",
-			"218ba8f7042fa96f33669cbb801921181e2e74992fcde42907804a425102731d",
-			"3e6057c6b4ff40da2e926bb2a0e645fecfa0e7b3068732b8614b5164f200d5f1",
-			"76c2839c637e396d4fa251bf8f02ba826a9a57cde727557336faacc459101cbf",
-			"7a4d89cf538d8128ddd182653977e0c0c12bd7d053bec4809c702d52233a6926",
-			"9dbc2c239300a1334505322f493393eea4a583d4e7c32df3e42f70739ca73b38",
-			"ab28f98acd84f4b886fb50895c632f0c60b63f9d23d03409bae4c7ba4dcaea07",
-			"b405691a24f9a1c514c1cadc810955f4fe7b591ff79c256e845bd173930005c0",
-			"bbea3a91761743237b405b2fa051786b7393932bb8117fb69aa9b20ee6b577c2",
-			"cee4155a02e7179c420492ff1d82122067615d325af38290c2c31baa5d8bcb15"
+			"09b20ae81a1c62f8a777cbf55dbd3de2895188eba793028e008dcf01612e38b5",
+			"248e152f8469be12c7e9547097675eaed984a3cb0cc0b888752528890e413897",
+			"3ac8c766caa32517e40bb3a1a60615923192e587ae62b4e3e72266470c58031f",
+			"5f0f79b9bd6b3edf71f4a3c9eae2c19ccf05c28c4e5af5f6d829f56e0739dc80",
+			"645ccf8f6489a93871ebbe03c4ee8adfa3cd52186f019825d30043f4c6f7dfce",
+			"67e4b57ec9cb17762bd0bf150f20e6fa45dd445eac8aa1008050dec7fc752aae",
+			"7ffa8d9699117b5cdb5f2c37090d61840ff0b6613894f017d506ac8f372c2d57",
+			"8aab799b81038577e6abefa65dd28a6753341dd59dc616f358a64386b9094340",
+			"c855af82997632bf8f296d502df30a19322b6e3fe423bb95b47b2f4d03894f9f",
+			"dcd657f2b58dc4a243f0d76764e7056ba64d77c27bd516b87a4a96db5f5b6825",
+			"f44d92abb9568f500825a444067ecd9af90dcc602dc2bf4ada648e648a64a69a"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Issue #8129 (no syntax errors)",
 		"requests": [
-			"1c745f211a5e7ed72268654b7288c6de0f61e26299045d88804916121a7f1b5b",
-			"218ba8f7042fa96f33669cbb801921181e2e74992fcde42907804a425102731d",
-			"3e6057c6b4ff40da2e926bb2a0e645fecfa0e7b3068732b8614b5164f200d5f1",
-			"76c2839c637e396d4fa251bf8f02ba826a9a57cde727557336faacc459101cbf",
-			"7a4d89cf538d8128ddd182653977e0c0c12bd7d053bec4809c702d52233a6926",
-			"9dbc2c239300a1334505322f493393eea4a583d4e7c32df3e42f70739ca73b38",
-			"ab28f98acd84f4b886fb50895c632f0c60b63f9d23d03409bae4c7ba4dcaea07",
-			"b405691a24f9a1c514c1cadc810955f4fe7b591ff79c256e845bd173930005c0",
-			"bbea3a91761743237b405b2fa051786b7393932bb8117fb69aa9b20ee6b577c2",
-			"cee4155a02e7179c420492ff1d82122067615d325af38290c2c31baa5d8bcb15"
+			"09b20ae81a1c62f8a777cbf55dbd3de2895188eba793028e008dcf01612e38b5",
+			"248e152f8469be12c7e9547097675eaed984a3cb0cc0b888752528890e413897",
+			"3ac8c766caa32517e40bb3a1a60615923192e587ae62b4e3e72266470c58031f",
+			"5f0f79b9bd6b3edf71f4a3c9eae2c19ccf05c28c4e5af5f6d829f56e0739dc80",
+			"645ccf8f6489a93871ebbe03c4ee8adfa3cd52186f019825d30043f4c6f7dfce",
+			"67e4b57ec9cb17762bd0bf150f20e6fa45dd445eac8aa1008050dec7fc752aae",
+			"7ffa8d9699117b5cdb5f2c37090d61840ff0b6613894f017d506ac8f372c2d57",
+			"8aab799b81038577e6abefa65dd28a6753341dd59dc616f358a64386b9094340",
+			"c855af82997632bf8f296d502df30a19322b6e3fe423bb95b47b2f4d03894f9f",
+			"dcd657f2b58dc4a243f0d76764e7056ba64d77c27bd516b87a4a96db5f5b6825",
+			"f44d92abb9568f500825a444067ecd9af90dcc602dc2bf4ada648e648a64a69a"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - refactor forloop, but only selected one",
 		"requests": [
-			"1f66f9191abc073b35ce0c6be118789e1f360566af8871e742b2c24e38e75e76"
+			"fb9ab981ab190af6b1f0d89824ad510648529c6f1ab0e4b6c989f712ad962f1e"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescriptreact] - issue #7487",
 		"requests": [
-			"7ccc587388e9ab2b9a0bc738a6a4e595d22bcd1216de5ae23a63cf988847530f"
+			"1736a21781fab7c1f8db5005762c71fd0fac662b12257dbb37701a19f36c8702",
+			"2c4f9c7ebc75638962493a9559ee09e851ca3d06b5eb8cd9242346be43446408",
+			"542c2ac94a3ed857e33658761f2e59b965d28e969bb4eb065f9f3c37ff53ceaa",
+			"5d7683d49d29a6c74d1dc6301add1aae47e20b636e06b620ac4583fbaace5a63",
+			"63411481bb59466ac59efe50d21cbbb421f2ab230ddb9ed60b61deb6815c9659",
+			"80e1b27a56ed8558b3e571690385fef8aadcef8f265e5f2864c4b78e18eb12b1",
+			"a1107061bf5d285331dea4e57e94deb6c8a4ca94eac36f8ce58406b465ec3254"
 		]
 	}
 ]

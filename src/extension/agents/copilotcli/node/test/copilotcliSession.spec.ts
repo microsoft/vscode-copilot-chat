@@ -5,8 +5,6 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AuthenticationSession } from 'vscode';
-import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
@@ -20,7 +18,7 @@ import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
-import { CopilotCLISessionOptions } from '../copilotCli';
+import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 
@@ -81,20 +79,22 @@ describe('CopilotCLISession', () => {
 	let logger: ILogService;
 	let gitService: IGitService;
 	let sessionOptions: CopilotCLISessionOptions;
-	let authService: IAuthenticationService;
 	let instaService: IInstantiationService;
+	let sdk: ICopilotCLISDK;
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logger = accessor.get(ILogService);
 		gitService = accessor.get(IGitService);
-		authService = new class extends mock<IAuthenticationService>() {
-			override async getAnyGitHubSession() {
+		sdk = new class extends mock<ICopilotCLISDK>() {
+			override async getAuthInfo(): Promise<SessionOptions['authInfo']> {
 				return {
-					accessToken: '',
-				} satisfies Partial<AuthenticationSession> as AuthenticationSession;
+					type: 'token',
+					token: '',
+					host: 'https://github.com'
+				};
 			}
-		}();
+		};
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
 		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0].fsPath }, logger);
@@ -114,7 +114,7 @@ describe('CopilotCLISession', () => {
 			gitService,
 			logger,
 			workspaceService,
-			authService,
+			sdk,
 			instaService
 		));
 	}
