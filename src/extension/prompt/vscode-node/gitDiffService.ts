@@ -121,19 +121,16 @@ export class GitDiffService implements IGitDiffService {
 				lines.pop();
 			}
 
-			// Header
 			patch.push(`diff --git a/${relativePath} b/${relativePath}`);
+			// 100644 is standard file mode for new git files. Saves us from trying to check file permissions and handling
+			// UNIX vs Windows permission differences.
 			patch.push('new file mode 100644');
 
-			// Add original/modified file paths
 			patch.push('--- /dev/null', `+++ b/${relativePath}`);
-
-			// Add range header
 			patch.push(`@@ -0,0 +1,${lines.length} @@`);
-
-			// Add content
 			patch.push(...lines.map(line => `+${line}`));
 
+			// Git standard to add this comment if the file does not end with a newline
 			if (content.length > 0 && !content.endsWith('\n')) {
 				patch.push('\\ No newline at end of file');
 			}
@@ -141,6 +138,7 @@ export class GitDiffService implements IGitDiffService {
 			console.error(err, `Failed to generate patch file for untracked file: ${resource.toString()}`);
 		}
 
+		// The patch itself should always end with a newline per git patch standards
 		return patch.join('\n') + '\n';
 	}
 }
