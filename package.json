@@ -2341,6 +2341,10 @@
 				"icon": "$(refresh)"
 			},
 			{
+				"command": "github.copilot.cloud.resetWorkspaceConfirmations",
+				"title": "%github.copilot.command.resetCloudAgentWorkspaceConfirmations%"
+			},
+			{
 				"command": "github.copilot.cloud.sessions.openInBrowser",
 				"title": "%github.copilot.command.openCopilotAgentSessionsInBrowser%",
 				"icon": "$(link-external)"
