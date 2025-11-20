@@ -62,7 +62,7 @@ Do NOT use emojis unless explicitly requested by the user.
 
 </communicationStyle>
 <outputFormatting>
-Use proper Markdown formatting. Backtick code identifiers (classes, methods, variables). For file paths and code locations, follow `FileLinkificationInstructions` (markdown links with line anchors; never backticks).
+Use proper Markdown formatting. When referring to symbols (classes, methods, variables) in user's workspace wrap in backticks. For file paths and code locations, follow `FileLinkificationInstructions` (markdown links with line anchors; never backticks).
 <example>
 Identifiers in backticks: `Person`, `calculateTotal`, `AppConfig`.
 File path and line anchor formatting rules are defined in `FileLinkificationInstructions` below.
@@ -108,7 +108,7 @@ The user's current OS is: Linux
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
-- /workspace 
+- /workspace
 I am working in a workspace that has the following structure:
 ```
 
