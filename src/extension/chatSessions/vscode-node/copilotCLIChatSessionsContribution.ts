@@ -402,7 +402,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			if (!isUntitled && confirmationResults.length) {
-				return await this.handleConfirmationData(session.object, request.prompt, confirmationResults, context, stream, token);
+				return await this.handleConfirmationData(request, session.object, request.prompt, confirmationResults, context, stream, token);
 			}
 
 			if (request.prompt.startsWith('/delegate')) {
@@ -503,7 +503,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return results;
 	}
 
-	private async handleConfirmationData(session: ICopilotCLISession, prompt: string, results: ConfirmationResult[], context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleConfirmationData(request: vscode.ChatRequest, session: ICopilotCLISession, prompt: string, results: ConfirmationResult[], context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		const uncommittedChangesData = results.find(data => data.step === UncommittedChangesStep);
 		if (!uncommittedChangesData) {
 			stream.warning(`Unknown confirmation step: ${results.map(r => r.step).join(', ')}\n\n`);
@@ -515,15 +515,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return {};
 		}
 
-		// const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession({
-		// 	prompt: uncommittedChangesData.metadata.prompt,
-		// 	references: uncommittedChangesData.metadata.references,
-		// 	// autoPushAndCommit: uncommittedChangesData.metadata.autoPushAndCommit,
-		// 	chatContext: context
-		// }, stream, token);
-		// if (prInfo) {
-		// 	await this.recordPushToSession(session, prompt, prInfo);
-		// }
+		const prInfo = await this.cloudSessionProvider?.delegate(request, stream, context, token, { ...uncommittedChangesData.metadata, prompt });
+		if (prInfo) {
+			await this.recordPushToSession(session, prompt, prInfo);
+		}
 		return {};
 	}
 
