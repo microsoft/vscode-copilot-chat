@@ -314,8 +314,8 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 					});
 
 				try {
-					const pomptReferences = extractChatPromptReferences(event.data.content || '');
-					references.push(...pomptReferences.references);
+					const promptReferences = extractChatPromptReferences(event.data.content || '');
+					references.push(...promptReferences.references);
 				} catch (ex) {
 					// ignore errors from parsing references
 				}
