@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as vscode from 'vscode';
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
 import { API, Change, Repository } from '../../../../platform/git/vscode/git';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
@@ -12,26 +13,27 @@ import { Uri } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { GitDiffService } from '../gitDiffService';
 
-const mockReadFile = vi.fn();
-
-vi.mock('vscode', async () => {
-	const actual = await vi.importActual('vscode');
-	return {
-		...actual,
-		workspace: {
-			fs: {
-				readFile: mockReadFile
-			}
-		}
-	};
-});
-
 describe('GitDiffService', () => {
+	let readFileSpy: any;
 	let accessor: ITestingServicesAccessor;
 	let gitDiffService: GitDiffService;
 	let mockRepository: Partial<Repository>;
 
 	beforeEach(() => {
+		// Create mock workspace.fs.readFile if it doesn't exist
+		if (!vscode.workspace?.fs?.readFile) {
+			(vscode as any).workspace = {
+				...vscode.workspace,
+				fs: {
+					...vscode.workspace?.fs,
+					readFile: vi.fn()
+				}
+			};
+		}
+
+		// Spy on workspace.fs.readFile
+		readFileSpy = vi.spyOn(vscode.workspace.fs, 'readFile').mockImplementation(() => Promise.resolve(new Uint8Array()));
+
 		mockRepository = {
 			rootUri: Uri.file('/repo'),
 			diffWith: vi.fn(),
@@ -54,12 +56,16 @@ describe('GitDiffService', () => {
 		gitDiffService = accessor.get(IInstantiationService).createInstance(GitDiffService);
 	});
 
+	afterEach(() => {
+		readFileSpy.mockRestore();
+	});
+
 	describe('_getUntrackedChangePatch', () => {
 		it('should generate correct patch for untracked file', async () => {
 			const fileUri = Uri.file('/repo/newfile.txt');
 			const fileContent = 'line1\nline2\n';
 
-			mockReadFile.mockResolvedValue(Buffer.from(fileContent));
+			readFileSpy.mockResolvedValue(Buffer.from(fileContent));
 
 			const changes: Change[] = [{
 				uri: fileUri,
@@ -97,7 +103,7 @@ describe('GitDiffService', () => {
 			const fileUri = Uri.file('/repo/no-newline.txt');
 			const fileContent = 'line1'; // No trailing \n
 
-			mockReadFile.mockResolvedValue(Buffer.from(fileContent));
+			readFileSpy.mockResolvedValue(Buffer.from(fileContent));
 
 			const changes: Change[] = [{
 				uri: fileUri,
@@ -120,7 +126,7 @@ describe('GitDiffService', () => {
 			const fileContent = '';
 
 			// Mock readFile to return an empty buffer
-			mockReadFile.mockResolvedValue(Buffer.from(fileContent));
+			readFileSpy.mockResolvedValue(Buffer.from(fileContent));
 
 			const changes: Change[] = [{
 				uri: fileUri,
