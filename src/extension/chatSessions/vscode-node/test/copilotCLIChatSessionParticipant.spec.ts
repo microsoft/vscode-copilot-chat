@@ -296,6 +296,38 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(execSpy.mock.calls[1]).toEqual(['workbench.action.chat.submit', { inputValue: expectedPrompt }]);
 	});
 
+	it('handleConfirmationData accepts uncommitted-changes and records push', async () => {
+		// Existing session (non-untitled) so confirmation path is hit
+		const sessionId = 'existing-confirm';
+		const sdkSession = new MockCliSdkSession(sessionId, new Date());
+		manager.sessions.set(sessionId, sdkSession);
+		const request = new TestChatRequest('my prompt');
+		const context = createChatContext(sessionId, false);
+		(request as any).acceptedConfirmationData = [{ step: 'uncommitted-changes', metadata: { chatContext: context } }];
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+		// Cloud provider will create delegated chat session returning prInfo
+		(cloudProvider.delegate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ uri: 'pr://2', title: 'T', description: 'D', author: 'A', linkTag: 'L' });
+
+		await participant.createHandler()(request, context, stream, token);
+
+		// Should NOT call session.handleRequest, instead record push messages
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].requests.length).toBe(0);
+		expect(sdkSession.emittedEvents.length).toBe(2);
+		expect(sdkSession.emittedEvents[0].event).toBe('user.message');
+		expect(sdkSession.emittedEvents[1].event).toBe('assistant.message');
+		expect(sdkSession.emittedEvents[1].content).toContain('pr://2');
+		// Cloud provider used with provided metadata
+		expect(cloudProvider.delegate).toHaveBeenCalledWith(
+			request,
+			stream,
+			context,
+			token,
+			{ chatContext: context }
+		);
+	});
+
 	it('handleConfirmationData cancels when uncommitted-changes rejected', async () => {
 		const sessionId = 'existing-confirm-reject';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());

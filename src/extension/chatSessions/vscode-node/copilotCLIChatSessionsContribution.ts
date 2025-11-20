@@ -515,7 +515,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return {};
 		}
 
-		const prInfo = await this.cloudSessionProvider?.delegate(request, stream, context, token, { ...uncommittedChangesData.metadata, prompt });
+		const prInfo = await this.cloudSessionProvider?.delegate(request, stream, context, token, uncommittedChangesData.metadata);
 		if (prInfo) {
 			await this.recordPushToSession(session, prompt, prInfo);
 		}
