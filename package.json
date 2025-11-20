@@ -135,7 +135,8 @@
 		"languageModelThinkingPart",
 		"chatSessionsProvider@3",
 		"devDeviceId",
-		"contribEditorContentMenu"
+		"contribEditorContentMenu",
+		"tokenInformation"
 	],
 	"contributes": {
 		"languageModelTools": [
