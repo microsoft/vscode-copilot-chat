@@ -26,9 +26,6 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 			// Convert VS Code API options to internal options
 			const internalOptions = options ? {
 				target: options.target,
-				excludeInvalidConfig: options.excludeInvalidConfig,
-				dedupe: options.dedupe,
-				includeSources: options.includeSources ? [...options.includeSources] : undefined,
 			} : undefined;
 
 			const agents = await this.octoKitService.getCustomAgents(repoOwner, repoName, internalOptions);
