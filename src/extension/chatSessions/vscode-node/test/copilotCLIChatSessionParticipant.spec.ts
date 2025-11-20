@@ -51,6 +51,7 @@ vi.mock('../copilotCLITerminalIntegration', () => {
 
 class FakeWorktreeManager extends mock<CopilotCLIWorktreeManager>() {
 	override createWorktree = vi.fn(async () => undefined);
+	override createWorktreeSilently = vi.fn(async (): Promise<string | undefined> => undefined);
 	override storeWorktreePath = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
 	override getIsolationPreference = vi.fn(() => false);
@@ -291,6 +292,28 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(execSpy.mock.calls[0]).toEqual(['vscode.open', expect.any(Object)]);
 		expect(String(execSpy.mock.calls[0].at(1))).toContain(`copilotcli:/${sessionId}`);
 		expect(execSpy.mock.calls[1]).toEqual(['workbench.action.chat.submit', { inputValue: expectedPrompt }]);
+	});
+
+	it('invokes handlePushConfirmationData with isolation enabled creates worktree silently', async () => {
+		// Enable isolation preference
+		worktree.getIsolationPreference = vi.fn(() => true);
+		worktree.createWorktreeSilently = vi.fn(async () => '/tmp/worktree-path');
+		
+		const request = new TestChatRequest('Push this');
+		const context = { chatSessionContext: undefined, chatSummary: undefined } as unknown as vscode.ChatContext;
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		// Verify worktree was created silently (not with stream parameter)
+		expect(worktree.createWorktreeSilently).toHaveBeenCalledTimes(1);
+		expect(worktree.createWorktree).not.toHaveBeenCalled();
+		
+		// Verify worktree path was stored
+		expect(worktree.storeWorktreePath).toHaveBeenCalledTimes(1);
+		const sessionId = Array.from(manager.sessions.keys())[0];
+		expect(worktree.storeWorktreePath).toHaveBeenCalledWith(sessionId, '/tmp/worktree-path');
 	});
 
 	it('handleConfirmationData accepts uncommitted-changes and records push', async () => {
