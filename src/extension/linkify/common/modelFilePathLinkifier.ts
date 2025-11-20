@@ -25,6 +25,7 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 	async linkify(text: string, context: LinkifierContext, token: CancellationToken): Promise<LinkifiedText | undefined> {
 		let lastIndex = 0;
 		const parts: Array<LinkifiedPart | Promise<LinkifiedPart>> = [];
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 
 		for (const match of text.matchAll(modelLinkRe)) {
 			const original = match[0];
@@ -40,7 +41,6 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 				continue;
 			}
 
-			const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 			if (!this.canLinkify(parsed, workspaceFolders)) {
 				parts.push(original);
 				continue;
@@ -244,13 +244,16 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 		try {
 			const stat = await this.fileSystem.stat(uri);
 			if (stat.type === FileType.Directory) {
-				if (preserveDirectorySlash) {
-					return uri.path.endsWith('/') ? uri : uri.with({ path: `${uri.path}/` });
+				const isRoot = uri.path === '/';
+				const hasTrailingSlash = uri.path.endsWith('/');
+				const shouldHaveTrailingSlash = preserveDirectorySlash && !isRoot;
+
+				if (shouldHaveTrailingSlash && !hasTrailingSlash) {
+					return uri.with({ path: `${uri.path}/` });
 				}
-				if (uri.path.endsWith('/') && uri.path !== '/') {
+				if (!shouldHaveTrailingSlash && hasTrailingSlash) {
 					return uri.with({ path: uri.path.slice(0, -1) });
 				}
-				return uri;
 			}
 			return uri;
 		} catch {
