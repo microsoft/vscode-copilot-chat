@@ -89,7 +89,7 @@ export class CopilotCloudGitOperationsManager {
 				if (!hasRemoteBranch) {
 					if (this.autoCommitAndPushEnabled) {
 						this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote. Auto-pushing because autoCommitAndPush is enabled.`);
-						stream.progress(vscode.l10n.t('Pushing branch \'{0}\'', baseRef, remoteName));
+						stream.progress(vscode.l10n.t('Pushing branch \'{0}\'', baseRef));
 						await repository.push(remoteName, baseRef, true);
 					} else {
 						throw new Error('autoCommitAndPush is disabled');

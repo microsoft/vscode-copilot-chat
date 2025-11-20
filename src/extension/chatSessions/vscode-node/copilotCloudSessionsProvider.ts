@@ -135,6 +135,23 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService, this.configurationService);
 	private readonly _summarizer: ChatSummarizerProvider;
 
+	// Title
+	private TITLE = vscode.l10n.t('Delegate to cloud agent');
+
+	// Buttons (used for matching, be careful changing!)
+	private readonly AUTHORIZE = vscode.l10n.t('Authorize');
+	private readonly COMMIT = vscode.l10n.t('Commit Changes');
+	private readonly DELEGATE = vscode.l10n.t('Delegate');
+	private readonly CANCEL = vscode.l10n.t('Cancel');
+
+	// Messages
+	private readonly BASE_MESSAGE = vscode.l10n.t('Cloud agent works asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
+	private readonly AUTHORIZE_MESSAGE = vscode.l10n.t('Cloud agent requires elevated GitHub access to proceed.');
+	private readonly COMMIT_MESSAGE = vscode.l10n.t('This workspace has uncommitted changes. Should these changes be pushed and included in cloud agent\'s work?');
+
+	// Workspace storage keys
+	private readonly WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
+
 	constructor(
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 		@IGitService private readonly _gitService: IGitService,
@@ -144,7 +161,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
-		// @IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IInstantiationService instantiationService: IInstantiationService,
 	) {
@@ -597,7 +613,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		metadata: ConfirmationMetadata,
 		head_ref?: string): Promise<{ uri: vscode.Uri; title: string; description: string; author: string; linkTag: string }> {
 
-
 		await this.gitOperationsManager.validateRemoteHasBaseRef(stream);
 
 		let history: string | undefined;
@@ -726,25 +741,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			await this.delegate(request, stream, context, token, metadata, head_ref);
 		} catch (error) {
 			this.logService.error(`Failure in delegation: ${error}`);
-			throw new Error(vscode.l10n.t('{0}', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to start cloud agent session.')));
+			throw new Error(vscode.l10n.t('{0}', (error instanceof Error ? error.message : String(error))));
 		}
 	}
-
-	// TODO: move to top of the file
-	// Title
-	private TITLE = vscode.l10n.t('Delegate to cloud agent');
-	// Button keywords (used for matching, be careful changing)
-	private readonly AUTHORIZE = vscode.l10n.t('Authorize');
-	private readonly COMMIT = vscode.l10n.t('Commit Changes');
-	private readonly DELEGATE = vscode.l10n.t('Delegate');
-	private readonly CANCEL = vscode.l10n.t('Cancel');
-	// Messages
-	private readonly BASE_MESSAGE = vscode.l10n.t('Cloud agent works asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
-	private readonly AUTHORIZE_MESSAGE = vscode.l10n.t('Cloud agent requires elevated GitHub access to proceed.');
-	private readonly COMMIT_MESSAGE = vscode.l10n.t('This workspace has uncommitted changes. Should these changes be pushed and included in cloud agent\'s work?');
-
-	private readonly WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
-
 
 	private setWorkspaceContext(key: string, value: string) {
 		this._extensionContext.workspaceState.update(`${this.WORKSPACE_CONTEXT_PREFIX}.${key}`, value);
