@@ -47,6 +47,8 @@ export class LanguageModelServer implements ILanguageModelServer {
 		};
 		this.adapterFactories = new Map();
 		this.adapterFactories.set('/v1/messages', new AnthropicAdapterFactory());
+		// Used only in stests.
+		// this.adapterFactories.set('/chat/completions', new OpenAIAdapterFactoryForSTests());
 
 		this.server = this.createServer();
 	}
@@ -230,7 +232,7 @@ export class LanguageModelServer implements ILanguageModelServer {
 						return undefined;
 					},
 					location: ChatLocation.Agent,
-					requestOptions: parsedRequest.options,
+					requestOptions: { ...parsedRequest.options, stream: false },
 					userInitiatedRequest,
 					telemetryProperties: {
 						messageSource: `lmServer-${adapter.name}`

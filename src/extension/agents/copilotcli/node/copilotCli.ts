@@ -55,10 +55,6 @@ export class CopilotCLISessionOptions {
 
 	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
 		const allOptions: SessionOptions = {
-			env: {
-				...process.env,
-				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
-			},
 			logger: this.logger,
 			requestPermission: async (request: PermissionRequest) => {
 				return await this.requestPermissionHandler(request);
