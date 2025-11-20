@@ -346,8 +346,7 @@ describe('CopilotCLISession', () => {
 				kind: 'write',
 				fileName: filePath,
 				intention: 'Apply edit',
-				diff: '',
-				toolCallId: String(i)
+				diff: ''
 			});
 			permissionResults.push(result);
 			// Complete the edit so the tracker (if it were real) would finish; emit completion event
