@@ -515,9 +515,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					this.logService.warn(`Pull request ${prNumber} is not visible yet, retrying...`);
 					throw new Error(`PR ${prNumber} not yet visible`);
 				}
-				this.chatSessions.set(found.number, found);
 				return found;
 			}, 1500, retries);
+			if (pr) {
+				this.chatSessions.set(pr.number, pr);
+			}
 			return pr;
 		} catch (error) {
 			this.logService.warn(`Pull request not found for number: ${prNumber}. ${error instanceof Error ? error.message : String(error)}`);
