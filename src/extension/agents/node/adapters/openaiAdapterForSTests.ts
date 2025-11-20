@@ -345,9 +345,9 @@ function responseApiInputToRawMessages(messages: ChatCompletionMessageParam[]): 
 				});
 				const message: Raw.AssistantChatMessage = { role: Raw.ChatRole.Assistant, content: contentParts };
 				if (toolCalls.length) {
-					(message as Raw.AssistantChatMessage).toolCalls = toolCalls;
+					message.toolCalls = toolCalls;
 				}
-				pushOrMerge({ role: Raw.ChatRole.Assistant, content: contentParts, toolCalls });
+				pushOrMerge(message);
 				return;
 			}
 			case 'system':

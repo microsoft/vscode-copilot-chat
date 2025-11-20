@@ -30,6 +30,18 @@ import { IInstantiationService } from '../../src/util/vs/platform/instantiation/
 import { ChatRequest, ChatSessionStatus, Uri } from '../../src/vscodeTypes';
 import { ssuite, stest } from '../base/stest';
 
+const keys = ['COPILOT_ENABLE_ALT_PROVIDERS', 'COPILOT_AGENT_MODEL', 'GH_TOKEN', 'COPILOT_API_URL', 'GITHUB_COPILOT_API_TOKEN'];
+const originalValues: Record<string, string | undefined> = {};
+for (const key of keys) {
+	originalValues[key] = process.env[key];
+}
+
+function restoreEnvVariables() {
+	for (const key of keys) {
+		process.env[key] = originalValues[key];
+	}
+}
+
 function registerChatServices(testingServiceCollection: TestingServiceCollection) {
 	const ITestSessionOptionsProvider = createServiceIdentifier<TestSessionOptionsProvider>('ITestSessionOptionsProvider');
 	class TestSessionOptionsProvider {
@@ -211,6 +223,7 @@ function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; 
 
 			await cb(services, stream, disposables);
 		} finally {
+			restoreEnvVariables();
 			disposables.dispose();
 		}
 	};
