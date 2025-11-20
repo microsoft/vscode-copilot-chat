@@ -55,6 +55,7 @@ class FakeWorktreeManager extends mock<CopilotCLIWorktreeManager>() {
 	override storeWorktreePath = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
 	override getIsolationPreference = vi.fn(() => false);
+	override getDefaultIsolationPreference = vi.fn(() => false);
 }
 
 class FakeModels implements ICopilotCLIModels {
