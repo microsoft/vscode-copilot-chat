@@ -642,6 +642,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (!pullRequest) {
 			throw new Error(`Failed to find pull request #${number} after delegation.`);
 		}
+		const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
 
 		if (metadata.chatContext.chatSessionContext?.isUntitled) {
 			// Untitled flow
@@ -654,7 +655,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			});
 		} else {
 			// Delegated flow
-			const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
 			const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
 			stream.push(card);
 			stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
@@ -663,7 +663,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		// Return this for external callers, eg: CLI
 		return {
-			uri: sessionUri,
+			uri, // PR uri
 			title: pullRequest.title,
 			description: pullRequest.body || '',
 			author: getAuthorDisplayName(pullRequest.author),
