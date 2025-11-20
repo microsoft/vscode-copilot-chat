@@ -234,7 +234,7 @@ export async function makeSearchGraphQLRequest(
 
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
 
-	return result ? result.data.search.nodes : [];
+	return result?.data?.search ? result.data.search.nodes : [];
 }
 
 export async function getPullRequestFromGlobalId(
@@ -244,7 +244,7 @@ export async function getPullRequestFromGlobalId(
 	host: string,
 	token: string | undefined,
 	globalId: string,
-): Promise<PullRequestSearchItem | null> {
+): Promise<PullRequestSearchItem | 'RATE_LIMIT' | null> {
 	const query = `
 		query GetPullRequestGlobal($globalId: ID!) {
 			node(id: $globalId) {
@@ -286,6 +286,9 @@ export async function getPullRequestFromGlobalId(
 	};
 
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+	if (result?.errors && result.errors.some((err: { type?: string }) => err?.type === 'RATE_LIMIT')) {
+		return 'RATE_LIMIT';
+	}
 
 	return result?.data?.node;
 }

@@ -490,7 +490,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			this.logService.warn('Failed to determine GitHub repo from workspace');
 			return undefined;
 		}
-		const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
+		try {
+			const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
+		} catch (error) {
+
+		}
 		pr = pullRequests.find(pr => pr.number === prNumber);
 		if (!pr) {
 			this.logService.warn(`Pull request not found for number: ${prNumber}`);

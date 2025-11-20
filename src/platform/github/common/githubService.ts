@@ -230,7 +230,7 @@ export interface IOctoKitService {
 	/**
 	 * Gets pull request from global id.
 	 */
-	getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null>;
+	getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | 'RATE_LIMIT' | null>;
 
 	/**
 	 * Gets the list of custom agents available for a repository.
@@ -305,7 +305,7 @@ export class BaseOctoKitService {
 		return addPullRequestCommentGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, pullRequestId, commentBody);
 	}
 
-	protected async getPullRequestFromSessionWithToken(globalId: string, token: string): Promise<PullRequestSearchItem | null> {
+	protected async getPullRequestFromSessionWithToken(globalId: string, token: string): Promise<PullRequestSearchItem | 'RATE_LIMIT' | null> {
 		return getPullRequestFromGlobalId(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, globalId);
 	}
 

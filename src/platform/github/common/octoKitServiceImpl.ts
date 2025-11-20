@@ -223,7 +223,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null> {
+	async getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | 'RATE_LIMIT' | null> {
 		const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
