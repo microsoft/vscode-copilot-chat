@@ -50,7 +50,7 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 
 		// Files & folders will not be added as regular attachments, as those will be handed by SDK.
 		// We merely add a <attachments> tag to signal that there are file/folder attachments.
-		// This is because we wwant to avoid adding all fo the content of the file into the prompt.
+		// This is because we want to avoid adding all fo the content of the file into the prompt.
 		// We leave that for Copilot CLI SDK to handle.
 		const nonResourceVariables = this.props.chatVariables.filter(variable => !URI.isUri(variable.value) && !isLocation(variable.value));
 		const resourceVariables = this.props.chatVariables.filter(variable => URI.isUri(variable.value) || isLocation(variable.value));
