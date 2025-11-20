@@ -64,7 +64,6 @@ Do NOT use emojis unless explicitly requested by the user.
 <outputFormatting>
 Use proper Markdown formatting. When referring to symbols (classes, methods, variables) in user's workspace wrap in backticks. For file paths and code locations, follow `FileLinkificationInstructions` (markdown links with line anchors; never backticks).
 <example>
-Identifiers in backticks: `Person`, `calculateTotal`, `AppConfig`.
 File path and line anchor formatting rules are defined in `FileLinkificationInstructions` below.
 </example>
 <file_linkification>
