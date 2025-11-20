@@ -7,7 +7,6 @@ import type { ConfigurationChangeEvent, ConfigurationScope } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
-import { StringSHA1 } from '../../../util/vs/base/common/hash';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as objects from '../../../util/vs/base/common/objects';
 import { IObservable, observableFromEventOpts } from '../../../util/vs/base/common/observable';
@@ -173,7 +172,6 @@ export abstract class AbstractConfigurationService extends Disposable implements
 
 	protected _isInternal: boolean = false;
 	protected _isTeamMember: boolean = false;
-	private _teamMemberUsername: string | undefined = undefined;
 
 	constructor(copilotTokenStore?: ICopilotTokenStore) {
 		super();
@@ -225,14 +223,13 @@ export abstract class AbstractConfigurationService extends Disposable implements
 	}
 
 	private _setUserInfo(userInfo: { isInternal: boolean; isTeamMember: boolean; teamMemberUsername?: string }): void {
-		if (this._isInternal === userInfo.isInternal && this._isTeamMember === userInfo.isTeamMember && this._teamMemberUsername === userInfo.teamMemberUsername) {
+		if (this._isInternal === userInfo.isInternal && this._isTeamMember === userInfo.isTeamMember) {
 			// no change
 			return;
 		}
 
 		this._isInternal = userInfo.isInternal;
 		this._isTeamMember = userInfo.isTeamMember;
-		this._teamMemberUsername = userInfo.teamMemberUsername;
 		// fire a fake change event to refresh all settings
 		this._onDidChangeConfiguration.fire({ affectsConfiguration: () => true });
 	}
@@ -287,31 +284,7 @@ export abstract class AbstractConfigurationService extends Disposable implements
 		) {
 			return false;
 		}
-		const rolloutRatio = key.defaultValue.teamDefaultValueRollout;
-		if (rolloutRatio === undefined || rolloutRatio >= 1) {
-			return true;
-		}
-
-		const selectedValue = `${key.fullyQualifiedId};${this._teamMemberUsername}`;
-
-		// Extract first 4 bytes and convert to a number between 0 and 1
-		const hashValue = AbstractConfigurationService._extractHashValue(selectedValue);
-
-		// Compare with rolloutRatio to determine if the user should get the feature
-		return hashValue < rolloutRatio;
-	}
-
-	/**
-	 * Extracts a normalized value (0-1) from a string
-	 */
-	public static _extractHashValue(input: string): number {
-		const hash = new StringSHA1();
-		hash.update(input);
-		const firstPortion = hash.digest().substring(0, 8);
-		// Convert from hex to number
-		const hashNumber = parseInt(firstPortion, 16);
-		// Normalize to a value between 0 and 1
-		return (hashNumber / 0xFFFFFFFF);
+		return true;
 	}
 
 	/**
@@ -335,14 +308,6 @@ export abstract class AbstractConfigurationService extends Disposable implements
 export type DefaultValueWithTeamValue<T> = {
 	defaultValue: T;
 	teamDefaultValue: T;
-	/**
-	 * Roll out `teamDefaultValue` to a percentage of the team.
-	 * This is a number between 0 and 1.
-	 * 0 means 0% of the team will get `teamDefaultValue`
-	 * 1 means 100% of the team will get `teamDefaultValue`
-	 * undefined means 100% of the team will get `teamDefaultValue`
-	 */
-	teamDefaultValueRollout?: number;
 };
 export type DefaultValueWithTeamAndInternalValue<T> = DefaultValueWithTeamValue<T> & { internalDefaultValue: T };
 
@@ -462,15 +427,6 @@ function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValu
 	}
 	if (isPublic && options?.valueIgnoredForExternals) {
 		throw new BugIndicatingError(`The setting ${key} is public, it therefore cannot be restricted to internal!`);
-	}
-	if (
-		ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(defaultValue)
-		|| ConfigValueValidators.isDefaultValueWithTeamValue(defaultValue)
-	) {
-		const rolloutRatio = defaultValue?.teamDefaultValueRollout;
-		if (rolloutRatio !== undefined && (rolloutRatio < 0 || rolloutRatio > 1)) {
-			throw new BugIndicatingError(`The rollout ratio for setting ${key} is invalid`);
-		}
 	}
 	const advancedSubKey = fullyQualifiedId.startsWith('github.copilot.advanced.') ? fullyQualifiedId.substring('github.copilot.advanced.'.length) : undefined;
 	return { id: key, oldId: options?.oldKey, isPublic, fullyQualifiedId, fullyQualifiedOldId, advancedSubKey, defaultValue, options };
