@@ -87,7 +87,7 @@ describe('CopilotCLISessionService', () => {
 				return fn(accessor, ...args);
 			},
 			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
-				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService, instantiationService));
+				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService));
 			}
 		} as unknown as IInstantiationService;
 
