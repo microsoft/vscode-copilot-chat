@@ -488,8 +488,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		const prompt = request.prompt.substring('/delegate'.length).trim();
 
-
-
 		const prInfo = await this.cloudSessionProvider.delegate(request, stream, context, token, { prompt, chatContext: context });
 		if (prInfo) {
 			await this.recordPushToSession(session, request.prompt, prInfo);
