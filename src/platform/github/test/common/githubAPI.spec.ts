@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it, vi } from 'vitest';
-import { GraphQLError, GraphQLResponse, isRateLimitError, makeGitHubGraphQLRequest, makeSearchGraphQLRequest, getPullRequestFromGlobalId, addPullRequestCommentGraphQLRequest, PullRequestSearchResult, PullRequestSearchItem } from '../../common/githubAPI';
+import { GraphQLError, GraphQLResponse, isRateLimitError, makeGitHubGraphQLRequest, makeSearchGraphQLRequest, getPullRequestFromGlobalId, addPullRequestCommentGraphQLRequest, PullRequestSearchResult, PullRequestSearchItem, RATE_LIMIT } from '../../common/githubAPI';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
@@ -158,7 +158,7 @@ describe('makeGitHubGraphQLRequest', () => {
 });
 
 describe('makeSearchGraphQLRequest', () => {
-	it('should return empty array on rate limit error', async () => {
+	it('should return RATE_LIMIT constant on rate limit error', async () => {
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({
@@ -196,7 +196,7 @@ describe('makeSearchGraphQLRequest', () => {
 			'test query'
 		);
 
-		expect(result).toEqual([]);
+		expect(result).toBe(RATE_LIMIT);
 		expect(mockLogService.error).toHaveBeenCalledWith(
 			expect.stringContaining('Rate limit exceeded')
 		);
@@ -269,7 +269,7 @@ describe('makeSearchGraphQLRequest', () => {
 });
 
 describe('getPullRequestFromGlobalId', () => {
-	it('should return null on rate limit error', async () => {
+	it('should return RATE_LIMIT constant on rate limit error', async () => {
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({
@@ -307,7 +307,7 @@ describe('getPullRequestFromGlobalId', () => {
 			'PR_kwDOAbc123'
 		);
 
-		expect(result).toBeNull();
+		expect(result).toBe(RATE_LIMIT);
 		expect(mockLogService.error).toHaveBeenCalledWith(
 			expect.stringContaining('Rate limit exceeded')
 		);
@@ -315,7 +315,7 @@ describe('getPullRequestFromGlobalId', () => {
 });
 
 describe('addPullRequestCommentGraphQLRequest', () => {
-	it('should return null on rate limit error', async () => {
+	it('should return RATE_LIMIT constant on rate limit error', async () => {
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({
@@ -354,7 +354,7 @@ describe('addPullRequestCommentGraphQLRequest', () => {
 			'Test comment'
 		);
 
-		expect(result).toBeNull();
+		expect(result).toBe(RATE_LIMIT);
 		expect(mockLogService.error).toHaveBeenCalledWith(
 			expect.stringContaining('Rate limit exceeded')
 		);

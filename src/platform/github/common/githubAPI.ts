@@ -61,6 +61,8 @@ export function isRateLimitError(response: GraphQLResponse | undefined): boolean
 	return response?.errors?.some(error => error.type === 'RATE_LIMIT') ?? false;
 }
 
+export const RATE_LIMIT = 'RATE_LIMIT' as const;
+
 export interface SessionInfo {
 	id: string;
 	name: string;
@@ -209,7 +211,7 @@ export async function makeSearchGraphQLRequest(
 	token: string | undefined,
 	searchQuery: string,
 	first: number = 20,
-): Promise<PullRequestSearchItem[]> {
+): Promise<PullRequestSearchItem[] | typeof RATE_LIMIT> {
 	const query = `
 		query FetchCopilotAgentPullRequests($searchQuery: String!, $first: Int!, $after: String) {
 			search(query: $searchQuery, type: ISSUE, first: $first, after: $after) {
@@ -264,7 +266,7 @@ export async function makeSearchGraphQLRequest(
 	if (isRateLimitError(result)) {
 		const rateLimitError = result?.errors?.find(error => error.type === 'RATE_LIMIT');
 		logService.error(`[makeSearchGraphQLRequest] Rate limit exceeded: ${rateLimitError?.message}`);
-		return [];
+		return RATE_LIMIT;
 	}
 
 	return result?.data?.search?.nodes ?? [];
@@ -277,7 +279,7 @@ export async function getPullRequestFromGlobalId(
 	host: string,
 	token: string | undefined,
 	globalId: string,
-): Promise<PullRequestSearchItem | null> {
+): Promise<PullRequestSearchItem | null | typeof RATE_LIMIT> {
 	const query = `
 		query GetPullRequestGlobal($globalId: ID!) {
 			node(id: $globalId) {
@@ -328,7 +330,7 @@ export async function getPullRequestFromGlobalId(
 	if (isRateLimitError(result)) {
 		const rateLimitError = result?.errors?.find(error => error.type === 'RATE_LIMIT');
 		logService.error(`[getPullRequestFromGlobalId] Rate limit exceeded: ${rateLimitError?.message}`);
-		return null;
+		return RATE_LIMIT;
 	}
 
 	return result?.data?.node ?? null;
@@ -342,7 +344,7 @@ export async function addPullRequestCommentGraphQLRequest(
 	token: string | undefined,
 	pullRequestId: string,
 	commentBody: string,
-): Promise<PullRequestComment | null> {
+): Promise<PullRequestComment | null | typeof RATE_LIMIT> {
 	const mutation = `
 		mutation AddPullRequestComment($pullRequestId: ID!, $body: String!) {
 			addComment(input: {subjectId: $pullRequestId, body: $body}) {
@@ -382,7 +384,7 @@ export async function addPullRequestCommentGraphQLRequest(
 	if (isRateLimitError(result)) {
 		const rateLimitError = result?.errors?.find(error => error.type === 'RATE_LIMIT');
 		logService.error(`[addPullRequestCommentGraphQLRequest] Rate limit exceeded: ${rateLimitError?.message}`);
-		return null;
+		return RATE_LIMIT;
 	}
 
 	return result?.data?.addComment?.commentEdge?.node || null;
