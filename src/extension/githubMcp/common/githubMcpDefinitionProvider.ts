@@ -61,8 +61,9 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 				havePermissiveToken = !!this.authenticationService.permissiveGitHubSession;
 				return hadToken !== havePermissiveToken;
 			})
-			.map(() =>
-				this.logService.debug(`GitHubMcpDefinitionProvider: Permissive GitHub session availability changed: ${havePermissiveToken}`))
+			.map(() => {
+				this.logService.debug(`GitHubMcpDefinitionProvider: Permissive GitHub session availability changed: ${havePermissiveToken}`);
+			})
 		);
 		this.onDidChangeMcpServerDefinitions = Event.any(configurationEvent, authEvent);
 	}
@@ -106,7 +107,7 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		// Build headers object conditionally
 		const headers: Record<string, string> = {};
 		// Build version string with toolsets and flags
-		let version = toolsets ?? '0';
+		let version = toolsets.length ? toolsets : '0';
 		if (toolsets.length > 0) {
 			headers['X-MCP-Toolsets'] = toolsets;
 		}
@@ -133,7 +134,10 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 				detail: l10n.t('Additional permissions are required to use GitHub MCP Server'),
 			},
 		});
-		server.headers['Authorization'] = `Bearer ${session!.accessToken}`;
+		if (!session) {
+			throw new Error('Authentication required');
+		}
+		server.headers['Authorization'] = `Bearer ${session.accessToken}`;
 		return server;
 	}
 }
