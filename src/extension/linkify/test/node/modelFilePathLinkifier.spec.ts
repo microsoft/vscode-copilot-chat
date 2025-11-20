@@ -117,6 +117,18 @@ suite('Model File Path Linkifier', () => {
 		expect(anchor.title).toBe('src/file.ts#L20-L25');
 		assertPartsEqual([anchor], [expected]);
 	});
+
+	test('Should handle absolute paths with forward slashes on Windows', async () => {
+		const absolutePath = workspaceFile('src/file.ts').fsPath;
+		const service = createTestLinkifierService('src/file.ts');
+		// Simulate model-generated path with forward slashes (e.g., c:/Repos/...)
+		const pathWithForwardSlashes = absolutePath.replace(/\\/g, '/');
+		const result = await linkify(service, `[line 67](${pathWithForwardSlashes}#L67)`);
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(66, 0), new Position(66, 0))));
+		expect(anchor.title).toBe('src/file.ts#L67');
+		assertPartsEqual([anchor], [expected]);
+	});
 });
 
 suite('Model File Path Linkifier Remote Workspace', () => {

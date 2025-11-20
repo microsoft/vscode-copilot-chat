@@ -47,7 +47,8 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 			}
 
 			// Push promise to resolve in parallel with other matches
-			parts.push(this.resolveTarget(parsed.targetPath, workspaceFolders, parsed.preserveDirectorySlash, token).then(resolved => {
+			// Pass originalTargetPath to preserve platform-specific separators (e.g., c:/path vs c:\path) before Uri.file() conversion
+			parts.push(this.resolveTarget(parsed.targetPath, parsed.originalTargetPath, workspaceFolders, parsed.preserveDirectorySlash, token).then(resolved => {
 				if (!resolved) {
 					return original;
 				}
@@ -82,7 +83,7 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 		return { parts: coalesceParts(await Promise.all(parts)) };
 	}
 
-	private parseModelLinkMatch(match: RegExpMatchArray): { readonly text: string; readonly targetPath: string; readonly anchor: string | undefined; readonly preserveDirectorySlash: boolean } | undefined {
+	private parseModelLinkMatch(match: RegExpMatchArray): { readonly text: string; readonly targetPath: string; readonly anchor: string | undefined; readonly preserveDirectorySlash: boolean; readonly originalTargetPath: string } | undefined {
 		const rawText = match.groups?.['text'];
 		const rawTarget = match.groups?.['target'];
 		if (!rawText || !rawTarget) {
@@ -103,7 +104,7 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 		const preserveDirectorySlash = decodedBase.endsWith('/') && decodedBase.length > 1;
 		const normalizedTarget = this.normalizeSlashes(decodedBase);
 		const normalizedText = this.normalizeLinkText(rawText);
-		return { text: normalizedText, targetPath: normalizedTarget, anchor, preserveDirectorySlash };
+		return { text: normalizedText, targetPath: normalizedTarget, anchor, preserveDirectorySlash, originalTargetPath: decodedBase };
 	}
 
 	private normalizeSlashes(value: string): string {
@@ -130,7 +131,7 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 		return Boolean(workspaceFolders.length) && (textMatchesBase || textIsFilename || descriptiveWithAnchor);
 	}
 
-	private async resolveTarget(targetPath: string, workspaceFolders: readonly Uri[], preserveDirectorySlash: boolean, token: CancellationToken): Promise<Uri | undefined> {
+	private async resolveTarget(targetPath: string, originalTargetPath: string, workspaceFolders: readonly Uri[], preserveDirectorySlash: boolean, token: CancellationToken): Promise<Uri | undefined> {
 		if (!workspaceFolders.length) {
 			return undefined;
 		}
@@ -150,11 +151,12 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 					return undefined;
 				}
 				if (folderUri.scheme === 'file') {
-					const absoluteFileUri = this.tryCreateFileUri(targetPath);
+					// Use original path (before normalization) for Uri.file to preserve platform-specific separators
+					const absoluteFileUri = this.tryCreateFileUri(originalTargetPath);
 					if (!absoluteFileUri) {
 						continue;
 					}
-					if (this.isEqualOrParentFs(absoluteFileUri, folderUri)) {
+					if (this.isEqualOrParent(absoluteFileUri, folderUri)) {
 						const stat = await this.tryStat(absoluteFileUri, preserveDirectorySlash, token);
 						if (stat) {
 							return stat;
@@ -200,7 +202,7 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 	}
 
 
-	private isEqualOrParentFs(target: Uri, folder: Uri): boolean {
+	private isEqualOrParent(target: Uri, folder: Uri): boolean {
 		const targetPath = normalizeUriPath(target).path;
 		const folderPath = normalizeUriPath(folder).path;
 		return targetPath === folderPath || targetPath.startsWith(folderPath.endsWith('/') ? folderPath : `${folderPath}/`);
