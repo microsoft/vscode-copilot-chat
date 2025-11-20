@@ -241,6 +241,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return await repository?.deleteWorktree(path, options);
 	}
 
+	async migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.migrateChanges(sourceRepositoryUri.fsPath, options);
+	}
+
 	async initialize(): Promise<void> {
 		if (this._isInitialized.get()) {
 			return;

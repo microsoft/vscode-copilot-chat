@@ -699,9 +699,12 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
-		// Migrate the changes, and close the active multi-file diff editor
-		await vscode.commands.executeCommand('git.migrateWorktreeChanges', activeRepository.rootUri, sessionWorktreeUri);
-		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+		// Migrate the changes from the worktree to the main repository
+		await gitService.migrateChanges(activeRepository.rootUri, sessionWorktreeUri, {
+			confirmation: false,
+			deleteFromSource: false,
+			untracked: true
+		});
 	}));
 	return disposableStore;
 }
