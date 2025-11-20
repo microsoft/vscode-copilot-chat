@@ -9,6 +9,7 @@ import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatR
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
+import { extractChatPromptReferences } from './copilotCLIPrompt';
 
 
 interface CreateTool {
@@ -236,6 +237,9 @@ export function stripReminders(text: string): string {
 	// Also remove <pr_metadata .../> tags
 	return text
 		.replace(/<reminder>[\s\S]*?<\/reminder>\s*/g, '')
+		.replace(/<attachments>[\s\S]*?<\/attachments>\s*/g, '')
+		.replace(/<userRequest>[\s\S]*?<\/userRequest>\s*/g, '')
+		.replace(/<context>[\s\S]*?<\/context>\s*/g, '')
 		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
 		.replace(/<pr_metadata[^>]*\/?>\s*/g, '')
 		.trim();
@@ -300,7 +304,21 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 				// TODO@rebornix filter instructions should be rendered as "references" in chat response like normal chat.
 				const references: ChatPromptReference[] = ((event.data.attachments || []) as Attachment[])
 					.filter(attachment => !isInstructionAttachmentPath(attachment.path))
-					.map(attachment => ({ id: attachment.path, name: attachment.displayName, value: Uri.file(attachment.path) } as ChatPromptReference));
+					.map(attachment => {
+						const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
+						return ({
+							id: attachment.path,
+							name: attachment.displayName,
+							value: Uri.file(attachment.path), range
+						} satisfies ChatPromptReference);
+					});
+
+				try {
+					const pomptReferences = extractChatPromptReferences(event.data.content || '');
+					references.push(...pomptReferences.references);
+				} catch (ex) {
+					// ignore errors from parsing references
+				}
 				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, references, '', [], undefined));
 				break;
 			}
@@ -345,6 +363,15 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 	}
 
 	return turns;
+}
+
+function getRangeInPrompt(prompt: string, referencedName: string): [number, number] | undefined {
+	referencedName = `#${referencedName}`;
+	const index = prompt.indexOf(referencedName);
+	if (index >= 0) {
+		return [index, index + referencedName.length];
+	}
+	return undefined;
 }
 
 export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {

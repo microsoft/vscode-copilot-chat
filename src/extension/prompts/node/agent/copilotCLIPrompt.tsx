@@ -1,0 +1,158 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { BasePromptElementProps, PromptElement, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
+import { ChatCompletionContentPartKind, ChatRole } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
+import type { ChatRequestEditedFileEvent } from 'vscode';
+import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
+import { isLocation } from '../../../../util/common/types';
+import { URI } from '../../../../util/vs/base/common/uri';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatRequest, FileType } from '../../../../vscodeTypes';
+import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
+import { renderPromptElement } from '../base/promptRenderer';
+import { Tag } from '../base/tag';
+import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
+import { renderChatVariables } from '../panel/chatVariables';
+import { FilePathMode, FileVariable } from '../panel/fileVariable';
+import { EditedFileEvents } from './agentPrompt';
+import './allAgentPrompts';
+
+export interface AgentUserMessageProps extends BasePromptElementProps {
+	readonly request: string;
+	readonly endpoint: IChatEndpoint;
+	readonly chatVariables: ChatVariablesCollection;
+	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
+	readonly sessionId?: string;
+}
+
+/**
+ * Is sent with each user message. Includes the user message and also any ambient context that we want to update with each request.
+ * Uses frozen content if available, for prompt caching and to avoid being updated by any agent action below this point in the conversation.
+ */
+class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
+	constructor(
+		props: AgentUserMessageProps,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+	) {
+		super(props);
+	}
+
+	async render(state: void, sizing: PromptSizing) {
+		const query = this.props.request;
+		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code');
+
+		// Files & folders will not be added as regular attachments, as those will be handed by SDK.
+		// We merely add a <attachments> tag to signal that there are file/folder attachments.
+		// This is because we wwant to avoid adding all fo the content of the file into the prompt.
+		// We leave that for Copilot CLI SDK to handle.
+		const nonResourceVariables = this.props.chatVariables.filter(variable => !URI.isUri(variable.value) && !isLocation(variable.value));
+		const resourceVariables = this.props.chatVariables.filter(variable => URI.isUri(variable.value) || isLocation(variable.value));
+		const [nonResourceAttachments, resourceAttachments] = await Promise.all([
+			renderChatVariables(nonResourceVariables, this.fileSystemService, true, false, false, true, false),
+			renderResourceVariables(resourceVariables, this.fileSystemService, this.promptPathRepresentationService)
+		]);
+		const attachmentHint = this.props.chatVariables.hasVariables() ?
+			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
+			: '';
+
+		const hasCustomContext = this.props.chatVariables.hasVariables() || (this.props.editedFileEvents?.length ?? 0) > 0;
+		return (
+			<UserMessage>
+				{/**
+				 * We need to ensure the user request is first, else CLI will not be able parse this for display in summary.
+				 * The `<reminder>` tag is a hack so that we can add additional context without interfering with the main user request.
+				 * CLI will ignore `<reminder>` content for summary purposes.
+				 * This is why we place it after the main user request.
+				*/}
+				<>{this.props.request}</>
+				{
+					hasCustomContext && (
+						<>
+							<br /> {/** Add an empty line after user prompt to ensure `<reminder>` tag is on a new line */}
+							<Tag name='reminder'>
+								IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+							</Tag>
+						</>
+					)
+				}
+				{
+					this.props.chatVariables.hasVariables() &&
+					<Tag name='attachments' priority={this.props.priority}>
+						{...nonResourceAttachments}
+						{...resourceAttachments}
+					</Tag>
+				}
+				{
+					(this.props.editedFileEvents?.length ?? 0) > 0 &&
+					<Tag name='context'>
+						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
+					</Tag>
+				}
+				{hasCustomContext && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
+			</UserMessage>
+		);
+	}
+}
+
+export async function generateUserPrompt(request: ChatRequest, chatVariables: ChatVariablesCollection, instantiationService: IInstantiationService): Promise<string> {
+	const endpoint = await instantiationService.invokeFunction((accessor) => accessor.get(IEndpointProvider).getChatEndpoint(request));
+	const { messages } = await renderPromptElement(instantiationService, endpoint, CopilotCLIAgentUserMessage, {
+		chatVariables,
+		endpoint,
+		request: request.prompt,
+		editedFileEvents: request.editedFileEvents,
+	});
+	if (messages.length === 1 && messages[0].role === ChatRole.User && messages[0].content.length === 1 && messages[0].content[0].type === ChatCompletionContentPartKind.Text) {
+		return messages[0].content[0].text;
+	}
+	throw new Error(`[CopilotCLISession] Unexpected generated prompt structure.`);
+
+}
+
+async function renderResourceVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, promptPathRepresentationService: IPromptPathRepresentationService): Promise<PromptElement[]> {
+	const elements: PromptElement[] = [];
+	await Promise.all(Array.from(chatVariables).map(async variable => {
+		const location = variable.value;
+		if (isLocation(location)) {
+			elements.push(<FileVariable
+				alwaysIncludeSummary={false}
+				filePathMode={FilePathMode.AsComment}
+				variableName={variable.uniqueName}
+				variableValue={location}
+				description={variable.reference.modelDescription}
+				lineNumberStyle={SummarizedDocumentLineNumberStyle.OmittedRanges}
+			/>);
+			return;
+		}
+		const uri = variable.value;
+		if (!URI.isUri(uri)) {
+			return;
+		}
+		// Check if the variable is a directory
+		let isDirectory = false;
+		try {
+			const stat = await fileSystemService.stat(uri);
+			isDirectory = stat.type === FileType.Directory;
+		} catch { }
+		const attrs: Record<string, string> = {};
+		const variableName = variable.uniqueName;
+		if (variableName) {
+			attrs.id = variableName;
+		}
+		if (isDirectory) {
+			attrs.folderPath = promptPathRepresentationService.getFilePath(uri);
+		} else {
+			attrs.filePath = promptPathRepresentationService.getFilePath(uri);
+		}
+		elements.push(<Tag name='attachment' attrs={attrs} />);
+	}));
+	return elements;
+}
+

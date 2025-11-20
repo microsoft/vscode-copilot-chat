@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
+import { IIgnoreService } from '../../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
@@ -45,7 +46,7 @@ describe('CopilotCLIPromptResolver', () => {
 		const accessor = services.createTestingAccessor();
 		fileSystemService = new MockFileSystemService();
 		logService = accessor.get(ILogService);
-		resolver = new CopilotCLIPromptResolver(logService, fileSystemService);
+		resolver = new CopilotCLIPromptResolver(logService, fileSystemService, services.seal(), accessor.get(IIgnoreService));
 	});
 
 	afterEach(() => {
