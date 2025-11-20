@@ -93,7 +93,7 @@ export class CopilotCLIPromptResolver {
 				}
 				const type = stat.type === FileType.Directory ? 'directory' : stat.type === FileType.File ? 'file' : undefined;
 				if (!type) {
-					this.logService.error(`[CopilotCLISession] Ignoring attachment as its not a file/directory (${uri.fsPath})`);
+					this.logService.error(`[CopilotCLISession] Ignoring attachment as it's not a file/directory (${uri.fsPath})`);
 					return;
 				}
 				attachments.push({
