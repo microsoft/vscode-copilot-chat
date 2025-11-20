@@ -125,7 +125,8 @@ function extractResources(prompt: string): {
 		let range: [number, number] | undefined = undefined;
 		let id = JSON.stringify(location);
 		if (prompt.includes(`#${locName}`)) {
-			range = [prompt.indexOf(`#${locName}`), prompt.indexOf(`#${locName}`) + locName.length];
+			const idx = prompt.indexOf(`#${locName}`);
+			range = [idx, idx + locName.length];
 		}
 		if (locName.startsWith('sym:')) {
 			id = `vscode.symbol/${JSON.stringify(location)}`;
