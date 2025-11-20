@@ -28,7 +28,7 @@ import { IPullRequestFileChangesService } from './pullRequestFileChangesService'
 interface ConfirmationMetadata {
 	prompt: string;
 	references?: readonly vscode.ChatPromptReference[];
-	chatContext: vscode.ChatContext; // TODO: Delete this
+	chatContext: vscode.ChatContext;
 }
 
 function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMetadata {
@@ -602,13 +602,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		let history: string | undefined;
 
+		// TODO: Do this async/optimistically before delegation triggered
 		if (this.hasHistoryToSummarize(context.history)) {
 			stream.progress(vscode.l10n.t('Analyzing chat history'));
 			history = await this._summarizer.provideChatSummary(context, token);
 		}
 
 		let customAgentName: string | undefined;
-		if (metadata.chatContext.chatSessionContext?.chatSessionItem.resource) {
+		if (metadata.chatContext.chatSessionContext?.chatSessionItem?.resource) {
 			customAgentName = this.sessionAgentMap.get(metadata.chatContext.chatSessionContext.chatSessionItem.resource);
 			if (customAgentName) {
 				this.logService.debug(`Using custom agent '${customAgentName}' for session ${metadata.chatContext.chatSessionContext.chatSessionItem.resource}`);
@@ -660,7 +661,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			await vscode.commands.executeCommand('vscode.open', sessionUri);
 		}
 
-		// Return this for the CLI
+		// Return this for external callers, eg: CLI
 		return {
 			uri: sessionUri,
 			title: pullRequest.title,
@@ -733,14 +734,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	// Title
 	private TITLE = vscode.l10n.t('Delegate to cloud agent');
 	// Button keywords (used for matching, be careful changing)
-	private AUTHORIZE = vscode.l10n.t('Authorize');
-	private COMMIT = vscode.l10n.t('Commit Changes');
-	private DELEGATE = vscode.l10n.t('Delegate');
-	private CANCEL = vscode.l10n.t('Cancel');
+	private readonly AUTHORIZE = vscode.l10n.t('Authorize');
+	private readonly COMMIT = vscode.l10n.t('Commit Changes');
+	private readonly DELEGATE = vscode.l10n.t('Delegate');
+	private readonly CANCEL = vscode.l10n.t('Cancel');
 	// Messages
-	private BASE_MESSAGE = vscode.l10n.t('Delegate to cloud agent?');
+	private readonly BASE_MESSAGE = vscode.l10n.t('Cloud agent works asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
+	private readonly AUTHORIZE_MESSAGE = vscode.l10n.t('Cloud agent requires elevated GitHub access to proceed.');
+	private readonly COMMIT_MESSAGE = vscode.l10n.t('This workspace has uncommitted changes. Should these changes be pushed and included in cloud agent\'s work?');
 
-	private WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
+	private readonly WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
 
 
 	private setWorkspaceContext(key: string, value: string) {
@@ -780,24 +783,25 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private async buildConfirmation(context: vscode.ChatContext): Promise<{ title: string; message: string; buttons: string[] } | undefined> {
 		const title: string = this.TITLE;
 		const buttons: string[] = [this.CANCEL];
-		let message: string = this.BASE_MESSAGE; // TODO: All the messages are WIP
+		let message: string = this.BASE_MESSAGE;
 
 		const needsPermissiveAuth = !this._authenticationService.permissiveGitHubSession;
 		const hasUncommittedChanges = await this.detectedUncommittedChanges();
 
 		if (needsPermissiveAuth && hasUncommittedChanges) {
-			message += ' ' + vscode.l10n.t('Cloud agent requires elevated access to your repositories and there are uncommitted changes in your workspace.'); // TODO
+			message += '\n\n' + this.AUTHORIZE_MESSAGE;
+			message += '\n\n' + this.COMMIT_MESSAGE;
 			buttons.unshift(
 				vscode.l10n.t('{0} and {1}', this.AUTHORIZE, this.COMMIT),
 				this.AUTHORIZE,
 			);
 		} else if (needsPermissiveAuth) {
-			message += ' ' + vscode.l10n.t('Cloud agent requires elevated access to your repositories.');
+			message += '\n\n' + this.AUTHORIZE_MESSAGE;
 			buttons.unshift(
 				this.AUTHORIZE,
 			);
 		} else if (hasUncommittedChanges) {
-			message += ' ' + vscode.l10n.t('There are uncommitted changes in your workspace.');
+			message += '\n\n' + this.COMMIT_MESSAGE;
 			buttons.unshift(
 				vscode.l10n.t('{0} and {1}', this.COMMIT, this.DELEGATE),
 				this.DELEGATE,
