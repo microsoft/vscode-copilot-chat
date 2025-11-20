@@ -497,7 +497,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		};
 	}
 
-	private async findPR(prNumber: number) {
+	private async findPR(prNumber: number, retries: number = 1) {
 		let pr = this.chatSessions.get(prNumber);
 		if (pr) {
 			return pr;
@@ -517,7 +517,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				}
 				this.chatSessions.set(found.number, found);
 				return found;
-			}, 1500, 10);
+			}, 1500, retries);
 			return pr;
 		} catch (error) {
 			this.logService.warn(`Pull request not found for number: ${prNumber}. ${error instanceof Error ? error.message : String(error)}`);
@@ -664,7 +664,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		stream.progress(vscode.l10n.t('Fetching pull request details'));
-		const pullRequest = await this.findPR(number);
+		const pullRequest = await this.findPR(number, 5);
 		if (!pullRequest) {
 			throw new Error(`Failed to find pull request #${number} after delegation.`);
 		}
