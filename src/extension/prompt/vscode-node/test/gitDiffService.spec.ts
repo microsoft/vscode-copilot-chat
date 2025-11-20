@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
 import { API, Change, Repository } from '../../../../platform/git/vscode/git';
@@ -14,7 +14,7 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { GitDiffService } from '../gitDiffService';
 
 describe('GitDiffService', () => {
-	let readFileSpy: any;
+	let readFileSpy: MockInstance<typeof vscode.workspace.fs.readFile>;
 	let accessor: ITestingServicesAccessor;
 	let gitDiffService: GitDiffService;
 	let mockRepository: Partial<Repository>;
@@ -22,7 +22,8 @@ describe('GitDiffService', () => {
 	beforeEach(() => {
 		// Create mock workspace.fs.readFile if it doesn't exist
 		if (!vscode.workspace?.fs?.readFile) {
-			(vscode as any).workspace = {
+			const workspaceWithFs = vscode as unknown as { workspace: typeof vscode.workspace };
+			workspaceWithFs.workspace = {
 				...vscode.workspace,
 				fs: {
 					...vscode.workspace?.fs,

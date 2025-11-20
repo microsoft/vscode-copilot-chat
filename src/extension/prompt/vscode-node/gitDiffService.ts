@@ -124,7 +124,7 @@ export class GitDiffService implements IGitDiffService {
 			patch.push('new file mode 100644');
 			patch.push('--- /dev/null', `+++ b/${relativePath}`);
 
-			// For non-empty files, add range header and content (empty file omit this)
+			// For non-empty files, add range header and content (empty files omit this)
 			if (content.length > 0) {
 				const lines = content.split('\n');
 				if (content.endsWith('\n')) {
