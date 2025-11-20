@@ -26,10 +26,18 @@ import { PermissionRequest, requestPermission } from '../../agents/copilotcli/no
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
-import { ConfirmationResult, CopilotCloudSessionsProvider, UncommittedChangesStep } from './copilotCloudSessionsProvider';
+import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
 const MODELS_OPTION_ID = 'model';
 const ISOLATION_OPTION_ID = 'isolation';
+
+const UncommittedChangesStep = 'uncommitted-changes';
+type ConfirmationResult = { step: string; accepted: boolean; metadata?: CLIConfirmationMetadata };
+interface CLIConfirmationMetadata {
+	prompt: string;
+	references?: readonly vscode.ChatPromptReference[];
+	chatContext: vscode.ChatContext;
+}
 
 // Track model selections per session
 // TODO@rebornix: we should have proper storage for the session model preference (revisit with API)
@@ -479,18 +487,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		const prompt = request.prompt.substring('/delegate'.length).trim();
-		if (!await this.cloudSessionProvider.tryHandleUncommittedChanges({
-			prompt: prompt,
-			chatContext: context
-		}, stream, token)) {
-			const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
-				prompt,
-				chatContext: context
-			}, stream, token);
-			if (prInfo) {
-				await this.recordPushToSession(session, request.prompt, prInfo);
-			}
+
+
+
+		const prInfo = await this.cloudSessionProvider.delegate(request, stream, context, token, { prompt, chatContext: context });
+		if (prInfo) {
+			await this.recordPushToSession(session, request.prompt, prInfo);
 		}
+
 	}
 
 	private getAcceptedRejectedConfirmationData(request: vscode.ChatRequest): ConfirmationResult[] {
@@ -513,15 +517,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return {};
 		}
 
-		const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession({
-			prompt: uncommittedChangesData.metadata.prompt,
-			references: uncommittedChangesData.metadata.references,
-			autoPushAndCommit: uncommittedChangesData.metadata.autoPushAndCommit,
-			chatContext: context
-		}, stream, token);
-		if (prInfo) {
-			await this.recordPushToSession(session, prompt, prInfo);
-		}
+		// const prInfo = await this.cloudSessionProvider?.createDelegatedChatSession({
+		// 	prompt: uncommittedChangesData.metadata.prompt,
+		// 	references: uncommittedChangesData.metadata.references,
+		// 	// autoPushAndCommit: uncommittedChangesData.metadata.autoPushAndCommit,
+		// 	chatContext: context
+		// }, stream, token);
+		// if (prInfo) {
+		// 	await this.recordPushToSession(session, prompt, prInfo);
+		// }
 		return {};
 	}
 
@@ -551,13 +555,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async recordPushToSession(
 		session: ICopilotCLISession,
 		userPrompt: string,
-		prInfo: { uri: string; title: string; description: string; author: string; linkTag: string }
+		prInfo: { uri: vscode.Uri; title: string; description: string; author: string; linkTag: string }
 	): Promise<void> {
 		// Add user message event
 		session.addUserMessage(userPrompt);
 
 		// Add assistant message event with embedded PR metadata
-		const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
+		const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri.toString()}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
 		session.addUserAssistantMessage(assistantMessage);
 	}
 }
