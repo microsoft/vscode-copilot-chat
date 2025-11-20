@@ -180,6 +180,14 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		};
 	}
 
+	async handleToolStream(options: vscode.LanguageModelToolInvocationStreamOptions<ICreateFileParams>, token: vscode.CancellationToken): Promise<vscode.LanguageModelToolStreamResult> {
+		const uri = resolveToolInputPath('/Users/lramos15/dev/vscode-copilot-chat/src/extension/tools/node/createFileTool.tsx', this.promptPathRepresentationService);
+
+		return {
+			invocationMessage: new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`),
+		};
+	}
+
 	private sendTelemetry(requestId: string | undefined, model: string | undefined, fileExtension: string) {
 		/* __GDPR__
 			"createFileToolInvoked" : {

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ChatResponseReferencePartStatusKind } from '@vscode/prompt-tsx';
-import type { ChatResponseFileTree, ChatResponseStream, ChatVulnerability, Command, ExtendedChatResponsePart, Location, NotebookEdit, Progress, ThinkingDelta, Uri } from 'vscode';
+import type { ChatResponseFileTree, ChatResponseStream, ChatToolInvocationStreamData, ChatVulnerability, Command, ExtendedChatResponsePart, Location, NotebookEdit, Progress, ThinkingDelta, Uri } from 'vscode';
 import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExternalEditPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseWarningPart, MarkdownString, TextEdit } from '../../vscodeTypes';
 import type { ThemeIcon } from '../vs/base/common/themables';
 
@@ -167,7 +167,7 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		this._push(new ChatResponseWarningPart(value));
 	}
 
-	prepareToolInvocation(toolName: string): void {
-		this._push(new ChatPrepareToolInvocationPart(toolName));
+	prepareToolInvocation(toolName: string, streamData: ChatToolInvocationStreamData): void {
+		this._push(new ChatPrepareToolInvocationPart(toolName, streamData));
 	}
 }

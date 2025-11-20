@@ -69,7 +69,10 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 		}
 
 		if (delta.beginToolCalls?.length) {
-			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name));
+			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name), { partialInput: '1' });
+			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name), { partialInput: '2' });
+			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name), { partialInput: '3' });
+			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name), { partialInput: '4' });
 		}
 	}
 
