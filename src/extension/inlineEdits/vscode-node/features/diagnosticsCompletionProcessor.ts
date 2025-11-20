@@ -218,7 +218,8 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			this._updateState();
 
 			// update state because diagnostics changed
-			reader.store.add(runOnChange(activeDocument.diagnostics, () => {
+			reader.store.add(runOnChange(activeDocument.diagnostics, (diagnostics) => {
+				this._tracer.trace(`Diagnostics changed received in processor: ${diagnostics.map(d => '\n- ' + d.message).join('')}`);
 				this._updateState();
 			}));
 		}));
