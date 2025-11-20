@@ -70,6 +70,20 @@ export class CopilotCLIWorktreeManager {
 		});
 	}
 
+	async createWorktreeSilently(): Promise<string | undefined> {
+		try {
+			const repository = this.gitService.activeRepository.get();
+			if (!repository) {
+				return undefined;
+			}
+			const worktreePath = await this.gitService.createWorktree(repository.rootUri);
+			return worktreePath;
+		} catch (error) {
+			// Silent failure - no warnings displayed
+			return undefined;
+		}
+	}
+
 	async storeWorktreePath(sessionId: string, workingDirectory: string): Promise<void> {
 		this._sessionWorktrees.set(sessionId, workingDirectory);
 		const sessionWorktrees = this.extensionContext.globalState.get<Record<string, string>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, {});
@@ -534,8 +548,23 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const history = await this.summarizer.provideChatSummary(context, token);
 
 		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
-		const session = await this.sessionService.createSession(requestPrompt, {}, token);
+		
+		// Create a temporary session ID to check isolation preference
+		const tempSessionId = `untitled-${Date.now()}`;
+		const isolationEnabled = this.worktreeManager.getIsolationPreference(tempSessionId);
+		
+		// Create worktree silently if isolation is enabled, before creating the session
+		const workingDirectory = isolationEnabled 
+			? await this.worktreeManager.createWorktreeSilently() ?? await this.getDefaultWorkingDirectory()
+			: await this.getDefaultWorkingDirectory();
+		
+		const session = await this.sessionService.createSession(requestPrompt, { workingDirectory, isolationEnabled }, token);
 		try {
+			// Store the worktree path for this session
+			if (workingDirectory) {
+				await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory);
+			}
+			
 			await this.commandExecutionService.executeCommand('vscode.open', SessionIdForCLI.getResource(session.object.sessionId));
 			await this.commandExecutionService.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 			return {};
