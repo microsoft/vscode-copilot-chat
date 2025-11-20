@@ -374,7 +374,6 @@ export const enum ConfigType {
 
 export interface ConfigOptions {
 	readonly oldKey?: string;
-	readonly internal?: boolean;
 	readonly valueIgnoredForExternals?: boolean;
 }
 
@@ -421,9 +420,6 @@ function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValu
 		if (!objects.equals(publicDefaultValue, packageJsonDefaultValue)) {
 			throw new BugIndicatingError(`The default value for setting ${key} is different in packageJson and in code`);
 		}
-	}
-	if (isPublic && options?.internal) {
-		throw new BugIndicatingError(`The setting ${key} is public, it therefore cannot be marked internal!`);
 	}
 	if (isPublic && options?.valueIgnoredForExternals) {
 		throw new BugIndicatingError(`The setting ${key} is public, it therefore cannot be restricted to internal!`);
@@ -490,7 +486,7 @@ function defineSetting<T extends ExperimentBasedConfigType>(key: string, configT
 function defineTeamInternalSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
 function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
 function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
-	options = { ...options, internal: true, valueIgnoredForExternals: true };
+	options = { ...options, valueIgnoredForExternals: true };
 	return configType === ConfigType.Simple ? defineSetting(key, configType, defaultValue, validator, options) : defineSetting(key, configType, defaultValue, validator, options, expOptions);
 }
 
