@@ -4,23 +4,34 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
 
 export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@ILogService private readonly logService: ILogService,
+		@IGitService private readonly gitService: IGitService,
 	) { }
 
 	async provideCustomAgents(
-		repoOwner: string,
-		repoName: string,
 		options: vscode.CustomAgentQueryOptions | undefined,
 		token: vscode.CancellationToken
 	): Promise<vscode.CustomAgent[]> {
 		try {
+			// Get repository information from the active git repository
+			const repoId = await getRepoId(this.gitService);
+			if (!repoId) {
+				this.logService.trace('[CustomAgentsProvider] No active repository found');
+				return [];
+			}
+
+			const repoOwner = repoId.org;
+			const repoName = repoId.repo;
+
 			this.logService.trace(`[CustomAgentsProvider] Fetching custom agents for ${repoOwner}/${repoName}`);
 
 			// Convert VS Code API options to internal options
