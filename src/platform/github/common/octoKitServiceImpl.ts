@@ -9,7 +9,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -231,21 +231,39 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.getPullRequestFromSessionWithToken(globalId, authToken);
 	}
 
-	async getCustomAgents(owner: string, repo: string): Promise<CustomAgentListItem[]> {
+	async getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]> {
 		try {
 			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 			if (!authToken) {
 				throw new Error('No authentication token available');
 			}
+
+			// Build query parameters
+			const queryParams = new URLSearchParams();
+			if (options?.target) {
+				queryParams.append('target', options.target);
+			}
+			if (options?.excludeInvalidConfig !== undefined) {
+				queryParams.append('exclude_invalid_config', String(options.excludeInvalidConfig));
+			}
+			if (options?.dedupe !== undefined) {
+				queryParams.append('dedupe', String(options.dedupe));
+			}
+			if (options?.includeSources && options.includeSources.length > 0) {
+				queryParams.append('include_sources', options.includeSources.join(','));
+			}
+
 			const response = await this._capiClientService.makeRequest<Response>({
 				method: 'GET',
 				headers: {
 					Authorization: `Bearer ${authToken}`,
 				}
 			}, { type: RequestType.CopilotCustomAgents, owner, repo });
+
 			if (!response.ok) {
-				throw new Error(`Failed to fetch custom agents for ${owner} ${repo}: ${response.statusText}`);
+				throw new Error(`Failed to fetch custom agents for ${owner}/${repo}: ${response.statusText}`);
 			}
+
 			const data = await response.json() as {
 				agents?: CustomAgentListItem[];
 			};
@@ -256,6 +274,42 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		} catch (e) {
 			this._logService.error(e);
 			return [];
+		}
+	}
+
+	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined> {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+
+			// Build query parameters
+			const queryParams = new URLSearchParams();
+			if (version) {
+				queryParams.append('version', version);
+			}
+
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotCustomAgents, owner, repo });
+
+			if (!response.ok) {
+				if (response.status === 404) {
+					this._logService.trace(`Custom agent '${agentName}' not found for ${owner}/${repo}`);
+					return undefined;
+				}
+				throw new Error(`Failed to fetch custom agent details for ${agentName}: ${response.statusText}`);
+			}
+
+			const data = await response.json() as CustomAgentDetails;
+			return data;
+		} catch (e) {
+			this._logService.error(e);
+			return undefined;
 		}
 	}
 
