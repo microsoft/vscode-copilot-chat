@@ -156,7 +156,8 @@ function extractResources(prompt: string): {
 		let id = providedId ?? uri.toString();
 		let range: [number, number] | undefined = undefined;
 		if (providedId && prompt.includes(`#${providedId}`)) {
-			range = [prompt.indexOf(`#${providedId}`), prompt.indexOf(`#${providedId}`) + providedId.length];
+			const startIdx = prompt.indexOf(`#${providedId}`);
+			range = [startIdx, startIdx + providedId.length];
 		}
 		if (providedId && providedId.startsWith('sym:')) {
 			id = `vscode.symbol/${uri.toJSON()}`;
