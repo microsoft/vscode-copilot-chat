@@ -277,12 +277,22 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		const existingSession = isUntitled ? undefined : await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
 		const selectedModelId = await existingSession?.object?.getSelectedModelId();
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
-		const options: Record<string, string> = {
+		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {
 			[MODELS_OPTION_ID]: _sessionModel.get(copilotcliSessionId)?.id ?? defaultModel.id,
 		};
 
 		if (!existingSession && this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
+		} else if (existingSession && workingDirectory && this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
+			// For existing sessions with a worktree, show the worktree branch name as a locked option
+			const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(copilotcliSessionId);
+			if (worktreeRelativePath) {
+				options[ISOLATION_OPTION_ID] = {
+					id: 'enabled',
+					name: 'Isolated', //worktreeRelativePath,
+					locked: true
+				};
+			}
 		}
 		const history = existingSession?.object?.getChatHistory() || [];
 		existingSession?.dispose();
@@ -299,6 +309,11 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	}
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
+		const isolationItems = [
+			{ id: 'enabled', name: 'Isolated' },
+			{ id: 'disabled', name: 'Workspace' }
+		];
+
 		return {
 			optionGroups: [
 				{
@@ -311,10 +326,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 					id: ISOLATION_OPTION_ID,
 					name: 'Isolation',
 					description: 'Enable worktree isolation for this session',
-					items: [
-						{ id: 'enabled', name: 'Isolated' },
-						{ id: 'disabled', name: 'Workspace' }
-					]
+					items: isolationItems
 				}
 			]
 		};
