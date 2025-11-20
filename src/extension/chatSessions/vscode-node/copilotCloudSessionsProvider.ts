@@ -28,7 +28,7 @@ import { IPullRequestFileChangesService } from './pullRequestFileChangesService'
 interface ConfirmationMetadata {
 	prompt: string;
 	references?: readonly vscode.ChatPromptReference[];
-	chatContext: vscode.ChatContext;
+	chatContext: vscode.ChatContext; // TODO: Delete this
 }
 
 function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMetadata {
@@ -624,7 +624,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		metadata: ConfirmationMetadata,
 		customAgentName?: string,
 		head_ref?: string): Promise<{ uri: vscode.Uri; title: string; description: string; author: string; linkTag: string }> {
+
 		let history: string | undefined;
+
 		if (this.hasHistoryToSummarize(context.history)) {
 			stream.progress(vscode.l10n.t('Analyzing chat history'));
 			history = await this._summarizer.provideChatSummary(context, token);
@@ -641,6 +643,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			customAgentName,
 			head_ref,
 		);
+
 		this.logService.debug(`Delegated to cloud agent for PR #${number} with session ID ${sessionId}`);
 
 		// Store references for this session
@@ -718,11 +721,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					throw new Error('Failed to obtain permissive GitHub session');
 				}
 			} catch (error) {
-				return {
-					error: vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'),
-					innerError: error instanceof Error ? error.message : String(error),
-					state: 'error'
-				};
+				this.logService.error(`Authorization failed: ${error}`);
+				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
+
 			}
 		}
 
@@ -734,11 +735,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				head_ref = await this.gitOperationsManager.commitAndPushChanges();
 				stream.markdown(vscode.l10n.t('Local changes committed and pushed to remote branch `{0}`.', head_ref));
 			} catch (error) {
-				return {
-					error: vscode.l10n.t('{0}. Commit or stash your changes and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to commit and push changes.')),
-					innerError: error instanceof Error ? error.message : String(error),
-					state: 'error'
-				};
+				this.logService.error(`Commit and push failed: ${error}`);
+				throw vscode.l10n.t('{0}. Commit or stash your changes and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to commit and push changes.'));
 			}
 		}
 
@@ -747,22 +745,19 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			stream.progress(vscode.l10n.t('Verifying branch status'));
 			await this.gitOperationsManager.validateRemoteHasBaseRef();
 		} catch (error) {
-			return {
-				error: vscode.l10n.t('{0}. Commit or stash your changes and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to .')),
-				innerError: error instanceof Error ? error.message : String(error),
-				state: 'error'
-			};
+			this.logService.error(`Remote branch validation failed: ${error}`);
+			throw new Error(vscode.l10n.t('{0}. Commit or stash your changes and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to .')));
 		}
+
+		// Get custom agent
+		const customAgentName = undefined;
 
 		// Now trigger delegation
 		try {
-			await this.delegate(request, stream, context, token, metadata, head_ref);
+			await this.delegate(request, stream, context, token, metadata, customAgentName, head_ref);
 		} catch (error) {
-			return {
-				error: vscode.l10n.t('{0}', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to start cloud agent session.')),
-				innerError: error instanceof Error ? error.message : String(error),
-				state: 'error'
-			};
+			this.logService.error(`Failure in delegation: ${error}`);
+			throw new Error(vscode.l10n.t('{0}', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to start cloud agent session.')));
 		}
 	}
 
@@ -900,7 +895,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				},
 				buttons);
 		} else {
-			// TODO: Run the same create as happpens in handleConfirmationData()
+			// TODO: call delegate();
 		}
 	}
 
@@ -1383,8 +1378,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		};
 
 		stream?.progress(vscode.l10n.t('Delegating to cloud agent'));
-		this.logService.trace(`Invoking cloud agent job with payload: ${JSON.stringify(payload)}`);
+		this.logService.trace(`[postCopilotAgentJob] Invoking cloud agent job with payload: ${JSON.stringify(payload)}`);
 		const response = await this._octoKitService.postCopilotAgentJob(repoId.org, repoId.repo, JOBS_API_VERSION, payload);
+		this.logService.trace(`[postCopilotAgentJob] Received response from cloud agent job invocation: ${JSON.stringify(response)}`);
 		if (!this.validateRemoteAgentJobResponse(response)) {
 			const statusCode = response?.status;
 			switch (statusCode) {
