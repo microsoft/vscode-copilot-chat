@@ -813,7 +813,7 @@
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"icon": "$(pencil)",
-				"displayName": "%copilot.tools.editNotebook.name%",
+				"displayName": "%copilot.tools.editNotebook.description%",
 				"userDescription": "Edit a notebook file in the workspace",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
 				"tags": [
@@ -1222,8 +1222,7 @@
 			},
 			{
 				"name": "launch",
-				"icon": "$(rocket)",
-				"description": "Launch and run code, binaries or tests in the workspace",
+				"description": "",
 				"tools": [
 					"runNotebookCell",
 					"testFailure"
@@ -1231,6 +1230,7 @@
 			},
 			{
 				"name": "vscode",
+				"description": "",
 				"tools": [
 					"getProjectSetupInfo",
 					"installExtension",

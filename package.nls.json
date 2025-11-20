@@ -306,6 +306,7 @@
 	"copilot.tools.getDocInfo.description": "For a symbol like a class or function, find the information about how to document it",
 	"copilot.tools.changes.description": "Get diffs of changed files",
 	"copilot.tools.newJupyterNotebook.description": "Create a new Jupyter Notebook",
+	"copilot.tools.editNotebook.description": "Edit a notebook file in the workspace",
 	"copilot.tools.runNotebookCell.description": "Trigger the execution of a cell in a notebook file",
 	"copilot.tools.getNotebookCellOutput.description": "Read the output of a previously executed cell",
 	"copilot.tools.fetchWebPage.description": "Fetch the main content from a web page. You should include the URL of the page you want to fetch.",
