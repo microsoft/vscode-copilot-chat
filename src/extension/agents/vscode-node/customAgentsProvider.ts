@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
-import { IOctoKitService } from '../../../platform/github/common/githubService';
+import { CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
 
@@ -37,7 +37,8 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 			// Convert VS Code API options to internal options
 			const internalOptions = options ? {
 				target: options.target,
-			} : undefined;
+				includeSources: ['org', 'enterprise'] // don't include 'repo' to avoid redundancy
+			} satisfies CustomAgentListOptions : undefined;
 
 			const agents = await this.octoKitService.getCustomAgents(repoOwner, repoName, internalOptions);
 
