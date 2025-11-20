@@ -127,6 +127,7 @@ export class CopilotCloudGitOperationsManager {
 				throw new Error(vscode.l10n.t('Uncommitted changes still detected.'));
 			}
 		} catch (error) {
+			// TODO: stream.progress('waiting for user to manually commit changes');
 			const commitSuccessful = await this.handleInteractiveCommit(repository);
 			if (!commitSuccessful) {
 				throw new Error(vscode.l10n.t('Failed to commit changes. Please commit or stash your changes manually before using the cloud agent.'));

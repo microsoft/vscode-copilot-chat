@@ -627,7 +627,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		let history: string | undefined;
 		if (this.hasHistoryToSummarize(context.history)) {
 			stream.progress(vscode.l10n.t('Analyzing chat history'));
-			history = await this._summarizer.provideChatSummary(metadata.chatContext, token);
+			history = await this._summarizer.provideChatSummary(context, token);
 		}
 
 		const { number, sessionId } = await this.invokeRemoteAgent(
@@ -732,6 +732,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			try {
 				stream.progress(vscode.l10n.t('Committing and pushing local changes'));
 				head_ref = await this.gitOperationsManager.commitAndPushChanges();
+				stream.markdown(vscode.l10n.t('Local changes committed and pushed to remote branch `{0}`.', head_ref));
 			} catch (error) {
 				return {
 					error: vscode.l10n.t('{0}. Commit or stash your changes and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to commit and push changes.')),
