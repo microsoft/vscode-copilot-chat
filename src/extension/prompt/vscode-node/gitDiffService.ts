@@ -123,7 +123,8 @@ export class GitDiffService implements IGitDiffService {
 
 			patch.push(`diff --git a/${relativePath} b/${relativePath}`);
 			// 100644 is standard file mode for new git files. Saves us from trying to check file permissions and handling
-			// UNIX vs Windows permission differences.
+			// UNIX vs Windows permission differences. Skipping calculating the SHA1 hashes as well since they are not strictly necessary
+			// to apply the patch.
 			patch.push('new file mode 100644');
 
 			patch.push('--- /dev/null', `+++ b/${relativePath}`);
