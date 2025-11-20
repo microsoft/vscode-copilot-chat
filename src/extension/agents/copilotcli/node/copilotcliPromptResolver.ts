@@ -30,10 +30,6 @@ export class CopilotCLIPromptResolver {
 		if (request.prompt.startsWith('/')) {
 			return { prompt: request.prompt, attachments: [] }; // likely a slash command, don't modify
 		}
-		return this.resolvePromptImpl(request, token);
-	}
-
-	private async resolvePromptImpl(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
 		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(request.references), token);
 		if (token.isCancellationRequested) {
 			return { prompt: request.prompt, attachments: [] };
@@ -65,6 +61,7 @@ export class CopilotCLIPromptResolver {
 				}
 
 				// Files and directories will be attached using regular attachments via Copilot CLI SDK.
+				validReferences.push(variable.reference);
 				fileFolderReferences.push(variable.reference);
 				continue;
 			}
