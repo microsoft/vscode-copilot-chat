@@ -263,7 +263,7 @@ describe('GitHubMcpDefinitionProvider', () => {
 
 			const definitions = readonlyEmptyProvider.provideMcpServerDefinitions();
 
-			expect(definitions[0].version).toBe('|readonly');
+			expect(definitions[0].version).toBe('0|readonly');
 		});
 	});
 
