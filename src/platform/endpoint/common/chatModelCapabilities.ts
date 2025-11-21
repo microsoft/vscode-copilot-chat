@@ -176,7 +176,7 @@ export function isGptCodexFamily(model: LanguageModelChat | IChatEndpoint | stri
 	}
 
 	const family = typeof model === 'string' ? model : model.family;
-	return !!family.startsWith('gpt-') && family.includes('-codex');
+	return !!family.startsWith('gpt-') && family.includes('-codex') || family.toLowerCase() === 'customoai';
 }
 
 /**
@@ -188,7 +188,7 @@ export function isGpt5Family(model: LanguageModelChat | IChatEndpoint | string |
 	}
 
 	const family = typeof model === 'string' ? model : model.family;
-	return family === 'gpt-5' || family === 'gpt-5-mini' || family === 'gpt-5-codex';
+	return family === 'gpt-5' || family === 'gpt-5-mini' || family === 'gpt-5-codex' || family.toLowerCase() === 'customoai';
 }
 
 export function isGptFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
@@ -209,7 +209,7 @@ export function isGpt51Family(model: LanguageModelChat | IChatEndpoint | string 
 	}
 
 	const family = typeof model === 'string' ? model : model.family;
-	return !!family.match(/^gpt-5\.\d+/i);
+	return !!family.match(/^gpt-5\.\d+/i) || family.toLowerCase() === 'customoai';
 }
 
 /**

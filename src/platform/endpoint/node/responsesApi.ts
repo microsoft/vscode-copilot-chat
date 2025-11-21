@@ -33,7 +33,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const verbosity = getVerbosityForModelSync(endpoint);
 	const body: IEndpointBody = {
 		model,
-		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
+		...rawMessagesToResponseAPI(model, options.messages, true),
 		stream: true,
 		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
 			...tool.function,

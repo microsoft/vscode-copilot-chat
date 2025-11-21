@@ -92,7 +92,7 @@ class Gpt51CodexResolver implements IAgentPrompt {
 	static readonly familyPrefixes = [];
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return endpoint.family.startsWith('gpt-5.1') && endpoint.family.includes('-codex');
+		return endpoint.family.startsWith('gpt-5.1') && endpoint.family.includes('-codex') || endpoint.family.toLowerCase() === 'customoai';
 	}
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
