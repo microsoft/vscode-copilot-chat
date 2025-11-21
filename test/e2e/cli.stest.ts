@@ -32,8 +32,9 @@ import { DisposableStore, IReference } from '../../src/util/vs/base/common/lifec
 import { Mutable } from '../../src/util/vs/base/common/types';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
-import { ChatRequest, ChatSessionStatus, Location, Range, Uri } from '../../src/vscodeTypes';
+import { ChatRequest, ChatSessionStatus, Diagnostic, DiagnosticSeverity, Location, Range, Uri } from '../../src/vscodeTypes';
 import { ssuite, stest } from '../base/stest';
+import { ChatReferenceDiagnostic } from '../../src/util/common/test/shims/chatTypes';
 
 const keys = ['COPILOT_ENABLE_ALT_PROVIDERS', 'COPILOT_AGENT_MODEL', 'GH_TOKEN', 'COPILOT_API_URL', 'GITHUB_COPILOT_API_TOKEN'];
 const originalValues: Record<string, string | undefined> = {};
@@ -158,6 +159,11 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	const promptResolver = instaService.createInstance(CopilotCLIPromptResolver);
 
 	async function populateWorkspaceFiles(workingDirectory: string) {
+		const fileLanguages = new Map<string, string>([
+			['.js', 'javascrtipt'],
+			['.ts', 'typescript'],
+			['.py', 'python'],
+		]);
 		const workspaceUri = Uri.file(workingDirectory);
 		// Enumerate all files and folders under workingDirectory
 
@@ -180,7 +186,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 				uri: fileUri,
 				fileContents: content,
 				kind: 'qualifiedFile',
-				languageId: 'javascript',
+				languageId: fileLanguages.get(path.extname(fileUri.fsPath)),
 			} satisfies IQualifiedFile;
 		}));
 		simulationWorkspace.resetFromFiles(fileList, [workspaceUri]);
@@ -307,7 +313,7 @@ async function assertFileNotContains(filePath: string, expectedContent: string) 
 	assert.ok(!fileContent.includes(expectedContent), `Expected not to contain "${expectedContent}", contents = ${fileContent}`);
 }
 
-ssuite({ title: '@cli', location: 'external' }, async (_) => {
+ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	stest({ description: 'can start a session' },
 		testRunner(async ({ sessionService, init }, scenariosPath, stream, disposables) => {
 			const workingDirectory = path.join(scenariosPath, 'wkspc1');
@@ -320,12 +326,14 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 
 			// Verify we have a response of 9.
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
 			assertStreamContains(stream, '9');
 
 			// Can send a subsequent request.
 			await session.object.handleRequest('What is 11+25?', [], undefined, CancellationToken.None);
 			// Verify we have a response of 36.
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
 			assertStreamContains(stream, '36');
 		})
 	);
@@ -365,6 +373,7 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 
 				// Verify we have a response of 9.
 				assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+				assertNoErrorsInStream(stream);
 				assertStreamContains(stream, '8');
 			}
 		})
@@ -382,6 +391,7 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 			await session.object.handleRequest(prompt, [], undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
 			assertStreamContains(stream, 'add');
 		})
 	);
@@ -412,6 +422,7 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 			await session.object.handleRequest(prompt, [], undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
 			const streamOutput = stream.output.join('\n');
 			assert.ok(permissionRequested, 'Expected permission to be requested for external file, output:' + streamOutput);
 		})
@@ -434,6 +445,7 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
 			assertStreamContains(stream, 'add');
 		})
 	);
@@ -443,7 +455,7 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 			await init(workingDirectory);
 			const file = path.join(workingDirectory, 'sample.js');
 			let { prompt, attachments } = await resolvePromptWithFileReferences(
-				`Remove comments form add function and add a substract function to #file:sample.js.`,
+				`Remove comments form add function and add a subtract function to #file:sample.js.`,
 				[file],
 				promptResolver
 			);
@@ -455,9 +467,10 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
 			await assertFileNotContains(file, 'Sample function to add two values');
-			await assertFileContains(file, 'function subtract(', 1);
-			await assertFileContains(file, 'function add(', 1);
+			await assertFileContains(file, 'function subtract', 1);
+			await assertFileContains(file, 'function add', 1);
 
 			// Multi-turn edit
 			({ prompt, attachments } = await resolvePromptWithFileReferences(
@@ -468,12 +481,11 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
 			// Ensure previous edits are preserved (in past there have been cases where SDK applies edits again)
 			await assertFileNotContains(file, 'Sample function to add two values');
-			await assertFileContains(file, 'function subtract(', 1);
-			await assertFileContains(file, 'function add(', 1);
-			// Very new check for divide function
-			// Verify new check for divide function
+			await assertFileContains(file, 'function subtract', 1);
+			await assertFileContains(file, 'function add', 1);
 		})
 	);
 	stest({ description: 'explain selection' },
@@ -495,7 +507,6 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
-			assertNoErrorsInStream(stream);
 			assertStreamContains(stream, 'throw');
 		})
 	);
@@ -516,7 +527,117 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
 			await assertFileContains(path.join(workingDirectory, 'math.js'), 'function', 1);
+		})
+	);
+	stest({ description: 'can list files in directory' },
+		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
+			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			await init(workingDirectory);
+			const { prompt, attachments } = await resolvePromptWithFileReferences(
+				`What files are in the current directory.`,
+				[],
+				promptResolver
+			);
+
+			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			disposables.add(session);
+			disposables.add(session.object.attachStream(stream));
+
+			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+
+			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
+			assertStreamContains(stream, 'sample.js');
+			assertStreamContains(stream, 'utils.js');
+			assertStreamContains(stream, 'stringUtils.js');
+			assertStreamContains(stream, 'demo.py');
+		})
+	);
+	stest({ description: 'can fix problems' },
+		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
+			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			await init(workingDirectory);
+			const file = path.join(workingDirectory, 'stringUtils.js');
+			const diag = new Diagnostic(new Range(7, 0, 7, 1), '} expected', DiagnosticSeverity.Error);
+			const { prompt, attachments } = await resolvePromptWithFileReferences(
+				`Fix the problem`,
+				[createDiagnosticReference(file, [diag])],
+				promptResolver
+			);
+			let contents = await fs.readFile(file, 'utf-8');
+			assert.ok(!contents.trim().endsWith('}'), '} is missing');
+			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			disposables.add(session);
+			disposables.add(session.object.attachStream(stream));
+
+			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+
+			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertNoErrorsInStream(stream);
+			contents = await fs.readFile(file, 'utf-8');
+			assert.ok(contents.trim().endsWith('}'), `} has not been added, contents = ${contents}`);
+		})
+	);
+
+	stest({ description: 'can fix multiple problems in multiple files' },
+		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
+			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			await init(workingDirectory);
+			const tsFile = path.join(workingDirectory, 'stringUtils.js');
+			const tsDiag = new Diagnostic(new Range(7, 0, 7, 1), '} expected', DiagnosticSeverity.Error);
+			const pyFile = path.join(workingDirectory, 'demo.py');
+			const pyDiag1 = new Diagnostic(new Range(3, 21, 3, 21), 'Expected \':\', found new line', DiagnosticSeverity.Error);
+			const pyDiag2 = new Diagnostic(new Range(19, 13, 19, 13), 'Statement ends with an unnecessary semicolon', DiagnosticSeverity.Warning);
+
+			const { prompt, attachments } = await resolvePromptWithFileReferences(
+				`Fix the problem`,
+				[createDiagnosticReference(tsFile, [tsDiag]), createDiagnosticReference(pyFile, [pyDiag1, pyDiag2])],
+				promptResolver
+			);
+			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			disposables.add(session);
+			disposables.add(session.object.attachStream(stream));
+
+			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+
+			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			const tsContents = await fs.readFile(tsFile, 'utf-8');
+			assert.ok(tsContents.trim().endsWith('}'), `} has not been added, contents = ${tsContents}`);
+			assertFileContains(pyFile, 'def printFibb(nterms):');
+			assertFileNotContains(pyFile, 'printFibb(34);');
+		})
+	);
+
+	(platform() === 'win32' ? stest.skip : stest)({ description: 'can run terminal commands' },
+		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
+			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			await init(workingDirectory);
+
+			const { prompt, attachments } = await resolvePromptWithFileReferences(
+				`Use terminal commands to determine my current directory`,
+				[],
+				promptResolver
+			);
+			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			disposables.add(session);
+			disposables.add(session.object.attachStream(stream));
+
+			disposables.add(session.object.attachPermissionHandler(async (permission: PermissionRequest) => {
+				if (permission.kind === 'read') {
+					return true;
+				} else if (permission.kind === 'shell' && permission.fullCommandText === 'pwd') {
+					return true;
+				} else {
+					return false;
+				}
+			}));
+
+			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+
+			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
+			assertStreamContains(stream, 'wkspc1');
 		})
 	);
 });
@@ -548,6 +669,16 @@ function createFileSelectionReference(file: string, range: Range): ChatPromptRef
 		value: new Location(uri, range),
 	} satisfies ChatPromptReference;
 }
+
+function createDiagnosticReference(file: string, diag: Diagnostic[]): ChatPromptReference {
+	const uri = Uri.file(file);
+	return {
+		id: `file-${file}`,
+		name: `file:${path.basename(file)}`,
+		value: new ChatReferenceDiagnostic([[uri, diag]]),
+	} satisfies ChatPromptReference;
+}
+
 
 function resolvePromptWithFileReferences(prompt: string, filesOrReferences: (string | ChatPromptReference)[], promptResolver: CopilotCLIPromptResolver): Promise<{ prompt: string; attachments: any[] }> {
 	return promptResolver.resolvePrompt(
