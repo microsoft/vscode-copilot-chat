@@ -444,6 +444,26 @@ export enum LanguageModelChatMessageRole {
 	System = 3
 }
 
+export class LanguageModelChatMessage implements vscode.LanguageModelChatMessage {
+	role: LanguageModelChatMessageRole;
+	content: Array<any>;
+	name: string | undefined;
+
+	constructor(role: LanguageModelChatMessageRole, content: string | Array<any>, name?: string) {
+		this.role = role;
+		this.content = typeof content === 'string' ? [{ type: 'text', value: content }] : content;
+		this.name = name;
+	}
+
+	static User(content: string | Array<any>, name?: string): LanguageModelChatMessage {
+		return new LanguageModelChatMessage(LanguageModelChatMessageRole.User, content, name);
+	}
+
+	static Assistant(content: string | Array<any>, name?: string): LanguageModelChatMessage {
+		return new LanguageModelChatMessage(LanguageModelChatMessageRole.Assistant, content, name);
+	}
+}
+
 export class ChatToolInvocationPart {
 	toolName: string;
 	toolCallId: string;
