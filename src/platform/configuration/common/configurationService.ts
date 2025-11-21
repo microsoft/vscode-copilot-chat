@@ -228,10 +228,36 @@ export abstract class AbstractConfigurationService extends Disposable implements
 			return;
 		}
 
+		const internalChanged = this._isInternal !== userInfo.isInternal;
+		const teamMemberChanged = this._isTeamMember !== userInfo.isTeamMember;
+
 		this._isInternal = userInfo.isInternal;
 		this._isTeamMember = userInfo.isTeamMember;
-		// fire a fake change event to refresh all settings
-		this._onDidChangeConfiguration.fire({ affectsConfiguration: () => true });
+
+		// collect potential affected settings
+		const potentialAffectedKeys = new Set<string>();
+		for (const config of globalConfigRegistry.configs.values()) {
+			if (internalChanged && (config.options?.valueIgnoredForExternals || ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(config.defaultValue))) {
+				potentialAffectedKeys.add(config.fullyQualifiedId);
+			} else if (teamMemberChanged && ConfigValueValidators.isDefaultValueWithTeamValue(config.defaultValue)) {
+				potentialAffectedKeys.add(config.fullyQualifiedId);
+			}
+		}
+
+		if (potentialAffectedKeys.size > 0) {
+			// fire a fake change event to refresh potential affected settings
+			this._onDidChangeConfiguration.fire({
+				affectsConfiguration: (section) => {
+					// Check for exact match or prefix match with dot separator
+					for (const key of potentialAffectedKeys) {
+						if (key === section || key.startsWith(section + '.') || section.startsWith(key + '.')) {
+							return true;
+						}
+					}
+					return false;
+				}
+			});
+		}
 	}
 
 	abstract getConfig<T>(key: Config<T>, scope?: ConfigurationScope): T;
@@ -740,6 +766,7 @@ export namespace ConfigKey {
 		// TODO: @sandy081 - These should be moved away from this namespace
 		export const EnableReadFileV2 = defineSetting<boolean>('chat.advanced.enableReadFileV2', ConfigType.ExperimentBased, isPreRelease);
 		export const AskAgent = defineSetting<boolean>('chat.advanced.enableAskAgent', ConfigType.ExperimentBased, { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true });
+		export const RetryNetworkErrors = defineSetting<boolean>('chat.advanced.enableRetryNetworkErrors', ConfigType.ExperimentBased, false);
 	}
 
 	export const Enable = defineSetting<{ [key: string]: boolean }>('enable', ConfigType.Simple, {

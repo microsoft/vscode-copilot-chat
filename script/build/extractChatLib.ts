@@ -6,6 +6,7 @@
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import { glob } from 'glob';
+import * as jsonc from 'jsonc-parser';
 import * as path from 'path';
 import { promisify } from 'util';
 
@@ -26,6 +27,7 @@ const entryPoints = [
 	'src/platform/tokenizer/node/tikTokenizerWorker.ts',
 	// For tests:
 	'src/platform/authentication/test/node/simulationTestCopilotTokenManager.ts',
+	'src/extension/completions-core/vscode-node/lib/src/test/textDocument.ts',
 ];
 
 interface FileInfo {
@@ -38,8 +40,11 @@ interface FileInfo {
 class ChatLibExtractor {
 	private processedFiles = new Set<string>();
 	private allFiles = new Map<string, FileInfo>();
+	private pathMappings: Map<string, string> = new Map();
 
 	async extract(): Promise<void> {
+		// Load path mappings from tsconfig.json
+		await this.loadPathMappings();
 		console.log('Starting chat-lib extraction...');
 
 		// Clean target directory
@@ -61,6 +66,33 @@ class ChatLibExtractor {
 		await this.compileTypeScript();
 
 		console.log('Chat-lib extraction completed successfully!');
+	}
+
+	private async loadPathMappings(): Promise<void> {
+		const tsconfigPath = path.join(REPO_ROOT, 'tsconfig.json');
+		const tsconfigContent = await fs.promises.readFile(tsconfigPath, 'utf-8');
+		const tsconfig = jsonc.parse(tsconfigContent);
+
+		if (tsconfig.compilerOptions?.paths) {
+			for (const [alias, targets] of Object.entries(tsconfig.compilerOptions.paths)) {
+				// Skip the 'vscode' mapping as it's handled separately
+				if (alias === 'vscode') {
+					continue;
+				}
+
+				// Handle path mappings like "#lib/*" -> ["./src/extension/completions-core/lib/src/*"]
+				// and "#types" -> ["./src/extension/completions-core/types/src"]
+				if (Array.isArray(targets) && targets.length > 0) {
+					const target = targets[0]; // Use the first target
+					// Remove leading './' and trailing '/*' if present
+					const cleanTarget = target.replace(/^\.\//, '').replace(/\/\*$/, '');
+					const cleanAlias = alias.replace(/\/\*$/, '');
+					this.pathMappings.set(cleanAlias, cleanTarget);
+				}
+			}
+		}
+
+		console.log('Loaded path mappings:', Array.from(this.pathMappings.entries()));
 	}
 
 	private async cleanTargetDir(): Promise<void> {
@@ -113,16 +145,68 @@ class ChatLibExtractor {
 		const content = await fs.promises.readFile(filePath, 'utf-8');
 		const dependencies: string[] = [];
 
+		// Remove single-line comments and process line by line to avoid matching commented imports
+		// We need to be careful not to remove strings that contain '//'
+		const lines = content.split('\n');
+		const activeLines: string[] = [];
+		let inBlockComment = false;
+
+		for (const line of lines) {
+			// Track block comments
+			if (line.trim().startsWith('/*')) {
+				// preserve pragmas in tsx files
+				if (!(filePath.endsWith('.tsx') && line.match(/\/\*\*\s+@jsxImportSource\s+\S+/))) {
+					inBlockComment = true;
+				}
+			}
+			if (inBlockComment) {
+				if (line.includes('*/')) {
+					inBlockComment = false;
+				}
+				continue;
+			}
+
+			// Skip single-line comments
+			const trimmedLine = line.trim();
+			if (trimmedLine.startsWith('//')) {
+				continue;
+			}
+
+			// For lines that might have inline comments, we need to preserve string content
+			// Remove comments that are not inside strings
+			let processedLine = line;
+			// Simple heuristic: if the line contains import/export, keep everything up to //
+			// that's outside of string literals
+			if (trimmedLine.includes('import') || trimmedLine.includes('export')) {
+				// Remove inline comments (this is a simple approach - could be improved)
+				const commentIndex = line.indexOf('//');
+				if (commentIndex !== -1) {
+					// Check if // is inside a string by counting quotes before it
+					const beforeComment = line.substring(0, commentIndex);
+					const singleQuotes = (beforeComment.match(/'/g) || []).length;
+					const doubleQuotes = (beforeComment.match(/"/g) || []).length;
+					// If even number of quotes, the comment is outside strings
+					if (singleQuotes % 2 === 0 && doubleQuotes % 2 === 0) {
+						processedLine = beforeComment;
+					}
+				}
+			}
+
+			activeLines.push(processedLine);
+		}
+
+		const activeContent = activeLines.join('\n');
+
 		// Extract both import and export statements using regex
 		// Matches:
 		// - import ... from './path'
 		// - export ... from './path'
 		// - export { ... } from './path'
 		// Updated regex to match all relative imports (including multiple ../ segments)
-		const importExportRegex = /(?:import|export)\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"](\.\.?\/[^'"]*)['"]/g;
+		const relativeImportRegex = /(?:import(?:\s+type)?|export)\s+(?:(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?|\w+)\s+from\s+)?['"](\.\.?\/[^'"]*)['"]/g;
 		let match;
 
-		while ((match = importExportRegex.exec(content)) !== null) {
+		while ((match = relativeImportRegex.exec(activeContent)) !== null) {
 			const importPath = match[1];
 			const resolvedPath = this.resolveImportPath(filePath, importPath);
 
@@ -131,7 +215,93 @@ class ChatLibExtractor {
 			}
 		}
 
+		// Also match path alias imports like: import ... from '#lib/...' or '#types'
+		// We need to resolve these to follow their dependencies
+		const aliasImportRegex = /(?:import(?:\s+type)?|export)\s+(?:(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?|\w+)\s+from\s+)?['"]([#][^'"]*)['"]/g;
+
+		while ((match = aliasImportRegex.exec(activeContent)) !== null) {
+			const importPath = match[1];
+			const resolvedPath = this.resolvePathAlias(importPath);
+
+			if (resolvedPath) {
+				dependencies.push(resolvedPath);
+			}
+		}
+
+		// For tsx files process JSX imports as well
+		if (filePath.endsWith('.tsx')) {
+			const jsxRelativeImportRegex = /\/\*\*\s+@jsxImportSource\s+(\.\.?\/\S+)\s+\*\//g;
+
+			while ((match = jsxRelativeImportRegex.exec(activeContent)) !== null) {
+				const importPath = match[1];
+				const resolvedPath = this.resolveImportPath(filePath, path.join(importPath, 'jsx-runtime'));
+
+				if (resolvedPath) {
+					dependencies.push(resolvedPath);
+				}
+			}
+		}
+
 		return dependencies;
+	}
+
+	private resolvePathAlias(importPath: string): string | null {
+		// Handle path alias imports like '#lib/foo' or '#types'
+		// Find the matching alias by checking if the import starts with any registered alias
+		for (const [alias, targetPath] of this.pathMappings.entries()) {
+			if (importPath === alias) {
+				// Exact match for aliases without wildcards (e.g., '#types')
+				return this.resolveFileWithExtensions(path.join(REPO_ROOT, targetPath));
+			} else if (importPath.startsWith(alias + '/')) {
+				// Wildcard match for aliases with /* (e.g., '#lib/foo' matches '#lib')
+				const remainder = importPath.substring(alias.length + 1); // +1 to skip the '/'
+				const fullPath = path.join(REPO_ROOT, targetPath, remainder);
+				return this.resolveFileWithExtensions(fullPath);
+			}
+		}
+
+		// If no alias matched, return null
+		console.warn(`Warning: Path alias not found for: ${importPath}`);
+		return null;
+	}
+
+	private resolveFileWithExtensions(basePath: string): string | null {
+		// Try with .ts extension
+		if (fs.existsSync(basePath + '.ts')) {
+			return this.normalizePath(path.relative(REPO_ROOT, basePath + '.ts'));
+		}
+
+		// Try with .tsx extension
+		if (fs.existsSync(basePath + '.tsx')) {
+			return this.normalizePath(path.relative(REPO_ROOT, basePath + '.tsx'));
+		}
+
+		// Try with .d.ts extension
+		if (fs.existsSync(basePath + '.d.ts')) {
+			return this.normalizePath(path.relative(REPO_ROOT, basePath + '.d.ts'));
+		}
+
+		// Try with index.ts
+		if (fs.existsSync(path.join(basePath, 'index.ts'))) {
+			return this.normalizePath(path.relative(REPO_ROOT, path.join(basePath, 'index.ts')));
+		}
+
+		// Try with index.tsx
+		if (fs.existsSync(path.join(basePath, 'index.tsx'))) {
+			return this.normalizePath(path.relative(REPO_ROOT, path.join(basePath, 'index.tsx')));
+		}
+
+		// Try with index.d.ts
+		if (fs.existsSync(path.join(basePath, 'index.d.ts'))) {
+			return this.normalizePath(path.relative(REPO_ROOT, path.join(basePath, 'index.d.ts')));
+		}
+
+		// Try as-is
+		if (fs.existsSync(basePath)) {
+			return this.normalizePath(path.relative(REPO_ROOT, basePath));
+		}
+
+		return null;
 	}
 
 	private resolveImportPath(fromFile: string, importPath: string): string | null {
@@ -344,6 +514,67 @@ class ChatLibExtractor {
 
 		// Copy all tiktoken files
 		await this.copyTikTokenFiles();
+
+		// Update chat-lib tsconfig.json with path mappings
+		await this.updateChatLibTsConfig();
+	}
+
+	private async updateChatLibTsConfig(): Promise<void> {
+		console.log('Updating chat-lib tsconfig.json with path mappings...');
+
+		const chatLibTsconfigPath = path.join(CHAT_LIB_DIR, 'tsconfig.json');
+		const tsconfigContent = await fs.promises.readFile(chatLibTsconfigPath, 'utf-8');
+		const tsconfig = jsonc.parse(tsconfigContent);
+
+		// Ensure compilerOptions exists
+		if (!tsconfig.compilerOptions) {
+			tsconfig.compilerOptions = {};
+		}
+
+		// Ensure paths exists
+		if (!tsconfig.compilerOptions.paths) {
+			tsconfig.compilerOptions.paths = {};
+		}
+
+		// Read the root tsconfig once to check for wildcards
+		const rootTsconfigPath = path.join(REPO_ROOT, 'tsconfig.json');
+		const rootTsconfigContent = await fs.promises.readFile(rootTsconfigPath, 'utf-8');
+		const rootTsconfig = jsonc.parse(rootTsconfigContent);
+
+		// Add path mappings from the root tsconfig, adjusted for chat-lib structure
+		// The files are in src/_internal/... structure
+		for (const [alias, targetPath] of this.pathMappings.entries()) {
+			// Convert from root paths like "src/extension/completions-core/lib/src"
+			// to chat-lib paths like "./src/_internal/extension/completions-core/lib/src"
+			// Remove the "src/" prefix from targetPath since it's already part of the _internal structure
+			const pathWithoutSrc = targetPath.replace(/^src\//, '');
+			const chatLibPath = `./src/_internal/${pathWithoutSrc}`;
+
+			let aliasWithWildcard = alias;
+			let pathWithWildcard = chatLibPath;
+
+			// Check if the original mapping had a wildcard
+			if (rootTsconfig.compilerOptions?.paths) {
+				for (const key of Object.keys(rootTsconfig.compilerOptions.paths)) {
+					const keyWithoutWildcard = key.replace(/\/\*$/, '');
+					if (keyWithoutWildcard === alias && key.endsWith('/*')) {
+						aliasWithWildcard = alias + '/*';
+						pathWithWildcard = chatLibPath + '/*';
+						break;
+					}
+				}
+			}
+
+			tsconfig.compilerOptions.paths[aliasWithWildcard] = [pathWithWildcard];
+		}
+
+		// Write the updated tsconfig back
+		await fs.promises.writeFile(
+			chatLibTsconfigPath,
+			JSON.stringify(tsconfig, null, '\t') + '\n'
+		);
+
+		console.log('Chat-lib tsconfig.json updated with path mappings:', Object.keys(tsconfig.compilerOptions.paths));
 	}
 
 	private async validateModule(): Promise<void> {

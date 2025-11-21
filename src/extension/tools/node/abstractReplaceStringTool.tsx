@@ -17,7 +17,6 @@ import { IAlternativeNotebookContentService } from '../../../platform/notebook/c
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -80,7 +79,6 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
 		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
 		@ILogService private readonly logService: ILogService,
@@ -400,9 +398,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			}
 			this.recordEditSuccess(options, false);
 
-			const shouldSkipHealingForNotExplicitlyEnabled = this.experimentationService.getTreatmentVariable<boolean>('copilotchat.disableReplaceStringHealing') === true;
-			const canHeal = shouldSkipHealingForNotExplicitlyEnabled ? model && modelShouldUseReplaceStringHealing(model) : true;
-			if (!canHeal) {
+			if (model && !modelShouldUseReplaceStringHealing(model)) {
 				throw e;
 			}
 

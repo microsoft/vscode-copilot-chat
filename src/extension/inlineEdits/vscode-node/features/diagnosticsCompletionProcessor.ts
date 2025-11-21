@@ -325,6 +325,8 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			log.setError(error);
 		}
 
+		this._tracer.trace('Diagnostic Providers returned completion item: ' + (completionItem ? completionItem.toString() : 'null'));
+
 		// Distance to the closest diagnostic which is not supported by any provider
 		const allNoneSupportedDiagnostics = allDiagnostics.filter(diagnostic => !diagnosticsSorted.includes(diagnostic));
 		telemetryBuilder.setDistanceToUnknownDiagnostic(distanceToClosestDiagnostic(workspaceDocument, allNoneSupportedDiagnostics, cursor));
@@ -405,9 +407,16 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 	private async _fetchDiagnosticsBasedCompletions(workspaceDocument: IVSCodeObservableDocument, sortedDiagnostics: Diagnostic[], pos: Position, logContext: DiagnosticInlineEditRequestLogContext, token: CancellationToken): Promise<DiagnosticCompletionItem[]> {
 		const providers = this._diagnosticsCompletionProviders.get();
 
-		const providerResults = await Promise.all(providers.map(provider =>
-			provider.provideDiagnosticCompletionItem(workspaceDocument, sortedDiagnostics, pos, logContext, token)
-		));
+		const providerTimings: Array<{ provider: string; duration: number }> = [];
+
+		const providerResults = await Promise.all(providers.map(async provider => {
+			const startTime = Date.now();
+			const result = await provider.provideDiagnosticCompletionItem(workspaceDocument, sortedDiagnostics, pos, logContext, token);
+			providerTimings.push({ provider: provider.providerName, duration: Date.now() - startTime });
+			return result;
+		}));
+
+		this._tracer.trace(`Provider durations: ${providerTimings.map(timing => `\n- ${timing.provider}: ${timing.duration}ms`).join('')}`);
 
 		return providerResults.filter(item => !!item) as DiagnosticCompletionItem[];
 	}

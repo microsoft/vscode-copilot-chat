@@ -16,6 +16,7 @@ import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/com
 import { IOctoKitService, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { retry } from '../../../util/vs/base/common/async';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -496,7 +497,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		};
 	}
 
-	private async findPR(prNumber: number) {
+	private async findPR(prNumber: number, retries: number = 1) {
 		let pr = this.chatSessions.get(prNumber);
 		if (pr) {
 			return pr;
@@ -506,13 +507,24 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			this.logService.warn('Failed to determine GitHub repo from workspace');
 			return undefined;
 		}
-		const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
-		pr = pullRequests.find(pr => pr.number === prNumber);
-		if (!pr) {
-			this.logService.warn(`Pull request not found for number: ${prNumber}`);
+		try {
+			pr = await retry(async () => {
+				const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
+				const found = pullRequests.find(p => p.number === prNumber);
+				if (!found) {
+					this.logService.warn(`Pull request ${prNumber} is not visible yet, retrying...`);
+					throw new Error(`PR ${prNumber} not yet visible`);
+				}
+				return found;
+			}, 1500, retries);
+			if (pr) {
+				this.chatSessions.set(pr.number, pr);
+			}
+			return pr;
+		} catch (error) {
+			this.logService.warn(`Pull request not found for number: ${prNumber}. ${error instanceof Error ? error.message : String(error)}`);
 			return undefined;
 		}
-		return pr;
 	}
 
 	private getSessionStatusFromSession(session: SessionInfo): vscode.ChatSessionStatus {
@@ -653,7 +665,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			this.sessionReferencesMap.set(sessionUri, metadata.references);
 		}
 
-		const pullRequest = await this.findPR(number);
+		stream.progress(vscode.l10n.t('Fetching pull request details'));
+		const pullRequest = await this.findPR(number, 5);
 		if (!pullRequest) {
 			throw new Error(`Failed to find pull request #${number} after delegation.`);
 		}
