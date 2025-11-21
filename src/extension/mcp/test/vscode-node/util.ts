@@ -5,7 +5,7 @@
 
 import * as fs from 'fs/promises';
 import path from 'path';
-import { FetchOptions, IAbortController, IFetcherService, Response } from '../../../../platform/networking/common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../../../platform/networking/common/fetcherService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { ICommandExecutor } from '../../vscode-node/util';
 
@@ -72,6 +72,11 @@ export class FixtureFetcherService implements IFetcherService {
 				json: async () => JSON.parse(content),
 			} as Response);
 		}
+	}
+
+	// We can implement it if we ever need it
+	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		throw new Error('Method not implemented.');
 	}
 
 	_serviceBrand: undefined;

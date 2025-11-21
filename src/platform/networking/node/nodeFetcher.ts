@@ -6,9 +6,9 @@
 import * as http from 'http';
 import * as https from 'https';
 import { IEnvService } from '../../env/common/envService';
-import { FetchOptions, IAbortController, IHeaders, Response } from '../common/fetcherService';
-import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
+import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../common/fetcherService';
+import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export class NodeFetcher implements IFetcher {
 
@@ -50,6 +50,11 @@ export class NodeFetcher implements IFetcher {
 		}
 
 		return this._fetch(url, method, headers, body, signal);
+	}
+
+	// We can implement it if we ever need it
+	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		throw new Error('Method not implemented.');
 	}
 
 	private _fetch(url: string, method: 'GET' | 'POST', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {

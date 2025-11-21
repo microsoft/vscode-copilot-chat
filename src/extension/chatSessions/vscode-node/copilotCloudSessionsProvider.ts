@@ -169,15 +169,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this._summarizer = instantiationService.createInstance(ChatSummarizerProvider);
 		const interval = setInterval(async () => {
 			const repoId = await getRepoId(this._gitService);
-			if (repoId) {
-				// TODO: handle no auth token case more gracefully
-				if (!this._authenticationService.permissiveGitHubSession) {
-					return;
-				}
-				const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
-				if (this.cachedSessionsSize !== sessions.length) {
-					this.refresh();
-				}
+			// TODO: handle no auth token case more gracefully
+			if (!this._authenticationService.permissiveGitHubSession) {
+				return;
+			}
+			const sessions = await this._octoKitService.getAllOpenSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
+			if (this.cachedSessionsSize !== sessions.length) {
+				this.refresh();
 			}
 		}, BACKGROUND_REFRESH_INTERVAL_MS);
 		this._register(toDisposable(() => clearInterval(interval)));
@@ -245,15 +243,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 		this.chatSessionItemsPromise = (async () => {
 			const repoId = await getRepoId(this._gitService);
-			if (!repoId) {
-				return [];
-			}
 
 			// TODO: handle no auth token case more gracefully
 			if (!this._authenticationService.permissiveGitHubSession) {
 				return [];
 			}
-			const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
+			const sessions = await this._octoKitService.getAllOpenSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
 			this.cachedSessionsSize = sessions.length;
 
 			// Group sessions by resource_id and keep only the latest per resource_id

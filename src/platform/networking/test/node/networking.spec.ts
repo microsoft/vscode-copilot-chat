@@ -10,7 +10,7 @@ import { ICAPIClientService } from '../../../endpoint/common/capiClient';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
-import { FetchOptions, IAbortController, IFetcherService, Response } from '../../common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../common/fetcherService';
 import { postRequest } from '../../common/networking';
 
 suite('Networking test Suite', function () {
@@ -18,7 +18,6 @@ suite('Networking test Suite', function () {
 	let headerBuffer: { [name: string]: string } | undefined;
 
 	class StaticFetcherService implements IFetcherService {
-
 		declare readonly _serviceBrand: undefined;
 
 		getUserAgentLibrary(): string {
@@ -44,6 +43,9 @@ suite('Networking test Suite', function () {
 			throw new Error('Method not implemented.');
 		}
 		getUserMessageForFetcherError(err: any): string {
+			throw new Error('Method not implemented.');
+		}
+		fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
 			throw new Error('Method not implemented.');
 		}
 	}

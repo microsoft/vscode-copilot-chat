@@ -5,9 +5,9 @@
 
 import { Readable } from 'stream';
 import { IEnvService } from '../../env/common/envService';
-import { FetchOptions, IAbortController, Response } from '../common/fetcherService';
-import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
+import { FetchOptions, IAbortController, PaginationOptions, Response } from '../common/fetcherService';
+import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export abstract class BaseFetchFetcher implements IFetcher {
 
@@ -47,6 +47,11 @@ export abstract class BaseFetchFetcher implements IFetcher {
 		}
 
 		return this._fetch(url, method, headers, body, signal);
+	}
+
+	// We can implement it if we ever need it
+	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		throw new Error('Method not implemented.');
 	}
 
 	private async _fetch(url: string, method: 'GET' | 'POST', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {

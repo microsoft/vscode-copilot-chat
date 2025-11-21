@@ -225,7 +225,7 @@ export interface IOctoKitService {
 	/**
 	 * Gets all open Copilot sessions.
 	 */
-	getAllOpenSessions(nwo: string): Promise<SessionInfo[]>;
+	getAllOpenSessions(nwo?: string): Promise<SessionInfo[]>;
 
 	/**
 	 * Gets pull request from global id.
