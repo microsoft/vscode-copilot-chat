@@ -1201,6 +1201,14 @@
 				]
 			},
 			{
+				"name": "execute",
+				"description": "",
+				"tools": [
+					"runNotebookCell",
+					"testFailure"
+				]
+			},
+			{
 				"name": "read",
 				"description": "%copilot.toolSet.read.description%",
 				"icon": "$(eye)",
@@ -1223,14 +1231,6 @@
 					"searchResults",
 					"textSearch",
 					"usages"
-				]
-			},
-			{
-				"name": "launch",
-				"description": "",
-				"tools": [
-					"runNotebookCell",
-					"testFailure"
 				]
 			},
 			{
