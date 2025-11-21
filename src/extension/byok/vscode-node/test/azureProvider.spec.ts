@@ -5,9 +5,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { BlockedExtensionService, IBlockedExtensionService } from '../../../../platform/chat/common/blockedExtensionService';
 import { AzureAuthMode, ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { BYOKKnownModels } from '../../common/byokProvider';
@@ -24,6 +26,10 @@ describe('AzureBYOKModelProvider', () => {
 
 	beforeEach(() => {
 		const testingServiceCollection = createExtensionUnitTestingServices();
+
+		// Add IBlockedExtensionService which is required by CopilotLanguageModelWrapper
+		testingServiceCollection.define(IBlockedExtensionService, new SyncDescriptor(BlockedExtensionService));
+
 		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		instaService = accessor.get(IInstantiationService);
 
@@ -291,13 +297,28 @@ describe('AzureBYOKModelProvider', () => {
 			expect(provideResponseSpy).toHaveBeenCalled();
 		});
 
-		it('should throw error with user-friendly message when authentication fails', async () => {
-			const authError = new Error('Authentication canceled');
+		it('should throw original error when authentication is rejected', async () => {
+			const authError = new Error('User did not consent to login.');
 			vi.spyOn(vscode.authentication, 'getSession').mockRejectedValue(authError);
 
-			await expect(
-				provider.provideLanguageModelChatResponse(mockModel, mockMessages, mockOptions, mockProgress, mockToken)
-			).rejects.toThrow('Azure authentication failed. Please sign in to your Microsoft account and try again.');
+			try {
+				await provider.provideLanguageModelChatResponse(mockModel, mockMessages, mockOptions, mockProgress, mockToken);
+				expect.fail('Should have thrown error');
+			} catch (err: any) {
+				expect(err.message).toBe('User did not consent to login.');
+			}
+		});
+
+		it('should throw LanguageModelError.NoPermissions when session is null', async () => {
+			vi.spyOn(vscode.authentication, 'getSession').mockResolvedValue(undefined);
+
+			try {
+				await provider.provideLanguageModelChatResponse(mockModel, mockMessages, mockOptions, mockProgress, mockToken);
+				expect.fail('Should have thrown LanguageModelError');
+			} catch (err: any) {
+				expect(err.message).toBe('Azure authentication is required to use this model. Please sign in to continue.');
+				expect(err.code).toBe(vscode.LanguageModelError.NoPermissions().code);
+			}
 		});
 
 		it('should pass Entra ID token to AzureOpenAIEndpoint', async () => {

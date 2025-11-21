@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { authentication, CancellationToken, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
+import * as vscode from 'vscode';
+import { CancellationToken, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { AzureAuthMode, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -79,7 +80,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			// This mirrors API key behavior where user is prompted during enumeration
 			if (!silent) {
 				try {
-					await authentication.getSession(
+					await vscode.authentication.getSession(
 						AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
 						[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
 						{ createIfNone: true }
@@ -109,17 +110,15 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 		const authType = this._configurationService.getConfig(ConfigKey.AzureAuthType);
 
 		if (authType === AzureAuthMode.EntraId) {
-			let session;
-			try {
-				session = await authentication.getSession(
-					AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
-					[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-					{ createIfNone: true }
-				);
-			} catch (err) {
-				const errorMessage = 'Azure authentication failed. Please sign in to your Microsoft account and try again.';
-				this._logService.error('[AzureBYOKModelProvider] Authentication failed during chat request:', err);
-				throw new Error(errorMessage);
+			const session = await vscode.authentication.getSession(
+				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
+				[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
+				{ createIfNone: true }
+			);
+
+			if (!session) {
+				this._logService.info('[AzureBYOKModelProvider] No authentication session available');
+				throw vscode.LanguageModelError.NoPermissions('Azure authentication is required to use this model. Please sign in to continue.');
 			}
 
 			const modelInfo = await this.getModelInfo(model.id, undefined, {
