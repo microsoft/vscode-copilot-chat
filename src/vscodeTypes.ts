@@ -87,6 +87,7 @@ export import LanguageModelToolResultPart = vscode.LanguageModelToolResultPart;
 export import LanguageModelToolResultPart2 = vscode.LanguageModelToolResultPart2;
 export import LanguageModelChatMessageRole = vscode.LanguageModelChatMessageRole;
 export import LanguageModelChatMessage = vscode.LanguageModelChatMessage;
+export import LanguageModelChatToolMode = vscode.LanguageModelChatToolMode;
 export import TextEditorSelectionChangeKind = vscode.TextEditorSelectionChangeKind;
 export import TextDocumentChangeReason = vscode.TextDocumentChangeReason;
 export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;

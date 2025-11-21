@@ -444,6 +444,11 @@ export enum LanguageModelChatMessageRole {
 	System = 3
 }
 
+export enum LanguageModelChatToolMode {
+	Auto = 1,
+	Required = 2
+}
+
 export class LanguageModelChatMessage implements vscode.LanguageModelChatMessage {
 	role: LanguageModelChatMessageRole;
 	content: Array<any>;

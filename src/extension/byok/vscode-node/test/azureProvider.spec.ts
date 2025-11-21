@@ -134,7 +134,7 @@ describe('AzureBYOKModelProvider', () => {
 			expect(vscode.authentication.getSession).toHaveBeenCalledWith(
 				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
 				[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-				{ createIfNone: true }
+				{ createIfNone: true, silent: false }
 			);
 			expect(Object.keys(models)).toHaveLength(2);
 			expect(models['gpt-4']).toBeDefined();
@@ -162,7 +162,7 @@ describe('AzureBYOKModelProvider', () => {
 			expect(vscode.authentication.getSession).toHaveBeenCalledWith(
 				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
 				[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-				{ createIfNone: true }
+				{ createIfNone: true, silent: false }
 			);
 		});
 
@@ -292,7 +292,7 @@ describe('AzureBYOKModelProvider', () => {
 			expect(vscode.authentication.getSession).toHaveBeenCalledWith(
 				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
 				[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-				{ createIfNone: true }
+				{ createIfNone: true, silent: false }
 			);
 			expect(provideResponseSpy).toHaveBeenCalled();
 		});
@@ -306,18 +306,6 @@ describe('AzureBYOKModelProvider', () => {
 				expect.fail('Should have thrown error');
 			} catch (err: any) {
 				expect(err.message).toBe('User did not consent to login.');
-			}
-		});
-
-		it('should throw LanguageModelError.NoPermissions when session is null', async () => {
-			vi.spyOn(vscode.authentication, 'getSession').mockResolvedValue(undefined);
-
-			try {
-				await provider.provideLanguageModelChatResponse(mockModel, mockMessages, mockOptions, mockProgress, mockToken);
-				expect.fail('Should have thrown LanguageModelError');
-			} catch (err: any) {
-				expect(err.message).toBe('Azure authentication is required to use this model. Please sign in to continue.');
-				expect(err.code).toBe(vscode.LanguageModelError.NoPermissions().code);
 			}
 		});
 

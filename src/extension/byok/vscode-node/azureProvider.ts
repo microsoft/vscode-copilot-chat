@@ -83,7 +83,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 					await vscode.authentication.getSession(
 						AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
 						[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-						{ createIfNone: true }
+						{ createIfNone: true, silent: false }
 					);
 				} catch (error) {
 					// If sign-in fails, don't show models in picker
