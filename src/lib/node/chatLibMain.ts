@@ -777,11 +777,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		}
 	});
 	builder.define(ICompletionsContextProviderService, new ContextProviderStatistics());
-	try {
-		builder.define(ICompletionsPromptFactoryService, new SyncDescriptor(CompletionsPromptFactory));
-	} catch (e) {
-		console.log(e);
-	}
+	builder.define(ICompletionsPromptFactoryService, new SyncDescriptor(CompletionsPromptFactory));
 	builder.define(ICompletionsFetcherService, new class implements ICompletionsFetcherService {
 		declare _serviceBrand: undefined;
 		getImplementation(): ICompletionsFetcherService | Promise<ICompletionsFetcherService> {
