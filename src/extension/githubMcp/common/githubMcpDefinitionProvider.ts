@@ -99,6 +99,7 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		const toolsets = this.toolsets.sort().join(',');
 		const readonly = this.readonly;
 		const lockdown = this.lockdown;
+		const isSignedIn = !!this.authenticationService.permissiveGitHubSession;
 
 		const basics = providerId === AuthProviderId.GitHubEnterprise
 			? { label: 'GitHub Enterprise', uri: this.getGheUri() }
@@ -107,17 +108,22 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		// Build headers object conditionally
 		const headers: Record<string, string> = {};
 		// Build version string with toolsets and flags
-		let version = toolsets.length ? toolsets : '0';
-		if (toolsets.length > 0) {
-			headers['X-MCP-Toolsets'] = toolsets;
-		}
-		if (readonly) {
-			headers['X-MCP-Readonly'] = 'true';
-			version += '|readonly';
-		}
-		if (lockdown) {
-			headers['X-MCP-Lockdown'] = 'true';
-			version += '|lockdown';
+		let version: string;
+		if (isSignedIn) {
+			version = toolsets.length ? toolsets : '0';
+			if (toolsets.length > 0) {
+				headers['X-MCP-Toolsets'] = toolsets;
+			}
+			if (readonly) {
+				headers['X-MCP-Readonly'] = 'true';
+				version += '|readonly';
+			}
+			if (lockdown) {
+				headers['X-MCP-Lockdown'] = 'true';
+				version += '|lockdown';
+			}
+		} else {
+			version = 'signedout';
 		}
 		return [
 			{
