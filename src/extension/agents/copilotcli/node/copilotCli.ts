@@ -77,7 +77,7 @@ export class CopilotCLISessionOptions {
 export interface ICopilotCLIModels {
 	readonly _serviceBrand: undefined;
 	toModelProvider(modelId: string): string;
-	getDefaultModel(): Promise<ChatSessionProviderOptionItem>;
+	getDefaultModel(): Promise<ChatSessionProviderOptionItem | undefined>;
 	setDefaultModel(model: ChatSessionProviderOptionItem): Promise<void>;
 	getAvailableModels(): Promise<ChatSessionProviderOptionItem[]>;
 }
@@ -99,8 +99,10 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		return modelId;
 	}
 	public async getDefaultModel() {
-		// We control this
 		const models = await this.getAvailableModels();
+		if (!models.length) {
+			return;
+		}
 		const defaultModel = models.find(m => m.id.toLowerCase() === DEFAULT_CLI_MODEL.toLowerCase()) ?? models[0];
 		const preferredModelId = this.extensionContext.globalState.get<string>(COPILOT_CLI_MODEL_MEMENTO_KEY, defaultModel.id);
 

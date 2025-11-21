@@ -269,17 +269,17 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		]);
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		const isUntitled = copilotcliSessionId.startsWith('untitled-');
-		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id;
-		const preferredModel = (preferredModelId ? models.find(m => m.id === preferredModelId) : undefined) ?? defaultModel;
+		const preferredModelId = _sessionModel.get(copilotcliSessionId)?.id ?? defaultModel?.id;
 
 		const workingDirectory = this.worktreeManager.getWorktreePath(copilotcliSessionId);
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
 		const existingSession = isUntitled ? undefined : await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token);
-		const selectedModelId = await existingSession?.object?.getSelectedModelId();
+		const selectedModelId = (await existingSession?.object?.getSelectedModelId()) ?? preferredModelId;
 		const selectedModel = selectedModelId ? models.find(m => m.id === selectedModelId) : undefined;
-		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {
-			[MODELS_OPTION_ID]: _sessionModel.get(copilotcliSessionId)?.id ?? defaultModel.id,
-		};
+		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
+		if (preferredModelId) {
+			options[MODELS_OPTION_ID] = preferredModelId;
+		}
 
 		if (!existingSession && this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
 			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
@@ -296,8 +296,8 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		}
 		const history = existingSession?.object?.getChatHistory() || [];
 		existingSession?.dispose();
-		if (!_sessionModel.get(copilotcliSessionId)) {
-			_sessionModel.set(copilotcliSessionId, selectedModel ?? preferredModel);
+		if (!_sessionModel.get(copilotcliSessionId) && selectedModel) {
+			_sessionModel.set(copilotcliSessionId, selectedModel);
 		}
 
 		return {
@@ -498,10 +498,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 
 	private async getModelId(sessionId: string): Promise<string | undefined> {
-		const defaultModel = await this.copilotCLIModels.getDefaultModel();
-		const preferredModel = _sessionModel.get(sessionId);
-		// For existing sessions we cannot fall back, as the model info would be updated in _sessionModel
-		return this.copilotCLIModels.toModelProvider(preferredModel?.id || defaultModel.id);
+		const preferredModelId = _sessionModel.get(sessionId)?.id ?? (await this.copilotCLIModels.getDefaultModel())?.id;
+		return preferredModelId ? this.copilotCLIModels.toModelProvider(preferredModelId) : undefined;
 	}
 
 	private async handleDelegateCommand(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
