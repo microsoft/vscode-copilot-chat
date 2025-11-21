@@ -88,7 +88,7 @@ describe('CopilotCLISession', () => {
 		logger = accessor.get(ILogService);
 		gitService = accessor.get(IGitService);
 		sdk = new class extends mock<ICopilotCLISDK>() {
-			override async getAuthInfo(): Promise<SessionOptions['authInfo']> {
+			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 				return {
 					type: 'token',
 					token: '',
@@ -346,7 +346,8 @@ describe('CopilotCLISession', () => {
 				kind: 'write',
 				fileName: filePath,
 				intention: 'Apply edit',
-				diff: ''
+				diff: '',
+				toolCallId: String(i)
 			});
 			permissionResults.push(result);
 			// Complete the edit so the tracker (if it were real) would finish; emit completion event

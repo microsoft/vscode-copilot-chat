@@ -56,7 +56,7 @@ const SESSION_SHUTDOWN_TIMEOUT_MS = 300 * 1000;
 export class CopilotCLISessionService extends Disposable implements ICopilotCLISessionService {
 	declare _serviceBrand: undefined;
 
-	private _sessionManager: Lazy<Promise<internal.CLISessionManager>>;
+	private _sessionManager: Lazy<Promise<internal.LocalSessionManager>>;
 	private _sessionWrappers = new DisposableMap<string, RefCountedSession>();
 	private _newActiveSessions = new Map<string, ICopilotCLISessionItem>();
 
@@ -78,9 +78,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	) {
 		super();
 		this.monitorSessionFiles();
-		this._sessionManager = new Lazy<Promise<internal.CLISessionManager>>(async () => {
+		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			const { internal } = await this.copilotCLISDK.getPackage();
-			return new internal.CLISessionManager({
+			return new internal.LocalSessionManager({
 				logger: getCopilotLogger(this.logService)
 			});
 		});
@@ -242,7 +242,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.CLISessionManager): RefCountedSession {
+	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager): RefCountedSession {
 		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
 		session.add(session.onDidChangeStatus(() => this._onDidChangeSessions.fire()));
 		session.add(toDisposable(() => {

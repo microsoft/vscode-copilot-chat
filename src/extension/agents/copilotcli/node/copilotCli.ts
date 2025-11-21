@@ -117,8 +117,8 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 	}
 
 	private async _getAvailableModels(): Promise<ChatSessionProviderOptionItem[]> {
-		const { getAvailableModels } = await this.copilotCLISDK.getPackage();
-		const models = await getAvailableModels();
+		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
+		const models = await getAvailableModels(authInfo);
 		return models.map(model => ({
 			id: model.model,
 			name: model.label
@@ -133,7 +133,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 export interface ICopilotCLISDK {
 	readonly _serviceBrand: undefined;
 	getPackage(): Promise<typeof import('@github/copilot/sdk')>;
-	getAuthInfo(): Promise<SessionOptions['authInfo']>;
+	getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>>;
 }
 
 export class CopilotCLISDK implements ICopilotCLISDK {
@@ -165,7 +165,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		]);
 	}
 
-	public async getAuthInfo(): Promise<SessionOptions['authInfo']> {
+	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 		const copilotToken = await this.authentService.getAnyGitHubSession();
 		return {
 			type: 'token',

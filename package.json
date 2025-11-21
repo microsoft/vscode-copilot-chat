@@ -2762,7 +2762,9 @@
 					},
 					"github.copilot.chat.githubMcpServer.toolsets": {
 						"type": "array",
-						"default": ["default"],
+						"default": [
+							"default"
+						],
 						"markdownDescription": "%github.copilot.config.githubMcpServer.toolsets%",
 						"items": {
 							"type": "string"
@@ -5261,7 +5263,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.68.0",
-		"@github/copilot": "^0.0.358",
+		"@github/copilot": "^0.0.362",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
