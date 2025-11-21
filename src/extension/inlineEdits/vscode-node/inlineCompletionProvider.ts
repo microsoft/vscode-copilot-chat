@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModel, InlineCompletionModelInfo, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -11,6 +11,7 @@ import { DocumentEditRecorder } from '../../../platform/editSurvivalTracking/com
 import { EditSurvivalReporter } from '../../../platform/editSurvivalTracking/common/editSurvivalReporter';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
+import { DEFAULT_OPTIONS, ModelConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -23,7 +24,7 @@ import { findCell, findNotebook, isNotebookCell } from '../../../util/common/not
 import { ITracer, createTracer } from '../../../util/common/tracing';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
@@ -103,6 +104,10 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
 	private readonly _displayNextEditorNES: boolean;
 
+	private readonly _onDidChangeModelInfo = new Emitter<void>();
+	public readonly onDidChangeModelInfo: vscodeEvent<void> = this._onDidChangeModelInfo.event;
+	private _currentModelId: string = 'current';
+
 	constructor(
 		private readonly model: InlineEditModel,
 		private readonly logger: InlineEditLogger,
@@ -121,6 +126,158 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
+	}
+
+	public get modelInfo(): InlineCompletionModelInfo {
+		const models = this._getAvailableModels();
+		return {
+			models,
+			currentModelId: this._currentModelId,
+		};
+	}
+
+	public async setCurrentModelId(modelId: string): Promise<void> {
+		const models = this._getAvailableModels();
+		const model = models.find(m => m.id === modelId);
+		if (!model) {
+			throw new Error(`Model with ID ${modelId} not found`);
+		}
+		this._currentModelId = modelId;
+		this._onDidChangeModelInfo.fire();
+	}
+
+	private _getAvailableModels(): InlineCompletionModel[] {
+		const models: InlineCompletionModel[] = [];
+
+		// Check what provider is currently being used
+		const providerId = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsProviderId, this._expService);
+
+		// Determine the model configuration and derive a name from differences with defaults
+		const modelName = this._deriveModelName();
+
+		// Add the current model
+		models.push({
+			id: 'current',
+			name: modelName,
+		});
+
+		// If using ServerPoweredInlineEditProvider, add it as an additional option
+		if (providerId === 'ServerPoweredInlineEditProvider') {
+			models.push({
+				id: 'server-powered',
+				name: 'Server Powered (Experimental)',
+			});
+		}
+
+		return models;
+	}
+
+	private _deriveModelName(): string {
+		// Get the model configuration that would be used
+		const localModelConfig = this._configurationService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration);
+		const expModelConfigString = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString, this._expService);
+		const defaultModelConfigString = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString, this._expService);
+
+		// Check for custom endpoint
+		const hasCustomEndpoint = this._isUsingCustomEndpoint();
+
+		// If there's a local model configuration override
+		if (localModelConfig) {
+			const modelName = localModelConfig.modelName || 'XTab';
+			const strategy = localModelConfig.promptingStrategy;
+			if (hasCustomEndpoint) {
+				return `Custom (${modelName}${strategy ? ` - ${strategy}` : ''})`;
+			}
+			return `${modelName}${strategy ? ` (${strategy})` : ''}`;
+		}
+
+		// If there's an experiment-based model config string
+		if (expModelConfigString) {
+			try {
+				const parsed = JSON.parse(expModelConfigString) as ModelConfiguration;
+				const modelName = parsed.modelName || 'XTab';
+				const strategy = parsed.promptingStrategy;
+				return `${modelName}${strategy ? ` (${strategy})` : ''} [Exp]`;
+			} catch {
+				// Invalid JSON, fall through
+			}
+		}
+
+		// If there's a default model config string from experiments
+		if (defaultModelConfigString) {
+			try {
+				const parsed = JSON.parse(defaultModelConfigString) as ModelConfiguration;
+				const modelName = parsed.modelName || 'XTab';
+				const strategy = parsed.promptingStrategy;
+				return `${modelName}${strategy ? ` (${strategy})` : ''}`;
+			} catch {
+				// Invalid JSON, fall through
+			}
+		}
+
+		// Check if any configuration differs from DEFAULT_OPTIONS
+		const hasCustomConfig = this._hasNonDefaultConfiguration();
+
+		if (hasCustomEndpoint) {
+			return hasCustomConfig ? 'XTab (Custom Endpoint + Config)' : 'XTab (Custom Endpoint)';
+		}
+
+		if (hasCustomConfig) {
+			return 'XTab (Custom Config)';
+		}
+
+		// Default XTab configuration
+		return 'XTab (Default)';
+	}
+
+	private _hasNonDefaultConfiguration(): boolean {
+		// Check if any of the prompt options differ from DEFAULT_OPTIONS
+		const currentFileMaxTokens = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabCurrentFileMaxTokens, this._expService);
+		if (currentFileMaxTokens !== DEFAULT_OPTIONS.currentFile.maxTokens) {
+			return true;
+		}
+
+		const includeTags = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabIncludeTagsInCurrentFile, this._expService);
+		if (includeTags !== DEFAULT_OPTIONS.currentFile.includeTags) {
+			return true;
+		}
+
+		const pageSize = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabPageSize, this._expService);
+		if (pageSize !== DEFAULT_OPTIONS.pagedClipping.pageSize) {
+			return true;
+		}
+
+		const nRecentlyViewedDocuments = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabNRecentlyViewedDocuments, this._expService);
+		if (nRecentlyViewedDocuments !== DEFAULT_OPTIONS.recentlyViewedDocuments.nDocuments) {
+			return true;
+		}
+
+		const recentlyViewedMaxTokens = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedDocumentsMaxTokens, this._expService);
+		if (recentlyViewedMaxTokens !== DEFAULT_OPTIONS.recentlyViewedDocuments.maxTokens) {
+			return true;
+		}
+
+		const diffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
+		if (diffNEntries !== DEFAULT_OPTIONS.diffHistory.nEntries) {
+			return true;
+		}
+
+		const diffMaxTokens = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffMaxTokens, this._expService);
+		if (diffMaxTokens !== DEFAULT_OPTIONS.diffHistory.maxTokens) {
+			return true;
+		}
+
+		return false;
+	}
+
+	private _isUsingCustomEndpoint(): boolean {
+		// Check if custom URL or API key is being used for the XTab provider
+		const customUrl = this._configurationService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUrl);
+		const customApiKey = this._configurationService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderApiKey);
+		const nextCursorPredictionUrl = this._configurationService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionUrl);
+		const nextCursorPredictionApiKey = this._configurationService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionApiKey);
+
+		return !!(customUrl || customApiKey || nextCursorPredictionUrl || nextCursorPredictionApiKey);
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`

@@ -21,16 +21,19 @@ declare module 'vscode' {
 		 * @return A {@link Disposable} that unregisters this provider when being disposed.
 		 */
 		export function registerInlineCompletionItemProvider(selector: DocumentSelector, provider: InlineCompletionItemProvider, metadata: InlineCompletionItemProviderMetadata): Disposable;
+
+		/**
+		 * temporary: to be removed
+		 */
+		export const inlineCompletionsUnificationState: InlineCompletionsUnificationState;
+		/**
+		 * temporary: to be removed
+		 */
+		export const onDidChangeCompletionsUnificationState: Event<void>;
 	}
 
 	export interface InlineCompletionItem {
-		/**
-		 * If set to `true`, unopened closing brackets are removed and unclosed opening brackets are closed.
-		 * Defaults to `false`.
-		*/
-		completeBracketPairs?: boolean;
-
-		warning?: InlineCompletionWarning;
+		// insertText: string | SnippetString | undefined;
 
 		/** If set to `true`, this item is treated as inline edit. */
 		isInlineEdit?: boolean;
@@ -43,23 +46,38 @@ declare module 'vscode' {
 
 		showInlineEditMenu?: boolean;
 
+		/**
+		 * If set, specifies where insertText, filterText and range apply to.
+		*/
+		uri?: Uri;
+
+		// TODO: rename to gutterMenuLinkAction
 		action?: Command;
 
 		displayLocation?: InlineCompletionDisplayLocation;
 
 		/** Used for telemetry. Can be an arbitrary string. */
 		correlationId?: string;
+
+		/**
+		 * If set to `true`, unopened closing brackets are removed and unclosed opening brackets are closed.
+		 * Defaults to `false`.
+		*/
+		completeBracketPairs?: boolean;
+
+		warning?: InlineCompletionWarning;
 	}
 
-	export enum InlineCompletionDisplayLocationKind {
-		Code = 1,
-		Label = 2
-	}
 
 	export interface InlineCompletionDisplayLocation {
 		range: Range;
 		kind: InlineCompletionDisplayLocationKind;
 		label: string;
+	}
+
+	export enum InlineCompletionDisplayLocationKind {
+		Code = 1,
+		Label = 2
 	}
 
 	export interface InlineCompletionWarning {
@@ -113,7 +131,12 @@ declare module 'vscode' {
 		// eslint-disable-next-line local/vscode-dts-provider-naming
 		handleListEndOfLifetime?(list: InlineCompletionList, reason: InlineCompletionsDisposeReason): void;
 
-		onDidChange?: Event<void>;
+		readonly onDidChange?: Event<void>;
+
+		readonly modelInfo?: InlineCompletionModelInfo;
+		readonly onDidChangeModelInfo?: Event<void>;
+		setCurrentModelId?(modelId: string): Promise<void>;
+
 
 		// #region Deprecated methods
 
@@ -133,6 +156,16 @@ declare module 'vscode' {
 		handleDidRejectCompletionItem?(completionItem: InlineCompletionItem): void;
 
 		// #endregion
+	}
+
+	export interface InlineCompletionModelInfo {
+		readonly models: InlineCompletionModel[];
+		readonly currentModelId: string;
+	}
+
+	export interface InlineCompletionModel {
+		readonly id: string;
+		readonly name: string;
 	}
 
 	export enum InlineCompletionEndOfLifeReasonKind {
@@ -198,5 +231,15 @@ declare module 'vscode' {
 		 * Defaults to false (might change).
 		 */
 		enableForwardStability?: boolean;
+	}
+
+	/**
+	 * temporary: to be removed
+	 */
+	export interface InlineCompletionsUnificationState {
+		codeUnification: boolean;
+		modelUnification: boolean;
+		extensionUnification: boolean;
+		expAssignments: string[];
 	}
 }
