@@ -19,6 +19,7 @@ import { RunCommandExecutionServiceImpl } from '../../../platform/commands/vscod
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ConfigurationServiceImpl } from '../../../platform/configuration/vscode/configurationServiceImpl';
 import { CustomInstructionsService, ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
+import { IOrgCustomInstructionsService, OrgCustomInstructionsService } from '../../../platform/customInstructions/common/orgCustomInstructionsService';
 import { IDebugOutputService } from '../../../platform/debug/common/debugOutputService';
 import { DebugOutputServiceImpl } from '../../../platform/debug/vscode/debugOutputServiceImpl';
 import { IDialogService } from '../../../platform/dialog/common/dialogService';
@@ -158,6 +159,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IEditLogService, new SyncDescriptor(EditLogService));
 	builder.define(IMultiFileEditInternalTelemetryService, new SyncDescriptor(MultiFileEditInternalTelemetryService));
 	builder.define(ICustomInstructionsService, new SyncDescriptor(CustomInstructionsService));
+	builder.define(IOrgCustomInstructionsService, new SyncDescriptor(OrgCustomInstructionsService));
 	builder.define(ILaunchConfigService, new SyncDescriptor(LaunchConfigService));
 	builder.define(ISurveyService, new SyncDescriptor(SurveyService));
 	builder.define(IEditSurvivalTrackerService, new SyncDescriptor(EditSurvivalTrackerService));
