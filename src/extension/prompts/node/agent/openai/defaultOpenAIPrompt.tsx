@@ -105,10 +105,10 @@ export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptPr
 					Identifiers only: `calculateTotal`, `Person`, `AppConfig`.<br />
 					File path link examples live in fileLinkification section below.<br />
 				</Tag>
+				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
-			<FileLinkificationInstructions />
 		</InstructionMessage>;
 	}
 }

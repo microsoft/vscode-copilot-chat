@@ -60,8 +60,6 @@ When referring to a filename or symbol in the user's workspace, wrap it in backt
 <example>
 The class `Person` is in `src/models/person.ts`.
 </example>
-
-</special_formatting>
 <fileLinkification>
 ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations in the workspace. Paths should be relative to workspace root.
 
@@ -89,6 +87,8 @@ Critical rules:
 - Don't wrap links in backticks; only cite existing paths from context
 
 </fileLinkification>
+
+</special_formatting>
 
 
 [copilot_cache_control: { type: 'ephemeral' }]

@@ -83,9 +83,9 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 				<Tag name='example'>
 					The class `Person` is in `src/models/person.ts`.
 				</Tag>
+				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>
-			<FileLinkificationInstructions />
 		</InstructionMessage>;
 	}
 }

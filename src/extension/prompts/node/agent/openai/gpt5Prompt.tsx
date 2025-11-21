@@ -219,10 +219,11 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				<Tag name='example'>
 					The class `Person` is in `src/models/person.ts`.
 				</Tag>
+				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
-			<FileLinkificationInstructions />
+
 		</InstructionMessage>;
 	}
 }

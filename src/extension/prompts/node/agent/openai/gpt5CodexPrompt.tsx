@@ -76,7 +76,6 @@ class CodexStyleGpt5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 			- Tone: collaborative, concise, factual; present tense, active voice; self-contained; no "above/below"; parallel wording.<br />
 			- Don'ts: no nested bullets/hierarchies; no ANSI codes; don't cram unrelated keywords; keep keyword lists short—wrap/reformat if long; avoid naming formatting styles in answers.<br />
 			- Adaptation: code explanations → precise, structured with code refs; simple tasks → lead with outcome; big changes → logical walkthrough + rationale + next actions; casual one-offs → plain sentences, no headers/bullets.<br />
-			- File path and line anchor link rules are defined in fileLinkification section below.<br />
 			<FileLinkificationInstructions />
 		</InstructionMessage>;
 	}

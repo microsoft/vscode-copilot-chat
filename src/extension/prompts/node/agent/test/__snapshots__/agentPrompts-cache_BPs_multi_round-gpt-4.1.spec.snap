@@ -40,8 +40,6 @@ Identifiers only: `calculateTotal`, `Person`, `AppConfig`.
 File path link examples live in fileLinkification section below.
 
 </example>
-
-</outputFormatting>
 <fileLinkification>
 ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations in the workspace. Paths should be relative to workspace root.
 
@@ -69,6 +67,8 @@ Critical rules:
 - Don't wrap links in backticks; only cite existing paths from context
 
 </fileLinkification>
+
+</outputFormatting>
 
 <instructions>
 This is a test custom instruction file
