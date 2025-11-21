@@ -106,11 +106,7 @@ class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptPro
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting. Backtick code identifiers (classes, functions, variables, commands). For file paths and specific code locations, do NOT use backticks — convert them to markdown links with line anchors as defined in `FileLinkificationInstructions` below.<br />
-				<Tag name='example'>
-					Identifiers only: `Person`, `calculateTotal`, `AppConfig`.<br />
-					File path and line anchor formatting rules and examples are defined in `FileLinkificationInstructions` below.
-				</Tag>
+				Use proper Markdown formatting. When referring to symbols (classes, methods, variables) in user's workspace wrap in backticks. For file paths and line number rules, see fileLinkification section<br />
 				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>

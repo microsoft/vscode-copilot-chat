@@ -71,7 +71,7 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Headers: optional; short Title Case (1-3 words) wrapped in **…**; no blank line before the first bullet; add only if they truly help.<br />
 				- Bullets: use - ; merge related points; keep to one line when possible; 4-6 per list ordered by importance; keep phrasing consistent.<br />
 				- Monospace: backticks for commands, env vars, and code identifiers; never combine with **.<br />
-				- File path + line anchor link rules are defined in `FileLinkificationInstructions` below.<br />
+				- File path and line number formatting rules are defined in the fileLinkification section below.<br />
 				- Code samples or multi-line snippets should be wrapped in fenced code blocks; include an info string as often as possible.<br />
 				- Structure: group related bullets; order sections general → specific → supporting; for subsections, start with a bolded keyword bullet, then items; match complexity to the task.<br />
 				- Tone: collaborative, concise, factual; present tense, active voice; self-contained; no "above/below"; parallel wording.<br />

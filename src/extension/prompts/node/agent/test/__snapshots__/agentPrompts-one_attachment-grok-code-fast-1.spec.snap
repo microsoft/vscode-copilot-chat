@@ -39,35 +39,34 @@ You don't currently have any tools available for running terminal commands. If t
 Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.
 </toolUseInstructions>
 <outputFormatting>
-Use proper Markdown formatting. Backtick code identifiers (classes, functions, variables, commands). For file paths and specific code locations, do NOT use backticks — convert them to markdown links with line anchors as defined in `FileLinkificationInstructions` below.
-<example>
-Identifiers only: `Person`, `calculateTotal`, `AppConfig`.
-File path and line anchor formatting rules and examples are defined in `FileLinkificationInstructions` below.
-</example>
-<file_linkification>
-ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations. Use links inside normal sentences, not as the entire answer.
-Format examples:
+Use proper Markdown formatting. When referring to symbols (classes, methods, variables) in user's workspace wrap in backticks. For file paths and line number rules, see fileLinkification section
+<fileLinkification>
+ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations in the workspace. Paths should be relative to workspace root.
+
+**Inline references:** Use the file path as link text within sentences:
 - `The handler lives in [path/to/file.ts](path/to/file.ts#L10).` (single line)
-- `See [path/to/file.ts](path/to/file.ts#L10-L12) for the range.`
+- `See [path/to/file.ts](path/to/file.ts#L10-L12) for the range.` (line range)
 - `Configuration is defined in [path/to/file.ts](path/to/file.ts).` (whole file)
-- `The widget renderer attaches anchors ([src/renderer.ts](src/renderer.ts#L42-L48)).` (in parentheses)
-When you need a bullet list of references with line numbers, you can use descriptive text:
-- [Await chat view](path/to/chatQuick.ts#L142)
-- [Show widget](path/to/chatQuick.ts#L321)
+
+**Bullet lists:** Explains what each reference is, so readers understand the context without clicking:
+- [Await chat view](path/to/file.ts#L142)
+- [Show widget](path/to/file.ts#L321)
+Don't just list bare file paths like `file.ts#L142`
+
 NEVER cite file paths as plain text when referring to specific locations. For example, instead of saying `The function is in exampleScript.ts at line 25.`, say `The function is in [exampleScript.ts](exampleScript.ts#L25).`
+
 Critical rules:
-- Link text must be the exact file path (no backticks, no `#L` in the visible text, no extra wording). Keep the `#L` anchor in the **link target**, e.g. `[src/file.ts](src/file.ts#L25)`.
 - Always include both brackets **and** parentheses. `[src/file.ts](src/file.ts#L25)` is valid; `[src/file.ts#L25]` is not.
 - Path format: Strip drive letters and workspace parent folders - use only path after workspace root
 - Transform `c:/Repos/workspace/src/file.ts` → `[src/file.ts](src/file.ts)`
 - Always use forward slashes `/`, never backslashes `/`
-- Do not use URIs like file://, vscode://, or https://.
+- Do not use URIs like file://, vscode:// for file paths.
 - Percent-encode spaces in target only: `[My File.md](My%20File.md)`
 - Each file reference needs complete path (don't abbreviate repeated files)
 - Integrate line numbers into anchor: `#L10` or `#L10-L12` for ranges
 - Don't wrap links in backticks; only cite existing paths from context
 
-</file_linkification>
+</fileLinkification>
 
 </outputFormatting>
 

@@ -103,7 +103,7 @@ export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptPr
 				Use proper Markdown formatting. Backtick code identifiers (classes, functions, variables, commands). For file paths or specific code locations, do NOT use backticks—convert them to markdown links with line anchors; file path and line anchor link rules are defined in `FileLinkificationInstructions` below. Avoid duplicating those examples here.<br />
 				<Tag name='example'>
 					Identifiers only: `calculateTotal`, `Person`, `AppConfig`.<br />
-					File path link examples live in FileLinkificationInstructions.<br />
+					File path link examples live in fileLinkification section below.<br />
 				</Tag>
 				<MathIntegrationRules />
 			</Tag>

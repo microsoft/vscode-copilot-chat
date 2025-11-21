@@ -223,7 +223,7 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				- Wrap all commands, env vars, and code identifiers in backticks (`` `...` ``).<br />
 				- Apply to inline examples and to bullet keywords if the keyword itself is a literal file/command.<br />
 				- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`).<br />
-				- File path and line anchor formatting rules are defined in `FileLinkificationInstructions` below.<br />
+				- File path and line number formatting rules are defined in the fileLinkification section below.<br />
 				<br />
 				**Structure**<br />
 				<br />
