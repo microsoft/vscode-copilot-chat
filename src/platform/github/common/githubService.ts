@@ -244,6 +244,11 @@ export interface IOctoKitService {
 	 * This includes both repo-level and org/enterprise-level custom agents.
 	 * @param owner The repository owner
 	 * @param repo The repository name
+	 * @param options Optional filtering options:
+	 *   - targetPlatform: Only include agents for the specified platform.
+	 *   - excludeInvalidConfigs: Exclude agents with invalid configurations.
+	 *   - deduplicate: Remove duplicate agents from the result.
+	 *   - source: Filter agents by their source (repo, org, enterprise).
 	 * @returns An array of custom agent list items with basic metadata
 	 */
 	getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]>;
