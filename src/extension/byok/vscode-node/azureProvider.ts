@@ -110,16 +110,15 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 		const authType = this._configurationService.getConfig(ConfigKey.AzureAuthType);
 
 		if (authType === AzureAuthMode.EntraId) {
-			const session = await vscode.authentication.getSession(
+			// Session is guaranteed to be defined when createIfNone: true
+			const session: vscode.AuthenticationSession = await vscode.authentication.getSession(
 				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
 				[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-				{ createIfNone: true }
+				{
+					createIfNone: true,
+					silent: false
+				}
 			);
-
-			if (!session) {
-				this._logService.info('[AzureBYOKModelProvider] No authentication session available');
-				throw vscode.LanguageModelError.NoPermissions('Azure authentication is required to use this model. Please sign in to continue.');
-			}
 
 			const modelInfo = await this.getModelInfo(model.id, undefined, {
 				maxInputTokens: model.maxInputTokens,
