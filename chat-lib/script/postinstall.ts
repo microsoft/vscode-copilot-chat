@@ -52,15 +52,21 @@ async function platformDir(): Promise<string> {
 	}
 }
 
+function treeSitterWasmDir(): string {
+	const modulePath = path.dirname(require.resolve('@vscode/tree-sitter-wasm'));
+	return path.relative(REPO_ROOT, modulePath);
+}
+
 async function main() {
 	const platform = await platformDir();
 	const vendoredTiktokenFiles = [`${platform}/tokenizer/node/cl100k_base.tiktoken`, `${platform}/tokenizer/node/o200k_base.tiktoken`];
+	const wasm = treeSitterWasmDir();
 
 	// copy static assets to dist
 	await copyStaticAssets([
 		...vendoredTiktokenFiles,
-		...treeSitterGrammars.map(grammar => `node_modules/@vscode/tree-sitter-wasm/wasm/${grammar}.wasm`),
-		'node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter.wasm',
+		...treeSitterGrammars.map(grammar => `${wasm}/${grammar}.wasm`),
+		`${wasm}/tree-sitter.wasm`,
 	], 'dist');
 
 }
