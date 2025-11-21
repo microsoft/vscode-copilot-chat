@@ -148,7 +148,6 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	testingServiceCollection.define(ICopilotCLISDK, new SyncDescriptor(TestCopilotCLISDK));
 	testingServiceCollection.define(ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
-	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 	const simulationWorkspace = new SimulationWorkspace();
 	simulationWorkspace.setupServices(testingServiceCollection);
 

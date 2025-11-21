@@ -47,8 +47,6 @@ export class LanguageModelServer implements ILanguageModelServer {
 		};
 		this.adapterFactories = new Map();
 		this.adapterFactories.set('/v1/messages', new AnthropicAdapterFactory());
-		// Used only in stests.
-		// this.adapterFactories.set('/chat/completions', new OpenAIAdapterFactoryForSTests());
 
 		this.server = this.createServer();
 	}
