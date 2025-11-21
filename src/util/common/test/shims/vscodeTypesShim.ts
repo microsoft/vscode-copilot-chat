@@ -121,8 +121,8 @@ const shim = {
 	FileType,
 	ChatSessionStatus,
 	authentication: {
-		getSession: () => Promise.reject(new Error('authentication.getSession not mocked in test'))
-	} as any
+		getSession: (providerId: string, scopes: readonly string[], options?: { createIfNone?: boolean; silent?: boolean; clearSessionPreference?: boolean; forceNewSession?: boolean }) => Promise.reject(new Error('authentication.getSession not mocked in test'))
+	}
 };
 
 export = shim;

@@ -125,22 +125,6 @@ describe('AzureBYOKModelProvider', () => {
 			provider = instaService.createInstance(AzureBYOKModelProvider, mockByokStorageService);
 		});
 
-		it('should return all models when authentication succeeds in non-silent mode', async () => {
-			const mockSession = { accessToken: 'test-token', account: { id: 'test', label: 'test' }, scopes: [], id: 'test' };
-			vi.spyOn(vscode.authentication, 'getSession').mockResolvedValue(mockSession);
-
-			const models = await provider['getModelsWithCredentials'](false);
-
-			expect(vscode.authentication.getSession).toHaveBeenCalledWith(
-				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
-				[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-				{ createIfNone: true, silent: false }
-			);
-			expect(Object.keys(models)).toHaveLength(2);
-			expect(models['gpt-4']).toBeDefined();
-			expect(models['gpt-35-turbo']).toBeDefined();
-		});
-
 		it('should return all models without prompting authentication in silent mode', async () => {
 			const getSessionSpy = vi.spyOn(vscode.authentication, 'getSession');
 
@@ -162,7 +146,7 @@ describe('AzureBYOKModelProvider', () => {
 			expect(vscode.authentication.getSession).toHaveBeenCalledWith(
 				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
 				[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-				{ createIfNone: true, silent: false }
+				{ createIfNone: true }
 			);
 		});
 

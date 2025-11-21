@@ -83,7 +83,7 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 					await vscode.authentication.getSession(
 						AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
 						[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-						{ createIfNone: true, silent: false }
+						{ createIfNone: true }
 					);
 				} catch (error) {
 					// If sign-in fails, don't show models in picker
@@ -123,8 +123,8 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 			const modelInfo = await this.getModelInfo(model.id, undefined, {
 				maxInputTokens: model.maxInputTokens,
 				maxOutputTokens: model.maxOutputTokens,
-				toolCalling: !!model.capabilities?.toolCalling || false,
-				vision: !!model.capabilities?.imageInput || false,
+				toolCalling: !!model.capabilities?.toolCalling,
+				vision: !!model.capabilities?.imageInput,
 				name: model.name,
 				url: model.url,
 				thinking: model.thinking,
