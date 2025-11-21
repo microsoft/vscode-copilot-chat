@@ -577,6 +577,18 @@ export enum AuthPermissionMode {
 	Minimal = 'minimal'
 }
 
+export enum AzureAuthMode {
+	EntraId = 'entraId',
+	ApiKey = 'apiKey'
+}
+
+export namespace AzureAuthMode {
+	/** Microsoft authentication provider ID for VS Code authentication API */
+	export const MICROSOFT_AUTH_PROVIDER = 'microsoft';
+	/** Azure Cognitive Services scope for Entra ID authentication */
+	export const COGNITIVE_SERVICES_SCOPE = 'https://cognitiveservices.azure.com/.default';
+}
+
 export type CodeGenerationImportInstruction = { language?: string; file: string };
 export type CodeGenerationTextInstruction = { language?: string; text: string };
 export type CodeGenerationInstruction = CodeGenerationImportInstruction | CodeGenerationTextInstruction;
@@ -838,6 +850,7 @@ export namespace ConfigKey {
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', ConfigType.Simple, true);
 	/** BYOK  */
 	export const OllamaEndpoint = defineSetting<string>('chat.byok.ollamaEndpoint', ConfigType.Simple, 'http://localhost:11434');
+	export const AzureAuthType = defineSetting<AzureAuthMode>('chat.azureAuthType', ConfigType.Simple, AzureAuthMode.EntraId);
 	export const AzureModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean }>>('chat.azureModels', ConfigType.Simple, {});
 	export const CustomOAIModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean; requestHeaders?: Record<string, string> }>>('chat.customOAIModels', ConfigType.Simple, {});
 	export const AutoFixDiagnostics = defineSetting<boolean>('chat.agent.autoFix', ConfigType.ExperimentBased, true);

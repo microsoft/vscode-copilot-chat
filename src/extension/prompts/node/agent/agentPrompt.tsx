@@ -704,7 +704,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 }
 
 function getFileCreationReminder(modelFamily: string | undefined) {
-	if (modelFamily === 'claude-sonnet-4.5' || modelFamily === 'claude-haiku-4.5') {
+	if (modelFamily?.startsWith('claude') || modelFamily?.startsWith('Anthropic')) {
 		return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
 	}
 }

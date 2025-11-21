@@ -2762,7 +2762,9 @@
 					},
 					"github.copilot.chat.githubMcpServer.toolsets": {
 						"type": "array",
-						"default": ["default"],
+						"default": [
+							"default"
+						],
 						"markdownDescription": "%github.copilot.config.githubMcpServer.toolsets%",
 						"items": {
 							"type": "string"
@@ -3209,6 +3211,22 @@
 							"experimental"
 						],
 						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
+					},
+					"github.copilot.chat.azureAuthType": {
+						"type": "string",
+						"enum": [
+							"entraId",
+							"apiKey"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.azureAuthType.entraId%",
+							"%github.copilot.config.azureAuthType.apiKey%"
+						],
+						"default": "entraId",
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.azureAuthType%"
 					},
 					"github.copilot.chat.azureModels": {
 						"type": "object",
