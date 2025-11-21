@@ -19,7 +19,6 @@ import { PermissionRequest } from './permissionHelpers';
 import { ensureRipgrepShim } from './ripgrepShim';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
-const DEFAULT_CLI_MODEL = 'claude-sonnet-4';
 
 export class CopilotCLISessionOptions {
 	public readonly isolationEnabled: boolean;
@@ -99,11 +98,12 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		return modelId;
 	}
 	public async getDefaultModel() {
+		// First item in the list is always the default model (SDK sends the list ordered based on default preference)
 		const models = await this.getAvailableModels();
 		if (!models.length) {
 			return;
 		}
-		const defaultModel = models.find(m => m.id.toLowerCase() === DEFAULT_CLI_MODEL.toLowerCase()) ?? models[0];
+		const defaultModel = models[0];
 		const preferredModelId = this.extensionContext.globalState.get<string>(COPILOT_CLI_MODEL_MEMENTO_KEY, defaultModel.id);
 
 		return models.find(m => m.id === preferredModelId) ?? defaultModel;
