@@ -132,6 +132,13 @@ export interface CustomAgentListItem {
 	version: string;
 }
 
+export interface CustomAgentListOptions {
+	target?: 'github-copilot' | 'vscode';
+	excludeInvalidConfig?: boolean;
+	dedupe?: boolean;
+	includeSources?: ('repo' | 'org' | 'enterprise')[];
+}
+
 export interface CustomAgentDetails extends CustomAgentListItem {
 	prompt: string;
 	'mcp-servers'?: {
@@ -239,7 +246,7 @@ export interface IOctoKitService {
 	 * @param repo The repository name
 	 * @returns An array of custom agent list items with basic metadata
 	 */
-	getCustomAgents(owner: string, repo: string): Promise<CustomAgentListItem[]>;
+	getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]>;
 
 	/**
 	 * Gets the list of files changed in a pull request.

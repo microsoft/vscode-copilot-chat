@@ -9,7 +9,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -231,7 +231,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.getPullRequestFromSessionWithToken(globalId, authToken);
 	}
 
-	async getCustomAgents(owner: string, repo: string): Promise<CustomAgentListItem[]> {
+	async getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]> {
 		try {
 			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 			if (!authToken) {
@@ -242,7 +242,15 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 				headers: {
 					Authorization: `Bearer ${authToken}`,
 				}
-			}, { type: RequestType.CopilotCustomAgents, owner, repo });
+			}, {
+				type: RequestType.CopilotCustomAgents,
+				owner,
+				repo,
+				target: options?.target,
+				exclude_invalid_config: options?.excludeInvalidConfig,
+				dedupe: options?.dedupe,
+				include_sources: options?.includeSources
+			});
 			if (!response.ok) {
 				throw new Error(`Failed to fetch custom agents for ${owner} ${repo}: ${response.statusText}`);
 			}
