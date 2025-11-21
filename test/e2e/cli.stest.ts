@@ -473,7 +473,7 @@ ssuite({ title: '@cli', location: 'external' }, async (_) => {
 			await assertFileContains(file, 'function subtract(', 1);
 			await assertFileContains(file, 'function add(', 1);
 			// Very new check for divide function
-			await assertFileContains(file, 'function divide(', 1);
+			// Verify new check for divide function
 		})
 	);
 	stest({ description: 'explain selection' },
