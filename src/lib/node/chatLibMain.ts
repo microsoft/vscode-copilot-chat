@@ -577,7 +577,7 @@ export interface INotificationSender {
 
 export type IIPCitationDetail = IPCitationDetail;
 export type IIPDocumentCitation = IPDocumentCitation;
-export interface IInlineCompletionsCitationHanlder {
+export interface IInlineCompletionsCitationHandler {
 	handleIPCodeCitation(citation: IIPDocumentCitation): Promise<void>;
 }
 
@@ -603,7 +603,7 @@ export interface IInlineCompletionsProviderOptions {
 	readonly waitForTreatmentVariables?: boolean;
 	readonly endpointProvider: IEndpointProvider;
 	readonly capiClientService: ICAPIClientService;
-	readonly citationHandler?: IInlineCompletionsCitationHanlder;
+	readonly citationHandler?: IInlineCompletionsCitationHandler;
 }
 
 export type IGetInlineCompletionsOptions = Exclude<Partial<GetGhostTextOptions>, 'promptOnly'> & {
