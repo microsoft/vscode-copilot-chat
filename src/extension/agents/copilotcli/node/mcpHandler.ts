@@ -273,7 +273,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 				isDefaultServer: true,
 				headers: {
 					'Authorization': `Bearer ${session.accessToken}`,
-					'X-MCP-Toolsets': 'repos,issues,users,pull_requests,code_security,secret_protection,actions,web_search',
+					'X-MCP-Toolsets': 'all',
 					'X-MCP-Host': 'copilot-sdk',
 				},
 			};
