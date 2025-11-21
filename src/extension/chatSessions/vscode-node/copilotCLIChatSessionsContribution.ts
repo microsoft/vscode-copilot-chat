@@ -289,8 +289,9 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			if (worktreeRelativePath) {
 				options[ISOLATION_OPTION_ID] = {
 					id: 'enabled',
-					name: 'Isolated', //worktreeRelativePath,
-					locked: true
+					name: worktreeRelativePath,
+					locked: true,
+					icon: new vscode.ThemeIcon('git-branch')
 				};
 			}
 		}
