@@ -132,6 +132,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		await this.chatParticipantImpl(request, context, stream, token);
 	});
 	private cachedSessionsSize: number = 0;
+	// Cache for provideChatSessionItems
+	private cachedSessionItems: vscode.ChatSessionItem[] | undefined;
+	private hasActiveSessions: boolean = false;
 	private readonly plainTextRenderer = new PlainTextRenderer();
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService, this.configurationService);
 	private readonly _summarizer: ChatSummarizerProvider;
@@ -185,6 +188,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	public refresh(): void {
+		this.cachedSessionItems = undefined;
+		this.hasActiveSessions = false;
 		this._onDidChangeChatSessionItems.fire();
 	}
 
@@ -238,6 +243,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
+		// If cache is valid (we have active sessions being tracked), return cached items
+		if (this.cachedSessionItems && this.hasActiveSessions) {
+			return this.cachedSessionItems;
+		}
+
 		if (this.chatSessionItemsPromise) {
 			return this.chatSessionItemsPromise;
 		}
@@ -259,6 +269,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					latestSessionsMap.set(session.resource_id, session);
 				}
 			}
+
+			// Check if there are any active sessions (in_progress or queued)
+			const activeSessions = Array.from(latestSessionsMap.values()).filter(
+				session => session.state === 'in_progress' || session.state === 'queued'
+			);
+			this.hasActiveSessions = activeSessions.length > 0;
 
 			// Fetch PRs for all unique resource_global_ids in parallel
 			const uniqueGlobalIds = new Set(Array.from(latestSessionsMap.values()).map(s => s.resource_global_id));
@@ -311,6 +327,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				});
 
 			vscode.commands.executeCommand('setContext', 'github.copilot.chat.cloudSessionsEmpty', filteredSessions.length === 0);
+			
+			// Cache the result if we have active sessions
+			if (this.hasActiveSessions) {
+				this.cachedSessionItems = filteredSessions;
+			} else {
+				// No active sessions, so don't cache
+				this.cachedSessionItems = undefined;
+			}
+
 			return filteredSessions;
 		})().finally(() => {
 			this.chatSessionItemsPromise = undefined;
