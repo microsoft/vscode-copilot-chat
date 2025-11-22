@@ -638,7 +638,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
-		const { result, processedReferences } = await this.extractReferences(metadata.references);
+		const { result, processedReferences } = await this.extractReferences(metadata.references, !!head_ref);
 
 		const { number, sessionId } = await this.invokeRemoteAgent(
 			metadata.prompt,
@@ -949,7 +949,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	 * Processes *supported* references, returning an LLM-friendly string representation and the filtered list of those references that were processed.
 	 * #
 	 */
-	private async extractReferences(references: readonly vscode.ChatPromptReference[] | undefined): Promise<{ result: string; processedReferences: readonly vscode.ChatPromptReference[] }> {
+	private async extractReferences(references: readonly vscode.ChatPromptReference[] | undefined, pushedInProgressBranch: boolean): Promise<{ result: string; processedReferences: readonly vscode.ChatPromptReference[] }> {
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
 		const fileRefs: string[] = [];
 		const fullFileParts: string[] = [];
@@ -963,8 +963,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, fileUri.fsPath);
 					const isInWorkingTree = repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath);
 					const isInIndex = repositoryForFile.state.indexChanges.some(change => change.uri.fsPath === fileUri.fsPath);
-					
-					if (isInWorkingTree || isInIndex) {
+					if (!pushedInProgressBranch && (isInWorkingTree || isInIndex)) {
 						try {
 							// Show only the file diffs for modified files
 							let diff: string;
@@ -973,7 +972,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 							} else {
 								diff = await repositoryForFile.diffWithHEAD(fileUri.fsPath);
 							}
-							
+
 							if (diff && diff.trim()) {
 								fullFileParts.push(`<file-diff-start>${relativePath}</file-diff-start>`);
 								fullFileParts.push(diff);
