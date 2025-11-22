@@ -978,12 +978,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 								fullFileParts.push(`<file-diff-start>${relativePath}</file-diff-start>`);
 								fullFileParts.push(diff);
 								fullFileParts.push(`<file-diff-end>${relativePath}</file-diff-end>`);
-								processedReferences.push(ref);
 							} else {
 								// If diff is empty, fall back to file reference
 								fileRefs.push(` - ${relativePath}`);
-								processedReferences.push(ref);
 							}
+							processedReferences.push(ref);
 						} catch (error) {
 							this.logService.error(`Error reading file diff for reference: ${fileUri.toString()}: ${error}`);
 						}
