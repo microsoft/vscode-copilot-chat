@@ -961,16 +961,31 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const repositoryForFile = git?.getRepository(fileUri);
 				if (repositoryForFile) {
 					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, fileUri.fsPath);
-					if (repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath)) {
+					const isInWorkingTree = repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath);
+					const isInIndex = repositoryForFile.state.indexChanges.some(change => change.uri.fsPath === fileUri.fsPath);
+					
+					if (isInWorkingTree || isInIndex) {
 						try {
-							// TODO: Consider just showing the file diffs
-							const document = await vscode.workspace.openTextDocument(fileUri);
-							const content = document.getText();
-							fullFileParts.push(`<file-start>${relativePath}</file-start>`);
-							fullFileParts.push(content);
-							fullFileParts.push(`<file-end>${relativePath}</file-end>`);
+							// Show only the file diffs for modified files
+							let diff: string;
+							if (isInIndex) {
+								diff = await repositoryForFile.diffIndexWithHEAD(fileUri.fsPath);
+							} else {
+								diff = await repositoryForFile.diffWithHEAD(fileUri.fsPath);
+							}
+							
+							if (diff && diff.trim()) {
+								fullFileParts.push(`<file-diff-start>${relativePath}</file-diff-start>`);
+								fullFileParts.push(diff);
+								fullFileParts.push(`<file-diff-end>${relativePath}</file-diff-end>`);
+								processedReferences.push(ref);
+							} else {
+								// If diff is empty, fall back to file reference
+								fileRefs.push(` - ${relativePath}`);
+								processedReferences.push(ref);
+							}
 						} catch (error) {
-							this.logService.error(`Error reading file content for reference: ${fileUri.toString()}: ${error}`);
+							this.logService.error(`Error reading file diff for reference: ${fileUri.toString()}: ${error}`);
 						}
 					} else {
 						fileRefs.push(` - ${relativePath}`);
