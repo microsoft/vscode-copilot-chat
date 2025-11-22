@@ -50,6 +50,7 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
 const BACKGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
 /**
@@ -134,7 +135,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private cachedSessionsSize: number = 0;
 	// Cache for provideChatSessionItems
 	private cachedSessionItems: vscode.ChatSessionItem[] | undefined;
-	private hasActiveSessions: boolean = false;
+	private activeSessionIds: Set<string> = new Set();
+	private activeSessionPollingInterval: ReturnType<typeof setInterval> | undefined;
 	private readonly plainTextRenderer = new PlainTextRenderer();
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService, this.configurationService);
 	private readonly _summarizer: ChatSummarizerProvider;
@@ -189,8 +191,75 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	public refresh(): void {
 		this.cachedSessionItems = undefined;
-		this.hasActiveSessions = false;
+		this.activeSessionIds.clear();
+		this.stopActiveSessionPolling();
 		this._onDidChangeChatSessionItems.fire();
+	}
+
+	private stopActiveSessionPolling(): void {
+		if (this.activeSessionPollingInterval) {
+			clearInterval(this.activeSessionPollingInterval);
+			this.activeSessionPollingInterval = undefined;
+		}
+	}
+
+	private startActiveSessionPolling(): void {
+		// Don't start if already polling
+		if (this.activeSessionPollingInterval) {
+			return;
+		}
+
+		this.activeSessionPollingInterval = setInterval(async () => {
+			await this.updateActiveSessionsOnly();
+		}, ACTIVE_SESSION_POLL_INTERVAL_MS);
+	}
+
+	private async updateActiveSessionsOnly(): Promise<void> {
+		if (this.activeSessionIds.size === 0) {
+			this.stopActiveSessionPolling();
+			return;
+		}
+
+		try {
+			// Fetch only the active sessions
+			const updatedSessions = await Promise.all(
+				Array.from(this.activeSessionIds).map(sessionId =>
+					this._octoKitService.getSessionInfo(sessionId)
+				)
+			);
+
+			// Check if any sessions completed
+			let hasChanges = false;
+			const stillActiveSessions = new Set<string>();
+
+			for (const session of updatedSessions) {
+				if (!session) {
+					continue;
+				}
+
+				if (session.state === 'in_progress' || session.state === 'queued') {
+					stillActiveSessions.add(session.id);
+				} else {
+					// Session completed or failed
+					hasChanges = true;
+				}
+			}
+
+			// Update the active sessions set
+			this.activeSessionIds = stillActiveSessions;
+
+			// If there are changes or no more active sessions, invalidate cache and notify
+			if (hasChanges || this.activeSessionIds.size === 0) {
+				this.cachedSessionItems = undefined;
+				this._onDidChangeChatSessionItems.fire();
+				
+				if (this.activeSessionIds.size === 0) {
+					this.stopActiveSessionPolling();
+				}
+			}
+		} catch (error) {
+			this.logService.error(`Error updating active sessions: ${error}`);
+		}
 	}
 
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
@@ -243,9 +312,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
-		// Return cached items if we're actively tracking sessions (in_progress or queued)
-		// This avoids expensive API calls when monitoring active sessions
-		if (this.cachedSessionItems && this.hasActiveSessions) {
+		// Return cached items if available
+		if (this.cachedSessionItems) {
 			return this.cachedSessionItems;
 		}
 
@@ -271,11 +339,21 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				}
 			}
 
-			// Check if there are any active sessions (in_progress or queued)
-			// This determines whether caching should be enabled
-			this.hasActiveSessions = Array.from(latestSessionsMap.values()).some(
-				session => session.state === 'in_progress' || session.state === 'queued'
-			);
+			// Track active sessions for background polling
+			const newActiveSessionIds = new Set<string>();
+			for (const session of latestSessionsMap.values()) {
+				if (session.state === 'in_progress' || session.state === 'queued') {
+					newActiveSessionIds.add(session.id);
+				}
+			}
+
+			// Update active sessions and start polling if needed
+			this.activeSessionIds = newActiveSessionIds;
+			if (this.activeSessionIds.size > 0) {
+				this.startActiveSessionPolling();
+			} else {
+				this.stopActiveSessionPolling();
+			}
 
 			// Fetch PRs for all unique resource_global_ids in parallel
 			const uniqueGlobalIds = new Set(Array.from(latestSessionsMap.values()).map(s => s.resource_global_id));
@@ -329,10 +407,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			vscode.commands.executeCommand('setContext', 'github.copilot.chat.cloudSessionsEmpty', filteredSessions.length === 0);
 			
-			// Cache the result if we have active sessions being tracked
-			if (this.hasActiveSessions) {
-				this.cachedSessionItems = filteredSessions;
-			}
+			// Cache the results
+			this.cachedSessionItems = filteredSessions;
 
 			return filteredSessions;
 		})().finally(() => {
