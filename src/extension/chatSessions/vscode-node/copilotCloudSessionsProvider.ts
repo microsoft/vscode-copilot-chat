@@ -655,7 +655,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const sessionUri = vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number });
 
 		// Cache the processed references for presentation later
-		if (metadata.references && metadata.references.length > 0) {
+		if (processedReferences.length > 0) {
 			this.sessionReferencesMap.set(sessionUri, processedReferences);
 		}
 
@@ -947,7 +947,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	/**
 	 * Processes *supported* references, returning an LLM-friendly string representation and the filtered list of those references that were processed.
-	 * #
+
 	 */
 	private async extractReferences(references: readonly vscode.ChatPromptReference[] | undefined): Promise<{ result: string; processedReferences: readonly vscode.ChatPromptReference[] }> {
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
@@ -998,7 +998,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		];
 
 		this.logService.debug(`Cloud agent knew how to process ${processedReferences.length} of the ${references?.length || 0} provided references.`);
-		return { result: parts?.join('\n'), processedReferences };
+		return { result: parts.join('\n'), processedReferences };
 	}
 
 	private async streamSessionLogs(stream: vscode.ChatResponseStream, pullRequest: PullRequestSearchItem, sessionId: string, token: vscode.CancellationToken): Promise<void> {
