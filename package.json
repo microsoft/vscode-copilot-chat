@@ -817,7 +817,7 @@
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"icon": "$(pencil)",
-				"displayName": "%copilot.tools.editNotebook.description%",
+				"displayName": "%copilot.tools.editNotebook.name%",
 				"userDescription": "%copilot.tools.editNotebook.userDescription%",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
 				"tags": [
