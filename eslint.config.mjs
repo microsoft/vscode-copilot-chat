@@ -340,7 +340,6 @@ export default tseslint.config(
 			'./src/extension/context/node/resolvers/genericPanelIntentInvocation.ts',
 			'./src/extension/context/node/resolvers/inlineFixIntentInvocation.ts',
 			'./src/extension/context/node/resolvers/promptWorkspaceLabels.ts',
-			'./src/extension/context/node/resolvers/vscodeContext.ts',
 			'./src/extension/contextKeys/vscode-node/contextKeys.contribution.ts',
 			'./src/extension/conversation/vscode-node/userActions.ts',
 			'./src/extension/extension/vscode/services.ts',
