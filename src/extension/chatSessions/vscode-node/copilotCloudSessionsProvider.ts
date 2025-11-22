@@ -243,7 +243,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
-		// If cache is valid (we have active sessions being tracked), return cached items
+		// Return cached items if we're actively tracking sessions (in_progress or queued)
+		// This avoids expensive API calls when monitoring active sessions
 		if (this.cachedSessionItems && this.hasActiveSessions) {
 			return this.cachedSessionItems;
 		}
@@ -271,10 +272,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 
 			// Check if there are any active sessions (in_progress or queued)
-			const activeSessions = Array.from(latestSessionsMap.values()).filter(
+			// This determines whether caching should be enabled
+			this.hasActiveSessions = Array.from(latestSessionsMap.values()).some(
 				session => session.state === 'in_progress' || session.state === 'queued'
 			);
-			this.hasActiveSessions = activeSessions.length > 0;
 
 			// Fetch PRs for all unique resource_global_ids in parallel
 			const uniqueGlobalIds = new Set(Array.from(latestSessionsMap.values()).map(s => s.resource_global_id));
@@ -328,12 +329,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			vscode.commands.executeCommand('setContext', 'github.copilot.chat.cloudSessionsEmpty', filteredSessions.length === 0);
 			
-			// Cache the result if we have active sessions
+			// Cache the result if we have active sessions being tracked
 			if (this.hasActiveSessions) {
 				this.cachedSessionItems = filteredSessions;
-			} else {
-				// No active sessions, so don't cache
-				this.cachedSessionItems = undefined;
 			}
 
 			return filteredSessions;
