@@ -260,9 +260,9 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				Generally, ensure your final answers adapt their shape and depth to the request. For example, answers to code explanations should have a precise, structured explanation with code references that answer the question directly. For tasks with a simple implementation, lead with the outcome and supplement only with what's needed for clarity. Larger changes can be presented as a logical walkthrough of your approach, grouping related steps, explaining rationale where it adds value, and highlighting next actions to accelerate the user. Your answers should provide the right level of detail while being easily scannable.<br />
 				<br />
 				For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
+				<FileLinkificationInstructions />
 			</Tag>
 			<ResponseTranslationRules />
-			<FileLinkificationInstructions />
 		</InstructionMessage >;
 	}
 }

@@ -191,10 +191,9 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting. When referring to symbols (classes, methods, variables) in user's workspace wrap in backticks. For file paths and code locations, follow `FileLinkificationInstructions` (markdown links with line anchors; never backticks).<br />
-				<Tag name='example'>
-					File path and line anchor formatting rules are defined in `FileLinkificationInstructions` below.
-				</Tag>
+				Use proper Markdown formatting:
+				- Wrap symbol names (classes, methods, variables) in backticks: `MyClass`, `handleClick()`<br />
+				- When mentioning files or line numbers, always follow the rules in fileLinkification section below:
 				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>

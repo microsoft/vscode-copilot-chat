@@ -100,11 +100,8 @@ export class DefaultOpenAIAgentPrompt extends PromptElement<DefaultAgentPromptPr
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting. Backtick code identifiers (classes, functions, variables, commands). For file paths or specific code locations, do NOT use backticks—convert them to markdown links with line anchors; file path and line anchor link rules are defined in `FileLinkificationInstructions` below. Avoid duplicating those examples here.<br />
-				<Tag name='example'>
-					Identifiers only: `calculateTotal`, `Person`, `AppConfig`.<br />
-					File path link examples live in fileLinkification section below.<br />
-				</Tag>
+				- Wrap symbol names (classes, methods, variables) in backticks: `MyClass`, `handleClick()`<br />
+				- When mentioning files or line numbers, always follow the rules in fileLinkification section below:
 				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>

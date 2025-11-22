@@ -79,10 +79,9 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Adaptation: code explanations → precise, structured with code refs; simple tasks → lead with outcome; big changes → logical walkthrough + rationale + next actions; casual one-offs → plain sentences, no headers/bullets.
 			</Tag>
 			<Tag name='special_formatting'>
-				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
-				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.
-				</Tag>
+				Use proper Markdown formatting:
+				- Wrap symbol names (classes, methods, variables) in backticks: `MyClass`, `handleClick()`<br />
+				- When mentioning files or line numbers, always follow the rules in fileLinkification section below:
 				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>

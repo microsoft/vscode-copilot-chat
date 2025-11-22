@@ -9,30 +9,42 @@ import { Tag } from '../base/tag';
 export class FileLinkificationInstructions extends PromptElement<{}> {
 	render() {
 		return <Tag name='fileLinkification'>
-			ALWAYS convert file paths to markdown links with 1-based line numbers whenever you cite specific code locations in the workspace. Paths should be relative to workspace root.<br />
+			When mentioning files or line numbers, always convert them to markdown links using workspace-relative paths and 1-based line numbers.<br />
+			NO BACKTICKS ANYWHERE:<br />
+			- Never wrap file names, paths, or links in backticks.<br />
+			- Never use inline-code formatting for any file reference.<br />
 			<br />
-			**Inline references:** Use the file path as link text within sentences:<br />
-			- `The handler lives in [path/to/file.ts](path/to/file.ts#L10).` (single line)<br />
-			- `See [path/to/file.ts](path/to/file.ts#L10-L12) for the range.` (line range)<br />
-			- `Configuration is defined in [path/to/file.ts](path/to/file.ts).` (whole file)<br />
+
+			REQUIRED FORMATS:<br />
+			- File: [path/file.ts](path/file.ts)<br />
+			- Line: [file.ts](file.ts#L10)<br />
+			- Range: [file.ts](file.ts#L10-L12)<br />
 			<br />
-			**Bullet lists:** Explains what each reference is, so readers understand the context without clicking:<br />
-			- [Await chat view](path/to/file.ts#L142)<br />
-			- [Show widget](path/to/file.ts#L321)<br />
-			Don't just list bare file paths like `file.ts#L142`<br />
+
+			PATH RULES:<br />
+			- Without line numbers: Display text must match the target path.<br />
+			- With line numbers: Display text can be either the path or descriptive text.<br />
+			- Use '/' only; strip drive letters and external folders.<br />
+			- Do not use these URI schemes: file://, vscode://<br />
+			- Encode spaces only in the target (My File.md → My%20File.md).<br />
+			- Non-contiguous lines require separate links. NEVER use comma-separated line references like #L10-L12, L20.<br />
+			- Valid formats: [file.ts](file.ts#L10) or [file.ts#L10] only. Invalid: ([file.ts#L10]) or [file.ts](file.ts)#L10<br />
 			<br />
-			NEVER cite file paths as plain text when referring to specific locations. For example, instead of saying `The function is in exampleScript.ts at line 25.`, say `The function is in [exampleScript.ts](exampleScript.ts#L25).`<br />
+
+			USAGE EXAMPLES:<br />
+			- With path as display: The handler is in [src/handler.ts](src/handler.ts#L10).<br />
+			- With descriptive text: The [widget initialization](src/widget.ts#L321) runs on startup.<br />
+			- Bullet list: [Init widget](src/widget.ts#L321)<br />
+			- File only: See [src/config.ts](src/config.ts) for settings.<br />
 			<br />
-			Critical rules:<br />
-			- Always include both brackets **and** parentheses. `[src/file.ts](src/file.ts#L25)` is valid; `[src/file.ts#L25]` is not.<br />
-			- Path format: Strip drive letters and workspace parent folders - use only path after workspace root<br />
-			- Transform `c:\Repos\workspace\src\file.ts` → `[src/file.ts](src/file.ts)`<br />
-			- Always use forward slashes `/`, never backslashes `\`<br />
-			- Do not use URIs like file://, vscode:// for file paths.<br />
-			- Percent-encode spaces in target only: `[My File.md](My%20File.md)`<br />
-			- Each file reference needs complete path (don't abbreviate repeated files)<br />
-			- Integrate line numbers into anchor: `#L10` or `#L10-L12` for ranges<br />
-			- Don't wrap links in backticks; only cite existing paths from context<br />
+
+			FORBIDDEN (NEVER OUTPUT):<br />
+			- Inline code: `file.ts`, `src/file.ts`, `L86`.<br />
+			- Plain text file names: file.ts, chatService.ts.<br />
+			- References without links when mentioning specific file locations.<br />
+			- Specific line citations without links ("Line 86", "at line 86", "on line 25").<br />
+			- Combining multiple line references in one link: [file.ts#L10-L12, L20](file.ts#L10-L12, L20)<br />
+			<br />
 		</Tag>;
 	}
 }
