@@ -212,6 +212,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.activeSessionPollingInterval = setInterval(async () => {
 			await this.updateActiveSessionsOnly();
 		}, ACTIVE_SESSION_POLL_INTERVAL_MS);
+		
+		// Register for disposal
+		this._register(toDisposable(() => this.stopActiveSessionPolling()));
 	}
 
 	private async updateActiveSessionsOnly(): Promise<void> {
@@ -221,8 +224,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		try {
-			// Fetch only the active sessions
-			const updatedSessions = await Promise.all(
+			// Fetch only the active sessions using allSettled to handle individual failures
+			const sessionResults = await Promise.allSettled(
 				Array.from(this.activeSessionIds).map(sessionId =>
 					this._octoKitService.getSessionInfo(sessionId)
 				)
@@ -232,7 +235,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			let hasChanges = false;
 			const stillActiveSessions = new Set<string>();
 
-			for (const session of updatedSessions) {
+			for (const result of sessionResults) {
+				if (result.status === 'rejected') {
+					this.logService.warn(`Failed to fetch session info: ${result.reason}`);
+					continue;
+				}
+
+				const session = result.value;
 				if (!session) {
 					continue;
 				}
