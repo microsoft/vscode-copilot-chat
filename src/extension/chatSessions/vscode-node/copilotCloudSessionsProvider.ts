@@ -638,12 +638,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
+		const { result, processedReferences } = await this.extractReferences(metadata.references);
+
 		const { number, sessionId } = await this.invokeRemoteAgent(
 			metadata.prompt,
-			[
-				await this.extractFileReferences(metadata.references),
-				history
-			].filter(Boolean).join('\n\n').trim(),
+			[result, history].filter(Boolean).join('\n\n').trim(),
 			token,
 			stream,
 			customAgentName,
@@ -655,9 +654,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// Store references for this session
 		const sessionUri = vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number });
 
-		// Cache references for presentation later
+		// Cache the processed references for presentation later
 		if (metadata.references && metadata.references.length > 0) {
-			this.sessionReferencesMap.set(sessionUri, metadata.references);
+			this.sessionReferencesMap.set(sessionUri, processedReferences);
 		}
 
 		stream.progress(vscode.l10n.t('Fetching pull request details'));
@@ -946,16 +945,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return {};
 	}
 
-	private async extractFileReferences(references: readonly vscode.ChatPromptReference[] | undefined): Promise<string | undefined> {
-		if (!references || references.length === 0) {
-			return;
-		}
+	/**
+	 * Processes *supported* references, returning an LLM-friendly string representation and the filtered list of those references that were processed.
+	 * #
+	 */
+	private async extractReferences(references: readonly vscode.ChatPromptReference[] | undefined): Promise<{ result: string; processedReferences: readonly vscode.ChatPromptReference[] }> {
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
 		const fileRefs: string[] = [];
 		const fullFileParts: string[] = [];
+		const processedReferences: vscode.ChatPromptReference[] = [];
 		const git = this._gitExtensionService.getExtensionApi();
-		for (const ref of references) {
-			if (ref.value instanceof vscode.Uri && ref.value.scheme === 'file') { // TODO: Add support for more kinds of references
+		for (const ref of references || []) {
+			if (ref.value instanceof vscode.Uri && ref.value.scheme === 'file') {
 				const fileUri = ref.value;
 				const repositoryForFile = git?.getRepository(fileUri);
 				if (repositoryForFile) {
@@ -973,6 +974,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						}
 					} else {
 						fileRefs.push(` - ${relativePath}`);
+						processedReferences.push(ref);
 					}
 				}
 			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'untitled') {
@@ -983,6 +985,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					fullFileParts.push(`<file-start>${ref.value.path}</file-start>`);
 					fullFileParts.push(content);
 					fullFileParts.push(`<file-end>${ref.value.path}</file-end>`);
+					processedReferences.push(ref);
 				} catch (error) {
 					this.logService.error(`Error reading untitled file content for reference: ${ref.value.toString()}: ${error}`);
 				}
@@ -994,10 +997,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			...(fileRefs.length ? ['The user has attached the following file paths as relevant context:', ...fileRefs] : [])
 		];
 
-		if (!parts.length) {
-			return;
-		}
-		return parts.join('\n');
+		this.logService.debug(`Cloud agent knew how to process ${processedReferences.length} of the ${references?.length || 0} provided references.`);
+		return { result: parts?.join('\n'), processedReferences };
 	}
 
 	private async streamSessionLogs(stream: vscode.ChatResponseStream, pullRequest: PullRequestSearchItem, sessionId: string, token: vscode.CancellationToken): Promise<void> {
