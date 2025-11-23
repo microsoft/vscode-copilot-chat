@@ -5041,13 +5041,13 @@
 			{
 				"type": "copilotcli",
 				"name": "cli",
-				"displayName": "GitHub Copilot CLI Agent",
-				"icon": "$(copilot)",
-				"welcomeTitle": "GitHub Copilot CLI Agent",
-				"welcomeMessage": "Run local background tasks",
+				"displayName": "Background Agent",
+				"icon": "$(collection)",
+				"welcomeTitle": "Background Agent",
+				"welcomeMessage": "Run tasks in the background",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
-				"description": "The GitHub Copilot CLI Agent works on your local machine",
+				"description": "Delegate tasks to a background agent.",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
@@ -5066,12 +5066,12 @@
 					"copilot-swe-agent"
 				],
 				"name": "cloud",
-				"displayName": "GitHub Copilot Cloud Agent",
+				"displayName": "Cloud Agent",
 				"icon": {
 					"light": "assets/copilot-cloud.svg",
 					"dark": "assets/copilot-cloud-dark.svg"
 				},
-				"welcomeTitle": "GitHub Copilot Cloud Agent",
+				"welcomeTitle": "Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 1,
