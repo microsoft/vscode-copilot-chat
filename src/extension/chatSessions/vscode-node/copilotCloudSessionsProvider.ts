@@ -750,7 +750,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
-		const { result, processedReferences } = await this.extractReferences(metadata.references);
+		const { result, processedReferences } = await this.extractReferences(metadata.references, !!head_ref);
 
 		const { number, sessionId } = await this.invokeRemoteAgent(
 			metadata.prompt,
@@ -1059,9 +1059,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	/**
 	 * Processes *supported* references, returning an LLM-friendly string representation and the filtered list of those references that were processed.
-
 	 */
-	private async extractReferences(references: readonly vscode.ChatPromptReference[] | undefined): Promise<{ result: string; processedReferences: readonly vscode.ChatPromptReference[] }> {
+	private async extractReferences(references: readonly vscode.ChatPromptReference[] | undefined, pushedInProgressBranch: boolean): Promise<{ result: string; processedReferences: readonly vscode.ChatPromptReference[] }> {
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
 		const fileRefs: string[] = [];
 		const fullFileParts: string[] = [];
@@ -1073,16 +1072,29 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const repositoryForFile = git?.getRepository(fileUri);
 				if (repositoryForFile) {
 					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, fileUri.fsPath);
-					if (repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath)) {
+					const isInWorkingTree = repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath);
+					const isInIndex = repositoryForFile.state.indexChanges.some(change => change.uri.fsPath === fileUri.fsPath);
+					if (!pushedInProgressBranch && (isInWorkingTree || isInIndex)) {
 						try {
-							// TODO: Consider just showing the file diffs
-							const document = await vscode.workspace.openTextDocument(fileUri);
-							const content = document.getText();
-							fullFileParts.push(`<file-start>${relativePath}</file-start>`);
-							fullFileParts.push(content);
-							fullFileParts.push(`<file-end>${relativePath}</file-end>`);
+							// Show only the file diffs for modified files
+							let diff: string;
+							if (isInIndex) {
+								diff = await repositoryForFile.diffIndexWithHEAD(fileUri.fsPath);
+							} else {
+								diff = await repositoryForFile.diffWithHEAD(fileUri.fsPath);
+							}
+
+							if (diff && diff.trim()) {
+								fullFileParts.push(`<file-diff-start>${relativePath}</file-diff-start>`);
+								fullFileParts.push(diff);
+								fullFileParts.push(`<file-diff-end>${relativePath}</file-diff-end>`);
+							} else {
+								// If diff is empty, fall back to file reference
+								fileRefs.push(` - ${relativePath}`);
+							}
+							processedReferences.push(ref);
 						} catch (error) {
-							this.logService.error(`Error reading file content for reference: ${fileUri.toString()}: ${error}`);
+							this.logService.error(`Error reading file diff for reference: ${fileUri.toString()}: ${error}`);
 						}
 					} else {
 						fileRefs.push(` - ${relativePath}`);
