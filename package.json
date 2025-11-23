@@ -3570,6 +3570,7 @@
 						"default": false,
 						"markdownDescription": "Use only the modern `replace_string_in_file` edit tool when generating edits with Gemini 3 models.",
 						"tags": [
+							"advanced",
 							"experimental",
 							"onExp"
 						]
