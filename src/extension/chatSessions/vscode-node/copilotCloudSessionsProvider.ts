@@ -134,7 +134,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	});
 	private cachedSessionsSize: number = 0;
 	// Cache for provideChatSessionItems
-	private cachedSessionItems: vscode.ChatSessionItem[] | undefined;
+	private cachedSessionItems: (vscode.ChatSessionItem & {
+		fullDatabaseId: string;
+		pullRequestDetails: PullRequestSearchItem;
+	})[] | undefined;
 	private activeSessionIds: Set<string> = new Set();
 	private activeSessionPollingInterval: ReturnType<typeof setInterval> | undefined;
 	private readonly plainTextRenderer = new PlainTextRenderer();
@@ -212,7 +215,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.activeSessionPollingInterval = setInterval(async () => {
 			await this.updateActiveSessionsOnly();
 		}, ACTIVE_SESSION_POLL_INTERVAL_MS);
-		
+
 		// Register for disposal
 		this._register(toDisposable(() => this.stopActiveSessionPolling()));
 	}
@@ -231,8 +234,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				)
 			);
 
-			// Check if any sessions completed
-			let hasChanges = false;
 			const stillActiveSessions = new Set<string>();
 
 			for (const result of sessionResults) {
@@ -245,12 +246,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				if (!session) {
 					continue;
 				}
+				this.cachedSessionItems = this.cachedSessionItems?.map(item => {
+					if (item.fullDatabaseId === session.resource_global_id) {
+						return {
+							...item,
+							status: this.getSessionStatusFromSession(session),
+						};
+					}
+					return item;
+				});
 
 				if (session.state === 'in_progress' || session.state === 'queued') {
 					stillActiveSessions.add(session.id);
-				} else {
-					// Session completed or failed
-					hasChanges = true;
 				}
 			}
 
@@ -258,14 +265,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			this.activeSessionIds = stillActiveSessions;
 
 			// If there are changes or no more active sessions, invalidate cache and notify
-			if (hasChanges || this.activeSessionIds.size === 0) {
+			if (this.activeSessionIds.size === 0) {
 				this.cachedSessionItems = undefined;
-				this._onDidChangeChatSessionItems.fire();
-				
-				if (this.activeSessionIds.size === 0) {
-					this.stopActiveSessionPolling();
-				}
+				this.stopActiveSessionPolling();
 			}
+			this._onDidChangeChatSessionItems.fire();
 		} catch (error) {
 			this.logService.error(`Error updating active sessions: ${error}`);
 		}
@@ -415,7 +419,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				});
 
 			vscode.commands.executeCommand('setContext', 'github.copilot.chat.cloudSessionsEmpty', filteredSessions.length === 0);
-			
+
 			// Cache the results
 			this.cachedSessionItems = filteredSessions;
 
