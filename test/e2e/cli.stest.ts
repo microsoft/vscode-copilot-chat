@@ -160,7 +160,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 
 	async function populateWorkspaceFiles(workingDirectory: string) {
 		const fileLanguages = new Map<string, string>([
-			['.js', 'javascrtipt'],
+			['.js', 'javascript'],
 			['.ts', 'typescript'],
 			['.py', 'python'],
 		]);
