@@ -67,7 +67,6 @@ describe('CopilotCLISessionService', () => {
 	let instantiationService: IInstantiationService;
 	let service: CopilotCLISessionService;
 	let manager: MockCliSdkSessionManager;
-
 	beforeEach(async () => {
 		vi.useRealTimers();
 		const sdk = {

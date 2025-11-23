@@ -116,7 +116,7 @@ describe('CopilotCLISession', () => {
 			logger,
 			workspaceService,
 			sdk,
-			instaService
+			instaService,
 		));
 	}
 

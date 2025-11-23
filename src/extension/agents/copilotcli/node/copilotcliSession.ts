@@ -80,7 +80,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
