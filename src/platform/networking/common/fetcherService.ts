@@ -17,6 +17,7 @@ export interface IFetcherService {
 	isInternetDisconnectedError(e: any): boolean;
 	isFetcherError(e: any): boolean;
 	getUserMessageForFetcherError(err: any): string;
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]>;
 }
 
 /** A basic version of http://developer.mozilla.org/en-US/docs/Web/API/Response */
@@ -59,6 +60,13 @@ export interface FetchOptions {
 	expectJSON?: boolean;
 	useFetcher?: FetcherId;
 	suppressIntegrationId?: boolean;
+}
+
+export interface PaginationOptions<T> extends FetchOptions {
+	pageSize?: number;
+	startPage?: number;
+	getItemsFromResponse: (data: any) => T[];
+	buildUrl: (baseUrl: string, pageSize: number, page: number) => string;
 }
 
 export interface IAbortSignal {

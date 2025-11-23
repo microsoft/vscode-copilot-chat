@@ -69,7 +69,8 @@ type ICompletionModelCapabilities = {
 
 export enum ModelSupportedEndpoint {
 	ChatCompletions = '/chat/completions',
-	Responses = '/responses'
+	Responses = '/responses',
+	Messages = '/v1/messages'
 }
 
 export interface IModelAPIResponse {

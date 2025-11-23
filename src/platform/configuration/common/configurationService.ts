@@ -7,7 +7,6 @@ import type { ConfigurationChangeEvent, ConfigurationScope } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
-import { StringSHA1 } from '../../../util/vs/base/common/hash';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as objects from '../../../util/vs/base/common/objects';
 import { IObservable, observableFromEventOpts } from '../../../util/vs/base/common/observable';
@@ -173,7 +172,6 @@ export abstract class AbstractConfigurationService extends Disposable implements
 
 	protected _isInternal: boolean = false;
 	protected _isTeamMember: boolean = false;
-	private _teamMemberUsername: string | undefined = undefined;
 
 	constructor(copilotTokenStore?: ICopilotTokenStore) {
 		super();
@@ -225,16 +223,41 @@ export abstract class AbstractConfigurationService extends Disposable implements
 	}
 
 	private _setUserInfo(userInfo: { isInternal: boolean; isTeamMember: boolean; teamMemberUsername?: string }): void {
-		if (this._isInternal === userInfo.isInternal && this._isTeamMember === userInfo.isTeamMember && this._teamMemberUsername === userInfo.teamMemberUsername) {
+		if (this._isInternal === userInfo.isInternal && this._isTeamMember === userInfo.isTeamMember) {
 			// no change
 			return;
 		}
 
+		const internalChanged = this._isInternal !== userInfo.isInternal;
+		const teamMemberChanged = this._isTeamMember !== userInfo.isTeamMember;
+
 		this._isInternal = userInfo.isInternal;
 		this._isTeamMember = userInfo.isTeamMember;
-		this._teamMemberUsername = userInfo.teamMemberUsername;
-		// fire a fake change event to refresh all settings
-		this._onDidChangeConfiguration.fire({ affectsConfiguration: () => true });
+
+		// collect potential affected settings
+		const potentialAffectedKeys = new Set<string>();
+		for (const config of globalConfigRegistry.configs.values()) {
+			if (internalChanged && (config.options?.valueIgnoredForExternals || ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(config.defaultValue))) {
+				potentialAffectedKeys.add(config.fullyQualifiedId);
+			} else if (teamMemberChanged && ConfigValueValidators.isDefaultValueWithTeamValue(config.defaultValue)) {
+				potentialAffectedKeys.add(config.fullyQualifiedId);
+			}
+		}
+
+		if (potentialAffectedKeys.size > 0) {
+			// fire a fake change event to refresh potential affected settings
+			this._onDidChangeConfiguration.fire({
+				affectsConfiguration: (section) => {
+					// Check for exact match or prefix match with dot separator
+					for (const key of potentialAffectedKeys) {
+						if (key === section || key.startsWith(section + '.') || section.startsWith(key + '.')) {
+							return true;
+						}
+					}
+					return false;
+				}
+			});
+		}
 	}
 
 	abstract getConfig<T>(key: Config<T>, scope?: ConfigurationScope): T;
@@ -287,31 +310,7 @@ export abstract class AbstractConfigurationService extends Disposable implements
 		) {
 			return false;
 		}
-		const rolloutRatio = key.defaultValue.teamDefaultValueRollout;
-		if (rolloutRatio === undefined || rolloutRatio >= 1) {
-			return true;
-		}
-
-		const selectedValue = `${key.fullyQualifiedId};${this._teamMemberUsername}`;
-
-		// Extract first 4 bytes and convert to a number between 0 and 1
-		const hashValue = AbstractConfigurationService._extractHashValue(selectedValue);
-
-		// Compare with rolloutRatio to determine if the user should get the feature
-		return hashValue < rolloutRatio;
-	}
-
-	/**
-	 * Extracts a normalized value (0-1) from a string
-	 */
-	public static _extractHashValue(input: string): number {
-		const hash = new StringSHA1();
-		hash.update(input);
-		const firstPortion = hash.digest().substring(0, 8);
-		// Convert from hex to number
-		const hashNumber = parseInt(firstPortion, 16);
-		// Normalize to a value between 0 and 1
-		return (hashNumber / 0xFFFFFFFF);
+		return true;
 	}
 
 	/**
@@ -335,14 +334,6 @@ export abstract class AbstractConfigurationService extends Disposable implements
 export type DefaultValueWithTeamValue<T> = {
 	defaultValue: T;
 	teamDefaultValue: T;
-	/**
-	 * Roll out `teamDefaultValue` to a percentage of the team.
-	 * This is a number between 0 and 1.
-	 * 0 means 0% of the team will get `teamDefaultValue`
-	 * 1 means 100% of the team will get `teamDefaultValue`
-	 * undefined means 100% of the team will get `teamDefaultValue`
-	 */
-	teamDefaultValueRollout?: number;
 };
 export type DefaultValueWithTeamAndInternalValue<T> = DefaultValueWithTeamValue<T> & { internalDefaultValue: T };
 
@@ -409,7 +400,6 @@ export const enum ConfigType {
 
 export interface ConfigOptions {
 	readonly oldKey?: string;
-	readonly internal?: boolean;
 	readonly valueIgnoredForExternals?: boolean;
 }
 
@@ -457,20 +447,8 @@ function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValu
 			throw new BugIndicatingError(`The default value for setting ${key} is different in packageJson and in code`);
 		}
 	}
-	if (isPublic && options?.internal) {
-		throw new BugIndicatingError(`The setting ${key} is public, it therefore cannot be marked internal!`);
-	}
 	if (isPublic && options?.valueIgnoredForExternals) {
 		throw new BugIndicatingError(`The setting ${key} is public, it therefore cannot be restricted to internal!`);
-	}
-	if (
-		ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(defaultValue)
-		|| ConfigValueValidators.isDefaultValueWithTeamValue(defaultValue)
-	) {
-		const rolloutRatio = defaultValue?.teamDefaultValueRollout;
-		if (rolloutRatio !== undefined && (rolloutRatio < 0 || rolloutRatio > 1)) {
-			throw new BugIndicatingError(`The rollout ratio for setting ${key} is invalid`);
-		}
 	}
 	const advancedSubKey = fullyQualifiedId.startsWith('github.copilot.advanced.') ? fullyQualifiedId.substring('github.copilot.advanced.'.length) : undefined;
 	return { id: key, oldId: options?.oldKey, isPublic, fullyQualifiedId, fullyQualifiedOldId, advancedSubKey, defaultValue, options };
@@ -534,7 +512,7 @@ function defineSetting<T extends ExperimentBasedConfigType>(key: string, configT
 function defineTeamInternalSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
 function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
 function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
-	options = { ...options, internal: true, valueIgnoredForExternals: true };
+	options = { ...options, valueIgnoredForExternals: true };
 	return configType === ConfigType.Simple ? defineSetting(key, configType, defaultValue, validator, options) : defineSetting(key, configType, defaultValue, validator, options, expOptions);
 }
 
@@ -597,6 +575,18 @@ export enum AuthProviderId {
 export enum AuthPermissionMode {
 	Default = 'default',
 	Minimal = 'minimal'
+}
+
+export enum AzureAuthMode {
+	EntraId = 'entraId',
+	ApiKey = 'apiKey'
+}
+
+export namespace AzureAuthMode {
+	/** Microsoft authentication provider ID for VS Code authentication API */
+	export const MICROSOFT_AUTH_PROVIDER = 'microsoft';
+	/** Azure Cognitive Services scope for Entra ID authentication */
+	export const COGNITIVE_SERVICES_SCOPE = 'https://cognitiveservices.azure.com/.default';
 }
 
 export type CodeGenerationImportInstruction = { language?: string; file: string };
@@ -776,6 +766,7 @@ export namespace ConfigKey {
 		// TODO: @sandy081 - These should be moved away from this namespace
 		export const EnableReadFileV2 = defineSetting<boolean>('chat.advanced.enableReadFileV2', ConfigType.ExperimentBased, isPreRelease);
 		export const AskAgent = defineSetting<boolean>('chat.advanced.enableAskAgent', ConfigType.ExperimentBased, { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true });
+		export const RetryNetworkErrors = defineSetting<boolean>('chat.advanced.enableRetryNetworkErrors', ConfigType.ExperimentBased, false);
 	}
 
 	export const Enable = defineSetting<{ [key: string]: boolean }>('enable', ConfigType.Simple, {
@@ -792,6 +783,8 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
+	/** Use the Messages API instead of Chat Completions when supported */
+	export const UseMessagesApi = defineSetting<boolean | undefined>('chat.useMessagesApi', ConfigType.ExperimentBased, false);
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
 	/** Enable extended thinking for Anthropic models that support it */
 	export const AnthropicThinkingEnabled = defineSetting<boolean>('chat.anthropic.thinking.enabled', ConfigType.ExperimentBased, false);
@@ -826,7 +819,7 @@ export namespace ConfigKey {
 	export const SetupTests = defineSetting<boolean>('chat.setupTests.enabled', ConfigType.Simple, true);
 	/** Whether the Copilot TypeScript context provider is enabled and if how */
 	export const TypeScriptLanguageContext = defineSetting<boolean>('chat.languageContext.typescript.enabled', ConfigType.ExperimentBased, false);
-	export const TypeScriptLanguageContextMode = defineSetting<'minimal' | 'double' | 'fillHalf' | 'fill'>('chat.languageContext.typescript.items', ConfigType.ExperimentBased, 'minimal');
+	export const TypeScriptLanguageContextMode = defineSetting<'minimal' | 'double' | 'fillHalf' | 'fill'>('chat.languageContext.typescript.items', ConfigType.ExperimentBased, 'double');
 	export const TypeScriptLanguageContextIncludeDocumentation = defineSetting<boolean>('chat.languageContext.typescript.includeDocumentation', ConfigType.ExperimentBased, false);
 	export const TypeScriptLanguageContextCacheTimeout = defineSetting<number>('chat.languageContext.typescript.cacheTimeout', ConfigType.ExperimentBased, 500);
 	export const TypeScriptLanguageContextFix = defineSetting<boolean>('chat.languageContext.fix.typescript.enabled', ConfigType.ExperimentBased, false);
@@ -837,6 +830,7 @@ export namespace ConfigKey {
 	export const CodeFeedbackInstructions = defineSetting('chat.reviewSelection.instructions', ConfigType.Simple, [] as CodeGenerationInstruction[]);
 
 	export const UseProjectTemplates = defineSetting('chat.useProjectTemplates', ConfigType.Simple, true);
+	export const AgentDelegateAutoCommitAndPush = defineSetting('chat.agent.delegate.autoCommitAndPush', ConfigType.Simple, false);
 	export const ExplainScopeSelection = defineSetting('chat.scopeSelection', ConfigType.Simple, false);
 	export const EnableCodeActions = defineSetting('editor.enableCodeActions', ConfigType.Simple, true);
 	export const LocaleOverride = defineSetting('chat.localeOverride', ConfigType.Simple, 'auto');
@@ -856,6 +850,7 @@ export namespace ConfigKey {
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', ConfigType.Simple, true);
 	/** BYOK  */
 	export const OllamaEndpoint = defineSetting<string>('chat.byok.ollamaEndpoint', ConfigType.Simple, 'http://localhost:11434');
+	export const AzureAuthType = defineSetting<AzureAuthMode>('chat.azureAuthType', ConfigType.Simple, AzureAuthMode.EntraId);
 	export const AzureModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean }>>('chat.azureModels', ConfigType.Simple, {});
 	export const CustomOAIModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean; requestHeaders?: Record<string, string> }>>('chat.customOAIModels', ConfigType.Simple, {});
 	export const AutoFixDiagnostics = defineSetting<boolean>('chat.agent.autoFix', ConfigType.ExperimentBased, true);
@@ -867,6 +862,11 @@ export namespace ConfigKey {
 
 	export const CompletionsFetcher = defineSetting<FetcherId | undefined>('chat.completionsFetcher', ConfigType.ExperimentBased, undefined);
 	export const NextEditSuggestionsFetcher = defineSetting<FetcherId | undefined>('chat.nesFetcher', ConfigType.ExperimentBased, undefined);
+
+	export const GitHubMcpEnabled = defineSetting<boolean>('chat.githubMcpServer.enabled', ConfigType.ExperimentBased, false);
+	export const GitHubMcpToolsets = defineSetting<string[]>('chat.githubMcpServer.toolsets', ConfigType.Simple, ['default']);
+	export const GitHubMcpReadonly = defineSetting<boolean>('chat.githubMcpServer.readonly', ConfigType.Simple, false);
+	export const GitHubMcpLockdown = defineSetting<boolean>('chat.githubMcpServer.lockdown', ConfigType.Simple, false);
 }
 
 export function getAllConfigKeys(): string[] {

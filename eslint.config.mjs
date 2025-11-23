@@ -9,6 +9,7 @@ import tsParser from '@typescript-eslint/parser';
 import importEslint from 'eslint-plugin-import';
 import jsdocEslint from 'eslint-plugin-jsdoc';
 import fs from 'fs';
+import { builtinModules } from 'module';
 import path from 'path';
 import tseslint from 'typescript-eslint';
 import { fileURLToPath } from 'url';
@@ -169,59 +170,7 @@ export default tseslint.config(
 			'no-restricted-imports': [
 				'error',
 				// node: builtins
-				'assert',
-				'assert/strict',
-				'async_hooks',
-				'buffer',
-				'child_process',
-				'cluster',
-				'console',
-				'constants',
-				'crypto',
-				'dgram',
-				'diagnostics_channel',
-				'dns',
-				'dns/promises',
-				'domain',
-				'events',
-				'fs',
-				'fs/promises',
-				'http',
-				'http2',
-				'https',
-				'inspector',
-				'module',
-				'net',
-				'os',
-				'path',
-				'path/posix',
-				'path/win32',
-				'perf_hooks',
-				'process',
-				'punycode',
-				'querystring',
-				'readline',
-				'readline/promises',
-				'repl',
-				'stream',
-				'stream/consumers',
-				'stream/promises',
-				'stream/web',
-				'string_decoder',
-				'sys',
-				'timers',
-				'timers/promises',
-				'tls',
-				'trace_events',
-				'tty',
-				'url',
-				'util',
-				'util/types',
-				'v8',
-				'vm',
-				'wasi',
-				'worker_threads',
-				'zlib',
+				...builtinModules,
 				// node: dependencies
 				'@humanwhocodes/gitignore-to-minimatch',
 				'@vscode/extension-telemetry',
@@ -573,6 +522,12 @@ export default tseslint.config(
 					'fixToUnknown': true
 				}
 			]
+		}
+	},
+	{
+		files: ['./src/lib/node/chatLibMain.ts'],
+		rules: {
+			'import/no-restricted-paths': 'off'
 		}
 	},
 );
