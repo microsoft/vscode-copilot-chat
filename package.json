@@ -5041,13 +5041,13 @@
 			{
 				"type": "copilotcli",
 				"name": "cli",
-				"displayName": "GitHub Copilot CLI Agent",
-				"icon": "$(copilot)",
-				"welcomeTitle": "GitHub Copilot CLI Agent",
-				"welcomeMessage": "Run local background tasks",
+				"displayName": "GitHub Copilot Background Chat",
+				"icon": "$(copilot-logo)",
+				"welcomeTitle": "GitHub Copilot Background Chat",
+				"welcomeMessage": "Run background tasks",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
-				"description": "The GitHub Copilot CLI Agent works on your local machine",
+				"description": "GitHub Copilot runs background tasks on your local machine",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
@@ -5066,16 +5066,13 @@
 					"copilot-swe-agent"
 				],
 				"name": "cloud",
-				"displayName": "GitHub Copilot Cloud Agent",
-				"icon": {
-					"light": "assets/copilot-cloud.svg",
-					"dark": "assets/copilot-cloud-dark.svg"
-				},
-				"welcomeTitle": "GitHub Copilot Cloud Agent",
-				"welcomeMessage": "Delegate tasks to the cloud",
+				"displayName": "GitHub Copilot Background Chat",
+				"icon": "$(copilot-logo)",
+				"welcomeTitle": "GitHub Copilot Background Chat",
+				"welcomeMessage": "Run background tasks",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 1,
-				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
+				"description": "GitHub Copilot runs background tasks asynchronously, iterates via chat, and can create or update pull requests as needed",
 				"capabilities": {
 					"supportsFileAttachments": true
 				}
