@@ -7,8 +7,10 @@ import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { isGpt5Family } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
+import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
 import { InstructionMessage } from '../../base/instructionMessage';
 import { ResponseTranslationRules } from '../../base/responseTranslationRules';
+import { Gpt5SafetyRule } from '../../base/safetyRules';
 import { Tag } from '../../base/tag';
 import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, McpToolInstructions } from '../defaultAgentInstructions';
@@ -18,6 +20,9 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
+			You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
+			<GPT5CopilotIdentityRule />
+			<Gpt5SafetyRule />
 			<Tag name='coding_agent_instructions'>
 				You are a coding agent running in VS Code. You are expected to be precise, safe, and helpful.<br />
 				Your capabilities:<br />

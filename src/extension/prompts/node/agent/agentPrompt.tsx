@@ -28,9 +28,7 @@ import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt';
-import { CopilotIdentityRules, GPT5CopilotIdentityRule } from '../base/copilotIdentity';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
-import { Gpt5SafetyRule, SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { TerminalStatePromptElement } from '../base/terminalState';
 import { ChatVariables } from '../panel/chatVariables';
@@ -86,25 +84,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const instructions = await this.getInstructions();
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Advanced.OmitBaseAgentInstructions);
-		const baseAgentInstructions = <>
-			<SystemMessage>
-				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{isGpt5PlusFamily(this.props.endpoint.family) ? (
-					<>
-						<GPT5CopilotIdentityRule />
-						<Gpt5SafetyRule />
-					</>
-				) : (
-					<>
-						<CopilotIdentityRules />
-						<SafetyRules />
-					</>
-				)}
-			</SystemMessage>
-			{instructions}
-		</>;
 		const baseInstructions = <>
-			{!omitBaseAgentInstructions && baseAgentInstructions}
+			{!omitBaseAgentInstructions && instructions}
 			{await this.getAgentCustomInstructions()}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}

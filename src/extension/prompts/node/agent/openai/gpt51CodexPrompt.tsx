@@ -6,7 +6,9 @@
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
+import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
 import { InstructionMessage } from '../../base/instructionMessage';
+import { Gpt5SafetyRule } from '../../base/safetyRules';
 import { Tag } from '../../base/tag';
 import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { DefaultAgentPromptProps, detectToolCapabilities } from '../defaultAgentInstructions';
@@ -19,6 +21,9 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
+			<GPT5CopilotIdentityRule />
+			You are running as a coding agent in VS Code on a user's computer.<br />
+			<Gpt5SafetyRule />
 			<Tag name="editing_constraints">
 				- Default to ASCII when editing or creating files. Only introduce non-ASCII or other Unicode characters when there is a clear justification and the file already uses them.<br />
 				- Add succinct code comments that explain what is going on if code is not self-explanatory. You should not add comments like "Assigns the value to the variable", but a brief comment might be useful ahead of a complex code block that the user would otherwise have to spend time parsing out. Usage of these comments should be rare.<br />
