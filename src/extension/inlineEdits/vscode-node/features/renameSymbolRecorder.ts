@@ -4,18 +4,26 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { SnippetString } from 'vscode';
-import { IDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { Position, Range, SnippetString, TextEdit, type TextDocument } from 'vscode';
+import { CharSequence, LcsDiff } from '../../../../util/common/diff';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { renameSymbolCommandId } from '../../common/renameSymbol';
 
-export class RenameSymbolRecorder implements IDisposable {
+type PrepareResult = Range | { range: Range; placeholder: string };
 
-	private changeListener: IDisposable;
+type SingleEdits = {
+	renames: { edits: TextEdit[]; position: Position; oldName: string; newName: string };
+	others: { edits: TextEdit[] };
+}
+
+export class RenameSymbolRecorder extends Disposable {
 
 	private previousRenames: { oldName: string; newName: string }[];
 
 	constructor() {
+		super();
 		this.previousRenames = [];
-		this.changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
+		this._register(vscode.workspace.onDidChangeTextDocument((event) => {
 			if (event.contentChanges.length === 0) {
 				return;
 			}
@@ -34,118 +42,123 @@ export class RenameSymbolRecorder implements IDisposable {
 					}
 				}
 			}
-		});
-	}
-
-	public dispose(): void {
-		this.changeListener.dispose();
-	}
-
-	public async proposeRenameRefactoring(document: vscode.TextDocument, position: vscode.Position, completionItem: vscode.InlineCompletionItem): Promise<void> {
-		const nesRange = completionItem.range;
-		if (nesRange === undefined || nesRange.start.line !== nesRange.end.line || completionItem.insertText instanceof SnippetString) {
-			return;
-		}
-
-		const originalLine = document.lineAt(nesRange.start.line).text;
-		const modifiedLine = originalLine.substring(0, nesRange.start.character)
-			+ (completionItem.insertText === undefined ? '' : completionItem.insertText)
-			+ originalLine.substring(nesRange.end.character);
-		const diff = this.computeDiff(originalLine, modifiedLine);
-		if (diff === undefined) {
-			return;
-		}
-
-		const tokenInfo = await vscode.languages.getTokenInformationAtPosition(document, new vscode.Position(nesRange.start.line, diff.offset));
-		if (tokenInfo.type !== vscode.StandardTokenType.Other) {
-			return;
-		}
-		const tokenRange = tokenInfo.range;
-		if (tokenRange.start.line !== tokenRange.end.line || !nesRange.contains(tokenRange)) {
-			return;
-		}
-
-		const oldName = originalLine.substring(diff.offset, diff.offset + diff.length);
-		const newName = diff.text;
-		console.log(`Proposing rename from '${oldName}' to '${newName}'`);
-		// const command: vscode.Command = {
-		// 	command: renameSymbolCommandId,
-		// 	title: `Rename ${oldName} to ${newName}`,
-		// 	arguments: []
-		// };
-		// completionItem.command = command;
-	}
-
-	private computeDiff(original: string, modified: string): { offset: number; length: number; text: string } | undefined {
-		const len1 = original.length;
-		const len2 = modified.length;
-		let idx1 = 0;
-		let idx2 = 0;
-		let firstDiff: { offset: number; length: number; text: string } | undefined = undefined;
-
-		while (idx1 < len1 || idx2 < len2) {
-			// 1. Skip common prefix
-			while (idx1 < len1 && idx2 < len2 && original.charCodeAt(idx1) === modified.charCodeAt(idx2)) {
-				idx1++;
-				idx2++;
-			}
-
-			if (idx1 === len1 && idx2 === len2) {
-				break;
-			}
-
-			// 2. Find next sync point
-			let syncOffset1 = 0;
-			let syncOffset2 = 0;
-			let foundSync = false;
-
-			const limit = (len1 - idx1) + (len2 - idx2);
-
-			searchLoop:
-			for (let dist = 0; dist <= limit; dist++) {
-				// Try all combinations of (o1, o2) such that o1 + o2 = dist
-				for (let o1 = 0; o1 <= dist; o1++) {
-					const o2 = dist - o1;
-					if (idx1 + o1 < len1 && idx2 + o2 < len2) {
-						if (original.charCodeAt(idx1 + o1) === modified.charCodeAt(idx2 + o2)) {
-							syncOffset1 = o1;
-							syncOffset2 = o2;
-							foundSync = true;
-							break searchLoop;
-						}
-					} else if (idx1 + o1 === len1 && idx2 + o2 === len2) {
-						// Reached end of both simultaneously - valid sync at end
-						syncOffset1 = o1;
-						syncOffset2 = o2;
-						foundSync = true;
-						break searchLoop;
-					}
+		}));
+		this._register(vscode.commands.registerCommand(renameSymbolCommandId, async (document: TextDocument, position: Position, oldName: string, newName: string) => {
+			try {
+				// This code has to move to core. When the InlineCompletionItem hints to a refactoring then the core should execute
+				// the prepare rename. If it fails it should execute the normal proposed edit. If it succeeds it can present a UI
+				// to let the user choose between the normal completion item or the refactoring rename.
+				const prepare = await vscode.commands.executeCommand<PrepareResult>(`vscode.prepareRename`, document.uri, position);
+				if (prepare === undefined || prepare === null) {
+					return;
 				}
+				if (!(prepare instanceof Range) && prepare.placeholder !== oldName) {
+					return;
+				}
+			} catch (error) {
+				// The prepare rename can fail if the position is not valid for renaming.
+				return;
 			}
 
-			if (!foundSync) {
-				// Should not happen given the loop bounds, but as a fallback
-				syncOffset1 = len1 - idx1;
-				syncOffset2 = len2 - idx2;
+			try {
+				const result = await vscode.commands.executeCommand<vscode.WorkspaceEdit | undefined | null>('vscode.executeDocumentRenameProvider', document.uri, position, newName);
+				if (result === undefined || result === null) {
+					return;
+				}
+				vscode.workspace.applyEdit(result as vscode.WorkspaceEdit);
+			} catch (error) {
+				// The actual rename failed we should log this.
 			}
+		}));
+	}
 
-			const diffOriginal = original.substring(idx1, idx1 + syncOffset1);
-			const diffModified = modified.substring(idx2, idx2 + syncOffset2);
+	public async proposeRenameRefactoring(document: TextDocument, nesPosition: Position, completionItem: vscode.InlineCompletionItem): Promise<void> {
+		const nesRange = completionItem.range;
+		if (nesRange === undefined || completionItem.insertText instanceof SnippetString) {
+			return;
+		}
 
-			if (firstDiff === undefined) {
-				firstDiff = { offset: idx1, length: syncOffset1, text: diffModified };
-			} else {
-				// Check if this diff is the same as the first one
-				const firstOriginal = original.substring(firstDiff.offset, firstDiff.offset + firstDiff.length);
-				if (diffOriginal !== firstOriginal || diffModified !== firstDiff.text) {
+		const edits = await this.createSingleEdits(document, nesRange, completionItem.insertText === undefined ? '' : completionItem.insertText);
+		if (edits === undefined || edits.renames.edits.length === 0) {
+			console.log('No renames detected');
+			return;
+		}
+		const { oldName, newName, position } = edits.renames;
+		console.log(`Proposing rename from ${oldName} to ${newName} at ${position.line}:${position.character}`);
+
+		const command: vscode.Command = {
+			command: renameSymbolCommandId,
+			title: `Rename ${oldName} to ${newName}`,
+			arguments: [document, position, oldName, newName],
+		};
+		completionItem.command = command;
+		const pos = new Position(nesRange.start.line, document.lineAt(nesRange.start.line).text.length);
+		completionItem.range = new Range(pos, pos);
+		completionItem.insertText = ' ';
+	}
+
+	private async createSingleEdits(document: vscode.TextDocument, nesRange: vscode.Range, modifiedText: string): Promise<SingleEdits | undefined> {
+		const others: TextEdit[] = [];
+		const renames: TextEdit[] = [];
+		let oldName: string | undefined = undefined;
+		let newName: string | undefined = undefined;
+		let position: Position | undefined = undefined;
+
+		const originalText = document.getText(nesRange);
+		const nesOffset = document.offsetAt(nesRange.start);
+
+		const changes = (new LcsDiff(new CharSequence(originalText), new CharSequence(modifiedText))).ComputeDiff();
+		if (changes.length === 0) {
+			return undefined;
+		}
+
+		let tokenDiff: number = 0;
+		for (const change of changes) {
+			const startOffset = nesOffset + change.originalStart;
+			const startPos = document.positionAt(startOffset);
+			const wordRange = document.getWordRangeAtPosition(startPos);
+			// If we don't have a word range at the start position of the current document then we
+			// don't treat it as as rename assuming that the rename refactoring will fail as well since
+			// there can't be an identifier at that position.
+			if (wordRange === undefined) {
+				return undefined;
+			}
+			const endOffset = startOffset + change.originalLength;
+			const endPos = document.positionAt(endOffset);
+			const range = new Range(startPos, endPos);
+			const text = modifiedText.substring(change.modifiedStart, change.getModifiedEnd());
+			const tokenInfo = await vscode.languages.getTokenInformationAtPosition(document, startPos);
+			if (tokenInfo.type === vscode.StandardTokenType.Other) {
+				let identifier = document.getText(tokenInfo.range);
+				if (oldName === undefined) {
+					oldName = identifier;
+				} else if (oldName !== identifier) {
 					return undefined;
 				}
+				// We assume that the new name starts at the same position as the old name from a token range perspective.
+				const diff = text.length - change.originalLength;
+				const tokenStartPos = document.offsetAt(tokenInfo.range.start) - nesOffset + tokenDiff;
+				const tokenEndPos = document.offsetAt(tokenInfo.range.end) - nesOffset + tokenDiff;
+				identifier = modifiedText.substring(tokenStartPos, tokenEndPos + diff);
+				if (newName === undefined) {
+					newName = identifier;
+				} else if (newName !== identifier) {
+					return undefined;
+				}
+				if (position === undefined) {
+					position = tokenInfo.range.start;
+				}
+				renames.push(new TextEdit(range, text));
+				tokenDiff += diff;
+			} else {
+				others.push(new TextEdit(range, text));
 			}
-
-			idx1 += syncOffset1;
-			idx2 += syncOffset2;
 		}
-
-		return firstDiff;
+		if (oldName === undefined || newName === undefined || position === undefined) {
+			return undefined;
+		}
+		return {
+			renames: { edits: renames, position, oldName, newName }, others: { edits: others }
+		};
 	}
 }
