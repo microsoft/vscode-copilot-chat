@@ -50,6 +50,7 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
 const BACKGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
 /**
@@ -132,6 +133,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		await this.chatParticipantImpl(request, context, stream, token);
 	});
 	private cachedSessionsSize: number = 0;
+	// Cache for provideChatSessionItems
+	private cachedSessionItems: (vscode.ChatSessionItem & {
+		fullDatabaseId: string;
+		pullRequestDetails: PullRequestSearchItem;
+	})[] | undefined;
+	private activeSessionIds: Set<string> = new Set();
+	private activeSessionPollingInterval: ReturnType<typeof setInterval> | undefined;
 	private readonly plainTextRenderer = new PlainTextRenderer();
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService, this.configurationService);
 	private readonly _summarizer: ChatSummarizerProvider;
@@ -185,7 +193,86 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	public refresh(): void {
+		this.cachedSessionItems = undefined;
+		this.activeSessionIds.clear();
+		this.stopActiveSessionPolling();
 		this._onDidChangeChatSessionItems.fire();
+	}
+
+	private stopActiveSessionPolling(): void {
+		if (this.activeSessionPollingInterval) {
+			clearInterval(this.activeSessionPollingInterval);
+			this.activeSessionPollingInterval = undefined;
+		}
+	}
+
+	private startActiveSessionPolling(): void {
+		// Don't start if already polling
+		if (this.activeSessionPollingInterval) {
+			return;
+		}
+
+		this.activeSessionPollingInterval = setInterval(async () => {
+			await this.updateActiveSessionsOnly();
+		}, ACTIVE_SESSION_POLL_INTERVAL_MS);
+
+		// Register for disposal
+		this._register(toDisposable(() => this.stopActiveSessionPolling()));
+	}
+
+	private async updateActiveSessionsOnly(): Promise<void> {
+		if (this.activeSessionIds.size === 0) {
+			this.stopActiveSessionPolling();
+			return;
+		}
+
+		try {
+			// Fetch only the active sessions using allSettled to handle individual failures
+			const sessionResults = await Promise.allSettled(
+				Array.from(this.activeSessionIds).map(sessionId =>
+					this._octoKitService.getSessionInfo(sessionId)
+				)
+			);
+
+			const stillActiveSessions = new Set<string>();
+
+			for (const result of sessionResults) {
+				if (result.status === 'rejected') {
+					this.logService.warn(`Failed to fetch session info: ${result.reason}`);
+					continue;
+				}
+
+				const session = result.value;
+				if (!session) {
+					continue;
+				}
+				this.cachedSessionItems = this.cachedSessionItems?.map(item => {
+					if (item.fullDatabaseId === session.resource_global_id) {
+						return {
+							...item,
+							status: this.getSessionStatusFromSession(session),
+						};
+					}
+					return item;
+				});
+
+				if (session.state === 'in_progress' || session.state === 'queued') {
+					stillActiveSessions.add(session.id);
+				}
+			}
+
+			// Update the active sessions set
+			this.activeSessionIds = stillActiveSessions;
+
+			// If there are changes or no more active sessions, invalidate cache and notify
+			if (this.activeSessionIds.size === 0) {
+				this.cachedSessionItems = undefined;
+				this.stopActiveSessionPolling();
+			}
+			this._onDidChangeChatSessionItems.fire();
+		} catch (error) {
+			this.logService.error(`Error updating active sessions: ${error}`);
+		}
 	}
 
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
@@ -238,6 +325,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
+		// Return cached items if available
+		if (this.cachedSessionItems) {
+			return this.cachedSessionItems;
+		}
+
 		if (this.chatSessionItemsPromise) {
 			return this.chatSessionItemsPromise;
 		}
@@ -258,6 +350,22 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				if (!existing || this.shouldPushSession(session, existing)) {
 					latestSessionsMap.set(session.resource_id, session);
 				}
+			}
+
+			// Track active sessions for background polling
+			const newActiveSessionIds = new Set<string>();
+			for (const session of latestSessionsMap.values()) {
+				if (session.state === 'in_progress' || session.state === 'queued') {
+					newActiveSessionIds.add(session.id);
+				}
+			}
+
+			// Update active sessions and start polling if needed
+			this.activeSessionIds = newActiveSessionIds;
+			if (this.activeSessionIds.size > 0) {
+				this.startActiveSessionPolling();
+			} else {
+				this.stopActiveSessionPolling();
 			}
 
 			// Fetch PRs for all unique resource_global_ids in parallel
@@ -311,6 +419,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				});
 
 			vscode.commands.executeCommand('setContext', 'github.copilot.chat.cloudSessionsEmpty', filteredSessions.length === 0);
+
+			// Cache the results
+			this.cachedSessionItems = filteredSessions;
+
 			return filteredSessions;
 		})().finally(() => {
 			this.chatSessionItemsPromise = undefined;
@@ -655,7 +767,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const sessionUri = vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number });
 
 		// Cache the processed references for presentation later
-		if (metadata.references && metadata.references.length > 0) {
+		if (processedReferences.length > 0) {
 			this.sessionReferencesMap.set(sessionUri, processedReferences);
 		}
 
@@ -947,7 +1059,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	/**
 	 * Processes *supported* references, returning an LLM-friendly string representation and the filtered list of those references that were processed.
-	 * #
 	 */
 	private async extractReferences(references: readonly vscode.ChatPromptReference[] | undefined, pushedInProgressBranch: boolean): Promise<{ result: string; processedReferences: readonly vscode.ChatPromptReference[] }> {
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
@@ -1011,7 +1122,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		];
 
 		this.logService.debug(`Cloud agent knew how to process ${processedReferences.length} of the ${references?.length || 0} provided references.`);
-		return { result: parts?.join('\n'), processedReferences };
+		return { result: parts.join('\n'), processedReferences };
 	}
 
 	private async streamSessionLogs(stream: vscode.ChatResponseStream, pullRequest: PullRequestSearchItem, sessionId: string, token: vscode.CancellationToken): Promise<void> {

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { MockRunCommandExecutionService } from '../../../../platform/commands/common/mockRunCommandExecutionService';
 import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../../../platform/git/common/gitService';
@@ -31,6 +32,7 @@ import { MockChatResponseStream, TestChatRequest } from '../../../test/node/test
 import type { IToolsService } from '../../../tools/common/toolsService';
 import { CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLIWorktreeManager } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
+
 // Mock terminal integration to avoid importing PowerShell asset (.ps1) which Vite cannot parse during tests
 vi.mock('../copilotCLITerminalIntegration', () => {
 	// Minimal stand-in for createServiceIdentifier
@@ -147,6 +149,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		commandExecutionService = new MockRunCommandExecutionService();
 		const logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
+		const configurationService = accessor.get(IConfigurationService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
 			override async loadMcpConfig(_workingDirectory: string | undefined) {
 				return undefined;
@@ -179,7 +182,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			tools,
 			commandExecutionService,
 			workspaceService,
-			instantiationService
+			instantiationService,
+			configurationService
 		);
 	});
 
@@ -289,8 +293,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		expect(manager.sessions.size).toBe(1);
 		const sessionId = Array.from(manager.sessions.keys())[0];
-		const expectedPrompt = 'Push this\n**Summary**\nsummary text';
-		expect(summarySpy).toHaveBeenCalledTimes(1);
+		const expectedPrompt = 'Push this';
+		expect(summarySpy).toHaveBeenCalledTimes(0);
 		expect(execSpy).toHaveBeenCalledTimes(2);
 		expect(execSpy.mock.calls[0]).toEqual(['vscode.open', expect.any(Object)]);
 		expect(String(execSpy.mock.calls[0].at(1))).toContain(`copilotcli:/${sessionId}`);
