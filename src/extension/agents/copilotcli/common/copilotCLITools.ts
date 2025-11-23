@@ -312,12 +312,12 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 				} catch (ex) {
 					// ignore errors from parsing references
 				}
-				const existingRefernces = new ResourceSet();
+				const existingReferences = new ResourceSet();
 				references.forEach(ref => {
 					if (URI.isUri(ref.value)) {
-						existingRefernces.add(ref.value);
+						existingReferences.add(ref.value);
 					} else if (isLocation(ref.value)) {
-						existingRefernces.add(ref.value.uri);
+						existingReferences.add(ref.value.uri);
 					}
 				});
 				((event.data.attachments || []) as Attachment[])
@@ -328,7 +328,7 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 							getFolderAttachmentPath(attachment.path) :
 							attachment.path;
 						const uri = Uri.file(attachmentPath);
-						if (existingRefernces.has(uri)) {
+						if (existingReferences.has(uri)) {
 							return; // Skip duplicates
 						}
 						references.push({
