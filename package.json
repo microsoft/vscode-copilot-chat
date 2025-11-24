@@ -3580,6 +3580,7 @@
 						"default": false,
 						"markdownDescription": "Enable the modern `multi_replace_string_in_file` edit tool when generating edits with Gemini 3 models.",
 						"tags": [
+							"advanced",
 							"experimental",
 							"onExp"
 						]
