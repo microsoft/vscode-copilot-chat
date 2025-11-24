@@ -3759,7 +3759,7 @@
 					},
 					"github.copilot.chat.inlineEdits.diagnosticsContextProvider.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
 						"tags": [
 							"advanced",
