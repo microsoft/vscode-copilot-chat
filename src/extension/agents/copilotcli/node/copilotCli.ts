@@ -128,7 +128,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 				name: model.label
 			} satisfies ChatSessionProviderOptionItem));
 		} catch (ex) {
-			this.logService.error(`Failed to fetch models`, ex);
+			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];
 		}
 	}
