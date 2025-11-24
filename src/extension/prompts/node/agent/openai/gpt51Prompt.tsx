@@ -7,8 +7,10 @@ import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { isGpt51Family, isGptCodexFamily } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
+import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
 import { InstructionMessage } from '../../base/instructionMessage';
 import { ResponseTranslationRules } from '../../base/responseTranslationRules';
+import { Gpt5SafetyRule } from '../../base/safetyRules';
 import { Tag } from '../../base/tag';
 import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, McpToolInstructions } from '../defaultAgentInstructions';
@@ -18,6 +20,9 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
+			<GPT5CopilotIdentityRule />
+			You are running as a coding agent in VS Code on a user's computer. You are expected to be precise, safe, and helpful.<br />
+			<Gpt5SafetyRule />
 			<Tag name='coding_agent_instructions'>
 				You are a coding agent running in VS Code. You are expected to be precise, safe, and helpful.<br />
 				<br />

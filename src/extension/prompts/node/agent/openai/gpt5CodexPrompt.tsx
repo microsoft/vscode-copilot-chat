@@ -6,7 +6,9 @@
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
+import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
 import { InstructionMessage } from '../../base/instructionMessage';
+import { Gpt5SafetyRule } from '../../base/safetyRules';
 import { DefaultAgentPromptProps, detectToolCapabilities } from '../defaultAgentInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from '../promptRegistry';
 
@@ -14,6 +16,9 @@ class CodexStyleGpt5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
+			You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
+			<GPT5CopilotIdentityRule />
+			<Gpt5SafetyRule />
 			You are a coding agent based on GPT-5-Codex.<br />
 			<br />
 			## Editing constraints<br />

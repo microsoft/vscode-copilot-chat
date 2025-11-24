@@ -7,8 +7,10 @@ import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { isVSCModelA, isVSCModelB } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ToolName } from '../../../tools/common/toolNames';
+import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
+import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
@@ -18,6 +20,9 @@ class VSCModelPromptA extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
+			You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
+			<CopilotIdentityRules />
+			<SafetyRules />
 			{tools[ToolName.CoreManageTodoList] &&
 				<Tag name='planning_instructions'>
 					You have access to a manage_todo_list tool which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious.<br />
@@ -178,6 +183,9 @@ class VSCModelPromptB extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
+			You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
+			<CopilotIdentityRules />
+			<SafetyRules />
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
