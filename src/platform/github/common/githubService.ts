@@ -167,6 +167,17 @@ export interface CustomAgentDetails extends CustomAgentListItem {
 	};
 }
 
+export interface OrgCustomInstruction {
+	name: string;
+	description?: string;
+	content: string;
+	metadata?: Record<string, string>;
+}
+
+export interface OrgCustomInstructionsResponse {
+	prompts?: OrgCustomInstruction[];
+}
+
 export interface PullRequestFile {
 	filename: string;
 	status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
@@ -277,6 +288,14 @@ export interface IOctoKitService {
 	 * @returns The complete custom agent configuration including the prompt
 	 */
 	getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined>;
+
+	/**
+	 * Gets the list of custom instructions (prompts) available for an organization.
+	 * @param repoOwner The repository owner (organization or user)
+	 * @param repoName The repository name
+	 * @returns The response containing an array of custom instructions
+	 */
+	getOrgCustomInstructions(repoOwner: string, repoName: string): Promise<OrgCustomInstructionsResponse>;
 
 	/**
 	 * Gets the list of files changed in a pull request.

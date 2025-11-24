@@ -8,11 +8,12 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitService } from '../../../platform/git/common/gitService';
 import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
 
-export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
+export class CustomAgentsProvider extends Disposable implements vscode.CustomAgentsProvider {
 
-	private readonly _onDidChangeCustomAgents = new vscode.EventEmitter<void>();
+	private readonly _onDidChangeCustomAgents = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
 
 	private readonly cacheDir: vscode.Uri;
@@ -24,11 +25,8 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext readonly extensionContext: IVSCodeExtensionContext,
 	) {
+		super();
 		this.cacheDir = vscode.Uri.joinPath(extensionContext.globalStorageUri, 'customAgents');
-	}
-
-	dispose(): void {
-		this._onDidChangeCustomAgents.dispose();
 	}
 
 	async provideCustomAgents(
@@ -77,12 +75,12 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 				return [];
 			}
 
-			// Read all .agent.md files from cache
+			// Read all .agent.md and .prompt.md files from cache
 			const files = await vscode.workspace.fs.readDirectory(repoCacheDir);
 			const agents: vscode.CustomAgentResource[] = [];
 
 			for (const [filename, fileType] of files) {
-				if (fileType === vscode.FileType.File && filename.endsWith('.agent.md')) {
+				if (fileType === vscode.FileType.File && (filename.endsWith('.agent.md') || filename.endsWith('.prompt.md'))) {
 					const fileUri = vscode.Uri.joinPath(repoCacheDir, filename);
 					const content = await vscode.workspace.fs.readFile(fileUri);
 					const text = new TextDecoder().decode(content);
@@ -99,7 +97,7 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 				}
 			}
 
-			this.logService.trace(`[CustomAgentsProvider] Loaded ${agents.length} agents from cache for ${repoOwner}/${repoName}`);
+			this.logService.trace(`[CustomAgentsProvider] Loaded ${agents.length} agents/prompts from cache for ${repoOwner}/${repoName}`);
 			return agents;
 		} catch (error) {
 			this.logService.error(`[CustomAgentsProvider] Error reading from cache: ${error}`);
@@ -128,16 +126,24 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 				includeSources: ['org', 'enterprise'] // don't include 'repo' to avoid redundancy
 			} satisfies CustomAgentListOptions : undefined;
 
-			const agents = await this.octoKitService.getCustomAgents(repoOwner, repoName, internalOptions);
+			// Fetch agents and org custom instructions in parallel
+			const [agents, orgInstructions] = await Promise.all([
+				this.octoKitService.getCustomAgents(repoOwner, repoName, internalOptions),
+				this.octoKitService.getOrgCustomInstructions(repoOwner, repoName).catch(error => {
+					this.logService.error(`[CustomAgentsProvider] Error fetching org custom instructions: ${error}`);
+					return null;
+				})
+			]);
 
 			// Update cache
 			const repoCacheDir = this.getRepoCacheDir(repoOwner, repoName);
 
 			// Ensure cache directory exists
 			try {
+				await vscode.workspace.fs.stat(repoCacheDir);
+			} catch (error) {
+				// Directory doesn't exist, create it
 				await vscode.workspace.fs.createDirectory(repoCacheDir);
-			} catch {
-				// Directory might already exist
 			}
 
 			// Clear existing cache files
@@ -150,7 +156,7 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 				// Directory might not exist yet
 			}
 
-			// Write new cache files
+			// Write new cache files for custom agents
 			for (const agent of agents) {
 				const filename = this.sanitizeFilename(agent.name) + '.agent.md';
 				const fileUri = vscode.Uri.joinPath(repoCacheDir, filename);
@@ -166,6 +172,20 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 				// Generate agent markdown file content
 				const content = this.generateAgentMarkdown(agentDetails || agent);
 				await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(content));
+			}
+
+			// Write cache files for org custom instructions (prompts)
+			if (orgInstructions?.prompts && Array.isArray(orgInstructions.prompts)) {
+				for (const prompt of orgInstructions.prompts) {
+					const filename = this.sanitizeFilename(prompt.name) + '.prompt.md';
+					const fileUri = vscode.Uri.joinPath(repoCacheDir, filename);
+
+					// Generate prompt markdown file content
+					const content = this.generatePromptMarkdown(prompt);
+					await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(content));
+				}
+
+				this.logService.trace(`[CustomAgentsProvider] Cached ${orgInstructions.prompts.length} custom instructions`);
 			}
 
 			this.logService.trace(`[CustomAgentsProvider] Updated cache with ${agents.length} agents for ${repoOwner}/${repoName}`);
@@ -249,7 +269,7 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 			// Parse frontmatter or extract metadata from the content
 			// For now, use a simple approach: extract from first heading and paragraph
 			const lines = content.split('\n');
-			let name = filename.replace('.agent.md', '');
+			let name = filename.replace('.agent.md', '').replace('.prompt.md', '');
 			let description = '';
 
 			// Look for frontmatter (YAML between --- markers)
@@ -293,5 +313,40 @@ export class CustomAgentsProvider implements vscode.CustomAgentsProvider {
 
 	private getRepoCacheDir(repoOwner: string, repoName: string): vscode.Uri {
 		return vscode.Uri.joinPath(this.cacheDir, `${repoOwner}_${repoName}`);
+	}
+
+	private generatePromptMarkdown(prompt: {
+		name: string;
+		description?: string;
+		content: string;
+		metadata?: Record<string, string>;
+	}): string {
+		const lines: string[] = [];
+
+		// Add header with metadata
+		lines.push(`---`);
+		lines.push(`name: ${prompt.name}`);
+		if (prompt.description) {
+			lines.push(`description: ${prompt.description}`);
+		}
+		if (prompt.metadata) {
+			lines.push(`metadata:`);
+			for (const [key, value] of Object.entries(prompt.metadata)) {
+				lines.push(`  ${key}: ${value}`);
+			}
+		}
+		lines.push(`---`);
+		lines.push(``);
+
+		// Add body
+		lines.push(`# ${prompt.name}`);
+		lines.push(``);
+		if (prompt.description) {
+			lines.push(prompt.description);
+			lines.push(``);
+		}
+		lines.push(prompt.content);
+
+		return lines.join('\n');
 	}
 }
