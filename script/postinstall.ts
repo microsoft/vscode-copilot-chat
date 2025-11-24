@@ -140,7 +140,6 @@ async function main() {
 
 	await copyStaticAssets([
 		`node_modules/@anthropic-ai/claude-agent-sdk/cli.js`,
-		`node_modules/@anthropic-ai/claude-agent-sdk/yoga.wasm`,
 	], 'dist');
 }
 
