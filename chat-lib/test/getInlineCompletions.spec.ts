@@ -20,7 +20,7 @@ import { TextDocumentChangeEvent, TextDocumentCloseEvent, TextDocumentFocusedEve
 import { CopilotToken, TokenEnvelope } from '../src/_internal/platform/authentication/common/copilotToken';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily } from '../src/_internal/platform/endpoint/common/endpointProvider';
 import { MutableObservableWorkspace } from '../src/_internal/platform/inlineEdits/common/observableWorkspace';
-import { FetchOptions, IAbortController, IHeaders, Response } from '../src/_internal/platform/networking/common/fetcherService';
+import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../src/_internal/platform/networking/common/fetcherService';
 import { IChatEndpoint, IEmbeddingsEndpoint, IFetcher } from '../src/_internal/platform/networking/common/networking';
 import { Emitter, Event } from '../src/_internal/util/vs/base/common/event';
 import { Disposable } from '../src/_internal/util/vs/base/common/lifecycle';
@@ -57,6 +57,10 @@ class TestFetcher implements IFetcher {
 			async () => JSON.parse(responseText || ''),
 			async () => stream.Readable.from([responseText || ''])
 		);
+	}
+
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		throw new Error('Method not implemented.');
 	}
 
 	async disconnectAll(): Promise<unknown> {

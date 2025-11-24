@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as vscodeTypes from '../../../../vscodeTypes';
 import { CancellationTokenSource } from '../../../vs/base/common/cancellation';
 import { Emitter as EventEmitter } from '../../../vs/base/common/event';
 import { URI as Uri } from '../../../vs/base/common/uri';
@@ -24,7 +25,7 @@ import { t } from './l10n';
 import { NewSymbolName, NewSymbolNameTag, NewSymbolNameTriggerKind } from './newSymbolName';
 import { TerminalShellExecutionCommandLineConfidence } from './terminal';
 
-const shim = {
+const shim: typeof vscodeTypes = {
 	Position,
 	Range,
 	Selection,
@@ -121,7 +122,7 @@ const shim = {
 	FileType,
 	ChatSessionStatus,
 	authentication: {
-		getSession: (providerId: string, scopes: readonly string[], options?: { createIfNone?: boolean; silent?: boolean; clearSessionPreference?: boolean; forceNewSession?: boolean }) => Promise.reject(new Error('authentication.getSession not mocked in test'))
+		getSession: async () => { throw new Error('authentication.getSession not mocked in test'); }
 	}
 };
 

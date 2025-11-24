@@ -107,3 +107,7 @@ export const l10n = {
 	 */
 	t: vscode.l10n.t
 };
+
+export const authentication = {
+	getSession: vscode.authentication.getSession,
+};
