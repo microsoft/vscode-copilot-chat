@@ -38,6 +38,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			'- semantic_search: Broad semantic retrieval. Use first for general or conceptual queries.',
 			'- file_search: Discover candidate files/directories via glob patterns.',
 			'- grep_search: Precise pattern or symbol matching; gather surrounding lines for verification.',
+			'- read_file: Read specific files to extract relevant information.',
 			'',
 			'After completing your search, return ONLY a valid JSON array of the most relevant code contexts in this exact format:',
 			'[',
