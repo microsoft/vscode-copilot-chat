@@ -479,7 +479,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return undefined;
 		}
 
-		if (chatSessionContext.isUntitled && workingDirectory) {
+		if (chatSessionContext.isUntitled && workingDirectory && isolationEnabled) {
 			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory);
 		}
 		disposables.add(session.object.attachStream(stream));
