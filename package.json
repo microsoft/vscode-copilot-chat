@@ -3978,10 +3978,10 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.advanced.inlineEdits.renameSymbolSuggestions": {
+					"github.copilot.chat.inlineEdits.renameSymbolSuggestions": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.advanced.inlineEdits.renameSymbolSuggestions%",
+						"markdownDescription": "%github.copilot.config.inlineEdits.renameSymbolSuggestions%",
 						"tags": [
 							"advanced",
 							"experimental",
