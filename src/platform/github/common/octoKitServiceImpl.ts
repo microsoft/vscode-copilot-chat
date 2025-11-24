@@ -238,21 +238,6 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 				throw new Error('No authentication token available');
 			}
 
-			// Build query parameters
-			const queryParams = new URLSearchParams();
-			if (options?.target) {
-				queryParams.append('target', options.target);
-			}
-			if (options?.excludeInvalidConfig !== undefined) {
-				queryParams.append('exclude_invalid_config', String(options.excludeInvalidConfig));
-			}
-			if (options?.dedupe !== undefined) {
-				queryParams.append('dedupe', String(options.dedupe));
-			}
-			if (options?.includeSources && options.includeSources.length > 0) {
-				queryParams.append('include_sources', options.includeSources.join(','));
-			}
-
 			const response = await this._capiClientService.makeRequest<Response>({
 				method: 'GET',
 				headers: {
