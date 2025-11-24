@@ -255,8 +255,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							model: chatEndpoint.model,
 							apiType: chatEndpoint.apiType,
 							associatedRequestId: telemetryProperties.associatedRequestId,
-							...(telemetryProperties.retryAfterErrorCategory ? { retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory } : {}),
-							...(telemetryProperties.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {}),
+							retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory,
+							retryAfterError: telemetryProperties.retryAfterError,
+							connectivityTestError: telemetryProperties.connectivityTestError,
+							retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory,
 						},
 						{
 							totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
@@ -281,6 +283,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		} catch (err: unknown) {
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
 			const processed = this.processError(err, ourRequestId);
+			let connectivityTestError = telemetryProperties.connectivityTestError;
 			if (processed.type === ChatFetchResponseType.NetworkError && enableRetryOnError) {
 				// Keep existing handling of net::ERR_NETWORK_CHANGED: https://github.com/microsoft/vscode/issues/260297
 				const isNetworkChangedError = ['darwin', 'linux'].includes(process.platform) && processed.reason.indexOf('net::ERR_NETWORK_CHANGED') !== -1;
@@ -289,8 +292,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					const useFetcher = isNetworkChangedError ? 'node-fetch' : opts.useFetcher;
 					this._logService.info(`Retrying chat request with ${useFetcher || 'default'} fetcher after: ${processed.reasonDetail || processed.reason}`);
 					// Keep existing handling of net::ERR_NETWORK_CHANGED if setting is not enabled: https://github.com/microsoft/vscode/issues/260297
-					const isConnected = !isRetryNetworkErrorEnabled || await this._checkNetworkConnectivity(useFetcher);
-					if (isConnected) {
+					const connectivity = !isRetryNetworkErrorEnabled ? { retryRequest: true } : await this._checkNetworkConnectivity(useFetcher);
+					connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError) : undefined;
+					if (connectivity.retryRequest) {
 						streamRecorder.callback('', 0, { text: '', retryReason: 'network_error' });
 						const retryResult = await this.fetchMany({
 							...opts,
@@ -305,6 +309,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							telemetryProperties: {
 								...telemetryProperties,
 								retryAfterErrorCategory: processed.reasonDetail || processed.reason,
+								retryAfterError: processed.reasonDetail || processed.reason,
+								connectivityTestError,
 							},
 							enableRetryOnFilter: opts.enableRetryOnFilter,
 							enableRetryOnError: false,
@@ -326,7 +332,11 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						requestId: ourRequestId,
 						model: chatEndpoint.model,
 						apiType: chatEndpoint.apiType,
-						associatedRequestId: telemetryProperties.associatedRequestId
+						associatedRequestId: telemetryProperties.associatedRequestId,
+						retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory,
+						retryAfterError: telemetryProperties.retryAfterError,
+						connectivityTestError,
+						retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory,
 					},
 					{
 						totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
@@ -340,16 +350,17 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					}
 				);
 			} else {
-				Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, telemetryProperties, ourRequestId, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
+				Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, { ...telemetryProperties, connectivityTestError }, ourRequestId, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
 			}
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
 		}
 	}
 
-	private async _checkNetworkConnectivity(useFetcher?: FetcherId): Promise<boolean> {
+	private async _checkNetworkConnectivity(useFetcher?: FetcherId): Promise<{ retryRequest: boolean; connectivityTestError?: string }> {
 		// Ping CAPI to check network connectivity before retrying
 		const delays = [1000, 10000, 10000];
+		let connectivityTestError: string | undefined = undefined;
 		for (const delay of delays) {
 			this._logService.info(`Waiting ${delay}ms before pinging CAPI to check network connectivity...`);
 			await new Promise(resolve => setTimeout(resolve, delay));
@@ -363,15 +374,17 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				});
 				if (res.status >= 200 && res.status < 300) {
 					this._logService.info(`CAPI ping successful, proceeding with chat request retry...`);
-					return true;
+					return { retryRequest: true, connectivityTestError };
 				} else {
+					connectivityTestError = `Status ${res.status}: ${res.statusText}`;
 					this._logService.info(`CAPI ping returned status ${res.status}, retrying ping...`);
 				}
 			} catch (err) {
-				this._logService.info(`CAPI ping failed with error, retrying ping: ${collectSingleLineErrorMessage(err)}`);
+				connectivityTestError = collectSingleLineErrorMessage(err);
+				this._logService.info(`CAPI ping failed with error, retrying ping: ${connectivityTestError}`);
 			}
 		}
-		return false;
+		return { retryRequest: false, connectivityTestError };
 	}
 
 	private async _getAuthHeaders(isGHEnterprise: boolean, url: string) {
