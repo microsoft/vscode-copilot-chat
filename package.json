@@ -3978,6 +3978,16 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.advanced.inlineEdits.renameSymbolSuggestions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.advanced.inlineEdits.renameSymbolSuggestions%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.suggestRelatedFilesFromGitHistory.useEmbeddings": {
 						"type": "boolean",
 						"default": false,
