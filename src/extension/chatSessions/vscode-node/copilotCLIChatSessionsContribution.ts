@@ -473,6 +473,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const session = chatSessionContext.isUntitled ?
 			await this.sessionService.createSession(prompt, { model, workingDirectory, isolationEnabled }, token) :
 			await this.sessionService.getSession(id, { model, workingDirectory, isolationEnabled, readonly: false }, token);
+		this.sessionItemProvider.refresh();
 
 		if (!session) {
 			stream.warning(vscode.l10n.t('Chat session not found.'));
