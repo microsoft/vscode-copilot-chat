@@ -6,14 +6,14 @@
 import assert from 'assert';
 import { Readable } from 'stream';
 import { suite, test } from 'vitest';
-import { FakeHeaders } from '../../../test/node/fetcher';
-import { TestLogService } from '../../../testing/common/testLogService';
-import { FetcherId, FetchOptions, Response } from '../../common/fetcherService';
-import { IFetcher } from '../../common/networking';
-import { fetchWithFallbacks } from '../../node/fetcherFallback';
+import { ConfigKey } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
-import { ConfigKey } from '../../../configuration/common/configurationService';
+import { FakeHeaders } from '../../../test/node/fetcher';
+import { TestLogService } from '../../../testing/common/testLogService';
+import { FetcherId, FetchOptions, PaginationOptions, Response } from '../../common/fetcherService';
+import { IFetcher } from '../../common/networking';
+import { fetchWithFallbacks } from '../../node/fetcherFallback';
 
 suite('FetcherFallback Test Suite', function () {
 
@@ -168,6 +168,9 @@ function createTestFetchers(fetcherSpecs: Array<{ name: string; response: Respon
 					throw next;
 				}
 				return next;
+			},
+			fetchWithPagination: async <T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> => {
+				throw new Error('Method not implemented.');
 			},
 			disconnectAll: async () => { },
 			makeAbortController: () => { throw new Error('Method not implemented.'); },

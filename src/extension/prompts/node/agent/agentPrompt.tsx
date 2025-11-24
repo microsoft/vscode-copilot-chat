@@ -10,7 +10,6 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { isGpt51Family, isGpt5Family, isGpt5PlusFamily, isGptCodexFamily, isGptFamily, isVSCModelA, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
-import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
@@ -23,7 +22,6 @@ import { isDefined } from '../../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { GitHubPullRequestProviders } from '../../../conversation/node/githubPullRequestProviders';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
 import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
 import { InternalToolReference } from '../../../prompt/common/intents';
@@ -355,7 +353,6 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{hasTodoTool && <TodoListContextPrompt sessionId={this.props.sessionId} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
-					<RepoContext />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
 						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
@@ -539,35 +536,6 @@ class CurrentEditorContext extends PromptElement<CurrentEditorContextProps> {
 	}
 }
 
-class RepoContext extends PromptElement<{}> {
-	constructor(
-		props: {},
-		@IGitService private readonly gitService: IGitService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-	) {
-		super(props);
-	}
-
-	async render(state: void, sizing: PromptSizing) {
-		const activeRepository = this.gitService.activeRepository?.get();
-		const repoContext = activeRepository && getGitHubRepoInfoFromContext(activeRepository);
-		if (!repoContext || !activeRepository) {
-			return;
-		}
-		const prProvider = this.instantiationService.createInstance(GitHubPullRequestProviders);
-		const repoDescription = await prProvider.getRepositoryDescription(activeRepository.rootUri);
-
-		return <Tag name='repoContext'>
-			Below is the information about the current repository. You can use this information when you need to calculate diffs or compare changes with the default branch.<br />
-			Repository name: {repoContext.id.repo}<br />
-			Owner: {repoContext.id.org}<br />
-			Current branch: {activeRepository.headBranchName}<br />
-			{repoDescription ? <>Default branch: {repoDescription?.defaultBranch}<br /></> : ''}
-			{repoDescription?.pullRequest ? <>Active pull request (may not be the same as open pull request): {repoDescription.pullRequest.title} ({repoDescription.pullRequest.url})<br /></> : ''}
-		</Tag>;
-	}
-}
-
 class WorkspaceFoldersHint extends PromptElement<BasePromptElementProps> {
 	constructor(
 		props: BasePromptElementProps,
@@ -736,7 +704,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 }
 
 function getFileCreationReminder(modelFamily: string | undefined) {
-	if (modelFamily === 'claude-sonnet-4.5' || modelFamily === 'claude-haiku-4.5') {
+	if (modelFamily?.startsWith('claude') || modelFamily?.startsWith('Anthropic')) {
 		return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
 	}
 }

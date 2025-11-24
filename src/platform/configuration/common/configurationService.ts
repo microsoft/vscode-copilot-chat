@@ -228,10 +228,36 @@ export abstract class AbstractConfigurationService extends Disposable implements
 			return;
 		}
 
+		const internalChanged = this._isInternal !== userInfo.isInternal;
+		const teamMemberChanged = this._isTeamMember !== userInfo.isTeamMember;
+
 		this._isInternal = userInfo.isInternal;
 		this._isTeamMember = userInfo.isTeamMember;
-		// fire a fake change event to refresh all settings
-		this._onDidChangeConfiguration.fire({ affectsConfiguration: () => true });
+
+		// collect potential affected settings
+		const potentialAffectedKeys = new Set<string>();
+		for (const config of globalConfigRegistry.configs.values()) {
+			if (internalChanged && (config.options?.valueIgnoredForExternals || ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(config.defaultValue))) {
+				potentialAffectedKeys.add(config.fullyQualifiedId);
+			} else if (teamMemberChanged && ConfigValueValidators.isDefaultValueWithTeamValue(config.defaultValue)) {
+				potentialAffectedKeys.add(config.fullyQualifiedId);
+			}
+		}
+
+		if (potentialAffectedKeys.size > 0) {
+			// fire a fake change event to refresh potential affected settings
+			this._onDidChangeConfiguration.fire({
+				affectsConfiguration: (section) => {
+					// Check for exact match or prefix match with dot separator
+					for (const key of potentialAffectedKeys) {
+						if (key === section || key.startsWith(section + '.') || section.startsWith(key + '.')) {
+							return true;
+						}
+					}
+					return false;
+				}
+			});
+		}
 	}
 
 	abstract getConfig<T>(key: Config<T>, scope?: ConfigurationScope): T;
@@ -551,6 +577,18 @@ export enum AuthPermissionMode {
 	Minimal = 'minimal'
 }
 
+export enum AzureAuthMode {
+	EntraId = 'entraId',
+	ApiKey = 'apiKey'
+}
+
+export namespace AzureAuthMode {
+	/** Microsoft authentication provider ID for VS Code authentication API */
+	export const MICROSOFT_AUTH_PROVIDER = 'microsoft';
+	/** Azure Cognitive Services scope for Entra ID authentication */
+	export const COGNITIVE_SERVICES_SCOPE = 'https://cognitiveservices.azure.com/.default';
+}
+
 export type CodeGenerationImportInstruction = { language?: string; file: string };
 export type CodeGenerationTextInstruction = { language?: string; text: string };
 export type CodeGenerationInstruction = CodeGenerationImportInstruction | CodeGenerationTextInstruction;
@@ -638,6 +676,7 @@ export namespace ConfigKey {
 		export const InlineEditsTriggerOnEditorChangeAfterSeconds = defineAndMigrateExpSetting<number | undefined>('chat.advanced.inlineEdits.triggerOnEditorChangeAfterSeconds', 'chat.inlineEdits.triggerOnEditorChangeAfterSeconds', { defaultValue: undefined, teamDefaultValue: 10 });
 		export const InlineEditsNextCursorPredictionDisplayLine = defineAndMigrateExpSetting<boolean>('chat.advanced.inlineEdits.nextCursorPrediction.displayLine', 'chat.inlineEdits.nextCursorPrediction.displayLine', true);
 		export const InlineEditsNextCursorPredictionCurrentFileMaxTokens = defineAndMigrateExpSetting<number>('chat.advanced.inlineEdits.nextCursorPrediction.currentFileMaxTokens', 'chat.inlineEdits.nextCursorPrediction.currentFileMaxTokens', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.maxTokens);
+		export const InlineEditsRenameSymbolSuggestions = defineSetting<boolean>('chat.inlineEdits.renameSymbolSuggestions', ConfigType.ExperimentBased, { defaultValue: false, teamDefaultValue: true });
 		export const DiagnosticsContextProvider = defineAndMigrateExpSetting<boolean>('chat.advanced.inlineEdits.diagnosticsContextProvider.enabled', 'chat.inlineEdits.diagnosticsContextProvider.enabled', true);
 	}
 
@@ -728,6 +767,7 @@ export namespace ConfigKey {
 		// TODO: @sandy081 - These should be moved away from this namespace
 		export const EnableReadFileV2 = defineSetting<boolean>('chat.advanced.enableReadFileV2', ConfigType.ExperimentBased, isPreRelease);
 		export const AskAgent = defineSetting<boolean>('chat.advanced.enableAskAgent', ConfigType.ExperimentBased, { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true });
+		export const RetryNetworkErrors = defineSetting<boolean>('chat.advanced.enableRetryNetworkErrors', ConfigType.ExperimentBased, false);
 	}
 
 	export const Enable = defineSetting<{ [key: string]: boolean }>('enable', ConfigType.Simple, {
@@ -811,6 +851,7 @@ export namespace ConfigKey {
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', ConfigType.Simple, true);
 	/** BYOK  */
 	export const OllamaEndpoint = defineSetting<string>('chat.byok.ollamaEndpoint', ConfigType.Simple, 'http://localhost:11434');
+	export const AzureAuthType = defineSetting<AzureAuthMode>('chat.azureAuthType', ConfigType.Simple, AzureAuthMode.EntraId);
 	export const AzureModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean }>>('chat.azureModels', ConfigType.Simple, {});
 	export const CustomOAIModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean; requestHeaders?: Record<string, string> }>>('chat.customOAIModels', ConfigType.Simple, {});
 	export const AutoFixDiagnostics = defineSetting<boolean>('chat.agent.autoFix', ConfigType.ExperimentBased, true);

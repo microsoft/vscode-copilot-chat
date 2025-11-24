@@ -19,7 +19,6 @@ import { PermissionRequest } from './permissionHelpers';
 import { ensureRipgrepShim } from './ripgrepShim';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
-const DEFAULT_CLI_MODEL = 'claude-sonnet-4';
 
 export class CopilotCLISessionOptions {
 	public readonly isolationEnabled: boolean;
@@ -77,7 +76,7 @@ export class CopilotCLISessionOptions {
 export interface ICopilotCLIModels {
 	readonly _serviceBrand: undefined;
 	toModelProvider(modelId: string): string;
-	getDefaultModel(): Promise<ChatSessionProviderOptionItem>;
+	getDefaultModel(): Promise<ChatSessionProviderOptionItem | undefined>;
 	setDefaultModel(model: ChatSessionProviderOptionItem): Promise<void>;
 	getAvailableModels(): Promise<ChatSessionProviderOptionItem[]>;
 }
@@ -92,6 +91,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@ILogService private readonly logService: ILogService,
 	) {
 		this._availableModels = new Lazy<Promise<ChatSessionProviderOptionItem[]>>(() => this._getAvailableModels());
 	}
@@ -99,9 +99,12 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		return modelId;
 	}
 	public async getDefaultModel() {
-		// We control this
+		// First item in the list is always the default model (SDK sends the list ordered based on default preference)
 		const models = await this.getAvailableModels();
-		const defaultModel = models.find(m => m.id.toLowerCase() === DEFAULT_CLI_MODEL.toLowerCase()) ?? models[0];
+		if (!models.length) {
+			return;
+		}
+		const defaultModel = models[0];
 		const preferredModelId = this.extensionContext.globalState.get<string>(COPILOT_CLI_MODEL_MEMENTO_KEY, defaultModel.id);
 
 		return models.find(m => m.id === preferredModelId) ?? defaultModel;
@@ -117,12 +120,17 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 	}
 
 	private async _getAvailableModels(): Promise<ChatSessionProviderOptionItem[]> {
-		const { getAvailableModels } = await this.copilotCLISDK.getPackage();
-		const models = await getAvailableModels();
-		return models.map(model => ({
-			id: model.model,
-			name: model.label
-		} satisfies ChatSessionProviderOptionItem));
+		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
+		try {
+			const models = await getAvailableModels(authInfo);
+			return models.map(model => ({
+				id: model.model,
+				name: model.label
+			} satisfies ChatSessionProviderOptionItem));
+		} catch (ex) {
+			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
+			return [];
+		}
 	}
 }
 
@@ -133,7 +141,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 export interface ICopilotCLISDK {
 	readonly _serviceBrand: undefined;
 	getPackage(): Promise<typeof import('@github/copilot/sdk')>;
-	getAuthInfo(): Promise<SessionOptions['authInfo']>;
+	getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>>;
 }
 
 export class CopilotCLISDK implements ICopilotCLISDK {
@@ -165,7 +173,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		]);
 	}
 
-	public async getAuthInfo(): Promise<SessionOptions['authInfo']> {
+	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 		const copilotToken = await this.authentService.getAnyGitHubSession();
 		return {
 			type: 'token',

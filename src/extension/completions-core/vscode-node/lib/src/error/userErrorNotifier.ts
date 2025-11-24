@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { env } from 'vscode';
+import { IEnvService } from '../../../../../../platform/env/common/envService';
 import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { URI } from '../../../../../../util/vs/base/common/uri';
 import { ICompletionsLogTargetService, Logger } from '../logger';
@@ -27,6 +27,7 @@ export class UserErrorNotifier implements ICompletionsUserErrorNotifierService {
 	constructor(
 		@ICompletionsLogTargetService private readonly _logTarget: ICompletionsLogTargetService,
 		@ICompletionsNotificationSender private readonly _notificationSender: ICompletionsNotificationSender,
+		@IEnvService private readonly _env: IEnvService
 	) { }
 
 	notifyUser(e: unknown) {
@@ -49,7 +50,7 @@ export class UserErrorNotifier implements ICompletionsUserErrorNotifierService {
 			.showWarningMessage(errorMsg, learnMoreAction)
 			.then(userResponse => {
 				if (userResponse?.title === learnMoreAction.title) {
-					return env.openExternal(URI.parse(learnMoreLink));
+					return this._env.openExternal(URI.parse(learnMoreLink));
 				}
 			});
 	}
