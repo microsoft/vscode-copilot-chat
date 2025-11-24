@@ -731,6 +731,9 @@ export namespace ConfigKey {
 		export const VirtualToolEmbeddingRanking = defineExpSetting<boolean>('chat.advanced.virtualTools.embeddingRanking', false, INTERNAL);
 		export const MultiReplaceStringGrok = defineExpSetting<boolean>('chat.advanced.multiReplaceStringGrok.enabled', false, INTERNAL);
 
+		export const Gemini3ReplaceStringOnly = defineExpSetting<boolean>('chat.edits.gemini3ReplaceStringOnly', false, INTERNAL);
+		export const Gemini3MultiReplaceString = defineExpSetting<boolean>('chat.edits.gemini3MultiReplaceString', false, INTERNAL);
+
 		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false);
 		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false);
 		export const CopilotCLIEnabled = defineSetting<boolean | undefined>('chat.advanced.copilotCLI.enabled', true);

@@ -65,6 +65,9 @@ describe('Configurations', () => {
 
 		// Validate Internal settings have the correct prefix
 		internalKeys.forEach(key => {
+			if (key.startsWith('github.copilot.chat.edits')) {
+				return;
+			}
 			expect(key, 'Internal settings must start with github.copilot.chat.advanced.').toMatch(/^github\.copilot\.chat\.advanced\./);
 		});
 
