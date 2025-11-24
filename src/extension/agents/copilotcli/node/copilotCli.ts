@@ -91,6 +91,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@ILogService private readonly logService: ILogService,
 	) {
 		this._availableModels = new Lazy<Promise<ChatSessionProviderOptionItem[]>>(() => this._getAvailableModels());
 	}
@@ -120,11 +121,16 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 
 	private async _getAvailableModels(): Promise<ChatSessionProviderOptionItem[]> {
 		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
-		const models = await getAvailableModels(authInfo);
-		return models.map(model => ({
-			id: model.model,
-			name: model.label
-		} satisfies ChatSessionProviderOptionItem));
+		try {
+			const models = await getAvailableModels(authInfo);
+			return models.map(model => ({
+				id: model.model,
+				name: model.label
+			} satisfies ChatSessionProviderOptionItem));
+		} catch (ex) {
+			this.logService.error(`Failed to fetch models`, ex);
+			return [];
+		}
 	}
 }
 
