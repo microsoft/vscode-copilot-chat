@@ -176,7 +176,7 @@ export function isGptCodexFamily(model: LanguageModelChat | IChatEndpoint | stri
 	}
 
 	const family = typeof model === 'string' ? model : model.family;
-	return !!family.startsWith('gpt-') && family.includes('-codex');
+	return (!!family.startsWith('gpt-') && family.includes('-codex')) || (family === 'arctic-fox');
 }
 
 /**
