@@ -6,9 +6,12 @@
 import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatResponsePart } from 'vscode';
+import { isLocation } from '../../../../util/common/types';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
+import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 
 
 interface CreateTool {
@@ -236,6 +239,9 @@ export function stripReminders(text: string): string {
 	// Also remove <pr_metadata .../> tags
 	return text
 		.replace(/<reminder>[\s\S]*?<\/reminder>\s*/g, '')
+		.replace(/<attachments>[\s\S]*?<\/attachments>\s*/g, '')
+		.replace(/<userRequest>[\s\S]*?<\/userRequest>\s*/g, '')
+		.replace(/<context>[\s\S]*?<\/context>\s*/g, '')
 		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
 		.replace(/<pr_metadata[^>]*\/?>\s*/g, '')
 		.trim();
@@ -298,9 +304,40 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 				};
 				// Filter out vscode instruction files from references when building session history
 				// TODO@rebornix filter instructions should be rendered as "references" in chat response like normal chat.
-				const references: ChatPromptReference[] = ((event.data.attachments || []) as Attachment[])
+				const references: ChatPromptReference[] = [];
+
+				try {
+					const promptReferences = extractChatPromptReferences(event.data.content || '');
+					references.push(...promptReferences.references);
+				} catch (ex) {
+					// ignore errors from parsing references
+				}
+				const existingReferences = new ResourceSet();
+				references.forEach(ref => {
+					if (URI.isUri(ref.value)) {
+						existingReferences.add(ref.value);
+					} else if (isLocation(ref.value)) {
+						existingReferences.add(ref.value.uri);
+					}
+				});
+				((event.data.attachments || []) as Attachment[])
 					.filter(attachment => !isInstructionAttachmentPath(attachment.path))
-					.map(attachment => ({ id: attachment.path, name: attachment.displayName, value: Uri.file(attachment.path) } as ChatPromptReference));
+					.forEach(attachment => {
+						const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
+						const attachmentPath = attachment.type === 'directory' ?
+							getFolderAttachmentPath(attachment.path) :
+							attachment.path;
+						const uri = Uri.file(attachmentPath);
+						if (existingReferences.has(uri)) {
+							return; // Skip duplicates
+						}
+						references.push({
+							id: attachment.path,
+							name: attachment.displayName,
+							value: uri,
+							range
+						});
+					});
 				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, references, '', [], undefined));
 				break;
 			}
@@ -345,6 +382,15 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 	}
 
 	return turns;
+}
+
+function getRangeInPrompt(prompt: string, referencedName: string): [number, number] | undefined {
+	referencedName = `#${referencedName}`;
+	const index = prompt.indexOf(referencedName);
+	if (index >= 0) {
+		return [index, index + referencedName.length];
+	}
+	return undefined;
 }
 
 export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
@@ -433,10 +479,10 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invo
 	'search_bash': [l10n.t('Search'), formatSearchToolInvocation],
 	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation],
 	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation],
-	'code_review': [l10n.t('Review Code'), formatCodeReviewInvocation],
+	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation],
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation],
 	'think': [l10n.t('Thinking'), emptyInvocation],
-	'report_progress': [l10n.t('Progress Update'), formatProgressToolInvocation],
+	'report_progress': [l10n.t('Report Progress'), formatProgressToolInvocation],
 };
 
 
@@ -447,6 +493,8 @@ function formatProgressToolInvocation(invocation: ChatToolInvocationPart, toolCa
 		invocation.originMessage = `Commit: ${args.commitMessage}`;
 	}
 }
+
+
 function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: ViewTool): void {
 	const args = toolCall.arguments;
 
@@ -574,11 +622,13 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 }
 
 function formatCodeReviewInvocation(invocation: ChatToolInvocationPart, toolCall: CodeReviewTool): void {
-	invocation.invocationMessage = `**${toolCall.arguments.prTitle}**  \n${toolCall.arguments.prDescription}`;
+	invocation.invocationMessage = toolCall.arguments.prTitle;
+	invocation.originMessage = toolCall.arguments.prDescription;
 }
 
 function formatReplyToCommentInvocation(invocation: ChatToolInvocationPart, toolCall: ReplyToCommentTool): void {
-	invocation.invocationMessage = toolCall.arguments.reply;
+	invocation.invocationMessage = `Replied to comment_id ${toolCall.arguments.comment_id}`;
+	invocation.originMessage = toolCall.arguments.reply;
 }
 
 function formatGenericInvocation(invocation: ChatToolInvocationPart, toolCall: UnknownToolCall): void {

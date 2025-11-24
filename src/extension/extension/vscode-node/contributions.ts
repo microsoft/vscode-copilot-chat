@@ -25,6 +25,7 @@ import { DiagnosticsContextContribution } from '../../diagnosticsContext/vscode/
 import { LanguageModelProxyContrib } from '../../externalAgents/vscode-node/lmProxyContrib';
 import { WalkthroughCommandContribution } from '../../getting-started/vscode-node/commands';
 import * as newWorkspaceContribution from '../../getting-started/vscode-node/newWorkspace.contribution';
+import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribution';
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
 import { InlineEditProviderFeature } from '../../inlineEdits/vscode-node/inlineEditProviderFeature';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
@@ -87,7 +88,8 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(CompletionsCoreContribution),
 	asContributionFactory(CompletionsUnificationContribution),
 	workspaceIndexingContribution,
-	asContributionFactory(ChatSessionsContrib)
+	asContributionFactory(ChatSessionsContrib),
+	asContributionFactory(GitHubMcpContrib)
 ];
 
 /**

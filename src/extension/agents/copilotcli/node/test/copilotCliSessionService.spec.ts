@@ -54,7 +54,7 @@ export class MockCliSdkSessionManager {
 		return Promise.resolve(undefined);
 	}
 	listSessions() {
-		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime })));
+		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime, modifiedTime: s.startTime })));
 	}
 	deleteSession(id: string) { this.sessions.delete(id); return Promise.resolve(); }
 	closeSession(_id: string) { return Promise.resolve(); }
@@ -67,11 +67,10 @@ describe('CopilotCLISessionService', () => {
 	let instantiationService: IInstantiationService;
 	let service: CopilotCLISessionService;
 	let manager: MockCliSdkSessionManager;
-
 	beforeEach(async () => {
 		vi.useRealTimers();
 		const sdk = {
-			getPackage: vi.fn(async () => ({ internal: { CLISessionManager: MockCliSdkSessionManager } }))
+			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager } }))
 		} as unknown as ICopilotCLISDK;
 
 		const services = disposables.add(createExtensionUnitTestingServices());

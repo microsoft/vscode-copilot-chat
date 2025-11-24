@@ -4,8 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { Repository } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
+import { getRepoId } from '../vscode/copilotCodingAgentUtils';
 
 export interface GitRepoInfo {
 	repository: Repository;
@@ -14,10 +18,93 @@ export interface GitRepoInfo {
 }
 
 export class CopilotCloudGitOperationsManager {
-	constructor(private readonly logService: ILogService) { }
+	constructor(
+		private readonly logService: ILogService,
+		private readonly gitService: IGitService,
+		private readonly gitExtensionService: IGitExtensionService,
+		private readonly configurationService: IConfigurationService
+	) { }
 
-	async commitAndPushChanges(repoInfo: GitRepoInfo): Promise<string> {
-		const { repository, remoteName, baseRef } = repoInfo;
+	private get autoCommitAndPushEnabled(): boolean {
+		return this.configurationService.getConfig(ConfigKey.AgentDelegateAutoCommitAndPush);
+	}
+
+	async repoInfo(): Promise<GitRepoInfo> {
+		// TODO: support selecting remote
+		// await this.promptAndUpdatePreferredGitHubRemote(true);
+		const repoId = await getRepoId(this.gitService);
+		if (!repoId) {
+			throw new Error(vscode.l10n.t('Repository information is not available. Open a GitHub repository to continue with cloud agent.'));
+		}
+		const currentRepository = this.gitService.activeRepository.get();
+		if (!currentRepository) {
+			throw new Error(vscode.l10n.t('No active repository found. Open a GitHub repository to continue with cloud agent.'));
+		}
+		const git = this.gitExtensionService.getExtensionApi();
+		const repo = git?.getRepository(currentRepository?.rootUri);
+		// Checks if user has permission to access the repository
+		if (!repo) {
+			throw new Error(
+				vscode.l10n.t(
+					'Unable to access {0}. Please check your permissions and try again.',
+					`\`${repoId.org}/${repoId.repo}\``
+				)
+			);
+		}
+		return {
+			repository: repo,
+			remoteName: repo.state.HEAD?.upstream?.remote ?? currentRepository.upstreamRemote ?? repo.state.remotes?.[0]?.name ?? 'origin',
+			baseRef: currentRepository.headBranchName ?? 'main'
+		};
+	}
+
+	async validateRemoteHasBaseRef(stream: vscode.ChatResponseStream): Promise<void> {
+		const { repository, remoteName, baseRef } = await this.repoInfo();
+		stream.progress(vscode.l10n.t('Verifying branch \'{0}\' exists on remote \'{1}\'', baseRef, remoteName));
+		if (repository && remoteName && baseRef) {
+			try {
+				const remoteBranches =
+					(await repository.getBranches({ remote: true }))
+						.filter(b => b.remote); // Has an associated remote
+				const expectedRemoteBranch = `${remoteName}/${baseRef}`;
+				const alternateNames = new Set<string>([
+					expectedRemoteBranch,
+					`refs/remotes/${expectedRemoteBranch}`,
+					baseRef
+				]);
+				const hasRemoteBranch = remoteBranches.some(branch => {
+					if (!branch.name) {
+						return false;
+					}
+					if (branch.remote && branch.remote !== remoteName) {
+						return false;
+					}
+					const candidateName =
+						(branch.remote && branch.name.startsWith(branch.remote + '/'))
+							? branch.name
+							: `${branch.remote}/${branch.name}`;
+					return alternateNames.has(candidateName);
+				});
+
+				if (!hasRemoteBranch) {
+					if (this.autoCommitAndPushEnabled) {
+						this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote. Auto-pushing because autoCommitAndPush is enabled.`);
+						stream.progress(vscode.l10n.t('Pushing branch \'{0}\'', baseRef));
+						await repository.push(remoteName, baseRef, true);
+					} else {
+						throw new Error('autoCommitAndPush is disabled');
+					}
+				}
+			} catch (error) {
+				this.logService.error(`Failed to verify remote branch for cloud agent: ${error instanceof Error ? error.message : String(error)}`);
+				throw new Error(vscode.l10n.t('Branch \'{0}\' does not exist on remote \'{1}\'. Push the branch manually or enable \'github.copilot.chat.agent.delegate.autoCommitAndPush\'', baseRef, remoteName));
+			}
+		}
+	}
+
+
+	async commitAndPushChanges(): Promise<string> {
+		const { repository, remoteName, baseRef } = await this.repoInfo();
 		const asyncBranch = await this.generateRandomBranchName(repository, 'copilot');
 
 		const commitMessage = vscode.l10n.t('Checkpoint from VS Code for cloud agent session');
@@ -25,7 +112,7 @@ export class CopilotCloudGitOperationsManager {
 			await repository.createBranch(asyncBranch, true);
 			await this.performCommit(asyncBranch, repository, commitMessage);
 			await repository.push(remoteName, asyncBranch, true);
-			this.showBranchSwitchNotification(repository, baseRef, asyncBranch);
+			await this.switchBackToBaseRef(repository, baseRef, asyncBranch);
 			return asyncBranch;
 		} catch (error) {
 			await this.rollbackToOriginalBranch(repository, baseRef);
@@ -41,6 +128,7 @@ export class CopilotCloudGitOperationsManager {
 				throw new Error(vscode.l10n.t('Uncommitted changes still detected.'));
 			}
 		} catch (error) {
+			// TODO: stream.progress('waiting for user to manually commit changes');
 			const commitSuccessful = await this.handleInteractiveCommit(repository);
 			if (!commitSuccessful) {
 				throw new Error(vscode.l10n.t('Failed to commit changes. Please commit or stash your changes manually before using the cloud agent.'));
@@ -115,17 +203,9 @@ export class CopilotCloudGitOperationsManager {
 		});
 	}
 
-	private showBranchSwitchNotification(repository: Repository, baseRef: string, newRef: string): void {
+	private async switchBackToBaseRef(repository: Repository, baseRef: string, newRef: string): Promise<void> {
 		if (repository.state.HEAD?.name !== baseRef) {
-			const SWAP_BACK_TO_ORIGINAL_BRANCH = vscode.l10n.t('Swap back to \'{0}\'', baseRef);
-			vscode.window.showInformationMessage(
-				vscode.l10n.t('Pending changes pushed to remote branch \'{0}\'.', newRef),
-				SWAP_BACK_TO_ORIGINAL_BRANCH,
-			).then(async (selection) => {
-				if (selection === SWAP_BACK_TO_ORIGINAL_BRANCH) {
-					await repository.checkout(baseRef);
-				}
-			});
+			await repository.checkout(baseRef);
 		}
 	}
 

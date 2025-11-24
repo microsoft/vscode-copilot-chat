@@ -47,6 +47,8 @@ declare module 'vscode' {
 
 		displayLocation?: InlineCompletionDisplayLocation;
 
+		supportsRename?: boolean;
+
 		/** Used for telemetry. Can be an arbitrary string. */
 		correlationId?: string;
 	}

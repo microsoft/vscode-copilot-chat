@@ -38,6 +38,7 @@ import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { toExternalRange } from './utils/translations';
+import { IObservable } from '../../../util/vs/base/common/observable';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -102,6 +103,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
 	private readonly _displayNextEditorNES: boolean;
+	private readonly _renameSymbolSuggestions: IObservable<boolean>;
 
 	constructor(
 		private readonly model: InlineEditModel,
@@ -121,6 +123,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
+		this._renameSymbolSuggestions = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsRenameSymbolSuggestions, this._expService);
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -291,7 +294,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				action: learnMoreAction,
 				isInlineEdit: !isInlineCompletion,
 				showInlineEditMenu: !serveAsCompletionsProvider,
-				wasShown: false
+				wasShown: false,
+				supportsRename: this._renameSymbolSuggestions.get()
 			};
 
 			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);

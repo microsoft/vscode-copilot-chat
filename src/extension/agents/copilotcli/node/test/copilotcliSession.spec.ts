@@ -18,6 +18,7 @@ import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
+import { ToolCall } from '../../common/copilotCLITools';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
@@ -87,7 +88,7 @@ describe('CopilotCLISession', () => {
 		logger = accessor.get(ILogService);
 		gitService = accessor.get(IGitService);
 		sdk = new class extends mock<ICopilotCLISDK>() {
-			override async getAuthInfo(): Promise<SessionOptions['authInfo']> {
+			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 				return {
 					type: 'token',
 					token: '',
@@ -115,7 +116,7 @@ describe('CopilotCLISession', () => {
 			logger,
 			workspaceService,
 			sdk,
-			instaService
+			instaService,
 		));
 	}
 
@@ -329,11 +330,12 @@ describe('CopilotCLISession', () => {
 		// Emit 10 edit tool start events in rapid succession for the same file
 		const filePath = '/workspace/abc.py';
 		for (let i = 1; i <= 10; i++) {
-			sdkSession.emit('tool.execution_start', {
+			const editToolCall: ToolCall = {
+				toolName: 'edit',
 				toolCallId: String(i),
-				toolName: 'str_replace_editor',
-				arguments: { command: 'str_replace', path: filePath }
-			});
+				arguments: { path: filePath, new_str: 'new content' },
+			};
+			sdkSession.emit('tool.execution_start', editToolCall);
 		}
 
 		// Now request permissions sequentially AFTER all tool calls have been emitted
@@ -344,7 +346,8 @@ describe('CopilotCLISession', () => {
 				kind: 'write',
 				fileName: filePath,
 				intention: 'Apply edit',
-				diff: ''
+				diff: '',
+				toolCallId: String(i)
 			});
 			permissionResults.push(result);
 			// Complete the edit so the tracker (if it were real) would finish; emit completion event

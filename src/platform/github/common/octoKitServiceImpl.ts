@@ -197,26 +197,18 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.addPullRequestCommentWithToken(pullRequestId, commentBody, authToken);
 	}
 
-	async getAllOpenSessions(nwo: string): Promise<SessionInfo[]> {
+	async getAllOpenSessions(nwo?: string): Promise<SessionInfo[]> {
 		try {
 			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 			if (!authToken) {
 				throw new Error('No authentication token available');
 			}
-			const response = await this._capiClientService.makeRequest<Response>({
+			return await this._capiClientService.makeRequest<SessionInfo[]>({
 				method: 'GET',
 				headers: {
 					Authorization: `Bearer ${authToken}`,
 				}
-			}, { type: RequestType.CopilotSessions, nwo });
-			if (!response.ok) {
-				throw new Error(`Failed to fetch copilot sessions for ${nwo}: ${response.statusText}`);
-			}
-			const data = await response.json() as { sessions?: SessionInfo[] };
-			if (data && Array.isArray(data.sessions)) {
-				return data.sessions;
-			}
-			throw new Error('Invalid response format');
+			}, { type: RequestType.CopilotSessions, nwo, resourceState: 'draft,open' });
 		} catch (e) {
 			this._logService.error(e);
 			return [];
@@ -243,8 +235,15 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 				headers: {
 					Authorization: `Bearer ${authToken}`,
 				}
-			}, { type: RequestType.CopilotCustomAgents, owner, repo });
-
+			}, {
+				type: RequestType.CopilotCustomAgents,
+				owner,
+				repo,
+				target: options?.target,
+				exclude_invalid_config: options?.excludeInvalidConfig,
+				dedupe: options?.dedupe,
+				include_sources: options?.includeSources
+			});
 			if (!response.ok) {
 				throw new Error(`Failed to fetch custom agents for ${owner}/${repo}: ${response.statusText}`);
 			}

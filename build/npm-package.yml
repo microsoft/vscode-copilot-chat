@@ -54,8 +54,8 @@ extends:
         testPlatforms:
           - name: Linux
             nodeVersions: [22.x]
-          # - name: MacOS
-          #   nodeVersions: [22.x]
+          - name: MacOS
+            nodeVersions: [22.x]
           - name: Windows
             nodeVersions: [22.x]
         workingDirectory: chat-lib

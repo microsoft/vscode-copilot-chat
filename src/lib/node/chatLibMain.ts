@@ -4,6 +4,50 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { DocumentSelector, Position } from 'vscode-languageserver-protocol';
+import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from '../../extension/completions-core/vscode-node/bridge/src/completionsTelemetryServiceBridge';
+import { CopilotExtensionStatus, ICompletionsExtensionStatus } from '../../extension/completions-core/vscode-node/extension/src/extensionStatus';
+import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from '../../extension/completions-core/vscode-node/lib/src/auth/copilotTokenManager';
+import { ICompletionsCitationManager, IPCitationDetail, IPDocumentCitation } from '../../extension/completions-core/vscode-node/lib/src/citationManager';
+import { CompletionNotifier, ICompletionsNotifierService } from '../../extension/completions-core/vscode-node/lib/src/completionNotifier';
+import { ICompletionsObservableWorkspace } from '../../extension/completions-core/vscode-node/lib/src/completionsObservableWorkspace';
+import { BuildInfo, BuildType, DefaultsOnlyConfigProvider, EditorInfo, EditorPluginInfo, ICompletionsConfigProvider, ICompletionsEditorAndPluginInfo, InMemoryConfigProvider } from '../../extension/completions-core/vscode-node/lib/src/config';
+import { ICompletionsUserErrorNotifierService, UserErrorNotifier } from '../../extension/completions-core/vscode-node/lib/src/error/userErrorNotifier';
+import { Features } from '../../extension/completions-core/vscode-node/lib/src/experiments/features';
+import { ICompletionsFeaturesService } from '../../extension/completions-core/vscode-node/lib/src/experiments/featuresService';
+import { FileReader, ICompletionsFileReaderService } from '../../extension/completions-core/vscode-node/lib/src/fileReader';
+import { ICompletionsFileSystemService } from '../../extension/completions-core/vscode-node/lib/src/fileSystem';
+import { AsyncCompletionManager, ICompletionsAsyncManagerService } from '../../extension/completions-core/vscode-node/lib/src/ghostText/asyncCompletions';
+import { CompletionsCache, ICompletionsCacheService } from '../../extension/completions-core/vscode-node/lib/src/ghostText/completionsCache';
+import { ConfigBlockModeConfig, ICompletionsBlockModeConfig } from '../../extension/completions-core/vscode-node/lib/src/ghostText/configBlockMode';
+import { CopilotCompletion } from '../../extension/completions-core/vscode-node/lib/src/ghostText/copilotCompletion';
+import { CurrentGhostText, ICompletionsCurrentGhostText } from '../../extension/completions-core/vscode-node/lib/src/ghostText/current';
+import { GetGhostTextOptions } from '../../extension/completions-core/vscode-node/lib/src/ghostText/ghostText';
+import { ICompletionsLastGhostText, LastGhostText } from '../../extension/completions-core/vscode-node/lib/src/ghostText/last';
+import { ITextEditorOptions } from '../../extension/completions-core/vscode-node/lib/src/ghostText/normalizeIndent';
+import { ICompletionsSpeculativeRequestCache, SpeculativeRequestCache } from '../../extension/completions-core/vscode-node/lib/src/ghostText/speculativeRequestCache';
+import { getInlineCompletions } from '../../extension/completions-core/vscode-node/lib/src/inlineCompletion';
+import { LocalFileSystem } from '../../extension/completions-core/vscode-node/lib/src/localFileSystem';
+import { LogLevel as CompletionsLogLevel, ICompletionsLogTargetService } from '../../extension/completions-core/vscode-node/lib/src/logger';
+import { ICompletionsFetcherService } from '../../extension/completions-core/vscode-node/lib/src/networking';
+import { ActionItem, ICompletionsNotificationSender } from '../../extension/completions-core/vscode-node/lib/src/notificationSender';
+import { ICompletionsOpenAIFetcherService, LiveOpenAIFetcher } from '../../extension/completions-core/vscode-node/lib/src/openai/fetch';
+import { AvailableModelsManager, ICompletionsModelManagerService } from '../../extension/completions-core/vscode-node/lib/src/openai/model';
+import { ICompletionsStatusReporter, StatusChangedEvent, StatusReporter } from '../../extension/completions-core/vscode-node/lib/src/progress';
+import { CompletionsPromptFactory, ICompletionsPromptFactoryService } from '../../extension/completions-core/vscode-node/lib/src/prompt/completionsPromptFactory/completionsPromptFactory';
+import { ContextProviderBridge, ICompletionsContextProviderBridgeService } from '../../extension/completions-core/vscode-node/lib/src/prompt/components/contextProviderBridge';
+import { CachedContextProviderRegistry, CoreContextProviderRegistry, DefaultContextProvidersContainer, ICompletionsContextProviderRegistryService, ICompletionsDefaultContextProviders } from '../../extension/completions-core/vscode-node/lib/src/prompt/contextProviderRegistry';
+import { ContextProviderStatistics, ICompletionsContextProviderService } from '../../extension/completions-core/vscode-node/lib/src/prompt/contextProviderStatistics';
+import { FullRecentEditsProvider, ICompletionsRecentEditsProviderService } from '../../extension/completions-core/vscode-node/lib/src/prompt/recentEdits/recentEditsProvider';
+import { CompositeRelatedFilesProvider } from '../../extension/completions-core/vscode-node/lib/src/prompt/similarFiles/compositeRelatedFilesProvider';
+import { ICompletionsRelatedFilesProviderService } from '../../extension/completions-core/vscode-node/lib/src/prompt/similarFiles/relatedFiles';
+import { ICompletionsTelemetryUserConfigService, TelemetryUserConfig } from '../../extension/completions-core/vscode-node/lib/src/telemetry/userConfig';
+import { INotebookDocument, ITextDocument, TextDocumentIdentifier } from '../../extension/completions-core/vscode-node/lib/src/textDocument';
+import { ICompletionsTextDocumentManagerService, TextDocumentChangeEvent, TextDocumentCloseEvent, TextDocumentFocusedEvent, TextDocumentManager, TextDocumentOpenEvent, WorkspaceFoldersChangeEvent } from '../../extension/completions-core/vscode-node/lib/src/textDocumentManager';
+import { Event } from '../../extension/completions-core/vscode-node/lib/src/util/event';
+import { ICompletionsPromiseQueueService, PromiseQueue } from '../../extension/completions-core/vscode-node/lib/src/util/promiseQueue';
+import { ICompletionsRuntimeModeService, RuntimeMode } from '../../extension/completions-core/vscode-node/lib/src/util/runtimeMode';
+import { DocumentContext, WorkspaceFolder } from '../../extension/completions-core/vscode-node/types/src';
 import { DebugRecorder } from '../../extension/inlineEdits/node/debugRecorder';
 import { INextEditProvider, NextEditProvider } from '../../extension/inlineEdits/node/nextEditProvider';
 import { LlmNESTelemetryBuilder, NextEditProviderTelemetryBuilder, TelemetrySender } from '../../extension/inlineEdits/node/nextEditProviderTelemetry';
@@ -26,9 +70,10 @@ import { IDiffService } from '../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../platform/diff/node/diffServiceImpl';
 import { ICAPIClientService } from '../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../platform/endpoint/common/domainService';
+import { IEndpointProvider } from '../../platform/endpoint/common/endpointProvider';
 import { CAPIClientImpl } from '../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../platform/endpoint/node/domainServiceImpl';
-import { IEnvService } from '../../platform/env/common/envService';
+import { IEnvService, NameAndVersion, OperatingSystem } from '../../platform/env/common/envService';
 import { NullEnvService } from '../../platform/env/common/nullEnvService';
 import { IGitExtensionService } from '../../platform/git/common/gitExtensionService';
 import { NullGitExtensionService } from '../../platform/git/common/nullGitExtensionService';
@@ -36,7 +81,7 @@ import { IIgnoreService, NullIgnoreService } from '../../platform/ignore/common/
 import { DocumentId } from '../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../platform/inlineEdits/common/observableGit';
-import { ObservableWorkspace } from '../../platform/inlineEdits/common/observableWorkspace';
+import { IObservableDocument, ObservableWorkspace } from '../../platform/inlineEdits/common/observableWorkspace';
 import { NesHistoryContextProvider } from '../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILanguageContextProviderService } from '../../platform/languageContextProvider/common/languageContextProviderService';
@@ -44,7 +89,7 @@ import { NullLanguageContextProviderService } from '../../platform/languageConte
 import { ILanguageDiagnosticsService } from '../../platform/languages/common/languageDiagnosticsService';
 import { TestLanguageDiagnosticsService } from '../../platform/languages/common/testLanguageDiagnosticsService';
 import { ConsoleLog, ILogService, LogLevel as InternalLogLevel, LogServiceImpl } from '../../platform/log/common/logService';
-import { FetchOptions, IAbortController, IFetcherService } from '../../platform/networking/common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
 import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../platform/requestLogger/node/requestLogger';
@@ -53,15 +98,21 @@ import { ISnippyService, NullSnippyService } from '../../platform/snippy/common/
 import { IExperimentationService, TreatmentsChangeEvent } from '../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
+import { unwrapEventNameFromPrefix } from '../../platform/telemetry/node/azureInsightsReporter';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
 import { CancellationToken } from '../../util/vs/base/common/cancellation';
 import { Emitter } from '../../util/vs/base/common/event';
-import { Disposable } from '../../util/vs/base/common/lifecycle';
+import { Disposable, IDisposable } from '../../util/vs/base/common/lifecycle';
+import { IObservableWithChange } from '../../util/vs/base/common/observableInternal';
+import { URI } from '../../util/vs/base/common/uri';
 import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
+export {
+	IAuthenticationService, ICAPIClientService, IEndpointProvider, IExperimentationService, IIgnoreService, ILanguageContextProviderService
+};
 
 /**
  * Log levels (taken from vscode.d.ts)
@@ -106,6 +157,7 @@ export interface ILogTarget {
 
 export interface ITelemetrySender {
 	sendTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void;
+	sendEnhancedTelemetryEvent?(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void;
 }
 
 export interface INESProviderOptions {
@@ -384,6 +436,10 @@ class SingleFetcherService implements IFetcherService {
 		private readonly _fetcher: IFetcher,
 	) { }
 
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		return this._fetcher.fetchWithPagination(baseUrl, options);
+	}
+
 	getUserAgentLibrary(): string {
 		return this._fetcher.getUserAgentLibrary();
 	}
@@ -455,9 +511,323 @@ class SimpleTelemetryService implements ITelemetryService {
 	}
 
 	sendEnhancedGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
-		return;
+		if (this._telemetrySender.sendEnhancedTelemetryEvent) {
+			this._telemetrySender.sendEnhancedTelemetryEvent(eventName, eventPropertiesToSimpleObject(properties), measurements);
+		}
 	}
 	sendEnhancedGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
 		return;
 	}
+}
+
+export type IDocumentContext = DocumentContext;
+
+export type CompletionsContextProviderMatchFunction = (documentSelector: DocumentSelector, documentContext: IDocumentContext) => Promise<number>;
+
+export type ICompletionsStatusChangedEvent = StatusChangedEvent;
+
+export interface ICompletionsStatusHandler {
+	didChange(event: ICompletionsStatusChangedEvent): void;
+}
+
+export type ICompletionsTextDocumentChangeEvent = Event<TextDocumentChangeEvent>;
+export type ICompletionsTextDocumentOpenEvent = Event<TextDocumentOpenEvent>;
+export type ICompletionsTextDocumentCloseEvent = Event<TextDocumentCloseEvent>;
+export type ICompletionsTextDocumentFocusedEvent = Event<TextDocumentFocusedEvent>;
+export type ICompletionsWorkspaceFoldersChangeEvent = Event<WorkspaceFoldersChangeEvent>;
+export type ICompletionsTextDocumentIdentifier = TextDocumentIdentifier;
+export type ICompletionsNotebookDocument = INotebookDocument;
+export type ICompletionsWorkspaceFolder = WorkspaceFolder;
+
+export interface ICompletionsTextDocumentManager {
+	onDidChangeTextDocument: ICompletionsTextDocumentChangeEvent;
+	onDidOpenTextDocument: ICompletionsTextDocumentOpenEvent;
+	onDidCloseTextDocument: ICompletionsTextDocumentCloseEvent;
+
+	onDidFocusTextDocument: ICompletionsTextDocumentFocusedEvent;
+	onDidChangeWorkspaceFolders: ICompletionsWorkspaceFoldersChangeEvent;
+
+	/**
+	 * Get all open text documents, skipping content exclusions and other validations.
+	 */
+	getTextDocumentsUnsafe(): ITextDocument[];
+
+	/**
+	 * If `TextDocument` represents notebook returns `INotebookDocument` instance, otherwise returns `undefined`
+	 */
+	findNotebook(doc: TextDocumentIdentifier): ICompletionsNotebookDocument | undefined;
+
+	getWorkspaceFolders(): WorkspaceFolder[];
+}
+
+export interface IURLOpener {
+	open(url: string): Promise<void>;
+}
+
+export type IEditorInfo = EditorInfo;
+export type IEditorPluginInfo = EditorPluginInfo;
+
+export interface IEditorSession {
+	readonly sessionId: string;
+	readonly machineId: string;
+	readonly remoteName?: string;
+	readonly uiKind?: string;
+}
+
+export type IActionItem = ActionItem
+export interface INotificationSender {
+	showWarningMessage(message: string, ...actions: IActionItem[]): Promise<IActionItem | undefined>;
+}
+
+export type IIPCitationDetail = IPCitationDetail;
+export type IIPDocumentCitation = IPDocumentCitation;
+export interface IInlineCompletionsCitationHandler {
+	handleIPCodeCitation(citation: IIPDocumentCitation): Promise<void>;
+}
+
+
+export interface IInlineCompletionsProviderOptions {
+	readonly fetcher: IFetcher;
+	readonly authService: IAuthenticationService;
+	readonly telemetrySender: ITelemetrySender;
+	readonly logTarget?: ILogTarget;
+	readonly isRunningInTest?: boolean;
+	readonly contextProviderMatch: CompletionsContextProviderMatchFunction;
+	readonly languageContextProvider?: ILanguageContextProviderService;
+	readonly statusHandler: ICompletionsStatusHandler;
+	readonly documentManager: ICompletionsTextDocumentManager;
+	readonly workspace: ObservableWorkspace;
+	readonly urlOpener: IURLOpener;
+	readonly editorInfo: IEditorInfo;
+	readonly editorPluginInfo: IEditorPluginInfo;
+	readonly relatedPluginInfo: IEditorPluginInfo[];
+	readonly editorSession: IEditorSession;
+	readonly notificationSender: INotificationSender;
+	readonly ignoreService?: IIgnoreService;
+	readonly waitForTreatmentVariables?: boolean;
+	readonly endpointProvider: IEndpointProvider;
+	readonly capiClientService: ICAPIClientService;
+	readonly citationHandler?: IInlineCompletionsCitationHandler;
+}
+
+export type IGetInlineCompletionsOptions = Exclude<Partial<GetGhostTextOptions>, 'promptOnly'> & {
+	formattingOptions?: ITextEditorOptions;
+};
+
+export interface IInlineCompletionsProvider {
+	updateTreatmentVariables(variables: Record<string, boolean | number | string>): void;
+	getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined>;
+	dispose(): void;
+}
+
+export function createInlineCompletionsProvider(options: IInlineCompletionsProviderOptions): IInlineCompletionsProvider {
+	const svc = setupCompletionServices(options);
+	return svc.createInstance(InlineCompletionsProvider);
+}
+
+class InlineCompletionsProvider extends Disposable implements IInlineCompletionsProvider {
+
+	constructor(
+		@IInstantiationService private _insta: IInstantiationService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
+
+	) {
+		super();
+		this._register(_insta);
+	}
+
+	updateTreatmentVariables(variables: Record<string, boolean | number | string>) {
+		if (this._expService instanceof SimpleExperimentationService) {
+			this._expService.updateTreatmentVariables(variables);
+		}
+	}
+
+	async getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined> {
+		return await this._insta.invokeFunction(getInlineCompletions, textDocument, position, token, options);
+	}
+}
+
+class UnwrappingTelemetrySender implements ITelemetrySender {
+	constructor(private readonly sender: ITelemetrySender) { }
+
+	sendTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void {
+		this.sender.sendTelemetryEvent(this.normalizeEventName(eventName), properties, measurements);
+	}
+
+	sendEnhancedTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void {
+		if (this.sender.sendEnhancedTelemetryEvent) {
+			this.sender.sendEnhancedTelemetryEvent(this.normalizeEventName(eventName), properties, measurements);
+		}
+	}
+
+	private normalizeEventName(eventName: string): string {
+		const unwrapped = unwrapEventNameFromPrefix(eventName);
+		const withoutPrefix = unwrapped.match(/^[^/]+\/(.*)/);
+		return withoutPrefix ? withoutPrefix[1] : unwrapped;
+	}
+}
+
+function setupCompletionServices(options: IInlineCompletionsProviderOptions): IInstantiationService {
+	const { fetcher, authService, statusHandler, documentManager, workspace, telemetrySender, urlOpener, editorSession } = options;
+	const logTarget = options.logTarget || new ConsoleLog(undefined, InternalLogLevel.Trace);
+
+	const builder = new InstantiationServiceBuilder();
+	builder.define(ICompletionsLogTargetService, new class implements ICompletionsLogTargetService {
+		declare _serviceBrand: undefined;
+		logIt(level: CompletionsLogLevel, category: string, ...extra: unknown[]): void {
+			logTarget.logIt(this.toExternalLogLevel(level), category, ...extra);
+		}
+		private toExternalLogLevel(level: CompletionsLogLevel): LogLevel {
+			switch (level) {
+				case CompletionsLogLevel.DEBUG: return LogLevel.Debug;
+				case CompletionsLogLevel.INFO: return LogLevel.Info;
+				case CompletionsLogLevel.WARN: return LogLevel.Warning;
+				case CompletionsLogLevel.ERROR: return LogLevel.Error;
+				default: return LogLevel.Info;
+			}
+		}
+	});
+	builder.define(IAuthenticationService, authService);
+	builder.define(IIgnoreService, options.ignoreService || new NullIgnoreService());
+	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [new UnwrappingTelemetrySender(telemetrySender)]));
+	builder.define(IExperimentationService, new SyncDescriptor(SimpleExperimentationService, [options.waitForTreatmentVariables]));
+	builder.define(IEndpointProvider, options.endpointProvider);
+	builder.define(ICAPIClientService, options.capiClientService);
+	builder.define(ICompletionsTelemetryService, new SyncDescriptor(CompletionsTelemetryServiceBridge));
+	builder.define(ICompletionsRuntimeModeService, RuntimeMode.fromEnvironment(options.isRunningInTest ?? false));
+	builder.define(ICompletionsCacheService, new CompletionsCache());
+	builder.define(ICompletionsConfigProvider, new InMemoryConfigProvider(new DefaultsOnlyConfigProvider()));
+	builder.define(ICompletionsLastGhostText, new LastGhostText());
+	builder.define(ICompletionsCurrentGhostText, new CurrentGhostText());
+	builder.define(ICompletionsSpeculativeRequestCache, new SpeculativeRequestCache());
+	builder.define(ICompletionsNotificationSender, new class implements ICompletionsNotificationSender {
+		declare _serviceBrand: undefined;
+		async showWarningMessage(message: string, ...actions: IActionItem[]): Promise<IActionItem | undefined> {
+			return await options.notificationSender.showWarningMessage(message, ...actions);
+		}
+	});
+	builder.define(ICompletionsEditorAndPluginInfo, new class implements ICompletionsEditorAndPluginInfo {
+		declare _serviceBrand: undefined;
+		getEditorInfo(): EditorInfo {
+			return options.editorInfo;
+		}
+		getEditorPluginInfo(): EditorPluginInfo {
+			return options.editorPluginInfo;
+		}
+		getRelatedPluginInfo(): EditorPluginInfo[] {
+			return options.relatedPluginInfo;
+		}
+	});
+	builder.define(ICompletionsExtensionStatus, new CopilotExtensionStatus());
+	builder.define(ICompletionsFeaturesService, new SyncDescriptor(Features));
+	builder.define(ICompletionsObservableWorkspace, new class implements ICompletionsObservableWorkspace {
+		declare _serviceBrand: undefined;
+		get openDocuments(): IObservableWithChange<readonly IObservableDocument[], { added: readonly IObservableDocument[]; removed: readonly IObservableDocument[] }> {
+			return workspace.openDocuments;
+		}
+		getWorkspaceRoot(documentId: DocumentId): URI | undefined {
+			return workspace.getWorkspaceRoot(documentId);
+		}
+		getFirstOpenDocument(): IObservableDocument | undefined {
+			return workspace.getFirstOpenDocument();
+		}
+		getDocument(documentId: DocumentId): IObservableDocument | undefined {
+			return workspace.getDocument(documentId);
+		}
+	});
+	builder.define(ICompletionsStatusReporter, new class extends StatusReporter {
+		didChange(event: StatusChangedEvent): void {
+			statusHandler.didChange(event);
+		}
+	});
+	builder.define(ICompletionsCopilotTokenManager, new SyncDescriptor(CopilotTokenManagerImpl, [false]));
+	builder.define(ICompletionsTextDocumentManagerService, new SyncDescriptor(class extends TextDocumentManager {
+		onDidChangeTextDocument = documentManager.onDidChangeTextDocument;
+		onDidOpenTextDocument = documentManager.onDidOpenTextDocument;
+		onDidCloseTextDocument = documentManager.onDidCloseTextDocument;
+		onDidFocusTextDocument = documentManager.onDidFocusTextDocument;
+		onDidChangeWorkspaceFolders = documentManager.onDidChangeWorkspaceFolders;
+		getTextDocumentsUnsafe(): ITextDocument[] {
+			return documentManager.getTextDocumentsUnsafe();
+		}
+		findNotebook(doc: TextDocumentIdentifier): INotebookDocument | undefined {
+			return documentManager.findNotebook(doc);
+		}
+		getWorkspaceFolders(): WorkspaceFolder[] {
+			return documentManager.getWorkspaceFolders();
+		}
+	}));
+	builder.define(ICompletionsFileReaderService, new SyncDescriptor(FileReader));
+	builder.define(ICompletionsBlockModeConfig, new SyncDescriptor(ConfigBlockModeConfig));
+	builder.define(ICompletionsTelemetryUserConfigService, new SyncDescriptor(TelemetryUserConfig));
+	builder.define(ICompletionsRecentEditsProviderService, new SyncDescriptor(FullRecentEditsProvider, [undefined]));
+	builder.define(ICompletionsNotifierService, new SyncDescriptor(CompletionNotifier));
+	builder.define(ICompletionsOpenAIFetcherService, new SyncDescriptor(LiveOpenAIFetcher));
+	builder.define(ICompletionsModelManagerService, new SyncDescriptor(AvailableModelsManager, [true]));
+	builder.define(ICompletionsAsyncManagerService, new SyncDescriptor(AsyncCompletionManager));
+	builder.define(ICompletionsContextProviderBridgeService, new SyncDescriptor(ContextProviderBridge));
+	builder.define(ICompletionsUserErrorNotifierService, new SyncDescriptor(UserErrorNotifier));
+	builder.define(ICompletionsRelatedFilesProviderService, new SyncDescriptor(CompositeRelatedFilesProvider));
+	builder.define(ICompletionsFileSystemService, new LocalFileSystem());
+	builder.define(ICompletionsContextProviderRegistryService, new SyncDescriptor(CachedContextProviderRegistry, [CoreContextProviderRegistry, (_: IInstantiationService, sel: DocumentSelector, docCtx: DocumentContext) => options.contextProviderMatch(sel, docCtx)]));
+	builder.define(ICompletionsPromiseQueueService, new PromiseQueue());
+	builder.define(ICompletionsCitationManager, new class implements ICompletionsCitationManager {
+		declare _serviceBrand: undefined;
+		register(): IDisposable { return Disposable.None; }
+		async handleIPCodeCitation(citation: IPDocumentCitation): Promise<void> {
+			if (options.citationHandler) {
+				return await options.citationHandler.handleIPCodeCitation(citation);
+			}
+		}
+	});
+	builder.define(ICompletionsContextProviderService, new ContextProviderStatistics());
+	builder.define(ICompletionsPromptFactoryService, new SyncDescriptor(CompletionsPromptFactory));
+	builder.define(ICompletionsFetcherService, new class implements ICompletionsFetcherService {
+		declare _serviceBrand: undefined;
+		getImplementation(): ICompletionsFetcherService | Promise<ICompletionsFetcherService> {
+			return this;
+		}
+		fetch(url: string, options: FetchOptions) {
+			return fetcher.fetch(url, options);
+		}
+		disconnectAll(): Promise<unknown> {
+			return fetcher.disconnectAll();
+		}
+	});
+	builder.define(ICompletionsDefaultContextProviders, new DefaultContextProvidersContainer());
+	builder.define(IEnvService, new class implements IEnvService {
+		declare _serviceBrand: undefined;
+		readonly language = undefined;
+		readonly sessionId = editorSession.sessionId;
+		readonly machineId = editorSession.machineId;
+		readonly devDeviceId = editorSession.machineId;
+		readonly vscodeVersion = options.editorInfo.version;
+		readonly isActive = true;
+		readonly remoteName = editorSession.remoteName;
+		readonly uiKind = editorSession.uiKind === 'web' ? 'web' : 'desktop';
+		readonly OS = process.platform === 'darwin' ? OperatingSystem.Macintosh : process.platform === 'win32' ? OperatingSystem.Windows : OperatingSystem.Linux;
+		readonly uriScheme = '';
+		readonly extensionId = options.editorPluginInfo.name;
+		readonly appRoot = options.editorInfo.root ?? '';
+		readonly shell = '';
+		isProduction(): boolean { return BuildInfo.isProduction(); }
+		isPreRelease(): boolean { return BuildInfo.isPreRelease(); }
+		isSimulation(): boolean { return options.isRunningInTest === true; }
+		getBuildType(): 'prod' | 'dev' {
+			const t = BuildInfo.getBuildType();
+			return t === BuildType.DEV ? 'dev' : 'prod';
+		}
+		getVersion(): string { return BuildInfo.getVersion(); }
+		getBuild(): string { return BuildInfo.getBuild(); }
+		getName(): string { return options.editorInfo.name; }
+		getEditorInfo(): NameAndVersion { return new NameAndVersion(options.editorInfo.name, options.editorInfo.version); }
+		getEditorPluginInfo(): NameAndVersion { return new NameAndVersion(options.editorPluginInfo.name, options.editorPluginInfo.version); }
+		async openExternal(target: URI): Promise<boolean> {
+			await urlOpener.open(target.toString());
+			return true;
+		}
+	});
+	builder.define(ILanguageContextProviderService, options.languageContextProvider ?? new NullLanguageContextProviderService());
+
+	return builder.seal();
 }

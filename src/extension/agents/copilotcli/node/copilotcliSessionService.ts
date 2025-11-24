@@ -27,8 +27,7 @@ import { ICopilotCLIMCPHandler } from './mcpHandler';
 export interface ICopilotCLISessionItem {
 	readonly id: string;
 	readonly label: string;
-	readonly startTime: Date;
-	readonly endTime?: Date;
+	readonly timing: { startTime: number; endTime?: number };
 	readonly status?: ChatSessionStatus;
 }
 
@@ -57,7 +56,7 @@ const SESSION_SHUTDOWN_TIMEOUT_MS = 300 * 1000;
 export class CopilotCLISessionService extends Disposable implements ICopilotCLISessionService {
 	declare _serviceBrand: undefined;
 
-	private _sessionManager: Lazy<Promise<internal.CLISessionManager>>;
+	private _sessionManager: Lazy<Promise<internal.LocalSessionManager>>;
 	private _sessionWrappers = new DisposableMap<string, RefCountedSession>();
 	private _newActiveSessions = new Map<string, ICopilotCLISessionItem>();
 
@@ -70,18 +69,18 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private sessionMutexForGetSession = new Map<string, Mutex>();
 
 	constructor(
-		@ILogService private readonly logService: ILogService,
+		@ILogService protected readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@INativeEnvService private readonly nativeEnv: INativeEnvService,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 	) {
 		super();
 		this.monitorSessionFiles();
-		this._sessionManager = new Lazy<Promise<internal.CLISessionManager>>(async () => {
+		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			const { internal } = await this.copilotCLISDK.getPackage();
-			return new internal.CLISessionManager({
+			return new internal.LocalSessionManager({
 				logger: getCopilotLogger(this.logService)
 			});
 		});
@@ -123,8 +122,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return undefined;
 					}
 					const id = metadata.sessionId;
-					const startTime = metadata.startTime;
-					const endTime = metadata.modifiedTime;
+					const startTime = metadata.startTime.getTime();
+					const endTime = metadata.modifiedTime.getTime();
 					const label = metadata.summary ? labelFromPrompt(metadata.summary) : undefined;
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
@@ -133,8 +132,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
-							startTime,
-							endTime,
+							timing: { startTime, endTime },
 						} satisfies ICopilotCLISessionItem;
 					}
 					try {
@@ -151,8 +149,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
-							startTime,
-							endTime,
+							timing: { startTime, endTime },
 						} satisfies ICopilotCLISessionItem;
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
@@ -185,7 +182,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		const newSession: ICopilotCLISessionItem = {
 			id: sdkSession.sessionId,
 			label,
-			startTime: sdkSession.startTime
+			timing: { startTime: sdkSession.startTime.getTime() }
 		};
 		this._newActiveSessions.set(sdkSession.sessionId, newSession);
 		this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
@@ -245,7 +242,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.CLISessionManager): RefCountedSession {
+	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager): RefCountedSession {
 		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
 		session.add(session.onDidChangeStatus(() => this._onDidChangeSessions.fire()));
 		session.add(toDisposable(() => {

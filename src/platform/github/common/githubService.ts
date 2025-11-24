@@ -144,6 +144,13 @@ export interface CustomAgentListOptions {
 	includeSources?: ('repo' | 'org' | 'enterprise')[];
 }
 
+export interface CustomAgentListOptions {
+	target?: 'github-copilot' | 'vscode';
+	excludeInvalidConfig?: boolean;
+	dedupe?: boolean;
+	includeSources?: ('repo' | 'org' | 'enterprise')[];
+}
+
 export interface CustomAgentDetails extends CustomAgentListItem {
 	prompt: string;
 	argument_hint?: string;
@@ -239,7 +246,7 @@ export interface IOctoKitService {
 	/**
 	 * Gets all open Copilot sessions.
 	 */
-	getAllOpenSessions(nwo: string): Promise<SessionInfo[]>;
+	getAllOpenSessions(nwo?: string): Promise<SessionInfo[]>;
 
 	/**
 	 * Gets pull request from global id.
@@ -251,7 +258,12 @@ export interface IOctoKitService {
 	 * This includes both repo-level and org/enterprise-level custom agents.
 	 * @param owner The repository owner
 	 * @param repo The repository name
-	 * @param options Optional query parameters for filtering and configuration
+	 * @param options Optional filtering options:
+	 *   - targetPlatform: Only include agents for the specified platform.
+	 *   - excludeInvalidConfigs: Exclude agents with invalid configurations.
+	 *   - deduplicate: Remove duplicate agents from the result.
+	 *   - source: Filter agents by their source (repo, org, enterprise).
+	 * @returns An array of custom agent list items with basic metadata
 	 * @returns An array of custom agent list items with basic metadata
 	 */
 	getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]>;

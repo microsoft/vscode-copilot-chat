@@ -7,7 +7,6 @@ import { IObservableDocument } from '../../../../../platform/inlineEdits/common/
 import { IObservableWithChange } from '../../../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { createDecorator as createServiceIdentifier } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { VSCodeWorkspace } from '../../../../inlineEdits/vscode-node/parts/vscodeWorkspace';
 
 export const ICompletionsObservableWorkspace = createServiceIdentifier<ICompletionsObservableWorkspace>('ICompletionsObservableWorkspace');
 export interface ICompletionsObservableWorkspace {
@@ -20,8 +19,4 @@ export interface ICompletionsObservableWorkspace {
 	getFirstOpenDocument(): IObservableDocument | undefined;
 
 	getDocument(documentId: DocumentId): IObservableDocument | undefined;
-}
-
-export class CompletionsObservableWorkspace extends VSCodeWorkspace implements ICompletionsObservableWorkspace {
-	declare _serviceBrand: undefined;
 }
