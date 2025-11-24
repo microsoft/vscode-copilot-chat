@@ -310,14 +310,15 @@ export class AnthropicMessagesProcessor {
 				return;
 			case 'content_block_start':
 				if (chunk.content_block?.type === 'tool_use' && chunk.index !== undefined) {
+					const toolCallId = chunk.content_block.id || generateUuid();
 					this.toolCallAccumulator.set(chunk.index, {
-						id: chunk.content_block.id || generateUuid(),
+						id: toolCallId,
 						name: chunk.content_block.name || '',
 						arguments: '',
 					});
 					onProgress({
 						text: '',
-						beginToolCalls: [{ name: chunk.content_block.name || '' }]
+						beginToolCalls: [{ name: chunk.content_block.name || '', id: toolCallId }]
 					});
 				} else if (chunk.content_block?.type === 'thinking' && chunk.index !== undefined) {
 					this.thinkingAccumulator.set(chunk.index, {

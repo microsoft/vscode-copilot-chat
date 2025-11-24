@@ -167,7 +167,7 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		this._push(new ChatResponseWarningPart(value));
 	}
 
-	prepareToolInvocation(toolName: string, streamData: ChatToolInvocationStreamData): void {
-		this._push(new ChatPrepareToolInvocationPart(toolName, streamData));
+	prepareToolInvocation(toolCallId: string, toolName: string, streamData: ChatToolInvocationStreamData): void {
+		this._push(new ChatPrepareToolInvocationPart(toolCallId, toolName, streamData));
 	}
 }

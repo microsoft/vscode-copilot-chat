@@ -411,7 +411,7 @@ export class OpenAIResponsesProcessor {
 				if (chunk.item.type === 'function_call') {
 					onProgress({
 						text: '',
-						beginToolCalls: [{ name: chunk.item.name }]
+						beginToolCalls: [{ name: chunk.item.name, id: chunk.item.call_id }]
 					});
 				}
 				return;

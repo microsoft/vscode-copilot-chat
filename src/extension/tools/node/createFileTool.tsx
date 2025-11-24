@@ -186,7 +186,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		if (options.rawInput && typeof options.rawInput === 'string') {
 			// Try to extract filePath from the raw JSON input
 			const filePathMatch = options.rawInput.match(/"filePath"\s*:\s*"([^"]+)"/);
-			const contentMatch = options.rawInput.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+			const contentMatch = options.rawInput.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)/);
 
 			if (filePathMatch) {
 				const filePath = filePathMatch[1];

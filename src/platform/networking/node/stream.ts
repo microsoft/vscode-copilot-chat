@@ -471,13 +471,14 @@ export class SSEProcessor {
 					if (choice.delta?.tool_calls) {
 						const hadExistingToolCalls = this.toolCalls.hasToolCalls();
 						if (!hadExistingToolCalls) {
-							const firstToolName = choice.delta.tool_calls.at(0)?.function?.name;
+							const firstToolCall = choice.delta.tool_calls.at(0);
+							const firstToolName = firstToolCall?.function?.name;
 							if (firstToolName) {
 								if (solution.text.length) {
 									// Flush the linkifier stream. See #16465
 									solution.append({ index: 0, delta: { content: ' ' } });
 								}
-								if (await emitSolution({ beginToolCalls: [{ name: firstToolName }] })) {
+								if (await emitSolution({ beginToolCalls: [{ name: firstToolName, id: firstToolCall?.id }] })) {
 									continue;
 								}
 							}

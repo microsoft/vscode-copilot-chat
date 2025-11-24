@@ -70,7 +70,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 
 		if (delta.beginToolCalls?.length) {
 			for (const beginCall of delta.beginToolCalls) {
-				progress.prepareToolInvocation(getContributedToolName(beginCall.name), {});
+				progress.prepareToolInvocation(beginCall.id ?? '', getContributedToolName(beginCall.name), {});
 			}
 		}
 
@@ -79,7 +79,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 				if (!update.name) {
 					continue;
 				}
-				progress.prepareToolInvocation(getContributedToolName(update.name), { partialInput: tryParsePartialToolInput(update.arguments) });
+				progress.prepareToolInvocation(update.id ?? '', getContributedToolName(update.name), { partialInput: tryParsePartialToolInput(update.arguments) });
 			}
 		}
 	}

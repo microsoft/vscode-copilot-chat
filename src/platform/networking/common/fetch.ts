@@ -92,6 +92,7 @@ export interface ICopilotToolCallStreamUpdate {
 
 export interface ICopilotBeginToolCall {
 	name: string;
+	id?: string;
 }
 
 /**
