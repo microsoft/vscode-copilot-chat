@@ -197,7 +197,7 @@ export function isGptFamily(model: LanguageModelChat | IChatEndpoint | string | 
 	}
 
 	const family = typeof model === 'string' ? model : model.family;
-	return !!family.startsWith('gpt-');
+	return !!family.startsWith('gpt-') || family === 'arctic-fox';
 }
 
 /**
@@ -209,7 +209,7 @@ export function isGpt51Family(model: LanguageModelChat | IChatEndpoint | string 
 	}
 
 	const family = typeof model === 'string' ? model : model.family;
-	return !!family.match(/^gpt-5\.\d+/i);
+	return !!family.match(/^gpt-5\.\d+/i) || family === 'arctic-fox';
 }
 
 /**
