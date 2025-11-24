@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -19,7 +20,6 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
-import { SDKUserMessage } from '@anthropic-ai/claude-code';
 
 function computeFolderSlug(folderUri: URI): string {
 	return folderUri.path.replace(/\//g, '-');
