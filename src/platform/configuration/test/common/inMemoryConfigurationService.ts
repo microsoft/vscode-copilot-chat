@@ -46,11 +46,17 @@ export class InMemoryConfigurationService extends AbstractConfigurationService {
 
 	override setConfig<T>(key: BaseConfig<T>, value: T): Promise<void> {
 		this.overrides.set(key, value);
+		this._onDidChangeConfiguration.fire({
+			affectsConfiguration: (section: string) => section === key.fullyQualifiedId || key.fullyQualifiedId.startsWith(section + '.')
+		});
 		return Promise.resolve();
 	}
 
 	setNonExtensionConfig<T>(key: string, value: T): Promise<void> {
 		this.nonExtensionOverrides.set(key, value);
+		this._onDidChangeConfiguration.fire({
+			affectsConfiguration: (section: string) => section === key || key.startsWith(section + '.')
+		});
 		return Promise.resolve();
 	}
 

@@ -80,7 +80,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -127,15 +127,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 		const toolNames = new Map<string, string>();
 		const editToolIds = new Set<string>();
+		const toolCalls = new Map<string, ToolCall>();
 		const editTracker = new ExternalEditTracker();
 		const editFilesAndToolCallIds = new ResourceMap<ToolCall[]>();
 		disposables.add(this._options.addPermissionHandler(async (permissionRequest) => {
 			// Need better API from SDK to correlate file edits in permission requests to tool invocations.
 			return await this.requestPermission(permissionRequest, editTracker,
-				(file: Uri) => {
-					const ids = editFilesAndToolCallIds.get(file);
-					return ids?.shift();
-				},
+				(toolCallId: string) => toolCalls.get(toolCallId),
 				this._options.toSessionOptions().workingDirectory,
 				token
 			);
@@ -163,6 +161,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('tool.execution_start', (event) => {
 				toolNames.set(event.data.toolCallId, event.data.toolName);
+				toolCalls.set(event.data.toolCallId, event.data as unknown as ToolCall);
 				if (isCopilotCliEditToolCall(event.data)) {
 					editToolIds.add(event.data.toolCallId);
 					// Track edits for edit tools.
@@ -259,7 +258,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
 		editTracker: ExternalEditTracker,
-		getEditKeyForFile: (file: Uri) => ToolCall | undefined,
+		getToolCall: (toolCallId: string) => ToolCall | undefined,
 		workingDirectory: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
@@ -280,9 +279,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 		}
 
-		const editFile = permissionRequest.kind === 'write' ? Uri.file(permissionRequest.fileName) : undefined;
-		const toolCall = editFile ? getEditKeyForFile(editFile) : undefined;
-		if (workingDirectory && permissionRequest.kind === 'write' && editFile) {
+		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
+		const toolCall = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
+		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
+		const editFile = editFiles && editFiles.length ? editFiles[0] : undefined;
+		if (workingDirectory && permissionRequest.kind === 'write' && editFile && toolCall) {
 			// TODO:@rebornix @lszomoru
 			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
 			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
@@ -296,12 +297,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				autoApprove = true;
 			}
 			// If its a workspace file, and not editing protected files, we auto-approve.
-			if (!autoApprove && isWorkspaceFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest))) {
+			if (!autoApprove && isWorkspaceFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall))) {
 				autoApprove = true;
 			}
 
 			if (autoApprove) {
-				this.logService.trace(`[CopilotCLISession] Auto Approving request ${permissionRequest.fileName}`);
+				this.logService.trace(`[CopilotCLISession] Auto Approving request ${editFile.fsPath}`);
 
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
 				if (toolCall && this._stream) {

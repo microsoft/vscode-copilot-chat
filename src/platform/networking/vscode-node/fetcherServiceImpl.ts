@@ -7,7 +7,7 @@ import { Config, ConfigKey, ExperimentBasedConfig, ExperimentBasedConfigType, IC
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { FetchOptions, IAbortController, IFetcherService, Response } from '../common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
 import { fetchWithFallbacks } from '../node/fetcherFallback';
 import { NodeFetcher } from '../node/nodeFetcher';
@@ -28,6 +28,32 @@ export class FetcherService implements IFetcherService {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		this._availableFetchers = fetcher ? [fetcher] : undefined;
+	}
+
+	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		const items: T[] = [];
+		const pageSize = options.pageSize ?? 20;
+		let page = options.startPage ?? 1;
+		let hasNextPage = false;
+
+		do {
+			const url = options.buildUrl(baseUrl, pageSize, page);
+			const response = await this.fetch(url, options);
+
+			if (!response.ok) {
+				// Return what we've collected so far if request fails
+				return items;
+			}
+
+			const data = await response.json();
+			const pageItems = options.getItemsFromResponse(data);
+			items.push(...pageItems);
+
+			hasNextPage = pageItems.length === pageSize;
+			page++;
+		} while (hasNextPage);
+
+		return items;
 	}
 
 	setExperimentationService(experimentationService: IExperimentationService) {

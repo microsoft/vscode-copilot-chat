@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { parse, ParseError, printParseErrorCode } from 'jsonc-parser';
+import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -11,6 +12,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { GitHubMcpDefinitionProvider } from '../../../githubMcp/common/githubMcpDefinitionProvider';
 
 declare const TextDecoder: {
 	decode(input: Uint8Array): string;
@@ -249,35 +251,32 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 				return;
 			}
 
-			// Check if any existing server already uses the GitHub MCP URL
-			const githubMcpUrlPrefix = 'https://api.githubcopilot.com/mcp/';
-			for (const [serverName, serverConfig] of Object.entries(config)) {
-				if (serverConfig.type === 'http' || serverConfig.type === 'sse') {
-					if (serverConfig.url.startsWith(githubMcpUrlPrefix)) {
-						this.logService.trace(`[CopilotCLIMCPHandler] Skipping built-in GitHub MCP server as "${serverName}" already uses the same URL.`);
-						return;
-					}
-				}
-			}
+			const definitionProvider = new GitHubMcpDefinitionProvider(
+				this.configurationService,
+				this.authenticationService,
+				this.logService
+			);
 
-			const session = await this.authenticationService.getAnyGitHubSession();
-			if (!session) {
-				this.logService.trace('[CopilotCLIMCPHandler] Skipping built-in GitHub MCP server due to missing Copilot token.');
+			const definitions = definitionProvider.provideMcpServerDefinitions();
+			if (!definitions || definitions.length === 0) {
+				this.logService.trace('[CopilotCLIMCPHandler] No GitHub MCP server definitions available.');
 				return;
 			}
 
+			// Use the first definition
+			const definition = definitions[0];
+
+			// Resolve the definition to get the access token
+			const resolvedDefinition = await definitionProvider.resolveMcpServerDefinition(definition, {} as CancellationToken);
+
 			config['github'] = {
 				type: 'http',
-				url: 'https://api.githubcopilot.com/mcp/readonly',
+				url: resolvedDefinition.uri.toString(),
 				tools: ['*'],
 				isDefaultServer: true,
-				headers: {
-					'Authorization': `Bearer ${session.accessToken}`,
-					'X-MCP-Toolsets': 'repos,issues,users,pull_requests,code_security,secret_protection,actions,web_search',
-					'X-MCP-Host': 'copilot-sdk',
-				},
+				headers: resolvedDefinition.headers,
 			};
-			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server.');
+			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server via definition provider.');
 		} catch (error) {
 			this.logService.warn(`[CopilotCLIMCPHandler] Failed to add built-in GitHub MCP server: ${error}`);
 		}

@@ -13,28 +13,28 @@ const EDIT_TOOL_NAMES = ['insert_edit_into_file', 'replace_string_in_file', 'mul
 // Tool names that indicate a continuation/retry attempt
 const CONTINUATION_TOOL_NAMES = ['read_file'];
 
-interface EditLogEntry {
-	timestamp: string;
-	requestId: string;
-	success: boolean;
-	input: string;
-	healed?: string;
-}
-
 interface ToolCall {
-	toolName: string;
-	requestId: string;
-	timestamp?: string;
+	tool: string;
+	input_tokens?: number;
+	cached_input_tokens?: number;
+	output_tokens?: number;
+	response: string | string[];
+	edits?: Array<{
+		path: string;
+		edits: {
+			replacements: Array<{
+				replaceRange: { start: number; endExclusive: number };
+				newText: string;
+			}>;
+		};
+	}>;
 }
 
 interface EditOperation {
 	toolName: string;
-	requestId: string;
 	timestamp: string;
 	success: boolean;
-	wasHealed: boolean;
-	originalInput: string;
-	healedInput?: string;
+	filePath?: string;
 	turnIndex: number;
 	isRetry: boolean;
 	retrySucceeded?: boolean;
@@ -46,7 +46,6 @@ interface ConversationAnalysis {
 	totalEdits: number;
 	successfulEdits: number;
 	failedEdits: number;
-	healedEdits: number;
 	successfulEditsWithRetries: number;
 	totalUniqueEdits: number;
 	modelName?: string;
@@ -57,7 +56,6 @@ interface RunAnalysis {
 	conversations: ConversationAnalysis[];
 	totalEdits: number;
 	successRate: number;
-	healingRate: number;
 	successRateWithRetries: number;
 	totalUniqueEdits: number;
 	modelName?: string;
@@ -65,9 +63,10 @@ interface RunAnalysis {
 
 async function listRuns(amlOutPath: string): Promise<string[]> {
 	const entries = await fs.readdir(amlOutPath, { withFileTypes: true });
+	// Filter directories that are numeric run IDs
 	const runs = entries
-		.filter(e => e.isDirectory() && e.name.startsWith('msbench-'))
-		.map(e => e.name.replace('msbench-', ''))
+		.filter(e => e.isDirectory() && /^\d+$/.test(e.name))
+		.map(e => e.name)
 		.sort((a, b) => parseInt(b) - parseInt(a)); // Sort descending (newest first)
 	return runs;
 }
@@ -105,128 +104,67 @@ async function promptUserForRun(runs: string[]): Promise<string> {
 	});
 }
 
-async function parseEditLogs(simLogPath: string): Promise<EditLogEntry[]> {
-	const editLogs: EditLogEntry[] = [];
-
-	try {
-		const content = await fs.readFile(simLogPath, 'utf-8');
-		const lines = content.split('\n');
-
-		for (const line of lines) {
-			const editToolMatch = line.match(/\[(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\] \[edit-tool:([^\]]+)\] (.+)$/);
-			if (editToolMatch) {
-				const [, timestamp, _requestId, jsonData] = editToolMatch;
-				try {
-					const data = JSON.parse(jsonData);
-					// The data can be either an object or an array with one object
-					const entry = Array.isArray(data) ? data : [data];
-					if (entry && entry.length && entry[0]) {
-						editLogs.push({
-							timestamp,
-							requestId: entry[0].requestId ?? _requestId,
-							success: entry.every(e => e.success),
-							input: entry[0].input,
-							healed: entry[0].healed
-						});
-					}
-				} catch (e) {
-					console.warn(`Failed to parse edit log JSON: ${jsonData.substring(0, 100)}...`);
-				}
-			}
-		}
-	} catch (error) {
-		console.warn(`Could not read sim-log file: ${simLogPath}`);
-	}
-
-	return editLogs;
-}
-
-async function parseToolCalls(simRequestsPath: string): Promise<ToolCall[]> {
-	const toolCalls: ToolCall[] = [];
-
-	try {
-		const content = await fs.readFile(simRequestsPath, 'utf-8');
-		const requests = JSON.parse(content);
-
-		// The file contains an array of request objects
-		if (Array.isArray(requests)) {
-			for (const request of requests) {
-				const requestId = request.response?.requestId;
-				const copilotFunctionCalls = request.response?.copilotFunctionCalls || [];
-
-				for (const call of copilotFunctionCalls) {
-					// Track ALL tool calls (edit tools + read_file for retry detection)
-					if (call.name) {
-						toolCalls.push({
-							toolName: call.name,
-							requestId: requestId || 'unknown'
-						});
-					}
-				}
-			}
-		}
-	} catch (error) {
-		console.warn(`Could not read sim-requests file: ${simRequestsPath}`);
-	}
-
-	return toolCalls;
-}
-
 async function analyzeConversation(conversationPath: string): Promise<ConversationAnalysis> {
-	const simLogPath = path.join(conversationPath, 'sim-log-0.txt');
-	const simRequestsPath = path.join(conversationPath, 'sim-requests-0.txt');
+	const trajectoryPath = path.join(conversationPath, 'trajectories', 'trajectory.json');
 
-	const editLogs = await parseEditLogs(simLogPath);
-	const toolCalls = await parseToolCalls(simRequestsPath);
-
-	// Extract model name from first request
+	let toolCalls: ToolCall[] = [];
 	let modelName: string | undefined;
+
 	try {
-		const content = await fs.readFile(simRequestsPath, 'utf-8');
-		const requests = JSON.parse(content);
-		if (Array.isArray(requests) && requests.length > 0) {
-			modelName = requests[0]?.model || requests[0]?.response?.model;
-		}
-	} catch (e) {
-		// Model name is optional
+		const content = await fs.readFile(trajectoryPath, 'utf-8');
+		toolCalls = JSON.parse(content);
+	} catch (error) {
+		console.warn(`Could not read trajectory file: ${trajectoryPath}`);
+		return {
+			conversationPath,
+			edits: [],
+			totalEdits: 0,
+			successfulEdits: 0,
+			failedEdits: 0,
+			successfulEditsWithRetries: 0,
+			totalUniqueEdits: 0
+		};
 	}
 
 	const edits: EditOperation[] = [];
 	let turnIndex = 0;
 
-	// Match edit tool calls to edit logs sequentially
-	let editLogIndex = 0;
 	for (let i = 0; i < toolCalls.length; i++) {
 		const toolCall = toolCalls[i];
-		if (!EDIT_TOOL_NAMES.includes(toolCall.toolName)) {
+
+		if (!EDIT_TOOL_NAMES.includes(toolCall.tool)) {
 			continue;
 		}
 
-		const logEntry = editLogs[editLogIndex++];
-		if (!logEntry) {
-			break;
-		}
+		// Determine success based on response
+		const response = Array.isArray(toolCall.response) ? toolCall.response[0] : toolCall.response;
+		const success = typeof response === 'string' && response.includes('successfully edited');
+
+		// Get file path from edits if available
+		const filePath = toolCall.edits && toolCall.edits.length > 0
+			? toolCall.edits[0].path
+			: undefined;
 
 		// Detect retry pattern: failed edit -> continuation tool -> another edit
 		let isRetry = false;
 		let retrySucceeded: boolean | undefined;
 
-		if (!logEntry.success) {
+		if (!success) {
 			// Look ahead to see if there's a continuation tool followed by another edit
 			let j = i + 1;
 			let foundContinuationTool = false;
 			while (j < toolCalls.length && j < i + 10) { // Look ahead max 10 calls
-				if (CONTINUATION_TOOL_NAMES.includes(toolCalls[j].toolName)) {
+				if (CONTINUATION_TOOL_NAMES.includes(toolCalls[j].tool)) {
 					foundContinuationTool = true;
-				} else if (foundContinuationTool && EDIT_TOOL_NAMES.includes(toolCalls[j].toolName)) {
+				} else if (foundContinuationTool && EDIT_TOOL_NAMES.includes(toolCalls[j].tool)) {
 					// Found a retry!
 					isRetry = true;
-					const retryLogEntry = editLogs[editLogIndex];
-					if (retryLogEntry) {
-						retrySucceeded = retryLogEntry.success;
-					}
+					const retryResponse = Array.isArray(toolCalls[j].response)
+						? toolCalls[j].response[0]
+						: toolCalls[j].response;
+					retrySucceeded = typeof retryResponse === 'string' && retryResponse.includes('successfully edited');
 					break;
-				} else if (EDIT_TOOL_NAMES.includes(toolCalls[j].toolName)) {
+				} else if (EDIT_TOOL_NAMES.includes(toolCalls[j].tool)) {
 					// Another edit without continuation tool in between, not a retry
 					break;
 				}
@@ -235,13 +173,10 @@ async function analyzeConversation(conversationPath: string): Promise<Conversati
 		}
 
 		edits.push({
-			toolName: toolCall.toolName,
-			requestId: toolCall.requestId,
-			timestamp: logEntry.timestamp,
-			success: logEntry.success,
-			wasHealed: !!logEntry.healed && logEntry.healed !== logEntry.input,
-			originalInput: logEntry.input,
-			healedInput: logEntry.healed,
+			toolName: toolCall.tool,
+			timestamp: new Date().toISOString(), // Trajectory doesn't have timestamps, use current time
+			success,
+			filePath,
 			turnIndex: turnIndex++,
 			isRetry,
 			retrySucceeded
@@ -249,7 +184,6 @@ async function analyzeConversation(conversationPath: string): Promise<Conversati
 	}
 
 	const successfulEdits = edits.filter(e => e.success).length;
-	const healedEdits = edits.filter(e => e.wasHealed).length;
 
 	// Calculate success rate accounting for retries (final outcome only)
 	const editsWithRetries = edits.filter(e => !e.success && e.isRetry);
@@ -263,7 +197,6 @@ async function analyzeConversation(conversationPath: string): Promise<Conversati
 		totalEdits: edits.length,
 		successfulEdits,
 		failedEdits: edits.length - successfulEdits,
-		healedEdits,
 		successfulEditsWithRetries,
 		totalUniqueEdits,
 		modelName
@@ -271,7 +204,7 @@ async function analyzeConversation(conversationPath: string): Promise<Conversati
 }
 
 async function analyzeRun(runId: string, basePath: string): Promise<RunAnalysis> {
-	const runPath = path.join(basePath, `msbench-${runId}`, 'simulate', 'simulator_output_dir', 'simulator_output');
+	const runPath = path.join(basePath, runId);
 
 	const conversations: ConversationAnalysis[] = [];
 
@@ -293,7 +226,6 @@ async function analyzeRun(runId: string, basePath: string): Promise<RunAnalysis>
 
 	const totalEdits = conversations.reduce((sum, c) => sum + c.totalEdits, 0);
 	const totalSuccessful = conversations.reduce((sum, c) => sum + c.successfulEdits, 0);
-	const totalHealed = conversations.reduce((sum, c) => sum + c.healedEdits, 0);
 	const totalSuccessfulWithRetries = conversations.reduce((sum, c) => sum + c.successfulEditsWithRetries, 0);
 	const totalUniqueEdits = conversations.reduce((sum, c) => sum + c.totalUniqueEdits, 0);
 
@@ -305,14 +237,13 @@ async function analyzeRun(runId: string, basePath: string): Promise<RunAnalysis>
 		conversations,
 		totalEdits,
 		successRate: totalEdits > 0 ? totalSuccessful / totalEdits : 0,
-		healingRate: totalEdits > 0 ? totalHealed / totalEdits : 0,
 		successRateWithRetries: totalUniqueEdits > 0 ? totalSuccessfulWithRetries / totalUniqueEdits : 0,
 		totalUniqueEdits,
 		modelName
 	};
 }
 
-function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: boolean = true, includeRetries: boolean = false): string {
+function generateHTML(analysis: RunAnalysis, outputPath: string, includeRetries: boolean = false): string {
 	// Build Sankey data
 	const sankeyNodes: string[] = [];
 	const sankeyLinks: Array<{ source: number; target: number; value: number }> = [];
@@ -337,48 +268,22 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 			// Check if this is a failed edit with a retry
 			if (includeRetries && !edit.success && edit.isRetry && edit.retrySucceeded !== undefined) {
 				// Show full retry flow: Tool -> Failed -> read_file -> Retry Edit -> Final Result
-				if (showHealing && edit.wasHealed) {
-					const healedNode = 'Healed';
-					const failedNode = 'Failed (will retry)';
-					const readFileNode = 'read_file';
-					const retryEditNode = `${toolNode} (retry)`;
-					const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
+				const failedNode = 'Failed (will retry)';
+				const readFileNode = 'read_file';
+				const retryEditNode = `${toolNode} (retry)`;
+				const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
 
-					flows.set(`${toolNode}->${healedNode}`, (flows.get(`${toolNode}->${healedNode}`) || 0) + 1);
-					flows.set(`${healedNode}->${failedNode}`, (flows.get(`${healedNode}->${failedNode}`) || 0) + 1);
-					flows.set(`${failedNode}->${readFileNode}`, (flows.get(`${failedNode}->${readFileNode}`) || 0) + 1);
-					flows.set(`${readFileNode}->${retryEditNode}`, (flows.get(`${readFileNode}->${retryEditNode}`) || 0) + 1);
-					flows.set(`${retryEditNode}->${finalResult}`, (flows.get(`${retryEditNode}->${finalResult}`) || 0) + 1);
-				} else {
-					const failedNode = 'Failed (will retry)';
-					const readFileNode = 'read_file';
-					const retryEditNode = `${toolNode} (retry)`;
-					const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
-
-					flows.set(`${toolNode}->${failedNode}`, (flows.get(`${toolNode}->${failedNode}`) || 0) + 1);
-					flows.set(`${failedNode}->${readFileNode}`, (flows.get(`${failedNode}->${readFileNode}`) || 0) + 1);
-					flows.set(`${readFileNode}->${retryEditNode}`, (flows.get(`${readFileNode}->${retryEditNode}`) || 0) + 1);
-					flows.set(`${retryEditNode}->${finalResult}`, (flows.get(`${retryEditNode}->${finalResult}`) || 0) + 1);
-				}
+				flows.set(`${toolNode}->${failedNode}`, (flows.get(`${toolNode}->${failedNode}`) || 0) + 1);
+				flows.set(`${failedNode}->${readFileNode}`, (flows.get(`${failedNode}->${readFileNode}`) || 0) + 1);
+				flows.set(`${readFileNode}->${retryEditNode}`, (flows.get(`${readFileNode}->${retryEditNode}`) || 0) + 1);
+				flows.set(`${retryEditNode}->${finalResult}`, (flows.get(`${retryEditNode}->${finalResult}`) || 0) + 1);
 				continue;
 			}
 
-			if (showHealing && edit.wasHealed) {
-				// Tool -> Healed -> Success/Fail
-				const healedNode = 'Healed';
-				const resultNode = edit.success ? 'Success (healed)' : 'Failed (healed)';
-
-				const flow1Key = `${toolNode}->${healedNode}`;
-				const flow2Key = `${healedNode}->${resultNode}`;
-
-				flows.set(flow1Key, (flows.get(flow1Key) || 0) + 1);
-				flows.set(flow2Key, (flows.get(flow2Key) || 0) + 1);
-			} else {
-				// Tool -> Success/Fail
-				const resultNode = edit.success ? 'Success' : 'Failed';
-				const flowKey = `${toolNode}->${resultNode}`;
-				flows.set(flowKey, (flows.get(flowKey) || 0) + 1);
-			}
+			// Tool -> Success/Fail
+			const resultNode = edit.success ? 'Success' : 'Failed';
+			const flowKey = `${toolNode}->${resultNode}`;
+			flows.set(flowKey, (flows.get(flowKey) || 0) + 1);
 		}
 	}
 
@@ -399,10 +304,10 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 			toolName: edit.toolName,
 			timestamp: edit.timestamp,
 			success: edit.success,
-			wasHealed: edit.wasHealed,
 			turnIndex: edit.turnIndex,
 			isRetry: edit.isRetry,
-			retrySucceeded: edit.retrySucceeded
+			retrySucceeded: edit.retrySucceeded,
+			filePath: edit.filePath
 		}))
 	);
 
@@ -544,11 +449,6 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 			color: #d1242f;
 		}
 
-		.badge-healed {
-			background: #fff3cd;
-			color: #856404;
-		}
-
 		.sankey-node rect {
 			cursor: pointer;
 			fill-opacity: 0.9;
@@ -588,10 +488,6 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 				<div class="stat-label">Success Rate</div>
 				<div class="stat-value" id="success-rate-value">${(analysis.successRate * 100).toFixed(1)}%</div>
 			</div>
-			<div class="stat-card" style="border-left-color: #fb8500;">
-				<div class="stat-label">Healing Rate</div>
-				<div class="stat-value">${(analysis.healingRate * 100).toFixed(1)}%</div>
-			</div>
 			<div class="stat-card" style="border-left-color: #8250df;">
 				<div class="stat-label">Conversations</div>
 				<div class="stat-value">${analysis.conversations.length}</div>
@@ -600,10 +496,6 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 
 		<div class="controls">
 			<label>
-				<input type="checkbox" id="showHealing" ${showHealing ? 'checked' : ''}>
-				Show healing as separate step in diagram
-			</label>
-			<label style="margin-left: 20px;">
 				<input type="checkbox" id="includeRetries" ${includeRetries ? 'checked' : ''}>
 				Include retries (show re-evaluate → retry flows)
 			</label>
@@ -619,9 +511,8 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 						<th>Conversation</th>
 						<th>Tool</th>
 						<th>Turn</th>
-						<th>Timestamp</th>
+						<th>File</th>
 						<th>Status</th>
-						<th>Healed</th>
 						<th>Retry</th>
 					</tr>
 				</thead>
@@ -631,9 +522,8 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 							<td>${row.conversation}</td>
 							<td><code style="background: #f6f8fa; padding: 2px 6px; border-radius: 3px; font-size: 12px;">${row.toolName}</code></td>
 							<td>${row.turnIndex}</td>
-							<td style="color: #666; font-size: 12px;">${row.timestamp}</td>
+							<td style="color: #666; font-size: 12px; max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${row.filePath || '-'}</td>
 							<td><span class="badge ${row.success ? 'badge-success' : 'badge-failed'}">${row.success ? '✓ Success' : '✗ Failed'}</span></td>
-							<td>${row.wasHealed ? '<span class="badge badge-healed">Healed</span>' : '-'}</td>
 							<td>${row.isRetry ? (row.retrySucceeded === true ? '<span class="badge badge-success">✓ Retry Success</span>' : row.retrySucceeded === false ? '<span class="badge badge-failed">✗ Retry Failed</span>' : '<span class="badge" style="background: #e3e3e3; color: #666;">Retry Pending</span>') : '-'}</td>
 						</tr>
 					`).join('')}
@@ -654,11 +544,11 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 			totalUniqueEdits: ${analysis.totalUniqueEdits}
 		};
 
-		function drawSankey(showHealing, includeRetries) {
+		function drawSankey(includeRetries) {
 			// Clear previous diagram
 			d3.select('#sankey-diagram').html('');
 
-			// Rebuild data based on showHealing flag
+			// Rebuild data based on includeRetries flag
 			const allEdits = ${JSON.stringify(tableRows)};
 			const nodes = [];
 			const links = [];
@@ -679,47 +569,22 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 
 				// Check if this is a failed edit with a retry
 				if (includeRetries && !edit.success && edit.isRetry && edit.retrySucceeded !== undefined) {
-					// Show full retry flow: Tool -> Failed -> read_file -> Retry Edit -> Final Result
-					if (showHealing && edit.wasHealed) {
-						const healedNode = 'Healed';
-						const failedNode = 'Failed (will retry)';
-						const readFileNode = 'read_file';
-						const retryEditNode = toolNode + ' (retry)';
-						const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
+					// Show full retry flow
+					const failedNode = 'Failed (will retry)';
+					const readFileNode = 'read_file';
+					const retryEditNode = toolNode + ' (retry)';
+					const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
 
-						flows.set(toolNode + '->' + healedNode, (flows.get(toolNode + '->' + healedNode) || 0) + 1);
-						flows.set(healedNode + '->' + failedNode, (flows.get(healedNode + '->' + failedNode) || 0) + 1);
-						flows.set(failedNode + '->' + readFileNode, (flows.get(failedNode + '->' + readFileNode) || 0) + 1);
-						flows.set(readFileNode + '->' + retryEditNode, (flows.get(readFileNode + '->' + retryEditNode) || 0) + 1);
-						flows.set(retryEditNode + '->' + finalResult, (flows.get(retryEditNode + '->' + finalResult) || 0) + 1);
-					} else {
-						const failedNode = 'Failed (will retry)';
-						const readFileNode = 'read_file';
-						const retryEditNode = toolNode + ' (retry)';
-						const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
-
-						flows.set(toolNode + '->' + failedNode, (flows.get(toolNode + '->' + failedNode) || 0) + 1);
-						flows.set(failedNode + '->' + readFileNode, (flows.get(failedNode + '->' + readFileNode) || 0) + 1);
-						flows.set(readFileNode + '->' + retryEditNode, (flows.get(readFileNode + '->' + retryEditNode) || 0) + 1);
-						flows.set(retryEditNode + '->' + finalResult, (flows.get(retryEditNode + '->' + finalResult) || 0) + 1);
-					}
+					flows.set(toolNode + '->' + failedNode, (flows.get(toolNode + '->' + failedNode) || 0) + 1);
+					flows.set(failedNode + '->' + readFileNode, (flows.get(failedNode + '->' + readFileNode) || 0) + 1);
+					flows.set(readFileNode + '->' + retryEditNode, (flows.get(readFileNode + '->' + retryEditNode) || 0) + 1);
+					flows.set(retryEditNode + '->' + finalResult, (flows.get(retryEditNode + '->' + finalResult) || 0) + 1);
 					continue;
 				}
 
-				if (showHealing && edit.wasHealed) {
-					const healedNode = 'Healed';
-					const resultNode = edit.success ? 'Success (healed)' : 'Failed (healed)';
-
-					const flow1Key = toolNode + '->' + healedNode;
-					const flow2Key = healedNode + '->' + resultNode;
-
-					flows.set(flow1Key, (flows.get(flow1Key) || 0) + 1);
-					flows.set(flow2Key, (flows.get(flow2Key) || 0) + 1);
-				} else {
-					const resultNode = edit.success ? 'Success' : 'Failed';
-					const flowKey = toolNode + '->' + resultNode;
-					flows.set(flowKey, (flows.get(flowKey) || 0) + 1);
-				}
+				const resultNode = edit.success ? 'Success' : 'Failed';
+				const flowKey = toolNode + '->' + resultNode;
+				flows.set(flowKey, (flows.get(flowKey) || 0) + 1);
 			}
 
 			for (const [flowKey, count] of flows.entries()) {
@@ -750,8 +615,8 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 			});
 
 			const colorScale = d3.scaleOrdinal()
-				.domain(['insert_edit_into_file', 'replace_string_in_file', 'multi_replace_string_in_file', 'apply_patch', 'Healed', 'read_file', 'Failed (will retry)', 'Success', 'Failed', 'Success (healed)', 'Failed (healed)'])
-				.range(['#0969da', '#1f883d', '#8250df', '#fb8500', '#fbbf24', '#a855f7', '#ff9800', '#2da44e', '#d1242f', '#22c55e', '#ef4444']);
+				.domain(['replace_string_in_file', 'multi_replace_string_in_file', 'read_file', 'Failed (will retry)', 'Success', 'Failed'])
+				.range(['#0969da', '#8250df', '#a855f7', '#ff9800', '#2da44e', '#d1242f']);
 
 			// Links
 			svg.append('g')
@@ -792,7 +657,7 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 		}
 
 		// Initial draw
-		drawSankey(${showHealing}, ${includeRetries});
+		drawSankey(${includeRetries});
 
 		// Update success rate display
 		function updateSuccessRate(includeRetries) {
@@ -801,14 +666,8 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 		}
 
 		// Handle checkbox change
-		document.getElementById('showHealing').addEventListener('change', (e) => {
-			const includeRetries = document.getElementById('includeRetries').checked;
-			drawSankey(e.target.checked, includeRetries);
-		});
-
 		document.getElementById('includeRetries').addEventListener('change', (e) => {
-			const showHealing = document.getElementById('showHealing').checked;
-			drawSankey(showHealing, e.target.checked);
+			drawSankey(e.target.checked);
 			updateSuccessRate(e.target.checked);
 		});
 
@@ -817,9 +676,8 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 		window.addEventListener('resize', () => {
 			clearTimeout(resizeTimer);
 			resizeTimer = setTimeout(() => {
-				const showHealing = document.getElementById('showHealing').checked;
 				const includeRetries = document.getElementById('includeRetries').checked;
-				drawSankey(showHealing, includeRetries);
+				drawSankey(includeRetries);
 			}, 250);
 		});
 	</script>
@@ -833,7 +691,7 @@ async function main() {
 	const args = process.argv.slice(2);
 	const runIdArg = args.find(arg => arg.startsWith('--runId='));
 
-	const basePath = path.join(__dirname, '..', 'test', 'aml', 'out');
+	const basePath = path.join('/Users/connor/Github/vscode-copilot-evaluation/.msbenchRun');
 
 	let runId: string;
 
@@ -856,10 +714,9 @@ async function main() {
 	console.log(`\nFound ${analysis.conversations.length} conversations with edits`);
 	console.log(`Total edits: ${analysis.totalEdits}`);
 	console.log(`Success rate: ${(analysis.successRate * 100).toFixed(1)}%`);
-	console.log(`Healing rate: ${(analysis.healingRate * 100).toFixed(1)}%`);
 
-	const outputPath = path.join(basePath, `msbench-${runId}`, 'simulate', 'edit-analysis.html');
-	const html = generateHTML(analysis, outputPath, true);
+	const outputPath = path.join(basePath, runId, 'edit-analysis.html');
+	const html = generateHTML(analysis, outputPath);
 
 	await fs.writeFile(outputPath, html, 'utf-8');
 	console.log(`\n✓ Analysis complete! Generated: ${outputPath}`);

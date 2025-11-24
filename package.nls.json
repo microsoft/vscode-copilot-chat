@@ -32,13 +32,6 @@
 	"github.copilot.command.sendChatFeedback": "Send Chat Feedback",
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
-	"github.copilot.viewsWelcome.signIn": {
-		"message": "Sign in to enable features powered by GitHub Copilot.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}"
-		]
-	},
 	"github.copilot.viewsWelcome.individual.expired": "Your Copilot subscription has expired.\n\n[Review Copilot Settings](https://github.com/settings/copilot?editor=vscode)",
 	"github.copilot.viewsWelcome.enterprise": "Contact your GitHub organization administrator to enable Copilot.",
 	"github.copilot.viewsWelcome.offline": {
@@ -167,6 +160,9 @@
 	"github.copilot.config.codeGeneration.useInstructionFiles": "Controls whether code instructions from `.github/copilot-instructions.md` are added to Copilot requests.\n\nNote: Keep your instructions short and precise. Poor instructions can degrade Copilot's quality and performance. [Learn more](https://aka.ms/github-copilot-custom-instructions) about customizing Copilot.",
 	"github.copilot.config.codeGeneration.instruction.text": "A text instruction that will be added to Copilot requests that generate code. Optionally, you can specify a language for the instruction.",
 	"github.copilot.config.codeGeneration.instruction.file": "A path to a file that will be added to Copilot requests that generate code. Optionally, you can specify a language for the instruction.",
+	"github.copilot.config.azureAuthType": "Authentication method for Azure OpenAI models. Entra ID is recommended for enterprise security and uses your Azure credentials.",
+	"github.copilot.config.azureAuthType.entraId": "Use Entra ID (Azure AD) authentication with your Microsoft account credentials",
+	"github.copilot.config.azureAuthType.apiKey": "Use API key authentication. Not recommended as this is less secure than token based authentication.",
 	"github.copilot.config.testGeneration.instructions": "A set of instructions that will be added to Copilot requests that generate tests.\nInstructions can come from: \n- a file in the workspace: `{ \"file\": \"fileName\" }`\n- text in natural language: `{ \"text\": \"Use underscore for field names.\" }`\n\nNote: Keep your instructions short and precise. Poor instructions can degrade Copilot's quality and performance.",
 	"github.copilot.config.testGeneration.instructions.deprecated": "Use instructions files instead. See https://aka.ms/vscode-ghcp-custom-instructions for more information.",
 	"github.copilot.config.experimental.testGeneration.instruction.text": "A text instruction that will be added to Copilot requests that generate tests. Optionally, you can specify a language for the instruction.",
@@ -321,6 +317,7 @@
 	"copilot.tools.findTextInFiles.name": "Find Text In Files",
 	"copilot.tools.applyPatch.name": "Apply Patch",
 	"copilot.tools.readFile.name": "Read File",
+	"copilot.tools.readFile.userDescription": "Read the contents of a file",
 	"copilot.tools.listDirectory.name": "List Dir",
 	"copilot.tools.getTaskOutput.name": "Get Task Output",
 	"copilot.tools.getErrors.name": "Get Problems",
@@ -335,6 +332,7 @@
 	"copilot.tools.replaceString.name": "Replace String in File",
 	"copilot.tools.multiReplaceString.name": "Multi-Replace String in Files",
 	"copilot.tools.editNotebook.name": "Edit Notebook",
+	"copilot.tools.editNotebook.userDescription": "Edit a notebook file in the workspace",
 	"copilot.tools.runNotebookCell.name": "Run Notebook Cell",
 	"copilot.tools.getNotebookCellOutput.name": "Get Notebook Cell Output",
 	"copilot.tools.fetchWebPage.name": "Fetch Web Page",
@@ -410,11 +408,16 @@
 	"github.copilot.config.inlineEdits.triggerOnEditorChangeAfterSeconds": "Trigger inline edits after editor has been idle for this many seconds.",
 	"github.copilot.config.inlineEdits.nextCursorPrediction.displayLine": "Display predicted cursor line for next edit suggestions.",
 	"github.copilot.config.inlineEdits.nextCursorPrediction.currentFileMaxTokens": "Maximum tokens for current file in next cursor prediction.",
+	"github.copilot.config.inlineEdits.renameSymbolSuggestions": "Enable rename symbol suggestions in inline edits.",
 	"github.copilot.command.refreshAgentSessions": "Refresh Agent Sessions",
 	"github.copilot.command.deleteAgentSession": "Delete Agent Session",
 	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume Agent Session in Terminal",
 	"github.copilot.cli.sessions.newTerminalSession": "New Agent Session in Terminal",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
-	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes"
+	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes",
+	"github.copilot.config.githubMcpServer.enabled": "Enable built-in support for the GitHub MCP Server.",
+	"github.copilot.config.githubMcpServer.toolsets": "Specify toolsets to use from the GitHub MCP Server.",
+	"github.copilot.config.githubMcpServer.readonly": "Enable read-only mode for the GitHub MCP Server. When enabled, only read tools are available.",
+	"github.copilot.config.githubMcpServer.lockdown": "Enable lockdown mode for the GitHub MCP Server. When enabled, hides public issue details created by users without push access."
 }

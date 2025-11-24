@@ -13,10 +13,10 @@ import { ChatFetchError, ChatFetchResponseType, ChatFetchRetriableError, ChatLoc
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { getTextPart, toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
-import { HARD_TOOL_LIMIT } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
-import { ILogService } from '../../../platform/log/common/logService';
+import { collectSingleLineErrorMessage, ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, getRequestId, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { FetcherId, IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
@@ -37,6 +37,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatMLFetcherTelemetrySender as Telemetry } from './chatMLFetcherTelemetry';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 
 export interface IMadeChatRequestEvent {
 	readonly messages: Raw.ChatMessage[];
@@ -95,6 +96,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IConversationOptions options: IConversationOptions,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super(options);
 	}
@@ -278,31 +281,41 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		} catch (err: unknown) {
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
 			const processed = this.processError(err, ourRequestId);
-			if (['darwin', 'linux'].includes(process.platform) && processed.type === ChatFetchResponseType.NetworkError && processed.reason.indexOf('net::ERR_NETWORK_CHANGED') !== -1) {
+			if (processed.type === ChatFetchResponseType.NetworkError && enableRetryOnError) {
+				// Keep existing handling of net::ERR_NETWORK_CHANGED: https://github.com/microsoft/vscode/issues/260297
+				const isNetworkChangedError = ['darwin', 'linux'].includes(process.platform) && processed.reason.indexOf('net::ERR_NETWORK_CHANGED') !== -1;
+				const isRetryNetworkErrorEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.RetryNetworkErrors, this._experimentationService);
+				if (isNetworkChangedError || isRetryNetworkErrorEnabled) {
+					const useFetcher = isNetworkChangedError ? 'node-fetch' : opts.useFetcher;
+					this._logService.info(`Retrying chat request with ${useFetcher || 'default'} fetcher after: ${processed.reasonDetail || processed.reason}`);
+					// Keep existing handling of net::ERR_NETWORK_CHANGED if setting is not enabled: https://github.com/microsoft/vscode/issues/260297
+					const isConnected = !isRetryNetworkErrorEnabled || await this._checkNetworkConnectivity(useFetcher);
+					if (isConnected) {
+						streamRecorder.callback('', 0, { text: '', retryReason: 'network_error' });
+						const retryResult = await this.fetchMany({
+							...opts,
+							debugName: 'retry-error-' + debugName,
+							messages,
+							finishedCb,
+							location,
+							endpoint: chatEndpoint,
+							source,
+							requestOptions,
+							userInitiatedRequest: false, // do not mark the retry as user initiated
+							telemetryProperties: {
+								...telemetryProperties,
+								retryAfterErrorCategory: processed.reasonDetail || processed.reason,
+							},
+							enableRetryOnFilter: opts.enableRetryOnFilter,
+							enableRetryOnError: false,
+							useFetcher,
+						}, token);
 
-				if (enableRetryOnError) {
-					this._logService.info('Retrying chat request with node-fetch after net::ERR_NETWORK_CHANGED error.');
-					streamRecorder.callback('', 0, { text: '', retryReason: 'network_error' });
-
-					// Retry with other fetchers
-					const retryResult = await this.fetchMany({
-						...opts,
-						debugName: 'retry-error-' + debugName,
-						messages,
-						finishedCb,
-						location,
-						endpoint: chatEndpoint,
-						source,
-						requestOptions,
-						userInitiatedRequest: false, // do not mark the retry as user initiated
-						telemetryProperties: { ...telemetryProperties, retryAfterErrorCategory: 'electron-network-changed' },
-						enableRetryOnFilter: opts.enableRetryOnFilter,
-						enableRetryOnError: false,
-						useFetcher: 'node-fetch',
-					}, token);
-
-					pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
-					return retryResult;
+						pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
+						return retryResult;
+					} else {
+						this._logService.info(`Not retrying chat request as network connectivity could not be re-established.`);
+					}
 				}
 			}
 			if (processed.type === ChatFetchResponseType.Canceled) {
@@ -332,6 +345,52 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
 		}
+	}
+
+	private async _checkNetworkConnectivity(useFetcher?: FetcherId): Promise<boolean> {
+		// Ping CAPI to check network connectivity before retrying
+		const delays = [1000, 10000, 10000];
+		for (const delay of delays) {
+			this._logService.info(`Waiting ${delay}ms before pinging CAPI to check network connectivity...`);
+			await new Promise(resolve => setTimeout(resolve, delay));
+			try {
+				const isGHEnterprise = this._capiClientService.dotcomAPIURL !== 'https://api.github.com';
+				const url = this._capiClientService.capiPingURL;
+				const headers = await this._getAuthHeaders(isGHEnterprise, url);
+				const res = await this._fetcherService.fetch(url, {
+					headers,
+					useFetcher,
+				});
+				if (res.status >= 200 && res.status < 300) {
+					this._logService.info(`CAPI ping successful, proceeding with chat request retry...`);
+					return true;
+				} else {
+					this._logService.info(`CAPI ping returned status ${res.status}, retrying ping...`);
+				}
+			} catch (err) {
+				this._logService.info(`CAPI ping failed with error, retrying ping: ${collectSingleLineErrorMessage(err)}`);
+			}
+		}
+		return false;
+	}
+
+	private async _getAuthHeaders(isGHEnterprise: boolean, url: string) {
+		const authHeaders: Record<string, string> = {};
+		if (isGHEnterprise) {
+			let token = '';
+			if (url === this._capiClientService.dotcomAPIURL) {
+				token = this._authenticationService.anyGitHubSession?.accessToken || '';
+			} else {
+				try {
+					token = (await this._authenticationService.getCopilotToken()).token;
+				} catch (_err) {
+					// Ignore error
+					token = '';
+				}
+			}
+			authHeaders['Authorization'] = `Bearer ${token}`;
+		}
+		return authHeaders;
 	}
 
 	private async _fetchAndStreamChat(

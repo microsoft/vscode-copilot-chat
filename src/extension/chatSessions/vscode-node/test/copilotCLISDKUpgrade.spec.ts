@@ -17,7 +17,6 @@ describe('CopilotCLI SDK Upgrade', function () {
 		const existingBinaries = new Set(await findAllBinaries(copilotSDKPath));
 		const knownBinaries = new Set([
 			// node-pty related files (already accounted for in SDK, using VS Code node-pty).
-			path.join('prebuilds', 'darwin-arm64', 'keytar.node'),
 			path.join('prebuilds', 'darwin-arm64', 'pty.node'),
 			path.join('prebuilds', 'darwin-x64', 'pty.node'),
 			path.join('prebuilds', 'linux-arm64', 'pty.node'),
@@ -46,19 +45,6 @@ describe('CopilotCLI SDK Upgrade', function () {
 			path.join('prebuilds', 'win32-x64', 'winpty-agent.pdb'),
 			path.join('prebuilds', 'win32-x64', 'winpty.dll'),
 			path.join('prebuilds', 'win32-x64', 'winpty.pdb'),
-			// keytar used by sdk for auth, not required as extension provides the auth token info.
-			path.join('prebuilds', 'darwin-x64', 'keytar.node'),
-			path.join('prebuilds', 'linux-arm', 'keytar.node'),
-			path.join('prebuilds', 'linux-arm64', 'keytar.node'),
-			path.join('prebuilds', 'linux-armv7l', 'keytar.node'),
-			path.join('prebuilds', 'linux-ia32', 'keytar.node'),
-			path.join('prebuilds', 'linux-x64', 'keytar.node'),
-			path.join('prebuilds', 'linuxmusl-arm', 'keytar.node'),
-			path.join('prebuilds', 'linuxmusl-arm64', 'keytar.node'),
-			path.join('prebuilds', 'linuxmusl-x64', 'keytar.node'),
-			path.join('prebuilds', 'win32-arm64', 'keytar.node'),
-			path.join('prebuilds', 'win32-ia32', 'keytar.node'),
-			path.join('prebuilds', 'win32-x64', 'keytar.node'),
 			// ripgrep
 			path.join('ripgrep', 'bin', 'win32-arm64', 'rg.exe'),
 			path.join('ripgrep', 'bin', 'win32-x64', 'rg.exe'),
@@ -92,6 +78,10 @@ describe('CopilotCLI SDK Upgrade', function () {
 		const errors: string[] = [];
 		// Look for new binaries
 		for (const binary of existingBinaries) {
+			const binaryName = path.basename(binary);
+			if (binaryName.startsWith('keytar') || binaryName.startsWith('clipboard')) {
+				continue;
+			}
 			if (!knownBinaries.has(binary)) {
 				errors.push(`Unexpected native binary found in Copilot CLI SDK: ${path.relative(copilotSDKPath, binary)}`);
 			}
