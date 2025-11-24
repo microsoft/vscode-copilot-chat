@@ -84,6 +84,12 @@ export interface ICopilotToolCall {
 	id: string;
 }
 
+export interface ICopilotToolCallStreamUpdate {
+	name: string;
+	arguments: string;
+	id?: string;
+}
+
 export interface ICopilotBeginToolCall {
 	name: string;
 }
@@ -128,6 +134,7 @@ export interface IResponseDelta {
 	copilotReferences?: ICopilotReference[];
 	copilotErrors?: ICopilotError[];
 	copilotToolCalls?: ICopilotToolCall[];
+	copilotToolCallStreamUpdates?: ICopilotToolCallStreamUpdate[];
 	beginToolCalls?: ICopilotBeginToolCall[];
 	_deprecatedCopilotFunctionCalls?: ICopilotFunctionCall[];
 	copilotConfirmation?: ICopilotConfirmation;

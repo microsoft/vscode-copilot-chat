@@ -69,10 +69,18 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 		}
 
 		if (delta.beginToolCalls?.length) {
-			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name), { partialInput: '1' });
-			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name), { partialInput: '2' });
-			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name), { partialInput: '3' });
-			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name), { partialInput: '4' });
+			for (const beginCall of delta.beginToolCalls) {
+				progress.prepareToolInvocation(getContributedToolName(beginCall.name), {});
+			}
+		}
+
+		if (delta.copilotToolCallStreamUpdates?.length) {
+			for (const update of delta.copilotToolCallStreamUpdates) {
+				if (!update.name) {
+					continue;
+				}
+				progress.prepareToolInvocation(getContributedToolName(update.name), { partialInput: tryParsePartialToolInput(update.arguments) });
+			}
 		}
 	}
 
@@ -212,5 +220,17 @@ export function reportCitations(delta: IResponseDelta, progress: ChatResponseStr
 				c.citations.license;
 			progress.codeCitation(URI.parse(c.citations.url), licenseLabel, c.citations.snippet);
 		});
+	}
+}
+
+function tryParsePartialToolInput(raw: string | undefined): unknown {
+	if (!raw) {
+		return raw;
+	}
+
+	try {
+		return JSON.parse(raw);
+	} catch {
+		return raw;
 	}
 }
