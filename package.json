@@ -5301,7 +5301,7 @@
 		"yargs": "^17.7.2"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-code": "^1.0.120",
+		"@anthropic-ai/claude-code": "^2.0.31",
 		"@anthropic-ai/sdk": "^0.68.0",
 		"@github/copilot": "^0.0.362",
 		"@google/genai": "^1.22.0",
