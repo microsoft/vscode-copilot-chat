@@ -2531,6 +2531,11 @@
 				"title": "GitHub Copilot Chat",
 				"id": "stable",
 				"properties": {
+					"github.copilot.enable": {
+						"type": "object",
+						"default": {},
+						"markdownDescription": "Enable or disable Copilot completions for specified languages. The special `*` key applies to all languages."
+					},
 					"github.copilot.chat.codeGeneration.useInstructionFiles": {
 						"type": "boolean",
 						"default": true,
