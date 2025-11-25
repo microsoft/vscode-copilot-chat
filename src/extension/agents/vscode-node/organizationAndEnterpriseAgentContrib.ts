@@ -8,9 +8,10 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
-import { CustomAgentsProvider } from './customAgentsProvider';
-export class CustomAgentsContribution extends Disposable implements IExtensionContribution {
-	readonly id = 'CustomAgents';
+import { OrganizationAndEnterpriseAgentProvider } from './organizationAndEnterpriseAgentProvider';
+
+export class OrganizationAndEnterpriseAgentContribution extends Disposable implements IExtensionContribution {
+	readonly id = 'OrganizationAndEnterpriseAgents';
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -21,7 +22,7 @@ export class CustomAgentsContribution extends Disposable implements IExtensionCo
 		if ('registerCustomAgentsProvider' in vscode.chat) {
 			// Only register the provider if the setting is enabled
 			if (configurationService.getConfig(ConfigKey.ShowOrganizationAndEnterpriseAgents)) {
-				const provider = instantiationService.createInstance(CustomAgentsProvider);
+				const provider = instantiationService.createInstance(OrganizationAndEnterpriseAgentProvider);
 				this._register(vscode.chat.registerCustomAgentsProvider(provider));
 			}
 		}

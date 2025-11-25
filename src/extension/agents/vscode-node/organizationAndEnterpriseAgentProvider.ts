@@ -6,14 +6,14 @@
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
-import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
+import { CustomAgentDetails, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
 
 const AgentFileExtension = '.agent.md';
 
-export class CustomAgentsProvider extends Disposable implements vscode.CustomAgentsProvider {
+export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentsProvider {
 
 	private readonly _onDidChangeCustomAgents = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
@@ -44,7 +44,7 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 			// Get repository information from the active git repository
 			const repoId = await getRepoId(this.gitService);
 			if (!repoId) {
-				this.logService.trace('[CustomAgentsProvider] No active repository found');
+				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No active repository found');
 				return [];
 			}
 
@@ -56,12 +56,12 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 
 			// Trigger async fetch to update cache
 			this.fetchAndUpdateCache(repoOwner, repoName, options).catch(error => {
-				this.logService.error(`[CustomAgentsProvider] Error in background fetch: ${error}`);
+				this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in background fetch: ${error}`);
 			});
 
 			return cachedAgents;
 		} catch (error) {
-			this.logService.error(`[CustomAgentsProvider] Error in provideCustomAgents: ${error}`);
+			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in provideCustomAgents: ${error}`);
 			return [];
 		}
 	}
@@ -73,13 +73,13 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 		try {
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
-				this.logService.trace('[CustomAgentsProvider] No workspace open, cannot use cache');
+				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No workspace open, cannot use cache');
 				return [];
 			}
 
 			const cacheContents = await this.readCacheContents(cacheDir);
 			if (cacheContents.size === 0) {
-				this.logService.trace(`[CustomAgentsProvider] No cache found for ${repoOwner}/${repoName}`);
+				this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] No cache found for ${repoOwner}/${repoName}`);
 				return [];
 			}
 
@@ -98,10 +98,10 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 				}
 			}
 
-			this.logService.trace(`[CustomAgentsProvider] Loaded ${agents.length} agents/prompts from cache for ${repoOwner}/${repoName}`);
+			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Loaded ${agents.length} agents/prompts from cache for ${repoOwner}/${repoName}`);
 			return agents;
 		} catch (error) {
-			this.logService.error(`[CustomAgentsProvider] Error reading from cache: ${error}`);
+			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error reading from cache: ${error}`);
 			return [];
 		}
 	}
@@ -113,13 +113,13 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 	): Promise<void> {
 		// Prevent concurrent fetches
 		if (this.isFetching) {
-			this.logService.trace('[CustomAgentsProvider] Fetch already in progress, skipping');
+			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Fetch already in progress, skipping');
 			return;
 		}
 
 		this.isFetching = true;
 		try {
-			this.logService.trace(`[CustomAgentsProvider] Fetching custom agents for ${repoOwner}/${repoName}`);
+			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetching custom agents for ${repoOwner}/${repoName}`);
 
 			// Convert VS Code API options to internal options
 			const internalOptions = options ? {
@@ -130,7 +130,7 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 			const agents = await this.octoKitService.getCustomAgents(repoOwner, repoName, internalOptions);
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
-				this.logService.trace('[CustomAgentsProvider] No workspace open, cannot use cache');
+				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No workspace open, cannot use cache');
 				return;
 			}
 
@@ -169,7 +169,7 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 			const hasChanges = this.hasContentChanged(existingContents, newContents);
 
 			if (!hasChanges) {
-				this.logService.trace(`[CustomAgentsProvider] No changes detected in cache for ${repoOwner}/${repoName}`);
+				this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] No changes detected in cache for ${repoOwner}/${repoName}`);
 				return;
 			}
 
@@ -187,7 +187,7 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 				await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(content));
 			}
 
-			this.logService.trace(`[CustomAgentsProvider] Updated cache with ${agents.length} agents for ${repoOwner}/${repoName}`);
+			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Updated cache with ${agents.length} agents for ${repoOwner}/${repoName}`);
 
 			// Fire event to notify consumers that agents have changed
 			this._onDidChangeCustomAgents.fire();
@@ -238,65 +238,30 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 		return false;
 	}
 
-	private generateAgentMarkdown(agent: CustomAgentDetails | CustomAgentListItem): string {
-		// Generate agent.md file content from CustomAgent metadata
+	private generateAgentMarkdown(agent: CustomAgentDetails): string {
 		const lines: string[] = [];
 
-		// Add header with metadata
+		// Header
 		lines.push(`---`);
-		lines.push(`name: ${agent.name}`);
 		if (agent.display_name) {
-			lines.push(`displayName: ${agent.display_name}`);
+			lines.push(`name: ${agent.display_name}`);
 		}
 		if (agent.description) {
 			lines.push(`description: ${agent.description}`);
 		}
-		if (agent.tools && agent.tools.length > 0) {
-			lines.push(`tools: [${agent.tools.join(', ')}]`);
+		if (agent.tools && agent.tools.length > 0 && agent.tools[0] !== '*') {
+			lines.push(`tools: [${agent.tools.map((t) => `'${t}'`).join(', ')}]`);
 		}
 		if (agent.argument_hint) {
-			lines.push(`argumentHint: ${agent.argument_hint}`);
+			lines.push(`argument-hint: ${agent.argument_hint}`);
 		}
 		if (agent.target) {
 			lines.push(`target: ${agent.target}`);
 		}
-		if (agent.metadata) {
-			lines.push(`advancedOptions:`);
-			for (const [key, value] of Object.entries(agent.metadata)) {
-				lines.push(`  ${key}: ${value}`);
-			}
-		}
-		if (agent['mcp-servers']) {
-			lines.push(`mcp-servers:`);
-			for (const [serverName, serverConfig] of Object.entries(agent['mcp-servers'])) {
-				lines.push(`  ${serverName}:`);
-				for (const [key, value] of Object.entries(serverConfig)) {
-					if (Array.isArray(value)) {
-						lines.push(`    ${key}: [${value.join(', ')}]`);
-					} else if (typeof value === 'object' && value !== null) {
-						lines.push(`    ${key}:`);
-						for (const [k, v] of Object.entries(value)) {
-							lines.push(`      ${k}: ${v}`);
-						}
-					} else {
-						lines.push(`    ${key}: ${value}`);
-					}
-				}
-			}
-		}
 		lines.push(`---`);
-		lines.push(``);
 
-		// Add body (prompt instructions if available)
-		lines.push(`# ${agent.display_name || agent.name}`);
-		lines.push(``);
-		if (agent.description) {
-			lines.push(agent.description);
-			lines.push(``);
-		}
-
-		// Add prompt content if available (from CustomAgentDetails)
-		if ('prompt' in agent && agent.prompt) {
+		// Body
+		if (agent.prompt) {
 			lines.push(agent.prompt);
 		} else {
 			lines.push(`This is a custom agent.`);
@@ -307,43 +272,26 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 
 	private parseAgentMetadata(content: string, filename: string): { name: string; description: string } | null {
 		try {
-			// Parse frontmatter or extract metadata from the content
-			// For now, use a simple approach: extract from first heading and paragraph
-			const lines = content.split('\n');
-			let name = filename.replace(AgentFileExtension, '');
+			// Extract name from filename (e.g., "example.agent.md" -> "example")
+			const name = filename.replace(AgentFileExtension, '');
 			let description = '';
 
-			// Look for frontmatter (YAML between --- markers)
+			// Look for frontmatter (YAML between --- markers) and extract description
+			const lines = content.split('\n');
 			if (lines[0]?.trim() === '---') {
 				const endIndex = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
 				if (endIndex > 0) {
 					const frontmatter = lines.slice(1, endIndex).join('\n');
-					const nameMatch = frontmatter.match(/name:\s*(.+)/);
 					const descMatch = frontmatter.match(/description:\s*(.+)/);
-					if (nameMatch) {
-						name = nameMatch[1].trim();
-					}
 					if (descMatch) {
 						description = descMatch[1].trim();
 					}
-					return { name, description };
-				}
-			}
-
-			// Fallback: look for first # heading and first paragraph
-			for (const line of lines) {
-				const trimmed = line.trim();
-				if (trimmed.startsWith('# ') && !name) {
-					name = trimmed.substring(2).trim();
-				} else if (trimmed && !trimmed.startsWith('#') && !description) {
-					description = trimmed;
-					break;
 				}
 			}
 
 			return { name, description };
 		} catch (error) {
-			this.logService.error(`[CustomAgentsProvider] Error parsing agent metadata: ${error}`);
+			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error parsing agent metadata: ${error}`);
 			return null;
 		}
 	}
