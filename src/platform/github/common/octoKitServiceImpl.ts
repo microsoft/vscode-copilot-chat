@@ -9,14 +9,13 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IGithubRepositoryService, IOctoKitService, IOctoKitUser, JobInfo, OrgCustomInstructionsResponse, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
 
 	constructor(
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
-		@IGithubRepositoryService private readonly _githubRepositoryService: IGithubRepositoryService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
 		@ILogService logService: ILogService,
@@ -280,7 +279,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 				headers: {
 					Authorization: `Bearer ${authToken}`,
 				}
-			}, { type: RequestType.CopilotCustomAgents, owner, repo });
+			}, { type: RequestType.CopilotCustomAgentsDetail, owner, repo, version, customAgentName: agentName });
 
 			if (!response.ok) {
 				if (response.status === 404) {
@@ -320,51 +319,5 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			throw new Error('No GitHub authentication available');
 		}
 		return this.getFileContentWithToken(owner, repo, ref, path, authToken);
-	}
-
-	async getOrgCustomInstructions(repoOwner: string, repoName: string): Promise<OrgCustomInstructionsResponse> {
-		try {
-			// Get Copilot token (not GitHub token) for this endpoint
-			const copilotToken = await this._authService.getCopilotToken();
-			if (!copilotToken?.token) {
-				this._logService.warn('No Copilot authentication available for fetching custom instructions');
-				return {};
-			}
-
-			// Fetch repository info to get organization ID
-			const repoInfo = await this._githubRepositoryService.getRepositoryInfo(repoOwner, repoName);
-			if (!repoInfo?.owner?.id) {
-				this._logService.trace(`No organization ID found for ${repoOwner}/${repoName}`);
-				return {};
-			}
-
-			const organizationId = repoInfo.owner.id;
-			// This endpoint uses the originTrackerURL (like Snippy) and requires a Copilot Bearer token
-			const response = await this._capiClientService.makeRequest<Response>({
-				headers: {
-					Accept: 'application/json',
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${copilotToken.token}`,
-				},
-				method: 'POST',
-				json: {
-					organization_id: organizationId,
-				}
-			}, { type: RequestType.OrgCustomInstructions, organizationId });
-
-			if (!response.ok) {
-				if (response.status === 404) {
-					this._logService.trace(`No custom instructions found for organization ${organizationId}`);
-					return {};
-				}
-				throw new Error(`Failed to fetch custom instructions for org ${organizationId}: ${response.statusText}`);
-			}
-
-			const data = await response.json() as OrgCustomInstructionsResponse;
-			return data;
-		} catch (e) {
-			this._logService.error(e);
-			return {};
-		}
 	}
 }

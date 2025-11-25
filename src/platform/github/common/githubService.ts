@@ -290,14 +290,6 @@ export interface IOctoKitService {
 	getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined>;
 
 	/**
-	 * Gets the list of custom instructions (prompts) available for an organization.
-	 * @param repoOwner The repository owner (organization or user)
-	 * @param repoName The repository name
-	 * @returns The response containing an array of custom instructions
-	 */
-	getOrgCustomInstructions(repoOwner: string, repoName: string): Promise<OrgCustomInstructionsResponse>;
-
-	/**
 	 * Gets the list of files changed in a pull request.
 	 * @param owner The repository owner
 	 * @param repo The repository name

@@ -11,12 +11,13 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
 
+const AgentFileExtension = '.agent.md';
+
 export class CustomAgentsProvider extends Disposable implements vscode.CustomAgentsProvider {
 
 	private readonly _onDidChangeCustomAgents = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
 
-	private readonly cacheDir: vscode.Uri;
 	private isFetching = false;
 
 	constructor(
@@ -26,12 +27,18 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 		@IVSCodeExtensionContext readonly extensionContext: IVSCodeExtensionContext,
 	) {
 		super();
-		this.cacheDir = vscode.Uri.joinPath(extensionContext.globalStorageUri, 'customAgents');
+	}
+
+	private getCacheDir(): vscode.Uri | undefined {
+		if (!this.extensionContext.storageUri) {
+			return;
+		}
+		return vscode.Uri.joinPath(this.extensionContext.storageUri, 'customAgentsCache');
 	}
 
 	async provideCustomAgents(
 		options: vscode.CustomAgentQueryOptions | undefined,
-		token: vscode.CancellationToken
+		_token: vscode.CancellationToken
 	): Promise<vscode.CustomAgentResource[]> {
 		try {
 			// Get repository information from the active git repository
@@ -47,7 +54,7 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 			// Read from cache first
 			const cachedAgents = await this.readFromCache(repoOwner, repoName);
 
-			// Trigger async fetch to update cache (don't await)
+			// Trigger async fetch to update cache
 			this.fetchAndUpdateCache(repoOwner, repoName, options).catch(error => {
 				this.logService.error(`[CustomAgentsProvider] Error in background fetch: ${error}`);
 			});
@@ -64,36 +71,30 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 		repoName: string,
 	): Promise<vscode.CustomAgentResource[]> {
 		try {
-			const repoCacheDir = this.getRepoCacheDir(repoOwner, repoName);
+			const cacheDir = this.getCacheDir();
+			if (!cacheDir) {
+				this.logService.trace('[CustomAgentsProvider] No workspace open, cannot use cache');
+				return [];
+			}
 
-			// Check if cache directory exists
-			try {
-				await vscode.workspace.fs.stat(repoCacheDir);
-			} catch {
-				// Cache doesn't exist yet
+			const cacheContents = await this.readCacheContents(cacheDir);
+			if (cacheContents.size === 0) {
 				this.logService.trace(`[CustomAgentsProvider] No cache found for ${repoOwner}/${repoName}`);
 				return [];
 			}
 
-			// Read all .agent.md and .prompt.md files from cache
-			const files = await vscode.workspace.fs.readDirectory(repoCacheDir);
 			const agents: vscode.CustomAgentResource[] = [];
 
-			for (const [filename, fileType] of files) {
-				if (fileType === vscode.FileType.File && (filename.endsWith('.agent.md') || filename.endsWith('.prompt.md'))) {
-					const fileUri = vscode.Uri.joinPath(repoCacheDir, filename);
-					const content = await vscode.workspace.fs.readFile(fileUri);
-					const text = new TextDecoder().decode(content);
-
-					// Parse metadata from the file (name and description)
-					const metadata = this.parseAgentMetadata(text, filename);
-					if (metadata) {
-						agents.push({
-							name: metadata.name,
-							description: metadata.description,
-							uri: fileUri,
-						});
-					}
+			for (const [filename, text] of cacheContents) {
+				// Parse metadata from the file (name and description)
+				const metadata = this.parseAgentMetadata(text, filename);
+				if (metadata) {
+					const fileUri = vscode.Uri.joinPath(cacheDir, filename);
+					agents.push({
+						name: metadata.name,
+						description: metadata.description,
+						uri: fileUri,
+					});
 				}
 			}
 
@@ -126,40 +127,28 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 				includeSources: ['org', 'enterprise'] // don't include 'repo' to avoid redundancy
 			} satisfies CustomAgentListOptions : undefined;
 
-			// Fetch agents and org custom instructions in parallel
-			const [agents, orgInstructions] = await Promise.all([
-				this.octoKitService.getCustomAgents(repoOwner, repoName, internalOptions),
-				this.octoKitService.getOrgCustomInstructions(repoOwner, repoName).catch(error => {
-					this.logService.error(`[CustomAgentsProvider] Error fetching org custom instructions: ${error}`);
-					return null;
-				})
-			]);
-
-			// Update cache
-			const repoCacheDir = this.getRepoCacheDir(repoOwner, repoName);
+			const agents = await this.octoKitService.getCustomAgents(repoOwner, repoName, internalOptions);
+			const cacheDir = this.getCacheDir();
+			if (!cacheDir) {
+				this.logService.trace('[CustomAgentsProvider] No workspace open, cannot use cache');
+				return;
+			}
 
 			// Ensure cache directory exists
 			try {
-				await vscode.workspace.fs.stat(repoCacheDir);
+				await vscode.workspace.fs.stat(cacheDir);
 			} catch (error) {
 				// Directory doesn't exist, create it
-				await vscode.workspace.fs.createDirectory(repoCacheDir);
+				await vscode.workspace.fs.createDirectory(cacheDir);
 			}
 
-			// Clear existing cache files
-			try {
-				const existingFiles = await vscode.workspace.fs.readDirectory(repoCacheDir);
-				for (const [filename] of existingFiles) {
-					await vscode.workspace.fs.delete(vscode.Uri.joinPath(repoCacheDir, filename));
-				}
-			} catch {
-				// Directory might not exist yet
-			}
+			// Read existing cache contents before updating
+			const existingContents = await this.readCacheContents(cacheDir);
 
-			// Write new cache files for custom agents
+			// Generate new cache contents
+			const newContents = new Map<string, string>();
 			for (const agent of agents) {
-				const filename = this.sanitizeFilename(agent.name) + '.agent.md';
-				const fileUri = vscode.Uri.joinPath(repoCacheDir, filename);
+				const filename = this.sanitizeFilename(agent.name) + AgentFileExtension;
 
 				// Fetch full agent details including prompt content
 				const agentDetails = await this.octoKitService.getCustomAgentDetails(
@@ -170,22 +159,32 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 				);
 
 				// Generate agent markdown file content
-				const content = this.generateAgentMarkdown(agentDetails || agent);
-				await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(content));
+				if (agentDetails) {
+					const content = this.generateAgentMarkdown(agentDetails);
+					newContents.set(filename, content);
+				}
 			}
 
-			// Write cache files for org custom instructions (prompts)
-			if (orgInstructions?.prompts && Array.isArray(orgInstructions.prompts)) {
-				for (const prompt of orgInstructions.prompts) {
-					const filename = this.sanitizeFilename(prompt.name) + '.prompt.md';
-					const fileUri = vscode.Uri.joinPath(repoCacheDir, filename);
+			// Compare contents to detect changes
+			const hasChanges = this.hasContentChanged(existingContents, newContents);
 
-					// Generate prompt markdown file content
-					const content = this.generatePromptMarkdown(prompt);
-					await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(content));
+			if (!hasChanges) {
+				this.logService.trace(`[CustomAgentsProvider] No changes detected in cache for ${repoOwner}/${repoName}`);
+				return;
+			}
+
+			// Clear existing cache files
+			const existingFiles = await vscode.workspace.fs.readDirectory(cacheDir);
+			for (const [filename, fileType] of existingFiles) {
+				if (fileType === vscode.FileType.File && filename.endsWith(AgentFileExtension)) {
+					await vscode.workspace.fs.delete(vscode.Uri.joinPath(cacheDir, filename));
 				}
+			}
 
-				this.logService.trace(`[CustomAgentsProvider] Cached ${orgInstructions.prompts.length} custom instructions`);
+			// Write new cache files
+			for (const [filename, content] of newContents) {
+				const fileUri = vscode.Uri.joinPath(cacheDir, filename);
+				await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(content));
 			}
 
 			this.logService.trace(`[CustomAgentsProvider] Updated cache with ${agents.length} agents for ${repoOwner}/${repoName}`);
@@ -195,6 +194,48 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 		} finally {
 			this.isFetching = false;
 		}
+	}
+
+	private async readCacheContents(cacheDir: vscode.Uri): Promise<Map<string, string>> {
+		const contents = new Map<string, string>();
+		try {
+			const files = await vscode.workspace.fs.readDirectory(cacheDir);
+			for (const [filename, fileType] of files) {
+				if (fileType === vscode.FileType.File && filename.endsWith(AgentFileExtension)) {
+					const fileUri = vscode.Uri.joinPath(cacheDir, filename);
+					const content = await vscode.workspace.fs.readFile(fileUri);
+					const text = new TextDecoder().decode(content);
+					contents.set(filename, text);
+				}
+			}
+		} catch {
+			// Directory might not exist yet or other errors
+		}
+		return contents;
+	}
+
+	private hasContentChanged(oldContents: Map<string, string>, newContents: Map<string, string>): boolean {
+		// Check if the set of files changed
+		if (oldContents.size !== newContents.size) {
+			return true;
+		}
+
+		// Check if any file content changed
+		for (const [filename, newContent] of newContents) {
+			const oldContent = oldContents.get(filename);
+			if (oldContent !== newContent) {
+				return true;
+			}
+		}
+
+		// Check if any old files are missing in new contents
+		for (const filename of oldContents.keys()) {
+			if (!newContents.has(filename)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private generateAgentMarkdown(agent: CustomAgentDetails | CustomAgentListItem): string {
@@ -269,7 +310,7 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 			// Parse frontmatter or extract metadata from the content
 			// For now, use a simple approach: extract from first heading and paragraph
 			const lines = content.split('\n');
-			let name = filename.replace('.agent.md', '').replace('.prompt.md', '');
+			let name = filename.replace(AgentFileExtension, '');
 			let description = '';
 
 			// Look for frontmatter (YAML between --- markers)
@@ -309,44 +350,5 @@ export class CustomAgentsProvider extends Disposable implements vscode.CustomAge
 
 	private sanitizeFilename(name: string): string {
 		return name.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
-	}
-
-	private getRepoCacheDir(repoOwner: string, repoName: string): vscode.Uri {
-		return vscode.Uri.joinPath(this.cacheDir, `${repoOwner}_${repoName}`);
-	}
-
-	private generatePromptMarkdown(prompt: {
-		name: string;
-		description?: string;
-		content: string;
-		metadata?: Record<string, string>;
-	}): string {
-		const lines: string[] = [];
-
-		// Add header with metadata
-		lines.push(`---`);
-		lines.push(`name: ${prompt.name}`);
-		if (prompt.description) {
-			lines.push(`description: ${prompt.description}`);
-		}
-		if (prompt.metadata) {
-			lines.push(`metadata:`);
-			for (const [key, value] of Object.entries(prompt.metadata)) {
-				lines.push(`  ${key}: ${value}`);
-			}
-		}
-		lines.push(`---`);
-		lines.push(``);
-
-		// Add body
-		lines.push(`# ${prompt.name}`);
-		lines.push(``);
-		if (prompt.description) {
-			lines.push(prompt.description);
-			lines.push(``);
-		}
-		lines.push(prompt.content);
-
-		return lines.join('\n');
 	}
 }
