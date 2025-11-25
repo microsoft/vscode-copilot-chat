@@ -13,6 +13,7 @@ import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { OutputChannelName } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { filterMap } from '../../../util/common/arrays';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { LRUCache } from '../../../util/vs/base/common/map';
@@ -588,25 +589,28 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 			const result: (ChatPromptItem | TreeChildItem)[] = [];
 			const seen = new Set<ChatRequest | undefined>();
 
-			for (const r of this.requestLogger.getRequests()) {
-				const item = this.logToTreeItem(r);
-				if (r.chatRequest !== lastPrompt?.request) {
+			for (const currReq of this.requestLogger.getRequests()) {
+
+				if (currReq.chatRequest !== lastPrompt?.request) {
 					if (lastPrompt) {
 						result.push(lastPrompt);
 					}
-					lastPrompt = r.chatRequest ? ChatPromptItem.create(r, r.chatRequest, seen.has(r.chatRequest)) : undefined;
-					seen.add(r.chatRequest);
+					lastPrompt = (currReq.chatRequest === undefined ? undefined
+						: ChatPromptItem.create(currReq, currReq.chatRequest, seen.has(currReq.chatRequest))
+					);
+					if (currReq.chatRequest) {
+						seen.add(currReq.chatRequest);
+					}
 				}
 
-				if (lastPrompt) {
-					if (!lastPrompt.children.find(c => c.id === item.id)) {
-						lastPrompt.children.push(item);
-					}
-					if (!lastPrompt.children.find(c => c.id === item.id)) {
-						lastPrompt.children.push(item);
-					}
+				const currReqTreeItem = this.logToTreeItem(currReq);
+				if (lastPrompt === undefined) {
+					result.push(currReqTreeItem);
 				} else {
-					result.push(item);
+					const alreadyIncludesThisRequest = lastPrompt.children.find(existingChild => existingChild.id === currReqTreeItem.id);
+					if (!alreadyIncludesThisRequest) {
+						lastPrompt.children.push(currReqTreeItem);
+					}
 				}
 			}
 
@@ -614,14 +618,17 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 				result.push(lastPrompt);
 			}
 
-			return result.map(r => {
+			return filterMap(result, r => {
+				if (!this.filters.itemIncluded(r)) {
+					return undefined;
+				}
+
 				if (r instanceof ChatPromptItem) {
 					return r.withFilteredChildren(child => this.filters.itemIncluded(child));
 				}
 
 				return r;
-			})
-				.filter(r => this.filters.itemIncluded(r));
+			});
 		}
 	}
 
