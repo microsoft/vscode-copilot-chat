@@ -7,8 +7,9 @@ import { RequestType } from '@vscode/copilot-api';
 import type { ChatRequest } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { TimeoutTimer } from '../../../util/vs/base/common/async';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
@@ -31,6 +32,7 @@ class AutoModeTokenBank extends Disposable {
 
 	constructor(
 		public debugName: string,
+		private readonly _location: ChatLocation,
 		private readonly _capiClientService: ICAPIClientService,
 		private readonly _authService: IAuthenticationService,
 		private readonly _logService: ILogService,
@@ -68,7 +70,11 @@ class AutoModeTokenBank extends Disposable {
 			headers['Copilot-Session-Token'] = this._token.session_token;
 		}
 
-		const autoModeHint = this._expService.getTreatmentVariable<string>('copilotchat.autoModelHint') || 'auto';
+		const expName = this._location === ChatLocation.Editor
+			? 'copilotchat.autoModelHint.editor'
+			: 'copilotchat.autoModelHint';
+
+		const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
 
 		const response = await this._capiClientService.makeRequest<Response>({
 			json: {
@@ -99,7 +105,7 @@ export interface IAutomodeService {
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
 	private readonly _autoModelCache: Map<string, { endpoint: IChatEndpoint; tokenBank: AutoModeTokenBank }> = new Map();
-	private _reserveToken: AutoModeTokenBank | undefined;
+	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
 
 	constructor(
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
@@ -114,8 +120,11 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				entry.tokenBank.dispose();
 			}
 			this._autoModelCache.clear();
-			this._reserveToken?.dispose();
-			this._reserveToken = new AutoModeTokenBank('reserve', this._capiClientService, this._authService, this._logService, this._expService);
+			const keys = Array.from(this._reserveTokens.keys());
+			this._reserveTokens.clearAndDisposeAll();
+			for (const location of keys) {
+				this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
+			}
 		}));
 		this._serviceBrand = undefined;
 	}
@@ -125,7 +134,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			entry.tokenBank.dispose();
 		}
 		this._autoModelCache.clear();
-		this._reserveToken?.dispose();
+		this._reserveTokens.dispose();
 		super.dispose();
 	}
 
@@ -150,8 +159,9 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		}
 
 		// No entry yet -> Promote reserve token to active and repopulate reserve
-		const reserveTokenBank = this._reserveToken || new AutoModeTokenBank('reserve', this._capiClientService, this._authService, this._logService, this._expService);
-		this._reserveToken = new AutoModeTokenBank('reserve', this._capiClientService, this._authService, this._logService, this._expService);
+		const location = chatRequest?.location ?? ChatLocation.Panel;
+		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService);
+		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
 
 		// Update the debug name so logs are properly associating this token with the right conversation id now
 		reserveTokenBank.debugName = conversationId;
