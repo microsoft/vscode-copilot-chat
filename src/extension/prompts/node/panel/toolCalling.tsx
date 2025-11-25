@@ -56,8 +56,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		props: PromptElementProps<ChatToolCallsProps>,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IConfigurationService private readonly configurationService: IConfigurationService
+		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super(props);
 	}
@@ -105,8 +104,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 
 		// Don't include this when rendering and triggering summarization
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
-		const pastReasoningTextDisabled = !!this.configurationService.getNonExtensionConfig('chat.pastReasoningTextDisabled');
-		const thinking = (!this.props.isHistorical || !pastReasoningTextDisabled) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
+		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}
