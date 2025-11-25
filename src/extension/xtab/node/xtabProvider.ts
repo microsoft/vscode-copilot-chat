@@ -172,10 +172,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				logContext.setIsSkipped();
 			}
 
-			if (nextEditResult.isOk()) {
-				await this.enforceArtificialDelay(delaySession, tracer, telemetry);
-			}
-
 			return new StatelessNextEditResult(nextEditResult, telemetry.build(nextEditResult));
 		} catch (err: unknown) {
 			return StatelessNextEditResult.noEdit(new NoNextEditReason.Unexpected(errors.fromUnknown(err)), telemetry);
