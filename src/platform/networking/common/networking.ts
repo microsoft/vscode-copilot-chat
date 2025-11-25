@@ -158,13 +158,25 @@ export interface IMakeChatRequestOptions {
 	/** Indicates if the request was user-initiated */
 	userInitiatedRequest?: boolean;
 	/** (CAPI-only) Optional telemetry properties for analytics */
-	telemetryProperties?: TelemetryProperties;
+	telemetryProperties?: IChatRequestTelemetryProperties;
 	/** Enable retrying the request when it was filtered due to snippy. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
 	enableRetryOnFilter?: boolean;
 	/** Enable retrying the request when it failed. Defaults to enableRetryOnFilter. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
 	enableRetryOnError?: boolean;
 	/** Which fetcher to use, overrides the default. */
 	useFetcher?: FetcherId;
+}
+
+export type IChatRequestTelemetryProperties = {
+	requestId?: string;
+	messageId?: string;
+	conversationId?: string;
+	messageSource?: string;
+	associatedRequestId?: string;
+	retryAfterErrorCategory?: string;
+	retryAfterError?: string;
+	connectivityTestError?: string;
+	retryAfterFilterCategory?: string;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {

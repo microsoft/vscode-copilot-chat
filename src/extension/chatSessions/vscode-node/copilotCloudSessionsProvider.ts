@@ -1339,6 +1339,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (!sessionInfo || sessionInfo.state !== 'queued') {
 			if (sessionInfo?.state === 'in_progress') {
 				this.logService.trace('Session already in progress');
+				this.refresh();
 				return sessionInfo;
 			}
 			// Failure
@@ -1355,6 +1356,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const sessionInfo = await this._octoKitService.getSessionInfo(sessionId);
 			if (sessionInfo?.state === 'in_progress') {
 				this.logService.trace(`Session ${sessionInfo.id} now in progress.`);
+				this.refresh();
 				return sessionInfo;
 			}
 			await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -1446,6 +1448,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const jobInfo = await this._octoKitService.getJobByJobId(owner, repo, jobId, 'vscode-copilot-chat');
 			if (jobInfo && jobInfo.pull_request && jobInfo.pull_request.number) {
 				this.logService.trace(`Job ${jobId} now has pull request #${jobInfo.pull_request.number}`);
+				this.refresh();
 				return jobInfo;
 			}
 			await new Promise(resolve => setTimeout(resolve, pollInterval));

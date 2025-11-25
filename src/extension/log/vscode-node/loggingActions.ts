@@ -86,7 +86,7 @@ export class LoggingActionsContrib {
 ## Network
 
 User Settings:
-\`\`\`json${getNonDefaultSettings()}
+\`\`\`json${getNetworkSettings()}
   "github.copilot.advanced.debug.useElectronFetcher": ${electronConfig},
   "github.copilot.advanced.debug.useNodeFetcher": ${nodeConfig},
   "github.copilot.advanced.debug.useNodeFetchFetcher": ${nodeFetchConfig}
@@ -217,18 +217,21 @@ User Settings:
 				}
 			}
 
-			// Using NodeFetcher since this is what telemetry currently uses.
+			const currentFetcher = Object.values(fetchers).find(fetcher => fetcher.current)?.fetcher || nodeFetcher;
 			const secondaryUrls = [
-				'https://github.com',
-				vscode.Uri.parse(this.capiClientService.copilotTelemetryURL).with({ path: '/_ping' }).toString(),
+				{ url: 'https://mobile.events.data.microsoft.com', fetcher: currentFetcher },
+				{ url: 'https://dc.services.visualstudio.com', fetcher: currentFetcher },
+				{ url: 'https://copilot-telemetry.githubusercontent.com/_ping', fetcher: nodeFetcher },
+				{ url: vscode.Uri.parse(this.capiClientService.copilotTelemetryURL).with({ path: '/_ping' }).toString(), fetcher: nodeFetcher },
+				{ url: 'https://default.exp-tas.com', fetcher: nodeFetcher },
 			];
 			await appendText(editor, `\n`);
-			for (const url of secondaryUrls) {
+			for (const { url, fetcher } of secondaryUrls) {
 				const authHeaders = await this.getAuthHeaders(isGHEnterprise, url);
 				await appendText(editor, `Connecting to ${url}: `);
 				const start = Date.now();
 				try {
-					const response = await Promise.race([nodeFetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
+					const response = await Promise.race([fetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
 					if (response) {
 						await appendText(editor, `HTTP ${response.status} (${Date.now() - start} ms)\n`);
 					} else {
@@ -369,24 +372,30 @@ async function proxyConnect(httpx: typeof https | typeof http, proxyUrl: string,
 	});
 }
 
-function getNonDefaultSettings() {
+const networkSettingsIds = [
+	'http.proxy',
+	'http.noProxy',
+	'http.proxyAuthorization',
+	'http.proxyStrictSSL',
+	'http.proxySupport',
+	'http.electronFetch',
+	'http.fetchAdditionalSupport',
+	'http.proxyKerberosServicePrincipal',
+	'http.systemCertificates',
+	'http.systemCertificatesNode',
+	'http.experimental.systemCertificatesV2',
+	'http.useLocalProxyConfiguration',
+];
+const alwaysShowSettingsIds = [
+	'http.systemCertificatesNode',
+];
+
+function getNetworkSettings() {
 	const configuration = vscode.workspace.getConfiguration();
-	return [
-		'http.proxy',
-		'http.noProxy',
-		'http.proxyAuthorization',
-		'http.proxyStrictSSL',
-		'http.proxySupport',
-		'http.electronFetch',
-		'http.fetchAdditionalSupport',
-		'http.proxyKerberosServicePrincipal',
-		'http.systemCertificates',
-		'http.experimental.systemCertificatesV2',
-		'http.systemCertificatesNode',
-	].map(key => {
+	return networkSettingsIds.map(key => {
 		const i = configuration.inspect(key);
 		const v = configuration.get(key, i?.defaultValue);
-		if (v !== i?.defaultValue && !(Array.isArray(v) && Array.isArray(i?.defaultValue) && v.length === 0 && i?.defaultValue.length === 0)) {
+		if (alwaysShowSettingsIds.includes(key) || v !== i?.defaultValue && !(Array.isArray(v) && Array.isArray(i?.defaultValue) && v.length === 0 && i?.defaultValue.length === 0)) {
 			return `\n  "${key}": ${JSON.stringify(v)},`;
 		}
 		return '';

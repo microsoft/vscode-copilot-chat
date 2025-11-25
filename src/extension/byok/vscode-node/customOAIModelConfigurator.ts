@@ -20,6 +20,7 @@ interface ModelConfig {
 	requiresAPIKey?: boolean;
 	thinking?: boolean;
 	requestHeaders?: Record<string, string>;
+	zeroDataRetentionEnabled?: boolean;
 }
 
 interface ModelQuickPickItem extends QuickPickItem {
