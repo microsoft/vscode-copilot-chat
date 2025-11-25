@@ -122,7 +122,7 @@ suite('parsePromptAttachments', () => {
 		expect(result.references.length).toBe(1);
 		const folderRef = result.references[0];
 		expect(folderRef.name).toBe('file:folder');
-		expect((folderRef.value as Uri).fsPath).toBe(URI.file('/workspace/folder').fsPath);
+		expect((folderRef.value as Uri).fsPath).toBe(URI.file('/workspace/folder/').fsPath);
 		expect(result.diagnostics.length).toBe(0);
 	});
 

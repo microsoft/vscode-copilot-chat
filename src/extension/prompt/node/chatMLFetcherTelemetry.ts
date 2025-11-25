@@ -5,9 +5,9 @@
 
 import { ChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
-import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, IChatRequestTelemetryProperties, IEndpointBody } from '../../../platform/networking/common/networking';
 import { ChatCompletion } from '../../../platform/networking/common/openai';
-import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 
@@ -31,6 +31,10 @@ export interface IChatMLFetcherCancellationProperties {
 	model: string;
 	apiType: string | undefined;
 	associatedRequestId?: string;
+	retryAfterErrorCategory?: string;
+	retryAfterError?: string;
+	connectivityTestError?: string;
+	retryAfterFilterCategory?: string;
 }
 
 export interface IChatMLFetcherCancellationMeasures {
@@ -95,6 +99,8 @@ export class ChatMLFetcherTelemetrySender {
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
 				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
+				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
+				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
 				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
 		*/
@@ -111,6 +117,8 @@ export class ChatMLFetcherTelemetrySender {
 			reasoningEffort: requestBody.reasoning?.effort,
 			reasoningSummary: requestBody.reasoning?.summary,
 			...(baseTelemetry?.properties.retryAfterErrorCategory ? { retryAfterErrorCategory: baseTelemetry.properties.retryAfterErrorCategory } : {}),
+			...(baseTelemetry?.properties.retryAfterError ? { retryAfterError: baseTelemetry.properties.retryAfterError } : {}),
+			...(baseTelemetry?.properties.connectivityTestError ? { connectivityTestError: baseTelemetry.properties.connectivityTestError } : {}),
 			...(baseTelemetry?.properties.retryAfterFilterCategory ? { retryAfterFilterCategory: baseTelemetry.properties.retryAfterFilterCategory } : {}),
 		}, {
 			totalTokenMax: chatEndpointInfo?.modelMaxPromptTokens ?? -1,
@@ -139,7 +147,11 @@ export class ChatMLFetcherTelemetrySender {
 			requestId,
 			model,
 			apiType,
-			associatedRequestId
+			associatedRequestId,
+			retryAfterErrorCategory,
+			retryAfterError,
+			connectivityTestError,
+			retryAfterFilterCategory,
 		}: IChatMLFetcherCancellationProperties,
 		{
 			totalTokenMax,
@@ -172,6 +184,8 @@ export class ChatMLFetcherTelemetrySender {
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
 				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
+				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
+				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
 				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
 		*/
@@ -181,6 +195,10 @@ export class ChatMLFetcherTelemetrySender {
 			requestId,
 			model,
 			associatedRequestId,
+			...(retryAfterErrorCategory ? { retryAfterErrorCategory } : {}),
+			...(retryAfterError ? { retryAfterError } : {}),
+			...(connectivityTestError ? { connectivityTestError } : {}),
+			...(retryAfterFilterCategory ? { retryAfterFilterCategory } : {})
 		}, {
 			totalTokenMax,
 			promptTokenCount,
@@ -197,7 +215,7 @@ export class ChatMLFetcherTelemetrySender {
 	public static sendResponseErrorTelemetry(
 		telemetryService: ITelemetryService,
 		processed: ChatFetchError,
-		telemetryProperties: TelemetryProperties | undefined,
+		telemetryProperties: IChatRequestTelemetryProperties | undefined,
 		ourRequestId: string,
 		chatEndpointInfo: IChatEndpoint,
 		requestBody: IEndpointBody,
@@ -228,6 +246,8 @@ export class ChatMLFetcherTelemetrySender {
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
 				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
+				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
+				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
 				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
 		*/
@@ -242,6 +262,8 @@ export class ChatMLFetcherTelemetrySender {
 			reasoningSummary: requestBody.reasoning?.summary,
 			associatedRequestId: telemetryProperties?.associatedRequestId,
 			...(telemetryProperties?.retryAfterErrorCategory ? { retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory } : {}),
+			...(telemetryProperties?.retryAfterError ? { retryAfterError: telemetryProperties.retryAfterError } : {}),
+			...(telemetryProperties?.connectivityTestError ? { connectivityTestError: telemetryProperties.connectivityTestError } : {}),
 			...(telemetryProperties?.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {})
 		}, {
 			totalTokenMax: chatEndpointInfo.modelMaxPromptTokens ?? -1,

@@ -39,7 +39,8 @@ const testFamilies = [
 	'gpt-5.1-codex-mini',
 	'claude-sonnet-4.5',
 	'gemini-2.0-flash',
-	'grok-code-fast-1'
+	'grok-code-fast-1',
+	'arctic-fox'
 ];
 
 testFamilies.forEach(family => {

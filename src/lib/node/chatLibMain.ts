@@ -89,7 +89,7 @@ import { NullLanguageContextProviderService } from '../../platform/languageConte
 import { ILanguageDiagnosticsService } from '../../platform/languages/common/languageDiagnosticsService';
 import { TestLanguageDiagnosticsService } from '../../platform/languages/common/testLanguageDiagnosticsService';
 import { ConsoleLog, ILogService, LogLevel as InternalLogLevel, LogServiceImpl } from '../../platform/log/common/logService';
-import { FetchOptions, IAbortController, IFetcherService } from '../../platform/networking/common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
 import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../platform/requestLogger/node/requestLogger';
@@ -435,6 +435,10 @@ class SingleFetcherService implements IFetcherService {
 	constructor(
 		private readonly _fetcher: IFetcher,
 	) { }
+
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		return this._fetcher.fetchWithPagination(baseUrl, options);
+	}
 
 	getUserAgentLibrary(): string {
 		return this._fetcher.getUserAgentLibrary();

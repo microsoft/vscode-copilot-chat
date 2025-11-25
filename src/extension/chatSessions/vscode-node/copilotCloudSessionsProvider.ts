@@ -50,6 +50,7 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
 const BACKGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
 /**
@@ -132,6 +133,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		await this.chatParticipantImpl(request, context, stream, token);
 	});
 	private cachedSessionsSize: number = 0;
+	// Cache for provideChatSessionItems
+	private cachedSessionItems: (vscode.ChatSessionItem & {
+		fullDatabaseId: string;
+		pullRequestDetails: PullRequestSearchItem;
+	})[] | undefined;
+	private activeSessionIds: Set<string> = new Set();
+	private activeSessionPollingInterval: ReturnType<typeof setInterval> | undefined;
 	private readonly plainTextRenderer = new PlainTextRenderer();
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService, this.configurationService);
 	private readonly _summarizer: ChatSummarizerProvider;
@@ -169,15 +177,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this._summarizer = instantiationService.createInstance(ChatSummarizerProvider);
 		const interval = setInterval(async () => {
 			const repoId = await getRepoId(this._gitService);
-			if (repoId) {
-				// TODO: handle no auth token case more gracefully
-				if (!this._authenticationService.permissiveGitHubSession) {
-					return;
-				}
-				const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
-				if (this.cachedSessionsSize !== sessions.length) {
-					this.refresh();
-				}
+			// TODO: handle no auth token case more gracefully
+			if (!this._authenticationService.permissiveGitHubSession) {
+				return;
+			}
+			const sessions = await this._octoKitService.getAllOpenSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
+			if (this.cachedSessionsSize !== sessions.length) {
+				this.refresh();
 			}
 		}, BACKGROUND_REFRESH_INTERVAL_MS);
 		this._register(toDisposable(() => clearInterval(interval)));
@@ -187,7 +193,86 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	public refresh(): void {
+		this.cachedSessionItems = undefined;
+		this.activeSessionIds.clear();
+		this.stopActiveSessionPolling();
 		this._onDidChangeChatSessionItems.fire();
+	}
+
+	private stopActiveSessionPolling(): void {
+		if (this.activeSessionPollingInterval) {
+			clearInterval(this.activeSessionPollingInterval);
+			this.activeSessionPollingInterval = undefined;
+		}
+	}
+
+	private startActiveSessionPolling(): void {
+		// Don't start if already polling
+		if (this.activeSessionPollingInterval) {
+			return;
+		}
+
+		this.activeSessionPollingInterval = setInterval(async () => {
+			await this.updateActiveSessionsOnly();
+		}, ACTIVE_SESSION_POLL_INTERVAL_MS);
+
+		// Register for disposal
+		this._register(toDisposable(() => this.stopActiveSessionPolling()));
+	}
+
+	private async updateActiveSessionsOnly(): Promise<void> {
+		if (this.activeSessionIds.size === 0) {
+			this.stopActiveSessionPolling();
+			return;
+		}
+
+		try {
+			// Fetch only the active sessions using allSettled to handle individual failures
+			const sessionResults = await Promise.allSettled(
+				Array.from(this.activeSessionIds).map(sessionId =>
+					this._octoKitService.getSessionInfo(sessionId)
+				)
+			);
+
+			const stillActiveSessions = new Set<string>();
+
+			for (const result of sessionResults) {
+				if (result.status === 'rejected') {
+					this.logService.warn(`Failed to fetch session info: ${result.reason}`);
+					continue;
+				}
+
+				const session = result.value;
+				if (!session) {
+					continue;
+				}
+				this.cachedSessionItems = this.cachedSessionItems?.map(item => {
+					if (item.fullDatabaseId === session.resource_global_id) {
+						return {
+							...item,
+							status: this.getSessionStatusFromSession(session),
+						};
+					}
+					return item;
+				});
+
+				if (session.state === 'in_progress' || session.state === 'queued') {
+					stillActiveSessions.add(session.id);
+				}
+			}
+
+			// Update the active sessions set
+			this.activeSessionIds = stillActiveSessions;
+
+			// If there are changes or no more active sessions, invalidate cache and notify
+			if (this.activeSessionIds.size === 0) {
+				this.cachedSessionItems = undefined;
+				this.stopActiveSessionPolling();
+			}
+			this._onDidChangeChatSessionItems.fire();
+		} catch (error) {
+			this.logService.error(`Error updating active sessions: ${error}`);
+		}
 	}
 
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
@@ -201,7 +286,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return { optionGroups: [] };
 		}
 		try {
-			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo);
+			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true });
 			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 				{ id: DEFAULT_AGENT_ID, name: vscode.l10n.t('Default Agent') },
 				...customAgents.map(agent => ({
@@ -240,20 +325,22 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
+		// Return cached items if available
+		if (this.cachedSessionItems) {
+			return this.cachedSessionItems;
+		}
+
 		if (this.chatSessionItemsPromise) {
 			return this.chatSessionItemsPromise;
 		}
 		this.chatSessionItemsPromise = (async () => {
 			const repoId = await getRepoId(this._gitService);
-			if (!repoId) {
-				return [];
-			}
 
 			// TODO: handle no auth token case more gracefully
 			if (!this._authenticationService.permissiveGitHubSession) {
 				return [];
 			}
-			const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
+			const sessions = await this._octoKitService.getAllOpenSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
 			this.cachedSessionsSize = sessions.length;
 
 			// Group sessions by resource_id and keep only the latest per resource_id
@@ -263,6 +350,22 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				if (!existing || this.shouldPushSession(session, existing)) {
 					latestSessionsMap.set(session.resource_id, session);
 				}
+			}
+
+			// Track active sessions for background polling
+			const newActiveSessionIds = new Set<string>();
+			for (const session of latestSessionsMap.values()) {
+				if (session.state === 'in_progress' || session.state === 'queued') {
+					newActiveSessionIds.add(session.id);
+				}
+			}
+
+			// Update active sessions and start polling if needed
+			this.activeSessionIds = newActiveSessionIds;
+			if (this.activeSessionIds.size > 0) {
+				this.startActiveSessionPolling();
+			} else {
+				this.stopActiveSessionPolling();
 			}
 
 			// Fetch PRs for all unique resource_global_ids in parallel
@@ -316,6 +419,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				});
 
 			vscode.commands.executeCommand('setContext', 'github.copilot.chat.cloudSessionsEmpty', filteredSessions.length === 0);
+
+			// Cache the results
+			this.cachedSessionItems = filteredSessions;
+
 			return filteredSessions;
 		})().finally(() => {
 			this.chatSessionItemsPromise = undefined;
@@ -643,12 +750,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
+		const { result, processedReferences } = await this.extractReferences(metadata.references, !!head_ref);
+
 		const { number, sessionId } = await this.invokeRemoteAgent(
 			metadata.prompt,
-			[
-				await this.extractFileReferences(metadata.references),
-				history
-			].filter(Boolean).join('\n\n').trim(),
+			[result, history].filter(Boolean).join('\n\n').trim(),
 			token,
 			stream,
 			customAgentName,
@@ -660,9 +766,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// Store references for this session
 		const sessionUri = vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number });
 
-		// Cache references for presentation later
-		if (metadata.references && metadata.references.length > 0) {
-			this.sessionReferencesMap.set(sessionUri, metadata.references);
+		// Cache the processed references for presentation later
+		if (processedReferences.length > 0) {
+			this.sessionReferencesMap.set(sessionUri, processedReferences);
 		}
 
 		stream.progress(vscode.l10n.t('Fetching pull request details'));
@@ -951,33 +1057,48 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return {};
 	}
 
-	private async extractFileReferences(references: readonly vscode.ChatPromptReference[] | undefined): Promise<string | undefined> {
-		if (!references || references.length === 0) {
-			return;
-		}
+	/**
+	 * Processes *supported* references, returning an LLM-friendly string representation and the filtered list of those references that were processed.
+	 */
+	private async extractReferences(references: readonly vscode.ChatPromptReference[] | undefined, pushedInProgressBranch: boolean): Promise<{ result: string; processedReferences: readonly vscode.ChatPromptReference[] }> {
 		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
 		const fileRefs: string[] = [];
 		const fullFileParts: string[] = [];
+		const processedReferences: vscode.ChatPromptReference[] = [];
 		const git = this._gitExtensionService.getExtensionApi();
-		for (const ref of references) {
-			if (ref.value instanceof vscode.Uri && ref.value.scheme === 'file') { // TODO: Add support for more kinds of references
+		for (const ref of references || []) {
+			if (ref.value instanceof vscode.Uri && ref.value.scheme === 'file') {
 				const fileUri = ref.value;
 				const repositoryForFile = git?.getRepository(fileUri);
 				if (repositoryForFile) {
 					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, fileUri.fsPath);
-					if (repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath)) {
+					const isInWorkingTree = repositoryForFile.state.workingTreeChanges.some(change => change.uri.fsPath === fileUri.fsPath);
+					const isInIndex = repositoryForFile.state.indexChanges.some(change => change.uri.fsPath === fileUri.fsPath);
+					if (!pushedInProgressBranch && (isInWorkingTree || isInIndex)) {
 						try {
-							// TODO: Consider just showing the file diffs
-							const document = await vscode.workspace.openTextDocument(fileUri);
-							const content = document.getText();
-							fullFileParts.push(`<file-start>${relativePath}</file-start>`);
-							fullFileParts.push(content);
-							fullFileParts.push(`<file-end>${relativePath}</file-end>`);
+							// Show only the file diffs for modified files
+							let diff: string;
+							if (isInIndex) {
+								diff = await repositoryForFile.diffIndexWithHEAD(fileUri.fsPath);
+							} else {
+								diff = await repositoryForFile.diffWithHEAD(fileUri.fsPath);
+							}
+
+							if (diff && diff.trim()) {
+								fullFileParts.push(`<file-diff-start>${relativePath}</file-diff-start>`);
+								fullFileParts.push(diff);
+								fullFileParts.push(`<file-diff-end>${relativePath}</file-diff-end>`);
+							} else {
+								// If diff is empty, fall back to file reference
+								fileRefs.push(` - ${relativePath}`);
+							}
+							processedReferences.push(ref);
 						} catch (error) {
-							this.logService.error(`Error reading file content for reference: ${fileUri.toString()}: ${error}`);
+							this.logService.error(`Error reading file diff for reference: ${fileUri.toString()}: ${error}`);
 						}
 					} else {
 						fileRefs.push(` - ${relativePath}`);
+						processedReferences.push(ref);
 					}
 				}
 			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'untitled') {
@@ -988,6 +1109,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					fullFileParts.push(`<file-start>${ref.value.path}</file-start>`);
 					fullFileParts.push(content);
 					fullFileParts.push(`<file-end>${ref.value.path}</file-end>`);
+					processedReferences.push(ref);
 				} catch (error) {
 					this.logService.error(`Error reading untitled file content for reference: ${ref.value.toString()}: ${error}`);
 				}
@@ -999,10 +1121,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			...(fileRefs.length ? ['The user has attached the following file paths as relevant context:', ...fileRefs] : [])
 		];
 
-		if (!parts.length) {
-			return;
-		}
-		return parts.join('\n');
+		this.logService.debug(`Cloud agent knew how to process ${processedReferences.length} of the ${references?.length || 0} provided references.`);
+		return { result: parts.join('\n'), processedReferences };
 	}
 
 	private async streamSessionLogs(stream: vscode.ChatResponseStream, pullRequest: PullRequestSearchItem, sessionId: string, token: vscode.CancellationToken): Promise<void> {
@@ -1219,6 +1339,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (!sessionInfo || sessionInfo.state !== 'queued') {
 			if (sessionInfo?.state === 'in_progress') {
 				this.logService.trace('Session already in progress');
+				this.refresh();
 				return sessionInfo;
 			}
 			// Failure
@@ -1235,6 +1356,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const sessionInfo = await this._octoKitService.getSessionInfo(sessionId);
 			if (sessionInfo?.state === 'in_progress') {
 				this.logService.trace(`Session ${sessionInfo.id} now in progress.`);
+				this.refresh();
 				return sessionInfo;
 			}
 			await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -1326,6 +1448,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const jobInfo = await this._octoKitService.getJobByJobId(owner, repo, jobId, 'vscode-copilot-chat');
 			if (jobInfo && jobInfo.pull_request && jobInfo.pull_request.number) {
 				this.logService.trace(`Job ${jobId} now has pull request #${jobInfo.pull_request.number}`);
+				this.refresh();
 				return jobInfo;
 			}
 			await new Promise(resolve => setTimeout(resolve, pollInterval));

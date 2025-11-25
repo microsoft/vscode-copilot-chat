@@ -105,6 +105,14 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			allowTools[ToolName.MultiReplaceString] = false;
 		}
 
+		if (model.family.includes('gemini-3') && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gemini3ReplaceStringOnly, experimentationService)) {
+			allowTools[ToolName.ReplaceString] = true;
+			allowTools[ToolName.EditFile] = false;
+		}
+		if (model.family.includes('gemini-3') && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gemini3MultiReplaceString, experimentationService)) {
+			allowTools[ToolName.MultiReplaceString] = true;
+		}
+
 		const tools = toolsService.getEnabledTools(request, model, tool => {
 			if (typeof allowTools[tool.name] === 'boolean') {
 				return allowTools[tool.name];

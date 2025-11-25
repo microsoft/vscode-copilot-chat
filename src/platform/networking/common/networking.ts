@@ -18,7 +18,7 @@ import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { AnthropicMessagesTool, FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
-import { FetcherId, FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
+import { FetcherId, FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from './fetcherService';
 import { ChatCompletion, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
 
 /**
@@ -35,6 +35,7 @@ export interface IFetcher {
 	isInternetDisconnectedError(e: any): boolean;
 	isFetcherError(err: any): boolean;
 	getUserMessageForFetcherError(err: any): string;
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]>;
 }
 
 export const userAgentLibraryHeader = 'X-VSCode-User-Agent-Library-Version';
@@ -157,13 +158,25 @@ export interface IMakeChatRequestOptions {
 	/** Indicates if the request was user-initiated */
 	userInitiatedRequest?: boolean;
 	/** (CAPI-only) Optional telemetry properties for analytics */
-	telemetryProperties?: TelemetryProperties;
+	telemetryProperties?: IChatRequestTelemetryProperties;
 	/** Enable retrying the request when it was filtered due to snippy. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
 	enableRetryOnFilter?: boolean;
 	/** Enable retrying the request when it failed. Defaults to enableRetryOnFilter. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
 	enableRetryOnError?: boolean;
 	/** Which fetcher to use, overrides the default. */
 	useFetcher?: FetcherId;
+}
+
+export type IChatRequestTelemetryProperties = {
+	requestId?: string;
+	messageId?: string;
+	conversationId?: string;
+	messageSource?: string;
+	associatedRequestId?: string;
+	retryAfterErrorCategory?: string;
+	retryAfterError?: string;
+	connectivityTestError?: string;
+	retryAfterFilterCategory?: string;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {

@@ -334,7 +334,7 @@
 					"search/readFile"
 				],
 				"displayName": "%copilot.tools.readFile.name%",
-				"userDescription": "Read the contents of a file. You must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads.",
+				"userDescription": "%copilot.tools.readFile.userDescription%",
 				"modelDescription": "Read the contents of a file.\n\nYou must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads.",
 				"tags": [
 					"vscode_codesearch"
@@ -817,8 +817,8 @@
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"icon": "$(pencil)",
-				"displayName": "%copilot.tools.editNotebook.description%",
-				"userDescription": "Edit a notebook file in the workspace",
+				"displayName": "%copilot.tools.editNotebook.name%",
+				"userDescription": "%copilot.tools.editNotebook.userDescription%",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
 				"tags": [
 					"enable_other_tool_copilot_getNotebookSummary"
@@ -1201,6 +1201,14 @@
 				]
 			},
 			{
+				"name": "execute",
+				"description": "",
+				"tools": [
+					"runNotebookCell",
+					"testFailure"
+				]
+			},
+			{
 				"name": "read",
 				"description": "%copilot.toolSet.read.description%",
 				"icon": "$(eye)",
@@ -1223,14 +1231,6 @@
 					"searchResults",
 					"textSearch",
 					"usages"
-				]
-			},
-			{
-				"name": "launch",
-				"description": "",
-				"tools": [
-					"runNotebookCell",
-					"testFailure"
 				]
 			},
 			{
@@ -1900,12 +1900,6 @@
 			}
 		],
 		"chatViewsWelcome": [
-			{
-				"icon": "$(copilot-large)",
-				"title": "Ask Copilot",
-				"content": "%github.copilot.viewsWelcome.signIn%",
-				"when": "!github.copilot-chat.activated && !github.copilot.offline && !github.copilot.interactiveSession.individual.expired && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.chatDisabled && !github.copilot.interactiveSession.switchToReleaseChannel"
-			},
 			{
 				"icon": "$(copilot-large)",
 				"title": "Ask Copilot",
@@ -2762,7 +2756,9 @@
 					},
 					"github.copilot.chat.githubMcpServer.toolsets": {
 						"type": "array",
-						"default": ["default"],
+						"default": [
+							"default"
+						],
 						"markdownDescription": "%github.copilot.config.githubMcpServer.toolsets%",
 						"items": {
 							"type": "string"
@@ -3210,6 +3206,22 @@
 						],
 						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
+					"github.copilot.chat.azureAuthType": {
+						"type": "string",
+						"enum": [
+							"entraId",
+							"apiKey"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.azureAuthType.entraId%",
+							"%github.copilot.config.azureAuthType.apiKey%"
+						],
+						"default": "entraId",
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.azureAuthType%"
+					},
 					"github.copilot.chat.azureModels": {
 						"type": "object",
 						"default": {},
@@ -3247,6 +3259,11 @@
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"zeroDataRetentionEnabled": {
+									"type": "boolean",
+									"default": false,
+									"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
 								},
 								"requestHeaders": {
 									"type": "object",
@@ -3323,6 +3340,11 @@
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"zeroDataRetentionEnabled": {
+									"type": "boolean",
+									"default": false,
+									"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
 								},
 								"requestHeaders": {
 									"type": "object",
@@ -3547,6 +3569,26 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.edits.gemini3ReplaceStringOnly": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Use only the modern `replace_string_in_file` edit tool when generating edits with Gemini 3 models.",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.edits.gemini3MultiReplaceString": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Enable the modern `multi_replace_string_in_file` edit tool when generating edits with Gemini 3 models.",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.projectLabels.expanded": {
 						"type": "boolean",
 						"default": false,
@@ -3747,7 +3789,7 @@
 					},
 					"github.copilot.chat.inlineEdits.diagnosticsContextProvider.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
 						"tags": [
 							"advanced",
@@ -3960,6 +4002,16 @@
 						"type": "number",
 						"default": 2000,
 						"markdownDescription": "%github.copilot.config.inlineEdits.nextCursorPrediction.currentFileMaxTokens%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.inlineEdits.renameSymbolSuggestions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.inlineEdits.renameSymbolSuggestions%",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -5029,13 +5081,13 @@
 			{
 				"type": "copilotcli",
 				"name": "cli",
-				"displayName": "GitHub Copilot CLI Agent",
-				"icon": "$(copilot)",
-				"welcomeTitle": "GitHub Copilot CLI Agent",
-				"welcomeMessage": "Run local background tasks",
+				"displayName": "Background Agent",
+				"icon": "$(collection)",
+				"welcomeTitle": "Background Agent",
+				"welcomeMessage": "Run tasks in the background",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
-				"description": "The GitHub Copilot CLI Agent works on your local machine",
+				"description": "Delegate tasks to a background agent.",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
@@ -5054,12 +5106,12 @@
 					"copilot-swe-agent"
 				],
 				"name": "cloud",
-				"displayName": "GitHub Copilot Cloud Agent",
+				"displayName": "Cloud Agent",
 				"icon": {
 					"light": "assets/copilot-cloud.svg",
 					"dark": "assets/copilot-cloud-dark.svg"
 				},
-				"welcomeTitle": "GitHub Copilot Cloud Agent",
+				"welcomeTitle": "Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 1,
@@ -5261,12 +5313,12 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.68.0",
-		"@github/copilot": "^0.0.358",
+		"@github/copilot": "^0.0.362",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.2",
+		"@vscode/copilot-api": "^0.2.4",
 		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

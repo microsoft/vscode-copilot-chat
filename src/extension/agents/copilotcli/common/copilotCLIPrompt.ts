@@ -3,9 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { ChatPromptReference } from 'vscode';
 import { createFilepathRegexp } from '../../../../util/common/markdown';
+import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatReferenceDiagnostic, Location, Range, Uri } from '../../../../vscodeTypes';
+import { ChatReferenceDiagnostic, Location, Range } from '../../../../vscodeTypes';
 
 
 /**
@@ -26,12 +28,7 @@ export function extractChatPromptReferences(prompt: string): {
 		name: string;
 		value: ChatReferenceDiagnostic;
 	}[];
-	references: {
-		id: string;
-		name: string;
-		range?: [number, number];
-		value: Location | Uri;
-	}[];
+	references: ChatPromptReference[];
 } {
 	return {
 		diagnostics: extractDiagnostics(prompt),
@@ -51,18 +48,8 @@ export function extractChatPromptReferences(prompt: string): {
  *    or attachment blocks containing a `# filepath: /abs/path.py` comment
  *    -> Converted into vscode.Location objects.
  */
-function extractResources(prompt: string): {
-	id: string;
-	name: string;
-	range?: [number, number];
-	value: Location | Uri;
-}[] {
-	const references: {
-		id: string;
-		name: string;
-		range?: [number, number];
-		value: Location | Uri;
-	}[] = [];
+function extractResources(prompt: string): ChatPromptReference[] {
+	const references: ChatPromptReference[] = [];
 
 	const attachmentsBlockMatch = prompt.match(/<attachments>([\s\S]*?)<\/attachments>/i);
 	if (!attachmentsBlockMatch) {
@@ -147,11 +134,13 @@ function extractResources(prompt: string): {
 		for (const attrMatch of tag.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) {
 			attrs[attrMatch[1]] = attrMatch[2];
 		}
+		const isFolder = attrs['folderPath'] !== undefined && attrs['folderPath'] !== '' && attrs['filePath'] === undefined;
 		const fileOrFolderpath = attrs['filePath'] || attrs['folderPath'];
 		if (!fileOrFolderpath) {
 			continue;
 		}
-		const uri = URI.file(fileOrFolderpath);
+		// Ensure folders are represented with trailing path separator, this allows us to extract these as folders later on.
+		const uri = URI.file(isFolder ? getFolderAttachmentPath(fileOrFolderpath) : fileOrFolderpath);
 		const providedId = attrs['id'];
 		const locName = providedId ?? uri.toString();
 		let id = providedId ?? uri.toString();
@@ -254,5 +243,13 @@ function extractDiagnostics(prompt: string): {
 	}
 
 	return diagnostics;
+}
+
+
+export function getFolderAttachmentPath(folderPath: string): string {
+	if (folderPath.endsWith('/') || folderPath.endsWith('\\')) {
+		return folderPath;
+	}
+	return folderPath + path.sep;
 }
 
