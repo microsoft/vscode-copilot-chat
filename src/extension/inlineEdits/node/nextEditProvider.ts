@@ -135,7 +135,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const sw = new StopWatch();
 
 		const tracer = this._tracer.sub(context.requestUuid.substring(4, 8), {
-			extraLog: (msg: string, ...payload: unknown[]) => {
+			extraLog: (msg: string) => {
 				logContext.trace(`[${Math.floor(sw.elapsed()).toString().padStart(4, ' ')}ms] ${msg}`);
 			}
 		});
