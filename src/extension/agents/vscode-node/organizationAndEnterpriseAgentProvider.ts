@@ -94,6 +94,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 						name: metadata.name,
 						description: metadata.description,
 						uri: fileUri,
+						isReadOnly: true,
 					});
 				}
 			}
