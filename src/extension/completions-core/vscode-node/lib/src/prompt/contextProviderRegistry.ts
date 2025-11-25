@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, CancellationTokenSource, DocumentSelector } from 'vscode-languageserver-protocol';
-import { ILanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
 import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { isCancellationError } from '../../../../../../util/vs/base/common/errors';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -124,7 +124,7 @@ export class CoreContextProviderRegistry implements ICompletionsContextProviderR
 	}
 
 	get providers(): ContextProvider<SupportedContextItem>[] {
-		return this.registryService.getAllProviders().slice() as ContextProvider<SupportedContextItem>[];
+		return this.registryService.getAllProviders([ProviderTarget.Completions]).slice() as ContextProvider<SupportedContextItem>[];
 	}
 
 	/**

@@ -11,6 +11,7 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { isLocation } from '../../../../util/common/types';
+import { Schemas } from '../../../../util/vs/base/common/network';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest, FileType } from '../../../../vscodeTypes';
@@ -121,8 +122,10 @@ async function renderResourceVariables(chatVariables: ChatVariablesCollection, f
 	await Promise.all(Array.from(chatVariables).map(async variable => {
 		const location = variable.value;
 		if (isLocation(location)) {
+			// If its an untitled document, we always include a summary, as CLI cannot read untitled documents.
+			const alwaysIncludeSummary = location.uri.scheme === Schemas.untitled;
 			elements.push(<FileVariable
-				alwaysIncludeSummary={false}
+				alwaysIncludeSummary={alwaysIncludeSummary}
 				filePathMode={FilePathMode.AsComment}
 				variableName={variable.uniqueName}
 				variableValue={location}
@@ -133,6 +136,18 @@ async function renderResourceVariables(chatVariables: ChatVariablesCollection, f
 		}
 		const uri = variable.value;
 		if (!URI.isUri(uri)) {
+			return;
+		}
+		if (uri.scheme === Schemas.untitled) {
+			// If its an untitled document, we always include a summary, as CLI cannot read untitled documents.
+			elements.push(<FileVariable
+				alwaysIncludeSummary={true}
+				filePathMode={FilePathMode.AsComment}
+				variableName={variable.uniqueName}
+				variableValue={uri}
+				description={variable.reference.modelDescription}
+				lineNumberStyle={SummarizedDocumentLineNumberStyle.OmittedRanges}
+			/>);
 			return;
 		}
 		// Check if the variable is a directory

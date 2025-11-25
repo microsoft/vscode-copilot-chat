@@ -56,7 +56,7 @@ describe('CopilotCLIPromptResolver', () => {
 
 	it('returns original prompt unchanged for slash command', async () => {
 		const req = new TestChatRequest('/help something');
-		const { prompt, attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, CancellationToken.None);
+		const { prompt, attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, [], CancellationToken.None);
 		expect(prompt).toBe('/help something');
 		expect(attachments).toHaveLength(0);
 	});
@@ -73,7 +73,7 @@ describe('CopilotCLIPromptResolver', () => {
 			{ id: 'file-b', value: fileB, name: 'b.ts', range: [14, 15] } // 'b'
 		]);
 
-		const { prompt, attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, CancellationToken.None);
+		const { prompt, attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, [], CancellationToken.None);
 
 		// Should have reminder block
 		expect(prompt).toMatch(/<reminder>/);
@@ -103,7 +103,7 @@ describe('CopilotCLIPromptResolver', () => {
 			{ id: 'diag-1', value: chatRefDiag }
 		]);
 
-		const { prompt, attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, CancellationToken.None);
+		const { prompt, attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, [], CancellationToken.None);
 
 		expect(prompt).toMatch(/Fix issues/);
 		expect(prompt).toMatch(/IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task./);
@@ -122,7 +122,7 @@ describe('CopilotCLIPromptResolver', () => {
 			{ id: 'src-dir', value: dirUri, name: 'src', range: [5, 8] }
 		]);
 
-		const { attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, CancellationToken.None);
+		const { attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, [], CancellationToken.None);
 		expect(attachments).toHaveLength(1);
 		expect(attachments[0].type).toBe('directory');
 		expect(attachments[0].displayName).toBe('src');
@@ -138,7 +138,7 @@ describe('CopilotCLIPromptResolver', () => {
 			{ id: 'bad', value: badUri, name: 'unknown', range: [6, 13] }
 		]);
 
-		const { attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, CancellationToken.None);
+		const { attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, [], CancellationToken.None);
 		expect(attachments).toHaveLength(0); // ignored
 		expect(statSpy).toHaveBeenCalledTimes(1);
 		expect(logSpy).toHaveBeenCalled();
@@ -153,7 +153,7 @@ describe('CopilotCLIPromptResolver', () => {
 			{ id: 'file', value: fileUri, name: 'index.ts', range: [5, 10] }
 		]);
 
-		const { attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, CancellationToken.None);
+		const { attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, [], CancellationToken.None);
 		expect(attachments).toHaveLength(0);
 		expect(statSpy).toHaveBeenCalledTimes(1);
 		expect(logSpy).toHaveBeenCalled();
@@ -161,7 +161,7 @@ describe('CopilotCLIPromptResolver', () => {
 
 	it('no reminder block when there are no references or diagnostics', async () => {
 		const req = new TestChatRequest('Just a question');
-		const { prompt } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, CancellationToken.None);
+		const { prompt } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, [], CancellationToken.None);
 		expect(prompt).toBe('Just a question');
 	});
 });

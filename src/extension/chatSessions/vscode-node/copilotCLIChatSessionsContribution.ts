@@ -387,6 +387,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return this.handleRequest.bind(this);
 	}
 
+	private readonly previousReferences = new Map<string, vscode.ChatPromptReference[]>();
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
 		const disposables = new DisposableStore();
@@ -417,8 +418,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const isUntitled = chatSessionContext.isUntitled;
 			const { resource } = chatSessionContext.chatSessionItem;
 			const id = SessionIdForCLI.parse(resource);
+			const additionalReferences = this.previousReferences.get(id) || [];
 			const [{ prompt, attachments }, modelId] = await Promise.all([
-				this.promptResolver.resolvePrompt(request, token),
+				this.promptResolver.resolvePrompt(request, additionalReferences, token),
 				this.getModelId(id)
 			]);
 
@@ -571,7 +573,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const isolationEnabled = this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled);
 		if (!isolationEnabled) {
 			// No isolation, proceed without worktree
-			return await this.createCLISessionAndOpen(request.prompt, context, undefined, false, stream, token);
+			return await this.createCLISessionAndOpen(request.prompt, request.references, context, undefined, false, stream, token);
 		}
 
 		// Check for uncommitted changes
@@ -579,7 +581,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const hasUncommittedChanges = currentRepository?.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
 		if (!hasUncommittedChanges) {
 			// No uncommitted changes, create worktree and proceed
-			return await this.createCLISessionAndOpen(request.prompt, context, undefined, true, stream, token);
+			return await this.createCLISessionAndOpen(request.prompt, request.references, context, undefined, true, stream, token);
 		}
 
 		const message =
@@ -639,7 +641,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const worktreePath = await this.worktreeManager.createWorktree(stream);
 			if (!worktreePath) {
 				stream.warning(vscode.l10n.t('Failed to create worktree. Proceeding without isolation.'));
-				return await this.createCLISessionAndOpen(prompt, context, undefined, false, stream, token);
+				return await this.createCLISessionAndOpen(prompt, request.references, context, undefined, false, stream, token);
 			}
 
 			// Migrate changes from active repository to worktree
@@ -685,15 +687,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			}
 
-			return await this.createCLISessionAndOpen(prompt, context, worktreePath, true, stream, token);
+			return await this.createCLISessionAndOpen(prompt, request.references, context, worktreePath, true, stream, token);
 		} else {
 			// Skip changes, just create worktree without migration
-			return await this.createCLISessionAndOpen(prompt, context, undefined, true, stream, token);
+			return await this.createCLISessionAndOpen(prompt, request.references, context, undefined, true, stream, token);
 		}
 	}
 
 	private async createCLISessionAndOpen(
 		prompt: string,
+		references: readonly vscode.ChatPromptReference[] | undefined,
 		context: vscode.ChatContext,
 		workingDirectory: string | undefined,
 		isolationEnabled: boolean,
@@ -727,6 +730,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		try {
+			// Since we're going to open a new session, store the references for later use.
+			this.previousReferences.set(session.object.sessionId, (references || []).concat([]));
 			await this.commandExecutionService.executeCommand('vscode.open', SessionIdForCLI.getResource(session.object.sessionId));
 			await this.commandExecutionService.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 			return {};

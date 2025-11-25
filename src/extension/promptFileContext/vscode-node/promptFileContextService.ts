@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { PromptFileLangageId, PromptHeaderAttributes } from '../../../platform/promptFiles/common/promptsService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -89,7 +89,7 @@ export class PromptFileContextContribution extends Disposable {
 			if (copilotAPI) {
 				disposables.add(copilotAPI.registerContextProvider(provider));
 			}
-			disposables.add(this.languageContextProviderService.registerContextProvider(provider));
+			disposables.add(this.languageContextProviderService.registerContextProvider(provider, [ProviderTarget.NES, ProviderTarget.Completions]));
 		} catch (error) {
 			this.logService.error('Error regsistering prompt file context provider:', error);
 		}
