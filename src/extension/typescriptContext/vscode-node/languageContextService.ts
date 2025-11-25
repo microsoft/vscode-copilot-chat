@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { LRUCache } from 'lru-cache';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ContextKind, ILanguageContextService, KnownSources, TriggerKind, type ContextItem, type RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -1942,7 +1942,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			}
 
 			// Register with chat always.
-			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider));
+			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider, [ProviderTarget.Completions]));
 			this.telemetrySender.sendInlineCompletionProviderTelemetry(KnownSources.completion, true);
 			logService.info('Registered TypeScript context provider with Copilot inline completions.');
 		} catch (error) {

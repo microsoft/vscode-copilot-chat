@@ -24,7 +24,7 @@ import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/commo
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
 import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ContextKind, SnippetContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -486,7 +486,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return undefined;
 			}
 
-			const providers = this.langCtxService.getContextProviders(textDoc);
+			const providers = this.langCtxService.getContextProviders(textDoc, ProviderTarget.NES);
 			if (providers.length < 1) {
 				return undefined;
 			}
