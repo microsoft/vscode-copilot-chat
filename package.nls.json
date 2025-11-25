@@ -419,5 +419,9 @@
 	"github.copilot.config.githubMcpServer.enabled": "Enable built-in support for the GitHub MCP Server.",
 	"github.copilot.config.githubMcpServer.toolsets": "Specify toolsets to use from the GitHub MCP Server.",
 	"github.copilot.config.githubMcpServer.readonly": "Enable read-only mode for the GitHub MCP Server. When enabled, only read tools are available.",
-	"github.copilot.config.githubMcpServer.lockdown": "Enable lockdown mode for the GitHub MCP Server. When enabled, hides public issue details created by users without push access."
+	"github.copilot.config.githubMcpServer.lockdown": "Enable lockdown mode for the GitHub MCP Server. When enabled, hides public issue details created by users without push access.",
+	"copilot.tools.runSubagent.name": "Run Subagent",
+	"copilot.tools.runSubagent.description": "Runs a task within an isolated subagent context. Enables efficient organization of tasks and context window management.",
+	"copilot.tools.searchSubagent.name": "Search Subagent",
+	"copilot.tools.searchSubagent.description": "Launch an iterative search-focused subagent to find relevant code in your workspace"
 }
