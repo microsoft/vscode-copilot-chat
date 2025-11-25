@@ -324,9 +324,10 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 
 	async getOrgCustomInstructions(repoOwner: string, repoName: string): Promise<OrgCustomInstructionsResponse> {
 		try {
-			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
-			if (!authToken) {
-				this._logService.warn('No GitHub authentication available for fetching custom instructions');
+			// Get Copilot token (not GitHub token) for this endpoint
+			const copilotToken = await this._authService.getCopilotToken();
+			if (!copilotToken?.token) {
+				this._logService.warn('No Copilot authentication available for fetching custom instructions');
 				return {};
 			}
 
@@ -338,11 +339,12 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 
 			const organizationId = repoInfo.owner.id;
+			// This endpoint uses the originTrackerURL (like Snippy) and requires a Copilot Bearer token
 			const response = await this._capiClientService.makeRequest<Response>({
 				headers: {
 					Accept: 'application/json',
 					'Content-Type': 'application/json',
-					Authorization: `Bearer ${authToken}`,
+					Authorization: `Bearer ${copilotToken.token}`,
 				},
 				method: 'POST',
 				json: {
