@@ -21,13 +21,13 @@ const VSC_MODEL_HASHES_A = [
 	'b576d46942ee2c45ecd979cbbcb62688ae3171a07ac83f53b783787f345e3dd7',
 	'b46570bfd230db11a82d5463c160b9830195def7086519ca319c41037b991820',
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
-];
-
-const VSC_MODEL_HASHES_B = [
 	'e30111497b2a7e8f1aa7beed60b69952537d99bcdc18987abc2f6add63a89960',
 	'df610ed210bb9266ff8ab812908d5837538cdb1d7436de907fb7e970dab5d289',
 	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
 ];
+
+// Currently empty, will be used in future for a different set of VSC models
+const VSC_MODEL_HASHES_B: string[] = [];
 
 const HIDDEN_MODEL_E_HASHES: string[] = [
 	'6013de0381f648b7f21518885c02b40b7583adfb33c6d9b64d3aed52c3934798'
