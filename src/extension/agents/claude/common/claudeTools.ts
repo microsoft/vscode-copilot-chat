@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk';
+import { PreToolUseHookInput } from '@anthropic-ai/claude-code';
 import { URI } from '../../../../util/vs/base/common/uri';
 
 export enum ClaudeToolNames {

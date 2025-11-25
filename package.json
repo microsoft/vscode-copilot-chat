@@ -5050,7 +5050,7 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 3,
 				"description": "The Claude Code Agent works on your local machine",
-				"when": "config.github.copilot.chat.claudeCode.enabled",
+				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
 				"canDelegate": false,
 				"capabilities": {
 					"supportsFileAttachments": true
@@ -5311,7 +5311,7 @@
 		"yargs": "^17.7.2"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.1.50",
+		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.68.0",
 		"@github/copilot": "^0.0.362",
 		"@google/genai": "^1.22.0",
