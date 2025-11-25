@@ -11,7 +11,7 @@ import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { createEditConfirmation, formatDiffAsUnified } from '../../../tools/node/editFileToolUtils';
-import { getAffectedUrisForEditTool, ToolCall } from '../common/copilotCLITools';
+import { getAffectedUrisForEditTool, ToolCall } from '../common/copilotcliTools';
 
 type CoreTerminalConfirmationToolParams = {
 	tool: ToolName.CoreTerminalConfirmationTool;

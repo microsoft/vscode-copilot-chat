@@ -21,7 +21,7 @@ import {
 	processToolExecutionComplete,
 	processToolExecutionStart,
 	stripReminders
-} from '../copilotCLITools';
+} from '../copilotcliTools';
 
 // Helper to extract invocation message text independent of MarkdownString vs string
 function getInvocationMessageText(part: ChatToolInvocationPart | undefined): string {
