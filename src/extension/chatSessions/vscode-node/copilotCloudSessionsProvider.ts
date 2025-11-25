@@ -141,6 +141,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private activeSessionIds: Set<string> = new Set();
 	private activeSessionPollingInterval: ReturnType<typeof setInterval> | undefined;
 	private readonly plainTextRenderer = new PlainTextRenderer();
+	private readonly prCancellationTokens = new Map<number, Set<vscode.CancellationToken>>();
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService, this.configurationService);
 	private readonly _summarizer: ChatSummarizerProvider;
 
@@ -453,6 +454,21 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
+		// Track cancellation token for this PR
+		const prNumber = pullRequestNumber;
+		if (!this.prCancellationTokens.has(prNumber)) {
+			this.prCancellationTokens.set(prNumber, new Set());
+		}
+		this.prCancellationTokens.get(prNumber)!.add(token);
+		this._register(token.onCancellationRequested(() => {
+			this.logService.info(`[CopilotCloudSessions] Cancellation requested for PR #${prNumber} from provideChatSessionContent`);
+			this.prCancellationTokens.get(prNumber)?.delete(token);
+			if (this.prCancellationTokens.get(prNumber)?.size === 0) {
+				this.prCancellationTokens.delete(prNumber);
+				this.closePR(prNumber);
+			}
+		}));
+
 		const pr = await this.findPR(pullRequestNumber);
 		const getProblemStatement = async (sessions: SessionInfo[]) => {
 			if (sessions.length === 0) {
@@ -763,6 +779,29 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		this.logService.debug(`Delegated to cloud agent for PR #${number} with session ID ${sessionId}`);
 
+		// Track cancellation token for this PR
+		if (!this.prCancellationTokens.has(number)) {
+			this.prCancellationTokens.set(number, new Set());
+		}
+		this.prCancellationTokens.get(number)!.add(token);
+
+		if (token.isCancellationRequested) {
+			this.prCancellationTokens.get(number)?.delete(token);
+			if (this.prCancellationTokens.get(number)?.size === 0) {
+				this.prCancellationTokens.delete(number);
+				this.closePR(number);
+			}
+		}
+
+		this._register(token.onCancellationRequested(async () => {
+			this.logService.info(`[CopilotCloudSessions] Cancellation requested for PR #${number} from delegate`);
+			this.prCancellationTokens.get(number)?.delete(token);
+			if (this.prCancellationTokens.get(number)?.size === 0) {
+				this.prCancellationTokens.delete(number);
+				this.closePR(number);
+			}
+		}));
+
 		// Store references for this session
 		const sessionUri = vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + number });
 
@@ -803,6 +842,20 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			author: getAuthorDisplayName(pullRequest.author),
 			linkTag: `#${pullRequest.number}`
 		};
+	}
+
+	private async closePR(number: number) {
+		const repoId = await getRepoId(this._gitService);
+		if (!repoId) {
+			this.logService.warn('Failed to determine GitHub repo from workspace for PR closure');
+			return;
+		}
+		try {
+			await this._octoKitService.closePullRequest(repoId.org, repoId.repo, number);
+			this.logService.info(`Closed pull request #${number} due to cancellation`);
+		} catch (error) {
+			this.logService.error(`Failed to close pull request #${number}: ${error}`);
+		}
 	}
 
 	private async handleConfirmationData(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, context: vscode.ChatContext, token: vscode.CancellationToken) {
