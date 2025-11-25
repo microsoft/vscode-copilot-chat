@@ -5107,10 +5107,7 @@
 				],
 				"name": "cloud",
 				"displayName": "Cloud Agent",
-				"icon": {
-					"light": "assets/copilot-cloud.svg",
-					"dark": "assets/copilot-cloud-dark.svg"
-				},
+				"icon": "$(cloud)",
 				"welcomeTitle": "Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
