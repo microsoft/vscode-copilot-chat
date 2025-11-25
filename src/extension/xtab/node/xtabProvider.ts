@@ -877,11 +877,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return;
 		}
 
-		let nextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionEnabled, this.expService);
-		nextCursorLinePrediction = (
-			nextCursorLinePrediction === true ? NextCursorLinePrediction.OnlyWithEdit :
-				(nextCursorLinePrediction === false ? undefined : nextCursorLinePrediction)
-		);
+		const nextCursorLinePrediction = this.determineNextCursorPredicationEnablement();
 		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying) {
 			const nextCursorLineR = await this.predictNextCursorPosition(promptPieces, tracer);
 			if (cancellationToken.isCancellationRequested) {
@@ -941,6 +937,29 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
 		return;
+	}
+
+	private determineNextCursorPredicationEnablement(): NextCursorLinePrediction | undefined {
+		const originalNextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionEnabled, this.expService);
+
+		switch (originalNextCursorLinePrediction) {
+			case undefined:
+				return undefined;
+
+			// remove support for enum members other than OnlyWithEdit
+			case NextCursorLinePrediction.OnlyWithEdit:
+			case NextCursorLinePrediction.Jump:
+			case NextCursorLinePrediction.LabelOnlyWithEdit:
+				return NextCursorLinePrediction.OnlyWithEdit;
+
+			// for backward compatibility
+			case true:
+				return NextCursorLinePrediction.OnlyWithEdit;
+			case false:
+				return undefined;
+			default:
+				assertNever(originalNextCursorLinePrediction);
+		}
 	}
 
 	private computeAreaAroundEditWindowLinesRange(currentDocument: CurrentDocument): OffsetRange {
