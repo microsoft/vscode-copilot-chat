@@ -254,8 +254,8 @@ export class OpenAIEndpoint extends ChatEndpoint {
 				body.reasoning = undefined;
 				body.include = undefined;
 			}
-			if (body.previous_response_id && !body.previous_response_id.startsWith('resp_')) {
-				// Don't use a response ID from CAPI
+			if (body.previous_response_id && (!body.previous_response_id.startsWith('resp_') || this.modelMetadata.zeroDataRetentionEnabled)) {
+				// Don't use a response ID from CAPI or when zero data retention is enabled
 				body.previous_response_id = undefined;
 			}
 			return body;

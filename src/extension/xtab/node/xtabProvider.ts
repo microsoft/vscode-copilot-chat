@@ -1139,7 +1139,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const tracer = this.tracer.sub('predictNextCursorPosition');
 
-		const systemMessage = `Your task is to predict the next line number in the current file where the developer is most likely to make their next edit, using the provided context. If you don't think anywhere is a good next line jump target, just output the current line number of the cursor. Make sure to just output the line number and nothing else (no explanation, reasoning, etc,).`;
+		const systemMessage = `Your task is to predict the next line number in the current file where the developer is most likely to make their next edit, using the provided context. If you don't think anywhere is a good next line jump target, just output the current line number of the cursor. Make sure to just output the line number and nothing else (no explanation, reasoning, etc.).`;
 
 		const maxTokens = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsNextCursorPredictionCurrentFileMaxTokens, this.expService);
 

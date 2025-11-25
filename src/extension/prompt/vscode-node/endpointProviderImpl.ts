@@ -41,7 +41,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService protected readonly _logService: ILogService,
-		@IConfigurationService private readonly _configService: IConfigurationService,
+		@IConfigurationService protected readonly _configService: IConfigurationService,
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IEnvService _envService: IEnvService,
 		@IAuthenticationService protected readonly _authService: IAuthenticationService,

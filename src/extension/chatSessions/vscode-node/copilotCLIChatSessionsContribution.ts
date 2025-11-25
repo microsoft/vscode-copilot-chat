@@ -184,11 +184,11 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		super();
 		this._register(this.terminalIntegration);
 		this._register(this.copilotcliSessionService.onDidChangeSessions(() => {
-			this.refresh();
+			this.notifySessionsChange();
 		}));
 	}
 
-	public refresh(): void {
+	public notifySessionsChange(): void {
 		this._onDidChangeChatSessionItems.fire();
 	}
 
@@ -473,6 +473,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const session = chatSessionContext.isUntitled ?
 			await this.sessionService.createSession(prompt, { model, workingDirectory, isolationEnabled }, token) :
 			await this.sessionService.getSession(id, { model, workingDirectory, isolationEnabled, readonly: false }, token);
+		this.sessionItemProvider.notifySessionsChange();
 
 		if (!session) {
 			stream.warning(vscode.l10n.t('Chat session not found.'));
@@ -768,10 +769,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService, gitService: IGitService): IDisposable {
 	const disposableStore = new DisposableStore();
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.copilotcli.sessions.refresh', () => {
-		copilotcliSessionItemProvider.refresh();
+		copilotcliSessionItemProvider.notifySessionsChange();
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.refresh', () => {
-		copilotcliSessionItemProvider.refresh();
+		copilotcliSessionItemProvider.notifySessionsChange();
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
@@ -804,7 +805,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 					}
 				}
 
-				copilotcliSessionItemProvider.refresh();
+				copilotcliSessionItemProvider.notifySessionsChange();
 			}
 		}
 	}));
