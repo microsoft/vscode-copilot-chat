@@ -221,7 +221,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		retryState: RetryState,
 	): Promise<Result<void, NoNextEditReason>> {
 
-		const tracer = parentTracer.sub('doGetNextEditWithSelection');
+		const tracer = parentTracer.sub(['XtabProvider', 'doGetNextEditWithSelection']);
 
 		const activeDocument = request.getActiveDocument();
 
