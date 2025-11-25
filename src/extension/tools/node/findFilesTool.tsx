@@ -39,6 +39,13 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindFilesToolParams>, token: CancellationToken) {
 		checkCancellation(token);
+
+		// TODO strict input validation
+		// Certain models just really want to pass incorrect input
+		if ((options.input as unknown as Record<string, string>).path) {
+			throw new Error('The property "path" is not supported');
+		}
+
 		const endpoint = options.model && (await this.endpointProvider.getChatEndpoint(options.model));
 		const modelFamily = endpoint?.family;
 

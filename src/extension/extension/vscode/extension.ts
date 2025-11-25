@@ -7,9 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { commands, env, ExtensionContext, ExtensionMode, l10n as vscodeL10n } from 'vscode';
 import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { isProduction } from '../../../platform/env/common/packagejson';
-import { IHeatmapService } from '../../../platform/heatmap/common/heatmapService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
-import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationServiceBuilder, InstantiationServiceBuilder } from '../../../util/common/services';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -64,16 +62,16 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 
 	await instantiationService.invokeFunction(async accessor => {
 		const expService = accessor.get(IExperimentationService);
-		const logService = accessor.get(ILogService);
 
 		// Await intialization of exp service. This ensure cache is fresh.
 		// It will then auto refresh every 30 minutes after that.
 		await expService.hasTreatments();
 
+		// THIS is awaited because some contributions can block activation
+		// via `IExtensionContribution#activationBlocker`
 		const contributions = instantiationService.createInstance(ContributionCollection, configuration.contributions);
 		context.subscriptions.push(contributions);
-
-		logService.trace('Copilot Chat extension activated');
+		await contributions.waitForActivationBlockers();
 	});
 
 	if (ExtensionMode.Test === context.extensionMode && !isScenarioAutomation) {
@@ -103,9 +101,6 @@ export function createInstantiationService(configuration: IExtensionActivationCo
 
 		// Does the initial read of ignore files, but don't block
 		accessor.get(IIgnoreService).init();
-
-		// force create heatmap service
-		accessor.get(IHeatmapService);
 	});
 
 	return instantiationService;

@@ -4,9 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../context';
-import { Features } from '../experiments/features';
-import { logger, LogTarget } from '../logger';
+import { ICompletionsFeaturesService } from '../experiments/featuresService';
+import { ICompletionsLogTargetService, logger } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
 import { ActiveExperiments } from './contextProviderRegistry';
 
@@ -30,15 +29,21 @@ export function fillInTsActiveExperiments(
 	) {
 		return false;
 	}
-	const ctx = accessor.get(ICompletionsContextService);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const featuresService = accessor.get(ICompletionsFeaturesService);
 	try {
-		const tsContextProviderParams = ctx.get(Features).tsContextProviderParams(telemetryData);
+		const tsContextProviderParams = featuresService.tsContextProviderParams(telemetryData);
 		if (tsContextProviderParams) {
 			const params = JSON.parse(tsContextProviderParams) as ContextProviderParams;
 			for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
+		} else {
+			const params = featuresService.getContextProviderExpSettings('typescript')?.params;
+			if (params) {
+				for (const [key, value] of Object.entries(params)) { activeExperiments.set(key, value); }
+			}
 		}
 	} catch (e) {
-		logger.debug(ctx.get(LogTarget), `Failed to get the active TypeScript experiments for the Context Provider API`, e);
+		logger.debug(logTarget, `Failed to get the active TypeScript experiments for the Context Provider API`, e);
 		return false;
 	}
 	return true;

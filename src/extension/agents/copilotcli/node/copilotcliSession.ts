@@ -3,26 +3,53 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { AgentOptions, Attachment, ModelProvider, PostToolUseHookInput, PreToolUseHookInput, Session, SessionEvent } from '@github/copilot/sdk';
+import type { Attachment, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
-import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { raceCancellation } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { ChatResponseThinkingProgressPart, ChatSessionStatus, EventEmitter, LanguageModelTextPart } from '../../../../vscodeTypes';
-import { IToolsService } from '../../../tools/common/toolsService';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
+import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { ResourceMap } from '../../../../util/vs/base/common/map';
+import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { getAffectedUrisForEditTool } from '../common/copilotcliTools';
-import { ICopilotCLISDK } from './copilotCli';
-import { processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
-import { getCopilotLogger } from './logger';
-import { getConfirmationToolParams, PermissionRequest } from './permissionHelpers';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
+import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
+import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
 
-export class CopilotCLISession extends DisposableStore {
-	private _abortController = new AbortController();
+type PermissionHandler = (
+	permissionRequest: PermissionRequest,
+	toolCall: ToolCall | undefined,
+	token: CancellationToken,
+) => Promise<boolean>;
+
+export interface ICopilotCLISession extends IDisposable {
+	readonly sessionId: string;
+	readonly status: vscode.ChatSessionStatus | undefined;
+	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
+	readonly permissionRequested?: PermissionRequest;
+	readonly onPermissionRequested: vscode.Event<PermissionRequest>;
+
+	attachPermissionHandler(handler: PermissionHandler): IDisposable;
+	attachStream(stream: vscode.ChatResponseStream): IDisposable;
+	handleRequest(
+		prompt: string,
+		attachments: Attachment[],
+		modelId: string | undefined,
+		token: vscode.CancellationToken
+	): Promise<void>;
+	addUserMessage(content: string): void;
+	addUserAssistantMessage(content: string): void;
+	getSelectedModelId(): Promise<string | undefined>;
+	getChatHistory(): (ChatRequestTurn2 | ChatResponseTurn2)[];
+}
+
+export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
 	private _pendingToolInvocations = new Map<string, vscode.ChatToolInvocationPart>();
-	private _editTracker = new ExternalEditTracker();
 	public readonly sessionId: string;
 	private _status?: vscode.ChatSessionStatus;
 	public get status(): vscode.ChatSessionStatus | undefined {
@@ -32,188 +59,294 @@ export class CopilotCLISession extends DisposableStore {
 
 	public readonly onDidChangeStatus = this._statusChange.event;
 
+	private _permissionRequested?: PermissionRequest;
+	public get permissionRequested(): PermissionRequest | undefined {
+		return this._permissionRequested;
+	}
+	private readonly _onPermissionRequested = this.add(new EventEmitter<PermissionRequest>());
+	public readonly onPermissionRequested = this._onPermissionRequested.event;
+	private _permissionHandler?: PermissionHandler;
+	private readonly _permissionHandlerSet = this.add(new Emitter<void>());
+	private _stream?: vscode.ChatResponseStream;
+	public get sdkSession() {
+		return this._sdkSession;
+	}
+	private _lastUsedModel: string | undefined;
+
 	constructor(
+		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
+		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IToolsService private readonly toolsService: IToolsService,
-		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK
+		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
 	}
 
-	public override dispose(): void {
-		this._abortController.abort();
-		super.dispose();
+	attachStream(stream: vscode.ChatResponseStream): IDisposable {
+		this._stream = stream;
+		return toDisposable(() => {
+			if (this._stream === stream) {
+				this._stream = undefined;
+			}
+		});
 	}
 
-	async *query(prompt: string, attachments: Attachment[], options: AgentOptions): AsyncGenerator<SessionEvent> {
-		// Dynamically import the SDK
-		const { Agent } = await this.copilotCLISDK.getPackage();
-		const agent = new Agent(options);
-		yield* agent.query(prompt, attachments);
+	attachPermissionHandler(handler: PermissionHandler): IDisposable {
+		this._permissionHandler = handler;
+		this._permissionHandlerSet.fire();
+		return toDisposable(() => {
+			if (this._permissionHandler === handler) {
+				this._permissionHandler = undefined;
+			}
+		});
 	}
 
-	public async invoke(
+	public async handleRequest(
 		prompt: string,
 		attachments: Attachment[],
-		toolInvocationToken: vscode.ChatParticipantToolToken,
-		stream: vscode.ChatResponseStream,
-		modelId: ModelProvider | undefined,
+		modelId: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<void> {
 		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
-
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
 
 		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
-		const copilotToken = await this._authenticationService.getCopilotToken();
+		const disposables = this.add(new DisposableStore());
+		const abortController = new AbortController();
+		disposables.add(token.onCancellationRequested(() => {
+			abortController.abort();
+		}));
+		disposables.add(toDisposable(() => abortController.abort()));
 
-		const options: AgentOptions = {
-			modelProvider: modelId ?? {
-				type: 'anthropic',
-				model: 'claude-sonnet-4.5',
-			},
-			abortController: this._abortController,
-			// TODO@rebornix handle workspace properly
-			workingDirectory: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
-			copilotToken: copilotToken.token,
-			env: {
-				...process.env,
-				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
-			},
-			requestPermission: async (permissionRequest) => {
-				return await this.requestPermission(permissionRequest, toolInvocationToken);
-			},
-			logger: getCopilotLogger(this.logService),
-			session: this._sdkSession,
-			hooks: {
-				preToolUse: [
-					async (input: PreToolUseHookInput) => {
-						const editKey = getEditOperationKey(input.toolName, input.toolArgs);
-						await this._onWillEditTool(input, editKey, stream);
-					}
-				],
-				postToolUse: [
-					async (input: PostToolUseHookInput) => {
-						const editKey = getEditOperationKey(input.toolName, input.toolArgs);
-						void this._onDidEditTool(editKey);
-					}
-				]
-			}
-		};
+		const toolNames = new Map<string, string>();
+		const editToolIds = new Set<string>();
+		const toolCalls = new Map<string, ToolCall>();
+		const editTracker = new ExternalEditTracker();
+		const editFilesAndToolCallIds = new ResourceMap<ToolCall[]>();
+		disposables.add(this._options.addPermissionHandler(async (permissionRequest) => {
+			// Need better API from SDK to correlate file edits in permission requests to tool invocations.
+			return await this.requestPermission(permissionRequest, editTracker,
+				(toolCallId: string) => toolCalls.get(toolCallId),
+				this._options.toSessionOptions().workingDirectory,
+				token
+			);
+		}));
 
 		try {
-			for await (const event of this.query(prompt, attachments, options)) {
-				if (token.isCancellationRequested) {
-					break;
+			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
+			const [currentModel, authInfo] = await Promise.all([
+				modelId ? (this._lastUsedModel ?? raceCancellation(this._sdkSession.getSelectedModel(), token)) : undefined,
+				raceCancellation(this.copilotCLISDK.getAuthInfo(), token)
+			]);
+			if (authInfo) {
+				this._sdkSession.setAuthInfo(authInfo);
+			}
+			if (modelId && modelId !== currentModel && !token.isCancellationRequested) {
+				this._lastUsedModel = modelId;
+				await raceCancellation(this._sdkSession.setSelectedModel(modelId), token);
+			}
+
+			disposables.add(toDisposable(this._sdkSession.on('*', (event) => this.logService.trace(`[CopilotCLISession]CopilotCLI Event: ${JSON.stringify(event, null, 2)}`))));
+			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
+				if (typeof event.data.content === 'string' && event.data.content.length) {
+					this._stream?.markdown(event.data.content);
+				}
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('tool.execution_start', (event) => {
+				toolNames.set(event.data.toolCallId, event.data.toolName);
+				toolCalls.set(event.data.toolCallId, event.data as unknown as ToolCall);
+				if (isCopilotCliEditToolCall(event.data)) {
+					editToolIds.add(event.data.toolCallId);
+					// Track edits for edit tools.
+					const editUris = getAffectedUrisForEditTool(event.data);
+					if (editUris.length) {
+						editUris.forEach(uri => {
+							const ids = editFilesAndToolCallIds.get(uri) || [];
+							ids.push(event.data as UnknownToolCall as ToolCall);
+							editFilesAndToolCallIds.set(uri, ids);
+							this.logService.trace(`[CopilotCLISession] Tracking for toolCallId ${event.data.toolCallId} of file ${uri.fsPath}`);
+						});
+					}
+				} else {
+					const responsePart = processToolExecutionStart(event, this._pendingToolInvocations);
+					if (responsePart instanceof ChatResponseThinkingProgressPart) {
+						this._stream?.push(responsePart);
+						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+					}
+				}
+				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('tool.execution_complete', (event) => {
+				// Mark the end of the edit if this was an edit tool.
+				editTracker.completeEdit(event.data.toolCallId);
+				if (editToolIds.has(event.data.toolCallId)) {
+					this.logService.trace(`[CopilotCLISession] Completed edit tracking for toolCallId ${event.data.toolCallId}`);
+					return;
 				}
 
-				this._processEvent(event, stream, toolInvocationToken);
+				const responsePart = processToolExecutionComplete(event, this._pendingToolInvocations);
+				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
+					this._stream?.push(responsePart);
+				}
+
+				const toolName = toolNames.get(event.data.toolCallId) || '<unknown>';
+				const success = `success: ${event.data.success}`;
+				const error = event.data.error ? `error: ${event.data.error.code},${event.data.error.message}` : '';
+				const result = event.data.result ? `result: ${event.data.result?.content}` : '';
+				const parts = [success, error, result].filter(part => part.length > 0).join(', ');
+				this.logService.trace(`[CopilotCLISession]Complete Tool ${toolName}, ${parts}`);
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('session.error', (event) => {
+				this.logService.error(`[CopilotCLISession]CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
+				this._stream?.markdown(`\n\n❌ Error: (${event.data.errorType}) ${event.data.message}`);
+			})));
+
+			if (!token.isCancellationRequested) {
+				await this._sdkSession.send({ prompt, attachments, abortController });
 			}
+			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
+
+			if (this._options.isolationEnabled && !token.isCancellationRequested) {
+				// When isolation is enabled and we are using a git workspace, stage
+				// all changes in the working directory when the session is completed
+				const workingDirectory = this._options.toSessionOptions().workingDirectory;
+				if (workingDirectory) {
+					await this.gitService.add(Uri.file(workingDirectory), []);
+					this.logService.trace(`[CopilotCLISession] Staged all changes in working directory ${workingDirectory}`);
+				}
+			}
+
 			this._status = ChatSessionStatus.Completed;
 			this._statusChange.fire(this._status);
 		} catch (error) {
 			this._status = ChatSessionStatus.Failed;
 			this._statusChange.fire(this._status);
-			this.logService.error(`CopilotCLI session error: ${error}`);
-			stream.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
+			this.logService.error(`[CopilotCLISession] Invoking session (error) ${this.sessionId}`, error);
+			this._stream?.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
+		} finally {
+			disposables.dispose();
 		}
 	}
 
-	private _toolNames = new Map<string, string>();
-	private _processEvent(
-		event: SessionEvent,
-		stream: vscode.ChatResponseStream,
-		toolInvocationToken: vscode.ChatParticipantToolToken
-	): void {
-		this.logService.trace(`CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
+	addUserMessage(content: string) {
+		this._sdkSession.emit('user.message', { content });
+	}
 
-		switch (event.type) {
-			case 'assistant.turn_start':
-			case 'assistant.turn_end': {
-				this._toolNames.clear();
-				break;
-			}
+	addUserAssistantMessage(content: string) {
+		this._sdkSession.emit('assistant.message', {
+			messageId: `msg_${Date.now()}`,
+			content
+		});
+	}
 
-			case 'assistant.message': {
-				if (event.data.content.length) {
-					stream.markdown(event.data.content);
-				}
-				break;
-			}
+	public getSelectedModelId() {
+		return this._sdkSession.getSelectedModel();
+	}
 
-			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, this._toolNames, this._pendingToolInvocations);
-				const toolName = this._toolNames.get(event.data.toolCallId);
-				if (responsePart instanceof ChatResponseThinkingProgressPart) {
-					stream.push(responsePart);
-				}
-				this.logService.trace(`Start Tool ${toolName || '<unknown>'}`);
-				break;
-			}
-
-			case 'tool.execution_complete': {
-				const responsePart = processToolExecutionComplete(event, this._pendingToolInvocations);
-				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
-					stream.push(responsePart);
-				}
-
-				const toolName = this._toolNames.get(event.data.toolCallId) || '<unknown>';
-				const success = `success: ${event.data.success}`;
-				const error = event.data.error ? `error: ${event.data.error.code},${event.data.error.message}` : '';
-				const result = event.data.result ? `result: ${event.data.result?.content}` : '';
-				const parts = [success, error, result].filter(part => part.length > 0).join(', ');
-				this.logService.trace(`Complete Tool ${toolName}, ${parts}`);
-				break;
-			}
-
-			case 'session.error': {
-				this.logService.error(`CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
-				stream.markdown(`\n\n❌ Error: ${event.data.message}`);
-				break;
-			}
-		}
+	public getChatHistory(): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+		const events = this._sdkSession.getEvents();
+		return buildChatHistoryFromEvents(events);
 	}
 
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
-		toolInvocationToken: vscode.ChatParticipantToolToken
+		editTracker: ExternalEditTracker,
+		getToolCall: (toolCallId: string) => ToolCall | undefined,
+		workingDirectory: string | undefined,
+		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
-		try {
-			const { tool, input } = getConfirmationToolParams(permissionRequest);
-			const result = await this.toolsService.invokeTool(tool,
-				{ input, toolInvocationToken },
-				CancellationToken.None);
+		if (permissionRequest.kind === 'read') {
+			// If user is reading a file in the working directory or workspace, auto-approve
+			// read requests. Outside workspace reads (e.g., /etc/passwd) will still require
+			// approval.
+			const data = Uri.file(permissionRequest.path);
 
-			const firstResultPart = result.content.at(0);
-			if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
+			if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(data, Uri.file(workingDirectory))) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read file in working directory ${permissionRequest.path}`);
+				return { kind: 'approved' };
+			}
+
+			if (this.workspaceService.getWorkspaceFolder(data)) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read workspace file ${permissionRequest.path}`);
+				return { kind: 'approved' };
+			}
+		}
+
+		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
+		const toolCall = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
+		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
+		const editFile = editFiles && editFiles.length ? editFiles[0] : undefined;
+		if (workingDirectory && permissionRequest.kind === 'write' && editFile && toolCall) {
+			// TODO:@rebornix @lszomoru
+			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
+			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
+
+			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
+			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
+
+			let autoApprove = false;
+			// If isolation is enabled, we only auto-approve writes within the working directory.
+			if (this._options.isolationEnabled && isWorkingDirectoryFile) {
+				autoApprove = true;
+			}
+			// If its a workspace file, and not editing protected files, we auto-approve.
+			if (!autoApprove && isWorkspaceFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall))) {
+				autoApprove = true;
+			}
+
+			if (autoApprove) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request ${editFile.fsPath}`);
+
+				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
+				if (toolCall && this._stream) {
+					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
+					await editTracker.trackEdit(toolCall.toolCallId, [editFile], this._stream);
+				}
+
+				return { kind: 'approved' };
+			}
+		}
+
+		try {
+			const permissionHandler = await this.waitForPermissionHandler(permissionRequest);
+			if (!permissionHandler) {
+				this.logService.warn(`[CopilotCLISession] No permission handler registered, denying request for ${permissionRequest.kind} permission.`);
+				return { kind: 'denied-interactively-by-user' };
+			}
+
+			if (await permissionHandler(permissionRequest, toolCall, token)) {
+				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
+				if (editFile && toolCall && this._stream) {
+					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
+					await editTracker.trackEdit(toolCall.toolCallId, [editFile], this._stream);
+				}
 				return { kind: 'approved' };
 			}
 		} catch (error) {
 			this.logService.error(`[CopilotCLISession] Permission request error: ${error}`);
+		} finally {
+			this._permissionRequested = undefined;
 		}
 
 		return { kind: 'denied-interactively-by-user' };
 	}
 
-	private async _onWillEditTool(input: PreToolUseHookInput, editKey: string, stream: vscode.ChatResponseStream): Promise<void> {
-		const uris = getAffectedUrisForEditTool(input.toolName, input.toolArgs);
-		return this._editTracker.trackEdit(editKey, uris, stream);
+	private async waitForPermissionHandler(permissionRequest: PermissionRequest): Promise<PermissionHandler | undefined> {
+		if (!this._permissionHandler) {
+			this._permissionRequested = permissionRequest;
+			this._onPermissionRequested.fire(permissionRequest);
+			const disposables = this.add(new DisposableStore());
+			await Event.toPromise(this._permissionHandlerSet.event, disposables);
+			disposables.dispose();
+			this._permissionRequested = undefined;
+		}
+		return this._permissionHandler;
 	}
-
-	private async _onDidEditTool(editKey: string): Promise<void> {
-		return this._editTracker.completeEdit(editKey);
-	}
-}
-
-
-function getEditOperationKey(toolName: string, toolArgs: unknown): string {
-	// todo@connor4312: get copilot CLI to surface the tool call ID instead?
-	return `${toolName}:${JSON.stringify(toolArgs)}`;
 }

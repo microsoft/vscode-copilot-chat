@@ -34,6 +34,7 @@ export interface IEnvService {
 	readonly language: string | undefined;
 	readonly sessionId: string;
 	readonly machineId: string;
+	readonly devDeviceId: string;
 	readonly vscodeVersion: string;
 	/**
 	 * Whether the current session is considered active
@@ -76,6 +77,7 @@ export abstract class AbstractEnvService implements IEnvService {
 	abstract get vscodeVersion(): string;
 	abstract get extensionId(): string;
 	abstract get machineId(): string;
+	abstract get devDeviceId(): string;
 	abstract get remoteName(): string | undefined;
 	abstract get uiKind(): 'desktop' | 'web';
 	abstract get OS(): OperatingSystem;

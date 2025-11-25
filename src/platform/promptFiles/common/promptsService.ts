@@ -12,6 +12,12 @@ export * from '../../../util/vs/workbench/contrib/chat/common/promptSyntax/promp
 
 export const IPromptsService = createServiceIdentifier<IPromptsService>('IPromptsService');
 
+export namespace PromptFileLangageId {
+	export const prompt = 'prompt';
+	export const instructions = 'instructions';
+	export const agent = 'chatagent';
+}
+
 /**
  * A service that provides prompt file related functionalities: agents, instructions and prompt files.
  */

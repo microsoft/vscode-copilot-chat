@@ -6,102 +6,106 @@
 import type { Attachment } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { isLocation } from '../../../../util/common/types';
-import { raceCancellationError } from '../../../../util/vs/base/common/async';
+import { raceCancellation } from '../../../../util/vs/base/common/async';
+import { Schemas } from '../../../../util/vs/base/common/network';
 import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatReferenceDiagnostic, FileType } from '../../../../vscodeTypes';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatReferenceBinaryData, FileType } from '../../../../vscodeTypes';
+import { ChatVariablesCollection, isPromptFile, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
+import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
 
 export class CopilotCLIPromptResolver {
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) { }
 
 	public async resolvePrompt(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
 		if (request.prompt.startsWith('/')) {
 			return { prompt: request.prompt, attachments: [] }; // likely a slash command, don't modify
 		}
+		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(request.references), token);
+		if (token.isCancellationRequested) {
+			return { prompt: request.prompt, attachments: [] };
+		}
+		const prompt = await raceCancellation(generateUserPrompt(request, variables, this.instantiationService), token);
+		return { prompt: prompt ?? '', attachments };
+	}
 
-		const attachments: Attachment[] = [];
-		const allRefsTexts: string[] = [];
-		const diagnosticTexts: string[] = [];
-		const files: { path: string; name: string }[] = [];
-		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
-		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
-			if (ref.value instanceof ChatReferenceDiagnostic) {
-				// Handle diagnostic reference
-				for (const [uri, diagnostics] of ref.value.diagnostics) {
-					if (uri.scheme !== 'file') {
-						continue;
-					}
-					for (const diagnostic of diagnostics) {
-						const severityMap: { [key: number]: string } = {
-							0: 'error',
-							1: 'warning',
-							2: 'info',
-							3: 'hint'
-						};
-						const severity = severityMap[diagnostic.severity] ?? 'error';
-						const code = (typeof diagnostic.code === 'object' && diagnostic.code !== null) ? diagnostic.code.value : diagnostic.code;
-						const codeStr = code ? ` [${code}]` : '';
-						const line = diagnostic.range.start.line + 1;
-						diagnosticTexts.push(`- ${severity}${codeStr} at ${uri.fsPath}:${line}: ${diagnostic.message}`);
-						files.push({ path: uri.fsPath, name: path.basename(uri.fsPath) });
-					}
+	private async constructChatVariablesAndAttachments(variables: ChatVariablesCollection, token: vscode.CancellationToken): Promise<[variables: ChatVariablesCollection, Attachment[]]> {
+		const validReferences: vscode.ChatPromptReference[] = [];
+		const fileFolderReferences: vscode.ChatPromptReference[] = [];
+		for (const variable of variables) {
+			// Unsupported references.
+			if (isPromptInstruction(variable) || isPromptFile(variable)) {
+				continue;
+			}
+			// Images will be attached using regular attachments via Copilot CLI SDK.
+			if (variable.value instanceof ChatReferenceBinaryData) {
+				continue;
+			}
+			if (isLocation(variable.value)) {
+				validReferences.push(variable.reference);
+				continue;
+			}
+			// Notebooks are not supported yet.
+			if (URI.isUri(variable.value)) {
+				if (variable.value.scheme === Schemas.vscodeNotebookCellOutput || variable.value.scheme === Schemas.vscodeNotebookCellOutput) {
+					continue;
 				}
-			} else {
-				const uri = URI.isUri(ref.value) ? ref.value : isLocation(ref.value) ? ref.value.uri : undefined;
-				if (!uri || uri.scheme !== 'file') {
+
+				// Files and directories will be attached using regular attachments via Copilot CLI SDK.
+				validReferences.push(variable.reference);
+				fileFolderReferences.push(variable.reference);
+				continue;
+			}
+
+			validReferences.push(variable.reference);
+		}
+
+		variables = new ChatVariablesCollection(validReferences);
+		const attachments = await this.constructFileOrFolderAttachments(fileFolderReferences, token);
+		return [variables, attachments];
+	}
+
+
+	private async constructFileOrFolderAttachments(fileOrFolderReferences: vscode.ChatPromptReference[], token: vscode.CancellationToken): Promise<Attachment[]> {
+		const attachments: Attachment[] = [];
+		await Promise.all(fileOrFolderReferences.map(async ref => {
+			const uri = ref.value;
+			if (!URI.isUri(uri)) {
+				return;
+			}
+			if (await this.ignoreService.isCopilotIgnored(uri)) {
+				return;
+			}
+
+			try {
+				const stat = await raceCancellation(this.fileSystemService.stat(uri), token);
+				if (!stat) {
 					return;
 				}
-				const filePath = uri.fsPath;
-				files.push({ path: filePath, name: ref.name || path.basename(filePath) });
-				const valueText = URI.isUri(ref.value) ?
-					ref.value.fsPath :
-					isLocation(ref.value) ?
-						`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
-						undefined;
-				if (valueText && ref.range) {
-					// Keep the original prompt untouched, just collect resolved paths
-					const variableText = request.prompt.substring(ref.range[0], ref.range[1]);
-					allRefsTexts.push(`- ${variableText} → ${valueText}`);
-				}
-			}
-		});
-
-		await Promise.all(files.map(async (file) => {
-			try {
-				const stat = await raceCancellationError(this.fileSystemService.stat(URI.file(file.path)), token);
 				const type = stat.type === FileType.Directory ? 'directory' : stat.type === FileType.File ? 'file' : undefined;
 				if (!type) {
-					this.logService.error(`[CopilotCLIAgentManager] Ignoring attachment as its not a file/directory (${file.path})`);
+					this.logService.error(`[CopilotCLISession] Ignoring attachment as it's not a file/directory (${uri.fsPath})`);
 					return;
 				}
 				attachments.push({
 					type,
-					displayName: file.name,
-					path: file.path
+					displayName: ref.name || path.basename(uri.fsPath),
+					path: uri.fsPath
 				});
 			} catch (error) {
-				this.logService.error(`[CopilotCLIAgentManager] Failed to attach ${file.path}: ${error}`);
+				this.logService.error(`[CopilotCLISession] Failed to attach ${uri.fsPath}: ${error}`);
 			}
 		}));
 
-		const reminderParts: string[] = [];
-		if (allRefsTexts.length > 0) {
-			reminderParts.push(`The user provided the following references:\n${allRefsTexts.join('\n')}`);
-		}
-		if (diagnosticTexts.length > 0) {
-			reminderParts.push(`The user provided the following diagnostics:\n${diagnosticTexts.join('\n')}`);
-		}
-
-		let prompt = request.prompt;
-		if (reminderParts.length > 0) {
-			prompt = `<reminder>\n${reminderParts.join('\n\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</reminder>\n\n${prompt}`;
-		}
-
-		return { prompt, attachments };
+		return attachments;
 	}
 }

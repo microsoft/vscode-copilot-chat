@@ -3,26 +3,34 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IEditSurvivalTrackerService } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { Event } from '../../../util/vs/base/common/event';
 import { assertType } from '../../../util/vs/base/common/types';
-import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
 import { getAgentTools } from '../../intents/node/agentIntent';
+import { IIntentService } from '../../intents/node/intentService';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { Conversation } from '../../prompt/common/conversation';
+import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IToolCall } from '../../prompt/common/intents';
 import { ToolCallRound } from '../../prompt/common/toolCallRound';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
+import { IntentInvocationMetadata } from '../../prompt/node/conversation';
+import { DefaultIntentRequestHandler } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent } from '../../prompt/node/intents';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -31,8 +39,7 @@ import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
-import { InteractionOutcomeComputer } from './promptCraftingTypes';
-
+import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from './promptCraftingTypes';
 
 const INLINE_CHAT_EXIT_TOOL_NAME = 'inline_chat_exit';
 
@@ -60,16 +67,20 @@ export class InlineChatIntent implements IIntent {
 		@ILogService private readonly _logService: ILogService,
 		@IToolsService private readonly _toolsService: IToolsService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
+		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
+		@IIntentService private readonly _intentService: IIntentService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) { }
 
-	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, _agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 
 		assertType(request.location2 instanceof ChatRequestEditorData);
+		assertType(documentContext);
 
 		if (await this._ignoreService.isCopilotIgnored(request.location2.document.uri, token)) {
 			return {
 				errorDetails: {
-					message: localize('inlineChat.ignored', "Copilot is disabled for this file."),
+					message: l10n.t('inlineChat.ignored', "Copilot is disabled for this file."),
 				}
 			};
 		}
@@ -79,10 +90,68 @@ export class InlineChatIntent implements IIntent {
 		if (!endpoint.supportsToolCalls) {
 			return {
 				errorDetails: {
-					message: localize('inlineChat.model', "{0} cannot be used for inline chat", endpoint.name),
+					message: l10n.t('inlineChat.model', "{0} cannot be used for inline chat", endpoint.name),
 				}
 			};
 		}
+
+		if (this._configurationService.getNonExtensionConfig('inlineChat.enableV2')) {
+			return this._handleRequestWithEditTools(endpoint, conversation, request, stream, token, documentContext, chatTelemetry);
+		} else {
+			return this._handleRequestWithOldWorld(conversation, request, stream, token, documentContext, chatTelemetry, onPaused);
+		}
+	}
+
+	// --- OLD world
+
+	private async _handleRequestWithOldWorld(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+		// OLD world
+		let didEmitEdits = false;
+		stream = ChatResponseStreamImpl.spy(stream, part => {
+			if (part instanceof ChatResponseTextEditPart) {
+				didEmitEdits = true;
+			}
+		});
+
+		const intent = await this._selectIntent(conversation.turns, documentContext, request);
+		const handler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, conversation, request, stream, token, documentContext, ChatLocation.Editor, chatTelemetry, undefined, onPaused);
+		const result = await handler.getResult();
+
+		if (!didEmitEdits) {
+			// BAILOUT: when no edits were emitted, invoke the exit tool manually
+			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+		}
+		return result;
+	}
+
+	private async _selectIntent(history: readonly Turn[], documentContext: IDocumentContext, request: vscode.ChatRequest): Promise<IIntent> {
+
+		if (request.command) {
+			const result = this._intentService.getIntent(request.command, ChatLocation.Editor);
+			if (result) {
+				return result;
+			}
+		}
+
+		let preferredIntent: Intent | undefined;
+		if (documentContext && request.attempt === 0 && history.length === 1) {
+			if (documentContext.selection.isEmpty && documentContext.document.lineAt(documentContext.selection.start.line).text.trim() === '') {
+				preferredIntent = Intent.Generate;
+			} else if (!documentContext.selection.isEmpty && documentContext.selection.start.line !== documentContext.selection.end.line) {
+				preferredIntent = Intent.Edit;
+			}
+		}
+		if (preferredIntent) {
+			return this._intentService.getIntent(preferredIntent, ChatLocation.Editor) ?? this._intentService.unknownIntent;
+		}
+		return this._intentService.unknownIntent;
+	}
+
+	// --- NEW world
+
+	async _handleRequestWithEditTools(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<vscode.ChatResult> {
+		assertType(request.location2 instanceof ChatRequestEditorData);
+		assertType(documentContext);
 
 		const inlineChatTools = await this._getAvailableTools(request);
 
@@ -98,9 +167,19 @@ export class InlineChatIntent implements IIntent {
 
 		const telemetry = chatTelemetry.makeRequest(this, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, [], inlineChatTools.length);
 		const outcomeComputer = new InteractionOutcomeComputer(request.location2.document.uri);
+		const editSurvivalTracker = this._editSurvivalTrackerService.initialize(request.location2.document);
+
+		stream = ChatResponseStreamImpl.spy(stream, part => {
+			if (part instanceof ChatResponseTextEditPart) {
+				editSurvivalTracker.collectAIEdits(part.edits);
+				telemetry.markEmittedEdits(part.uri, part.edits);
+			}
+		});
 
 		stream = outcomeComputer.spyOnStream(stream);
+
 		const toolCalls: IToolCall[] = [];
+		let toolError: unknown | undefined;
 
 		const fetchResult = await endpoint.makeChatRequest2({
 			debugName: 'InlineChat2Intent',
@@ -108,6 +187,8 @@ export class InlineChatIntent implements IIntent {
 			userInitiatedRequest: true,
 			location: ChatLocation.Editor,
 			finishedCb: async (_text, _index, delta) => {
+
+				telemetry.markReceivedToken();
 
 				let doneAfterToolCalls = false;
 
@@ -127,25 +208,33 @@ export class InlineChatIntent implements IIntent {
 							break;
 						}
 
-						const input = isValidatedToolInput(validationResult)
-							? validationResult.inputObj
-							: JSON.parse(toolCall.arguments);
+						try {
+							let input = isValidatedToolInput(validationResult)
+								? validationResult.inputObj
+								: JSON.parse(toolCall.arguments);
 
-						const copilotTool = this._toolsService.getCopilotTool(toolCall.name as ToolName);
-						if (copilotTool?.resolveInput) {
-							copilotTool.resolveInput(input, {
-								request,
-								stream,
-								query: request.prompt,
-								chatVariables,
-								history: [],
-							}, CopilotToolMode.FullContext);
+							const copilotTool = this._toolsService.getCopilotTool(toolCall.name as ToolName);
+							if (copilotTool?.resolveInput) {
+								input = await copilotTool.resolveInput(input, {
+									request,
+									stream,
+									query: request.prompt,
+									chatVariables,
+									history: [],
+								}, CopilotToolMode.FullContext);
+							}
+
+							const result = await this._toolsService.invokeTool(toolCall.name, {
+								input,
+								toolInvocationToken: request.toolInvocationToken,
+							}, token);
+
+							this._logService.trace(`Tool ${toolCall.name} invocation result: ${JSON.stringify(result)}`);
+
+						} catch (err) {
+							this._logService.error(err, `Tool ${toolCall.name} invocation failed`);
+							toolError = err;
 						}
-
-						await this._toolsService.invokeTool(toolCall.name, {
-							input,
-							toolInvocationToken: request.toolInvocationToken,
-						}, token);
 					}
 				}
 
@@ -201,6 +290,34 @@ export class InlineChatIntent implements IIntent {
 				}
 			};
 		}
+
+		if (toolError) {
+			return {
+				errorDetails: {
+					message: toErrorMessage(toolError)
+				}
+			};
+		}
+
+		if (toolCalls.length === 0) {
+			// when no tools were called, invoke the exit tool manually
+			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+		}
+
+		// store metadata for telemetry sending
+		const turn = conversation.getLatestTurn();
+		turn.setMetadata(outcomeComputer.interactionOutcome);
+		turn.setMetadata(new CopilotInteractiveEditorResponse(
+			'ok', outcomeComputer.store,
+			{ ...documentContext, query: request.prompt, intent: this },
+			telemetry.telemetryMessageId, telemetry, editSurvivalTracker
+		));
+		turn.setMetadata(new IntentInvocationMetadata({ // UGLY fake intent invocation
+			location: ChatLocation.Editor,
+			intent: this,
+			endpoint: endpoint,
+			buildPrompt: () => { throw new Error(); },
+		}));
 
 		return {};
 

@@ -12,6 +12,7 @@ import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { SubagentToolCallingLoop } from '../../prompt/node/subagentLoop';
 import { SearchSubagentPrompt } from '../../prompts/node/agent/searchSubagentPrompt';
+import { PromptElementCtor } from '../../prompts/node/base/promptElement';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
@@ -63,7 +64,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			location: this._inputContext!.request!.location,
 			promptText: options.input.query,
 			allowedTools: new Set([ToolName.Codebase, ToolName.FindFiles, ToolName.FindTextInFiles, ToolName.ReadFile]),
-			customPromptClass: SearchSubagentPrompt,
+			customPromptClass: SearchSubagentPrompt as typeof SearchSubagentPrompt & PromptElementCtor,
 		});
 
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(

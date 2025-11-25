@@ -143,12 +143,6 @@
 		]
 	},
 	{
-		"name": "multifile-edit-claude [panel] [html] - Edits keeps editing files that are NOT attached due to temporal context #9130 - (claude-3.5-sonnet)",
-		"requests": [
-			"473821a0fa8c54fc60ddede6027fd795287996f5abdfc74a0e03507a08091757"
-		]
-	},
-	{
 		"name": "multifile-edit-claude [panel] [typescript] - add a command and dependency to a VS Code extension - (claude-3.5-sonnet)",
 		"requests": [
 			"0005596d20a2ebc3ba0e50976ad63ff177db91e1fbd15c53fa13f10858469d58",

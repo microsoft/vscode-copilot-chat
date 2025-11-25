@@ -8,7 +8,7 @@ import { HTMLTracer, IChatEndpointInfo, Raw, RenderPromptResult } from '@vscode/
 import { AsyncLocalStorage } from 'async_hooks';
 import type { Event } from 'vscode';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponses, FetchSuccess } from '../../../platform/chat/common/commonTypes';
-import { IResponseDelta, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -128,7 +128,6 @@ export interface ILoggedToolCall {
 
 export interface ILoggedPendingRequest {
 	messages: Raw.ChatMessage[];
-	tools: (OpenAiFunctionTool | OpenAiResponsesFunctionTool)[] | undefined;
 	ourRequestId: string;
 	model: string;
 	location: ChatLocation;

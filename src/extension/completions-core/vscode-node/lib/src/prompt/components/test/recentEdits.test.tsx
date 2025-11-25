@@ -6,21 +6,22 @@
 /** @jsxImportSource ../../../../../prompt/jsx-runtime/ */
 
 import * as assert from 'assert';
-import { MutableObservableWorkspace, ObservableWorkspace } from '../../../../../../../../platform/inlineEdits/common/observableWorkspace';
+import { IIgnoreService } from '../../../../../../../../platform/ignore/common/ignoreService';
+import { SyncDescriptor } from '../../../../../../../../util/vs/platform/instantiation/common/descriptors';
+import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
-import { CopilotContentExclusionManager } from '../../../contentExclusion/contentExclusionManager';
-import { ICompletionsContextService } from '../../../context';
+import { ICompletionsObservableWorkspace } from '../../../completionsObservableWorkspace';
 import { createCompletionRequestData } from '../../../test/completionsPrompt';
 import { createLibTestingContext } from '../../../test/context';
 import { querySnapshot } from '../../../test/snapshot';
-import { BlockingContentExclusionManager } from '../../../test/testContentExclusion';
+import { MockIgnoreService } from '../../../test/testContentExclusion';
 import { TestTextDocumentManager } from '../../../test/textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../../textDocumentManager';
 import { CompletionRequestDocument } from '../../completionsPromptFactory/componentsCompletionsPromptFactory';
-import { FullRecentEditsProvider, RecentEditsProvider } from '../../recentEdits/recentEditsProvider';
+import { CompletionsMutableObservableWorkspace } from '../../completionsPromptFactory/test/completionsPromptFactory.test';
+import { FullRecentEditsProvider, ICompletionsRecentEditsProviderService } from '../../recentEdits/recentEditsProvider';
 import { DiffHunk, RecentEdit, summarizeEdit } from '../../recentEdits/recentEditsReducer';
 import { RecentEdits, editIsTooCloseToCursor } from '../recentEdits';
-import { ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 class MockRecentEditsProvider extends FullRecentEditsProvider {
 	override getRecentEdits = () => [] as RecentEdit[];
@@ -33,20 +34,23 @@ class MockRecentEditsProvider extends FullRecentEditsProvider {
 suite('Recent Edits Component', function () {
 	let accessor: ServicesAccessor;
 	let mockRecentEditsProvider: MockRecentEditsProvider;
+	let ignoreService: MockIgnoreService;
 
 	setup(function () {
-		accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.set(ObservableWorkspace, new MutableObservableWorkspace());
-		mockRecentEditsProvider = ctx.instantiationService.createInstance(MockRecentEditsProvider, undefined);
-		ctx.forceSet(RecentEditsProvider, mockRecentEditsProvider);
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(ICompletionsObservableWorkspace, new CompletionsMutableObservableWorkspace());
+		serviceCollection.define(ICompletionsRecentEditsProviderService, new SyncDescriptor(MockRecentEditsProvider, [undefined]));
+		serviceCollection.define(IIgnoreService, new MockIgnoreService());
+		accessor = serviceCollection.createTestingAccessor();
+
+		ignoreService = accessor.get(IIgnoreService) as MockIgnoreService;
+		mockRecentEditsProvider = accessor.get(ICompletionsRecentEditsProviderService) as MockRecentEditsProvider;
 	});
 
 	test('renders nothing when recent edits are disabled', async function () {
 		mockRecentEditsProvider.isEnabled = () => false;
 
-		const ctx = accessor.get(ICompletionsContextService);
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		const doc = tdm.setTextDocument('file:///foo.ts', 'typescript', 'const x = |;');
 
 		const snapshot = await createSnapshot(accessor, doc, '|');
@@ -60,8 +64,7 @@ suite('Recent Edits Component', function () {
 		mockRecentEditsProvider.config.summarizationFormat = 'diff';
 		mockRecentEditsProvider.config.maxFiles = 5;
 
-		const ctx = accessor.get(ICompletionsContextService);
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.init([{ uri: 'file:///root/' }]);
 		const doc = tdm.setTextDocument(
 			'file:///root/relative/main.ts',
@@ -107,8 +110,7 @@ suite('Recent Edits Component', function () {
 		mockRecentEditsProvider.config.maxFiles = 5;
 		mockRecentEditsProvider.config.removeDeletedLines = true;
 
-		const ctx = accessor.get(ICompletionsContextService);
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.init([{ uri: 'file:///root/' }]);
 		const doc = tdm.setTextDocument(
 			'file:///root/relative/main.ts',
@@ -156,8 +158,7 @@ End of recent edits\n`.replace(/\n {12}/g, '\n')
 		mockRecentEditsProvider.config.summarizationFormat = 'diff';
 		mockRecentEditsProvider.config.maxFiles = 2;
 
-		const ctx = accessor.get(ICompletionsContextService);
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.init([{ uri: 'file:///root/' }]);
 
 		const fileUris = ['file:///root/file-1', 'file:///root/file-2', 'file:///root/file-3'];
@@ -213,8 +214,7 @@ End of recent edits\n`.replace(/\n {12}/g, '\n')
 		mockRecentEditsProvider.config.removeDeletedLines = true;
 		mockRecentEditsProvider.config.maxLinesPerEdit = 1;
 
-		const ctx = accessor.get(ICompletionsContextService);
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.init([{ uri: 'file:///root/' }]);
 
 		const fileUris = ['file:///root/file-1', 'file:///root/file-2', 'file:///root/file-3'];
@@ -272,8 +272,7 @@ End of recent edits\n`.replace(/\n {12}/g, '\n')
 		mockRecentEditsProvider.config.maxFiles = 5;
 		mockRecentEditsProvider.config.activeDocDistanceLimitFromCursor = 3;
 
-		const ctx = accessor.get(ICompletionsContextService);
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.init([{ uri: 'file:///root/' }]);
 		const doc = tdm.setTextDocument(
 			'file:///root/relative/main.ts',
@@ -344,8 +343,7 @@ End of recent edits\n`.replace(/\n {12}/g, '\n')
 		mockRecentEditsProvider.config.summarizationFormat = 'diff';
 		mockRecentEditsProvider.config.maxFiles = 5;
 
-		const ctx = accessor.get(ICompletionsContextService);
-		const tdm = ctx.get(TextDocumentManager) as TestTextDocumentManager;
+		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.init([{ uri: 'file:///root/' }]);
 
 		const doc = tdm.setTextDocument(
@@ -359,10 +357,7 @@ End of recent edits\n`.replace(/\n {12}/g, '\n')
 			'function excluded() {\n  return "excluded";\n}\n|'
 		);
 
-		ctx.forceSet(
-			CopilotContentExclusionManager,
-			ctx.instantiationService.createInstance(BlockingContentExclusionManager, ['file:///root/relative/excluded.ts'])
-		);
+		ignoreService.setBlockListUris([excludedDoc.uri]);
 
 		const fakeEdits: RecentEdit[] = [
 			{
@@ -412,8 +407,9 @@ End of recent edits\n`.replace(/\n {12}/g, '\n')
 
 	async function createSnapshot(accessor: ServicesAccessor, doc: CompletionRequestDocument, marker: string) {
 		const position = doc.positionAt(doc.getText().indexOf(marker));
-		const ctx = accessor.get(ICompletionsContextService);
-		const virtualPrompt = new VirtualPrompt(<RecentEdits ctx={ctx} />);
+		const tdms = accessor.get(ICompletionsTextDocumentManagerService);
+		const recentEditsProvider = accessor.get(ICompletionsRecentEditsProviderService);
+		const virtualPrompt = new VirtualPrompt(<RecentEdits tdms={tdms} recentEditsProvider={recentEditsProvider} />);
 		const pipe = virtualPrompt.createPipe();
 		await pipe.pump(createCompletionRequestData(accessor, doc, position));
 		return virtualPrompt.snapshot().snapshot!;

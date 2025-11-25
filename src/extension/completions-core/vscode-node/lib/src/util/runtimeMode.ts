@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { createDecorator } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { createServiceIdentifier } from '../../../../../../util/common/services';
 
 type RuntimeFlag = 'debug' | 'verboseLogging' | 'testMode' | 'simulation';
 
-export const ICompletionsRuntimeModeService = createDecorator<ICompletionsRuntimeModeService>('completionsRuntimeModeService');
+export const ICompletionsRuntimeModeService = createServiceIdentifier<ICompletionsRuntimeModeService>('completionsRuntimeModeService');
 export interface ICompletionsRuntimeModeService {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	readonly flags: Record<RuntimeFlag, boolean>;
 	isRunningInTest(): boolean;
@@ -20,7 +20,7 @@ export interface ICompletionsRuntimeModeService {
 }
 
 export class RuntimeMode implements ICompletionsRuntimeModeService {
-	_serviceBrand: undefined;
+	declare _serviceBrand: undefined;
 	constructor(readonly flags: Record<RuntimeFlag, boolean>) { }
 
 	static fromEnvironment(isRunningInTest: boolean, argv = process.argv, env = process.env): RuntimeMode {

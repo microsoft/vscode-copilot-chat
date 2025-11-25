@@ -5,7 +5,6 @@
 
 import * as vscode from 'vscode';
 import { window, workspace } from 'vscode';
-import { ICompletionsContextService } from '../../lib/src/context';
 import { detectLanguage } from '../../lib/src/language/languageDetection';
 import { CopilotTextDocument, INotebookCell, INotebookDocument, ITextDocument } from '../../lib/src/textDocument';
 import { TextDocumentManager, WorkspaceFoldersChangeEvent } from '../../lib/src/textDocumentManager';
@@ -21,7 +20,7 @@ const ignoreUriSchemes = new Set([
 	'chat-editing-snapshot-text-model', // VS Code Chat temporary editing snapshot
 ]);
 
-export function wrapDoc(_ctx: ICompletionsContextService, doc: vscode.TextDocument): ITextDocument | undefined {
+export function wrapDoc(doc: vscode.TextDocument): ITextDocument | undefined {
 	if (ignoreUriSchemes.has(doc.uri.scheme)) {
 		return;
 	}
@@ -40,22 +39,18 @@ export function wrapDoc(_ctx: ICompletionsContextService, doc: vscode.TextDocume
 }
 
 export class ExtensionTextDocumentManager extends TextDocumentManager {
-	constructor(@ICompletionsContextService ctx: ICompletionsContextService) {
-		super(ctx);
-	}
-
 	override onDidFocusTextDocument = transformEvent(window.onDidChangeActiveTextEditor, event => {
 		return { document: event && { uri: event.document.uri.toString() } };
 	});
 
 	override onDidChangeTextDocument = transformEvent(workspace.onDidChangeTextDocument, e => {
-		const document = wrapDoc(this.ctx, e.document);
+		const document = wrapDoc(e.document);
 		return document && { document, contentChanges: e.contentChanges };
 	});
 
 	override onDidOpenTextDocument = transformEvent(workspace.onDidOpenTextDocument, e => {
 		// use wrapDoc() to handle the "Invalid string length" case
-		const text = wrapDoc(this.ctx, e)?.getText();
+		const text = wrapDoc(e)?.getText();
 		if (text === undefined) {
 			return;
 		}
@@ -80,7 +75,7 @@ export class ExtensionTextDocumentManager extends TextDocumentManager {
 	getTextDocumentsUnsafe(): ITextDocument[] {
 		const docs: ITextDocument[] = [];
 		for (const vscodeDoc of workspace.textDocuments) {
-			const doc = wrapDoc(this.ctx, vscodeDoc);
+			const doc = wrapDoc(vscodeDoc);
 			if (doc) {
 				docs.push(doc);
 			}

@@ -6,11 +6,10 @@
 import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { normalizeLanguageId, SimilarFileInfo } from '../../../../prompt/src/prompt';
 import { CancellationToken as ICancellationToken } from '../../../../types/src';
-import { ICompletionsContextService } from '../../context';
-import { Features } from '../../experiments/features';
-import { LogTarget } from '../../logger';
+import { ICompletionsFeaturesService } from '../../experiments/featuresService';
+import { ICompletionsLogTargetService } from '../../logger';
 import { TelemetryWithExp } from '../../telemetry';
-import { TextDocumentManager } from '../../textDocumentManager';
+import { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
 import { OpenTabFiles } from './openTabFiles';
 import { getRelatedFilesAndTraits, relatedFilesLogger, RelatedFileTrait } from './relatedFiles';
 
@@ -92,12 +91,12 @@ export class NeighborSource {
 		neighborSource: Map<NeighboringFileType, string[]>;
 		traits: RelatedFileTrait[];
 	}> {
-		const ctx = accessor.get(ICompletionsContextService);
-		const logTarget = ctx.get(LogTarget);
+		const featuresService = accessor.get(ICompletionsFeaturesService);
+		const logTarget = accessor.get(ICompletionsLogTargetService);
 		const instantiationService = accessor.get(IInstantiationService);
-		const docManager = ctx.get(TextDocumentManager);
+		const docManager = accessor.get(ICompletionsTextDocumentManagerService);
 		if (NeighborSource.instance === undefined) {
-			NeighborSource.instance = new OpenTabFiles(docManager);
+			NeighborSource.instance = instantiationService.createInstance(OpenTabFiles);
 		}
 
 		const result = {
@@ -105,7 +104,7 @@ export class NeighborSource {
 			traits: [] as RelatedFileTrait[],
 		};
 
-		if (ctx.get(Features).excludeRelatedFiles(fileType, telemetryData)) { return result; }
+		if (featuresService.excludeRelatedFiles(fileType, telemetryData)) { return result; }
 
 		const doc = await docManager.getTextDocument({ uri });
 		if (!doc) {
@@ -188,6 +187,6 @@ export class NeighborSource {
 }
 
 export function isIncludeNeighborFilesActive(accessor: ServicesAccessor, languageId: string, telemetryData: TelemetryWithExp): boolean {
-	const ctx = accessor.get(ICompletionsContextService);
-	return ctx.get(Features).includeNeighboringFiles(languageId, telemetryData);
+	const featuresService = accessor.get(ICompletionsFeaturesService);
+	return featuresService.includeNeighboringFiles(languageId, telemetryData);
 }

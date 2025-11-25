@@ -4,17 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ClientHttp2Stream } from 'http2';
+import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
+import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
-import { CopilotToken, CopilotTokenManager } from '../auth/copilotTokenManager';
+import { CopilotToken, ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
-import { ICompletionsContextService } from '../context';
-import { Features } from '../experiments/features';
 import { asyncIterableFilter, asyncIterableMap } from '../helpers/iterableHelpers';
-import { LogTarget, Logger } from '../logger';
+import { ICompletionsLogTargetService, Logger } from '../logger';
 import { getEndpointUrl } from '../networkConfiguration';
 import { Response, isAbortError, postRequest } from '../networking';
-import { StatusReporter } from '../progress';
+import { ICompletionsStatusReporter } from '../progress';
 import { Prompt } from '../prompt/prompt';
 import { MaybeRepoInfo, tryGetGitHubNWO } from '../prompt/repository';
 import {
@@ -26,6 +26,7 @@ import {
 	telemetry,
 } from '../telemetry';
 import { delay } from '../util/async';
+import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 import { getKey } from '../util/unknown';
 import {
 	APIChoice,
@@ -37,7 +38,6 @@ import {
 	getTopP,
 } from './openai';
 import { CopilotAnnotations, SSEProcessor, prepareSolutionForReturn } from './stream';
-import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 
 const logger = new Logger('fetchCompletions');
 
@@ -247,12 +247,24 @@ export interface SpeculationFetchParams extends InternalFetchParams {
 	stops: string[] | null;
 }
 
+export const ICompletionsOpenAIFetcherService = createServiceIdentifier<ICompletionsOpenAIFetcherService>('ICompletionsOpenAIFetcherService');
+export interface ICompletionsOpenAIFetcherService {
+	readonly _serviceBrand: undefined;
+	fetchAndStreamCompletions(
+		params: CompletionParams,
+		baseTelemetryData: TelemetryWithExp,
+		finishedCb: FinishedCallback,
+		cancellationToken?: ICancellationToken
+	): Promise<CompletionResults | CompletionError>;
+}
+
 /** An interface to abstract away the network request to OpenAI, allowing for
  * fake or mock implementations. It's deliberately injected relatively high
  * in the call stack to avoid having to reconstruct some of the lower-level details
  * of the OpenAI API.
  */
-export abstract class OpenAIFetcher {
+export abstract class OpenAIFetcher implements ICompletionsOpenAIFetcherService {
+	declare _serviceBrand: undefined;
 	/**
 	 * Sends a request to the code completion endpoint.
 	 */
@@ -322,10 +334,9 @@ async function fetchWithInstrumentation(
 	cancel?: ICancellationToken,
 	headers?: CompletionHeaders
 ): Promise<Response> {
-	const ctx = accessor.get(ICompletionsContextService);
 	const instantiationService = accessor.get(IInstantiationService);
-	const logTarget = ctx.get(LogTarget);
-	const statusReporter = ctx.get(StatusReporter);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const statusReporter = accessor.get(ICompletionsStatusReporter);
 	const uri = instantiationService.invokeFunction(getProxyEngineUrl, copilotToken, engineModelId, endpoint);
 
 	const telemetryData = telemetryExp.extendedBy(
@@ -421,8 +432,11 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@ICompletionsContextService private readonly completionsContextService: ICompletionsContextService,
-		@ICompletionsRuntimeModeService private readonly runtimeModeService: ICompletionsRuntimeModeService
+		@ICompletionsRuntimeModeService private readonly runtimeModeService: ICompletionsRuntimeModeService,
+		@ICompletionsLogTargetService private readonly logTargetService: ICompletionsLogTargetService,
+		@ICompletionsCopilotTokenManager private readonly copilotTokenManager: ICompletionsCopilotTokenManager,
+		@ICompletionsStatusReporter private readonly statusReporter: ICompletionsStatusReporter,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
 		super();
 	}
@@ -436,10 +450,8 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		if (this.#disabledReason) {
 			return { type: 'canceled', reason: this.#disabledReason };
 		}
-		const statusReporter = this.completionsContextService.get(StatusReporter);
 		const endpoint = 'completions';
-		const tokenManager = this.completionsContextService.get(CopilotTokenManager);
-		const copilotToken = tokenManager.token ?? await tokenManager.getToken();
+		const copilotToken = this.copilotTokenManager.token ?? await this.copilotTokenManager.getToken();
 		const response = await this.fetchWithParameters(endpoint, params, copilotToken, baseTelemetryData, cancel);
 		if (response === 'not-sent') {
 			return { type: 'canceled', reason: 'before fetch request' };
@@ -462,7 +474,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 
 		if (response.status !== 200) {
 			const telemetryData = this.createTelemetryData(endpoint, params);
-			return this.handleError(statusReporter, telemetryData, response, copilotToken);
+			return this.handleError(this.statusReporter, telemetryData, response, copilotToken);
 		}
 		const processor = await this.instantiationService.invokeFunction(SSEProcessor.create, params.count, response, baseTelemetryData, [], cancel);
 		const finishedCompletions = processor.processSSE(finishedCb);
@@ -492,7 +504,6 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		baseTelemetryData: TelemetryWithExp,
 		cancel?: ICancellationToken
 	): Promise<Response | 'not-sent'> {
-		const disableLogProb = this.completionsContextService.get(Features).disableLogProb(baseTelemetryData);
 
 		const request: CompletionRequest = {
 			prompt: params.prompt.prefix,
@@ -506,7 +517,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			extra: params.extra,
 		};
 
-		if (params.requestLogProbs || !disableLogProb) {
+		if (params.requestLogProbs) {
 			request.logprobs = 2; // Request that logprobs of 2 tokens (i.e. including the best alternative) be returned
 		}
 
@@ -547,13 +558,11 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	}
 
 	async handleError(
-		statusReporter: StatusReporter,
+		statusReporter: ICompletionsStatusReporter,
 		telemetryData: TelemetryData,
 		response: Response,
 		copilotToken: CopilotToken
 	): Promise<CompletionError> {
-		const logTarget = this.completionsContextService.get(LogTarget);
-		const copilotTokenManager = this.completionsContextService.get(CopilotTokenManager);
 		const text = await response.text();
 		if (response.status === 402) {
 			this.#disabledReason = 'monthly free code completions exhausted';
@@ -562,28 +571,27 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				command: CMDQuotaExceeded,
 				title: 'Learn More',
 			});
-			const event = this.instantiationService.invokeFunction(
-				onCopilotToken, t => {
-					this.#disabledReason = undefined;
-					if (!t.isCompletionsQuotaExceeded) {
-						statusReporter.forceNormal();
-						event.dispose();
-					}
-				});
+			const event = onCopilotToken(this.authenticationService, t => {
+				this.#disabledReason = undefined;
+				if (!t.isCompletionsQuotaExceeded) {
+					statusReporter.forceNormal();
+					event.dispose();
+				}
+			});
 			return { type: 'failed', reason: this.#disabledReason };
 		}
 		if (response.status === 466) {
 			statusReporter.setError(text);
-			logger.info(logTarget, text);
+			logger.info(this.logTargetService, text);
 			return { type: 'failed', reason: `client not supported: ${text}` };
 		}
 		if (isClientError(response) && !response.headers.get('x-github-request-id')) {
 			const message = `Last response was a ${response.status} error and does not appear to originate from GitHub. Is a proxy or firewall intercepting this request? https://gh.io/copilot-firewall`;
-			logger.error(logTarget, message);
+			logger.error(this.logTargetService, message);
 			statusReporter.setWarning(message);
 			telemetryData.properties.error = `Response status was ${response.status} with no x-github-request-id header`;
 		} else if (isClientError(response)) {
-			logger.warn(logTarget, `Response status was ${response.status}:`, text);
+			logger.warn(this.logTargetService, `Response status was ${response.status}:`, text);
 			statusReporter.setWarning(`Last response was a ${response.status} error: ${text}`);
 			telemetryData.properties.error = `Response status was ${response.status}: ${text}`;
 		} else {
@@ -596,7 +604,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		if (response.status === 401 || response.status === 403) {
 			// Token has expired or invalid, fetch a new one on next request
 			// TODO(drifkin): these actions should probably happen in vsc specific code
-			copilotTokenManager.resetToken(response.status);
+			this.copilotTokenManager.resetToken(response.status);
 			return { type: 'failed', reason: `token expired or invalid: ${response.status}` };
 		}
 		if (response.status === 429) {
@@ -605,14 +613,14 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				this.#disabledReason = undefined;
 			}, rateLimitSeconds * 1000);
 			this.#disabledReason = 'rate limited';
-			logger.warn(logTarget, `Rate limited by server. Denying completions for the next ${rateLimitSeconds} seconds.`);
+			logger.warn(this.logTargetService, `Rate limited by server. Denying completions for the next ${rateLimitSeconds} seconds.`);
 			return { type: 'failed', reason: this.#disabledReason };
 		}
 		if (response.status === 499) {
-			logger.info(logTarget, 'Cancelled by server');
+			logger.info(this.logTargetService, 'Cancelled by server');
 			return { type: 'failed', reason: 'canceled by server' };
 		}
-		logger.error(logTarget, 'Unhandled status from server:', response.status, text);
+		logger.error(this.logTargetService, 'Unhandled status from server:', response.status, text);
 		return { type: 'failed', reason: `unhandled status from server: ${response.status} ${text}` };
 	}
 }

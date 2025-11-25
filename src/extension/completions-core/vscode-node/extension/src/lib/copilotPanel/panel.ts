@@ -4,12 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IInstantiationService, type ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ICompletionsContextService } from '../../../../lib/src/context';
 import { asyncIterableMapFilter } from '../../../../lib/src/helpers/iterableHelpers';
-import { Logger, LogTarget } from '../../../../lib/src/logger';
-import { CopilotUiKind, OpenAIFetcher } from '../../../../lib/src/openai/fetch';
+import { ICompletionsLogTargetService, Logger } from '../../../../lib/src/logger';
+import { CopilotUiKind, ICompletionsOpenAIFetcherService } from '../../../../lib/src/openai/fetch';
 import { APIChoice } from '../../../../lib/src/openai/openai';
-import { StatusReporter } from '../../../../lib/src/progress';
+import { ICompletionsStatusReporter } from '../../../../lib/src/progress';
 import { getNodeStartUtil } from '../../../../lib/src/prompt/parseBlock';
 import { trimLastLine } from '../../../../lib/src/prompt/prompt';
 import { postProcessChoiceInContext } from '../../../../lib/src/suggestions/suggestions';
@@ -32,7 +31,8 @@ const solutionsLogger = new Logger('solutions');
  */
 export async function launchSolutions(accessor: ServicesAccessor, solutionManager: SolutionManager): Promise<SolutionsStream> {
 	const instantiationService = accessor.get(IInstantiationService);
-	const ctx = accessor.get(ICompletionsContextService);
+	const fetcherService = accessor.get(ICompletionsOpenAIFetcherService);
+	const logTarget = accessor.get(ICompletionsLogTargetService);
 	const position = solutionManager.targetPosition;
 	const document = solutionManager.textDocument;
 
@@ -69,9 +69,7 @@ export async function launchSolutions(accessor: ServicesAccessor, solutionManage
 		extra,
 	};
 
-	const res = await ctx
-		.get(OpenAIFetcher)
-		.fetchAndStreamCompletions(completionParams, telemetryData.extendedBy(), finishedCb, cancellationToken);
+	const res = await fetcherService.fetchAndStreamCompletions(completionParams, telemetryData.extendedBy(), finishedCb, cancellationToken);
 
 	if (res.type === 'failed' || res.type === 'canceled') {
 		return { status: 'FinishedWithError', error: `${res.type}: ${res.reason}` };
@@ -83,7 +81,6 @@ export async function launchSolutions(accessor: ServicesAccessor, solutionManage
 
 	const solutions = asyncIterableMapFilter(choices, async (apiChoice: APIChoice) => {
 		let display = apiChoice.completionText;
-		const logTarget = ctx.get(LogTarget);
 		solutionsLogger.info(logTarget, `Open Copilot completion: [${apiChoice.completionText}]`);
 
 		// For completions that can happen in any location in the middle of the code we try to find the existing code
@@ -132,7 +129,7 @@ export async function runSolutions(
 	solutionHandler: ISolutionHandler
 ): Promise<void> {
 	const instantiationService = accessor.get(IInstantiationService);
-	const statusReporter = accessor.get(ICompletionsContextService).get(StatusReporter);
+	const statusReporter = accessor.get(ICompletionsStatusReporter);
 	return statusReporter.withProgress(async () => {
 		const nextSolution = instantiationService.invokeFunction(launchSolutions, solutionManager);
 		return await reportSolutions(nextSolution, solutionHandler);

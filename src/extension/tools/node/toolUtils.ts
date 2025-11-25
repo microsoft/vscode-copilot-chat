@@ -18,7 +18,7 @@ import { isAbsolute } from '../../../util/vs/base/common/path';
 import { isEqual, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location } from '../../../vscodeTypes';
+import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 
 export function checkCancellation(token: CancellationToken): void {
@@ -37,16 +37,6 @@ export async function toolTSX(insta: IInstantiationService, options: vscode.Lang
 			}, {}, options.tokenizationOptions, token)
 		)
 	]);
-}
-
-export function formatUriForFileWidget(uriOrLocation: URI | Location): string {
-	const uri = URI.isUri(uriOrLocation) ? uriOrLocation : uriOrLocation.uri;
-	const rangePart = URI.isUri(uriOrLocation) ?
-		'' :
-		`#${uriOrLocation.range.start.line + 1}-${uriOrLocation.range.end.line + 1}`;
-
-	// Empty link text -> rendered as file widget
-	return `[](${uri.toString()}${rangePart})`;
 }
 
 /**

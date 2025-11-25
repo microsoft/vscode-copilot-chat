@@ -10,11 +10,9 @@ import { UriHandlerPaths, UriHandlers } from './chatSessionsUriHandler';
 
 export const MAX_PROBLEM_STATEMENT_LENGTH = 30_000 - 50; // 50 character buffer
 export const CONTINUE_TRUNCATION = vscode.l10n.t('Continue with truncation');
-export const body_suffix = vscode.l10n.t('Created from VS Code via the [GitHub Pull Request](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github) extension.');
+export const body_suffix = vscode.l10n.t('Created from [VS Code](https://code.visualstudio.com/docs/copilot/copilot-coding-agent).');
+// https://github.com/github/sweagentd/blob/main/docs/adr/0001-create-job-api.md
 export const JOBS_API_VERSION = 'v1';
-type RemoteAgentSuccessResult = { link: string; state: 'success'; number: number; webviewUri: vscode.Uri; llmDetails: string; sessionId: string };
-type RemoteAgentErrorResult = { error: string; innerError?: string; state: 'error' };
-export type RemoteAgentResult = RemoteAgentSuccessResult | RemoteAgentErrorResult;
 
 /**
  * Truncation utility to ensure the problem statement sent to Copilot API is under the maximum length.

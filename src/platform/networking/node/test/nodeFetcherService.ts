@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IEnvService } from '../../../env/common/envService';
-import { FetchOptions, IAbortController, IFetcherService, Response } from '../../common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../common/fetcherService';
 import { NodeFetchFetcher } from '../nodeFetchFetcher';
 
 export class NodeFetcherService implements IFetcherService {
@@ -16,6 +16,10 @@ export class NodeFetcherService implements IFetcherService {
 	constructor(
 		@IEnvService private readonly _envService: IEnvService
 	) { }
+
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		return this._fetcher.fetchWithPagination(baseUrl, options);
+	}
 
 	getUserAgentLibrary(): string {
 		return this._fetcher.getUserAgentLibrary();

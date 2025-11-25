@@ -76,7 +76,7 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 
 		this.registerSerializer = this.registerEnvironment();
 		// Initialize ChatSessionsUriHandler with extension context for storage
-		this.chatSessionsUriHandler = new ChatSessionsUriHandler(this._octoKitService, this._gitService, this._gitExtensionService, this.context, this.logService, this.fileSystemService);
+		this.chatSessionsUriHandler = new ChatSessionsUriHandler(this._octoKitService, this._gitService, this._gitExtensionService, this.context, this.logService, this.fileSystemService, this.telemetryService);
 		// Check for pending chat sessions when this contribution is initialized
 		(this.chatSessionsUriHandler as ChatSessionsUriHandler).openPendingSession().catch((err) => {
 			this.logService.error('Failed to check for pending chat sessions from debug command contribution:', err);

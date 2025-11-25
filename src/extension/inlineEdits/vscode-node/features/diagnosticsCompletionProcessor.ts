@@ -34,11 +34,11 @@ import { StringText } from '../../../../util/vs/editor/common/core/text/abstract
 import { getInformationDelta, InformationDelta } from '../../common/informationDelta';
 import { RejectionCollector } from '../../common/rejectionCollector';
 import { IVSCodeObservableDocument, VSCodeWorkspace } from '../parts/vscodeWorkspace';
+import { toInternalPosition } from '../utils/translations';
 import { AnyDiagnosticCompletionItem, AnyDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/anyDiagnosticsCompletionProvider';
 import { AsyncDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/asyncDiagnosticsCompletionProvider';
 import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, distanceToClosestDiagnostic, IDiagnosticCompletionProvider, log, logList, sortDiagnosticsByDistance } from './diagnosticsBasedCompletions/diagnosticsCompletions';
 import { ImportDiagnosticCompletionItem, ImportDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/importDiagnosticsCompletionProvider';
-import { toInternalPosition } from '../utils/translations';
 
 interface IDiagnosticsCompletionState<T extends DiagnosticCompletionItem = DiagnosticCompletionItem> {
 	completionItem: T | null;
@@ -181,7 +181,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._tracer = createTracer(['NES', 'DiagnosticsInlineCompletionProvider'], (s) => logService.trace(s));
 
-		const diagnosticsExplorationEnabled = configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsDiagnosticsExplorationEnabled);
+		const diagnosticsExplorationEnabled = configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsDiagnosticsExplorationEnabled);
 
 		const importProvider = new ImportDiagnosticCompletionProvider(this._tracer.sub('Import'), workspaceService, fileSystemService);
 		const asyncProvider = new AsyncDiagnosticCompletionProvider(this._tracer.sub('Async'));
@@ -218,7 +218,8 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			this._updateState();
 
 			// update state because diagnostics changed
-			reader.store.add(runOnChange(activeDocument.diagnostics, () => {
+			reader.store.add(runOnChange(activeDocument.diagnostics, (diagnostics) => {
+				this._tracer.trace(`Diagnostics changed received in processor: ${diagnostics.map(d => '\n- ' + d.message).join('')}`);
 				this._updateState();
 			}));
 		}));
@@ -324,6 +325,8 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			log.setError(error);
 		}
 
+		this._tracer.trace('Diagnostic Providers returned completion item: ' + (completionItem ? completionItem.toString() : 'null'));
+
 		// Distance to the closest diagnostic which is not supported by any provider
 		const allNoneSupportedDiagnostics = allDiagnostics.filter(diagnostic => !diagnosticsSorted.includes(diagnostic));
 		telemetryBuilder.setDistanceToUnknownDiagnostic(distanceToClosestDiagnostic(workspaceDocument, allNoneSupportedDiagnostics, cursor));
@@ -404,9 +407,16 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 	private async _fetchDiagnosticsBasedCompletions(workspaceDocument: IVSCodeObservableDocument, sortedDiagnostics: Diagnostic[], pos: Position, logContext: DiagnosticInlineEditRequestLogContext, token: CancellationToken): Promise<DiagnosticCompletionItem[]> {
 		const providers = this._diagnosticsCompletionProviders.get();
 
-		const providerResults = await Promise.all(providers.map(provider =>
-			provider.provideDiagnosticCompletionItem(workspaceDocument, sortedDiagnostics, pos, logContext, token)
-		));
+		const providerTimings: Array<{ provider: string; duration: number }> = [];
+
+		const providerResults = await Promise.all(providers.map(async provider => {
+			const startTime = Date.now();
+			const result = await provider.provideDiagnosticCompletionItem(workspaceDocument, sortedDiagnostics, pos, logContext, token);
+			providerTimings.push({ provider: provider.providerName, duration: Date.now() - startTime });
+			return result;
+		}));
+
+		this._tracer.trace(`Provider durations: ${providerTimings.map(timing => `\n- ${timing.provider}: ${timing.duration}ms`).join('')}`);
 
 		return providerResults.filter(item => !!item) as DiagnosticCompletionItem[];
 	}

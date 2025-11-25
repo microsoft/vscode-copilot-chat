@@ -50,7 +50,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 	 * Determines if built-in tool grouping should be triggered based on configuration and tool count
 	 */
 	private shouldTriggerBuiltInGrouping(tools: LanguageModelToolInformation[]): boolean {
-		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
+		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.DefaultToolsGrouped, this._expService);
 
 		return tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
 	}
@@ -185,7 +185,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		if (idx >= 0) {
 			root.contents[idx] = newGroup;
 		} else {
-			root.contents.unshift(newGroup);
+			root.contents.push(newGroup);
 		}
 	}
 

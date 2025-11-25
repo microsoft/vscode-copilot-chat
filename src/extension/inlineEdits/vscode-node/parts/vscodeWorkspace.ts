@@ -11,6 +11,7 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { EditReason } from '../../../../platform/inlineEdits/common/editReason';
 import { IObservableDocument, ObservableWorkspace, StringEditWithReason } from '../../../../platform/inlineEdits/common/observableWorkspace';
+import { ILogService } from '../../../../platform/log/common/logService';
 import { createAlternativeNotebookDocument, IAlternativeNotebookDocument, toAltNotebookCellChangeEdit, toAltNotebookChangeEdit } from '../../../../platform/notebook/common/alternativeNotebookTextDocument';
 import { getDefaultLanguage } from '../../../../platform/notebook/common/helpers';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -44,7 +45,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	private readonly _store = new DisposableStore();
 	private readonly _filter = this._instaService.createInstance(DocumentFilter);
 	private get _useAlternativeNotebookFormat(): boolean {
-		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._experimentationService)
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._experimentationService)
 			|| this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, this._experimentationService);
 	}
 	private readonly _markdownNotebookCells = new Lazy<ResourceSet>(() => {
@@ -57,11 +58,12 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IInstantiationService private readonly _instaService: IInstantiationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 
-		const config = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.VerifyTextDocumentChanges, this._experimentationService);
+		const config = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.VerifyTextDocumentChanges, this._experimentationService);
 		this._store.add(autorun(reader => {
 			if (config.read(reader)) {
 				reader.store.add(this._instaService.createInstance(VerifyTextDocumentChanges));
@@ -164,6 +166,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 				const diagnostics = document instanceof VSCodeObservableTextDocument ?
 					this._createTextDocumentDiagnosticData(document) :
 					this._createNotebookDiagnosticData(document.altNotebook);
+				this._logService.trace(`[Diagnostics] got diagnostics ${diagnostics.map(d => d.message).join(', ')}`);
 				document.diagnostics.set(diagnostics, undefined);
 			});
 		}));

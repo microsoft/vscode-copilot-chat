@@ -30,14 +30,6 @@ export function getRequestId(response: Response, json?: any): RequestId {
 	};
 }
 
-export function getProcessingTime(response: Response): number {
-	const reqIdStr = response.headers.get('openai-processing-ms');
-	if (reqIdStr) {
-		return parseInt(reqIdStr, 10);
-	}
-	return 0;
-}
-
 // Request methods
 
 export interface ICodeVulnerabilityAnnotation {
@@ -272,8 +264,18 @@ export interface OpenAiResponsesFunctionTool extends OpenAiFunctionDef {
 	type: 'function';
 }
 
-export function isOpenAiFunctionTool(tool: OpenAiResponsesFunctionTool | OpenAiFunctionTool): tool is OpenAiFunctionTool {
+export function isOpenAiFunctionTool(tool: OpenAiResponsesFunctionTool | OpenAiFunctionTool | AnthropicMessagesTool): tool is OpenAiFunctionTool {
 	return (tool as OpenAiFunctionTool).function !== undefined;
+}
+
+export interface AnthropicMessagesTool {
+	name: string;
+	description?: string;
+	input_schema: {
+		type: 'object';
+		properties?: Record<string, any>;
+		required?: string[];
+	};
 }
 
 /**

@@ -64,7 +64,7 @@ export class ChatVariables extends PromptElement<ChatVariablesProps, void> {
 	}
 
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
-		const elements = await renderChatVariables(this.props.chatVariables, this.fileSystemService, this.props.includeFilepath, this.props.omitReferences, this.props.isAgent, this.props.useFixCookbook);
+		const elements = await renderChatVariables(this.props.chatVariables, this.fileSystemService, this.props.includeFilepath, true, this.props.omitReferences, this.props.isAgent, this.props.useFixCookbook);
 		if (elements.length === 0) {
 			return undefined;
 		}
@@ -115,7 +115,7 @@ export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryPr
 
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
 		const chatVariables = this.props.maintainOrder ? this.props.chatVariables : this.props.chatVariables.reverse();
-		const elements = await renderChatVariables(chatVariables, this.fileSystemService, this.props.includeFilepath, this.props.omitReferences, undefined);
+		const elements = await renderChatVariables(chatVariables, this.fileSystemService, this.props.includeFilepath, true, this.props.omitReferences, undefined);
 
 		if (this.props.embeddedInsideUserMessage ?? embeddedInsideUserMessageDefault) {
 			if (!elements.length) {
@@ -147,7 +147,7 @@ function asUserMessage(element: PromptElement, priority: number | undefined): Us
 }
 
 
-export async function renderChatVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, includeFilepathInCodeBlocks = true, omitReferences?: boolean, isAgent?: boolean, useFixCookbook?: boolean): Promise<PromptElement[]> {
+export async function renderChatVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, includeFilepathInCodeBlocks = true, alwaysIncludeSummary = true, omitReferences?: boolean, isAgent?: boolean, useFixCookbook?: boolean): Promise<PromptElement[]> {
 	const elements = [];
 	const filePathMode = (isAgent && includeFilepathInCodeBlocks)
 		? FilePathMode.AsAttribute
@@ -178,7 +178,7 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 				elements.push(<FolderVariable variableName={variableName} folderUri={uri} omitReferences={omitReferences} description={reference.modelDescription} />);
 			} else {
 				const file = <FileVariable
-					alwaysIncludeSummary={true}
+					alwaysIncludeSummary={alwaysIncludeSummary}
 					filePathMode={filePathMode}
 					variableName={variableName}
 					variableValue={variableValue}

@@ -10,7 +10,8 @@
 		"declarationMap": true,
 		"types": [
 			"node"
-		]
+		],
+		"paths": {}
 	},
 	"include": [
 		"src",

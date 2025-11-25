@@ -197,7 +197,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private isEmbeddingSearchEnabled() {
-		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
+		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
 	}
 
 	@LogExecTime(self => self._logService, 'EmbeddingsChunkSearch::searchSubsetOfFiles')

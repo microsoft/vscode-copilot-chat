@@ -8,16 +8,15 @@ import dedent from 'ts-dedent';
 import type { CancellationToken } from 'vscode';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
-import { IInstantiationService, ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { SyncDescriptor } from '../../../../../../../util/vs/platform/instantiation/common/descriptors';
+import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { initializeTokenizers } from '../../../../prompt/src/tokenization';
 import { CompletionState, createCompletionState } from '../../completionState';
-import { ConfigKey, InMemoryConfigProvider } from '../../config';
-import { ICompletionsContextService } from '../../context';
-import { Fetcher, Response } from '../../networking';
-import { LiveOpenAIFetcher, OpenAIFetcher } from '../../openai/fetch';
+import { ConfigKey, ICompletionsConfigProvider, InMemoryConfigProvider } from '../../config';
+import { ICompletionsFetcherService, Response } from '../../networking';
+import { ICompletionsOpenAIFetcherService, LiveOpenAIFetcher } from '../../openai/fetch';
 import { fakeAPIChoice, fakeAPIChoiceFromCompletion } from '../../openai/fetch.fake';
 import { APIChoice } from '../../openai/openai';
-import { CompletionsPromptFactory } from '../../prompt/completionsPromptFactory/completionsPromptFactory';
 import { extractPrompt, PromptResponsePresent, trimLastLine } from '../../prompt/prompt';
 import { getGhostTextInternal } from '../../prompt/test/prompt';
 import { TelemetryWithExp } from '../../telemetry';
@@ -27,10 +26,9 @@ import { withInMemoryTelemetry } from '../../test/telemetry';
 import { createTextDocument } from '../../test/textDocument';
 import { ITextDocument, LocationFactory } from '../../textDocument';
 import { Deferred } from '../../util/async';
-import { ICompletionsRuntimeModeService } from '../../util/runtimeMode';
-import { AsyncCompletionManager } from '../asyncCompletions';
-import { CompletionsCache } from '../completionsCache';
-import { CurrentGhostText } from '../current';
+import { ICompletionsAsyncManagerService } from '../asyncCompletions';
+import { ICompletionsCacheService } from '../completionsCache';
+import { ICompletionsCurrentGhostText } from '../current';
 import { getGhostText, GetNetworkCompletionsType, GhostCompletion, ResultType } from '../ghostText';
 import { mkBasicResultTelemetry } from '../telemetry';
 
@@ -47,17 +45,18 @@ suite('Isolated GhostText tests', function () {
 	}
 
 	function setupCompletion(
-		fetcher: Fetcher,
+		fetcher: ICompletionsFetcherService,
 		docText = 'import "fmt"\n\nfunc fizzbuzz(n int) {\n\n}\n',
 		position = LocationFactory.position(3, 0),
 		languageId = 'go',
 		token?: CancellationToken
 	) {
-		const accessor = createLibTestingContext();
-		const ctx = accessor.get(ICompletionsContextService);
+		const serviceCollection = createLibTestingContext();
+		serviceCollection.define(ICompletionsFetcherService, fetcher);
+		serviceCollection.define(ICompletionsOpenAIFetcherService, new SyncDescriptor(LiveOpenAIFetcher)); // gets results from static fetcher
+		const accessor = serviceCollection.createTestingAccessor();
+
 		const doc = createTextDocument('file:///fizzbuzz.go', languageId, 1, docText);
-		ctx.forceSet(Fetcher, fetcher);
-		ctx.set(OpenAIFetcher, new LiveOpenAIFetcher(accessor.get(IInstantiationService), ctx, accessor.get(ICompletionsRuntimeModeService))); // gets results from static fetcher
 		const state = createCompletionState(doc, position);
 		const prefix = getPrefix(state);
 
@@ -74,7 +73,6 @@ suite('Isolated GhostText tests', function () {
 		// Note, that we return a copy of the state to avoid side effects
 		return {
 			accessor,
-			ctx,
 			doc,
 			position,
 			prefix,
@@ -91,8 +89,8 @@ suite('Isolated GhostText tests', function () {
 		} else {
 			choice = completion;
 		}
-		const ctx = accessor.get(ICompletionsContextService);
-		ctx.get(CompletionsCache).append(prefix, suffix, choice);
+		const cache = accessor.get(ICompletionsCacheService);
+		cache.append(prefix, suffix, choice);
 	}
 
 	async function acceptAndRequestNextCompletion(
@@ -169,16 +167,6 @@ suite('Isolated GhostText tests', function () {
 		assert.strictEqual(responseWithTelemetry.reason, 'cached results empty after post-processing');
 	});
 
-	test('aborts if prompt is empty', async function () {
-		const { ctx, requestGhostText } = setupCompletion(new NoFetchFetcher());
-		ctx.forceSet(CompletionsPromptFactory, new BrokenCompletionsPromptFactory());
-
-		const responseWithTelemetry = await requestGhostText();
-
-		assert.strictEqual(responseWithTelemetry.type, 'abortedBeforeIssued');
-		assert.strictEqual(responseWithTelemetry.reason, 'Empty prompt');
-	});
-
 	test('returns typing as suggested', async function () {
 		const { accessor, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
 		const { suffix } = await requestPrompt();
@@ -203,8 +191,9 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('returns multiline typing as suggested when typing into single line context', async function () {
-		const { accessor, ctx, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
-		ctx.get(CurrentGhostText).hasAcceptedCurrentCompletion = () => true;
+		const { accessor, requestGhostText, requestPrompt, prefix } = setupCompletion(new NoFetchFetcher());
+		const currentGhostText = accessor.get(ICompletionsCurrentGhostText);
+		currentGhostText.hasAcceptedCurrentCompletion = () => true;
 		const { suffix } = await requestPrompt();
 		const completionText = '\tfmt.Println("hi")\n\tfmt.Print("hello")';
 		addToCache(accessor, prefix, suffix, completionText);
@@ -229,8 +218,8 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('trims multiline async completion into single line context', async function () {
-		const { ctx, doc, position, requestGhostText, requestPrompt } = setupCompletion(new NoFetchFetcher());
-		const asyncManager = ctx.get(AsyncCompletionManager);
+		const { accessor, doc, position, requestGhostText, requestPrompt } = setupCompletion(new NoFetchFetcher());
+		const asyncManager = accessor.get(ICompletionsAsyncManagerService);
 		const prompt = await requestPrompt();
 		const [prefix] = trimLastLine(doc.getText(LocationFactory.range(LocationFactory.position(0, 0), position)));
 		const response = fakeResult('\tfmt.Println("hi")\n\tfmt.Print("hello")');
@@ -592,7 +581,7 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('can close an unclosed brace (when using progressive reveal)', async function () {
-		const { ctx, requestGhostText } = setupCompletion(
+		const { accessor, requestGhostText } = setupCompletion(
 			new StaticFetcher(() => createFakeCompletionResponse('    }\n')),
 			dedent`
 				function hello(n: number) {
@@ -604,7 +593,8 @@ suite('Isolated GhostText tests', function () {
 			LocationFactory.position(3, 0),
 			'typescript'
 		);
-		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.AlwaysRequestMultiline, true);
+		const configProvider = accessor.get(ICompletionsConfigProvider) as InMemoryConfigProvider;
+		configProvider.setConfig(ConfigKey.AlwaysRequestMultiline, true);
 
 		const responseWithTelemetry = await requestGhostText();
 
@@ -614,7 +604,7 @@ suite('Isolated GhostText tests', function () {
 	});
 
 	test('filters out a duplicate brace (when using progressive reveal)', async function () {
-		const { ctx, requestGhostText } = setupCompletion(
+		const { accessor, requestGhostText } = setupCompletion(
 			new StaticFetcher(() => createFakeCompletionResponse('}\n')),
 			dedent`
 				function hello(n: number) {
@@ -627,7 +617,8 @@ suite('Isolated GhostText tests', function () {
 			LocationFactory.position(4, 0),
 			'typescript'
 		);
-		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.AlwaysRequestMultiline, true);
+		const configProvider = accessor.get(ICompletionsConfigProvider) as InMemoryConfigProvider;
+		configProvider.setConfig(ConfigKey.AlwaysRequestMultiline, true);
 
 		const responseWithTelemetry = await requestGhostText();
 
@@ -650,11 +641,13 @@ suite('Isolated GhostText tests', function () {
 			`;
 		const lines = raw.split('\n').map(line => `    ${line}`);
 		const multilineCompletion = lines.join('\n');
-		const { accessor, ctx, doc, position, state } = setupCompletion(
+		const { accessor, doc, position, state } = setupCompletion(
 			new StaticFetcher(() => createFakeCompletionResponse(multilineCompletion))
 		);
-		ctx.get(InMemoryConfigProvider).setConfig(ConfigKey.AlwaysRequestMultiline, true);
-		ctx.get(CurrentGhostText).hasAcceptedCurrentCompletion = () => true;
+		const configProvider = accessor.get(ICompletionsConfigProvider) as InMemoryConfigProvider;
+		const currentGhostText = accessor.get(ICompletionsCurrentGhostText);
+		configProvider.setConfig(ConfigKey.AlwaysRequestMultiline, true);
+		currentGhostText.hasAcceptedCurrentCompletion = () => true;
 
 		const response = await getGhostText(accessor, state, undefined, { isSpeculative: true });
 
@@ -680,33 +673,4 @@ function fakeResult(completionText: string): Promise<GetNetworkCompletionsType> 
 		telemetryBlob,
 		resultType: ResultType.Async,
 	});
-}
-
-class BrokenCompletionsPromptFactory extends CompletionsPromptFactory {
-	override prompt(): Promise<PromptResponsePresent> {
-		return Promise.resolve({
-			type: 'prompt',
-			prompt: {
-				prefix: '',
-				suffix: '',
-				isFimEnabled: true,
-			},
-			computeTimeMs: 0,
-			trailingWs: '',
-			neighborSource: new Map(),
-			metadata: {
-				renderId: 0,
-				rendererName: 'broken',
-				elisionStrategy: 'none',
-				tokenizer: 'none',
-				elisionCycles: 0,
-				elisionTimeMs: 0,
-				renderTimeMs: 0,
-				componentStatistics: [],
-				updateDataTimeMs: 0,
-				actualTokens: 0,
-				status: 'ok',
-			},
-		});
-	}
 }

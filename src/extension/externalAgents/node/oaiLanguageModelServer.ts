@@ -7,7 +7,7 @@ import { RequestMetadata } from '@vscode/copilot-api';
 import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
 import { ClientHttp2Stream } from 'http2';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import { IChatMLFetcher, Source } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { CustomModel, EndpointEditToolName, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -132,6 +132,16 @@ export class OpenAILanguageModelServer extends Disposable {
 
 		try {
 			const requestBody: OpenAI.Responses.ResponseCreateParams = JSON.parse(bodyString);
+			if (Array.isArray(requestBody.tools)) {
+				requestBody.tools = requestBody.tools.filter(tool => {
+					if (typeof tool?.type === 'string' && tool.type.startsWith('web_search')) {
+						this.warn(`Filtering out unsupported tool type: ${JSON.stringify(tool)}`);
+						return false;
+					}
+
+					return true;
+				});
+			}
 			const lastMessage = requestBody.input?.at(-1);
 			const isUserInitiatedMessage = typeof lastMessage === 'string' ||
 				lastMessage?.type === 'message' && lastMessage.role === 'user';
@@ -273,6 +283,11 @@ export class OpenAILanguageModelServer extends Disposable {
 	private trace(message: string): void {
 		const messageWithClassName = `[OpenAILanguageModelServer] ${message}`;
 		this.logService.trace(messageWithClassName);
+	}
+
+	private warn(message: string): void {
+		const messageWithClassName = `[OpenAILanguageModelServer] ${message}`;
+		this.logService.warn(messageWithClassName);
 	}
 }
 

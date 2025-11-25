@@ -18,18 +18,19 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
-import { ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { IChatModelInformation } from '../common/endpointProvider';
+import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
-export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
+export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
 	const configService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
+	const verbosity = getVerbosityForModelSync(endpoint);
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
@@ -48,10 +49,11 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 			? { type: 'function', name: options.postOptions.tool_choice.function.name }
 			: options.postOptions.tool_choice,
 		top_logprobs: options.postOptions.logprobs ? 3 : undefined,
-		store: false
+		store: false,
+		text: verbosity ? { verbosity } : undefined,
 	};
 
-	body.truncation = configService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
+	body.truncation = configService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation) ?
 		'auto' :
 		'disabled';
 	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
@@ -251,14 +253,16 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 						}
 					});
 					break;
-				case 'function_call_output':
+				case 'function_call_output': {
 					flushPendingFunctionCalls();
+					const content = responseFunctionOutputToRawContents(item.output);
 					messages.push({
 						role: Raw.ChatRole.Tool,
-						content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: item.output }],
+						content,
 						toolCallId: item.call_id
 					});
 					break;
+				}
 				case 'reasoning':
 					// We can't perfectly reconstruct the original thinking data
 					// but we can add a placeholder for logging
@@ -302,14 +306,19 @@ function ensureContentArray(content: string | OpenAI.Responses.ResponseInputMess
 	return content;
 }
 
-function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent): Raw.ChatCompletionContentPart | undefined {
+function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent | OpenAI.Responses.ResponseFunctionCallOutputItem): Raw.ChatCompletionContentPart | undefined {
 	switch (part.type) {
 		case 'input_text':
 			return { type: Raw.ChatCompletionContentPartKind.Text, text: part.text };
 		case 'input_image':
 			return {
 				type: Raw.ChatCompletionContentPartKind.Image,
-				imageUrl: { url: part.image_url || '', detail: part.detail === 'auto' ? undefined : part.detail }
+				imageUrl: {
+					url: part.image_url || '',
+					detail: part.detail === 'auto' ?
+						undefined :
+						(part.detail ?? undefined)
+				}
 			};
 		case 'input_file':
 			// This is a rough approximation for logging
@@ -327,6 +336,13 @@ function responseOutputToRawContent(part: OpenAI.Responses.ResponseOutputText | 
 		case 'refusal':
 			return { type: Raw.ChatCompletionContentPartKind.Text, text: `[Refusal: ${part.refusal}]` };
 	}
+}
+
+function responseFunctionOutputToRawContents(output: string | OpenAI.Responses.ResponseFunctionCallOutputItemList): Raw.ChatCompletionContentPart[] {
+	if (typeof output === 'string') {
+		return [{ type: Raw.ChatCompletionContentPartKind.Text, text: output }];
+	}
+	return coalesce(output.map(responseContentToRawContent));
 }
 
 export async function processResponseFromChatEndpoint(instantiationService: IInstantiationService, telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {

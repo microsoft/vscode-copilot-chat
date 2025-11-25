@@ -36,7 +36,6 @@ const baseNodeBuildOptions = {
 		'applicationinsights-native-metrics',
 		'@opentelemetry/instrumentation',
 		'@azure/opentelemetry-instrumentation-azure-sdk',
-		'zeromq',
 		'electron', // this is for simulation workbench,
 		'sqlite3',
 		'node-pty', // Required by @github/copilot
@@ -48,6 +47,15 @@ const baseNodeBuildOptions = {
 	define: {
 		'process.env.APPLICATIONINSIGHTS_CONFIGURATION_CONTENT': '"{}"'
 	},
+} satisfies esbuild.BuildOptions;
+
+const webviewBuildOptions = {
+	...baseBuildOptions,
+	platform: 'browser',
+	target: 'es2024', // Electron 34 -> Chrome 132 -> ES2024
+	entryPoints: [
+		{ in: 'src/extension/completions-core/vscode-node/extension/src/copilotPanel/webView/suggestionsPanelWebview.ts', out: 'suggestionsPanelWebview' },
+	],
 } satisfies esbuild.BuildOptions;
 
 const nodeExtHostTestGlobs = [
@@ -355,6 +363,7 @@ async function main() {
 			esbuild.build(nodeSimulationWorkbenchUIBuildOptions),
 			esbuild.build(nodeExtHostSimulationTestOptions),
 			esbuild.build(typeScriptServerPluginBuildOptions),
+			esbuild.build(webviewBuildOptions),
 		]);
 	}
 }

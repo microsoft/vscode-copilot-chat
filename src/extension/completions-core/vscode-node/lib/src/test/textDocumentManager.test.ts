@@ -14,7 +14,7 @@ suite('TextDocumentManager base class', () => {
 	let accessor: ServicesAccessor;
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 		textDocumentManager = accessor.get(IInstantiationService).createInstance(SimpleTestTextDocumentManager);
 	});
 

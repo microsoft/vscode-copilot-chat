@@ -26,6 +26,9 @@ export interface PullRequestSearchItem {
 	};
 	additions: number;
 	deletions: number;
+	files: {
+		totalCount: number;
+	};
 	fullDatabaseId: number;
 	headRefOid: string;
 	baseRefOid?: string;
@@ -83,11 +86,12 @@ export async function makeGitHubAPIRequest(
 	routeSlug: string,
 	method: 'GET' | 'POST',
 	token: string | undefined,
-	body?: { [key: string]: any },
+	body?: unknown,
 	version?: string,
 	type: 'json' | 'text' = 'json',
-	userAgent?: string) {
-	const headers: any = {
+	userAgent?: string,
+	returnStatusCodeOnError: boolean = false) {
+	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
 	if (token) {
@@ -106,6 +110,10 @@ export async function makeGitHubAPIRequest(
 		body: body ? JSON.stringify(body) : undefined
 	});
 	if (!response.ok) {
+		logService.error(`[GitHubAPI] ${method} ${host}/${routeSlug} - Status: ${response?.status}`);
+		if (returnStatusCodeOnError) {
+			return { status: response.status };
+		}
 		return undefined;
 	}
 
@@ -126,8 +134,8 @@ export async function makeGitHubAPIRequest(
 	}
 }
 
-export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: { [key: string]: any }) {
-	const headers: any = {
+export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown) {
+	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 		'Content-Type': 'application/json',
 	};
@@ -193,6 +201,9 @@ export async function makeSearchGraphQLRequest(
 						updatedAt
 						additions
 						deletions
+						files {
+							totalCount
+						}
 						author {
 							login
 						}
@@ -221,9 +232,13 @@ export async function makeSearchGraphQLRequest(
 		first
 	};
 
+	// TODO: Handle rate limiting
+	//       result.errors[0]
+	//         {type: 'RATE_LIMIT', code: 'graphql_rate_limit', message: 'API rate limit already exceeded for user ID xxxxxxx.'}
+
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
 
-	return result ? result.data.search.nodes : [];
+	return result.data?.search?.nodes ?? [];
 }
 
 export async function getPullRequestFromGlobalId(
@@ -250,6 +265,9 @@ export async function getPullRequestFromGlobalId(
 					updatedAt
 					additions
 					deletions
+					files {
+						totalCount
+					}
 					author {
 						login
 					}

@@ -23,7 +23,6 @@ export enum ToolName {
 	Codebase = 'semantic_search',
 	VSCodeAPI = 'get_vscode_api',
 	TestFailure = 'test_failure',
-	RunTests = 'run_tests',
 	FindFiles = 'file_search',
 	FindTextInFiles = 'grep_search',
 	ReadFile = 'read_file',
@@ -66,7 +65,7 @@ export enum ToolName {
 	CoreRunTest = 'runTests',
 	ToolReplay = 'tool_replay',
 	EditFilesPlaceholder = 'edit_files',
-	RunSubagent = 'runSubagent',
+	CoreRunSubagent = 'runSubagent',
 	CoreConfirmationTool = 'vscode_get_confirmation',
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent'
@@ -174,7 +173,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.FindFiles]: ToolCategory.Core,
 	[ToolName.CreateDirectory]: ToolCategory.Core,
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
-	[ToolName.RunSubagent]: ToolCategory.Core,
+	[ToolName.CoreRunSubagent]: ToolCategory.Core,
 	[ToolName.SearchSubagent]: ToolCategory.Core,
 	[ToolName.Memory]: ToolCategory.Core,
 
@@ -213,7 +212,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreTerminalLastCommand]: ToolCategory.VSCodeInteraction,
 
 	// Testing
-	[ToolName.RunTests]: ToolCategory.Testing,
 	[ToolName.TestFailure]: ToolCategory.Testing,
 	[ToolName.FindTestFiles]: ToolCategory.Testing,
 	[ToolName.CoreRunTest]: ToolCategory.Testing,

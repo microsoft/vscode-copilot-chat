@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ChatRequest, LanguageModelChat, lm } from 'vscode';
+import { ConfigKey } from '../../../platform/configuration/common/configurationService';
 import { ChatEndpointFamily } from '../../../platform/endpoint/common/endpointProvider';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
@@ -11,7 +12,8 @@ import { ProductionEndpointProvider } from './endpointProviderImpl';
 
 export class ScenarioAutomationEndpointProviderImpl extends ProductionEndpointProvider {
 	override async getChatEndpoint(requestOrFamilyOrModel: LanguageModelChat | ChatRequest | ChatEndpointFamily): Promise<IChatEndpoint> {
-		if (this._authService.copilotToken?.isNoAuthUser) {
+		const isProxyingCAPI = !!this._configService.getConfig(ConfigKey.Shared.DebugOverrideCAPIUrl) || !!this._configService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl);
+		if (this._authService.copilotToken?.isNoAuthUser && !isProxyingCAPI) {
 			// When using no auth in scenario automation, we want to force using a custom model / non-copilot for all requests
 			const getFirstNonCopilotModel = async () => {
 				const allModels = await lm.selectChatModels();

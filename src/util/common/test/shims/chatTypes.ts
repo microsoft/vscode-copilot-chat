@@ -404,9 +404,9 @@ export class LanguageModelToolMCPSource implements vscode.LanguageModelToolMCPSo
 export class LanguageModelToolCallPart implements vscode.LanguageModelToolCallPart {
 	callId: string;
 	name: string;
-	input: any;
+	input: object;
 
-	constructor(callId: string, name: string, input: any) {
+	constructor(callId: string, name: string, input: object) {
 		this.callId = callId;
 		this.name = name;
 
@@ -442,6 +442,31 @@ export enum LanguageModelChatMessageRole {
 	User = 1,
 	Assistant = 2,
 	System = 3
+}
+
+export enum LanguageModelChatToolMode {
+	Auto = 1,
+	Required = 2
+}
+
+export class LanguageModelChatMessage implements vscode.LanguageModelChatMessage {
+	role: LanguageModelChatMessageRole;
+	content: Array<any>;
+	name: string | undefined;
+
+	constructor(role: LanguageModelChatMessageRole, content: string | Array<any>, name?: string) {
+		this.role = role;
+		this.content = typeof content === 'string' ? [{ type: 'text', value: content }] : content;
+		this.name = name;
+	}
+
+	static User(content: string | Array<any>, name?: string): LanguageModelChatMessage {
+		return new LanguageModelChatMessage(LanguageModelChatMessageRole.User, content, name);
+	}
+
+	static Assistant(content: string | Array<any>, name?: string): LanguageModelChatMessage {
+		return new LanguageModelChatMessage(LanguageModelChatMessageRole.Assistant, content, name);
+	}
 }
 
 export class ChatToolInvocationPart {

@@ -218,7 +218,7 @@ export class GithubAvailableEmbeddingTypesService implements IGithubAvailableEmb
 		const all = result.val;
 		this._logService.info(`GithubAvailableEmbeddingTypesManager: Got embeddings. Primary: ${all.primary.join(',')}. Deprecated: ${all.deprecated.join(',')}`);
 
-		const preference = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.WorkspacePreferredEmbeddingsModel, this._experimentationService);
+		const preference = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.WorkspacePreferredEmbeddingsModel, this._experimentationService);
 		if (preference) {
 			const preferred = [...all.primary, ...all.deprecated].find(type => type.id === preference);
 			if (preferred) {

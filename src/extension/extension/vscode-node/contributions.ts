@@ -20,11 +20,12 @@ import { FeedbackCommandContribution } from '../../conversation/vscode-node/feed
 import { LanguageModelAccess } from '../../conversation/vscode-node/languageModelAccess';
 import { LogWorkspaceStateContribution } from '../../conversation/vscode-node/logWorkspaceState';
 import { RemoteAgentContribution } from '../../conversation/vscode-node/remoteAgents';
+import { DiagnosticsContextContribution } from '../../diagnosticsContext/vscode/diagnosticsContextProvider';
 import { LanguageModelProxyContrib } from '../../externalAgents/vscode-node/lmProxyContrib';
 import { WalkthroughCommandContribution } from '../../getting-started/vscode-node/commands';
 import * as newWorkspaceContribution from '../../getting-started/vscode-node/newWorkspace.contribution';
+import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribution';
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
-import { InlineChatHintFeature } from '../../inlineChat/vscode-node/inlineChatHint';
 import { InlineEditProviderFeature } from '../../inlineEdits/vscode-node/inlineEditProviderFeature';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
 import { TestGenLensContribution } from '../../intents/vscode-node/testGenLens';
@@ -81,11 +82,13 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ChatQuotaContribution),
 	asContributionFactory(NotebookFollowCommands),
 	asContributionFactory(PromptFileContextContribution),
+	asContributionFactory(DiagnosticsContextContribution),
 	asContributionFactory(ChatReplayContribution),
 	asContributionFactory(CompletionsCoreContribution),
 	asContributionFactory(CompletionsUnificationContribution),
 	workspaceIndexingContribution,
-	asContributionFactory(ChatSessionsContrib)
+	asContributionFactory(ChatSessionsContrib),
+	asContributionFactory(GitHubMcpContrib)
 ];
 
 /**
@@ -98,7 +101,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ConfigurationMigrationContribution),
 	asContributionFactory(TestGenLensContribution),
 	asContributionFactory(RequestLogTree),
-	asContributionFactory(InlineChatHintFeature),
 	asContributionFactory(OnboardTerminalTestsContribution),
 	asContributionFactory(ToolsContribution),
 	asContributionFactory(RemoteAgentContribution),

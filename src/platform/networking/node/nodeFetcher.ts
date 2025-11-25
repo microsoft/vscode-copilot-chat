@@ -6,7 +6,8 @@
 import * as http from 'http';
 import * as https from 'https';
 import { IEnvService } from '../../env/common/envService';
-import { FetchOptions, IAbortController, IHeaders, Response } from '../common/fetcherService';
+import { collectSingleLineErrorMessage } from '../../log/common/logService';
+import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export class NodeFetcher implements IFetcher {
@@ -49,6 +50,32 @@ export class NodeFetcher implements IFetcher {
 		}
 
 		return this._fetch(url, method, headers, body, signal);
+	}
+
+	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		const items: T[] = [];
+		const pageSize = options.pageSize ?? 20;
+		let page = options.startPage ?? 1;
+		let hasNextPage = false;
+
+		do {
+			const url = options.buildUrl(baseUrl, pageSize, page);
+			const response = await this.fetch(url, options);
+
+			if (!response.ok) {
+				// Return what we've collected so far if request fails
+				return items;
+			}
+
+			const data = await response.json();
+			const pageItems = options.getItemsFromResponse(data);
+			items.push(...pageItems);
+
+			hasNextPage = pageItems.length === pageSize;
+			page++;
+		} while (hasNextPage);
+
+		return items;
 	}
 
 	private _fetch(url: string, method: 'GET' | 'POST', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
@@ -97,7 +124,7 @@ export class NodeFetcher implements IFetcher {
 		return e && ['EADDRINUSE', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EPIPE', 'ETIMEDOUT'].includes(e.code);
 	}
 	getUserMessageForFetcherError(err: any): string {
-		return `Please check your firewall rules and network connection then try again. Error Code: ${err.code}.`;
+		return `Please check your firewall rules and network connection then try again. Error Code: ${collectSingleLineErrorMessage(err)}.`;
 	}
 }
 

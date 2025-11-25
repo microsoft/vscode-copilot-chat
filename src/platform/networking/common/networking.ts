@@ -17,8 +17,8 @@ import { CustomModel, EndpointEditToolName } from '../../endpoint/common/endpoin
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
-import { FetcherId, FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
+import { AnthropicMessagesTool, FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
+import { FetcherId, FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from './fetcherService';
 import { ChatCompletion, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
 
 /**
@@ -35,6 +35,7 @@ export interface IFetcher {
 	isInternetDisconnectedError(e: any): boolean;
 	isFetcherError(err: any): boolean;
 	getUserMessageForFetcherError(err: any): string;
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]>;
 }
 
 export const userAgentLibraryHeader = 'X-VSCode-User-Agent-Library-Version';
@@ -58,7 +59,7 @@ const requestTimeoutMs = 30 * 1000; // 30 seconds
  */
 export interface IEndpointBody {
 	/** General or completions: */
-	tools?: (OpenAiFunctionTool | OpenAiResponsesFunctionTool)[];
+	tools?: (OpenAiFunctionTool | OpenAiResponsesFunctionTool | AnthropicMessagesTool)[];
 	model?: string;
 	previous_response_id?: string;
 	max_tokens?: number;
@@ -101,6 +102,15 @@ export interface IEndpointBody {
 	truncation?: 'auto' | 'disabled';
 	include?: ['reasoning.encrypted_content'];
 	store?: boolean;
+	text?: {
+		verbosity?: 'low' | 'medium' | 'high';
+	};
+
+	/** Messages API */
+	thinking?: {
+		type: 'enabled' | 'disabled';
+		budget_tokens?: number;
+	};
 }
 
 export interface IEndpointFetchOptions {

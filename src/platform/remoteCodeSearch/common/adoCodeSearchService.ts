@@ -264,7 +264,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 			throw new Error('No valid auth token');
 		}
 
-		let endpoint = this._configurationService.getConfig(ConfigKey.Internal.WorkspacePrototypeAdoCodeSearchEndpointOverride);
+		let endpoint = this._configurationService.getConfig(ConfigKey.Advanced.WorkspacePrototypeAdoCodeSearchEndpointOverride);
 		if (!endpoint) {
 			endpoint = this.getAdoAlmSearchUrl(repo.adoRepoId);
 		}

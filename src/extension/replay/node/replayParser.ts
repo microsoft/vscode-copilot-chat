@@ -3,17 +3,40 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ChatStep } from '../common/chatReplayResponses';
+import { ChatStep, FileEdits } from '../common/chatReplayResponses';
+
+interface LogEntry {
+	kind: 'toolCall' | 'request';
+	id: string;
+	tool: string;
+	args: string;
+	edits: FileEdits[];
+	messages: string;
+	response: string[] | { message: string[] };
+	[key: string]: unknown;
+}
+
+interface PromptObject {
+	[key: string]: unknown;
+	prompt: unknown;
+	logs: LogEntry[];
+}
+
+function isValidPrompt(prompt: { [key: string]: unknown }): prompt is PromptObject {
+	return 'prompt' in prompt && 'logs' in prompt && Array.isArray(prompt.logs);
+}
 
 export function parseReplay(content: string): ChatStep[] {
 	const parsed = JSON.parse(content);
-	const prompts = (parsed.prompts && Array.isArray(parsed.prompts) ? parsed.prompts : [parsed]) as { [key: string]: any }[];
-	if (prompts.filter(p => !p.prompt).length) {
-		throw new Error('Invalid replay content: expected a prompt object or an array of prompts in the base JSON structure.');
+	const prompts = (parsed.prompts && Array.isArray(parsed.prompts) ? parsed.prompts : [parsed]) as { [key: string]: unknown }[];
+
+	const validPrompts = prompts.filter(isValidPrompt);
+	if (validPrompts.length !== prompts.length) {
+		console.warn(`Found invalid prompt(s) in replay content. Skipping invalid prompts.`);
 	}
 
 	const steps: ChatStep[] = [];
-	for (const prompt of prompts) {
+	for (const prompt of validPrompts) {
 		parsePrompt(prompt, steps);
 	}
 
@@ -41,10 +64,10 @@ export function parseReplay(content: string): ChatStep[] {
 	return steps;
 }
 
-function parsePrompt(prompt: { [key: string]: any }, steps: ChatStep[]) {
+function parsePrompt(prompt: PromptObject, steps: ChatStep[]) {
 	steps.push({
 		kind: 'userQuery',
-		query: prompt.prompt,
+		query: prompt.prompt as string,
 		line: 0,
 	});
 
@@ -57,7 +80,7 @@ function parsePrompt(prompt: { [key: string]: any }, steps: ChatStep[]) {
 				toolName: log.tool,
 				args: JSON.parse(log.args),
 				edits: log.edits,
-				results: log.response
+				results: Array.isArray(log.response) ? log.response : log.response.message
 			});
 		} else if (log.kind === 'request') {
 			steps.push({
@@ -65,7 +88,7 @@ function parsePrompt(prompt: { [key: string]: any }, steps: ChatStep[]) {
 				id: log.id,
 				line: 0,
 				prompt: log.messages,
-				result: log.response.message
+				result: Array.isArray(log.response) ? log.response.join('\n') : log.response.message.join('\n')
 			});
 		}
 	}

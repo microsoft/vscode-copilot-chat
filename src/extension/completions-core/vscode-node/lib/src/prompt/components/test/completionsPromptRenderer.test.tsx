@@ -58,7 +58,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 		let snapshot: PromptSnapshotNode | undefined;
 
 		setup(async function () {
-			accessor = createLibTestingContext();
+			accessor = createLibTestingContext().createTestingAccessor();
 			renderer = new CompletionsPromptRenderer();
 			const vPrompt = new VirtualPrompt(
 				(

@@ -47,6 +47,8 @@ declare module 'vscode' {
 
 		displayLocation?: InlineCompletionDisplayLocation;
 
+		supportsRename?: boolean;
+
 		/** Used for telemetry. Can be an arbitrary string. */
 		correlationId?: string;
 	}
@@ -60,7 +62,6 @@ declare module 'vscode' {
 		range: Range;
 		kind: InlineCompletionDisplayLocationKind;
 		label: string;
-		jumpToEdit?: boolean;
 	}
 
 	export interface InlineCompletionWarning {

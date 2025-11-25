@@ -7,10 +7,9 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isVSCModel, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt51Family, isGpt5Family, isGpt5PlusFamily, isGptCodexFamily, isGptFamily, isVSCModelA, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
-import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
@@ -19,12 +18,10 @@ import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAnd
 import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { basename } from '../../../../util/vs/base/common/path';
 import { isDefined } from '../../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { GitHubPullRequestProviders } from '../../../conversation/node/githubPullRequestProviders';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
 import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
 import { InternalToolReference } from '../../../prompt/common/intents';
@@ -88,11 +85,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const instructions = await this.getInstructions();
 
-		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
+		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Advanced.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{this.props.endpoint.family.startsWith('gpt-5') ? (
+				{isGpt5PlusFamily(this.props.endpoint.family) ? (
 					<>
 						<GPT5CopilotIdentityRule />
 						<Gpt5SafetyRule />
@@ -243,7 +240,6 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 		return <UserMessage>
 			<Tag name='environment_info'>
 				<UserOSPrompt />
-				<UserShellPrompt />
 			</Tag>
 			<Tag name='workspace_info'>
 				<AgentTasksInstructions availableTools={this.props.availableTools} />
@@ -323,7 +319,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			this.logService.trace('Re-rendering historical user message');
 		}
 
-		const shouldIncludePreamble = await isVSCModel(this.props.endpoint);
+		const shouldIncludePreamble = await isVSCModelA(this.props.endpoint);
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
@@ -333,8 +329,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const isGpt5 = this.props.endpoint.family.startsWith('gpt-5') && this.props.endpoint.family !== 'gpt-5-codex';
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || isGpt5) && this.props.chatVariables.hasVariables() ?
+		const needsAttachmentHint = this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family === 'gpt-5' || this.props.endpoint.family === 'gpt-5-mini';
+		const attachmentHint = needsAttachmentHint && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
@@ -357,14 +353,13 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{hasTodoTool && <TodoListContextPrompt sessionId={this.props.sessionId} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
-					<RepoContext />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
 						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getFileCreationReminder(this.props.endpoint.family)}
-						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+						{await getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 						{getVSCModelReminder(shouldIncludePreamble)}
 					</Tag>
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
@@ -401,7 +396,7 @@ interface ToolReferencesHintProps extends BasePromptElementProps {
  * `#` tool references included in the request are a strong hint to the model that the tool is relevant, but we don't force a tool call.
  */
 class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
-	render() {
+	async render() {
 		if (!this.props.toolReferences.length) {
 			return;
 		}
@@ -410,7 +405,7 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 			<Tag name='toolReferences'>
 				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
 				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')} <br />
-				{this.props.modelFamily?.startsWith('gpt-5') === true && <>
+				{(isGpt5Family(this.props.modelFamily)) && <>
 					Start by using the most relevant tool attached to this message—the user expects you to act with it first.<br />
 				</>}
 			</Tag>
@@ -444,29 +439,6 @@ class UserOSPrompt extends PromptElement<BasePromptElementProps> {
 		const osForDisplay = userOS === OperatingSystem.Macintosh ? 'macOS' :
 			userOS;
 		return <>The user's current OS is: {osForDisplay}</>;
-	}
-}
-
-class UserShellPrompt extends PromptElement<BasePromptElementProps> {
-	constructor(props: BasePromptElementProps, @IEnvService private readonly envService: IEnvService) {
-		super(props);
-	}
-
-	async render(state: void, sizing: PromptSizing) {
-		const shellName: string = basename(this.envService.shell);
-		const shellNameHint = shellName === 'powershell.exe' ? ' (Windows PowerShell v5.1)' : '';
-		let additionalHint = '';
-		switch (shellName) {
-			case 'powershell.exe': {
-				additionalHint = ' Use the `;` character if joining commands on a single line is needed.';
-				break;
-			}
-			case 'fish': {
-				additionalHint = ' Note that fish shell does not support heredocs - prefer printf or echo instead.';
-				break;
-			}
-		}
-		return <>The user's default shell is: "{shellName}"{shellNameHint}. When you generate terminal commands, please generate them correctly for this shell.{additionalHint}</>;
 	}
 }
 
@@ -561,35 +533,6 @@ class CurrentEditorContext extends PromptElement<CurrentEditorContextProps> {
 			selectionText = selection ? ` The current selection is from line ${selection.start.line + 1} to line ${selection.end.line + 1}.` : '';
 		}
 		return <>The user's current notebook is {this.promptPathRepresentationService.getFilePath(activeNotebookEditor.notebook.uri)}.{selectionText}</>;
-	}
-}
-
-class RepoContext extends PromptElement<{}> {
-	constructor(
-		props: {},
-		@IGitService private readonly gitService: IGitService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-	) {
-		super(props);
-	}
-
-	async render(state: void, sizing: PromptSizing) {
-		const activeRepository = this.gitService.activeRepository?.get();
-		const repoContext = activeRepository && getGitHubRepoInfoFromContext(activeRepository);
-		if (!repoContext || !activeRepository) {
-			return;
-		}
-		const prProvider = this.instantiationService.createInstance(GitHubPullRequestProviders);
-		const repoDescription = await prProvider.getRepositoryDescription(activeRepository.rootUri);
-
-		return <Tag name='repoContext'>
-			Below is the information about the current repository. You can use this information when you need to calculate diffs or compare changes with the default branch.<br />
-			Repository name: {repoContext.id.repo}<br />
-			Owner: {repoContext.id.org}<br />
-			Current branch: {activeRepository.headBranchName}<br />
-			{repoDescription ? <>Default branch: {repoDescription?.defaultBranch}<br /></> : ''}
-			{repoDescription?.pullRequest ? <>Active pull request (may not be the same as open pull request): {repoDescription.pullRequest.title} ({repoDescription.pullRequest.url})<br /></> : ''}
-		</Tag>;
 	}
 }
 
@@ -726,7 +669,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		if (this.props.modelFamily === 'gpt-4.1' || (this.props.modelFamily?.startsWith('gpt-5') === true)) {
+		if (isGptFamily(this.props.modelFamily) && !isGptCodexFamily(this.props.modelFamily)) {
 			if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 				// Extended reminder
 				return <>
@@ -739,9 +682,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 					You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
 					You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
 				</>;
-			} else if (this.props.modelFamily === 'gpt-5-codex') {
-				return undefined;
-			} else if (this.props.modelFamily?.startsWith('gpt-5') === true) {
+			} else if (isGpt5PlusFamily(this.props.modelFamily)) {
 				return <>
 					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
 					Take action when possible; the user expects you to do useful work without unnecessary questions.<br />
@@ -763,7 +704,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 }
 
 function getFileCreationReminder(modelFamily: string | undefined) {
-	if (modelFamily === 'claude-sonnet-4.5' || modelFamily === 'claude-haiku-4.5') {
+	if (modelFamily?.startsWith('claude') || modelFamily?.startsWith('Anthropic')) {
 		return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
 	}
 }
@@ -782,13 +723,13 @@ function getVSCModelReminder(isHiddenModel: boolean) {
 	</>;
 }
 
-function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
-	if (modelFamily === 'gpt-5-codex') {
+async function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
+	if (isGptCodexFamily(modelFamily)) {
 		return;
 	}
 
 	const isGpt5Mini = modelFamily === 'gpt-5-mini';
-	return modelFamily?.startsWith('gpt-5') === true ?
+	return isGpt5Family(modelFamily) ?
 		<>
 			Skip filler acknowledgements like "Sounds good" or "Okay, I will…". Open with a purposeful one-liner about what you're doing next.<br />
 			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />
@@ -797,10 +738,9 @@ function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: b
 			For non-trivial code generation, produce a complete, runnable solution: necessary source files, a tiny runner or test/benchmark harness, a minimal `README.md`, and updated dependency manifests (e.g., `package.json`, `requirements.txt`, `pyproject.toml`). Offer quick "try it" commands and optional platform-specific speed-ups when relevant.<br />
 			Your goal is to act like a pair programmer: be friendly and helpful. If you can do more, do more. Be proactive with your solutions, think about what the user needs and what they want, and implement it proactively.<br />
 			<Tag name='importantReminders'>
-				Before starting a task, review and follow the guidance in &lt;responseModeHints&gt;, &lt;engineeringMindsetHints&gt;, and &lt;requirementsUnderstanding&gt;.<br />
 				{!isGpt5Mini && <>Start your response with a brief acknowledgement, followed by a concise high-level plan outlining your approach.<br /></>}
 				Do NOT volunteer your model name unless the user explicitly asks you about it. <br />
-				{hasTodoTool && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks.<br /></>}
+				{hasTodoTool && !isGpt51Family(modelFamily) && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks.<br /></>}
 				{!hasTodoTool && <>Break down the request into clear, actionable steps and present them at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
 				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 			</Tag>

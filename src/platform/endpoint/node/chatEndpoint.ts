@@ -30,6 +30,7 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
+import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
 
 /**
@@ -182,7 +183,8 @@ export class ChatEndpoint implements IChatEndpoint {
 		// Use override or respect setting.
 		// TODO unlikely but would break if it changes in the middle of a request being constructed
 		return this.modelMetadata.urlOrRequestMetadata ??
-			(this.useResponsesApi ? { type: RequestType.ChatResponses } : { type: RequestType.ChatCompletions });
+			(this.useResponsesApi ? { type: RequestType.ChatResponses } :
+				this.useMessagesApi ? { type: RequestType.ChatMessages } : { type: RequestType.ChatCompletions });
 	}
 
 	protected get useResponsesApi(): boolean {
@@ -195,6 +197,11 @@ export class ChatEndpoint implements IChatEndpoint {
 
 		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._expService);
 		return !!(enableResponsesApi && this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses));
+	}
+
+	protected get useMessagesApi(): boolean {
+		const enableMessagesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseMessagesApi, this._expService);
+		return !!(enableMessagesApi && this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Messages));
 	}
 
 	public get degradationReason(): string | undefined {
@@ -212,7 +219,8 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public get apiType(): string {
-		return this.useResponsesApi ? 'responses' : 'chatCompletions';
+		return this.useResponsesApi ? 'responses' :
+			this.useMessagesApi ? 'messages' : 'chatCompletions';
 	}
 
 	interceptBody(body: IEndpointBody | undefined): void {
@@ -246,8 +254,11 @@ export class ChatEndpoint implements IChatEndpoint {
 
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
-			const body = this._instantiationService.invokeFunction(createResponsesRequestBody, options, this.model, this.modelMetadata);
+			const body = this._instantiationService.invokeFunction(createResponsesRequestBody, options, this.model, this);
 			return this.customizeResponsesBody(body);
+		} else if (this.useMessagesApi) {
+			const body = this._instantiationService.invokeFunction(createMessagesRequestBody, options, this.model, this);
+			return this.customizeMessagesBody(body);
 		} else {
 			const body = createCapiRequestBody(options, this.model, this.getCompletionsCallback());
 			return this.customizeCapiBody(body);
@@ -256,6 +267,10 @@ export class ChatEndpoint implements IChatEndpoint {
 
 	protected getCompletionsCallback(): RawMessageConversionCallback | undefined {
 		return undefined;
+	}
+
+	protected customizeMessagesBody(body: IEndpointBody): IEndpointBody {
+		return body;
 	}
 
 	protected customizeResponsesBody(body: IEndpointBody): IEndpointBody {
@@ -277,6 +292,8 @@ export class ChatEndpoint implements IChatEndpoint {
 	): Promise<AsyncIterableObject<ChatCompletion>> {
 		if (this.useResponsesApi) {
 			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
+		} else if (this.useMessagesApi) {
+			return processResponseFromMessagesEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
 		} else {

@@ -7,7 +7,7 @@ import { Config, ConfigKey, ExperimentBasedConfig, ExperimentBasedConfigType, IC
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { FetchOptions, IAbortController, IFetcherService, Response } from '../common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
 import { fetchWithFallbacks } from '../node/fetcherFallback';
 import { NodeFetcher } from '../node/nodeFetcher';
@@ -30,6 +30,32 @@ export class FetcherService implements IFetcherService {
 		this._availableFetchers = fetcher ? [fetcher] : undefined;
 	}
 
+	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		const items: T[] = [];
+		const pageSize = options.pageSize ?? 20;
+		let page = options.startPage ?? 1;
+		let hasNextPage = false;
+
+		do {
+			const url = options.buildUrl(baseUrl, pageSize, page);
+			const response = await this.fetch(url, options);
+
+			if (!response.ok) {
+				// Return what we've collected so far if request fails
+				return items;
+			}
+
+			const data = await response.json();
+			const pageItems = options.getItemsFromResponse(data);
+			items.push(...pageItems);
+
+			hasNextPage = pageItems.length === pageSize;
+			page++;
+		} while (hasNextPage);
+
+		return items;
+	}
+
 	setExperimentationService(experimentationService: IExperimentationService) {
 		this._experimentationService = experimentationService;
 	}
@@ -47,10 +73,10 @@ export class FetcherService implements IFetcherService {
 	}
 
 	private _getFetchers(configurationService: IConfigurationService, experimentationService: IExperimentationService | undefined, envService: IEnvService): IFetcher[] {
-		const useElectronFetcher = getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.Internal.DebugExpUseElectronFetcher);
+		const useElectronFetcher = getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.TeamInternal.DebugExpUseElectronFetcher);
 		const electronFetcher = ElectronFetcher.create(envService);
-		const useNodeFetcher = !(useElectronFetcher && electronFetcher) && getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.Internal.DebugExpUseNodeFetcher); // Node https wins over Node fetch. (historical order)
-		const useNodeFetchFetcher = !(useElectronFetcher && electronFetcher) && !useNodeFetcher && getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.Internal.DebugExpUseNodeFetchFetcher);
+		const useNodeFetcher = !(useElectronFetcher && electronFetcher) && getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.TeamInternal.DebugExpUseNodeFetcher); // Node https wins over Node fetch. (historical order)
+		const useNodeFetchFetcher = !(useElectronFetcher && electronFetcher) && !useNodeFetcher && getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.TeamInternal.DebugExpUseNodeFetchFetcher);
 
 		const fetchers = [];
 		if (electronFetcher) {

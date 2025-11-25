@@ -150,7 +150,7 @@ class InlineChatNotebookGenerateSelection extends PromptElement<InlineChatNotebo
 		const { document, wholeRange } = this.props.documentContext;
 
 		const inSummaryExperiment = this.experimentationService.getTreatmentVariable('copilotchat.notebookSummary')
-			|| this.configurationService.getConfig(ConfigKey.Internal.NotebookSummaryExperimentEnabled);
+			|| this.configurationService.getConfig(ConfigKey.Advanced.NotebookSummaryExperimentEnabled);
 
 		let executedCells: vscode.NotebookCell[] | undefined = undefined;
 		if (inSummaryExperiment && this.tabsAndEditorsService.activeNotebookEditor?.notebook && this.tabsAndEditorsService.activeNotebookEditor?.notebook.uri.path === document.uri.path) {

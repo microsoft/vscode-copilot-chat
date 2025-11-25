@@ -31,7 +31,7 @@ export interface ISubagentToolCallingLoopOptions extends IToolCallingLoopOptions
 	/** Optional: if provided, only these tools will be available to the subagent */
 	allowedTools?: Set<ToolName>;
 	/** Optional: custom prompt class to use instead of AgentPrompt */
-	customPromptClass?: PromptElementCtor<any, any>;
+	customPromptClass?: PromptElementCtor;
 }
 
 export class SubagentToolCallingLoop extends ToolCallingLoop<ISubagentToolCallingLoopOptions> {
@@ -69,16 +69,22 @@ export class SubagentToolCallingLoop extends ToolCallingLoop<ISubagentToolCallin
 	}
 
 	private async getEndpoint(request: ChatRequest) {
-		let endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
-		if (!endpoint.supportsToolCalls) {
-			endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+		try {
+			let endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
+			if (!endpoint.supportsToolCalls) {
+				endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+			}
+			return endpoint;
+		} catch (error) {
+			// If the requested model is not available, fall back to gpt-4.1
+			this._logService.warn(`[SubagentToolCallingLoop] Failed to get endpoint for request, falling back to gpt-4.1: ${error}`);
+			return await this.endpointProvider.getChatEndpoint('gpt-4.1');
 		}
-		return endpoint;
 	}
 
 	protected async buildPrompt(promptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
 		const endpoint = await this.getEndpoint(this.options.request);
-		const PromptClass = this.options.customPromptClass ?? AgentPrompt;
+		const PromptClass = (this.options.customPromptClass ?? AgentPrompt) as typeof AgentPrompt;
 		const renderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
@@ -101,7 +107,7 @@ export class SubagentToolCallingLoop extends ToolCallingLoop<ISubagentToolCallin
 			return allTools.filter(tool => this.options.allowedTools!.has(tool.name as ToolName));
 		} else {
 			// Default behavior: exclude certain tools
-			const excludedTools = new Set([ToolName.RunSubagent, ToolName.CoreManageTodoList]);
+			const excludedTools = new Set([ToolName.CoreRunSubagent, ToolName.CoreManageTodoList]);
 			return allTools
 				.filter(tool => !excludedTools.has(tool.name as ToolName))
 				// TODO can't do virtual tools at this level

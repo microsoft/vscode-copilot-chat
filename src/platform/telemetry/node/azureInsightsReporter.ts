@@ -20,7 +20,7 @@ export function wrapEventNameForPrefixRemoval(eventName: string): string {
 function isWrappedEventName(eventName: string): boolean {
 	return eventName.includes('wrapped-telemetry-event-name-') && eventName.endsWith('-wrapped-telemetry-event-name');
 }
-function unwrapEventNameFromPrefix(eventName: string): string {
+export function unwrapEventNameFromPrefix(eventName: string): string {
 	const match = eventName.match(/wrapped-telemetry-event-name-(.*?)-wrapped-telemetry-event-name/);
 	return match ? match[1] : eventName;
 }
@@ -121,6 +121,7 @@ function decorateWithCommonProperties(properties: TelemetryProperties, envServic
 	// We have editor-agnostic fields but keep the vs-specific ones for backward compatibility
 	properties['common_vscodemachineid'] = envService.machineId;
 	properties['common_vscodesessionid'] = envService.sessionId;
+	properties['client_deviceid'] = envService.devDeviceId;
 
 	properties['common_uikind'] = envService.uiKind;
 	properties['common_remotename'] = envService.remoteName ?? 'none';

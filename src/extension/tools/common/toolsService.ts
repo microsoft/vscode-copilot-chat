@@ -6,6 +6,7 @@
 import Ajv, { ValidateFunction } from 'ajv';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { LRUCache } from '../../../util/common/cache';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -56,8 +57,8 @@ export interface IToolsService {
 	/**
 	 * Tool implementations from tools in this extension
 	 */
-	copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
-	getCopilotTool(name: string): ICopilotTool<any> | undefined;
+	copilotTools: ReadonlyMap<ToolName, ICopilotTool<unknown>>;
+	getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 
 	invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
 	getTool(name: string): vscode.LanguageModelToolInformation | undefined;
@@ -75,7 +76,7 @@ export interface IToolsService {
 	 * pass `filter` function that can explicitl enable (true) or disable (false)
 	 * a tool, or use the default logic (undefined).
 	 */
-	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
+	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
 }
 
 /**
@@ -120,7 +121,7 @@ function ajvValidateForTool(toolName: string, fn: ValidateFunction, inputObj: un
 		let hasNestedJsonStrings = false;
 		for (const error of fn.errors) {
 			// Check if the error is about expecting an object but getting a string
-			const isObjError = error.keyword === 'type' && error.params?.type === 'object' && error.instancePath;
+			const isObjError = error.keyword === 'type' && (error.params?.type === 'object' || error.params?.type === 'array') && error.instancePath;
 			if (!isObjError) {
 				continue;
 			}
@@ -158,17 +159,17 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	public get onWillInvokeTool() { return this._onWillInvokeTool.event; }
 
 	abstract tools: ReadonlyArray<vscode.LanguageModelToolInformation>;
-	abstract copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
+	abstract copilotTools: ReadonlyMap<ToolName, ICopilotTool<unknown>>;
 
 	private readonly ajv = new Ajv({ coerceTypes: true });
 	private didWarnAboutValidationError?: Set<string>;
 	private readonly schemaCache = new LRUCache<ValidateFunction>(16);
 
-	abstract getCopilotTool(name: string): ICopilotTool<any> | undefined;
+	abstract getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 	abstract invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
 	abstract getTool(name: string): vscode.LanguageModelToolInformation | undefined;
 	abstract getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined;
-	abstract getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
+	abstract getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
 
 	constructor(
 		@ILogService private readonly logService: ILogService
@@ -238,7 +239,7 @@ export class NullToolsService extends BaseToolsService implements IToolsService 
 		return undefined;
 	}
 
-	override getCopilotTool(name: string): ICopilotTool<any> | undefined {
+	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
 		return undefined;
 	}
 

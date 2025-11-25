@@ -16,7 +16,7 @@ suite('contextProviderRegistryTs', function () {
 	let telemetryData: TelemetryWithExp;
 
 	setup(function () {
-		accessor = createLibTestingContext();
+		accessor = createLibTestingContext().createTestingAccessor();
 		activeExperiments = new Map();
 		telemetryData = TelemetryWithExp.createEmptyConfigForTesting();
 		telemetryData.filtersAndExp.exp.variables['copilottscontextproviderparams'] = JSON.stringify({

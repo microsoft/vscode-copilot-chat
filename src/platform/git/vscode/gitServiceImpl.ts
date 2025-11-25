@@ -19,7 +19,7 @@ import { ILogService } from '../../log/common/logService';
 import { IGitExtensionService } from '../common/gitExtensionService';
 import { IGitService, RepoContext } from '../common/gitService';
 import { parseGitRemotes } from '../common/utils';
-import { API, APIState, Change, Commit, LogOptions, Repository } from './git';
+import { API, APIState, Change, Commit, CommitShortStat, LogOptions, Repository } from './git';
 
 export class GitServiceImpl extends Disposable implements IGitService {
 
@@ -178,6 +178,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		}
 	}
 
+	async add(uri: URI, paths: string[]): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		await repository?.add(paths);
+	}
+
 	async log(uri: vscode.Uri, options?: LogOptions): Promise<Commit[] | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		if (!gitAPI) {
@@ -202,6 +208,15 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return repository?.diffWith(ref);
 	}
 
+	async diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		if (!repository?.diffIndexWithHEADShortStats) {
+			return undefined;
+		}
+		return await repository?.diffIndexWithHEADShortStats();
+	}
+
 	async fetch(uri: vscode.Uri, remote?: string, ref?: string, depth?: number): Promise<void> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
@@ -212,6 +227,24 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
 		return repository?.getMergeBase(ref1, ref2);
+	}
+
+	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.createWorktree(options);
+	}
+
+	async deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.deleteWorktree(path, options);
+	}
+
+	async migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.migrateChanges(sourceRepositoryUri.fsPath, options);
 	}
 
 	async initialize(): Promise<void> {
