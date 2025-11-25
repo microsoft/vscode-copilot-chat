@@ -9,6 +9,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
@@ -52,7 +53,7 @@ export interface IAutomodeService {
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
 	private readonly _autoModelCache: Map<string, ConversationCacheEntry> = new Map();
-	private _reserveToken: CachedAutoToken | undefined;
+	private readonly _reserveTokens: Map<ChatLocation, CachedAutoToken> = new Map();
 	private readonly _taskSingler = new TaskSingler<CachedAutoToken>();
 
 
@@ -66,7 +67,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
 			this._autoModelCache.clear();
-			this._reserveToken = undefined;
+			this._reserveTokens.clear();
 		}));
 		this._serviceBrand = undefined;
 	}
@@ -91,12 +92,13 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			entry.standby = undefined;
 		}
 
+		const location = chatRequest?.location ?? ChatLocation.Editor;
 		if (!entry.active) {
-			entry.active = await this._acquireActiveToken(conversationId, entry, knownEndpoints);
+			entry.active = await this._acquireActiveToken(conversationId, location, entry, knownEndpoints);
 		}
 
 		if (!entry.standby || !this._isTokenValid(entry.standby) || this._isExpiringSoon(entry.standby) || this._isExpiringSoon(entry.active)) {
-			this._refreshStandbyInBackground(conversationId, entry, knownEndpoints);
+			this._refreshStandbyInBackground(conversationId, location, entry, knownEndpoints);
 		}
 
 		this._ensureReserveRefill(knownEndpoints);
@@ -107,39 +109,43 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	 * Acquire or refresh the reserve token so that a future conversation can respond instantly.
 	 */
 	private _ensureReserveRefill(knownEndpoints: IChatEndpoint[]): void {
-		if (this._isTokenValid(this._reserveToken)) {
-			return;
-		}
 
-		void this._taskSingler.getOrCreate('reserve', () => this._fetchToken('reserve', undefined, knownEndpoints))
-			.then(token => {
-				this._reserveToken = token;
-			})
-			.catch(err => {
-				this._logService.error(`Failed to refresh reserve auto mode token: ${err instanceof Error ? err.message : String(err)}`);
-			});
+		for (const [location, token] of this._reserveTokens) {
+
+			if (this._isTokenValid(token)) {
+				continue;
+			}
+
+			void this._taskSingler.getOrCreate(`reserve/${location}`, () => this._fetchToken('reserve', location, undefined, knownEndpoints))
+				.then(token => {
+					this._reserveTokens.set(location, token);
+				})
+				.catch(err => {
+					this._logService.error(`Failed to refresh reserve auto mode token: ${err instanceof Error ? err.message : String(err)}`);
+				});
+		}
 	}
 
 	/**
 	 * Acquire the active token for a conversation, promoting the reserve if available.
 	 */
-	private async _acquireActiveToken(conversationId: string, entry: ConversationCacheEntry, knownEndpoints: IChatEndpoint[]): Promise<CachedAutoToken> {
-		if (this._isTokenValid(this._reserveToken)) {
-			const token = this._reserveToken;
-			this._reserveToken = undefined;
+	private async _acquireActiveToken(conversationId: string, location: ChatLocation, entry: ConversationCacheEntry, knownEndpoints: IChatEndpoint[]): Promise<CachedAutoToken> {
+		const token = this._reserveTokens.get(location);
+		if (this._isTokenValid(token)) {
+			this._reserveTokens.delete(location);
 			return token;
 		}
 
 		const sessionHint = entry.standby?.sessionToken ?? entry.active?.sessionToken;
-		return this._taskSingler.getOrCreate(`active:${conversationId}`, () => this._fetchToken('active', sessionHint, knownEndpoints));
+		return this._taskSingler.getOrCreate(`active:${conversationId}`, () => this._fetchToken('active', location, sessionHint, knownEndpoints));
 	}
 
 	/**
 	 * Start a background refresh to populate or update the standby token.
 	 */
-	private _refreshStandbyInBackground(conversationId: string, entrySnapshot: ConversationCacheEntry, knownEndpoints: IChatEndpoint[]): void {
+	private _refreshStandbyInBackground(conversationId: string, location: ChatLocation, entrySnapshot: ConversationCacheEntry, knownEndpoints: IChatEndpoint[]): void {
 		const sessionHint = entrySnapshot.standby?.sessionToken ?? entrySnapshot.active?.sessionToken;
-		void this._taskSingler.getOrCreate(`standby:${conversationId}`, () => this._fetchToken('standby', sessionHint, knownEndpoints))
+		void this._taskSingler.getOrCreate(`standby:${conversationId}`, () => this._fetchToken('standby', location, sessionHint, knownEndpoints))
 			.then(token => {
 				const entry = this._autoModelCache.get(conversationId);
 				if (!entry) {
@@ -158,7 +164,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	/**
 	 * Fetch a new token from the auto mode service.
 	 */
-	private async _fetchToken(debugName: string, sessionToken: string | undefined, knownEndpoints: IChatEndpoint[]): Promise<CachedAutoToken> {
+	private async _fetchToken(debugName: string, location: ChatLocation, sessionToken: string | undefined, knownEndpoints: IChatEndpoint[]): Promise<CachedAutoToken> {
 		const startTime = Date.now();
 
 		const authToken = (await this._authService.getCopilotToken()).token;
@@ -170,7 +176,10 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			headers['Copilot-Session-Token'] = sessionToken;
 		}
 
-		const autoModeHint = this._expService.getTreatmentVariable<string>('copilotchat.autoModelHint') || 'auto';
+		const expName = location === ChatLocation.Editor
+			? 'copilotchat.autoModelHint.editor'
+			: 'copilotchat.autoModelHint';
+		const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
 
 		const response = await this._capiClientService.makeRequest<Response>({
 			json: {
