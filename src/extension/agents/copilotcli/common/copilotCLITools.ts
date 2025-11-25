@@ -9,7 +9,7 @@ import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatR
 import { isLocation } from '../../../../util/common/types';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 
@@ -283,12 +283,14 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(events: readonly SessionEvent[], getVSCodeRequestId?: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
-	const pendingToolInvocations = new Map<string, ChatToolInvocationPart>();
+	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
 
+	let details: { requestId: string; toolIdEditMap: Record<string, string> } | undefined;
 	for (const event of events) {
+		details = getVSCodeRequestId?.(event.id) ?? details;
 		switch (event.type) {
 			case 'user.message': {
 				// Flush any pending response parts before adding user message
@@ -338,7 +340,7 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 							range
 						});
 					});
-				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, references, '', [], undefined));
+				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, references, '', [], undefined, details?.requestId));
 				break;
 			}
 			case 'assistant.message': {
@@ -367,9 +369,21 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 				break;
 			}
 			case 'tool.execution_complete': {
-				const responsePart = processToolExecutionComplete(event, pendingToolInvocations);
-				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
-					currentResponseParts.push(responsePart);
+				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations) ?? [undefined, undefined];
+				if (responsePart && toolCall && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
+					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
+					const editedUris = getAffectedUrisForEditTool(toolCall);
+					if (isCopilotCliEditToolCall(toolCall) && editId && editedUris.length > 0) {
+						for (const uri of editedUris) {
+							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
+							currentResponseParts.push(new ChatResponseCodeblockUriPart(uri, true, editId));
+							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
+							currentResponseParts.push(new ChatResponseTextEditPart(uri, []));
+							currentResponseParts.push(new ChatResponseTextEditPart(uri, true));
+						}
+					} else {
+						currentResponseParts.push(responsePart);
+					}
 				}
 				break;
 			}
@@ -393,27 +407,27 @@ function getRangeInPrompt(prompt: string, referencedName: string): [number, numb
 	return undefined;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall);
 	if (toolInvocation) {
 		// Store pending invocation to update with result later
-		pendingToolInvocations.set(event.data.toolCallId, toolInvocation);
+		pendingToolInvocations.set(event.data.toolCallId, [toolInvocation, event.data as ToolCall]);
 	}
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
-	if (invocation && invocation instanceof ChatToolInvocationPart) {
-		invocation.isComplete = true;
-		invocation.isError = !!event.data.error;
-		invocation.invocationMessage = event.data.error?.message || invocation.invocationMessage;
+	if (invocation && invocation[0] instanceof ChatToolInvocationPart) {
+		invocation[0].isComplete = true;
+		invocation[0].isError = !!event.data.error;
+		invocation[0].invocationMessage = event.data.error?.message || invocation[0].invocationMessage;
 		if (!event.data.success && (event.data.error?.code === 'rejected' || event.data.error?.code === 'denied')) {
-			invocation.isConfirmed = false;
+			invocation[0].isConfirmed = false;
 		} else {
-			invocation.isConfirmed = true;
+			invocation[0].isConfirmed = true;
 		}
 	}
 
@@ -423,7 +437,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 /**
  * Creates a formatted tool invocation part for CopilotCLI tools
  */
-export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolName: string; arguments?: unknown }): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolName: string; arguments?: unknown }, editId?: string): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const invocation = new ChatToolInvocationPart(data.toolName ?? 'unknown', data.toolCallId ?? '', false);
 		invocation.isConfirmed = false;
@@ -450,11 +464,11 @@ export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolN
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
 
-	(formatter as Formatter)(invocation, toolCall);
+	(formatter as Formatter)(invocation, toolCall, editId);
 	return invocation;
 }
 
-type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall) => void;
+type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, editId?: string) => void;
 type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { toolName: T }>;
 
 const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>) => void] } = {
@@ -513,7 +527,7 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 	}
 }
 
-function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, toolCall: StringReplaceEditorTool): void {
+function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, toolCall: StringReplaceEditorTool, editId?: string): void {
 	if (!toolCall.arguments.path) {
 		return;
 	}
@@ -554,7 +568,7 @@ function formatUndoEdit(invocation: ChatToolInvocationPart, toolCall: UndoEditTo
 	}
 }
 
-function formatEditToolInvocation(invocation: ChatToolInvocationPart, toolCall: EditTool): void {
+function formatEditToolInvocation(invocation: ChatToolInvocationPart, toolCall: EditTool, editId?: string): void {
 	const args = toolCall.arguments;
 	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 
@@ -564,7 +578,7 @@ function formatEditToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 }
 
 
-function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall: CreateTool): void {
+function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall: CreateTool, editId?: string): void {
 	const args = toolCall.arguments;
 	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 

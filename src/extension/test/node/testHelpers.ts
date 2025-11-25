@@ -51,12 +51,13 @@ export class MockChatResponseStream extends ChatResponseStreamImpl {
 		this.uris.push(uri.toString());
 	}
 
-	override externalEdit<T>(target: Uri | Uri[], callback: () => Thenable<T>): Thenable<T> {
+	override async externalEdit(target: Uri | Uri[], callback: () => Thenable<void>): Promise<string> {
 		if (Array.isArray(target)) {
 			this.externalEditUris.push(...target);
 		} else {
 			this.externalEditUris.push(target);
 		}
-		return callback();
+		await callback();
+		return '';
 	}
 }

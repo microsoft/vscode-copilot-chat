@@ -19,6 +19,7 @@ import { PermissionRequest } from './permissionHelpers';
 import { ensureRipgrepShim } from './ripgrepShim';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
+const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
 
 export class CopilotCLISessionOptions {
 	public readonly isolationEnabled: boolean;
@@ -142,10 +143,15 @@ export interface ICopilotCLISDK {
 	readonly _serviceBrand: undefined;
 	getPackage(): Promise<typeof import('@github/copilot/sdk')>;
 	getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>>;
+
+	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined;
+	setRequestId(sdkRequestId: string, details: { requestId: string; toolIdEditMap: Record<string, string> }): void;
 }
 
+type RequestDetails = { details: { requestId: string; toolIdEditMap: Record<string, string> }; createdDateTime: number };
 export class CopilotCLISDK implements ICopilotCLISDK {
 	declare _serviceBrand: undefined;
+	private requestMap: Record<string, RequestDetails> = {};
 
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -153,7 +159,25 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly authentService: IAuthenticationService,
-	) { }
+	) {
+		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
+	}
+
+	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined {
+		return this.requestMap[sdkRequestId]?.details;
+	}
+
+	setRequestId(sdkRequestId: string, details: { requestId: string; toolIdEditMap: Record<string, string> }): void {
+		this.requestMap[sdkRequestId] = { details, createdDateTime: Date.now() };
+		// Prune entries older than 7 days
+		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+		for (const [key, value] of Object.entries(this.requestMap)) {
+			if (value.createdDateTime < sevenDaysAgo) {
+				delete this.requestMap[key];
+			}
+		}
+		this.extensionContext.workspaceState.update(COPILOT_CLI_REQUEST_MAP_KEY, this.requestMap);
+	}
 
 	public async getPackage(): Promise<typeof import('@github/copilot/sdk')> {
 		try {

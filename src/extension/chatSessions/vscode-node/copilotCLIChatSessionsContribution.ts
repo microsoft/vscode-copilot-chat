@@ -442,7 +442,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (request.prompt.startsWith('/delegate')) {
 				await this.handleDelegateCommand(session.object, request, context, stream, token);
 			} else {
-				await session.object.handleRequest(prompt, attachments, modelId, token);
+				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 			}
 
 			if (isUntitled && !token.isCancellationRequested) {
