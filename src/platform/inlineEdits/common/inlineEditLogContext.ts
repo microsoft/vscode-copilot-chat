@@ -138,6 +138,15 @@ export class InlineEditRequestLogContext {
 			lines.push("\n</details>\n");
 		}
 
+		if (this._trace.length > 0) {
+			lines.push("## Trace");
+			lines.push("<details open><summary>Trace</summary>\n");
+			lines.push("```");
+			lines.push(...this._trace);
+			lines.push("```");
+			lines.push("\n</details>\n");
+		}
+
 		return lines.join('\n');
 	}
 
@@ -372,6 +381,11 @@ export class InlineEditRequestLogContext {
 
 	setRecentEdit(edit: HistoryContext): void {
 		this._recentEdit = edit;
+	}
+
+	private _trace: string[] = [];
+	trace(msg: string): void {
+		this._trace.push(msg);
 	}
 
 	private _logs: string[] = [];

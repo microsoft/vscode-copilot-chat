@@ -27,6 +27,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { mapObservableArrayCached, runOnChange } from '../../../util/vs/base/common/observable';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -127,16 +128,25 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		cancellationToken: CancellationToken,
 		telemetryBuilder: LlmNESTelemetryBuilder
 	): Promise<NextEditResult> {
-		this._lastTriggerTime = Date.now();
+		const now = Date.now();
 
-		const tracer = this._tracer.sub(context.requestUuid.substring(4, 8));
+		this._lastTriggerTime = now;
+
+		const sw = new StopWatch();
+
+		const tracer = this._tracer.sub(context.requestUuid.substring(4, 8), {
+			extraLog: (msg: string, ...payload: unknown[]) => {
+				logContext.trace(`[${Math.floor(sw.elapsed()).toString().padStart(4, ' ')}ms] ${msg}`);
+			}
+		});
+
 		const shouldExpandEditWindow = this._shouldExpandEditWindow;
 
 		logContext.setStatelessNextEditProviderId(this._statelessNextEditProvider.ID);
 
 		let result: NextEditResult;
 		try {
-			result = await this._getNextEditCanThrow(docId, context, this._lastTriggerTime, shouldExpandEditWindow, tracer, logContext, cancellationToken, telemetryBuilder);
+			result = await this._getNextEditCanThrow(docId, context, now, shouldExpandEditWindow, tracer, logContext, cancellationToken, telemetryBuilder);
 		} catch (error) {
 			logContext.setError(error);
 			telemetryBuilder.setNextEditProviderError(errors.toString(error));
@@ -690,7 +700,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		};
 		const pushEdit = createPushEdit();
 		try {
-			nextEditResult = await this._statelessNextEditProvider.provideNextEdit(nextEditRequest, pushEdit, logContext, nextEditRequest.cancellationTokenSource.token);
+			nextEditResult = await this._statelessNextEditProvider.provideNextEdit(nextEditRequest, pushEdit, tracer, logContext, nextEditRequest.cancellationTokenSource.token);
 			nextEditRequest.setResult(nextEditResult);
 		} catch (err) {
 			nextEditRequest.setResultError(err);
