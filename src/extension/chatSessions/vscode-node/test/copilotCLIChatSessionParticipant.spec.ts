@@ -6,10 +6,14 @@
 import { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { Uri } from 'vscode';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { MockRunCommandExecutionService } from '../../../../platform/commands/common/mockRunCommandExecutionService';
 import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../../platform/env/common/envService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -20,7 +24,7 @@ import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import type { ICopilotCLIModels, ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
+import { CopilotCLISDK, type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISession } from '../../../agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
@@ -147,12 +151,14 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		telemetry = new NullTelemetryService();
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
 		workspaceService = new NullWorkspaceService();
+		const vscodeExtensionContext = accessor.get(IVSCodeExtensionContext);
+		const copilotSDK = new CopilotCLISDK(vscodeExtensionContext, accessor.get(IEnvService), accessor.get(ILogService), accessor.get(IInstantiationService), accessor.get(IAuthenticationService), workspaceService);
 		commandExecutionService = new MockRunCommandExecutionService();
 		const logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
 		const configurationService = accessor.get(IConfigurationService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
-			override async loadMcpConfig(_workingDirectory: string | undefined) {
+			override async loadMcpConfig(_workingDirectory: Uri | undefined) {
 				return undefined;
 			}
 		}();
@@ -182,9 +188,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			telemetry,
 			tools,
 			commandExecutionService,
-			workspaceService,
 			instantiationService,
-			configurationService
+			configurationService,
+			copilotSDK
 		);
 	});
 

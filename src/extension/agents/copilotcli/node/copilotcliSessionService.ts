@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Session, SessionEvent, SessionOptions, internal } from '@github/copilot/sdk';
-import type { CancellationToken, ChatRequest } from 'vscode';
+import type { CancellationToken, ChatRequest, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
@@ -45,8 +45,8 @@ export interface ICopilotCLISessionService {
 	deleteSession(sessionId: string): Promise<void>;
 
 	// Session wrapper tracking
-	getSession(sessionId: string, options: { model?: string; workingDirectory?: string; isolationEnabled?: boolean; readonly: boolean }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
-	createSession(prompt: string, options: { model?: string; workingDirectory?: string; isolationEnabled?: boolean }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
+	getSession(sessionId: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
+	createSession(prompt: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
 }
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
@@ -173,7 +173,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	public async createSession(prompt: string, { model, workingDirectory, isolationEnabled }: { model?: string; workingDirectory?: string; isolationEnabled?: boolean }, token: CancellationToken): Promise<RefCountedSession> {
+	public async createSession(prompt: string, { model, workingDirectory, isolationEnabled }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean }, token: CancellationToken): Promise<RefCountedSession> {
 		const mcpServers = await this.mcpHandler.loadMcpConfig(workingDirectory);
 		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers });
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
@@ -200,11 +200,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return session;
 	}
 
-	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
+	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
 		return new CopilotCLISessionOptions(options, this.logService);
 	}
 
-	public async getSession(sessionId: string, { model, workingDirectory, isolationEnabled, readonly }: { model?: string; workingDirectory?: string; isolationEnabled?: boolean; readonly: boolean }, token: CancellationToken): Promise<RefCountedSession | undefined> {
+	public async getSession(sessionId: string, { model, workingDirectory, isolationEnabled, readonly }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean }, token: CancellationToken): Promise<RefCountedSession | undefined> {
 		// https://github.com/microsoft/vscode/issues/276573
 		const lock = this.sessionMutexForGetSession.get(sessionId) ?? new Mutex();
 		this.sessionMutexForGetSession.set(sessionId, lock);

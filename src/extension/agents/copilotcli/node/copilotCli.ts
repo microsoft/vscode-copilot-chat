@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { SessionOptions } from '@github/copilot/sdk';
-import type { ChatSessionProviderOptionItem } from 'vscode';
+import type { ChatSessionProviderOptionItem, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -22,13 +23,13 @@ const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 
 export class CopilotCLISessionOptions {
 	public readonly isolationEnabled: boolean;
-	public readonly workingDirectory?: string;
+	public readonly workingDirectory?: Uri;
 	private readonly model?: string;
 	private readonly mcpServers?: SessionOptions['mcpServers'];
 	private readonly logger: ReturnType<typeof getCopilotLogger>;
 	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
-	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService) {
+	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService) {
 		this.isolationEnabled = !!options.isolationEnabled;
 		this.workingDirectory = options.workingDirectory;
 		this.model = options.model;
@@ -61,7 +62,7 @@ export class CopilotCLISessionOptions {
 		};
 
 		if (this.workingDirectory) {
-			allOptions.workingDirectory = this.workingDirectory;
+			allOptions.workingDirectory = this.workingDirectory.fsPath;
 		}
 		if (this.model) {
 			allOptions.model = this.model as unknown as SessionOptions['model'];
@@ -142,6 +143,7 @@ export interface ICopilotCLISDK {
 	readonly _serviceBrand: undefined;
 	getPackage(): Promise<typeof import('@github/copilot/sdk')>;
 	getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>>;
+	getDefaultWorkingDirectory(): Promise<Uri | undefined>;
 }
 
 export class CopilotCLISDK implements ICopilotCLISDK {
@@ -153,6 +155,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly authentService: IAuthenticationService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) { }
 
 	public async getPackage(): Promise<typeof import('@github/copilot/sdk')> {
@@ -181,4 +184,16 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 			host: 'https://github.com'
 		};
 	}
+
+	public async getDefaultWorkingDirectory(): Promise<Uri | undefined> {
+		if (this.workspaceService.getWorkspaceFolders().length === 0) {
+			return undefined;
+		}
+		if (this.workspaceService.getWorkspaceFolders().length === 1) {
+			return this.workspaceService.getWorkspaceFolders()[0];
+		}
+		const folder = await this.workspaceService.showWorkspaceFolderPicker();
+		return folder?.uri;
+	}
 }
+
