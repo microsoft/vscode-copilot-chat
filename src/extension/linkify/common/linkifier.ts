@@ -6,7 +6,9 @@
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
-import { LinkifiedPart, LinkifiedText, coalesceParts } from './linkifiedText';
+import { Location, Position, Range } from '../../../vscodeTypes';
+import { parsePrecedingLineNumberAnnotation, parseTrailingLineNumberAnnotation } from './lineAnnotationParser';
+import { coalesceParts, LinkifiedPart, LinkifiedText, LinkifyLocationAnchor } from './linkifiedText';
 import type { IContributedLinkifier, ILinkifier, LinkifierContext } from './linkifyService';
 
 namespace LinkifierState {
@@ -67,6 +69,15 @@ export class Linkifier implements ILinkifier {
 
 	private _totalAddedLinkCount = 0;
 
+	// Buffer used to delay emitting a single file anchor until we either
+	// detect a line annotation or exceed buffering heuristics.
+	private _delayedAnchorBuffer: { anchor: LinkifyLocationAnchor; afterText: string; totalChars: number; precedingText: string } | undefined;
+
+	// Buffer size chosen based on empirical testing: 140 chars covers most typical sentence lengths and ensures
+	// that line annotations following file anchors are detected without excessive memory usage or latency.
+	private static readonly maxAnchorBuffer = 140;
+	private static readonly flushTerminatorsRe = /[\.?!]\s*$|\n/; // punctuation or newline suggests end of sentence
+
 	constructor(
 		private readonly context: LinkifierContext,
 		private readonly productUriScheme: string,
@@ -94,6 +105,21 @@ export class Linkifier implements ILinkifier {
 						out.push(this.doAppend(part));
 					} else {
 						// Start accumulating
+
+						// Early detect fenced code block openings so that linkification inside the first line
+						// of the block (before the newline token arrives) never runs. Previously we only
+						// recognized fences once the trailing whitespace/newline part was processed which meant
+						// a sequence like ['```', '\n', '[file.ts](file.ts)'] would linkify the interior filename.
+						// Recognize language spec suffixes (e.g. ```ts) by extracting just the fence marker.
+						const fenceOpen = part.match(/^(?:`{3,}|~{3,}|\$\$)[^\s]*$/);
+						if (fenceOpen) {
+							const fenceMarkerMatch = part.match(/(`{3,}|~{3,}|\$\$)/);
+							const fenceMarker = fenceMarkerMatch ? fenceMarkerMatch[1] : fenceOpen[0];
+							const indent = this._appliedText.match(/(\n|^)([ \t]*)$/);
+							this._state = new LinkifierState.CodeOrMathBlock(fenceMarker, indent?.[2] ?? '');
+							out.push(this.doAppend(part));
+							break;
+						}
 
 						// `text...
 						if (/^[^\[`]*`[^`]*$/.test(part)) {
@@ -210,11 +236,33 @@ export class Linkifier implements ILinkifier {
 				}
 			}
 		}
-		return { parts: coalesceParts(out) };
+		// Coalesce adjacent string parts first so upgrade regex sees complete annotation text
+		// If we are still accumulating a word (end of input chunk), finalize it so annotations like 'lines 77–85.' are present.
+		if (this._state.type === LinkifierState.Type.Accumulating && this._state.accumulationType === LinkifierState.AccumulationType.Word) {
+			const pending = this._state.pendingText;
+			// Avoid prematurely finalizing when we may be in the middle of a split fenced code block opener
+			// Example: parts ['``', '`ts', '\n'] should not linkify '```ts' before seeing the newline.
+			if (!/^(?:`{2,}|~{2,})[^\n]*$/.test(pending)) {
+				this._state = LinkifierState.Default;
+				if (pending.length) {
+					const r = await this.doLinkifyAndAppend(pending, {}, token);
+					out.push(...r.parts);
+				}
+			}
+		}
+
+		const coalesced = coalesceParts(out);
+
+		return { parts: this.processCoalescedParts(coalesced) };
 	}
 
 	async flush(token: CancellationToken): Promise<LinkifiedText | undefined> {
 		let out: LinkifiedText | undefined;
+
+		// Flush any buffered anchor before finalizing
+		if (this._delayedAnchorBuffer) {
+			out = { parts: this.flushAnchorBuffer() };
+		}
 
 		switch (this._state.type) {
 			case LinkifierState.Type.CodeOrMathBlock: {
@@ -304,5 +352,131 @@ export class Linkifier implements ILinkifier {
 			}
 		}
 		return out;
+	}
+
+	// --- buffering helpers ---
+
+	private processCoalescedParts(parts: readonly LinkifiedPart[]): LinkifiedPart[] {
+		const emit: LinkifiedPart[] = [];
+		for (const part of parts) {
+			if (part instanceof LinkifyLocationAnchor) {
+				const value = part.value;
+				if (typeof value === 'object' && value !== null && 'range' in value) { // already has line info
+					emit.push(part);
+					continue;
+				}
+				if (this._delayedAnchorBuffer) {
+					emit.push(...this.flushAnchorBuffer());
+				}
+				// Capture up to N chars of preceding applied text to allow upgrading
+				// anchors when annotation precedes file name: "in lines 5-7 of example.ts".
+				// Build a preceding snapshot from contiguous prior string parts (not entire applied text)
+				const precedingSnapshot = (() => {
+					let acc = '';
+					for (let i = emit.length - 1; i >= 0; i--) {
+						const prev = emit[i];
+						if (typeof prev === 'string') {
+							acc = prev + acc;
+							if (acc.length >= 160) { break; }
+						} else {
+							break; // stop at non-string boundary
+						}
+					}
+					// Fallback: if no contiguous prior parts (streaming emitted anchor before prose),
+					// use tail of already applied text so preceding patterns like '... line 25 in <file>' still upgrade.
+					if (!acc.length && this._appliedText.length) {
+						return this._appliedText.slice(-160);
+					}
+					return acc.slice(-160);
+				})();
+				this._delayedAnchorBuffer = { anchor: part, afterText: '', totalChars: 0, precedingText: precedingSnapshot };
+				// Try immediate upgrade using preceding annotation pattern.
+				// If upgraded, continue buffering to capture any trailing text (e.g., punctuation).
+				this.tryUpgradeBufferedAnchorFromPreceding();
+				continue;
+			}
+			if (this._delayedAnchorBuffer && typeof part === 'string') {
+				this._delayedAnchorBuffer.afterText += part;
+				this._delayedAnchorBuffer.totalChars += part.length;
+				if (this.shouldFlushCurrentBuffer()) {
+					emit.push(...this.flushAnchorBuffer());
+				}
+				continue;
+			}
+			emit.push(part);
+		}
+		return emit;
+	}
+
+	private shouldFlushCurrentBuffer(): boolean {
+		const b = this._delayedAnchorBuffer;
+		if (!b) { return false; }
+		return Linkifier.flushTerminatorsRe.test(b.afterText)
+			|| b.totalChars > Linkifier.maxAnchorBuffer
+			|| !!parseTrailingLineNumberAnnotation(b.afterText)
+			|| this.tryUpgradeBufferedAnchorFromPreceding();
+	}
+
+	private flushAnchorBuffer(): LinkifiedPart[] {
+		if (!this._delayedAnchorBuffer) { return []; }
+		const { anchor, afterText } = this._delayedAnchorBuffer;
+		let resultAnchor: LinkifyLocationAnchor = anchor;
+		const parsed = parseTrailingLineNumberAnnotation(afterText);
+		if (parsed) {
+			resultAnchor = new LinkifyLocationAnchor({ uri: anchor.value, range: Linkifier.createSingleLineRange(parsed.startLine) } as Location);
+		}
+		this._delayedAnchorBuffer = undefined;
+		return afterText.length > 0 ? [resultAnchor, afterText] : [resultAnchor];
+	}
+
+	private normalizePrecedingSnapshot(raw: string, anchor: LinkifyLocationAnchor): string {
+		if (!raw) { return raw; }
+		let out = raw;
+		// Trim trailing backtick-quoted full path containing file name (with optional punctuation)
+		try {
+			const anchorStr = (() => {
+				try { return (anchor.value as any)?.toString?.() ?? String(anchor.value); } catch { return undefined; }
+			})();
+			if (anchorStr) {
+				const fileNameMatch = anchorStr.match(/([^\\\/]+)$/);
+				const fileName = fileNameMatch?.[1];
+				if (fileName) {
+					const backtickPathRe = new RegExp("`[^`]*" + escapeRegExpCharacters(fileName) + "[^`]*`[.,;:]?$", 'i');
+					out = out.replace(backtickPathRe, '').replace(/\s+$/, '');
+				}
+			}
+		} catch { /* ignore */ }
+		// Strip common inline formatting (bold, italic, code) preserving inner content
+		out = out
+			.replace(/\*\*([^*]+)\*\*/g, '$1')
+			.replace(/\*([^*]+)\*/g, '$1')
+			.replace(/`([^`]+)`/g, '$1');
+		// Remove stray leftover formatting tokens
+		out = out.replace(/[*`_]{1,2}/g, '');
+		return out;
+	}
+
+	// Preceding annotation pattern (annotation before file name):
+	// Examples: "in lines 5-7 of example.ts", "lines 10-12 of foo.py", "on line 45 of bar.ts", "ln 22 of baz.js"
+	// We only upgrade once; if already upgraded via trailing text we skip.
+	private tryUpgradeBufferedAnchorFromPreceding(): boolean {
+		const b = this._delayedAnchorBuffer;
+		if (!b) { return false; }
+		// If already has line info or we already parsed trailing text, skip.
+		const val = b.anchor.value;
+		if (typeof val === 'object' && val !== null && 'range' in val) { return false; }
+		// Extract tail ending right before the file path anchor was inserted.
+		// Snapshot may include other text after the annotation; restrict to last 160 chars.
+		const text = b.precedingText;
+		if (!text) { return false; }
+		const normalized = this.normalizePrecedingSnapshot(text, b.anchor);
+		const parsed = parsePrecedingLineNumberAnnotation(normalized);
+		if (!parsed) { return false; }
+		b.anchor = new LinkifyLocationAnchor({ uri: b.anchor.value, range: Linkifier.createSingleLineRange(parsed.startLine) } as Location);
+		return true;
+	}
+
+	private static createSingleLineRange(line: number): Range {
+		return new Range(new Position(line, 0), new Position(line, 0));
 	}
 }
