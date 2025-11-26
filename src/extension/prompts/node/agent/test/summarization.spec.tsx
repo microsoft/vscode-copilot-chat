@@ -29,6 +29,7 @@ import { createExtensionUnitTestingServices } from '../../../../test/node/servic
 import { ToolName } from '../../../../tools/common/toolNames';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
+import { PromptRegistry } from '../promptRegistry';
 import { ConversationHistorySummarizationPrompt, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
 
 suite('Agent Summarization', () => {
@@ -91,7 +92,8 @@ suite('Agent Summarization', () => {
 
 		let renderer;
 		if (promptType === 'Agent') {
-			const props: AgentPromptProps = baseProps;
+			const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+			const props: AgentPromptProps = { ...baseProps, customizations };
 			renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
 		} else {
 			const propsInfo = instaService.createInstance(SummarizedConversationHistoryPropsBuilder).getProps(baseProps);
