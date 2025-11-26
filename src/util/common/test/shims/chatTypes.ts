@@ -15,9 +15,12 @@ export class ChatResponseMarkdownPart {
 }
 
 export class ChatResponseCodeblockUriPart {
+	isEdit?: boolean;
 	value: vscode.Uri;
-	constructor(value: vscode.Uri) {
+	undoStopId?: string;
+	constructor(value: vscode.Uri, isEdit?: boolean, undoStopId?: string) {
 		this.value = value;
+		this.undoStopId = undoStopId;
 	}
 }
 
@@ -54,6 +57,20 @@ export class ChatResponseThinkingProgressPart {
 		this.value = value;
 		this.id = id;
 		this.metadata = metadata;
+	}
+}
+
+export class ChatResponseExternalEditPart {
+	applied: Thenable<string>;
+	didGetApplied!: (value: string) => void;
+
+	constructor(
+		public uris: vscode.Uri[],
+		public callback: () => Thenable<unknown>,
+	) {
+		this.applied = new Promise<string>((resolve) => {
+			this.didGetApplied = resolve;
+		});
 	}
 }
 
@@ -287,6 +304,19 @@ export class LanguageModelTextPart2 extends LanguageModelTextPart {
 		this.audience = audience;
 	}
 }
+
+export class LanguageModelThinkingPart implements vscode.LanguageModelThinkingPart {
+	value: string | string[];
+	id?: string;
+	metadata?: { readonly [key: string]: any };
+
+	constructor(value: string | string[], id?: string, metadata?: { readonly [key: string]: any }) {
+		this.value = value;
+		this.id = id;
+		this.metadata = metadata;
+	}
+}
+
 export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 	mimeType: string;
 	data: Uint8Array<ArrayBufferLike>;
@@ -377,9 +407,9 @@ export class LanguageModelToolMCPSource implements vscode.LanguageModelToolMCPSo
 export class LanguageModelToolCallPart implements vscode.LanguageModelToolCallPart {
 	callId: string;
 	name: string;
-	input: any;
+	input: object;
 
-	constructor(callId: string, name: string, input: any) {
+	constructor(callId: string, name: string, input: object) {
 		this.callId = callId;
 		this.name = name;
 
@@ -417,6 +447,31 @@ export enum LanguageModelChatMessageRole {
 	System = 3
 }
 
+export enum LanguageModelChatToolMode {
+	Auto = 1,
+	Required = 2
+}
+
+export class LanguageModelChatMessage implements vscode.LanguageModelChatMessage {
+	role: LanguageModelChatMessageRole;
+	content: Array<any>;
+	name: string | undefined;
+
+	constructor(role: LanguageModelChatMessageRole, content: string | Array<any>, name?: string) {
+		this.role = role;
+		this.content = typeof content === 'string' ? [{ type: 'text', value: content }] : content;
+		this.name = name;
+	}
+
+	static User(content: string | Array<any>, name?: string): LanguageModelChatMessage {
+		return new LanguageModelChatMessage(LanguageModelChatMessageRole.User, content, name);
+	}
+
+	static Assistant(content: string | Array<any>, name?: string): LanguageModelChatMessage {
+		return new LanguageModelChatMessage(LanguageModelChatMessageRole.Assistant, content, name);
+	}
+}
+
 export class ChatToolInvocationPart {
 	toolName: string;
 	toolCallId: string;
@@ -445,6 +500,12 @@ export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
 		readonly participant: string,
 		readonly command?: string
 	) { }
+}
+
+export enum ChatSessionStatus {
+	Failed = 0,
+	Completed = 1,
+	InProgress = 2
 }
 
 export class LanguageModelError extends Error {

@@ -37,6 +37,7 @@ export import ChatResponseCommandButtonPart = vscode.ChatResponseCommandButtonPa
 export import ChatResponseWarningPart = vscode.ChatResponseWarningPart;
 export import ChatResponseMovePart = vscode.ChatResponseMovePart;
 export import ChatResponseExtensionsPart = vscode.ChatResponseExtensionsPart;
+export import ChatResponseExternalEditPart = vscode.ChatResponseExternalEditPart;
 export import ChatResponsePullRequestPart = vscode.ChatResponsePullRequestPart;
 export import ChatResponseMarkdownWithVulnerabilitiesPart = vscode.ChatResponseMarkdownWithVulnerabilitiesPart;
 export import ChatResponseCodeblockUriPart = vscode.ChatResponseCodeblockUriPart;
@@ -61,12 +62,12 @@ export import SymbolInformation = vscode.SymbolInformation;
 export import LanguageModelPromptTsxPart = vscode.LanguageModelPromptTsxPart;
 export import LanguageModelTextPart = vscode.LanguageModelTextPart;
 export import LanguageModelTextPart2 = vscode.LanguageModelTextPart2;
+export import LanguageModelThinkingPart = vscode.LanguageModelThinkingPart;
 export import LanguageModelDataPart = vscode.LanguageModelDataPart;
 export import LanguageModelDataPart2 = vscode.LanguageModelDataPart2;
 export import LanguageModelPartAudience = vscode.LanguageModelPartAudience;
 export import LanguageModelToolMCPSource = vscode.LanguageModelToolMCPSource;
 export import LanguageModelToolExtensionSource = vscode.LanguageModelToolExtensionSource;
-export import ChatImageMimeType = vscode.ChatImageMimeType;
 export import ChatReferenceBinaryData = vscode.ChatReferenceBinaryData;
 export import ChatReferenceDiagnostic = vscode.ChatReferenceDiagnostic;
 export import TextSearchMatch2 = vscode.TextSearchMatch2;
@@ -85,6 +86,8 @@ export import LanguageModelToolCallPart = vscode.LanguageModelToolCallPart;
 export import LanguageModelToolResultPart = vscode.LanguageModelToolResultPart;
 export import LanguageModelToolResultPart2 = vscode.LanguageModelToolResultPart2;
 export import LanguageModelChatMessageRole = vscode.LanguageModelChatMessageRole;
+export import LanguageModelChatMessage = vscode.LanguageModelChatMessage;
+export import LanguageModelChatToolMode = vscode.LanguageModelChatToolMode;
 export import TextEditorSelectionChangeKind = vscode.TextEditorSelectionChangeKind;
 export import TextDocumentChangeReason = vscode.TextDocumentChangeReason;
 export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;
@@ -95,6 +98,7 @@ export import SymbolKind = vscode.SymbolKind;
 export import SnippetString = vscode.SnippetString;
 export import SnippetTextEdit = vscode.SnippetTextEdit;
 export import FileType = vscode.FileType;
+export import ChatSessionStatus = vscode.ChatSessionStatus;
 export import SettingsSearchResultKind = vscode.SettingsSearchResultKind;
 
 export const l10n = {
@@ -103,4 +107,8 @@ export const l10n = {
 	 * use `import { l10n } from 'vscode'` or `import * as l10n from '@vscode/l10n'`.
 	 */
 	t: vscode.l10n.t
+};
+
+export const authentication = {
+	getSession: vscode.authentication.getSession,
 };
