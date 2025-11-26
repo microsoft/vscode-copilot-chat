@@ -26,11 +26,12 @@ export class CopilotCLIPromptResolver {
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) { }
 
-	public async resolvePrompt(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
+	public async resolvePrompt(request: vscode.ChatRequest, additionalReferences: vscode.ChatPromptReference[], token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
+		const references = request.references.concat(additionalReferences);
 		if (request.prompt.startsWith('/')) {
 			return { prompt: request.prompt, attachments: [] }; // likely a slash command, don't modify
 		}
-		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(request.references), token);
+		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(references), token);
 		if (token.isCancellationRequested) {
 			return { prompt: request.prompt, attachments: [] };
 		}
@@ -41,33 +42,36 @@ export class CopilotCLIPromptResolver {
 	private async constructChatVariablesAndAttachments(variables: ChatVariablesCollection, token: vscode.CancellationToken): Promise<[variables: ChatVariablesCollection, Attachment[]]> {
 		const validReferences: vscode.ChatPromptReference[] = [];
 		const fileFolderReferences: vscode.ChatPromptReference[] = [];
-		for (const variable of variables) {
+		await Promise.all(Array.from(variables).map(async variable => {
 			// Unsupported references.
 			if (isPromptInstruction(variable) || isPromptFile(variable)) {
-				continue;
+				return;
 			}
 			// Images will be attached using regular attachments via Copilot CLI SDK.
 			if (variable.value instanceof ChatReferenceBinaryData) {
-				continue;
+				return;
 			}
 			if (isLocation(variable.value)) {
 				validReferences.push(variable.reference);
-				continue;
+				return;
 			}
 			// Notebooks are not supported yet.
 			if (URI.isUri(variable.value)) {
+				if (await this.ignoreService.isCopilotIgnored(variable.value)) {
+					return;
+				}
 				if (variable.value.scheme === Schemas.vscodeNotebookCellOutput || variable.value.scheme === Schemas.vscodeNotebookCellOutput) {
-					continue;
+					return;
 				}
 
 				// Files and directories will be attached using regular attachments via Copilot CLI SDK.
 				validReferences.push(variable.reference);
 				fileFolderReferences.push(variable.reference);
-				continue;
+				return;
 			}
 
 			validReferences.push(variable.reference);
-		}
+		}));
 
 		variables = new ChatVariablesCollection(validReferences);
 		const attachments = await this.constructFileOrFolderAttachments(fileFolderReferences, token);
@@ -80,9 +84,6 @@ export class CopilotCLIPromptResolver {
 		await Promise.all(fileOrFolderReferences.map(async ref => {
 			const uri = ref.value;
 			if (!URI.isUri(uri)) {
-				return;
-			}
-			if (await this.ignoreService.isCopilotIgnored(uri)) {
 				return;
 			}
 

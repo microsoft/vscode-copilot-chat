@@ -13,6 +13,7 @@ import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
+import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
@@ -98,7 +99,7 @@ describe('CopilotCLISession', () => {
 		};
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0].fsPath }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0] }, logger);
 		instaService = services.seal();
 	});
 
@@ -203,7 +204,7 @@ describe('CopilotCLISession', () => {
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: '/workingDirectory' }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });

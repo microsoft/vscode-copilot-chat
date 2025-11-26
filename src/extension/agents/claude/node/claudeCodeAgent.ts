@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HookInput, HookJSONOutput, Options, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { HookInput, HookJSONOutput, Options, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -237,6 +237,7 @@ export class ClaudeCodeSession extends Disposable {
 	 */
 	private async _startSession(token: vscode.CancellationToken): Promise<void> {
 		// Build options for the Claude Code SDK
+		// process.env.DEBUG = '1'; // debug messages from sdk.mjs
 		const isDebugEnabled = this.configService.getConfig(ConfigKey.Advanced.ClaudeCodeDebugEnabled);
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
@@ -246,6 +247,7 @@ export class ClaudeCodeSession extends Disposable {
 			executable: process.execPath as 'node', // get it to fork the EH node process
 			env: {
 				...process.env,
+				...(isDebugEnabled ? { DEBUG: '1' } : {}),
 				ANTHROPIC_BASE_URL: `http://localhost:${this.serverConfig.port}`,
 				ANTHROPIC_API_KEY: this.serverConfig.nonce,
 				CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
@@ -272,20 +274,10 @@ export class ClaudeCodeSession extends Disposable {
 					this.canUseTool(name, input, this._currentRequest.toolInvocationToken) :
 					{ behavior: 'deny', message: 'No active request' };
 			},
-			systemPrompt: {
-				type: 'preset',
-				preset: 'claude_code',
-				append: 'Your responses will be rendered as markdown, so please reply with properly formatted markdown when appropriate. When replying with code or the name of a symbol, wrap it in backticks.'
-			},
-			settingSources: ['user', 'project', 'local'],
-			...(isDebugEnabled && {
-				stderr: data => {
-					this.logService.trace(`claude-agent-sdk stderr: ${data}`);
-				}
-			})
+			appendSystemPrompt: 'Your responses will be rendered as markdown, so please reply with properly formatted markdown when appropriate. When replying with code or the name of a symbol, wrap it in backticks.'
 		};
 
-		this.logService.trace(`claude-agent-sdk: Starting query with options: ${JSON.stringify(options)}`);
+		this.logService.trace(`Claude CLI SDK: Starting query with options: ${JSON.stringify(options)}`);
 		this._queryGenerator = await this.claudeCodeService.query({
 			prompt: this._createPromptIterable(),
 			options
@@ -373,7 +365,7 @@ export class ClaudeCodeSession extends Disposable {
 					throw new Error('Request was cancelled');
 				}
 
-				this.logService.trace(`claude-agent-sdk Message: ${JSON.stringify(message, null, 2)}`);
+				this.logService.trace(`Claude CLI SDK Message: ${JSON.stringify(message, null, 2)}`);
 				if (message.session_id) {
 					this.sessionId = message.session_id;
 				}

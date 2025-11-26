@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SDKAssistantMessage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { SDKAssistantMessage, SDKMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
 import { coalesce } from '../../../util/vs/base/common/arrays';

@@ -7,12 +7,12 @@ import type { CancellationToken, TextDocument, Disposable as VscodeDisposable } 
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ContextItem } from '../../languageServer/common/languageContextService';
-import { ILanguageContextProviderService } from './languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from './languageContextProviderService';
 
 export class NullLanguageContextProviderService implements ILanguageContextProviderService {
 	_serviceBrand: undefined;
 
-	registerContextProvider<T extends Copilot.SupportedContextItem>(provider: Copilot.ContextProvider<T>): VscodeDisposable {
+	registerContextProvider<T extends Copilot.SupportedContextItem>(provider: Copilot.ContextProvider<T>, targets: ProviderTarget[]): VscodeDisposable {
 		return Disposable.None;
 	}
 

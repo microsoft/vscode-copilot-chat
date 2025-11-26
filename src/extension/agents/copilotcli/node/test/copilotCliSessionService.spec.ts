@@ -21,6 +21,7 @@ import { ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
+import { URI } from '../../../../../util/vs/base/common/uri';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
 
@@ -105,14 +106,14 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.createSession', () => {
 		it('get session will return the same session created using createSession', async () => {
-			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
+			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: URI.file('/tmp') }, CancellationToken.None);
 
 			const existingSession = await service.getSession(session.object.sessionId, { readonly: false }, CancellationToken.None);
 
 			expect(existingSession).toBe(session);
 		});
 		it('get session will return new once previous session is disposed', async () => {
-			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
+			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: URI.file('/tmp') }, CancellationToken.None);
 
 			session.dispose();
 			await new Promise(resolve => setTimeout(resolve, 0)); // allow dispose async cleanup to run
@@ -214,7 +215,7 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.getAllSessions', () => {
 		it('will not list created sessions', async () => {
-			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
+			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: URI.file('/tmp') }, CancellationToken.None);
 			disposables.add(session);
 
 			const s1 = new MockCliSdkSession('s1', new Date(0));
