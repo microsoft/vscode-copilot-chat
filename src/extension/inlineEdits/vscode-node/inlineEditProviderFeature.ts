@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
 import { commands, languages, window } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -20,12 +19,10 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, derived, derivedDisposable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { join } from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
-import { Position } from '../../../util/vs/editor/common/core/position';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
-import { jumpToPositionCommandId } from '../common/jumpToCursorPosition';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
@@ -170,19 +167,6 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 
 			reader.store.add(commands.registerCommand(learnMoreCommandId, () => {
 				this._envService.openExternal(URI.parse(learnMoreLink));
-			}));
-
-			reader.store.add(commands.registerCommand(jumpToPositionCommandId, (position: Position) => {
-				const currentEditor = window.activeTextEditor;
-				if (!currentEditor) {
-					return;
-				}
-				// vscode API uses 0-based line and column numbers
-				const range = new vscode.Range(position.lineNumber - 1, position.column - 1, position.lineNumber - 1, position.column - 1);
-				currentEditor.selection = new vscode.Selection(range.start, range.end);
-				currentEditor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-
-				model.onChange.trigger(undefined);
 			}));
 
 			reader.store.add(commands.registerCommand(clearCacheCommandId, () => {
