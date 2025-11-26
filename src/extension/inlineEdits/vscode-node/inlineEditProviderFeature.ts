@@ -80,7 +80,6 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		super();
 
 		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.trace(s));
-		const constructorTracer = tracer.sub('constructor');
 		const hasUpdatedNesSettingKey = 'copilot.chat.nextEdits.hasEnabledNesInSettings';
 		const enableEnhancedNotebookNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, _experimentationService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, _experimentationService);
 		const unificationState = unificationStateObservable(this);
@@ -191,7 +190,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			}));
 		}));
 
-		constructorTracer.returns();
+		tracer.returns();
 	}
 }
 
