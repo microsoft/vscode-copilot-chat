@@ -33,7 +33,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		if (!this.extensionContext.storageUri) {
 			return;
 		}
-		return vscode.Uri.joinPath(this.extensionContext.storageUri, 'customAgentsCache');
+		return vscode.Uri.joinPath(this.extensionContext.storageUri, 'githubAgentsCache');
 	}
 
 	async provideCustomAgents(
