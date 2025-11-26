@@ -22,7 +22,7 @@ import { AdoRepoId, getGithubRepoIdFromFetchUrl, getOrderedRemoteUrlsFromContext
 import { Change } from '../../git/vscode/git';
 import { logExecTime, LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
-import { isGitHubRemoteRepository } from '../../remoteRepositories/common/utils';
+import { isAzureDevOpsRemoteRepository, isGitHubRemoteRepository } from '../../remoteRepositories/common/utils';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
@@ -235,6 +235,7 @@ export class CodeSearchRepoTracker extends Disposable {
 
 	private readonly _initializedGitReposP: CancelablePromise<void>;
 	private readonly _initializedGitHubRemoteReposP: CancelablePromise<void>;
+	private readonly _initializedAdoRemoteReposP: CancelablePromise<void>;
 
 	private _isDisposed = false;
 
@@ -300,6 +301,32 @@ export class CodeSearchRepoTracker extends Disposable {
 			}
 		});
 
+		this._initializedAdoRemoteReposP = createCancelablePromise(async (token) => {
+			try {
+				const adoRemoteRepos = this._workspaceService.getWorkspaceFolders().filter(isAzureDevOpsRemoteRepository);
+				if (!adoRemoteRepos.length) {
+					return;
+				}
+
+				this._logService.trace(`CodeSearchRepoTracker.initAdoRemoteRepos(): started`);
+
+				await raceCancellationError(
+					Promise.all(adoRemoteRepos.map(workspaceRoot => {
+						// URI format: vscode-vfs://azurerepos/{OrgName}/{ProjectName}/{RepoName}
+						const adoRepoIdParts = workspaceRoot.path.slice(1).split('/');
+						if (adoRepoIdParts.length !== 3) {
+							this._logService.error(`CodeSearchRepoTracker.initAdoRemoteRepos(): Invalid ADO remote repo URI format: ${workspaceRoot}. Expected format: vscode-vfs://azurerepos/{OrgName}/{ProjectName}/{RepoName}`);
+							return Promise.resolve();
+						}
+						return this.openAdoRemoteRepo(workspaceRoot, new AdoRepoId(adoRepoIdParts[0], adoRepoIdParts[1], adoRepoIdParts[2]));
+					})),
+					token);
+				this._logService.trace(`CodeSearchRepoTracker.initAdoRemoteRepos(): complete`);
+			} catch (e) {
+				this._logService.error(`CodeSearchRepoTracker.initAdoRemoteRepos(): Error occurred during initialization: ${e}`);
+			}
+		});
+
 		const refreshInterval = this._register(new IntervalTimer());
 		refreshInterval.cancelAndSet(() => this.updateIndexedCommitForAllRepos(), 5 * 60 * 1000); // 5 minutes
 
@@ -330,7 +357,8 @@ export class CodeSearchRepoTracker extends Disposable {
 					// Find all initial repos
 					await Promise.all([
 						this._initializedGitReposP,
-						this._initializedGitHubRemoteReposP
+						this._initializedGitHubRemoteReposP,
+						this._initializedAdoRemoteReposP
 					]);
 
 					if (this._isDisposed) {
@@ -382,6 +410,7 @@ export class CodeSearchRepoTracker extends Disposable {
 
 		this._initializedGitReposP.cancel();
 		this._initializedGitHubRemoteReposP.cancel();
+		this._initializedAdoRemoteReposP.cancel();
 	}
 
 	getAllRepos(): Iterable<RepoEntry> {
@@ -552,6 +581,29 @@ export class CodeSearchRepoTracker extends Disposable {
 		const repo: RepoInfo = { rootUri };
 		const remoteInfo: ResolvedRepoRemoteInfo = {
 			repoId: githubId,
+			fetchUrl: undefined,
+		};
+
+		const initCancellationTokenSource = new CancellationTokenSource();
+		const initP = this.updateRepoStateFromEndpoint(repo, remoteInfo, false, initCancellationTokenSource.token).then(() => { });
+
+		this._repos.set(rootUri, { status: RepoStatus.Initializing, repo, initTask: { p: initP, cts: initCancellationTokenSource } });
+		return initP;
+	}
+
+	private openAdoRemoteRepo(rootUri: URI, adoId: AdoRepoId): Promise<void> {
+		this._logService.trace(`CodeSearchRepoTracker.openAdoRemoteRepo(${rootUri})`);
+
+		const existing = this._repos.get(rootUri);
+		if (existing) {
+			if (existing.status === RepoStatus.Initializing) {
+				return existing.initTask.p;
+			}
+		}
+
+		const repo: RepoInfo = { rootUri };
+		const remoteInfo: ResolvedRepoRemoteInfo = {
+			repoId: adoId,
 			fetchUrl: undefined,
 		};
 
@@ -951,7 +1003,7 @@ export class CodeSearchRepoTracker extends Disposable {
 	}
 
 	public async diffWithIndexedCommit(repoInfo: RepoEntry): Promise<CodeSearchDiff | undefined> {
-		if (isGitHubRemoteRepository(repoInfo.repo.rootUri)) {
+		if (isGitHubRemoteRepository(repoInfo.repo.rootUri) || isAzureDevOpsRemoteRepository(repoInfo.repo.rootUri)) {
 			// TODO: always assumes no diff. Can we get a real diff somehow?
 			return { changes: [] };
 		}
