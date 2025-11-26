@@ -12,7 +12,6 @@ import { TelemetryData } from '../../../platform/telemetry/common/telemetryData'
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 
 export interface IChatMLFetcherSuccessfulData {
-	requestId: string;
 	chatCompletion: ChatCompletion;
 	baseTelemetry: TelemetryData | undefined;
 	userInitiatedRequest: boolean | undefined;
@@ -54,7 +53,6 @@ export class ChatMLFetcherTelemetrySender {
 	public static sendSuccessTelemetry(
 		telemetryService: ITelemetryService,
 		{
-			requestId,
 			chatCompletion,
 			baseTelemetry,
 			userInitiatedRequest,
@@ -79,6 +77,7 @@ export class ChatMLFetcherTelemetrySender {
 				"modelInvoked": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Actual model invoked for the response" },
 				"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
+				"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
 				"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
 				"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
 				"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
@@ -112,7 +111,8 @@ export class ChatMLFetcherTelemetrySender {
 			model: chatEndpointInfo?.model,
 			modelInvoked: chatCompletion.model,
 			apiType: chatEndpointInfo?.apiType,
-			requestId,
+			requestId: chatCompletion.requestId.headerRequestId,
+			githubRequestId: chatCompletion.requestId.gitHubRequestId,
 			associatedRequestId: baseTelemetry?.properties.associatedRequestId,
 			reasoningEffort: requestBody.reasoning?.effort,
 			reasoningSummary: requestBody.reasoning?.summary,
@@ -216,7 +216,6 @@ export class ChatMLFetcherTelemetrySender {
 		telemetryService: ITelemetryService,
 		processed: ChatFetchError,
 		telemetryProperties: IChatRequestTelemetryProperties | undefined,
-		ourRequestId: string,
 		chatEndpointInfo: IChatEndpoint,
 		requestBody: IEndpointBody,
 		tokenCount: number,
@@ -234,6 +233,7 @@ export class ChatMLFetcherTelemetrySender {
 				"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
+				"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
 				"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
 				"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
 				"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
@@ -255,7 +255,8 @@ export class ChatMLFetcherTelemetrySender {
 			type: processed.type,
 			reason: processed.reasonDetail || processed.reason,
 			source: telemetryProperties?.messageSource ?? 'unknown',
-			requestId: ourRequestId,
+			requestId: processed.requestId,
+			gitHubRequestId: processed.serverRequestId,
 			model: chatEndpointInfo.model,
 			apiType: chatEndpointInfo.apiType,
 			reasoningEffort: requestBody.reasoning?.effort,
