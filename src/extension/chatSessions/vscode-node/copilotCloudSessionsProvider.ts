@@ -957,17 +957,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// Check if the message has been modified from the default
 		const messageModified = message !== this.BASE_MESSAGE;
 
-		if (buttons.length === 1) {
-			// When the message has been modified, always show confirmation
-			if (!messageModified) {
-				if (context.chatSessionContext?.isUntitled) {
-					return; // Don't show the confirmation
-				}
-				const seenDelegationPromptBefore = this.getWorkspaceContext(SEEN_DELEGATION_PROMPT_KEY);
-				if (seenDelegationPromptBefore) {
-					return; // Don't show the confirmation
-				}
+		// Only skip confirmation if neither buttons were modified nor message was modified
+		if (buttons.length === 1 && !messageModified) {
+			if (context.chatSessionContext?.isUntitled) {
+				return; // Don't show the confirmation
 			}
+			const seenDelegationPromptBefore = this.getWorkspaceContext(SEEN_DELEGATION_PROMPT_KEY);
+			if (seenDelegationPromptBefore) {
+				return; // Don't show the confirmation
+			}
+		}
+
+		if (buttons.length === 1) {
 			// No other affirmative button added, so add generic one
 			buttons.unshift(this.DELEGATE);
 		}
