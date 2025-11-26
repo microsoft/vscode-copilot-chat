@@ -16,6 +16,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { URI } from '../../../util/vs/base/common/uri';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IGitExtensionService } from '../../git/common/gitExtensionService';
 import { AdoRepoId, getGithubRepoIdFromFetchUrl, getOrderedRemoteUrlsFromContext, getOrderedRepoInfosFromContext, GithubRepoId, IGitService, parseRemoteUrl, RepoContext, ResolvedRepoRemoteInfo } from '../../git/common/gitService';
@@ -35,7 +36,7 @@ export enum RepoStatus {
 	/** We could not resolve this repo */
 	NotResolvable = 'NotResolvable',
 
-	Initializing = 'Initializing',
+	Resolving = 'Resolving',
 
 	/** We are checking the status of the remote index. */
 	CheckingStatus = 'CheckingStatus',
@@ -100,9 +101,8 @@ export type RepoEntry =
 		readonly status: RepoStatus.NotResolvable;
 		readonly repo: RepoInfo;
 	} | {
-		readonly status: RepoStatus.Initializing;
+		readonly status: RepoStatus.Resolving;
 		readonly repo: RepoInfo;
-		readonly initTask: InitTask;
 	} | {
 		readonly status: RepoStatus.CheckingStatus;
 		readonly repo: RepoInfo;
@@ -212,7 +212,7 @@ function getRemoteTypeForTelemetry(remoteHost: string): GitRemoteTypeForTelemetr
 /**
  * Tracks all repositories in the workspace that have been indexed for code search.
  */
-export class CodeSearchRepoTracker extends Disposable {
+export class CodeSearchRepoManager extends Disposable {
 	// TODO: Switch to use backoff instead of polling at fixed intervals
 	private readonly _repoIndexPollingInterval = 3000; // ms
 	private readonly maxPollingAttempts = 120;
@@ -233,72 +233,30 @@ export class CodeSearchRepoTracker extends Disposable {
 	private readonly _onDidRemoveRepo = this._register(new Emitter<RepoEntry>());
 	public readonly onDidRemoveRepo = this._onDidRemoveRepo.event;
 
-	private readonly _initializedGitReposP: CancelablePromise<void>;
-	private readonly _initializedGitHubRemoteReposP: CancelablePromise<void>;
+	private readonly _tracker: CodeSearchRepoTracker;
 
 	private _isDisposed = false;
 
 	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
 		@IAdoCodeSearchService private readonly _adoCodeSearchService: IAdoCodeSearchService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ICodeSearchAuthenticationService private readonly _codeSearchAuthService: ICodeSearchAuthenticationService,
-		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@IGithubCodeSearchService private readonly _githubCodeSearchService: IGithubCodeSearchService,
 		@IGitService private readonly _gitService: IGitService,
 		@ILogService private readonly _logService: ILogService,
-		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
 		super();
 
-		this._initializedGitReposP = createCancelablePromise(async (token) => {
-			this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): started`);
+		this._tracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
 
-			try {
-				if (!this._gitService.isInitialized) {
-					this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Git service not initialized. Waiting for init signal.`);
-					const finishInitTimeout = 30_000;
-					await raceCancellationError(raceTimeout(new Promise<void>(resolve => this._gitService.onDidFinishInitialization(() => resolve())), finishInitTimeout), token);
-					if (this._isDisposed) {
-						return;
-					}
-				}
+		this._register(this._tracker.onDidAddOrUpdateRepo(info => {
+			this.addOrUpdateTrackedRepo(info);
+		}));
 
-				this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Found initial repos: [${this._gitService.repositories.map(repo => repo.rootUri.toString())}].`);
-
-				const openPromises = this._gitService.repositories.map(repo => this.openGitRepo(repo));
-
-				this._register(this._gitService.onDidOpenRepository(repo => this.openGitRepo(repo)));
-				this._register(this._gitService.onDidCloseRepository(repo => this.closeRepo(repo)));
-
-				await raceCancellationError(Promise.allSettled(openPromises), token);
-				this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Complete`);
-			} catch (e) {
-				this._logService.error(`CodeSearchRepoTracker.tryInitGitRepos(): Error occurred during initialization: ${e}`);
-			}
-		});
-
-		this._initializedGitHubRemoteReposP = createCancelablePromise(async (token) => {
-			try {
-				const githubRemoteRepos = this._workspaceService.getWorkspaceFolders().filter(isGitHubRemoteRepository);
-				if (!githubRemoteRepos.length) {
-					return;
-				}
-
-				this._logService.trace(`CodeSearchRepoTracker.initGithubRemoteRepos(): started`);
-
-				await raceCancellationError(
-					Promise.all(githubRemoteRepos.map(workspaceRoot => {
-						const githubRepoIdParts = workspaceRoot.path.slice(1).split('/');
-						return this.openGithubRemoteRepo(workspaceRoot, new GithubRepoId(githubRepoIdParts[0], githubRepoIdParts[1]));
-					})),
-					token);
-				this._logService.trace(`CodeSearchRepoTracker.initGithubRemoteRepos(): complete`);
-			} catch (e) {
-				this._logService.error(`CodeSearchRepoTracker.initGithubRemoteRepos(): Error occurred during initialization: ${e}`);
-			}
-		});
+		this._register(this._tracker.onDidRemoveRepo(info => {
+			this.closeRepo(info.repo);
+		}));
 
 		const refreshInterval = this._register(new IntervalTimer());
 		refreshInterval.cancelAndSet(() => this.updateIndexedCommitForAllRepos(), 5 * 60 * 1000); // 5 minutes
@@ -327,12 +285,7 @@ export class CodeSearchRepoTracker extends Disposable {
 			return logExecTime(this._logService, 'CodeSearchRepoTracker::initialize_impl', async () => {
 				try {
 					// Wait for the initial repos to be found
-					// Find all initial repos
-					await Promise.all([
-						this._initializedGitReposP,
-						this._initializedGitHubRemoteReposP
-					]);
-
+					await this._tracker.initialize();
 					if (this._isDisposed) {
 						return;
 					}
@@ -340,7 +293,7 @@ export class CodeSearchRepoTracker extends Disposable {
 					// And make sure they have done their initial checks.
 					// After this the repos may still be left polling github but we've done at least one check
 					await Promise.all(Array.from(this._repos.values(), async repo => {
-						if (repo.status === RepoStatus.Initializing || repo.status === RepoStatus.CheckingStatus) {
+						if (repo.status === RepoStatus.CheckingStatus) {
 							try {
 								await repo.initTask.p;
 							} catch (error) {
@@ -375,13 +328,10 @@ export class CodeSearchRepoTracker extends Disposable {
 		this._repoIndexPolling.clear();
 
 		for (const repo of this._repos.values()) {
-			if (repo.status === RepoStatus.Initializing || repo.status === RepoStatus.CheckingStatus) {
+			if (repo.status === RepoStatus.CheckingStatus) {
 				repo.initTask.cts.cancel();
 			}
 		}
-
-		this._initializedGitReposP.cancel();
-		this._initializedGitHubRemoteReposP.cancel();
 	}
 
 	getAllRepos(): Iterable<RepoEntry> {
@@ -392,22 +342,36 @@ export class CodeSearchRepoTracker extends Disposable {
 		return this._repos.get(repo.repo.rootUri)?.status ?? repo.status;
 	}
 
+	private addOrUpdateTrackedRepo(info: TrackedRepoInfo) {
+		switch (info.status) {
+			case TrackedRepoStatus.NotResolvable: {
+				this.updateRepoEntry(info.repo, { status: RepoStatus.NotResolvable, repo: info.repo });
+				return;
+			}
+			case TrackedRepoStatus.Resolving: {
+				this.updateRepoEntry(info.repo, { status: RepoStatus.Resolving, repo: info.repo });
+				return;
+			}
+			case TrackedRepoStatus.Resolved: {
+				return this.openGitRepo(info.repo, info.remoteInfo);
+			}
+		}
+	}
+
 	@LogExecTime(self => self._logService, 'CodeSearchRepoTracker::openGitRepo')
-	private async openGitRepo(repo: RepoContext): Promise<void> {
+	private async openGitRepo(repo: RepoInfo, remoteInfo: ResolvedRepoRemoteInfo): Promise<void> {
 		this._logService.trace(`CodeSearchRepoTracker.openGitRepo(${repo.rootUri})`);
 
 		const existing = this._repos.get(repo.rootUri);
-		if (existing) {
-			if (existing.status === RepoStatus.Initializing) {
-				try {
-					return await existing.initTask.p;
-				} catch (e) {
-					if (isCancellationError(e)) {
-						return;
-					}
-
-					throw e;
+		if (existing?.status === RepoStatus.CheckingStatus) {
+			try {
+				return await existing.initTask.p;
+			} catch (e) {
+				if (isCancellationError(e)) {
+					return;
 				}
+
+				throw e;
 			}
 		}
 
@@ -418,211 +382,18 @@ export class CodeSearchRepoTracker extends Disposable {
 		};
 
 		const initToken = initTask.cts.token;
-		(async () => {
-			try {
-				// Do a status check to make sure the repo info is fully loaded
-				// See #12954
-				await this._gitExtensionService.getExtensionApi()?.getRepository(repo.rootUri)?.status();
-			} catch {
-				this._logService.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). git status check failed.`);
-				// Noop, may still be ok even if the status check failed
-			}
-
-			if (initToken.isCancellationRequested) {
-				return;
-			}
-
-			const updatedRepo = await this._gitService.getRepository(repo.rootUri);
-			if (!updatedRepo && !this._simulationTestContext.isInSimulationTests) {
-				this._logService.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). No current repo found after status check.`);
-
-				/* __GDPR__
-					"codeSearchRepoTracker.openGitRepo.error.noCurrentRepo" : {
-						"owner": "mjbvz",
-						"comment": "Information about errors when trying to resolve a remote"
-					}
-				*/
-				this._telemetryService.sendMSFTTelemetryEvent('codeSearchRepoTracker.openGitRepo.error.noCurrentRepo');
-
-				this.updateRepoEntry(repo, { status: RepoStatus.NotResolvable, repo });
-				return;
-			}
-
-			if (updatedRepo) {
-				repo = updatedRepo;
-			}
-			this._repos.set(repo.rootUri, { status: RepoStatus.Initializing, repo, initTask });
-
-			const remoteInfos = await this.getRemoteInfosForRepo(repo);
-			if (initToken.isCancellationRequested) {
-				return;
-			}
-
-			let remoteTelemetryType: GitRemoteTypeForTelemetry;
-			if (remoteInfos.length) {
-				const primaryRemote = remoteInfos[0];
-				const remoteHost = primaryRemote.fetchUrl ? parseRemoteUrl(primaryRemote.fetchUrl) : undefined;
-				remoteTelemetryType = remoteHost ? getRemoteTypeForTelemetry(remoteHost.host) : GitRemoteTypeForTelemetry.Unknown;
-			} else {
-				const allRemotes = Array.from(getOrderedRemoteUrlsFromContext(repo));
-				if (allRemotes.length === 0) {
-					remoteTelemetryType = GitRemoteTypeForTelemetry.NoRemotes;
-				} else {
-					for (const remote of allRemotes) {
-						if (remote) {
-							const remoteHost = parseRemoteUrl(remote);
-							if (remoteHost) {
-								const telemetryId = getRemoteTypeForTelemetry(remoteHost.host);
-								if (telemetryId !== GitRemoteTypeForTelemetry.Unknown) {
-									remoteTelemetryType = telemetryId;
-									break;
-								}
-							}
-						}
-					}
-				}
-				remoteTelemetryType ??= GitRemoteTypeForTelemetry.Unknown;
-			}
-			/* __GDPR__
-				"codeSearchRepoTracker.openGitRepo.remoteInfo" : {
-					"owner": "mjbvz",
-					"comment": "Information about the remote",
-					"resolvedRemoteType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Identifies the primary remote's type " }
-				}
-			*/
-			this._telemetryService.sendMSFTTelemetryEvent('codeSearchRepoTracker.openGitRepo.remoteInfo', {}, {
-				resolvedRemoteType: remoteTelemetryType,
-			});
-
-			if (!remoteInfos.length) {
-				this._logService.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). No valid github remote found. Remote urls: ${JSON.stringify(Array.from(getOrderedRemoteUrlsFromContext(repo)))}.`);
-
-				this._telemetryService.sendInternalMSFTTelemetryEvent('codeSearchRepoTracker.error.couldNotResolveRemote.internal', {
-					remoteUrls: JSON.stringify(coalesce(repo.remoteFetchUrls ?? [])),
-				});
-
-				/* __GDPR__
-					"codeSearchRepoTracker.openGitRepo.error.couldNotResolveRemote" : {
-						"owner": "mjbvz",
-						"comment": "Information about errors when trying to resolve a remote",
-						"repoRemoteFetchUrlsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of remote fetch urls on the git repo" }
-					}
-				*/
-				this._telemetryService.sendMSFTTelemetryEvent('codeSearchRepoTracker.openGitRepo.error.couldNotResolveRemote', {}, {
-					repoRemoteFetchUrlsCount: repo.remoteFetchUrls?.length ?? 0,
-				});
-
-				this.updateRepoEntry(repo, { status: RepoStatus.NotResolvable, repo });
-				return;
-			}
-
-			// TODO: Support checking index status for multiple remotes
-			const primaryRemote = remoteInfos[0];
-			this.updateRepoEntry(repo, {
-				status: RepoStatus.CheckingStatus,
-				repo,
-				remoteInfo: primaryRemote,
-				initTask,
-			});
-
-			await this.updateRepoStateFromEndpoint(repo, primaryRemote, false, initToken);
-		})()
+		this.updateRepoStateFromEndpoint(repo, remoteInfo, false, initToken)
 			.catch(() => { })
 			.finally(() => {
 				initDeferredP.complete();
 			});
 
-		this._repos.set(repo.rootUri, {
-			status: RepoStatus.Initializing,
+		this.updateRepoEntry(repo, {
+			status: RepoStatus.CheckingStatus,
 			repo,
-			initTask
+			remoteInfo: remoteInfo,
+			initTask,
 		});
-	}
-
-	private openGithubRemoteRepo(rootUri: URI, githubId: GithubRepoId): Promise<void> {
-		this._logService.trace(`CodeSearchRepoTracker.openGithubRemoteRepo(${rootUri})`);
-
-		const existing = this._repos.get(rootUri);
-		if (existing) {
-			if (existing.status === RepoStatus.Initializing) {
-				return existing.initTask.p;
-			}
-		}
-
-		const repo: RepoInfo = { rootUri };
-		const remoteInfo: ResolvedRepoRemoteInfo = {
-			repoId: githubId,
-			fetchUrl: undefined,
-		};
-
-		const initCancellationTokenSource = new CancellationTokenSource();
-		const initP = this.updateRepoStateFromEndpoint(repo, remoteInfo, false, initCancellationTokenSource.token).then(() => { });
-
-		this._repos.set(rootUri, { status: RepoStatus.Initializing, repo, initTask: { p: initP, cts: initCancellationTokenSource } });
-		return initP;
-	}
-
-	private async getRemoteInfosForRepo(repo: RepoContext): Promise<ResolvedRepoRemoteInfo[]> {
-		const remoteInfos = Array.from(getOrderedRepoInfosFromContext(repo));
-
-		// Fallback to checking the SSH config if no remotes were found
-		if (!remoteInfos.length) {
-			const other = await this.getGithubRemoteFromSshConfig(repo);
-			if (other) {
-				remoteInfos.push(other);
-			}
-		}
-
-		// For now always prefer the github remotes
-		remoteInfos.sort((a, b) => {
-			if (a.repoId.type === 'github' && b.repoId.type !== 'github') {
-				return -1;
-			} else if (b.repoId.type === 'github' && a.repoId.type !== 'github') {
-				return 1;
-			}
-			return 0;
-		});
-
-		return remoteInfos;
-	}
-
-	private async getGithubRemoteFromSshConfig(repo: RepoContext): Promise<ResolvedRepoRemoteInfo | undefined> {
-		if (repo.rootUri.scheme !== Schemas.file) {
-			return;
-		}
-
-		try {
-			const execAsync = promisify(exec);
-			const { stdout, stderr } = await execAsync('git -c credential.interactive=never fetch --dry-run', {
-				cwd: repo.rootUri.fsPath,
-				env: {
-					GIT_SSH_COMMAND: 'ssh -v -o BatchMode=yes'
-				}
-			});
-
-			const output = stdout + '\n' + stderr;
-
-			const authMatch = output.match(/^Authenticated to ([^\s]+)\s/m);
-			const fromMatch = output.match(/^From ([^:]+):([^/]+)\/([^\s]+)$/m);
-
-			if (authMatch && fromMatch) {
-				const authenticatedTo = authMatch[1];
-				const owner = fromMatch[2];
-				const repo = fromMatch[3].replace(/\.git$/, '');
-				const remoteUrl = `ssh://${authenticatedTo}/${owner}/${repo}`;
-
-				const githubRepoId = getGithubRepoIdFromFetchUrl(remoteUrl);
-				if (githubRepoId) {
-					return {
-						repoId: githubRepoId,
-						fetchUrl: remoteUrl
-					};
-				}
-			}
-			return undefined;
-		} catch (e) {
-			return undefined;
-		}
 	}
 
 	public async updateRepoStateFromEndpoint(repo: RepoInfo, remoteInfo: ResolvedRepoRemoteInfo, force = false, token: CancellationToken): Promise<RepoEntry> {
@@ -699,7 +470,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		}
 	}
 
-	private closeRepo(repo: RepoContext) {
+	private closeRepo(repo: RepoInfo) {
 		this._logService.trace(`CodeSearchRepoTracker.closeRepo(${repo.rootUri})`);
 
 		const repoEntry = this._repos.get(repo.rootUri);
@@ -707,7 +478,7 @@ export class CodeSearchRepoTracker extends Disposable {
 			return;
 		}
 
-		if (repoEntry.status === RepoStatus.Initializing || repoEntry.status === RepoStatus.CheckingStatus) {
+		if (repoEntry.status === RepoStatus.CheckingStatus) {
 			repoEntry.initTask.cts.cancel();
 		}
 
@@ -731,7 +502,7 @@ export class CodeSearchRepoTracker extends Disposable {
 			return Result.error(TriggerRemoteIndexingError.noGitRepos);
 		}
 
-		if (allRepos.every(repo => repo.status === RepoStatus.Initializing)) {
+		if (allRepos.every(repo => repo.status === RepoStatus.Resolving)) {
 			return Result.error(TriggerRemoteIndexingError.stillResolving);
 		}
 
@@ -739,7 +510,7 @@ export class CodeSearchRepoTracker extends Disposable {
 			return Result.error(TriggerRemoteIndexingError.noRemoteIndexableRepos);
 		}
 
-		const candidateRepos = allRepos.filter(repo => repo.status !== RepoStatus.NotResolvable && repo.status !== RepoStatus.Initializing);
+		const candidateRepos = allRepos.filter(repo => repo.status !== RepoStatus.NotResolvable && repo.status !== RepoStatus.Resolving);
 
 		const authToken = await this.getGithubAuthToken();
 		if (this._isDisposed) {
@@ -776,7 +547,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		await Promise.all(Array.from(this._repos.values(), repo => {
 			switch (repo.status) {
 				case RepoStatus.NotResolvable:
-				case RepoStatus.Initializing:
+				case RepoStatus.Resolving:
 				case RepoStatus.CheckingStatus:
 					// Noop, nothing to refresh
 					return;
@@ -1010,6 +781,388 @@ export class CodeSearchRepoTracker extends Disposable {
 					() => {
 						// Noop
 					});
+		}
+	}
+}
+
+enum TrackedRepoStatus {
+	Resolving = 'Resolving',
+	NotResolvable = 'NotResolvable',
+	Resolved = 'Resolved',
+}
+
+type TrackedRepoInfo =
+	{
+		readonly status: TrackedRepoStatus.NotResolvable;
+		readonly repo: RepoInfo;
+	} | {
+		readonly status: TrackedRepoStatus.Resolving;
+		readonly repo: RepoInfo;
+		readonly initTask: InitTask;
+	} | {
+		readonly status: TrackedRepoStatus.Resolved;
+		readonly repo: RepoInfo;
+		readonly remoteInfo: ResolvedRepoRemoteInfo;
+	}
+	;
+
+class CodeSearchRepoTracker extends Disposable {
+	private readonly _repos = new ResourceMap<TrackedRepoInfo>();
+
+	private readonly _onDidAddOrUpdateRepo = this._register(new Emitter<TrackedRepoInfo>());
+	public readonly onDidAddOrUpdateRepo = this._onDidAddOrUpdateRepo.event;
+
+	private readonly _onDidRemoveRepo = this._register(new Emitter<TrackedRepoInfo>());
+	public readonly onDidRemoveRepo = this._onDidRemoveRepo.event;
+
+	private readonly _initializedGitReposP: CancelablePromise<void>;
+	private readonly _initializedGitHubRemoteReposP: CancelablePromise<void>;
+
+	private _isDisposed = false;
+
+	constructor(
+		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
+		@IGitService private readonly _gitService: IGitService,
+		@ILogService private readonly _logService: ILogService,
+		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
+	) {
+		super();
+
+		this._initializedGitReposP = createCancelablePromise(async (token) => {
+			this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): started`);
+
+			try {
+				if (!this._gitService.isInitialized) {
+					this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Git service not initialized. Waiting for init signal.`);
+					const finishInitTimeout = 30_000;
+					await raceCancellationError(raceTimeout(new Promise<void>(resolve => this._gitService.onDidFinishInitialization(() => resolve())), finishInitTimeout), token);
+					if (this._isDisposed) {
+						return;
+					}
+				}
+
+				this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Found initial repos: [${this._gitService.repositories.map(repo => repo.rootUri.toString())}].`);
+
+				const openPromises = this._gitService.repositories.map(repo => this.openGitRepo(repo));
+
+				this._register(this._gitService.onDidOpenRepository(repo => this.openGitRepo(repo)));
+				this._register(this._gitService.onDidCloseRepository(repo => this.closeRepo(repo)));
+
+				await raceCancellationError(Promise.allSettled(openPromises), token);
+				this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Complete`);
+			} catch (e) {
+				this._logService.error(`CodeSearchRepoTracker.tryInitGitRepos(): Error occurred during initialization: ${e}`);
+			}
+		});
+
+		this._initializedGitHubRemoteReposP = createCancelablePromise(async (token) => {
+			try {
+				const githubRemoteRepos = this._workspaceService.getWorkspaceFolders().filter(isGitHubRemoteRepository);
+				if (!githubRemoteRepos.length) {
+					return;
+				}
+
+				this._logService.trace(`CodeSearchRepoTracker.initGithubRemoteRepos(): started`);
+
+				await raceCancellationError(
+					Promise.all(githubRemoteRepos.map(workspaceRoot => {
+						const githubRepoIdParts = workspaceRoot.path.slice(1).split('/');
+						return this.openGithubRemoteRepo(workspaceRoot, new GithubRepoId(githubRepoIdParts[0], githubRepoIdParts[1]));
+					})),
+					token);
+				this._logService.trace(`CodeSearchRepoTracker.initGithubRemoteRepos(): complete`);
+			} catch (e) {
+				this._logService.error(`CodeSearchRepoTracker.initGithubRemoteRepos(): Error occurred during initialization: ${e}`);
+			}
+		});
+	}
+
+	public override dispose(): void {
+		super.dispose();
+
+		this._isDisposed = true;
+
+		this._initializedGitReposP.cancel();
+		this._initializedGitHubRemoteReposP.cancel();
+
+		for (const repo of this._repos.values()) {
+			if (repo.status === TrackedRepoStatus.Resolving) {
+				repo.initTask.cts.cancel();
+			}
+		}
+		this._repos.clear();
+	}
+
+	async initialize(): Promise<void> {
+		try {
+			// Wait for the initial repos to be discovered
+			await Promise.all([
+				this._initializedGitReposP,
+				this._initializedGitHubRemoteReposP
+			]);
+
+			// And wait for each repo to resolve
+			await Promise.all(Array.from(this._repos.values(), async repo => {
+				if (repo.status === TrackedRepoStatus.Resolving) {
+					try {
+						await repo.initTask.p;
+					} catch (error) {
+						this._logService.error(`Error during repo initialization: ${error}`);
+					}
+				}
+			}));
+		} catch (e) {
+			// Noop
+		}
+	}
+
+	private updateRepoEntry(repo: RepoInfo, entry: TrackedRepoInfo): void {
+		this._repos.set(repo.rootUri, entry);
+		this._onDidAddOrUpdateRepo.fire(entry);
+	}
+
+	@LogExecTime(self => self._logService, 'CodeSearchRepoTracker::openGitRepo')
+	private async openGitRepo(repo: RepoContext): Promise<void> {
+		this._logService.trace(`CodeSearchRepoTracker.openGitRepo(${repo.rootUri})`);
+
+		const existing = this._repos.get(repo.rootUri);
+		if (existing) {
+			if (existing.status === TrackedRepoStatus.Resolving) {
+				try {
+					return await existing.initTask.p;
+				} catch (e) {
+					if (isCancellationError(e)) {
+						return;
+					}
+
+					throw e;
+				}
+			}
+		}
+
+		const initDeferredP = new DeferredPromise<void>();
+		const initTask: InitTask = {
+			p: initDeferredP.p,
+			cts: new CancellationTokenSource(),
+		};
+
+		const initToken = initTask.cts.token;
+		(async () => {
+			try {
+				// Do a status check to make sure the repo info is fully loaded
+				// See #12954
+				await this._gitExtensionService.getExtensionApi()?.getRepository(repo.rootUri)?.status();
+			} catch {
+				this._logService.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). git status check failed.`);
+				// Noop, may still be ok even if the status check failed
+			}
+
+			if (initToken.isCancellationRequested) {
+				return;
+			}
+
+			const updatedRepo = await this._gitService.getRepository(repo.rootUri);
+			if (!updatedRepo && !this._simulationTestContext.isInSimulationTests) {
+				this._logService.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). No current repo found after status check.`);
+
+				/* __GDPR__
+					"codeSearchRepoTracker.openGitRepo.error.noCurrentRepo" : {
+						"owner": "mjbvz",
+						"comment": "Information about errors when trying to resolve a remote"
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryEvent('codeSearchRepoTracker.openGitRepo.error.noCurrentRepo');
+
+				this.updateRepoEntry(repo, { status: TrackedRepoStatus.NotResolvable, repo });
+				return;
+			}
+
+			if (updatedRepo) {
+				repo = updatedRepo;
+			}
+			this._repos.set(repo.rootUri, { status: TrackedRepoStatus.Resolving, repo, initTask });
+
+			const remoteInfos = await this.getRemoteInfosForRepo(repo);
+			if (initToken.isCancellationRequested) {
+				return;
+			}
+
+			let remoteTelemetryType: GitRemoteTypeForTelemetry;
+			if (remoteInfos.length) {
+				const primaryRemote = remoteInfos[0];
+				const remoteHost = primaryRemote.fetchUrl ? parseRemoteUrl(primaryRemote.fetchUrl) : undefined;
+				remoteTelemetryType = remoteHost ? getRemoteTypeForTelemetry(remoteHost.host) : GitRemoteTypeForTelemetry.Unknown;
+			} else {
+				const allRemotes = Array.from(getOrderedRemoteUrlsFromContext(repo));
+				if (allRemotes.length === 0) {
+					remoteTelemetryType = GitRemoteTypeForTelemetry.NoRemotes;
+				} else {
+					for (const remote of allRemotes) {
+						if (remote) {
+							const remoteHost = parseRemoteUrl(remote);
+							if (remoteHost) {
+								const telemetryId = getRemoteTypeForTelemetry(remoteHost.host);
+								if (telemetryId !== GitRemoteTypeForTelemetry.Unknown) {
+									remoteTelemetryType = telemetryId;
+									break;
+								}
+							}
+						}
+					}
+				}
+				remoteTelemetryType ??= GitRemoteTypeForTelemetry.Unknown;
+			}
+			/* __GDPR__
+				"codeSearchRepoTracker.openGitRepo.remoteInfo" : {
+					"owner": "mjbvz",
+					"comment": "Information about the remote",
+					"resolvedRemoteType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Identifies the primary remote's type " }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('codeSearchRepoTracker.openGitRepo.remoteInfo', {}, {
+				resolvedRemoteType: remoteTelemetryType,
+			});
+
+			if (!remoteInfos.length) {
+				this._logService.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). No valid github remote found. Remote urls: ${JSON.stringify(Array.from(getOrderedRemoteUrlsFromContext(repo)))}.`);
+
+				this._telemetryService.sendInternalMSFTTelemetryEvent('codeSearchRepoTracker.error.couldNotResolveRemote.internal', {
+					remoteUrls: JSON.stringify(coalesce(repo.remoteFetchUrls ?? [])),
+				});
+
+				/* __GDPR__
+					"codeSearchRepoTracker.openGitRepo.error.couldNotResolveRemote" : {
+						"owner": "mjbvz",
+						"comment": "Information about errors when trying to resolve a remote",
+						"repoRemoteFetchUrlsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of remote fetch urls on the git repo" }
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryEvent('codeSearchRepoTracker.openGitRepo.error.couldNotResolveRemote', {}, {
+					repoRemoteFetchUrlsCount: repo.remoteFetchUrls?.length ?? 0,
+				});
+
+				this.updateRepoEntry(repo, { status: TrackedRepoStatus.NotResolvable, repo });
+				return;
+			}
+
+			// TODO: Support checking index status for multiple remotes
+			const primaryRemote = remoteInfos[0];
+			this.updateRepoEntry(repo, {
+				status: TrackedRepoStatus.Resolved,
+				repo,
+				remoteInfo: primaryRemote,
+			});
+		})()
+			.catch(() => { })
+			.finally(() => {
+				initDeferredP.complete();
+			});
+
+		this._repos.set(repo.rootUri, {
+			status: TrackedRepoStatus.Resolving,
+			repo,
+			initTask
+		});
+	}
+
+	private async openGithubRemoteRepo(rootUri: URI, githubId: GithubRepoId): Promise<void> {
+		this._logService.trace(`CodeSearchRepoTracker.openGithubRemoteRepo(${rootUri})`);
+
+		const existing = this._repos.get(rootUri);
+		if (existing) {
+			if (existing.status === TrackedRepoStatus.Resolving) {
+				return existing.initTask.p;
+			}
+		}
+
+		this._repos.set(rootUri, {
+			status: TrackedRepoStatus.Resolved,
+			repo: { rootUri },
+			remoteInfo: {
+				repoId: githubId,
+				fetchUrl: undefined,
+			}
+		});
+	}
+
+	private closeRepo(repo: RepoContext) {
+		this._logService.trace(`CodeSearchRepoTracker.closeRepo(${repo.rootUri})`);
+
+		const repoEntry = this._repos.get(repo.rootUri);
+		if (!repoEntry) {
+			return;
+		}
+
+		if (repoEntry.status === TrackedRepoStatus.Resolving) {
+			repoEntry.initTask.cts.cancel();
+		}
+
+		this._onDidRemoveRepo.fire(repoEntry);
+		this._repos.delete(repo.rootUri);
+	}
+
+	private async getRemoteInfosForRepo(repo: RepoContext): Promise<ResolvedRepoRemoteInfo[]> {
+		const remoteInfos = Array.from(getOrderedRepoInfosFromContext(repo));
+
+		// Fallback to checking the SSH config if no remotes were found
+		if (!remoteInfos.length) {
+			const other = await this.getGithubRemoteFromSshConfig(repo);
+			if (other) {
+				remoteInfos.push(other);
+			}
+		}
+
+		// For now always prefer the github remotes
+		remoteInfos.sort((a, b) => {
+			if (a.repoId.type === 'github' && b.repoId.type !== 'github') {
+				return -1;
+			} else if (b.repoId.type === 'github' && a.repoId.type !== 'github') {
+				return 1;
+			}
+			return 0;
+		});
+
+		return remoteInfos;
+	}
+
+	private async getGithubRemoteFromSshConfig(repo: RepoContext): Promise<ResolvedRepoRemoteInfo | undefined> {
+		if (repo.rootUri.scheme !== Schemas.file) {
+			return;
+		}
+
+		try {
+			const execAsync = promisify(exec);
+			const { stdout, stderr } = await execAsync('git -c credential.interactive=never fetch --dry-run', {
+				cwd: repo.rootUri.fsPath,
+				env: {
+					GIT_SSH_COMMAND: 'ssh -v -o BatchMode=yes'
+				}
+			});
+
+			const output = stdout + '\n' + stderr;
+
+			const authMatch = output.match(/^Authenticated to ([^\s]+)\s/m);
+			const fromMatch = output.match(/^From ([^:]+):([^/]+)\/([^\s]+)$/m);
+
+			if (authMatch && fromMatch) {
+				const authenticatedTo = authMatch[1];
+				const owner = fromMatch[2];
+				const repo = fromMatch[3].replace(/\.git$/, '');
+				const remoteUrl = `ssh://${authenticatedTo}/${owner}/${repo}`;
+
+				const githubRepoId = getGithubRepoIdFromFetchUrl(remoteUrl);
+				if (githubRepoId) {
+					return {
+						repoId: githubRepoId,
+						fetchUrl: remoteUrl
+					};
+				}
+			}
+			return undefined;
+		} catch (e) {
+			return undefined;
 		}
 	}
 }

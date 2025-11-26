@@ -32,7 +32,7 @@ import { ILogService } from '../../log/common/logService';
 import { IAdoCodeSearchService } from '../../remoteCodeSearch/common/adoCodeSearchService';
 import { IGithubCodeSearchService } from '../../remoteCodeSearch/common/githubCodeSearchService';
 import { CodeSearchResult } from '../../remoteCodeSearch/common/remoteCodeSearch';
-import { BuildIndexTriggerReason, CodeSearchRepoTracker, IndexedRepoEntry, RepoEntry, RepoStatus, ResolvedRepoEntry, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
+import { BuildIndexTriggerReason, CodeSearchRepoManager, IndexedRepoEntry, RepoEntry, RepoStatus, ResolvedRepoEntry, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
@@ -112,7 +112,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	 */
 	private readonly embeddingsSearchFallbackTimeout = 8_000;
 
-	private readonly _repoTracker: Lazy<CodeSearchRepoTracker>;
+	private readonly _repoTracker: Lazy<CodeSearchRepoManager>;
 	private readonly _workspaceDiffTracker: Lazy<CodeSearchWorkspaceDiffTracker>;
 
 	private readonly _embeddingsChunkSearch: EmbeddingsChunkSearch;
@@ -148,7 +148,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				throw new Error('Disposed');
 			}
 
-			const tracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
+			const tracker = this._register(instantiationService.createInstance(CodeSearchRepoManager));
 
 			this._register(Event.any(
 				tracker.onDidFinishInitialization,
@@ -276,7 +276,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				return Result.error<AvailableFailureMetadata>({ unavailableReason: 'No repos', repoStatuses });
 			}
 
-			if (allRepos.some(repo => repo.status === RepoStatus.CheckingStatus || repo.status === RepoStatus.Initializing)) {
+			if (allRepos.some(repo => repo.status === RepoStatus.CheckingStatus || repo.status === RepoStatus.Resolving)) {
 				return Result.error<AvailableFailureMetadata>({ unavailableReason: 'Checking status', repoStatuses });
 			}
 

@@ -12,7 +12,7 @@ import { isEqualOrParent } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
-import { CodeSearchDiff, CodeSearchRepoTracker, RepoEntry, RepoStatus } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
+import { CodeSearchDiff, CodeSearchRepoManager, RepoEntry, RepoStatus } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
@@ -36,7 +36,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	private readonly _repos = new ResourceMap<RepoDiffState>();
 
-	private readonly _repoTracker: CodeSearchRepoTracker;
+	private readonly _repoTracker: CodeSearchRepoManager;
 
 	/**
 	 * Tracks all files that have been changed in the workspace during this session.
@@ -52,7 +52,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 	public readonly initialized = this._initialized.p;
 
 	constructor(
-		repoTracker: CodeSearchRepoTracker,
+		repoTracker: CodeSearchRepoManager,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceFileIndex private readonly _workspaceFileIndex: IWorkspaceFileIndex,
 		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
