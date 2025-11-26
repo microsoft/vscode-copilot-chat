@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { SessionOptions } from '@github/copilot/sdk';
+import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { ChatSessionProviderOptionItem, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -20,20 +21,29 @@ import { PermissionRequest } from './permissionHelpers';
 import { ensureRipgrepShim } from './ripgrepShim';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
+// Store last used Agent per workspace.
+const COPILOT_CLI_AGENT_MEMENTO_KEY = 'github.copilot.cli.customAgent';
+// Store last used Agent for a Session.
+const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents';
+export const COPILOT_CLI_DEFAULT_AGENT_ID = '___vscode_default___';
 
 export class CopilotCLISessionOptions {
 	public readonly isolationEnabled: boolean;
 	public readonly workingDirectory?: Uri;
 	private readonly model?: string;
+	private readonly agent?: SweCustomAgent;
+	private readonly customAgents?: SweCustomAgent[];
 	private readonly mcpServers?: SessionOptions['mcpServers'];
 	private readonly logger: ReturnType<typeof getCopilotLogger>;
 	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
-	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService) {
+	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[] }, logger: ILogService) {
 		this.isolationEnabled = !!options.isolationEnabled;
 		this.workingDirectory = options.workingDirectory;
 		this.model = options.model;
 		this.mcpServers = options.mcpServers;
+		this.agent = options.agent;
+		this.customAgents = options.customAgents;
 		this.logger = getCopilotLogger(logger);
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
 			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
@@ -69,6 +79,12 @@ export class CopilotCLISessionOptions {
 		}
 		if (this.mcpServers && Object.keys(this.mcpServers).length > 0) {
 			allOptions.mcpServers = this.mcpServers;
+		}
+		if (this.agent) {
+			allOptions.selectedCustomAgent = this.agent;
+		}
+		if (this.customAgents) {
+			allOptions.customAgents = this.customAgents;
 		}
 		return allOptions as Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }>;
 	}
@@ -132,6 +148,94 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];
 		}
+	}
+}
+
+export interface ICopilotCLIAgents {
+	readonly _serviceBrand: undefined;
+	getDefaultAgent(): Promise<string>;
+	resolveAgent(agentId: string): Promise<SweCustomAgent | undefined>;
+	setDefaultAgent(agent: string | undefined): Promise<void>;
+	getAgents(): Promise<SweCustomAgent[]>;
+	trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void>;
+	getSessiongAgent(sessionId: string): Promise<string | undefined>;
+}
+
+export const ICopilotCLIAgents = createServiceIdentifier<ICopilotCLIAgents>('ICopilotCLIAgents');
+
+export class CopilotCLIAgents implements ICopilotCLIAgents {
+	declare _serviceBrand: undefined;
+	private sessionAgents: Record<string, { agentId?: string; createdDateTime: number }> = {};
+	constructor(
+		// @ICopilotCLISDK private readonly _copilotCLISDK: ICopilotCLISDK,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		// @ILogService private readonly _logService: ILogService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+	) { }
+	async trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void> {
+		const details = Object.keys(this.sessionAgents).length ? this.sessionAgents : this.extensionContext.workspaceState.get<Record<string, { agentId?: string; createdDateTime: number }>>(COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY, this.sessionAgents);
+
+		details[sessionId] = { agentId: agent, createdDateTime: Date.now() };
+		this.sessionAgents = details;
+
+		// Prune entries older than 7 days.
+		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+		for (const [key, value] of Object.entries(details)) {
+			if (value.createdDateTime < sevenDaysAgo) {
+				delete details[key];
+			}
+		}
+
+		await this.extensionContext.workspaceState.update(COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY, details);
+	}
+
+	async getSessiongAgent(sessionId: string): Promise<string | undefined> {
+		const details = this.extensionContext.workspaceState.get<Record<string, { agentId?: string; createdDateTime: number }>>(COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY, this.sessionAgents);
+		// Check in-memory cache first before reading from memento.
+		// Possibly the session agent was just set and not yet persisted.
+		const agentId = this.sessionAgents[sessionId]?.agentId ?? details[sessionId]?.agentId;
+		if (!agentId || agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
+			return undefined;
+		}
+		const agents = await this.getAgents();
+		return agents.find(agent => agent.name === agentId)?.name;
+	}
+
+	async getDefaultAgent(): Promise<string> {
+		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, COPILOT_CLI_DEFAULT_AGENT_ID);
+		if (agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
+			return agentId;
+		}
+
+		const agents = await this.getAgents();
+		return agents.find(agent => agent.name === agentId)?.name ?? COPILOT_CLI_DEFAULT_AGENT_ID;
+	}
+	async setDefaultAgent(agent: string | undefined): Promise<void> {
+		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
+	}
+	async trackUsedAgent(sessionId: string, agent: string | undefined): Promise<void> {
+		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
+	}
+	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
+		const customAgents = await this.getAgents();
+		return customAgents.find(agent => agent.name === agentId);
+	}
+
+	async getAgents(): Promise<SweCustomAgent[]> {
+		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
+			return [];
+		}
+		// const [auth, { getCustomAgents }, workingDirectory] = await Promise.all([this.copilotCLISDK.getAuthInfo(), this.copilotCLISDK.getPackage(), this.copilotCLISDK.getDefaultWorkingDirectory()]);
+		// if (!auth) {
+		// 	this.logService.warn('[CopilotCLISession] No authentication info available, cannot fetch custom agents');
+		// 	return [];
+		// }
+		// if (!workingDirectory) {
+		// 	this.logService.trace('[CopilotCLISession] No working directory available, cannot fetch custom agents');
+		// 	return [];
+		// }
+		// return getCustomAgents(auth, workingDirectory.fsPath, undefined, getCopilotLogger(this.logService));
+		return [];
 	}
 }
 

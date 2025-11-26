@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Session, SessionEvent, SessionOptions, internal } from '@github/copilot/sdk';
+import type { Session, SessionEvent, SessionOptions, SweCustomAgent, internal } from '@github/copilot/sdk';
 import type { CancellationToken, ChatRequest, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -19,7 +19,7 @@ import { joinPath } from '../../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
 import { stripReminders } from '../common/copilotCLITools';
-import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
+import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { getCopilotLogger } from './logger';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
@@ -45,8 +45,8 @@ export interface ICopilotCLISessionService {
 	deleteSession(sessionId: string): Promise<void>;
 
 	// Session wrapper tracking
-	getSession(sessionId: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
-	createSession(prompt: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
+	getSession(sessionId: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
+	createSession(prompt: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
 }
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
@@ -75,6 +75,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@INativeEnvService private readonly nativeEnv: INativeEnvService,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
+		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -173,9 +174,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	public async createSession(prompt: string, { model, workingDirectory, isolationEnabled }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean }, token: CancellationToken): Promise<RefCountedSession> {
+	public async createSession(prompt: string, { model, workingDirectory, isolationEnabled, agent }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession> {
 		const mcpServers = await this.mcpHandler.loadMcpConfig(workingDirectory);
-		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers });
+		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers, agent });
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 		const sdkSession = await sessionManager.createSession(options.toSessionOptions());
 		const label = labelFromPrompt(prompt);
@@ -200,11 +201,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return session;
 	}
 
-	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
-		return new CopilotCLISessionOptions(options, this.logService);
+	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined }): Promise<CopilotCLISessionOptions> {
+		const customAgents = await this.agents.getAgents();
+		return new CopilotCLISessionOptions({ ...options, customAgents }, this.logService);
 	}
 
-	public async getSession(sessionId: string, { model, workingDirectory, isolationEnabled, readonly }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean }, token: CancellationToken): Promise<RefCountedSession | undefined> {
+	public async getSession(sessionId: string, { model, workingDirectory, isolationEnabled, readonly, agent }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession | undefined> {
 		// https://github.com/microsoft/vscode/issues/276573
 		const lock = this.sessionMutexForGetSession.get(sessionId) ?? new Mutex();
 		this.sessionMutexForGetSession.set(sessionId, lock);
@@ -226,9 +228,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 			const [sessionManager, mcpServers] = await Promise.all([
 				raceCancellationError(this.getSessionManager(), token),
-				this.mcpHandler.loadMcpConfig(workingDirectory)
+				this.mcpHandler.loadMcpConfig(workingDirectory),
 			]);
-			const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers });
+			const options = await this.createSessionsOptions({ model, workingDirectory, agent, isolationEnabled, mcpServers });
 
 			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
 			if (!sdkSession) {
