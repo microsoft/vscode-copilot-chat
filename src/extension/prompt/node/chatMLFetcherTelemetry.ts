@@ -112,7 +112,7 @@ export class ChatMLFetcherTelemetrySender {
 			modelInvoked: chatCompletion.model,
 			apiType: chatEndpointInfo?.apiType,
 			requestId: chatCompletion.requestId.headerRequestId,
-			githubRequestId: chatCompletion.requestId.gitHubRequestId,
+			gitHubRequestId: chatCompletion.requestId.gitHubRequestId,
 			associatedRequestId: baseTelemetry?.properties.associatedRequestId,
 			reasoningEffort: requestBody.reasoning?.effort,
 			reasoningSummary: requestBody.reasoning?.summary,
