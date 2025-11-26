@@ -157,7 +157,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly BASE_MESSAGE = vscode.l10n.t('Cloud agent works asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
 	private readonly AUTHORIZE_MESSAGE = vscode.l10n.t('Cloud agent requires elevated GitHub access to proceed.');
 	private readonly COMMIT_MESSAGE = vscode.l10n.t('This workspace has uncommitted changes. Should these changes be pushed and included in cloud agent\'s work?');
-	private readonly NON_DEFAULT_BRANCH_MESSAGE = (baseBranch: string) => vscode.l10n.t('Coding agent will start working from the checked out branch \'{0}\'.', baseBranch);
+	private readonly NON_DEFAULT_BRANCH_MESSAGE = (baseBranch: string) => vscode.l10n.t('Cloud agent will start working from the checked out branch \'{0}\'.', baseBranch);
 
 	// Workspace storage keys
 	private readonly WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
