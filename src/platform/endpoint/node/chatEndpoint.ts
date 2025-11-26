@@ -168,6 +168,17 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public getExtraHeaders(): Record<string, string> {
+		const isAnthropicModel = this.family.startsWith('claude') || this.family.startsWith('Anthropic');
+		const usesChatCompletionsEndpoint = !this.useMessagesApi && !this.useResponsesApi;
+		if (isAnthropicModel && usesChatCompletionsEndpoint) {
+			const thinkingBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
+			if (thinkingBudget) {
+				return {
+					...(this.modelMetadata.requestHeaders ?? {}),
+					'thinking_budget': String(thinkingBudget),
+				};
+			}
+		}
 		return this.modelMetadata.requestHeaders ?? {};
 	}
 
