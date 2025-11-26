@@ -45,6 +45,7 @@ export enum ToolName {
 	ReadCellOutput = 'read_notebook_cell_output',
 	InstallExtension = 'install_extension',
 	FetchWebPage = 'fetch_webpage',
+	BrowserVerification = 'browser_verification',
 	Memory = 'memory',
 	FindTestFiles = 'test_search',
 	GetProjectSetupInfo = 'get_project_setup_info',
@@ -100,6 +101,7 @@ export enum ContributedToolName {
 	ReadCellOutput = 'copilot_readNotebookCellOutput',
 	InstallExtension = 'copilot_installExtension',
 	FetchWebPage = 'copilot_fetchWebPage',
+	BrowserVerification = 'copilot_browserVerification',
 	Memory = 'copilot_memory',
 	FindTestFiles = 'copilot_findTestFiles',
 	GetProjectSetupInfo = 'copilot_getProjectSetupInfo',
@@ -193,6 +195,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.FetchWebPage]: ToolCategory.WebInteraction,
 	[ToolName.SimpleBrowser]: ToolCategory.WebInteraction,
 	[ToolName.GithubRepo]: ToolCategory.WebInteraction,
+	[ToolName.BrowserVerification]: ToolCategory.WebInteraction,
 
 	// VS Code Interaction
 	[ToolName.SearchWorkspaceSymbols]: ToolCategory.VSCodeInteraction,

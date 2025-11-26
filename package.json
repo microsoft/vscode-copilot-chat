@@ -733,6 +733,58 @@
 				}
 			},
 			{
+				"name": "copilot_browserVerification",
+				"displayName": "%copilot.tools.browserVerification.name%",
+				"modelDescription": "Launch a browser to verify web application UI by taking screenshots and validating page elements. Use this tool after making changes to web applications to verify the UI renders correctly. Returns a screenshot and validation report including console errors, element visibility checks, and timing metrics.",
+				"userDescription": "%copilot.tools.browserVerification.description%",
+				"toolReferenceName": "browserVerification",
+				"icon": "$(browser)",
+				"when": "!isWeb",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"url": {
+							"type": "string",
+							"description": "The URL to navigate to and verify. Must be an http or https URL."
+						},
+						"actions": {
+							"type": "array",
+							"description": "Optional array of actions to perform before taking the screenshot.",
+							"items": {
+								"type": "object",
+								"properties": {
+									"type": {
+										"type": "string",
+										"enum": ["click", "type", "scroll"],
+										"description": "The type of action to perform."
+									},
+									"selector": {
+										"type": "string",
+										"description": "CSS selector for the target element."
+									},
+									"value": {
+										"type": "string",
+										"description": "Value to type (for 'type' action) or scroll amount (for 'scroll' action)."
+									}
+								},
+								"required": ["type", "selector"]
+							}
+						},
+						"validateElements": {
+							"type": "array",
+							"description": "Optional array of CSS selectors to validate exist on the page.",
+							"items": {
+								"type": "string"
+							}
+						}
+					},
+					"required": [
+						"url"
+					]
+				}
+			},
+			{
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
@@ -5310,6 +5362,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.68.0",
+		"playwright": "^1.49.0",
 		"@github/copilot": "^0.0.363",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
