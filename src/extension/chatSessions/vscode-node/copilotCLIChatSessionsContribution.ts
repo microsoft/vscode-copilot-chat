@@ -767,7 +767,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		// We don't want to block the caller anymore.
 		// The caller is most likely a chat editor or the like.
-		// Now that we've deletagted it to a session, we can get out of here.
+		// Now that we've delegated it to a session, we can get out of here.
 		// Else if the request takes say 10 minutes, the caller would be blocked for that long.
 		session.object.handleRequest(request.id, prompt, attachments, model, token).finally(() => {
 			session.dispose();
