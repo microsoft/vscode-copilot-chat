@@ -13,7 +13,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
-import { IOctoKitService, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
+import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { retry } from '../../../util/vs/base/common/async';
@@ -157,6 +157,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly BASE_MESSAGE = vscode.l10n.t('Cloud agent works asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
 	private readonly AUTHORIZE_MESSAGE = vscode.l10n.t('Cloud agent requires elevated GitHub access to proceed.');
 	private readonly COMMIT_MESSAGE = vscode.l10n.t('This workspace has uncommitted changes. Should these changes be pushed and included in cloud agent\'s work?');
+	private readonly NON_DEFAULT_BRANCH_MESSAGE = (baseBranch: string, defaultBranch: string) => vscode.l10n.t('The current branch \'{0}\' is not the default branch \'{1}\'.', baseBranch, defaultBranch);
 
 	// Workspace storage keys
 	private readonly WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
@@ -172,6 +173,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IInstantiationService instantiationService: IInstantiationService,
+		@IGithubRepositoryService private readonly _githubRepositoryService: IGithubRepositoryService,
 	) {
 		super();
 		this._summarizer = instantiationService.createInstance(ChatSummarizerProvider);
@@ -896,6 +898,27 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	/**
+	 * Returns the base branch and default branch names if they differ, otherwise returns undefined.
+	 */
+	private async getNonDefaultBranchInfo(): Promise<{ baseBranch: string; defaultBranch: string } | undefined> {
+		try {
+			const repoId = await getRepoId(this._gitService);
+			if (!repoId) {
+				return undefined;
+			}
+			const { baseRef } = await this.gitOperationsManager.repoInfo();
+			const repoInfo = await this._githubRepositoryService.getRepositoryInfo(repoId.org, repoId.repo);
+			if (repoInfo.default_branch && baseRef !== repoInfo.default_branch) {
+				return { baseBranch: baseRef, defaultBranch: repoInfo.default_branch };
+			}
+			return undefined;
+		} catch (error) {
+			this.logService.debug(`Failed to check default branch: ${error}`);
+			return undefined;
+		}
+	}
+
+	/**
 	 * Returns either all the data for a confirmation dialog, or undefined if no confirmation is needed.
 	 * */
 	private async buildConfirmation(context: vscode.ChatContext): Promise<{ title: string; message: string; buttons: string[] } | undefined> {
@@ -905,6 +928,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		const needsPermissiveAuth = !this._authenticationService.permissiveGitHubSession;
 		const hasUncommittedChanges = await this.detectedUncommittedChanges();
+		const nonDefaultBranchInfo = await this.getNonDefaultBranchInfo();
 
 		if (needsPermissiveAuth && hasUncommittedChanges) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
@@ -924,6 +948,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				vscode.l10n.t('{0} and {1}', this.COMMIT, this.DELEGATE),
 				this.DELEGATE,
 			);
+		}
+
+		if (nonDefaultBranchInfo) {
+			message += '\n\n' + this.NON_DEFAULT_BRANCH_MESSAGE(nonDefaultBranchInfo.baseBranch, nonDefaultBranchInfo.defaultBranch);
 		}
 
 		if (buttons.length === 1) {
