@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { SweCustomAgent } from '@github/copilot/sdk';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, l10n, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
@@ -28,7 +29,6 @@ import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
-import { SweCustomAgent } from '@github/copilot/sdk';
 
 const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
@@ -271,7 +271,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		const [models, defaultModel, sessionAgent, defaultAgent] = await Promise.all([
 			this.copilotCLIModels.getAvailableModels(),
 			this.copilotCLIModels.getDefaultModel(),
-			this.copilotCLIAgents.getSessiongAgent(copilotcliSessionId),
+			this.copilotCLIAgents.getSessionAgent(copilotcliSessionId),
 			this.copilotCLIAgents.getDefaultAgent()
 		]);
 		const isUntitled = copilotcliSessionId.startsWith('untitled-');
@@ -453,7 +453,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const [{ prompt, attachments }, modelId, sessionAgent, defaultAgent] = await Promise.all([
 				this.promptResolver.resolvePrompt(request, additionalReferences, token),
 				this.getModelId(id),
-				this.copilotCLIAgents.getSessiongAgent(id),
+				this.copilotCLIAgents.getSessionAgent(id),
 				this.copilotCLIAgents.getDefaultAgent()
 			]);
 			const agent = await this.copilotCLIAgents.resolveAgent(sessionAgent ?? defaultAgent);
@@ -461,6 +461,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (!session || token.isCancellationRequested) {
 				return {};
 			}
+			this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
 			if (isUntitled) {
 				// The SDK doesn't save the session as no messages were added,
 				// If we dispose this here, then we will not be able to find this session later.

@@ -158,7 +158,7 @@ export interface ICopilotCLIAgents {
 	setDefaultAgent(agent: string | undefined): Promise<void>;
 	getAgents(): Promise<SweCustomAgent[]>;
 	trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void>;
-	getSessiongAgent(sessionId: string): Promise<string | undefined>;
+	getSessionAgent(sessionId: string): Promise<string | undefined>;
 }
 
 export const ICopilotCLIAgents = createServiceIdentifier<ICopilotCLIAgents>('ICopilotCLIAgents');
@@ -189,7 +189,7 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 		await this.extensionContext.workspaceState.update(COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY, details);
 	}
 
-	async getSessiongAgent(sessionId: string): Promise<string | undefined> {
+	async getSessionAgent(sessionId: string): Promise<string | undefined> {
 		const details = this.extensionContext.workspaceState.get<Record<string, { agentId?: string; createdDateTime: number }>>(COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY, this.sessionAgents);
 		// Check in-memory cache first before reading from memento.
 		// Possibly the session agent was just set and not yet persisted.
@@ -222,7 +222,7 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 	}
 
 	async getAgents(): Promise<SweCustomAgent[]> {
-		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
+		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
 			return [];
 		}
 		// const [auth, { getCustomAgents }, workingDirectory] = await Promise.all([this.copilotCLISDK.getAuthInfo(), this.copilotCLISDK.getPackage(), this.copilotCLISDK.getDefaultWorkingDirectory()]);

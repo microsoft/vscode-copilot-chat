@@ -69,16 +69,16 @@ export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	async getDefaultAgent(): Promise<string> {
 		return COPILOT_CLI_DEFAULT_AGENT_ID;
 	}
-	async getSessiongAgent(sessionId: string): Promise<string | undefined> {
+	async getSessionAgent(_sessionId: string): Promise<string | undefined> {
 		return undefined;
 	}
-	resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
+	resolveAgent(_agentId: string): Promise<SweCustomAgent | undefined> {
 		return Promise.resolve(undefined);
 	}
-	setDefaultAgent(agent: string | undefined): Promise<void> {
+	setDefaultAgent(_agent: string | undefined): Promise<void> {
 		return Promise.resolve();
 	}
-	trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void> {
+	trackSessionAgent(_sessionId: string, agent: string | undefined): Promise<void> {
 		return Promise.resolve();
 	}
 }
