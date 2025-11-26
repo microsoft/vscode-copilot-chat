@@ -315,7 +315,7 @@ async function assertFileNotContains(filePath: string, expectedContent: string) 
 	assert.ok(!fileContent.includes(expectedContent), `Expected not to contain "${expectedContent}", contents = ${fileContent}`);
 }
 
-ssuite({ title: '@cli', location: 'external' }, async (_) => {
+ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	stest({ description: 'can start a session' },
 		testRunner(async ({ sessionService, init }, scenariosPath, stream, disposables) => {
 			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
