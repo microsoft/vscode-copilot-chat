@@ -33,11 +33,9 @@ import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditPro
 import { InlineCompletionProviderImpl } from './inlineCompletionProvider';
 import { InlineEditModel } from './inlineEditModel';
 import { InlineEditLogger } from './parts/inlineEditLogger';
-import { LastEditTimeTracker } from './parts/lastEditTimeTracker';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 import { makeSettable } from './utils/observablesUtils';
 
-const TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE = false; // otherwise, eg, NES would trigger just when going through search results
 const useEnhancedNotebookNESContextKey = 'github.copilot.chat.enableEnhancedNotebookNES';
 
 export class InlineEditProviderFeature extends Disposable implements IExtensionContribution {
@@ -169,16 +167,6 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 				groupId: 'nes',
 				excludes,
 			}));
-
-			if (TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE) {
-				const lastEditTimeTracker = new LastEditTimeTracker(model.workspace);
-				reader.store.add(window.onDidChangeActiveTextEditor((activeEditor) => {
-					if (activeEditor !== undefined && lastEditTimeTracker.hadEditsRecently) {
-						model.onChange.trigger(undefined);
-					}
-				}));
-				reader.store.add(lastEditTimeTracker);
-			}
 
 			reader.store.add(commands.registerCommand(learnMoreCommandId, () => {
 				this._envService.openExternal(URI.parse(learnMoreLink));
