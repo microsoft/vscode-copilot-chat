@@ -103,7 +103,7 @@ export interface ILoggedElementInfo {
 	tokens: number;
 	maxTokens: number;
 	trace: HTMLTracer;
-	chatRequest: CapturingToken | undefined;
+	token: CapturingToken | undefined;
 	toJSON(): object;
 }
 
@@ -111,7 +111,7 @@ export interface ILoggedRequestInfo {
 	kind: LoggedInfoKind.Request;
 	id: string;
 	entry: LoggedRequest;
-	chatRequest: CapturingToken | undefined;
+	token: CapturingToken | undefined;
 	toJSON(): object;
 }
 
@@ -121,7 +121,7 @@ export interface ILoggedToolCall {
 	name: string;
 	args: unknown;
 	response: LanguageModelToolResult2;
-	chatRequest: CapturingToken | undefined;
+	token: CapturingToken | undefined;
 	time: number;
 	thinking?: ThinkingData;
 	toJSON(): Promise<object>;

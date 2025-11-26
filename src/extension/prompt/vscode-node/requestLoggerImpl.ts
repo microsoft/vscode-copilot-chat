@@ -67,7 +67,7 @@ class LoggedElementInfo implements ILoggedElementInfo {
 		public readonly tokens: number,
 		public readonly maxTokens: number,
 		public readonly trace: HTMLTracer,
-		public readonly chatRequest: CapturingToken | undefined
+		public readonly token: CapturingToken | undefined
 	) { }
 
 	toJSON(): object {
@@ -87,7 +87,7 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 	constructor(
 		public readonly id: string,
 		public readonly entry: LoggedRequest,
-		public readonly chatRequest: CapturingToken | undefined
+		public readonly token: CapturingToken | undefined
 	) { }
 
 	toJSON(): object {
@@ -196,7 +196,7 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly name: string,
 		public readonly args: unknown,
 		public readonly response: LanguageModelToolResult2,
-		public readonly chatRequest: any | undefined,
+		public readonly token: any | undefined,
 		public readonly time: number,
 		public readonly thinking?: ThinkingData,
 		public readonly edits?: { path: string; edits: string }[],

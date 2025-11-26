@@ -84,7 +84,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			return {
-				prompt: treeItem.request.label,
+				prompt: treeItem.token.label,
 				promptId: treeItem.id,
 				hasSeen: treeItem.hasSeen,
 				logCount: promptLogs.length,
@@ -264,7 +264,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			// Generate a default filename based on the prompt
-			const promptText = treeItem.request.label.replace(/\W/g, '_').substring(0, 50);
+			const promptText = treeItem.token.label.replace(/\W/g, '_').substring(0, 50);
 			const defaultFilename = `${promptText}_exports.tar.gz`;
 
 			// Show save dialog
@@ -362,7 +362,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			// Generate a default filename based on the prompt
-			const promptText = treeItem.request.label.replace(/\W/g, '_').substring(0, 50);
+			const promptText = treeItem.token.label.replace(/\W/g, '_').substring(0, 50);
 			const defaultFilename = `${promptText}_logs.chatreplay.json`;
 
 			// Show save dialog
@@ -591,15 +591,15 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 
 			for (const currReq of this.requestLogger.getRequests()) {
 
-				if (currReq.chatRequest !== lastPrompt?.request) {
+				if (currReq.token !== lastPrompt?.token) {
 					if (lastPrompt) {
 						result.push(lastPrompt);
 					}
-					lastPrompt = (currReq.chatRequest === undefined ? undefined
-						: ChatPromptItem.create(currReq, currReq.chatRequest, seen.has(currReq.chatRequest))
+					lastPrompt = (currReq.token === undefined ? undefined
+						: ChatPromptItem.create(currReq, currReq.token, seen.has(currReq.token))
 					);
-					if (currReq.chatRequest) {
-						seen.add(currReq.chatRequest);
+					if (currReq.token) {
+						seen.add(currReq.token);
 					}
 				}
 
@@ -666,10 +666,10 @@ class ChatPromptItem extends vscode.TreeItem {
 		return item;
 	}
 
-	protected constructor(public readonly request: CapturingToken, public readonly hasSeen: boolean) {
-		super(request.label, vscode.TreeItemCollapsibleState.Expanded);
-		if (request.icon) {
-			this.iconPath = new vscode.ThemeIcon(request.icon);
+	protected constructor(public readonly token: CapturingToken, public readonly hasSeen: boolean) {
+		super(token.label, vscode.TreeItemCollapsibleState.Expanded);
+		if (token.icon) {
+			this.iconPath = new vscode.ThemeIcon(token.icon);
 		}
 		if (hasSeen) {
 			this.description = '(Continued...)';
@@ -677,7 +677,7 @@ class ChatPromptItem extends vscode.TreeItem {
 	}
 
 	public withFilteredChildren(filter: (child: TreeChildItem) => boolean): ChatPromptItem {
-		const item = new ChatPromptItem(this.request, this.hasSeen);
+		const item = new ChatPromptItem(this.token, this.hasSeen);
 		item.children = this.children.filter(filter);
 		return item;
 	}
