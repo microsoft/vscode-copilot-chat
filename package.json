@@ -5149,6 +5149,13 @@
 				"description": "Researches a task to create multi-step plans"
 			}
 		],
+		"chatAgentFolders": [
+			{
+				"path": "./githubAgentsCache",
+				"pathType": "storageUri",
+				"external": true
+			}
+		],
 		"chatPromptFiles": [
 			{
 				"name": "savePrompt",
