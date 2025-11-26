@@ -825,7 +825,15 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 						if (!hasBeenDelayed) { // delay only the first one
 							hasBeenDelayed = true;
-							await this.enforceArtificialDelay(delaySession, tracer, telemetryBuilder);
+							const artificialDelay = this.determineArtificialDelayMs(delaySession, tracer, telemetryBuilder);
+							if (artificialDelay) {
+								await timeout(artificialDelay);
+								tracer.trace(`Artificial delay of ${artificialDelay} ms completed`);
+								if (cancellationToken.isCancellationRequested) {
+									pushEdit(Result.error(new NoNextEditReason.GotCancelled('afterArtificialDelay')));
+									return;
+								}
+							}
 						}
 
 						pushEdit(Result.ok({ edit: singleLineEdit, window: editWindow, showLabel: opts.showLabel }));
@@ -1349,18 +1357,20 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		await timeout(debounceTime);
 	}
 
-	private async enforceArtificialDelay(delaySession: DelaySession, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder) {
+	private determineArtificialDelayMs(delaySession: DelaySession, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder): number | undefined {
 		if (this.simulationCtx.isInSimulationTests) {
 			return;
 		}
 		const artificialDelay = delaySession.getArtificialDelay();
 
+		if (artificialDelay <= 0) {
+			return undefined;
+		}
+
 		tracer.trace(`Enforcing artificial delay of ${artificialDelay} ms`);
 		telemetry.setArtificialDelay(artificialDelay);
 
-		if (artificialDelay > 0) {
-			await timeout(artificialDelay);
-		}
+		return artificialDelay;
 	}
 
 }
