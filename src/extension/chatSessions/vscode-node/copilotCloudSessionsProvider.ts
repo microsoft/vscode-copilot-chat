@@ -157,7 +157,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly BASE_MESSAGE = vscode.l10n.t('Cloud agent works asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
 	private readonly AUTHORIZE_MESSAGE = vscode.l10n.t('Cloud agent requires elevated GitHub access to proceed.');
 	private readonly COMMIT_MESSAGE = vscode.l10n.t('This workspace has uncommitted changes. Should these changes be pushed and included in cloud agent\'s work?');
-	private readonly NON_DEFAULT_BRANCH_MESSAGE = (baseBranch: string, defaultBranch: string) => vscode.l10n.t('The current branch \'{0}\' is not the default branch \'{1}\'.', baseBranch, defaultBranch);
+	private readonly NON_DEFAULT_BRANCH_MESSAGE = (baseBranch: string) => vscode.l10n.t('Coding agent will start working from the checked out branch \'{0}\'.', baseBranch);
 
 	// Workspace storage keys
 	private readonly WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
@@ -898,9 +898,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	/**
-	 * Returns the base branch and default branch names if they differ, otherwise returns undefined.
+	 * Returns the base branch name if it differs from the default branch, otherwise returns undefined.
 	 */
-	private async getNonDefaultBranchInfo(): Promise<{ baseBranch: string; defaultBranch: string } | undefined> {
+	private async getNonDefaultBranchInfo(): Promise<string | undefined> {
 		try {
 			const repoId = await getRepoId(this._gitService);
 			if (!repoId) {
@@ -909,7 +909,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const { baseRef } = await this.gitOperationsManager.repoInfo();
 			const repoInfo = await this._githubRepositoryService.getRepositoryInfo(repoId.org, repoId.repo);
 			if (repoInfo.default_branch && baseRef !== repoInfo.default_branch) {
-				return { baseBranch: baseRef, defaultBranch: repoInfo.default_branch };
+				return baseRef;
 			}
 			return undefined;
 		} catch (error) {
@@ -928,6 +928,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		const needsPermissiveAuth = !this._authenticationService.permissiveGitHubSession;
 		const hasUncommittedChanges = await this.detectedUncommittedChanges();
+		const nonDefaultBranch = await this.getNonDefaultBranchInfo();
 
 		if (needsPermissiveAuth && hasUncommittedChanges) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
@@ -949,22 +950,23 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			);
 		}
 
+		if (nonDefaultBranch) {
+			message += '\n\n' + this.NON_DEFAULT_BRANCH_MESSAGE(nonDefaultBranch);
+		}
+
 		if (buttons.length === 1) {
-			if (context.chatSessionContext?.isUntitled) {
-				return; // Don't show the confirmation
-			}
-			const seenDelegationPromptBefore = this.getWorkspaceContext(SEEN_DELEGATION_PROMPT_KEY);
-			if (seenDelegationPromptBefore) {
-				return; // Don't show the confirmation
+			// When on a non-default branch, always show confirmation
+			if (!nonDefaultBranch) {
+				if (context.chatSessionContext?.isUntitled) {
+					return; // Don't show the confirmation
+				}
+				const seenDelegationPromptBefore = this.getWorkspaceContext(SEEN_DELEGATION_PROMPT_KEY);
+				if (seenDelegationPromptBefore) {
+					return; // Don't show the confirmation
+				}
 			}
 			// No other affirmative button added, so add generic one
 			buttons.unshift(this.DELEGATE);
-		}
-
-		// Only check for non-default branch when we're going to show the confirmation
-		const nonDefaultBranchInfo = await this.getNonDefaultBranchInfo();
-		if (nonDefaultBranchInfo) {
-			message += '\n\n' + this.NON_DEFAULT_BRANCH_MESSAGE(nonDefaultBranchInfo.baseBranch, nonDefaultBranchInfo.defaultBranch);
 		}
 
 		return { title, message, buttons };
