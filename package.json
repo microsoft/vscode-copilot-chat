@@ -3412,22 +3412,12 @@
 							"detailed"
 						]
 					},
-					"github.copilot.chat.anthropic.thinking.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.anthropic.thinking.maxTokens": {
+					"github.copilot.chat.anthropic.thinking.budgetTokens": {
 						"type": [
 							"number",
 							"null"
 						],
-						"default": null,
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.maxTokens%",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
 						"minimum": 1024,
 						"maximum": 32000,
 						"tags": [

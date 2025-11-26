@@ -790,10 +790,8 @@ export namespace ConfigKey {
 	/** Configure reasoning summary style sent to Responses API */
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
-	/** Enable extended thinking for Anthropic models that support it */
-	export const AnthropicThinkingEnabled = defineSetting<boolean>('chat.anthropic.thinking.enabled', ConfigType.ExperimentBased, false);
-	/** Maximum thinking tokens for Anthropic extended thinking. If set, overrides the default calculation. */
-	export const MaxAnthropicThinkingTokens = defineSetting<number | null>('chat.anthropic.thinking.maxTokens', ConfigType.Simple, null);
+	/** Thinking token budget for Anthropic extended thinking. If set, enables extended thinking. */
+	export const AnthropicThinkingBudget = defineSetting<number | undefined>('chat.anthropic.thinking.budgetTokens', ConfigType.ExperimentBased, undefined);
 	/** Enable Anthropic web search tool for BYOK Claude models */
 	export const AnthropicWebSearchToolEnabled = defineSetting<boolean>('chat.anthropic.tools.websearch.enabled', ConfigType.ExperimentBased, false);
 	/** Maximum number of web searches allowed per request */

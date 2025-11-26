@@ -12,10 +12,12 @@ import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { AnthropicMessagesTool, FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 
@@ -56,7 +58,6 @@ interface AnthropicStreamEvent {
 }
 
 export function createMessagesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
-
 	const anthropicTools = options.requestOptions?.tools
 		?.filter(tool => tool.function.name && tool.function.name.length > 0)
 		.map((tool): AnthropicMessagesTool => ({
@@ -69,6 +70,14 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			},
 		}));
 
+	const configurationService = accessor.get(IConfigurationService);
+	const experimentationService = accessor.get(IExperimentationService);
+	const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+	const maxTokens = options.postOptions.max_tokens ?? 1024;
+	const thinkingBudget = configuredBudget
+		? Math.min(32000, maxTokens - 1, configuredBudget)
+		: undefined;
+
 	return {
 		model,
 		...rawMessagesToMessagesAPI(options.messages),
@@ -76,11 +85,10 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		tools: anthropicTools,
 		top_p: options.postOptions.top_p,
 		max_tokens: options.postOptions.max_tokens,
-		// TODO: Make thinking configuration controllable via settings (enable/disable and budget_tokens)
-		thinking: {
+		thinking: thinkingBudget ? {
 			type: 'enabled',
-			budget_tokens: 1024,
-		},
+			budget_tokens: thinkingBudget,
+		} : undefined,
 	};
 }
 
