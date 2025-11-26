@@ -911,7 +911,7 @@ You are a world-class computer scientist.
 
 		const expectedContent = `---
 name: Special Chars Agent
-description: 'Agent with "double quotes", ''single quotes'', colons:, and #comments in the description'
+description: "Agent with \\"double quotes\\", 'single quotes', colons:, and #comments in the description"
 ---
 Test prompt with special characters
 `;
@@ -952,12 +952,10 @@ Test prompt with special characters
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
+		// Newlines should be escaped to keep description on a single line
 		const expectedContent = `---
 name: Multiline Agent
-description: |-
-  First line of description.
-  Second line of description.
-  Third line.
+description: First line of description.\\nSecond line of description.\\nThird line.
 ---
 Test prompt
 `;

@@ -249,7 +249,8 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			frontmatterObj.name = agent.display_name;
 		}
 		if (agent.description) {
-			frontmatterObj.description = agent.description;
+			// Escape newlines in description to keep it on a single line
+			frontmatterObj.description = agent.description.replace(/\n/g, '\\n');
 		}
 		if (agent.tools && agent.tools.length > 0 && agent.tools[0] !== '*') {
 			frontmatterObj.tools = agent.tools;
