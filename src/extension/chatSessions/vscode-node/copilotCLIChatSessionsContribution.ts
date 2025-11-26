@@ -649,7 +649,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			stream.warning(vscode.l10n.t('Invalid confirmation data.'));
 			return {};
 		}
-
+		const references = uncommittedChangesData.metadata.references?.length ? uncommittedChangesData.metadata.references : request.references;
 		const selection = (request.prompt?.split(':')[0] || '').trim().toUpperCase();
 
 		if (!selection || selection === this.CLI_CANCEL.toUpperCase() || token.isCancellationRequested) {
@@ -667,7 +667,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const worktreePath = worktreePathValue ? URI.file(worktreePathValue) : undefined;
 			if (!worktreePath) {
 				stream.warning(vscode.l10n.t('Failed to create worktree. Proceeding without isolation.'));
-				return await this.createCLISessionAndOpen(prompt, request.references, context, undefined, false, stream, token);
+				return await this.createCLISessionAndOpen(prompt, references, context, undefined, false, stream, token);
 			}
 
 			// Migrate changes from active repository to worktree
@@ -713,10 +713,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			}
 
-			return await this.createCLISessionAndOpen(prompt, request.references, context, worktreePath, true, stream, token);
+			return await this.createCLISessionAndOpen(prompt, references, context, worktreePath, true, stream, token);
 		} else {
 			// Skip changes, just create worktree without migration
-			return await this.createCLISessionAndOpen(prompt, request.references, context, undefined, true, stream, token);
+			return await this.createCLISessionAndOpen(prompt, references, context, undefined, true, stream, token);
 		}
 	}
 
