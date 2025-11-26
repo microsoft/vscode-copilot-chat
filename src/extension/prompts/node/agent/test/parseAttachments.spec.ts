@@ -312,6 +312,128 @@ suite('parsePromptAttachments', () => {
 		expect(result.references.length).toBe(0); // no excerpt with line numbers, cannot build location
 	});
 
+
+	test('extracts prompt references with // filepath comment', () => {
+		const prompt = `Help me with this prompt
+<attachments>
+<attachment id="prompt:myPrompt">
+Prompt instructions file:
+// filepath: file://workspace/prompts/test.prompt.md
+Some prompt content
+</attachment>
+</attachments>`;
+
+		const { references } = extractChatPromptReferences(prompt);
+
+		expect(references).toHaveLength(1);
+		expect(references[0].id).toBe('vscode.prompt.file__prompt:myPrompt');
+		expect(references[0].name).toBe('prompt:myPrompt');
+		// expect(references[0].value).toEqual(URI.file('/workspace/prompts/test.prompt.md'));
+		expect(references[0].modelDescription).toBe('Prompt instruction file');
+	});
+
+	test('extracts prompt references with /// filepath comment', () => {
+		const prompt = `Help me with this prompt
+<attachments>
+<attachment id="prompt:anotherPrompt">
+Prompt instructions file:
+/// filepath: /workspace/prompts/another.prompt.md
+More prompt content
+</attachment>
+</attachments>`;
+
+		const { references } = extractChatPromptReferences(prompt);
+
+		expect(references).toHaveLength(1);
+		expect(references[0].id).toBe('vscode.prompt.file__prompt:anotherPrompt');
+		expect(references[0].name).toBe('prompt:anotherPrompt');
+		// expect(references[0].value).toEqual(URI.file('/workspace/prompts/another.prompt.md'));
+	});
+
+	test('extracts prompt references with # filepath comment', () => {
+		const prompt = `Help me with this prompt
+<attachments>
+<attachment id="prompt:hashPrompt">
+Prompt instructions file:
+# filepath: /workspace/prompts/hash.prompt.md
+Hashtag style filepath
+</attachment>
+</attachments>`;
+
+		const { references } = extractChatPromptReferences(prompt);
+
+		expect(references).toHaveLength(1);
+		expect(references[0].id).toBe('vscode.prompt.file__prompt:hashPrompt');
+		expect(references[0].name).toBe('prompt:hashPrompt');
+		// expect(references[0].value).toEqual(URI.file('/workspace/prompts/hash.prompt.md'));
+	});
+
+	test('extracts prompt references with untitled URI', () => {
+		const prompt = `Help me with this prompt
+<attachments>
+<attachment id="prompt:untitledPrompt">
+Prompt instructions file:
+// filepath: untitled:Untitled-1
+Untitled prompt content
+</attachment>
+</attachments>`;
+
+		const { references } = extractChatPromptReferences(prompt);
+
+		expect(references).toHaveLength(1);
+		expect(references[0].id).toBe('vscode.prompt.file__prompt:untitledPrompt');
+		expect(references[0].name).toBe('prompt:untitledPrompt');
+		// expect(references[0].value).toEqual(URI.parse('untitled:Untitled-1'));
+	});
+
+	test('ignores prompt attachments without filepath', () => {
+		const prompt = `Help me with this prompt
+<attachments>
+<attachment id="prompt:noFilepath">
+Prompt instructions file:
+No filepath comment here
+</attachment>
+</attachments>`;
+
+		const { references } = extractChatPromptReferences(prompt);
+
+		expect(references).toHaveLength(0);
+	});
+
+	test('extracts multiple prompt references', () => {
+		const prompt = `Help me with multiple prompts
+<attachments>
+<attachment id="prompt:first">
+Prompt instructions file:
+// filepath: /workspace/first.prompt.md
+First prompt
+</attachment>
+<attachment id="prompt:second">
+Prompt instructions file:
+# filepath: /workspace/second.prompt.md
+Second prompt
+</attachment>
+</attachments>`;
+
+		const { references } = extractChatPromptReferences(prompt);
+
+		expect(references).toHaveLength(2);
+		expect(references[0].id).toBe('vscode.prompt.file__prompt:first');
+		expect(references[0].name).toBe('prompt:first');
+		expect(references[1].id).toBe('vscode.prompt.file__prompt:second');
+		expect(references[1].name).toBe('prompt:second');
+	});
+
+
+	test('returns empty arrays when no attachments block', () => {
+		const prompt = 'Simple question without attachments';
+
+		const { diagnostics, references } = extractChatPromptReferences(prompt);
+
+		expect(diagnostics).toHaveLength(0);
+		expect(references).toHaveLength(0);
+	});
+
 	function createMockFile(uri: URI, text: string) {
 		const doc = {
 			uri,

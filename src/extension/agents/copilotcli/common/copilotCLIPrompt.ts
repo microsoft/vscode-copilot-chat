@@ -195,14 +195,14 @@ function extractPromptReferences(prompt: string): ChatPromptReference[] {
 		let filePath: string | undefined;
 
 		// Look for // filepath: or /// filepath: pattern
-		const filepathMatch = content.match(/^\s*\/\/+\s*filepath:\s*(\S+)/im);
+		const filepathMatch = content.match(/^\s*\/\/+\s*filepath:\s*(.+?)/im);
 		if (filepathMatch) {
 			filePath = filepathMatch[1].trim();
 		}
 
 		if (!filePath) {
 			// Fallback: look for # filepath: pattern
-			const hashMatch = content.match(/^\s*#\s*filepath:\s*(\S+)/im);
+			const hashMatch = content.match(/^\s*#\s*filepath:\s*(.+?)/im);
 			if (hashMatch) {
 				filePath = hashMatch[1].trim();
 			}
@@ -224,17 +224,9 @@ function extractPromptReferences(prompt: string): ChatPromptReference[] {
 		const id = `${PromptFileIdPrefix}__${idAttr}`;
 		const name = idAttr;
 
-		// Try to find the range in the original prompt where this reference is mentioned
-		let range: [number, number] | undefined = undefined;
-		if (prompt.includes(`#${idAttr}`)) {
-			const idx = prompt.indexOf(`#${idAttr}`);
-			range = [idx, idx + idAttr.length + 1]; // +1 for the # character
-		}
-
 		references.push({
 			id,
 			name,
-			range,
 			value: uri,
 			modelDescription: 'Prompt instruction file'
 		});

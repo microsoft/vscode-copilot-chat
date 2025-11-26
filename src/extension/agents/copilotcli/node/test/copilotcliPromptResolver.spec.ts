@@ -164,4 +164,38 @@ describe('CopilotCLIPromptResolver', () => {
 		const { prompt } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, [], CancellationToken.None);
 		expect(prompt).toBe('Just a question');
 	});
+
+
+	it('filters out prompt instructions but processes prompt files', async () => {
+		const statSpy = vi.spyOn(fileSystemService, 'stat').mockResolvedValue({ type: FileType.File, size: 10 } as any);
+
+		const promptInstructionRef = {
+			id: 'vscode.prompt.instructions__someid',
+			name: 'Instruction',
+			value: URI.file('/workspace/instruction.txt')
+		};
+		const promptFileRef = {
+			id: 'vscode.prompt.file__prompt:myPrompt',
+			name: 'prompt:myPrompt',
+			value: URI.file('/workspace/prompt.md')
+		};
+		const regularFileRef = {
+			id: 'regular-file',
+			name: 'regular.ts',
+			value: URI.file('/workspace/regular.ts')
+		};
+
+		const req = withReferences(new TestChatRequest('Process these files'), [
+			promptInstructionRef,
+			promptFileRef,
+			regularFileRef
+		]);
+
+		const { attachments } = await resolver.resolvePrompt(req as unknown as vscode.ChatRequest, [], CancellationToken.None);
+
+		// Prompt instructions should be filtered out, so only 2 attachments (prompt file + regular file)
+		expect(attachments).toHaveLength(2);
+		expect(attachments.map(a => a.displayName).sort()).toEqual(['prompt:myPrompt', 'regular.ts']);
+		expect(statSpy).toHaveBeenCalledTimes(2); // Only called for non-prompt-instruction files
+	});
 });
