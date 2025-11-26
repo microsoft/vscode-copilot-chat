@@ -6,6 +6,7 @@
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
+import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
@@ -14,6 +15,7 @@ import { Result } from '../../../util/common/result';
 import { pushMany, range } from '../../../util/vs/base/common/arrays';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
+import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { PromptTags } from './tags';
@@ -602,4 +604,72 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	];
 
 	return Result.ok(taggedCurrentFileContent);
+}
+
+export function constructTaggedFile(
+	currentDocument: CurrentDocument,
+	editWindowLinesRange: OffsetRange,
+	areaAroundEditWindowLinesRange: OffsetRange,
+	promptOptions: xtabPromptOptions.PromptOptions,
+	computeTokens: (s: string) => number,
+	opts: {
+		includeLineNumbers: { areaAroundCodeToEdit: boolean; currentFileContent: boolean };
+	}
+) {
+	const contentWithCursorAsLinesOriginal = (() => {
+		const addCursorTagEdit = StringEdit.single(StringReplacement.insert(currentDocument.cursorOffset, PromptTags.CURSOR));
+		const contentWithCursor = addCursorTagEdit.applyOnText(currentDocument.content);
+		return contentWithCursor.getLines();
+	})();
+
+	const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx}| ${line}`);
+
+	const contentWithCursorAsLines = opts.includeLineNumbers.areaAroundCodeToEdit
+		? addLineNumbers(contentWithCursorAsLinesOriginal)
+		: contentWithCursorAsLinesOriginal;
+
+	const editWindowWithCursorAsLines = contentWithCursorAsLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+
+	const areaAroundCodeToEdit = [
+		PromptTags.AREA_AROUND.start,
+		...contentWithCursorAsLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
+		PromptTags.EDIT_WINDOW.start,
+		...editWindowWithCursorAsLines,
+		PromptTags.EDIT_WINDOW.end,
+		...contentWithCursorAsLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
+		PromptTags.AREA_AROUND.end
+	].join('\n');
+
+	const currentFileContentWithCursorLines = opts.includeLineNumbers.currentFileContent
+		? addLineNumbers(contentWithCursorAsLinesOriginal)
+		: contentWithCursorAsLinesOriginal;
+	const currentFileContentLines = opts.includeLineNumbers.currentFileContent
+		? addLineNumbers(currentDocument.lines)
+		: currentDocument.lines;
+
+	let areaAroundCodeToEditForCurrentFile: string;
+	if (promptOptions.currentFile.includeTags && opts.includeLineNumbers.currentFileContent === opts.includeLineNumbers.areaAroundCodeToEdit) {
+		areaAroundCodeToEditForCurrentFile = areaAroundCodeToEdit;
+	} else {
+		const editWindowLines = currentFileContentLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+		areaAroundCodeToEditForCurrentFile = [
+			...currentFileContentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
+			...editWindowLines,
+			...currentFileContentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
+		].join('\n');
+	}
+
+	const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
+		currentFileContentLines,
+		areaAroundCodeToEditForCurrentFile,
+		areaAroundEditWindowLinesRange,
+		computeTokens,
+		promptOptions.pagedClipping.pageSize,
+		promptOptions.currentFile,
+	);
+
+	return taggedCurrentFileContentResult.map(taggedCurrentDocLines => ({
+		taggedCurrentDocLines,
+		areaAroundCodeToEdit,
+	}));
 }

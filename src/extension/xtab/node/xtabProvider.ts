@@ -3,12 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { RequestType } from '@vscode/copilot-api';
 import { Raw } from '@vscode/prompt-tsx';
-import { ChatCompletionContentPartKind } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, ExperimentBasedConfig, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
@@ -36,14 +33,12 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { raceFilter } from '../../../util/common/async';
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
-import { TokenizerType } from '../../../util/common/tokenizer';
 import { ITracer } from '../../../util/common/tracing';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { AsyncIterableObject, DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
-import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
@@ -53,12 +48,13 @@ import { Position as VscodePosition } from '../../../vscodeTypes';
 import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { countTokensForLines, createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
+import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
 import { XtabEndpoint } from './xtabEndpoint';
-import { linesWithBackticksRemoved, toLines } from './xtabUtils';
+import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
+import { charCount, constructMessages, linesWithBackticksRemoved, toLines } from './xtabUtils';
 
 const enum RetryState {
 	NotRetrying,
@@ -84,6 +80,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private forceUseDefaultModel: boolean = false;
 
+	private nextCursorPredictor: XtabNextCursorPredictor;
+
 	constructor(
 		@ISimulationTestContext private readonly simulationCtx: ISimulationTestContext,
 		@IInstantiationService private readonly instaService: IInstantiationService,
@@ -97,6 +95,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ITelemetryService private readonly telemetryService: ITelemetryService
 	) {
 		this.delayer = new Delayer(this.configService, this.expService);
+		this.nextCursorPredictor = this.instaService.createInstance(XtabNextCursorPredictor, XtabProvider.computeTokens);
 	}
 
 	public handleAcceptance(): void {
@@ -266,7 +265,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const doesIncludeCursorTag = editWindowLines.some(line => line.includes(PromptTags.CURSOR));
 		const shouldRemoveCursorTagFromResponse = !doesIncludeCursorTag; // we'd like to remove the tag only if the original edit-window didn't include the tag
 
-		const taggedCurrentFileContentResult = this.constructTaggedFile(
+		const taggedCurrentFileContentResult = constructTaggedFile(
 			currentDocument,
 			editWindowLinesRange,
 			areaAroundEditWindowLinesRange,
@@ -364,74 +363,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cancellationToken
 		);
 		return Result.ok<void>(undefined);
-	}
-
-	private constructTaggedFile(
-		currentDocument: CurrentDocument,
-		editWindowLinesRange: OffsetRange,
-		areaAroundEditWindowLinesRange: OffsetRange,
-		promptOptions: xtabPromptOptions.PromptOptions,
-		computeTokens: (s: string) => number,
-		opts: {
-			includeLineNumbers: { areaAroundCodeToEdit: boolean; currentFileContent: boolean };
-		}
-	) {
-		const contentWithCursorAsLinesOriginal = (() => {
-			const addCursorTagEdit = StringEdit.single(StringReplacement.insert(currentDocument.cursorOffset, PromptTags.CURSOR));
-			const contentWithCursor = addCursorTagEdit.applyOnText(currentDocument.content);
-			return contentWithCursor.getLines();
-		})();
-
-		const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx}| ${line}`);
-
-		const contentWithCursorAsLines = opts.includeLineNumbers.areaAroundCodeToEdit
-			? addLineNumbers(contentWithCursorAsLinesOriginal)
-			: contentWithCursorAsLinesOriginal;
-
-		const editWindowWithCursorAsLines = contentWithCursorAsLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
-
-		const areaAroundCodeToEdit = [
-			PromptTags.AREA_AROUND.start,
-			...contentWithCursorAsLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
-			PromptTags.EDIT_WINDOW.start,
-			...editWindowWithCursorAsLines,
-			PromptTags.EDIT_WINDOW.end,
-			...contentWithCursorAsLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
-			PromptTags.AREA_AROUND.end
-		].join('\n');
-
-		const currentFileContentWithCursorLines = opts.includeLineNumbers.currentFileContent
-			? addLineNumbers(contentWithCursorAsLinesOriginal)
-			: contentWithCursorAsLinesOriginal;
-		const currentFileContentLines = opts.includeLineNumbers.currentFileContent
-			? addLineNumbers(currentDocument.lines)
-			: currentDocument.lines;
-
-		let areaAroundCodeToEditForCurrentFile: string;
-		if (promptOptions.currentFile.includeTags && opts.includeLineNumbers.currentFileContent === opts.includeLineNumbers.areaAroundCodeToEdit) {
-			areaAroundCodeToEditForCurrentFile = areaAroundCodeToEdit;
-		} else {
-			const editWindowLines = currentFileContentLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
-			areaAroundCodeToEditForCurrentFile = [
-				...currentFileContentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
-				...editWindowLines,
-				...currentFileContentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
-			].join('\n');
-		}
-
-		const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
-			currentFileContentLines,
-			areaAroundCodeToEditForCurrentFile,
-			areaAroundEditWindowLinesRange,
-			computeTokens,
-			promptOptions.pagedClipping.pageSize,
-			promptOptions.currentFile,
-		);
-
-		return taggedCurrentFileContentResult.map(taggedCurrentDocLines => ({
-			taggedCurrentDocLines,
-			areaAroundCodeToEdit,
-		}));
 	}
 
 	private getAndProcessLanguageContext(
@@ -873,9 +804,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return;
 		}
 
-		const nextCursorLinePrediction = this.determineNextCursorPredicationEnablement();
+		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement();
 		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying) {
-			const nextCursorLineR = await this.predictNextCursorPosition(promptPieces, tracer);
+			const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer);
 			if (cancellationToken.isCancellationRequested) {
 				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
 				return;
@@ -933,29 +864,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
 		return;
-	}
-
-	private determineNextCursorPredicationEnablement(): NextCursorLinePrediction | undefined {
-		const originalNextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionEnabled, this.expService);
-
-		switch (originalNextCursorLinePrediction) {
-			case undefined:
-				return undefined;
-
-			// remove support for enum members other than OnlyWithEdit
-			case NextCursorLinePrediction.OnlyWithEdit:
-			case NextCursorLinePrediction.Jump:
-			case NextCursorLinePrediction.LabelOnlyWithEdit:
-				return NextCursorLinePrediction.OnlyWithEdit;
-
-			// for backward compatibility
-			case true:
-				return NextCursorLinePrediction.OnlyWithEdit;
-			case false:
-				return undefined;
-			default:
-				assertNever(originalNextCursorLinePrediction);
-		}
 	}
 
 	private computeAreaAroundEditWindowLinesRange(currentDocument: CurrentDocument): OffsetRange {
@@ -1158,127 +1066,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		};
 	}
 
-	private async predictNextCursorPosition(promptPieces: PromptPieces, parentTracer: ITracer): Promise<Result</* zero-based line number */ number, Error>> {
-
-		const tracer = parentTracer.sub('predictNextCursorPosition');
-
-		const systemMessage = `Your task is to predict the next line number in the current file where the developer is most likely to make their next edit, using the provided context. If you don't think anywhere is a good next line jump target, just output the current line number of the cursor. Make sure to just output the line number and nothing else (no explanation, reasoning, etc.).`;
-
-		const maxTokens = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsNextCursorPredictionCurrentFileMaxTokens, this.expService);
-
-		const currentFileContentR = this.constructTaggedFile(
-			promptPieces.currentDocument,
-			promptPieces.editWindowLinesRange,
-			promptPieces.areaAroundEditWindowLinesRange,
-			{
-				...promptPieces.opts,
-				currentFile: {
-					...promptPieces.opts.currentFile,
-					maxTokens,
-					includeTags: false,
-				}
-			},
-			XtabProvider.computeTokens,
-			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: true } }
-		);
-
-		if (currentFileContentR.isError()) {
-			tracer.trace(`Failed to construct tagged file: ${currentFileContentR.err}`);
-			return Result.fromString(currentFileContentR.err);
-		}
-
-		const { taggedCurrentDocLines, areaAroundCodeToEdit } = currentFileContentR.val;
-
-		const newPromptPieces = new PromptPieces(
-			promptPieces.currentDocument,
-			promptPieces.editWindowLinesRange,
-			promptPieces.areaAroundEditWindowLinesRange,
-			promptPieces.activeDoc,
-			promptPieces.xtabHistory,
-			taggedCurrentDocLines,
-			areaAroundCodeToEdit,
-			promptPieces.langCtx,
-			XtabProvider.computeTokens,
-			{
-				...promptPieces.opts,
-				includePostScript: false,
-			}
-		);
-
-		const userMessage = getUserPrompt(newPromptPieces);
-
-		const messages = constructMessages({
-			systemMsg: systemMessage,
-			userMsg: userMessage
-		});
-
-		const modelName = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionModelName, this.expService);
-		if (modelName === undefined) {
-			tracer.trace('Model name for cursor prediction is not defined; skipping prediction');
-			return Result.fromString('modelNameNotDefined');
-		}
-
-		const url = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionUrl);
-		const secretKey = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionApiKey);
-
-		const endpoint = this.instaService.createInstance(ChatEndpoint, {
-			id: modelName,
-			name: 'nes.nextCursorPosition',
-			urlOrRequestMetadata: url ? url : { type: RequestType.ProxyChatCompletions },
-			model_picker_enabled: false,
-			is_chat_default: false,
-			is_chat_fallback: false,
-			version: '',
-			capabilities: {
-				type: 'chat',
-				family: '',
-				tokenizer: TokenizerType.CL100K,
-				limits: undefined,
-				supports: {
-					parallel_tool_calls: false,
-					tool_calls: false,
-					streaming: true,
-					vision: false,
-					prediction: false,
-					thinking: false
-				}
-			},
-		});
-
-		const response = await endpoint.makeChatRequest2(
-			{
-				messages,
-				debugName: 'nes.nextCursorPosition',
-				finishedCb: undefined,
-				location: ChatLocation.Other,
-				requestOptions: secretKey ? {
-					secretKey,
-				} : undefined,
-			},
-			CancellationToken.None
-		);
-
-		if (response.type !== ChatFetchResponseType.Success) {
-			return Result.fromString(`fetchError:${response.type}`);
-		}
-
-		try {
-			const trimmed = response.value.trim();
-			const lineNumber = parseInt(trimmed, 10);
-			if (isNaN(lineNumber)) {
-				return Result.fromString(`gotNaN`);
-			}
-			if (lineNumber < 0) {
-				return Result.fromString(`negativeLineNumber`);
-			}
-
-			return Result.ok(lineNumber);
-		} catch (err: unknown) {
-			tracer.trace(`Failed to parse predicted line number from response '${response.value}': ${err}`);
-			return Result.fromString(`failedToParseLine:"${response.value}". Error ${errors.fromUnknown(err).message}`);
-		}
-	}
-
 	private pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
 		switch (promptingStrategy) {
 			case xtabPromptOptions.PromptingStrategy.UnifiedModel:
@@ -1387,24 +1174,4 @@ export function findMergeConflictMarkersRange(lines: string[], editWindowRange: 
 		}
 	}
 	return undefined;
-}
-
-function constructMessages({ systemMsg, userMsg }: { systemMsg: string; userMsg: string }): Raw.ChatMessage[] {
-	return [
-		{
-			role: Raw.ChatRole.System,
-			content: toTextParts(systemMsg)
-		},
-		{
-			role: Raw.ChatRole.User,
-			content: toTextParts(userMsg)
-		}
-	] satisfies Raw.ChatMessage[];
-}
-
-function charCount(messages: Raw.ChatMessage[]): number {
-	const promptCharCount = messages.reduce((total, msg) =>
-		total + msg.content.reduce((subtotal, part) =>
-			subtotal + (part.type === ChatCompletionContentPartKind.Text ? part.text.length : 0), 0), 0);
-	return promptCharCount;
 }
