@@ -13,6 +13,7 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { getNotebookId } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -27,6 +28,7 @@ import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { IObservable } from '../../../util/vs/base/common/observable';
+import { basename } from '../../../util/vs/base/common/path';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
@@ -145,7 +147,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
-		const capturingToken = new CapturingToken(`NES | ${context.requestUuid.replace(/^icr\-/, '').slice(0, 4)}`, undefined, true);
+		const label = `NES | ${basename(document.uri.fsPath)} (v${document.version})`;
+		const capturingToken = new CapturingToken(label, undefined, true);
 
 		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, context, token));
 	}
@@ -156,7 +159,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
-		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortOpportunityId(context.requestUuid)]);
+		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
@@ -411,7 +414,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	}
 
 	public handleListEndOfLifetime(list: NesCompletionList, reason: InlineCompletionsDisposeReason): void {
-		const tracer = this._tracer.sub(['handleListEndOfLifetime', shortOpportunityId(list.requestUuid)]);
+		const tracer = this._tracer.sub(['handleListEndOfLifetime', shortenOpportunityId(list.requestUuid)]);
 		tracer.trace(`List ${list.requestUuid} disposed, reason: ${InlineCompletionsDisposeReasonKind[reason.kind]}`);
 
 		const telemetryBuilder = list.telemetryBuilder;
@@ -424,7 +427,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	}
 
 	public handleEndOfLifetime(item: NesCompletionItem, reason: InlineCompletionEndOfLifeReason): void {
-		const tracer = this._tracer.sub(['handleEndOfLifetime', shortOpportunityId(item.info.requestUuid)]);
+		const tracer = this._tracer.sub(['handleEndOfLifetime', shortenOpportunityId(item.info.requestUuid)]);
 		tracer.trace(`reason: ${InlineCompletionEndOfLifeReasonKind[reason.kind]}`);
 
 		switch (reason.kind) {
@@ -607,10 +610,6 @@ export function raceAndAll<T extends readonly unknown[]>(
 	const all = Promise.all(promises) as Promise<T>;
 
 	return { first, all };
-}
-
-function shortOpportunityId(oppId: string): string {
-	return oppId.substring(4, 8);
 }
 
 function hasNotebookCellMarker(document: TextDocument, newText: string) {
