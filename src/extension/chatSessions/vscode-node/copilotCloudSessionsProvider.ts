@@ -928,7 +928,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		const needsPermissiveAuth = !this._authenticationService.permissiveGitHubSession;
 		const hasUncommittedChanges = await this.detectedUncommittedChanges();
-		const nonDefaultBranchInfo = await this.getNonDefaultBranchInfo();
 
 		if (needsPermissiveAuth && hasUncommittedChanges) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
@@ -950,10 +949,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			);
 		}
 
-		if (nonDefaultBranchInfo) {
-			message += '\n\n' + this.NON_DEFAULT_BRANCH_MESSAGE(nonDefaultBranchInfo.baseBranch, nonDefaultBranchInfo.defaultBranch);
-		}
-
 		if (buttons.length === 1) {
 			if (context.chatSessionContext?.isUntitled) {
 				return; // Don't show the confirmation
@@ -964,6 +959,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 			// No other affirmative button added, so add generic one
 			buttons.unshift(this.DELEGATE);
+		}
+
+		// Only check for non-default branch when we're going to show the confirmation
+		const nonDefaultBranchInfo = await this.getNonDefaultBranchInfo();
+		if (nonDefaultBranchInfo) {
+			message += '\n\n' + this.NON_DEFAULT_BRANCH_MESSAGE(nonDefaultBranchInfo.baseBranch, nonDefaultBranchInfo.defaultBranch);
 		}
 
 		return { title, message, buttons };
