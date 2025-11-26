@@ -797,7 +797,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		} satisfies RequestInternalInlineTelemetryMeasurements);
 	}
 
-	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[]): Promise<void> {
+	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
 
 		const toolCounts = toolCalls.reduce((acc, call) => {
 			acc[call.name] = (acc[call.name] || 0) + 1;
