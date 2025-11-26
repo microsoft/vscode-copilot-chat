@@ -450,6 +450,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const { resource } = chatSessionContext.chatSessionItem;
 			const id = SessionIdForCLI.parse(resource);
 			const additionalReferences = this.previousReferences.get(id) || [];
+			this.previousReferences.delete(id);
 			const [{ prompt, attachments }, modelId, sessionAgent, defaultAgent] = await Promise.all([
 				this.promptResolver.resolvePrompt(request, additionalReferences, token),
 				this.getModelId(id),
