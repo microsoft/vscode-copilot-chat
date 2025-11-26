@@ -21,15 +21,22 @@ import { constructMessages } from './xtabUtils';
 
 export class XtabNextCursorPredictor {
 
+	private isDisabled: boolean;
+
 	constructor(
 		private readonly computeTokens: (text: string) => number,
 		@IInstantiationService private readonly instaService: IInstantiationService,
 		@IConfigurationService private readonly configService: IConfigurationService,
 		@IExperimentationService private readonly expService: IExperimentationService,
 	) {
+		this.isDisabled = false;
 	}
 
 	public determineEnablement(): NextCursorLinePrediction | undefined {
+		if (this.isDisabled) {
+			return undefined;
+		}
+
 		const originalNextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionEnabled, this.expService);
 
 		switch (originalNextCursorLinePrediction) {
@@ -154,6 +161,10 @@ export class XtabNextCursorPredictor {
 		);
 
 		if (response.type !== ChatFetchResponseType.Success) {
+			if (response.type === ChatFetchResponseType.NotFound) {
+				tracer.trace('Next cursor position prediction endpoint not found; disabling predictor for current session.');
+				this.isDisabled = true;
+			}
 			return Result.fromString(`fetchError:${response.type}`);
 		}
 
