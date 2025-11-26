@@ -168,9 +168,9 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 	declare _serviceBrand: undefined;
 	private sessionAgents: Record<string, { agentId?: string; createdDateTime: number }> = {};
 	constructor(
-		// @ICopilotCLISDK private readonly _copilotCLISDK: ICopilotCLISDK,
+		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
-		// @ILogService private readonly _logService: ILogService,
+		@ILogService private readonly logService: ILogService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
 	async trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void> {
@@ -226,17 +226,16 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
 			return [];
 		}
-		// const [auth, { getCustomAgents }, workingDirectory] = await Promise.all([this.copilotCLISDK.getAuthInfo(), this.copilotCLISDK.getPackage(), this.copilotCLISDK.getDefaultWorkingDirectory()]);
-		// if (!auth) {
-		// 	this.logService.warn('[CopilotCLISession] No authentication info available, cannot fetch custom agents');
-		// 	return [];
-		// }
-		// if (!workingDirectory) {
-		// 	this.logService.trace('[CopilotCLISession] No working directory available, cannot fetch custom agents');
-		// 	return [];
-		// }
-		// return getCustomAgents(auth, workingDirectory.fsPath, undefined, getCopilotLogger(this.logService));
-		return [];
+		const [auth, { getCustomAgents }, workingDirectory] = await Promise.all([this.copilotCLISDK.getAuthInfo(), this.copilotCLISDK.getPackage(), this.copilotCLISDK.getDefaultWorkingDirectory()]);
+		if (!auth) {
+			this.logService.warn('[CopilotCLISession] No authentication info available, cannot fetch custom agents');
+			return [];
+		}
+		if (!workingDirectory) {
+			this.logService.trace('[CopilotCLISession] No working directory available, cannot fetch custom agents');
+			return [];
+		}
+		return getCustomAgents(auth, workingDirectory.fsPath, undefined, getCopilotLogger(this.logService));
 	}
 }
 
