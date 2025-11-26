@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { SessionOptions } from '@github/copilot/sdk';
+import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
@@ -15,13 +15,13 @@ import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
+import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { ICopilotCLISDK } from '../copilotCli';
+import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
-import { URI } from '../../../../../util/vs/base/common/uri';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
 
@@ -61,6 +61,27 @@ export class MockCliSdkSessionManager {
 	closeSession(_id: string) { return Promise.resolve(); }
 }
 
+export class NullCopilotCLIAgents implements ICopilotCLIAgents {
+	_serviceBrand: undefined;
+	async getAgents(): Promise<SweCustomAgent[]> {
+		return [];
+	}
+	async getDefaultAgent(): Promise<string> {
+		return COPILOT_CLI_DEFAULT_AGENT_ID;
+	}
+	async getSessionAgent(_sessionId: string): Promise<string | undefined> {
+		return undefined;
+	}
+	resolveAgent(_agentId: string): Promise<SweCustomAgent | undefined> {
+		return Promise.resolve(undefined);
+	}
+	setDefaultAgent(_agent: string | undefined): Promise<void> {
+		return Promise.resolve();
+	}
+	trackSessionAgent(_sessionId: string, agent: string | undefined): Promise<void> {
+		return Promise.resolve();
+	}
+}
 
 describe('CopilotCLISessionService', () => {
 	const disposables = new DisposableStore();
@@ -79,6 +100,7 @@ describe('CopilotCLISessionService', () => {
 		logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
 		const workspaceService = new NullWorkspaceService();
+		const cliAgents = new NullCopilotCLIAgents();
 		const authService = {
 			getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
 		} as unknown as IAuthenticationService;
@@ -92,7 +114,7 @@ describe('CopilotCLISessionService', () => {
 		} as unknown as IInstantiationService;
 
 		const configurationService = accessor.get(IConfigurationService);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService)));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService), cliAgents));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 

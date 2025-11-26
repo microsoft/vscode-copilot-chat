@@ -402,6 +402,7 @@
 	"github.copilot.config.claudeCode.debug": "Enable debug mode for Claude Code agent.",
 	"github.copilot.config.copilotCLI.enabled": "Enable Copilot CLI integration.",
 	"github.copilot.config.cli.isolation.enabled": "Enable CLI isolation for agent sessions.",
+	"github.copilot.config.cli.customAgents.enabled": "Enable Custom Agents for CLI.",
 	"github.copilot.config.cli.mcp.enabled": "Enable Model Context Protocol (MCP) server for CLI.",
 	"github.copilot.config.copilotCodingAgent.enabled": "Enable Copilot Coding Agent (cloud).",
 	"github.copilot.config.gpt5AlternativePatch": "Enable GPT-5 alternative patch format.",
