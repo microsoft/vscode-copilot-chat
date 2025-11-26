@@ -19,11 +19,11 @@ import { IVSCodeExtensionContext } from '../../extContext/common/extensionContex
 import { logExecTime, LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { ICodeSearchAuthenticationService } from '../../remoteCodeSearch/node/codeSearchRepoAuth';
-import { BuildIndexTriggerReason, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../common/workspaceChunkSearch';
+import { BuildIndexTriggerReason, TriggerIndexingError } from './codeSearch/repoManager';
 import { WorkspaceChunkEmbeddingsIndex, WorkspaceChunkEmbeddingsIndexState } from './workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 

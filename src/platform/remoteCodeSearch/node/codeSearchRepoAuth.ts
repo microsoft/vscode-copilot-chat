@@ -5,7 +5,7 @@
 
 import { createDecorator as createServiceIdentifier } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { ResolvedRepoEntry } from './codeSearchRepoTracker';
+import { ResolvedRepoEntry } from '../../workspaceChunkSearch/node/codeSearch/repoManager';
 
 export const ICodeSearchAuthenticationService = createServiceIdentifier<ICodeSearchAuthenticationService>('ICodeSearchAuthentication');
 

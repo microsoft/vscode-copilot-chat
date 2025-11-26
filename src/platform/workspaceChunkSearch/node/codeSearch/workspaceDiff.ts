@@ -3,18 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DeferredPromise, IntervalTimer } from '../../../util/vs/base/common/async';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Emitter, Event } from '../../../util/vs/base/common/event';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
-import { isEqualOrParent } from '../../../util/vs/base/common/resources';
-import { URI } from '../../../util/vs/base/common/uri';
-import { LogExecTime } from '../../log/common/logExecTime';
-import { ILogService } from '../../log/common/logService';
-import { CodeSearchDiff, CodeSearchRepoManager, RepoEntry, RepoStatus } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
-import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
-import { IWorkspaceFileIndex } from './workspaceFileIndex';
+import { DeferredPromise, IntervalTimer } from '../../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { ResourceMap, ResourceSet } from '../../../../util/vs/base/common/map';
+import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
+import { URI } from '../../../../util/vs/base/common/uri';
+import { LogExecTime } from '../../../log/common/logExecTime';
+import { ILogService } from '../../../log/common/logService';
+import { ISimulationTestContext } from '../../../simulationTestContext/common/simulationTestContext';
+import { IWorkspaceFileIndex } from '../workspaceFileIndex';
+import { CodeSearchDiff, CodeSearchRepoManager, RepoEntry, RepoStatus } from './repoManager';
 
 enum RepoState {
 	Initializing,

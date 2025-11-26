@@ -7,8 +7,8 @@ import { t } from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgrade';
+import { ResolvedRepoEntry } from '../../workspaceChunkSearch/node/codeSearch/repoManager';
 import { ICodeSearchAuthenticationService } from '../node/codeSearchRepoAuth';
-import { ResolvedRepoEntry } from '../node/codeSearchRepoTracker';
 
 
 export class VsCodeCodeSearchAuthenticationService implements ICodeSearchAuthenticationService {
