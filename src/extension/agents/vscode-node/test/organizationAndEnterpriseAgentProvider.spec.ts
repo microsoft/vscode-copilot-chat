@@ -830,4 +830,138 @@ Valid prompt`;
 		assert.equal(capturedOwner, 'orgB');
 		assert.equal(capturedRepo, 'repoB');
 	});
+
+	test('generates markdown with long description on single line', async () => {
+		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
+		const provider = createProvider();
+
+		// Agent with a very long description that would normally be wrapped at 80 characters
+		const longDescription = 'Just for fun agent that teaches computer science concepts (while pretending to plot world domination).';
+		const mockAgent: CustomAgentListItem = {
+			name: 'world_domination',
+			repo_owner_id: 1,
+			repo_owner: 'testorg',
+			repo_id: 1,
+			repo_name: 'testrepo',
+			display_name: 'World Domination',
+			description: longDescription,
+			tools: [],
+			version: 'v1',
+		};
+		mockOctoKitService.setCustomAgents([mockAgent]);
+
+		const mockDetails: CustomAgentDetails = {
+			...mockAgent,
+			prompt: '# World Domination Agent\n\nYou are a world-class computer scientist.',
+		};
+		mockOctoKitService.setAgentDetails('world_domination', mockDetails);
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
+		const agentFile = URI.joinPath(cacheDir, 'world_domination.agent.md');
+		const contentBytes = await mockFileSystem.readFile(agentFile);
+		const content = new TextDecoder().decode(contentBytes);
+
+		const expectedContent = `---
+name: World Domination
+description: Just for fun agent that teaches computer science concepts (while pretending to plot world domination).
+---
+# World Domination Agent
+
+You are a world-class computer scientist.
+`;
+
+		assert.equal(content, expectedContent);
+	});
+
+	test('generates markdown with special characters properly escaped in description', async () => {
+		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
+		const provider = createProvider();
+
+		// Agent with description containing YAML special characters that need proper handling
+		const descriptionWithSpecialChars = "Agent with \"double quotes\", 'single quotes', colons:, and #comments in the description";
+		const mockAgent: CustomAgentListItem = {
+			name: 'special_chars_agent',
+			repo_owner_id: 1,
+			repo_owner: 'testorg',
+			repo_id: 1,
+			repo_name: 'testrepo',
+			display_name: 'Special Chars Agent',
+			description: descriptionWithSpecialChars,
+			tools: [],
+			version: 'v1',
+		};
+		mockOctoKitService.setCustomAgents([mockAgent]);
+
+		const mockDetails: CustomAgentDetails = {
+			...mockAgent,
+			prompt: 'Test prompt with special characters',
+		};
+		mockOctoKitService.setAgentDetails('special_chars_agent', mockDetails);
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
+		const agentFile = URI.joinPath(cacheDir, 'special_chars_agent.agent.md');
+		const contentBytes = await mockFileSystem.readFile(agentFile);
+		const content = new TextDecoder().decode(contentBytes);
+
+		const expectedContent = `---
+name: Special Chars Agent
+description: 'Agent with "double quotes", ''single quotes'', colons:, and #comments in the description'
+---
+Test prompt with special characters
+`;
+
+		assert.equal(content, expectedContent);
+	});
+
+	test('generates markdown with multiline description containing newlines', async () => {
+		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
+		const provider = createProvider();
+
+		// Agent with description containing actual newline characters
+		const descriptionWithNewlines = 'First line of description.\nSecond line of description.\nThird line.';
+		const mockAgent: CustomAgentListItem = {
+			name: 'multiline_agent',
+			repo_owner_id: 1,
+			repo_owner: 'testorg',
+			repo_id: 1,
+			repo_name: 'testrepo',
+			display_name: 'Multiline Agent',
+			description: descriptionWithNewlines,
+			tools: [],
+			version: 'v1',
+		};
+		mockOctoKitService.setCustomAgents([mockAgent]);
+
+		const mockDetails: CustomAgentDetails = {
+			...mockAgent,
+			prompt: 'Test prompt',
+		};
+		mockOctoKitService.setAgentDetails('multiline_agent', mockDetails);
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
+		const agentFile = URI.joinPath(cacheDir, 'multiline_agent.agent.md');
+		const contentBytes = await mockFileSystem.readFile(agentFile);
+		const content = new TextDecoder().decode(contentBytes);
+
+		const expectedContent = `---
+name: Multiline Agent
+description: |-
+  First line of description.
+  Second line of description.
+  Third line.
+---
+Test prompt
+`;
+
+		assert.equal(content, expectedContent);
+	});
 });

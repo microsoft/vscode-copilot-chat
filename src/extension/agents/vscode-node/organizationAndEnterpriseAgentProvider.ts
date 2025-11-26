@@ -261,7 +261,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			frontmatterObj.target = agent.target;
 		}
 
-		const frontmatter = YAML.stringify(frontmatterObj).trim();
+		const frontmatter = YAML.stringify(frontmatterObj, { lineWidth: 0 }).trim();
 		const body = agent.prompt ?? '';
 
 		return `---\n${frontmatter}\n---\n${body}\n`;
