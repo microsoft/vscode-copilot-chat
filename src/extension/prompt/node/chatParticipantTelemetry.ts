@@ -133,13 +133,13 @@ type RequestTelemetryProperties = {
 	languageId: string | undefined;
 	model: string;
 	apiType: string | undefined;
+	toolCounts: string;
 };
 
 type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
 	responseId: string;
 	codeBlocks: string;
 	isParticipantDetected: string;
-	toolCounts: string;
 };
 
 type RequestTelemetryMeasurements = {
@@ -149,6 +149,8 @@ type RequestTelemetryMeasurements = {
 	timeToComplete: number;
 	responseTokenCount: number;
 	messageTokenCount: number;
+	numToolCalls: number;
+	availableToolCount: number;
 };
 
 type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
@@ -158,8 +160,6 @@ type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	links: number;
 	maybeOffTopic: number;
 	userPromptCount: number;
-	numToolCalls: number;
-	availableToolCount: number;
 	summarizationEnabled: number;
 };
 
@@ -797,7 +797,12 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		} satisfies RequestInternalInlineTelemetryMeasurements);
 	}
 
-	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome): Promise<void> {
+	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[]): Promise<void> {
+
+		const toolCounts = toolCalls.reduce((acc, call) => {
+			acc[call.name] = (acc[call.name] || 0) + 1;
+			return acc;
+		}, {} as Record<string, number>);
 
 
 		/* __GDPR__
@@ -841,7 +846,10 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 				"codeGenInstructionsLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the code generation instructions that were added to request." },
 				"codeGenInstructionsFilteredCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instructions were filtered." },
 				"codeGenInstructionFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instruction files were read." },
-				"codeGenInstructionSettingsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instructions originated from settings." }
+				"codeGenInstructionSettingsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instructions originated from settings." },
+				"toolCounts": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The number of times each tool was used" },
+				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
+				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('inline.request', {
@@ -859,6 +867,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			diagnosticCodes: this._diagnosticsTelemetryData.fileDiagnosticsTelemetry.diagnosticCodes,
 			selectionDiagnosticCodes: this._diagnosticsTelemetryData.selectionDiagnosticsTelemetry.diagnosticCodes,
 			outcomeAnnotations: interactionOutcome.annotations?.map(a => a.label).join(','),
+			toolCounts: JSON.stringify(toolCounts),
 		} satisfies RequestInlineTelemetryProperties, {
 			firstTurn: this._firstTurn ? 1 : 0,
 			isNotebook: this._isNotebookDocument,
@@ -881,6 +890,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			timeToFirstToken: this._firstTokenTime ? this._firstTokenTime - this._startTime : -1,
 			timeToComplete: Date.now() - this._startTime,
 			...getCustomInstructionTelemetry(this._references),
+			numToolCalls: toolCalls.length,
+			availableToolCount: this._availableToolCount,
 		} satisfies RequestInlineTelemetryMeasurements);
 	}
 
