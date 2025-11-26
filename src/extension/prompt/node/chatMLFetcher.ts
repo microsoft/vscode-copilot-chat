@@ -7,6 +7,7 @@ import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { FetchStreamRecorder, IChatMLFetcher, IFetchMLOptions, Source } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { ChatFetchError, ChatFetchResponseType, ChatFetchRetriableError, ChatLocation, ChatResponse, ChatResponses } from '../../../platform/chat/common/commonTypes';
@@ -25,6 +26,7 @@ import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/c
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
@@ -37,7 +39,6 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatMLFetcherTelemetrySender as Telemetry } from './chatMLFetcherTelemetry';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 
 export interface IMadeChatRequestEvent {
 	readonly messages: Raw.ChatMessage[];
@@ -152,6 +153,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		let tokenCount = -1;
 		const streamRecorder = new FetchStreamRecorder(finishedCb);
 		const enableRetryOnError = opts.enableRetryOnError ?? opts.enableRetryOnFilter;
+		let usernameToScrub: string | undefined;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
 			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions);
@@ -163,12 +165,15 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					reason: payloadValidationResult.reason,
 				};
 			} else {
+				const copilotToken = await this._authenticationService.getCopilotToken();
+				usernameToScrub = copilotToken.username;
 				response = await this._fetchAndStreamChat(
 					chatEndpoint,
 					requestBody,
 					baseTelemetry,
 					streamRecorder.callback,
 					requestOptions.secretKey,
+					copilotToken,
 					opts.location,
 					ourRequestId,
 					postOptions.n,
@@ -282,7 +287,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			}
 		} catch (err: unknown) {
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
-			const processed = this.processError(err, ourRequestId);
+			const processed = this.processError(err, ourRequestId, usernameToScrub);
 			let connectivityTestError = telemetryProperties.connectivityTestError;
 			if (processed.type === ChatFetchResponseType.NetworkError && enableRetryOnError) {
 				// Keep existing handling of net::ERR_NETWORK_CHANGED: https://github.com/microsoft/vscode/issues/260297
@@ -293,7 +298,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					this._logService.info(`Retrying chat request with ${useFetcher || 'default'} fetcher after: ${processed.reasonDetail || processed.reason}`);
 					// Keep existing handling of net::ERR_NETWORK_CHANGED if setting is not enabled: https://github.com/microsoft/vscode/issues/260297
 					const connectivity = !isRetryNetworkErrorEnabled ? { retryRequest: true } : await this._checkNetworkConnectivity(useFetcher);
-					connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError) : undefined;
+					connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError, usernameToScrub) : undefined;
 					if (connectivity.retryRequest) {
 						streamRecorder.callback('', 0, { text: '', retryReason: 'network_error' });
 						const retryResult = await this.fetchMany({
@@ -412,6 +417,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		baseTelemetryData: TelemetryData,
 		finishedCb: FinishedCallback,
 		secretKey: string | undefined,
+		copilotToken: CopilotToken,
 		location: ChatLocation,
 		ourRequestId: string,
 		nChoices: number | undefined,
@@ -429,7 +435,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		this._logService.debug(`modelMaxResponseTokens ${request.max_tokens ?? 2048}`);
 		this._logService.debug(`chat model ${chatEndpointInfo.model}`);
 
-		secretKey ??= (await this._authenticationService.getCopilotToken()).token;
+		secretKey ??= copilotToken.token;
 		if (!secretKey) {
 			// If no key is set we error
 			const urlOrRequestMetadata = stringifyUrlOrRequestMetadata(chatEndpointInfo.urlOrRequestMetadata);
@@ -1029,7 +1035,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		return { type: ChatFetchResponseType.Failed, reason, requestId, serverRequestId };
 	}
 
-	private processError(err: unknown, requestId: string): ChatFetchError {
+	private processError(err: unknown, requestId: string, usernameToScrub: string | undefined): ChatFetchError {
 		const fetcher = this._fetcherService;
 		// If we cancelled a network request, we don't want to log an error
 		if (fetcher.isAbortError(err)) {
@@ -1062,7 +1068,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
 		this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
 		const errorDetail = fetcher.getUserMessageForFetcherError(err);
-		const scrubbedErrorDetail = this.scrubErrorDetail(errorDetail);
+		const scrubbedErrorDetail = this.scrubErrorDetail(errorDetail, usernameToScrub);
 		if (fetcher.isInternetDisconnectedError(err)) {
 			return {
 				type: ChatFetchResponseType.NetworkError,
@@ -1090,14 +1096,12 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}
 	}
 
-	private scrubErrorDetail(errorDetail: string) {
-		errorDetail = errorDetail.replaceAll(/(logged in as )([^\s]+)/ig, '$1<login>');
-		const username = this._authenticationService.copilotToken?.username;
-		if (!username) {
-			return errorDetail;
+	private scrubErrorDetail(errorDetail: string, usernameToScrub: string | undefined) {
+		if (usernameToScrub) {
+			const regex = new RegExp(escapeRegExpCharacters(usernameToScrub), 'ig');
+			errorDetail = errorDetail.replaceAll(regex, '<login>');
 		}
-		const regex = new RegExp(escapeRegExpCharacters(username), 'ig');
-		return errorDetail.replaceAll(regex, '<login>');
+		return errorDetail.replaceAll(/(?<=logged in as )(?!<login>)[^\s]+/ig, '!<login>!'); // marking fallback with !
 	}
 }
 
