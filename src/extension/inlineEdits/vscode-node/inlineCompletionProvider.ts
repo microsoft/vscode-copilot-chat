@@ -145,7 +145,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
-		const capturingToken = new CapturingToken(`NES | ${context.requestUuid.replace(/^icr\-/, '').slice(0, 4)}`, undefined);
+		const capturingToken = new CapturingToken(`NES | ${context.requestUuid.replace(/^icr\-/, '').slice(0, 4)}`, undefined, true);
 
 		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, context, token));
 	}

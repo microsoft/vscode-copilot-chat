@@ -125,7 +125,7 @@ export class DefaultIntentRequestHandler {
 				return confirmationResult;
 			}
 
-			const resultDetails = await this._requestLogger.captureInvocation(new CapturingToken(this.request.prompt, 'comment'), () => this.runWithToolCalling(intentInvocation));
+			const resultDetails = await this._requestLogger.captureInvocation(new CapturingToken(this.request.prompt, 'comment', false), () => this.runWithToolCalling(intentInvocation));
 
 			let chatResult = resultDetails.chatResult || {};
 			this._surveyService.signalUsage(`${this.location === ChatLocation.Editor ? 'inline' : 'panel'}.${this.intent.id}`, this.documentContext?.document.languageId);

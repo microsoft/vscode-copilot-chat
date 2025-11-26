@@ -589,12 +589,20 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 			const result: (ChatPromptItem | TreeChildItem)[] = [];
 			const seen = new Set<CapturingToken>();
 
+			const pushLastPrompt = () => {
+				if (lastPrompt) {
+					if (lastPrompt.token.flattenSingleChild && lastPrompt.children.length === 1) {
+						result.push(lastPrompt.children[0]);
+					} else {
+						result.push(lastPrompt);
+					}
+				}
+			};
+
 			for (const currReq of this.requestLogger.getRequests()) {
 
 				if (currReq.token !== lastPrompt?.token) {
-					if (lastPrompt) {
-						result.push(lastPrompt);
-					}
+					pushLastPrompt();
 					lastPrompt = (currReq.token === undefined ? undefined
 						: ChatPromptItem.create(currReq, currReq.token, seen.has(currReq.token))
 					);
@@ -614,9 +622,7 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 				}
 			}
 
-			if (lastPrompt) {
-				result.push(lastPrompt);
-			}
+			pushLastPrompt();
 
 			return filterMap(result, r => {
 				if (!this.filters.itemIncluded(r)) {
