@@ -15,7 +15,7 @@ import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, FileType } from '../../../../vscodeTypes';
-import { ChatVariablesCollection, isPromptFile, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
 
 export class CopilotCLIPromptResolver {
@@ -44,7 +44,7 @@ export class CopilotCLIPromptResolver {
 		const fileFolderReferences: vscode.ChatPromptReference[] = [];
 		await Promise.all(Array.from(variables).map(async variable => {
 			// Unsupported references.
-			if (isPromptInstruction(variable) || isPromptFile(variable)) {
+			if (isPromptInstruction(variable)) {
 				return;
 			}
 			// Images will be attached using regular attachments via Copilot CLI SDK.

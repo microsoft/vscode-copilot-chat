@@ -8,6 +8,7 @@ import { createFilepathRegexp } from '../../../../util/common/markdown';
 import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatReferenceDiagnostic, Location, Range } from '../../../../vscodeTypes';
+import { PromptFileIdPrefix } from '../../../prompt/common/chatVariablesCollection';
 
 
 /**
@@ -32,7 +33,7 @@ export function extractChatPromptReferences(prompt: string): {
 } {
 	return {
 		diagnostics: extractDiagnostics(prompt),
-		references: extractResources(prompt)
+		references: extractResources(prompt).concat(extractPromptReferences(prompt))
 	};
 }
 
@@ -71,7 +72,10 @@ function extractResources(prompt: string): ChatPromptReference[] {
 				providedId = idAttrMatch[1];
 			}
 		}
-
+		if (providedId && providedId.startsWith('prompt:')) {
+			// Skip prompt file attachments, handled elsewhere
+			continue;
+		}
 		// Attempt to extract fenced code block language
 		const fenceMatch = content.match(/```([^\n`]+)\n([\s\S]*?)```/);
 		const fencedLanguage = fenceMatch ? fenceMatch[1].trim() : undefined;
@@ -157,6 +161,82 @@ function extractResources(prompt: string): ChatPromptReference[] {
 			name: locName,
 			range,
 			value: uri
+		});
+	}
+
+	return references;
+}
+
+
+/**
+ * Parse the raw user prompt and extract prompt file attachments
+ * contained inside a single <attachments>...</attachments> block.
+ *
+ * Recognized elements:
+ *  - <attachment id="prompt:...">Prompt instructions file:\n// filepath: ...\n...</attachment>
+ *    -> Converted into ChatPromptReference with special id prefix "vscode.prompt.file__"
+ */
+function extractPromptReferences(prompt: string): ChatPromptReference[] {
+	const references: ChatPromptReference[] = [];
+
+	const attachmentsBlockMatch = prompt.match(/<attachments>([\s\S]*?)<\/attachments>/i);
+	if (!attachmentsBlockMatch) {
+		return references;
+	}
+	const block = attachmentsBlockMatch[1];
+
+	// Parse prompt attachments (<attachment id="prompt:..."> blocks)
+	const attachmentRegex = /<attachment\s+id="(prompt:[^"]+)">([\s\S]*?)<\/attachment>/gi;
+	for (let m; (m = attachmentRegex.exec(block));) {
+		const idAttr = m[1]; // e.g., "prompt:Untitled-1"
+		const content = m[2];
+
+		// Extract filepath from the content using various comment patterns
+		let filePath: string | undefined;
+
+		// Look for // filepath: or /// filepath: pattern
+		const filepathMatch = content.match(/^\s*\/\/+\s*filepath:\s*(\S+)/im);
+		if (filepathMatch) {
+			filePath = filepathMatch[1].trim();
+		}
+
+		if (!filePath) {
+			// Fallback: look for # filepath: pattern
+			const hashMatch = content.match(/^\s*#\s*filepath:\s*(\S+)/im);
+			if (hashMatch) {
+				filePath = hashMatch[1].trim();
+			}
+		}
+
+		if (!filePath) {
+			continue;
+		}
+
+		// Parse URI from filepath (could be untitled: scheme or file path)
+		let uri: URI;
+		if (filePath.startsWith('untitled:')) {
+			uri = URI.parse(filePath);
+		} else {
+			uri = URI.file(filePath);
+		}
+
+		// Create the special ID with prefix
+		const id = `${PromptFileIdPrefix}__${idAttr}`;
+		const name = idAttr;
+
+		// Try to find the range in the original prompt where this reference is mentioned
+		let range: [number, number] | undefined = undefined;
+		if (prompt.includes(`#${idAttr}`)) {
+			const idx = prompt.indexOf(`#${idAttr}`);
+			range = [idx, idx + idAttr.length + 1]; // +1 for the # character
+		}
+
+		references.push({
+			id,
+			name,
+			range,
+			value: uri,
+			modelDescription: 'Prompt instruction file'
 		});
 	}
 
