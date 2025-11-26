@@ -167,17 +167,6 @@ export interface CustomAgentDetails extends CustomAgentListItem {
 	};
 }
 
-export interface OrgCustomInstruction {
-	name: string;
-	description?: string;
-	content: string;
-	metadata?: Record<string, string>;
-}
-
-export interface OrgCustomInstructionsResponse {
-	prompts?: OrgCustomInstruction[];
-}
-
 export interface PullRequestFile {
 	filename: string;
 	status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
@@ -274,7 +263,6 @@ export interface IOctoKitService {
 	 *   - excludeInvalidConfigs: Exclude agents with invalid configurations.
 	 *   - deduplicate: Remove duplicate agents from the result.
 	 *   - source: Filter agents by their source (repo, org, enterprise).
-	 * @returns An array of custom agent list items with basic metadata
 	 * @returns An array of custom agent list items with basic metadata
 	 */
 	getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]>;

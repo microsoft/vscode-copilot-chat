@@ -229,7 +229,6 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			if (!authToken) {
 				throw new Error('No authentication token available');
 			}
-
 			const response = await this._capiClientService.makeRequest<Response>({
 				method: 'GET',
 				headers: {
@@ -245,9 +244,8 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 				include_sources: options?.includeSources
 			});
 			if (!response.ok) {
-				throw new Error(`Failed to fetch custom agents for ${owner}/${repo}: ${response.statusText}`);
+				throw new Error(`Failed to fetch custom agents for ${owner} ${repo}: ${response.statusText}`);
 			}
-
 			const data = await response.json() as {
 				agents?: CustomAgentListItem[];
 			};
@@ -266,12 +264,6 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 			if (!authToken) {
 				throw new Error('No authentication token available');
-			}
-
-			// Build query parameters
-			const queryParams = new URLSearchParams();
-			if (version) {
-				queryParams.append('version', version);
 			}
 
 			const response = await this._capiClientService.makeRequest<Response>({
