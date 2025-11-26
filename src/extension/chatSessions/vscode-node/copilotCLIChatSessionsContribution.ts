@@ -769,9 +769,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		// The caller is most likely a chat editor or the like.
 		// Now that we've delegated it to a session, we can get out of here.
 		// Else if the request takes say 10 minutes, the caller would be blocked for that long.
-		session.object.handleRequest(request.id, prompt, attachments, model, token).finally(() => {
-			session.dispose();
-		});
+		session.object.handleRequest(request.id, prompt, attachments, model, token)
+			.catch(error => {
+				this.logService.error(`Failed to handle CLI session request: ${error}`);
+				// Optionally: stream.error(error) to notify the user
+			})
+			.finally(() => {
+				session.dispose();
+			});
 
 		stream.markdown(vscode.l10n.t('{0} agent has begun working on your request. Follow its progress in the Agents View.', 'Background Agent'));
 	}
