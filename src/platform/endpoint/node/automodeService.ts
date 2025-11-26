@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
+import * as os from 'os';
+import * as path from 'path';
 import type { ChatRequest } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { TimeoutTimer } from '../../../util/vs/base/common/async';
@@ -12,10 +14,26 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatLocation } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ILogService } from '../../log/common/logService';
+import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ICAPIClientService } from '../common/capiClient';
 import { AutoChatEndpoint } from './autoChatEndpoint';
+import { ReasoningClassifier } from './reasoningClassifier';
+
+// Exact model names for reasoning-capable models (more capable, expensive models)
+const REASONING_MODELS = [
+	'GPT-5',
+	'Claude Sonnet 4.5',
+	'GPT-5',
+	'GPT-5-mini',
+	'CLaude Haiku 4.5'
+] as const;
+
+// Exact model names for low/no reasoning models (fast, cheaper models)
+const LOW_REASONING_MODELS = [
+	'GPT-4.1'
+] as const;
 
 interface AutoModeAPIResponse {
 	available_models: string[];
@@ -106,13 +124,15 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
 	private readonly _autoModelCache: Map<string, { endpoint: IChatEndpoint; tokenBank: AutoModeTokenBank }> = new Map();
 	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
+	private readonly _reasoningClassifier: ReasoningClassifier;
 
 	constructor(
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IExperimentationService private readonly _expService: IExperimentationService
+		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IFetcherService private readonly _fetcherService: IFetcherService
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -127,6 +147,11 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}));
 		this._serviceBrand = undefined;
+
+		// Initialize reasoning classifier
+		// Use temp directory for model cache
+		const modelCacheDir = path.join(os.tmpdir(), '.vscode-copilot-models');
+		this._reasoningClassifier = this._register(new ReasoningClassifier(modelCacheDir, this._fetcherService, this._logService));
 	}
 
 	override dispose(): void {
@@ -167,7 +192,15 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		reserveTokenBank.debugName = conversationId;
 
 		const reserveToken = await reserveTokenBank.getToken();
-		const selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model) || knownEndpoints[0];
+
+		// Check if a low reasoning model should be used based on the user's query
+		const shouldUseLowReasoning = await this._shouldUseLowReasoningModel(chatRequest);
+		const selectedModel = this._selectModelBasedOnReasoning(
+			knownEndpoints,
+			reserveToken,
+			shouldUseLowReasoning
+		);
+
 		const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
 		this._autoModelCache.set(conversationId, { endpoint: autoEndpoint, tokenBank: reserveTokenBank });
 		return autoEndpoint;
@@ -192,6 +225,64 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		}
 		return hasValues ? { low, high } : { low: 0, high: 0 };
 	}
+
+	/**
+	 * Determines if the user's query should use a low reasoning model (for simple queries)
+	 */
+	private async _shouldUseLowReasoningModel(chatRequest: ChatRequest | undefined): Promise<boolean> {
+		if (!chatRequest) {
+			return false;
+		}
+
+		try {
+			// Use ModernBERT classifier to determine if query needs reasoning
+			// Classifier outputs: 0 = reasoning required, 1 = non-reasoning (simple)
+			const isSimpleQuery = await this._reasoningClassifier.classify(chatRequest.prompt);
+
+			this._logService.trace(`Low reasoning model should be used: ${isSimpleQuery}`);
+			return isSimpleQuery;
+		} catch (error) {
+			this._logService.error('Failed to determine reasoning model requirement', error);
+			return false;
+		}
+	}
+
+	/**
+	 * Selects the appropriate model based on reasoning requirements
+	 */
+	private _selectModelBasedOnReasoning(
+		knownEndpoints: IChatEndpoint[],
+		autoModeResponse: AutoModeAPIResponse,
+		shouldUseLowReasoning: boolean
+	): IChatEndpoint {
+		const targetModels = shouldUseLowReasoning ? LOW_REASONING_MODELS : REASONING_MODELS;
+		const modelType = shouldUseLowReasoning ? 'low reasoning' : 'reasoning';
+
+		// First check if the server's selected_model already matches our requirements
+		if ((targetModels as readonly string[]).includes(autoModeResponse.selected_model)) {
+			const selectedEndpoint = knownEndpoints.find(e => e.model === autoModeResponse.selected_model);
+			if (selectedEndpoint) {
+				this._logService.trace(`Using server's selected ${modelType} model: ${selectedEndpoint.model}`);
+				return selectedEndpoint;
+			}
+		}
+
+		// If selected_model doesn't match, search available_models for a match
+		for (const modelName of targetModels) {
+			if (autoModeResponse.available_models.includes(modelName)) {
+				const endpoint = knownEndpoints.find(e => e.model === modelName);
+				if (endpoint) {
+					this._logService.trace(`Selected ${modelType} model from available_models: ${endpoint.model}`);
+					return endpoint;
+				}
+			}
+		}
+
+		// Fallback to the server's selected model or first available
+		this._logService.trace(`No matching ${modelType} model found, using server's selection: ${autoModeResponse.selected_model}`);
+		return knownEndpoints.find(e => e.model === autoModeResponse.selected_model) || knownEndpoints[0];
+	}
+
 }
 
 /**
