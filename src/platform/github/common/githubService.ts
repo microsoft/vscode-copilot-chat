@@ -134,7 +134,16 @@ export interface CustomAgentListItem {
 	metadata?: Record<string, string>;
 	target?: string;
 	config_error?: string;
-	'mcp-servers'?: Record<string, any>;
+	'mcp-servers'?: {
+		[serverName: string]: {
+			type: string;
+			command?: string;
+			args?: string[];
+			tools?: string[];
+			env?: { [key: string]: string };
+			headers?: { [key: string]: string };
+		};
+	};
 }
 
 export interface CustomAgentListOptions {
@@ -153,18 +162,6 @@ export interface CustomAgentListOptions {
 
 export interface CustomAgentDetails extends CustomAgentListItem {
 	prompt: string;
-	argument_hint?: string;
-	metadata?: Record<string, string>;
-	'mcp-servers'?: {
-		[serverName: string]: {
-			type: string;
-			command?: string;
-			args?: string[];
-			tools?: string[];
-			env?: { [key: string]: string };
-			headers?: { [key: string]: string };
-		};
-	};
 }
 
 export interface PullRequestFile {

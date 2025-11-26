@@ -4,7 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import YAML from 'yaml';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { CustomAgentDetails, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -25,6 +28,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		@ILogService private readonly logService: ILogService,
 		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext readonly extensionContext: IVSCodeExtensionContext,
+		@IFileSystemService private readonly fileSystem: IFileSystemService,
 	) {
 		super();
 	}
@@ -37,7 +41,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	}
 
 	async provideCustomAgents(
-		options: vscode.CustomAgentQueryOptions | undefined,
+		options: vscode.CustomAgentQueryOptions,
 		_token: vscode.CancellationToken
 	): Promise<vscode.CustomAgentResource[]> {
 		try {
@@ -109,7 +113,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	private async fetchAndUpdateCache(
 		repoOwner: string,
 		repoName: string,
-		options: vscode.CustomAgentQueryOptions | undefined
+		options: vscode.CustomAgentQueryOptions
 	): Promise<void> {
 		// Prevent concurrent fetches
 		if (this.isFetching) {
@@ -136,10 +140,10 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 			// Ensure cache directory exists
 			try {
-				await vscode.workspace.fs.stat(cacheDir);
+				await this.fileSystem.stat(cacheDir);
 			} catch (error) {
 				// Directory doesn't exist, create it
-				await vscode.workspace.fs.createDirectory(cacheDir);
+				await this.fileSystem.createDirectory(cacheDir);
 			}
 
 			// Read existing cache contents before updating
@@ -174,17 +178,17 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			}
 
 			// Clear existing cache files
-			const existingFiles = await vscode.workspace.fs.readDirectory(cacheDir);
+			const existingFiles = await this.fileSystem.readDirectory(cacheDir);
 			for (const [filename, fileType] of existingFiles) {
-				if (fileType === vscode.FileType.File && filename.endsWith(AgentFileExtension)) {
-					await vscode.workspace.fs.delete(vscode.Uri.joinPath(cacheDir, filename));
+				if (fileType === FileType.File && filename.endsWith(AgentFileExtension)) {
+					await this.fileSystem.delete(vscode.Uri.joinPath(cacheDir, filename));
 				}
 			}
 
 			// Write new cache files
 			for (const [filename, content] of newContents) {
 				const fileUri = vscode.Uri.joinPath(cacheDir, filename);
-				await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(content));
+				await this.fileSystem.writeFile(fileUri, new TextEncoder().encode(content));
 			}
 
 			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Updated cache with ${agents.length} agents for ${repoOwner}/${repoName}`);
@@ -199,11 +203,11 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	private async readCacheContents(cacheDir: vscode.Uri): Promise<Map<string, string>> {
 		const contents = new Map<string, string>();
 		try {
-			const files = await vscode.workspace.fs.readDirectory(cacheDir);
+			const files = await this.fileSystem.readDirectory(cacheDir);
 			for (const [filename, fileType] of files) {
-				if (fileType === vscode.FileType.File && filename.endsWith(AgentFileExtension)) {
+				if (fileType === FileType.File && filename.endsWith(AgentFileExtension)) {
 					const fileUri = vscode.Uri.joinPath(cacheDir, filename);
-					const content = await vscode.workspace.fs.readFile(fileUri);
+					const content = await this.fileSystem.readFile(fileUri);
 					const text = new TextDecoder().decode(content);
 					contents.set(filename, text);
 				}
@@ -239,35 +243,28 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	}
 
 	private generateAgentMarkdown(agent: CustomAgentDetails): string {
-		const lines: string[] = [];
+		const frontmatterObj: Record<string, unknown> = {};
 
-		// Header
-		lines.push(`---`);
 		if (agent.display_name) {
-			lines.push(`name: ${agent.display_name}`);
+			frontmatterObj.name = agent.display_name;
 		}
 		if (agent.description) {
-			lines.push(`description: ${agent.description}`);
+			frontmatterObj.description = agent.description;
 		}
 		if (agent.tools && agent.tools.length > 0 && agent.tools[0] !== '*') {
-			lines.push(`tools: [${agent.tools.map((t) => `'${t}'`).join(', ')}]`);
+			frontmatterObj.tools = agent.tools;
 		}
 		if (agent.argument_hint) {
-			lines.push(`argument-hint: ${agent.argument_hint}`);
+			frontmatterObj['argument-hint'] = agent.argument_hint;
 		}
 		if (agent.target) {
-			lines.push(`target: ${agent.target}`);
-		}
-		lines.push(`---`);
-
-		// Body
-		if (agent.prompt) {
-			lines.push(agent.prompt);
-		} else {
-			lines.push(`This is a custom agent.`);
+			frontmatterObj.target = agent.target;
 		}
 
-		return lines.join('\n');
+		const frontmatter = YAML.stringify(frontmatterObj).trim();
+		const body = agent.prompt ?? '';
+
+		return `---\n${frontmatter}\n---\n${body}\n`;
 	}
 
 	private parseAgentMetadata(content: string, filename: string): { name: string; description: string } | null {
