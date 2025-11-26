@@ -200,7 +200,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected get useMessagesApi(): boolean {
-		const enableMessagesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseMessagesApi, this._expService);
+		const enableMessagesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.UseMessagesApi, this._expService);
 		return !!(enableMessagesApi && this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Messages));
 	}
 

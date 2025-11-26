@@ -771,6 +771,8 @@ export namespace ConfigKey {
 		export const EnableReadFileV2 = defineSetting<boolean>('chat.advanced.enableReadFileV2', ConfigType.ExperimentBased, isPreRelease);
 		export const AskAgent = defineSetting<boolean>('chat.advanced.enableAskAgent', ConfigType.ExperimentBased, { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true });
 		export const RetryNetworkErrors = defineSetting<boolean>('chat.advanced.enableRetryNetworkErrors', ConfigType.ExperimentBased, false);
+		/** Use the Messages API instead of Chat Completions when supported */
+		export const UseMessagesApi = defineTeamInternalSetting<boolean | undefined>('chat.advanced.useMessagesApi', ConfigType.ExperimentBased, false);
 	}
 
 	export const Enable = defineSetting<{ [key: string]: boolean }>('enable', ConfigType.Simple, {
@@ -787,8 +789,6 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
-	/** Use the Messages API instead of Chat Completions when supported */
-	export const UseMessagesApi = defineSetting<boolean | undefined>('chat.useMessagesApi', ConfigType.ExperimentBased, false);
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
 	/** Enable extended thinking for Anthropic models that support it */
 	export const AnthropicThinkingEnabled = defineSetting<boolean>('chat.anthropic.thinking.enabled', ConfigType.ExperimentBased, false);
