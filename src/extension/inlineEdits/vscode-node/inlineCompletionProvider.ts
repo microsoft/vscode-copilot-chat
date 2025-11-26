@@ -16,6 +16,8 @@ import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/sta
 import { ILogService } from '../../../platform/log/common/logService';
 import { getNotebookId } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -24,6 +26,7 @@ import { ITracer, createTracer } from '../../../util/common/tracing';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
+import { IObservable } from '../../../util/vs/base/common/observable';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
@@ -38,7 +41,6 @@ import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { toExternalRange } from './utils/translations';
-import { IObservable } from '../../../util/vs/base/common/observable';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -120,6 +122,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@INotebookService private readonly _notebookService: INotebookService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
@@ -137,6 +140,17 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	}
 
 	public async provideInlineCompletionItems(
+		document: TextDocument,
+		position: Position,
+		context: InlineCompletionContext,
+		token: CancellationToken
+	): Promise<NesCompletionList | undefined> {
+		const capturingToken = new CapturingToken(`NES | ${context.requestUuid.replace(/^icr\-/, '').slice(0, 4)}`, undefined);
+
+		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, context, token));
+	}
+
+	private async _provideInlineCompletionItems(
 		document: TextDocument,
 		position: Position,
 		context: InlineCompletionContext,

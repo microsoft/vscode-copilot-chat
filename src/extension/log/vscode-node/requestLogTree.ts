@@ -12,14 +12,14 @@ import * as tar from 'tar';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { OutputChannelName } from '../../../platform/log/vscode/outputChannelLogTarget';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { filterMap } from '../../../util/common/arrays';
-import { assertNever } from '../../../util/vs/base/common/assert';
+import { assert, assertNever } from '../../../util/vs/base/common/assert';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { LRUCache } from '../../../util/vs/base/common/map';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequest } from '../../../vscodeTypes';
 import { IExtensionContribution } from '../../common/contributions';
 
 const showHtmlCommand = 'vscode.copilot.chat.showRequestHtmlItem';
@@ -84,7 +84,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			return {
-				prompt: treeItem.request.prompt,
+				prompt: treeItem.request.label,
 				promptId: treeItem.id,
 				hasSeen: treeItem.hasSeen,
 				logCount: promptLogs.length,
@@ -264,7 +264,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			// Generate a default filename based on the prompt
-			const promptText = treeItem.request.prompt.replace(/\W/g, '_').substring(0, 50);
+			const promptText = treeItem.request.label.replace(/\W/g, '_').substring(0, 50);
 			const defaultFilename = `${promptText}_exports.tar.gz`;
 
 			// Show save dialog
@@ -362,7 +362,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			// Generate a default filename based on the prompt
-			const promptText = treeItem.request.prompt.replace(/\W/g, '_').substring(0, 50);
+			const promptText = treeItem.request.label.replace(/\W/g, '_').substring(0, 50);
 			const defaultFilename = `${promptText}_logs.chatreplay.json`;
 
 			// Show save dialog
@@ -587,7 +587,7 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 		} else {
 			let lastPrompt: ChatPromptItem | undefined;
 			const result: (ChatPromptItem | TreeChildItem)[] = [];
-			const seen = new Set<ChatRequest | undefined>();
+			const seen = new Set<CapturingToken>();
 
 			for (const currReq of this.requestLogger.getRequests()) {
 
@@ -654,7 +654,7 @@ class ChatPromptItem extends vscode.TreeItem {
 	public children: TreeChildItem[] = [];
 	public override id: string | undefined;
 
-	public static create(info: LoggedInfo, request: ChatRequest, hasSeen: boolean) {
+	public static create(info: LoggedInfo, request: CapturingToken, hasSeen: boolean) {
 		const existing = ChatPromptItem.ids.get(info);
 		if (existing) {
 			return existing;
@@ -666,9 +666,11 @@ class ChatPromptItem extends vscode.TreeItem {
 		return item;
 	}
 
-	protected constructor(public readonly request: ChatRequest, public readonly hasSeen: boolean) {
-		super(request.prompt, vscode.TreeItemCollapsibleState.Expanded);
-		this.iconPath = new vscode.ThemeIcon('comment');
+	protected constructor(public readonly request: CapturingToken, public readonly hasSeen: boolean) {
+		super(request.label, vscode.TreeItemCollapsibleState.Expanded);
+		if (request.icon) {
+			this.iconPath = new vscode.ThemeIcon(request.icon);
+		}
 		if (hasSeen) {
 			this.description = '(Continued...)';
 		}
@@ -793,6 +795,9 @@ class LogTreeFilters extends Disposable {
 
 	itemIncluded(item: TreeItem): boolean {
 		if (item instanceof ChatPromptItem) {
+			if (this.isNesRequest(item)) {
+				return this._nesRequestsShown;
+			}
 			return true; // Always show chat prompt items
 		} else if (item instanceof ChatElementItem) {
 			return this._elementsShown;
@@ -808,8 +813,14 @@ class LogTreeFilters extends Disposable {
 		return true;
 	}
 
-	private isNesRequest(item: ChatRequestItem): boolean {
-		const debugName = item.info.entry.debugName.toLowerCase();
+	private isNesRequest(item: ChatPromptItem | ChatRequestItem): boolean {
+		let debugName: string;
+		if (item instanceof ChatPromptItem) {
+			assert(typeof item.label === 'string', 'ChatPromptItem label must be a string');
+			debugName = item.label.toLowerCase();
+		} else {
+			debugName = item.info.entry.debugName.toLowerCase();
+		}
 		return debugName.startsWith('nes |') || debugName === 'xtabprovider' || debugName.startsWith('nes.');
 	}
 
