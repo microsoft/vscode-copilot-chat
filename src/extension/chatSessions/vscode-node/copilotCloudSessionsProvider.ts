@@ -789,10 +789,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			});
 		} else {
 			// Delegated flow
-			const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
-			stream.push(card);
-			stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
-			await vscode.commands.executeCommand('vscode.open', sessionUri);
+			// NOTE: VS Code will now close the parent/source chat in most cases.
+			stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the Agents View and associated pull request.'));
 		}
 
 		// Return this for external callers, eg: CLI
