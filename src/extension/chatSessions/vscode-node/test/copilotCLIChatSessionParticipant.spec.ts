@@ -8,8 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
-import { MockRunCommandExecutionService } from '../../../../platform/commands/common/mockRunCommandExecutionService';
-import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
@@ -118,7 +116,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let telemetry: ITelemetryService;
 	let tools: IToolsService;
 	let participant: CopilotCLIChatSessionParticipant;
-	let commandExecutionService: IRunCommandExecutionService;
 	let workspaceService: IWorkspaceService;
 	let instantiationService: IInstantiationService;
 	let manager: MockCliSdkSessionManager;
@@ -133,8 +130,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		promptResolver = new class extends mock<CopilotCLIPromptResolver>() {
-			override resolvePrompt(request: vscode.ChatRequest) {
-				return Promise.resolve({ prompt: request.prompt, attachments: [] });
+			override resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined) {
+				return Promise.resolve({ prompt: prompt ?? request.prompt, attachments: [] });
 			}
 		}();
 		itemProvider = new class extends mock<CopilotCLIChatSessionItemProvider>() {
@@ -153,7 +150,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		workspaceService = new NullWorkspaceService();
 		const vscodeExtensionContext = accessor.get(IVSCodeExtensionContext);
 		const copilotSDK = new CopilotCLISDK(vscodeExtensionContext, accessor.get(IEnvService), accessor.get(ILogService), accessor.get(IInstantiationService), accessor.get(IAuthenticationService), workspaceService);
-		commandExecutionService = new MockRunCommandExecutionService();
 		const logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
 		const configurationService = accessor.get(IConfigurationService);
@@ -188,7 +184,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			sessionService,
 			telemetry,
 			tools,
-			commandExecutionService,
 			instantiationService,
 			configurationService,
 			copilotSDK
@@ -289,24 +284,20 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(sdkSession.emittedEvents[1].content).toMatch(/<pr_metadata uri="pr:\/\/1"/);
 	});
 
-	it('invokes handlePushConfirmationData without existing chatSessionContext (summary via summarizer)', async () => {
+	it('starts a new chat session and submits the request', async () => {
 		const request = new TestChatRequest('Push this');
 		const context = { chatSessionContext: undefined, chatSummary: undefined } as unknown as vscode.ChatContext;
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 		const summarySpy = vi.spyOn(summarizer, 'provideChatSummary');
-		const execSpy = vi.spyOn(commandExecutionService, 'executeCommand');
 
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(manager.sessions.size).toBe(1);
-		const sessionId = Array.from(manager.sessions.keys())[0];
-		const expectedPrompt = 'Push this';
 		expect(summarySpy).toHaveBeenCalledTimes(0);
-		expect(execSpy).toHaveBeenCalledTimes(2);
-		expect(execSpy.mock.calls[0]).toEqual(['vscode.open', expect.any(Object)]);
-		expect(String(execSpy.mock.calls[0].at(1))).toContain(`copilotcli:/${sessionId}`);
-		expect(execSpy.mock.calls[1]).toEqual(['workbench.action.chat.submit', { inputValue: expectedPrompt }]);
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].requests.length).toBe(1);
+		expect(cliSessions[0].requests[0].prompt).toContain('Push this');
 	});
 
 	it('handleConfirmationData accepts uncommitted-changes and records push', async () => {

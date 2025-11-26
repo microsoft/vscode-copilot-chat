@@ -58,7 +58,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private _sessionManager: Lazy<Promise<internal.LocalSessionManager>>;
 	private _sessionWrappers = new DisposableMap<string, RefCountedSession>();
-	private _newActiveSessions = new Map<string, ICopilotCLISessionItem>();
 
 
 	private readonly _onDidChangeSessions = new Emitter<void>();
@@ -118,10 +117,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
-					if (this._newActiveSessions.has(metadata.sessionId)) {
-						// This is a new session not yet persisted to disk by SDK
-						return undefined;
-					}
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
@@ -170,7 +165,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			return allSessions;
 		} catch (error) {
 			this.logService.error(`Failed to get all sessions: ${error}`);
-			return Array.from(this._newActiveSessions.values());
+			return [];
 		}
 	}
 
@@ -179,26 +174,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers, agent });
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 		const sdkSession = await sessionManager.createSession(options.toSessionOptions());
-		const label = labelFromPrompt(prompt);
-		const newSession: ICopilotCLISessionItem = {
-			id: sdkSession.sessionId,
-			label,
-			timing: { startTime: sdkSession.startTime.getTime() }
-		};
-		this._newActiveSessions.set(sdkSession.sessionId, newSession);
 		this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
 
 
-		const session = this.createCopilotSession(sdkSession, options, sessionManager);
-
-		session.object.add(toDisposable(() => this._newActiveSessions.delete(sdkSession.sessionId)));
-		session.object.add(session.object.onDidChangeStatus(() => {
-			// This will get swapped out as soon as the session has completed.
-			if (session.object.status === ChatSessionStatus.Completed || session.object.status === ChatSessionStatus.Failed) {
-				this._newActiveSessions.delete(sdkSession.sessionId);
-			}
-		}));
-		return session;
+		return this.createCopilotSession(sdkSession, options, sessionManager);
 	}
 
 	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined }): Promise<CopilotCLISessionOptions> {
@@ -297,7 +276,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		} catch (error) {
 			this.logService.error(`Failed to delete session ${sessionId}: ${error}`);
 		} finally {
-			this._newActiveSessions.delete(sessionId);
 			this._sessionWrappers.deleteAndLeak(sessionId);
 			// Possible the session was deleted in another vscode session or the like.
 			this._onDidChangeSessions.fire();

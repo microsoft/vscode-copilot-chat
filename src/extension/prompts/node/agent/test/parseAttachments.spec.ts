@@ -25,7 +25,7 @@ import { TestChatRequest } from '../../../../test/node/testHelpers';
 import { generateUserPrompt } from '../copilotCLIPrompt';
 
 
-suite('parsePromptAttachments', () => {
+suite('CopilotCLI parsePromptAttachments', () => {
 	const disposables = new DisposableStore();
 	let fileSystem: MockFileSystemService;
 	let instaService: IInstantiationService;
@@ -43,7 +43,7 @@ suite('parsePromptAttachments', () => {
 	async function buildPrompt(raw: string, chatVariables?: ChatPromptReference[]): Promise<string> {
 		// Set up instantiation service similar to other prompt tests
 		const request = new TestChatRequest(raw);
-		const prompt = await generateUserPrompt(request, new ChatVariablesCollection(chatVariables ?? []), instaService);
+		const prompt = await generateUserPrompt(request, undefined, new ChatVariablesCollection(chatVariables ?? []), instaService);
 		return prompt;
 	}
 	test('returns empty when no attachments block', async () => {

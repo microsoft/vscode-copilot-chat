@@ -26,16 +26,25 @@ export class CopilotCLIPromptResolver {
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) { }
 
-	public async resolvePrompt(request: vscode.ChatRequest, additionalReferences: vscode.ChatPromptReference[], token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
+	/**
+	 * Generates the final prompt for the Copilot CLI agent, resolving variables and preparing attachments.
+	 * @param request
+	 * @param prompt Provide a prompt to override the request prompt
+	 * @param additionalReferences
+	 * @param token
+	 * @returns
+	 */
+	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
 		const references = request.references.concat(additionalReferences);
-		if (request.prompt.startsWith('/')) {
-			return { prompt: request.prompt, attachments: [] }; // likely a slash command, don't modify
+		prompt = prompt ?? request.prompt;
+		if (prompt.startsWith('/')) {
+			return { prompt, attachments: [] }; // likely a slash command, don't modify
 		}
 		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(references), token);
 		if (token.isCancellationRequested) {
-			return { prompt: request.prompt, attachments: [] };
+			return { prompt, attachments: [] };
 		}
-		const prompt = await raceCancellation(generateUserPrompt(request, variables, this.instantiationService), token);
+		prompt = await raceCancellation(generateUserPrompt(request, prompt, variables, this.instantiationService), token);
 		return { prompt: prompt ?? '', attachments };
 	}
 

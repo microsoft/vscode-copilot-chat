@@ -406,7 +406,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IToolsService private readonly toolsService: IToolsService,
-		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
@@ -441,7 +440,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
 			if (!chatSessionContext) {
-				/* Invoked from a 'normal' chat or 'cloud button' without CLI session context */
+				// Invoked from a 'normal' chat or 'cloud button' without CLI session context
+				// Or cases such as delegating from Regular chat to CLI chat
 				// Handle confirmation data
 				return await this.handlePushConfirmationData(request, context, stream, token);
 			}
@@ -452,7 +452,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const additionalReferences = this.previousReferences.get(id) || [];
 			this.previousReferences.delete(id);
 			const [{ prompt, attachments }, modelId, sessionAgent, defaultAgent] = await Promise.all([
-				this.promptResolver.resolvePrompt(request, additionalReferences, token),
+				this.promptResolver.resolvePrompt(request, undefined, additionalReferences, token),
 				this.getModelId(id),
 				this.copilotCLIAgents.getSessionAgent(id),
 				this.copilotCLIAgents.getDefaultAgent()
@@ -527,8 +527,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return session;
 	}
 
-	private async getModelId(sessionId: string): Promise<string | undefined> {
-		const preferredModelId = _sessionModel.get(sessionId)?.id ?? (await this.copilotCLIModels.getDefaultModel())?.id;
+	private async getModelId(sessionId: string | undefined): Promise<string | undefined> {
+		const preferredModelId = (sessionId ? _sessionModel.get(sessionId)?.id : undefined) ?? (await this.copilotCLIModels.getDefaultModel())?.id;
 		return preferredModelId ? this.copilotCLIModels.toModelProvider(preferredModelId) : undefined;
 	}
 
@@ -598,7 +598,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const isolationEnabled = this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled);
 		if (!isolationEnabled) {
 			// No isolation, proceed without worktree
-			return await this.createCLISessionAndOpen(request.prompt, request.references, context, undefined, false, stream, token);
+			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, false, stream, token);
 		}
 
 		// Check for uncommitted changes
@@ -606,7 +606,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const hasUncommittedChanges = currentRepository?.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
 		if (!hasUncommittedChanges) {
 			// No uncommitted changes, create worktree and proceed
-			return await this.createCLISessionAndOpen(request.prompt, request.references, context, undefined, true, stream, token);
+			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, true, stream, token);
 		}
 
 		const message =
@@ -667,7 +667,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const worktreePath = worktreePathValue ? URI.file(worktreePathValue) : undefined;
 			if (!worktreePath) {
 				stream.warning(vscode.l10n.t('Failed to create worktree. Proceeding without isolation.'));
-				return await this.createCLISessionAndOpen(prompt, references, context, undefined, false, stream, token);
+				return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, undefined, false, stream, token);
 			}
 
 			// Migrate changes from active repository to worktree
@@ -713,15 +713,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			}
 
-			return await this.createCLISessionAndOpen(prompt, references, context, worktreePath, true, stream, token);
+			return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, worktreePath, true, stream, token);
 		} else {
 			// Skip changes, just create worktree without migration
-			return await this.createCLISessionAndOpen(prompt, references, context, undefined, true, stream, token);
+			return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, undefined, true, stream, token);
 		}
 	}
 
-	private async createCLISessionAndOpen(
-		prompt: string,
+	private async createCLISessionAndSubmitRequest(
+		request: vscode.ChatRequest,
+		userPrompt: string | undefined,
 		references: readonly vscode.ChatPromptReference[] | undefined,
 		context: vscode.ChatContext,
 		workingDirectory: Uri | undefined,
@@ -736,39 +737,43 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			history = await this.summarizer.provideChatSummary(context, token);
 		}
 
-		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
+		// Give priority to userPrompt if provided (e.g., from confirmation metadata)
+		userPrompt = userPrompt || request.prompt;
+		const requestPrompt = history ? `${userPrompt}\n**Summary**\n${history}` : userPrompt;
 
 		// Create worktree if isolation is enabled and we don't have one yet
-		let finalWorkingDirectory = workingDirectory;
-		if (isolationEnabled && !finalWorkingDirectory) {
+		if (isolationEnabled && !workingDirectory) {
 			const workTreePath = await this.worktreeManager.createWorktree(stream);
-			finalWorkingDirectory = workTreePath ? URI.file(workTreePath) : undefined;
+			workingDirectory = workTreePath ? URI.file(workTreePath) : undefined;
 		}
 
 		// Fallback to default directory if worktree creation failed
-		if (!finalWorkingDirectory && !isolationEnabled) {
-			finalWorkingDirectory = await this.copilotCLISDK.getDefaultWorkingDirectory();
+		if (!workingDirectory && !isolationEnabled) {
+			workingDirectory = await this.copilotCLISDK.getDefaultWorkingDirectory();
+		}
+		const [{ prompt, attachments }, model, agent] = await Promise.all([
+			this.promptResolver.resolvePrompt(request, requestPrompt, (references || []).concat([]), token),
+			this.getModelId(undefined),
+			this.copilotCLIAgents.getDefaultAgent().then(agent => this.copilotCLIAgents.resolveAgent(agent))
+		]);
+
+		const session = await this.sessionService.createSession(requestPrompt, { workingDirectory, isolationEnabled, agent, model }, token);
+		this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
+
+		// Do not await, we want this code path to be as fast as possible.
+		if (isolationEnabled && workingDirectory) {
+			void this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory.fsPath);
 		}
 
-		const session = await this.sessionService.createSession(requestPrompt, { workingDirectory: finalWorkingDirectory, isolationEnabled }, token);
+		// We don't want to block the caller anymore.
+		// The calller is most likely a chat editor or the like.
+		// Now that we've deletagted it to a session, we can get out of here.
+		// Else if the request takes say 10 minutes, the caller would be blocked for that long.
+		session.object.handleRequest(request.id, prompt, attachments, model, token).finally(() => {
+			session.dispose();
+		});
 
-		if (finalWorkingDirectory) {
-			await this.worktreeManager.storeWorktreePath(session.object.sessionId, finalWorkingDirectory.fsPath);
-		}
-
-		try {
-			// Since we're going to open a new session, store the references for later use.
-			this.previousReferences.set(session.object.sessionId, (references || []).concat([]));
-			await this.commandExecutionService.executeCommand('vscode.open', SessionIdForCLI.getResource(session.object.sessionId));
-			await this.commandExecutionService.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
-			return {};
-		}
-		finally {
-			// The SDK doesn't save the session as no messages were added,
-			// If we dispose this here, then we will not be able to find this session later.
-			// So leave this session alive till it gets used using the `getSession` API later
-			this._register(disposableTimeout(() => session.dispose(), WAIT_FOR_NEW_SESSION_TO_GET_USED));
-		}
+		stream.markdown(vscode.l10n.t('{0} agent has begun working on your request. Follow its progress in the Agents View.', 'Background Agent'));
 	}
 
 	private hasHistoryToSummarize(history: readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[]): boolean {

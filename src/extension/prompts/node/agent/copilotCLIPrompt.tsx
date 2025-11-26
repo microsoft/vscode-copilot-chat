@@ -102,12 +102,12 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 }
 
-export async function generateUserPrompt(request: ChatRequest, chatVariables: ChatVariablesCollection, instantiationService: IInstantiationService): Promise<string> {
+export async function generateUserPrompt(request: ChatRequest, prompt: string | undefined, chatVariables: ChatVariablesCollection, instantiationService: IInstantiationService): Promise<string> {
 	const endpoint = await instantiationService.invokeFunction((accessor) => accessor.get(IEndpointProvider).getChatEndpoint(request));
 	const { messages } = await renderPromptElement(instantiationService, endpoint, CopilotCLIAgentUserMessage, {
 		chatVariables,
 		endpoint,
-		request: request.prompt,
+		request: prompt ?? request.prompt,
 		editedFileEvents: request.editedFileEvents,
 	});
 	if (messages.length === 1 && messages[0].role === ChatRole.User && messages[0].content.length === 1 && messages[0].content[0].type === ChatCompletionContentPartKind.Text) {
