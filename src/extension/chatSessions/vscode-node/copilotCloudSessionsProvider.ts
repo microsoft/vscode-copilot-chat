@@ -954,9 +954,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			message += '\n\n' + this.NON_DEFAULT_BRANCH_MESSAGE(nonDefaultBranch);
 		}
 
+		// Check if the message has been modified from the default
+		const messageModified = message !== this.BASE_MESSAGE;
+
 		if (buttons.length === 1) {
-			// When on a non-default branch, always show confirmation
-			if (!nonDefaultBranch) {
+			// When the message has been modified, always show confirmation
+			if (!messageModified) {
 				if (context.chatSessionContext?.isUntitled) {
 					return; // Don't show the confirmation
 				}
