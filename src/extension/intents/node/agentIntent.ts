@@ -38,6 +38,7 @@ import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIn
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
+import { AgentPromptCustomizations, PromptRegistry, ToolAllowlist } from '../../prompts/node/agent/promptRegistry';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
@@ -52,7 +53,7 @@ import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 
-export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
+export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest, registryToolAllowlist?: ToolAllowlist) =>
 	instaService.invokeFunction(async accessor => {
 		const toolsService = accessor.get<IToolsService>(IToolsService);
 		const testService = accessor.get<ITestProvider>(ITestProvider);
@@ -64,6 +65,14 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 		const model = await endpointProvider.getChatEndpoint(request);
 
 		const allowTools: Record<string, boolean> = {};
+
+		if (registryToolAllowlist) {
+			for (const [toolName, allowed] of Object.entries(registryToolAllowlist)) {
+				if (typeof allowed === 'boolean') {
+					allowTools[toolName] = allowed;
+				}
+			}
+		}
 
 		const learned = editToolLearningService.getPreferredEndpointEditTool(model);
 		if (learned) { // a learning-enabled (BYOK) model, we should go with what it prefers
@@ -209,6 +218,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 	protected extraPromptProps: Partial<AgentPromptProps> | undefined;
 
+	private _resolvedCustomizations: AgentPromptCustomizations | undefined;
+
 	constructor(
 		intent: IIntent,
 		location: ChatLocation,
@@ -233,7 +244,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 	}
 
 	public override getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
-		return getAgentTools(this.instantiationService, this.request);
+		return getAgentTools(this.instantiationService, this.request, this._resolvedCustomizations?.toolAllowlist);
 	}
 
 	override async buildPrompt(
@@ -241,6 +252,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart>,
 		token: vscode.CancellationToken
 	): Promise<IBuildPromptResult> {
+		this._resolvedCustomizations = await PromptRegistry.resolveAllCustomizations(this.instantiationService, this.endpoint);
 		// Add any references from the codebase invocation to the request
 		const codebase = await this._getCodebaseReferences(promptContext, token);
 
@@ -283,7 +295,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			},
 			location: this.location,
 			enableCacheBreakpoints: summarizationEnabled,
-			...this.extraPromptProps
+			...this.extraPromptProps,
+			customizations: this._resolvedCustomizations
 		};
 		try {
 			const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);

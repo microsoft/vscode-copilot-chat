@@ -8,7 +8,7 @@ import { IChatEndpoint } from '../../../../../platform/networking/common/network
 import { ToolName } from '../../../../tools/common/toolNames';
 import { InstructionMessage } from '../../base/instructionMessage';
 import { DefaultAgentPromptProps, detectToolCapabilities } from '../defaultAgentInstructions';
-import { IAgentPrompt, PromptConstructor, PromptRegistry } from '../promptRegistry';
+import { IAgentPrompt, PromptRegistry, SystemPrompt } from '../promptRegistry';
 
 class CodexStyleGpt5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -93,7 +93,7 @@ class Gpt5CodexResolver implements IAgentPrompt {
 		return endpoint.family === 'gpt-5-codex';
 	}
 
-	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		return CodexStyleGpt5CodexPrompt;
 	}
 }

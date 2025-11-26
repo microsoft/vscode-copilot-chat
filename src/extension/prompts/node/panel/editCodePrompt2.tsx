@@ -10,7 +10,8 @@ import { IExperimentationService } from '../../../../platform/telemetry/common/n
 import { isLocation, isUri } from '../../../../util/common/types';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
-import { AgentPromptProps, getEditingReminder } from '../agent/agentPrompt';
+import { AgentPromptProps } from '../agent/agentPrompt';
+import { getEditingReminder } from '../agent/defaultAgentInstructions';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
