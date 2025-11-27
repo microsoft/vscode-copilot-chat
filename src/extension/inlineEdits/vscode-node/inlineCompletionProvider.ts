@@ -304,6 +304,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 
+			const supportsRename = (document.languageId === 'typescript' || document.languageId === 'typescriptreact') && this._renameSymbolSuggestions.get();
+
 			const nesCompletionItem: NesCompletionItem = {
 				...completionItem,
 				info: suggestionInfo,
@@ -312,7 +314,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				isInlineEdit: !isInlineCompletion,
 				showInlineEditMenu: !serveAsCompletionsProvider,
 				wasShown: false,
-				supportsRename: this._renameSymbolSuggestions.get()
+				supportsRename
 			};
 
 			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
