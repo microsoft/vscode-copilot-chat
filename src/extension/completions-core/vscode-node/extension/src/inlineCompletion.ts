@@ -57,6 +57,9 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 	initFallbackContext?: Promise<void>;
 	pendingRequests: Set<Promise<unknown>> = new Set();
 
+	public onDidChange = undefined;
+	public handleListEndOfLifetime = undefined;
+
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ICompletionsTelemetryService private readonly telemetryService: ICompletionsTelemetryService,
