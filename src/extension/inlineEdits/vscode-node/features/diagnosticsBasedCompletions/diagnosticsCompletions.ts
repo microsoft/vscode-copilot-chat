@@ -19,6 +19,7 @@ import { TextEdit, TextReplacement } from '../../../../../util/vs/editor/common/
 import { Position } from '../../../../../util/vs/editor/common/core/position';
 import { Range } from '../../../../../util/vs/editor/common/core/range';
 import { OffsetRange } from '../../../../../util/vs/editor/common/core/ranges/offsetRange';
+import { Command } from '../../../../../vscodeTypes';
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
 import { IVSCodeObservableDocument } from '../../parts/vscodeWorkspace';
 import { toExternalRange, toInternalRange } from '../../utils/translations';
@@ -31,7 +32,7 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 
 	static equals(a: DiagnosticCompletionItem, b: DiagnosticCompletionItem): boolean {
 		return a.documentId.toString() === b.documentId.toString() &&
-			Range.equalsRange(toInternalRange(a.range), toInternalRange(b.range)) &&
+			(a.range !== undefined && b.range !== undefined && Range.equalsRange(toInternalRange(a.range), toInternalRange(b.range)) || a.range === undefined && b.range === undefined) &&
 			a.insertText === b.insertText &&
 			a.type === b.type &&
 			a.isInlineEdit === b.isInlineEdit &&
@@ -44,16 +45,6 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 
 	public readonly abstract providerName: string;
 
-	private _range: vscode.Range | undefined;
-	get range(): vscode.Range {
-		if (!this._range) {
-			this._range = toExternalRange(this._edit.range);
-		}
-		return this._range;
-	}
-	get insertText(): string {
-		return this._edit.text;
-	}
 	get nextEditDisplayLocation(): INextEditDisplayLocation | undefined {
 		return this._getDisplayLocation();
 	}
@@ -69,31 +60,70 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 		return this._workspaceDocument.id;
 	}
 
+	get command(): Command | undefined {
+		return this.result.command;
+	}
+
+	get insertText(): string {
+		return this.result.insertText!;
+	}
+
+	get range(): vscode.Range | undefined {
+		return this.result.range;
+	}
+
+	public readonly result: DiagnosticEditResult | DiagnosticCommandResult;
+
 	constructor(
 		public readonly type: string,
 		public readonly diagnostic: Diagnostic,
-		private readonly _edit: TextReplacement,
+		private readonly _editOrCommand: TextReplacement | Command,
 		protected readonly _workspaceDocument: IVSCodeObservableDocument,
-	) { }
-
-	toOffsetEdit() {
-		return StringReplacement.replace(this._toOffsetRange(this._edit.range), this._edit.text);
+	) {
+		this.result = this._editOrCommand instanceof TextReplacement ? new DiagnosticEditResult(this._editOrCommand, this._workspaceDocument) : new DiagnosticCommandResult(this._editOrCommand);
 	}
 
-	toTextEdit() {
-		return new TextEdit([this._edit]);
-	}
-
-	toLineEdit() {
-		return LineEdit.fromTextEdit(this.toTextEdit(), this._workspaceDocument.value.get());
-	}
-
-	getDiagnosticOffsetRange() {
+	getDiagnosticOffsetRange(): OffsetRange {
 		return this.diagnostic.range;
 	}
 
-	getRootedLineEdit() {
-		return new RootedLineEdit(this._workspaceDocument.value.get(), this.toLineEdit());
+	// TODO: rethink if this needs to be updatable
+	protected _getDisplayLocation(): INextEditDisplayLocation | undefined {
+		return undefined;
+	}
+}
+
+export class DiagnosticEditResult {
+
+	public readonly command: undefined;
+	public readonly type = 'edit';
+
+	private _range: vscode.Range | undefined;
+	get range(): vscode.Range {
+		if (!this._range) {
+			this._range = toExternalRange(this._edit.range);
+		}
+		return this._range;
+	}
+	get insertText(): string {
+		return this._edit.text;
+	}
+
+	constructor(
+		private readonly _edit: TextReplacement,
+		private readonly _workspaceDocument: IVSCodeObservableDocument,
+	) { }
+
+	getRootedLineEdit(): RootedLineEdit {
+		return new RootedLineEdit(this._workspaceDocument.value.get(), this._toLineEdit(this._edit));
+	}
+
+	toOffsetEdit(): StringReplacement {
+		return StringReplacement.replace(this._toOffsetRange(this._edit.range), this._edit.text);
+	}
+
+	toRejectionCollectorEdit(): StringReplacement {
+		return this.toOffsetEdit();
 	}
 
 	private _toOffsetRange(range: Range): OffsetRange {
@@ -101,9 +131,31 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 		return transformer.getOffsetRange(range);
 	}
 
-	// TODO: rethink if this needs to be updatable
-	protected _getDisplayLocation(): INextEditDisplayLocation | undefined {
-		return undefined;
+	private _toLineEdit(edit: TextReplacement): LineEdit {
+		return LineEdit.fromTextEdit(new TextEdit([edit]), this._workspaceDocument.value.get());
+	}
+
+	toString(): string {
+		return this._toLineEdit(this._edit).toString();
+	}
+}
+
+export class DiagnosticCommandResult {
+
+	public readonly range: undefined;
+	public readonly insertText: undefined;
+	public readonly type = 'command';
+
+	constructor(
+		public readonly command: Command
+	) { }
+
+	toString(): string {
+		return `${this.command.title}(${this.command.command})${this.command.arguments ? `: [${this.command.arguments?.join(', ')}]` : ''}`;
+	}
+
+	toRejectionCollectorEdit(): StringReplacement {
+		return new StringReplacement(new OffsetRange(0, 0), this.toString());
 	}
 }
 

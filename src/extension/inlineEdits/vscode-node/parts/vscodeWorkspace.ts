@@ -693,6 +693,7 @@ function toCodeActionData(codeAction: CodeAction, workspaceDocument: IVSCodeObse
 		codeAction.title,
 		diagnostics,
 		documentEdits,
+		codeAction.command,
 	);
 	return codeActionData;
 }

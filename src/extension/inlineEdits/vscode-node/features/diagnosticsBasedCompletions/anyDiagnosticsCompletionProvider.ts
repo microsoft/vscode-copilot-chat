@@ -90,7 +90,7 @@ export class AnyDiagnosticCompletionProvider implements IDiagnosticCompletionPro
 			}
 
 			const item = new AnyDiagnosticCompletionItem(anyCodeAction, diagnostic, displayLocationLabel, workspaceDocument);
-			log(`Created Completion Item for diagnostic: ${diagnostic.message}: ${item.toLineEdit().toString()}`);
+			log(`Created Completion Item for diagnostic: ${diagnostic.message}: ${item.toString()}`);
 			return item;
 		}
 

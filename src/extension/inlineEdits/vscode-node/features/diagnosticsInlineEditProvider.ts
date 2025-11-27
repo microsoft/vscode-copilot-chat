@@ -20,25 +20,50 @@ import { StringReplacement } from '../../../../util/vs/editor/common/core/edits/
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { INextEditProvider } from '../../node/nextEditProvider';
 import { DiagnosticsTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
-import { INextEditDisplayLocation, INextEditResult } from '../../node/nextEditResult';
+import { INextEditCommandResult, INextEditDisplayLocation, INextEditResult } from '../../node/nextEditResult';
 import { VSCodeWorkspace } from '../parts/vscodeWorkspace';
 import { DiagnosticCompletionItem } from './diagnosticsBasedCompletions/diagnosticsCompletions';
 import { DiagnosticCompletionState, DiagnosticsCompletionProcessor } from './diagnosticsCompletionProcessor';
 
+type DiagnosticEditResult = {
+	type: 'edit';
+	edit: StringReplacement;
+	displayLocation?: INextEditDisplayLocation;
+	item: DiagnosticCompletionItem;
+	showRangePreference?: ShowNextEditPreference;
+	action?: Command;
+};
+
 export class DiagnosticsNextEditResult implements INextEditResult {
+	public readonly result: DiagnosticEditResult | undefined;
 	constructor(
 		public readonly requestId: number,
-		public readonly result: {
-			edit: StringReplacement;
-			displayLocation?: INextEditDisplayLocation;
-			item: DiagnosticCompletionItem;
-			showRangePreference?: ShowNextEditPreference;
-			action?: Command;
-		} | undefined,
-	) { }
+		result: Omit<DiagnosticEditResult, 'type'> | undefined,
+	) {
+		this.result = result ? { type: 'edit', ...result } : undefined;
+	}
 }
 
-export class DiagnosticsNextEditProvider extends Disposable implements INextEditProvider<DiagnosticsNextEditResult, DiagnosticsTelemetryBuilder, boolean> {
+type DiagnosticsCommandResult = {
+	type: 'command';
+	displayLocation: INextEditDisplayLocation;
+	item: DiagnosticCompletionItem;
+	showRangePreference?: ShowNextEditPreference;
+	action?: Command;
+	command: Command;
+};
+
+export class DiagnosticsNextEditCommandResult implements INextEditCommandResult {
+	public readonly result: DiagnosticsCommandResult | undefined;
+	constructor(
+		public readonly requestId: number,
+		result: Omit<DiagnosticsCommandResult, 'type'> | undefined,
+	) {
+		this.result = result ? { type: 'command', ...result } : undefined;
+	}
+}
+
+export class DiagnosticsNextEditProvider extends Disposable implements INextEditProvider<DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult, DiagnosticsTelemetryBuilder, boolean> {
 	public readonly ID = 'DiagnosticsNextEditProvider';
 
 	private _lastRejectionTime: number = 0;
@@ -66,7 +91,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		this._diagnosticsCompletionHandler = this._register(instantiationService.createInstance(DiagnosticsCompletionProcessor, workspace, git));
 	}
 
-	async getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
+	async getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult> {
 		this._lastTriggerTime = Date.now();
 
 		if (cancellationToken.isCancellationRequested) {
@@ -82,7 +107,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		return this._createNextEditResult(diagnosticEditResult, logContext, tb);
 	}
 
-	async runUntilNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, delayStart: number, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
+	async runUntilNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, delayStart: number, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult> {
 		try {
 			await timeout(delayStart);
 			if (cancellationToken.isCancellationRequested) {
@@ -118,7 +143,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		}
 	}
 
-	private _createNextEditResult(diagnosticEditResult: DiagnosticCompletionState, logContext: InlineEditRequestLogContext, tb: DiagnosticsTelemetryBuilder): DiagnosticsNextEditResult {
+	private _createNextEditResult(diagnosticEditResult: DiagnosticCompletionState, logContext: InlineEditRequestLogContext, tb: DiagnosticsTelemetryBuilder): DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult {
 		const { item, telemetry } = diagnosticEditResult;
 
 		// Diagnostics might not have updated yet since accepting a diagnostics based NES
@@ -137,20 +162,26 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		}
 
 		tb.setType(item.type);
-		logContext.setDiagnosticsResult(item.getRootedLineEdit());
-
 		this._tracer.trace(`created next edit result`);
-
-		return new DiagnosticsNextEditResult(logContext.requestId, {
-			edit: item.toOffsetEdit(),
-			displayLocation: item.nextEditDisplayLocation,
-			item
-		});
+		if (item.result.type === 'edit') {
+			logContext.setDiagnosticsResult(item.result.getRootedLineEdit());
+			return new DiagnosticsNextEditResult(logContext.requestId, {
+				edit: item.result.toOffsetEdit(),
+				displayLocation: item.nextEditDisplayLocation,
+				item,
+			});
+		} else {
+			return new DiagnosticsNextEditCommandResult(logContext.requestId, {
+				displayLocation: item.nextEditDisplayLocation!,
+				item,
+				command: item.result.command,
+			});
+		}
 	}
 
-	handleShown(suggestion: DiagnosticsNextEditResult): void { }
+	handleShown(suggestion: DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult): void { }
 
-	handleAcceptance(docId: DocumentId, suggestion: DiagnosticsNextEditResult): void {
+	handleAcceptance(docId: DocumentId, suggestion: DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult): void {
 		const completionResult = suggestion.result;
 		if (!completionResult) {
 			throw new BugIndicatingError('Completion result is undefined when accepted');
@@ -173,7 +204,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		return item.diagnostic.equals(this._lastAcceptedItem.item.diagnostic) || DiagnosticCompletionItem.equals(this._lastAcceptedItem.item, item);
 	}
 
-	handleRejection(docId: DocumentId, suggestion: DiagnosticsNextEditResult): void {
+	handleRejection(docId: DocumentId, suggestion: DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult): void {
 		this._lastRejectionTime = Date.now();
 
 		const completionResult = suggestion.result;
@@ -184,7 +215,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		this._diagnosticsCompletionHandler.handleEndOfLifetime(completionResult.item, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Rejected });
 	}
 
-	handleIgnored(docId: DocumentId, suggestion: DiagnosticsNextEditResult, supersededBy: INextEditResult | undefined): void {
+	handleIgnored(docId: DocumentId, suggestion: DiagnosticsNextEditResult | DiagnosticsNextEditCommandResult, supersededBy: INextEditResult | INextEditCommandResult | undefined): void {
 		const completionResult = suggestion.result;
 		if (!completionResult) {
 			throw new BugIndicatingError('Completion result is undefined when accepted');
