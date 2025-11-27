@@ -148,8 +148,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		telemetry = new NullTelemetryService();
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
 		workspaceService = new NullWorkspaceService();
+		const logger = accessor.get(ILogService);
 		const vscodeExtensionContext = accessor.get(IVSCodeExtensionContext);
-		const copilotSDK = new CopilotCLISDK(vscodeExtensionContext, accessor.get(IEnvService), accessor.get(ILogService), accessor.get(IInstantiationService), accessor.get(IAuthenticationService), workspaceService);
+		const copilotSDK = new CopilotCLISDK(vscodeExtensionContext, accessor.get(IEnvService), logger, accessor.get(IInstantiationService), accessor.get(IAuthenticationService), workspaceService);
 		const logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
 		const configurationService = accessor.get(IConfigurationService);
@@ -186,7 +187,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			tools,
 			instantiationService,
 			configurationService,
-			copilotSDK
+			copilotSDK,
+			logger
 		);
 	});
 

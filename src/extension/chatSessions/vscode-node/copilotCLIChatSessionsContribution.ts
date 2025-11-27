@@ -11,6 +11,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
+import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -409,6 +410,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
+		@ILogService private readonly logService: ILogService,
 	) {
 		super();
 	}
@@ -729,7 +731,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		isolationEnabled: boolean,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
-	): Promise<vscode.ChatResult | void> {
+	): Promise<vscode.ChatResult> {
 		let history: string | undefined;
 
 		if (this.hasHistoryToSummarize(context.history)) {
@@ -779,6 +781,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			});
 
 		stream.markdown(vscode.l10n.t('{0} agent has begun working on your request. Follow its progress in the Agents View.', 'Background Agent'));
+
+		return {};
 	}
 
 	private hasHistoryToSummarize(history: readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[]): boolean {
