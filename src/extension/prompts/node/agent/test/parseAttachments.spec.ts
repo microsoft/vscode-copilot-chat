@@ -19,7 +19,6 @@ import { CancellationToken } from '../../../../../util/vs/base/common/cancellati
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../../../util/vs/base/common/network';
 import { URI } from '../../../../../util/vs/base/common/uri';
-import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { Location } from '../../../../../util/vs/workbench/api/common/extHostTypes/location';
 import { Range } from '../../../../../util/vs/workbench/api/common/extHostTypes/range';
 import { extractChatPromptReferences } from '../../../../agents/copilotcli/common/copilotCLIPrompt';
@@ -31,7 +30,6 @@ import { TestChatRequest } from '../../../../test/node/testHelpers';
 suite('CopilotCLI Generate & parse prompts', () => {
 	const disposables = new DisposableStore();
 	let fileSystem: MockFileSystemService;
-	let instaService: IInstantiationService;
 	let workspaceService: TestWorkspaceService;
 	let resolver: CopilotCLIPromptResolver;
 	beforeEach(() => {
@@ -39,7 +37,6 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		const accessor = disposables.add(services.createTestingAccessor());
 		fileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
 		workspaceService = accessor.get(IWorkspaceService) as TestWorkspaceService;
-		instaService = accessor.get(IInstantiationService);
 		const logService = accessor.get(ILogService);
 		resolver = new CopilotCLIPromptResolver(logService, fileSystem, services.seal(), accessor.get(IIgnoreService));
 	});
