@@ -3,7 +3,7 @@
 exports[`CopilotCLI Generate & parse prompts > Folders are attached with just references 1`] = `
 "list files in #file:folder
  <reminder>
-IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task
 </reminder>
 <attachments>
 <attachment id="file:folder" folderPath="/workspace/folder" />
@@ -48,7 +48,7 @@ exports[`CopilotCLI Generate & parse prompts > Folders are attached with just re
 exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across same and different files 1`] = `
 "Fix these errors
  <reminder>
-IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task
 </reminder>
 <attachments>
 <error path="/workspace/file.py" line=2 code="E001" severity="warning">
@@ -186,7 +186,7 @@ exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across
 exports[`CopilotCLI Generate & parse prompts > files are attached as just references without content 1`] = `
 "explain contents of #file:file.ts and other files
  <reminder>
-IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task
 </reminder>
 <attachments>
 <attachment id="file:file.ts" filePath="/workspace/file.ts" />
@@ -247,7 +247,7 @@ exports[`CopilotCLI Generate & parse prompts > files are attached as just refere
 exports[`CopilotCLI Generate & parse prompts > includes contents of regular prompt files 1`] = `
 "Process these files
  <reminder>
-IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+Follow instructions in #prompt:doit.prompt.md
 </reminder>
 <attachments>
 <attachment id="prompt:doit.prompt.md">
@@ -277,12 +277,13 @@ exports[`CopilotCLI Generate & parse prompts > includes contents of regular prom
   "diagnostics": [],
   "references": [
     {
-      "id": "vscode.prompt.file__prompt:doit.prompt.md",
+      "id": "vscode.prompt.file__file:///doit.prompt.md",
       "modelDescription": "Prompt instruction file",
       "name": "prompt:doit.prompt.md",
       "value": {
         "$mid": 1,
-        "path": "/",
+        "external": "file:///doit.prompt.md",
+        "path": "/doit.prompt.md",
         "scheme": "file",
       },
     },
@@ -293,7 +294,7 @@ exports[`CopilotCLI Generate & parse prompts > includes contents of regular prom
 exports[`CopilotCLI Generate & parse prompts > includes contents of untitled file 1`] = `
 "Process these files
  <reminder>
-IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task
 </reminder>
 <attachments>
 <attachment id="file:untitled-1">
@@ -334,11 +335,11 @@ exports[`CopilotCLI Generate & parse prompts > includes contents of untitled fil
 exports[`CopilotCLI Generate & parse prompts > includes contents of untitled prompt files 1`] = `
 "Process these files
  <reminder>
-IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+Follow instructions in #prompt:Untitled-2
 </reminder>
 <attachments>
 <attachment id="prompt:Untitled-2">
-// filepath: untitled:/untitled-1
+// filepath: untitled:untitled-1
 This is a prompt file
 </attachment>
 <attachment id="regular.ts" filePath="/workspace/regular.ts" />
@@ -366,13 +367,14 @@ exports[`CopilotCLI Generate & parse prompts > includes contents of untitled pro
       },
     },
     {
-      "id": "vscode.prompt.file__prompt:Untitled-2",
+      "id": "vscode.prompt.file__untitled:untitled-1",
       "modelDescription": "Prompt instruction file",
       "name": "prompt:Untitled-2",
       "value": {
         "$mid": 1,
-        "path": "/u",
-        "scheme": "file",
+        "external": "untitled:untitled-1",
+        "path": "untitled-1",
+        "scheme": "untitled",
       },
     },
   ],
@@ -393,7 +395,7 @@ exports[`CopilotCLI Generate & parse prompts > just the prompt without anything 
 exports[`CopilotCLI Generate & parse prompts > parses locations including files with spaces 1`] = `
 "base
  <reminder>
-IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task
 </reminder>
 <attachments>
 <attachment id="file:file.ts">
@@ -504,7 +506,7 @@ exports[`CopilotCLI Generate & parse prompts > parses locations including files 
 exports[`CopilotCLI Generate & parse prompts > parses single error diagnostic 1`] = `
 "Fix this error
  <reminder>
-IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task
 </reminder>
 <attachments>
 <error path="/workspace/file.py" line=13 code="E001" severity="error">
@@ -588,7 +590,7 @@ exports[`CopilotCLI Generate & parse prompts > returns overridden prompt instead
 exports[`CopilotCLI Generate & parse prompts > uses attachment id attribute for name/id 1`] = `
 "explain #sym:add
  <reminder>
-IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task
 </reminder>
 <attachments>
 <attachment id="sym:add">

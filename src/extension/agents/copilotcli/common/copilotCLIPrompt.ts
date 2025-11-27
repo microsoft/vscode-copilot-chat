@@ -5,6 +5,7 @@
 
 import type { ChatPromptReference } from 'vscode';
 import { createFilepathRegexp } from '../../../../util/common/markdown';
+import { Schemas } from '../../../../util/vs/base/common/network';
 import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatReferenceDiagnostic, Location, Range } from '../../../../vscodeTypes';
@@ -110,7 +111,7 @@ function extractResources(prompt: string): ChatPromptReference[] {
 		if (!filePath) { continue; }
 		const startLine = linesMatch ? parseInt(linesMatch[1], 10) : undefined;
 		const endLine = linesMatch ? parseInt(linesMatch[2], 10) : undefined;
-		const uri = isUntitledFile ? URI.from({ scheme: 'untitled', path: filePath.substring('untitled:'.length) }) : URI.file(filePath);
+		const uri = isUntitledFile && filePath.startsWith('untitled:') ? URI.from({ scheme: Schemas.untitled, path: filePath.substring('untitled:'.length) }) : URI.file(filePath);
 		const location = (typeof startLine === 'undefined' || typeof endLine === 'undefined' || isNaN(startLine) || isNaN(endLine)) ? undefined : new Location(uri, new Range(startLine - 1, 0, endLine - 1, 0));
 
 		const locName = providedId ?? (location ? JSON.stringify(location) : uri.toString());
@@ -196,14 +197,14 @@ function extractPromptReferences(prompt: string): ChatPromptReference[] {
 		let filePath: string | undefined;
 
 		// Look for // filepath: or /// filepath: pattern
-		const filepathMatch = content.match(/^\s*\/\/+\s*filepath:\s*(.+?)/im);
+		const filepathMatch = content.match(/^\s*\/\/+\s*filepath:\s*(.+?)(?:\r?\n|$)/im);
 		if (filepathMatch) {
 			filePath = filepathMatch[1].trim();
 		}
 
 		if (!filePath) {
 			// Fallback: look for # filepath: pattern
-			const hashMatch = content.match(/^\s*#\s*filepath:\s*(.+?)/im);
+			const hashMatch = content.match(/^\s*#\s*filepath:\s*(.+?)(?:\r?\n|$)/im);
 			if (hashMatch) {
 				filePath = hashMatch[1].trim();
 			}
@@ -222,7 +223,7 @@ function extractPromptReferences(prompt: string): ChatPromptReference[] {
 		}
 
 		// Create the special ID with prefix
-		const id = `${PromptFileIdPrefix}__${idAttr}`;
+		const id = `${PromptFileIdPrefix}__${uri.toString()}`;
 		const name = idAttr;
 
 		references.push({

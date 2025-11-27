@@ -306,7 +306,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		const untitledPromptFile = {
 			id: 'vscode.prompt.file__untitled:untitled-1',
 			name: 'prompt:Untitled-2',
-			value: URI.from({ scheme: Schemas.untitled, path: '/untitled-1' })
+			value: URI.from({ scheme: Schemas.untitled, path: 'untitled-1' })
 		};
 		const regularFileRef = {
 			id: 'regular-file',

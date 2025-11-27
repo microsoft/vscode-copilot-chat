@@ -64,6 +64,15 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			: '';
 
 		const hasCustomContext = this.props.chatVariables.hasVariables() || (this.props.editedFileEvents?.length ?? 0) > 0;
+		const promptVariable = resourceVariables.find(v => isPromptFile(v));
+		// If we have a prompt file, we want to direct the model to follow instructions in that file.
+		// Otherwise we add a generic reminder to only use the context if its relevant.
+		// Also today we have a generic prompt that reads `Implement this.` and we have attachments.
+		// Thats not sufficient to direct the model to use prompt instructions.
+		// In regular chat we have `Follow instructions in #<file>` & thats very effective as the prompt is very sepcfici about what to do. `Implement this.` is not.
+		const instructions = promptVariable ?
+			`Follow instructions in #${promptVariable.reference.name}` :
+			'IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task';
 		return (
 			<UserMessage>
 				{/**
@@ -78,7 +87,7 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<>
 							<br /> {/** Add an empty line after user prompt to ensure `<reminder>` tag is on a new line */}
 							<Tag name='reminder'>
-								IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+								{instructions}
 							</Tag>
 						</>
 					)
