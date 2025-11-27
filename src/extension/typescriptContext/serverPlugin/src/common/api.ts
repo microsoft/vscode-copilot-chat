@@ -12,7 +12,7 @@ import { ContextProvider, ContextRunnableCollector, RequestContext, type Compute
 import { FunctionContextProvider } from './functionContextProvider';
 import { AccessorProvider, ConstructorContextProvider, MethodContextProvider } from './methodContextProvider';
 import { ModuleContextProvider } from './moduleContextProvider';
-import { type FilePath } from './protocol';
+import { type FilePath, type PrepareNesRenameResponse } from './protocol';
 import { SourceFileContextProvider } from './sourceFileContextProvider';
 import { RecoverableError } from './types';
 import tss from './typescripts';
@@ -143,4 +143,24 @@ export function computeContext(result: ContextResult, session: ComputeContextSes
 	const tokenInfo = tss.getRelevantTokens(sourceFile, position);
 	const providers = new ContextProviders(tokenInfo);
 	providers.execute(result, session, languageService, token);
+}
+
+export function prepareNesRename(languageService: tt.LanguageService, document: FilePath, position: number, newName: string, token: tt.CancellationToken): PrepareNesRenameResponse.OK {
+	const renameInfo = languageService.getRenameInfo(document, position, {});
+	if (!renameInfo.canRename) {
+		return { canRename: false, reason: renameInfo.localizedErrorMessage };
+	}
+	const program = languageService.getProgram();
+	if (program === undefined) {
+		return { canRename: false, reason: 'No program found on language service' };
+	}
+	const sourceFile = program.getSourceFile(document);
+	if (sourceFile === undefined) {
+		return { canRename: false, reason: 'No source file found for document' };
+	}
+	const tokenInfo = tss.getRelevantTokens(sourceFile, position);
+	if (tokenInfo.token === undefined) {
+		return { canRename: false, reason: 'No token found at position' };
+	}
+	return { canRename: false };
 }

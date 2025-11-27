@@ -47,6 +47,7 @@ import { SurveyCommandContribution } from '../../survey/vscode-node/surveyComman
 import { SetupTestsContribution } from '../../testing/vscode/setupTestContributions';
 import { ToolsContribution } from '../../tools/vscode-node/tools';
 import { InlineCompletionContribution } from '../../typescriptContext/vscode-node/languageContextService';
+import { NesRenameContribution } from '../../typescriptContext/vscode-node/nesRenameService';
 import * as workspaceChunkSearchContribution from '../../workspaceChunkSearch/node/workspaceChunkSearch.contribution';
 import * as workspaceIndexingContribution from '../../workspaceChunkSearch/vscode-node/workspaceChunkSearch.contribution';
 import { WorkspaceRecorderFeature } from '../../workspaceRecorder/vscode-node/workspaceRecorderFeature';
@@ -79,6 +80,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(SurveyCommandContribution),
 	asContributionFactory(FeedbackCommandContribution),
 	asContributionFactory(InlineCompletionContribution),
+	asContributionFactory(NesRenameContribution),
 	asContributionFactory(SearchPanelCommands),
 	asContributionFactory(ChatQuotaContribution),
 	asContributionFactory(NotebookFollowCommands),

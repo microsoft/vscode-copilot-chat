@@ -465,3 +465,45 @@ export namespace PingResponse {
 		stack?: string;
 	};
 }
+
+export type PrepareNesRenameResult = {
+	canRename: true;
+	oldName: string;
+} | {
+	canRename: false;
+	reason?: string;
+}
+
+export interface PrepareNesRenameRequest extends tt.server.protocol.Request {
+	arguments?: PrepareNesRenameRequestArgs;
+}
+
+export interface PrepareNesRenameRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
+	newName: string;
+}
+
+export namespace PrepareNesRenameResponse {
+
+	export type OK = PrepareNesRenameResult;
+
+	export type Failed = {
+		error: ErrorCode;
+		message: string;
+		stack?: string;
+	};
+
+	export function isCancelled(response: PrepareNesRenameResponse): boolean {
+		return (response.type === 'cancelled');
+	}
+
+	export function isOk(response: PrepareNesRenameResponse): response is tt.server.protocol.Response & { body: OK } {
+		return response.type === 'response' && (response.body as OK).canRename !== undefined;
+	}
+	export function isError(response: PrepareNesRenameResponse): response is tt.server.protocol.Response & { body: Failed } {
+		return response.type === 'response' && (response.body as Failed).error !== undefined;
+	}
+}
+
+export type PrepareNesRenameResponse = (tt.server.protocol.Response & {
+	body: PrepareNesRenameResponse.OK | PrepareNesRenameResponse.Failed;
+}) | { type: 'cancelled' };
