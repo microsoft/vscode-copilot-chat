@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
@@ -18,6 +17,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { constructTaggedFile, getUserPrompt, PromptPieces } from '../common/promptCrafting';
 import { constructMessages } from './xtabUtils';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 
 export class XtabNextCursorPredictor {
 
