@@ -232,9 +232,24 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				return emptyList;
 			}
 
+			if (suggestionInfo.source === 'provider' && suggestionInfo.suggestion.result?.jumpToPosition !== undefined) {
+				tracer.trace('next edit suggestion only has jumpToPosition');
+				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
+				const positionToJumpOneBased = suggestionInfo.suggestion.result.jumpToPosition;
+				const jumpToPosition = new Position(positionToJumpOneBased.lineNumber - 1, positionToJumpOneBased.column - 1);
+				const jumpToPositionCompletionItem: NesCompletionItem = {
+					insertText: undefined as unknown as string,
+					info: suggestionInfo,
+					wasShown: false,
+					telemetryBuilder,
+					jumpToPosition,
+				};
+				return new NesCompletionList(context.requestUuid, jumpToPositionCompletionItem, [], telemetryBuilder);
+			}
+
 			// Return and send telemetry if there is no result
 			const result = suggestionInfo.suggestion.result;
-			if (!result) {
+			if (!result || !result.edit) {
 				tracer.trace('no next edit suggestion');
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				return emptyList;
@@ -366,6 +381,10 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
+		if (!result.edit) {
+			return undefined;
+		}
+
 		// Only show edit when the cursor is max 4 lines away from the edit
 		const showRange = result.showRangePreference === ShowNextEditPreference.AroundEdit
 			? new Range(
@@ -472,7 +491,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	// TODO: Support tracking Diagnostics NES
 	private async _trackSurvivalRate(item: LlmCompletionInfo) {
 		const result = item.suggestion.result;
-		if (!result) {
+		if (!result || !result.edit) {
 			return;
 		}
 

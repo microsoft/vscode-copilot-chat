@@ -265,9 +265,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			if (error.nextCursorPosition === undefined) {
 				logContext.markAsNoSuggestions();
 			} else {
-				tracer.trace('no suggestions but has next cursor position -- NOT HANDLED YET');
-				// FIXME@ulugbekna: implement this when vscode core adds support for this
-				// return new NextEditResult(logContext.requestId, req, { edit, displayLocation, documentBeforeEdits: documentAtInvocationTime, action: commandJumpToEditRange });
+				telemetryBuilder.setStatus('emptyEditsButHasNextCursorPosition');
+				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime });
 			}
 		}
 
@@ -747,7 +746,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		assertType(suggestion.result, '@ulugbekna: undefined edit cannot be rejected?');
 
 		const shownDuration = Date.now() - this._lastShownTime;
-		if (shownDuration > 1000 && suggestion.result) {
+		if (shownDuration > 1000 && suggestion.result.edit) {
 			// we can argue that the user had the time to review this
 			// so it wasn't an accidental rejection
 			this._rejectionCollector.reject(docId, suggestion.result.edit);
@@ -762,7 +761,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
 
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
-		if (suggestion.result === undefined) {
+		if (suggestion.result === undefined || suggestion.result.edit === undefined) {
 			return;
 		}
 		this._snippyService.handlePostInsertion(docId.toUri(), suggestion.result.documentBeforeEdits, suggestion.result.edit);

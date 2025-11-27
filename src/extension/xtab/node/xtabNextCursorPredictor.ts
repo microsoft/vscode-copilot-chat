@@ -8,6 +8,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { fromUnknown } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { TokenizerType } from '../../../util/common/tokenizer';
@@ -17,7 +18,6 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { constructTaggedFile, getUserPrompt, PromptPieces } from '../common/promptCrafting';
 import { constructMessages } from './xtabUtils';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 
 export class XtabNextCursorPredictor {
 
@@ -40,12 +40,12 @@ export class XtabNextCursorPredictor {
 		const originalNextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionEnabled, this.expService);
 
 		switch (originalNextCursorLinePrediction) {
-			case undefined:
-				return undefined;
-
-			// remove support for enum members other than OnlyWithEdit
 			case NextCursorLinePrediction.OnlyWithEdit:
 			case NextCursorLinePrediction.Jump:
+			case undefined:
+				return originalNextCursorLinePrediction;
+
+			// remove support for LabelOnlyWithEdit
 			case NextCursorLinePrediction.LabelOnlyWithEdit:
 				return NextCursorLinePrediction.OnlyWithEdit;
 

@@ -304,7 +304,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		try {
 			const internalResult = await this._nextEditProvider.getNextEdit(docId, context, logContext, cancellationToken, telemetryBuilder.nesBuilder);
 			const result: NESResult = {
-				result: internalResult.result ? {
+				result: internalResult.result?.edit ? {
 					newText: internalResult.result.edit.newText,
 					range: internalResult.result.edit.replaceRange,
 				} : undefined,

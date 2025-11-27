@@ -189,9 +189,9 @@ export class InlineEditTester {
 		const targetDocId = nextEditResult.result?.targetDocumentId;
 		const targetDocument = targetDocId !== undefined ? assertReturnsDefined(historyContext.getDocument(targetDocId)) : activeDocument;
 
-		const aiRootedEdit = new RootedEdit(targetDocument.lastEdit.getEditedState(), nextEditResult.result?.edit.toEdit() ?? StringEdit.empty);
+		const aiRootedEdit = new RootedEdit(targetDocument.lastEdit.getEditedState(), nextEditResult.result?.edit?.toEdit() ?? StringEdit.empty);
 
-		if (!nextEditResult.result) {
+		if (!nextEditResult.result || !nextEditResult.result.edit) {
 			return {
 				aiEditDocumentUri: targetDocument.docId,
 				aiEditDocumentValue: aiRootedEdit.base
