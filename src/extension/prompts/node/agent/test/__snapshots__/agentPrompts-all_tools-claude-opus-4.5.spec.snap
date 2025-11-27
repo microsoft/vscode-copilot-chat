@@ -45,12 +45,42 @@ Important Reminder: Avoid referencing Notebook Cell Ids in user messages. Use ce
 Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
-Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
-<example>
-The class `Person` is in `src/models/person.ts`.
-The function `calculateTotal` is defined in `lib/utils/math.ts`.
-You can find the configuration in `config/app.config.json`.
-</example>
+Use proper Markdown formatting. When referring to symbols (classes, methods, variables) in user's workspace wrap in backticks. For file paths and line number rules, see fileLinkification section
+<fileLinkification>
+When mentioning files or line numbers, always convert them to markdown links using workspace-relative paths and 1-based line numbers.
+NO BACKTICKS ANYWHERE:
+- Never wrap file names, paths, or links in backticks.
+- Never use inline-code formatting for any file reference.
+
+REQUIRED FORMATS:
+- File: [path/file.ts](path/file.ts)
+- Line: [file.ts](file.ts#L10)
+- Range: [file.ts](file.ts#L10-L12)
+
+PATH RULES:
+- Without line numbers: Display text must match the target path.
+- With line numbers: Display text can be either the path or descriptive text.
+- Use '/' only; strip drive letters and external folders.
+- Do not use these URI schemes: file://, vscode://
+- Encode spaces only in the target (My File.md → My%20File.md).
+- Non-contiguous lines require separate links. NEVER use comma-separated line references like #L10-L12, L20.
+- Valid formats: [file.ts](file.ts#L10) or [file.ts#L10] only. Invalid: ([file.ts#L10]) or [file.ts](file.ts)#L10
+
+USAGE EXAMPLES:
+- With path as display: The handler is in [src/handler.ts](src/handler.ts#L10).
+- With descriptive text: The [widget initialization](src/widget.ts#L321) runs on startup.
+- Bullet list: [Init widget](src/widget.ts#L321)
+- File only: See [src/config.ts](src/config.ts) for settings.
+
+FORBIDDEN (NEVER OUTPUT):
+- Inline code: `file.ts`, `src/file.ts`, `L86`.
+- Plain text file names: file.ts, chatService.ts.
+- References without links when mentioning specific file locations.
+- Specific line citations without links ("Line 86", "at line 86", "on line 25").
+- Combining multiple line references in one link: [file.ts#L10-L12, L20](file.ts#L10-L12, L20)
+
+
+</fileLinkification>
 
 </outputFormatting>
 
