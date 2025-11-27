@@ -264,10 +264,14 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		if (error instanceof NoNextEditReason.FetchFailure || error instanceof NoNextEditReason.Unexpected) {
 			tracer.throws('has throwing error', error.error);
 			throw error.error;
-		} else if (error instanceof NoNextEditReason.NoSuggestions && error.nextCursorPosition !== undefined) {
-			tracer.trace('no suggestions but has next cursor position -- NOT HANDLED YET');
-			// FIXME@ulugbekna: implement this when vscode core adds support for this
-			// return new NextEditResult(logContext.requestId, req, { edit, displayLocation, documentBeforeEdits: documentAtInvocationTime, action: commandJumpToEditRange });
+		} else if (error instanceof NoNextEditReason.NoSuggestions) {
+			if (error.nextCursorPosition === undefined) {
+				logContext.markAsNoSuggestions();
+			} else {
+				tracer.trace('no suggestions but has next cursor position -- NOT HANDLED YET');
+				// FIXME@ulugbekna: implement this when vscode core adds support for this
+				// return new NextEditResult(logContext.requestId, req, { edit, displayLocation, documentBeforeEdits: documentAtInvocationTime, action: commandJumpToEditRange });
+			}
 		}
 
 		const emptyResult = new NextEditResult(logContext.requestId, req, undefined);
