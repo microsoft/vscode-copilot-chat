@@ -25,24 +25,21 @@ exports[`CopilotCLI Generate & parse prompts > Folders are attached with just re
 `;
 
 exports[`CopilotCLI Generate & parse prompts > Folders are attached with just references 3`] = `
-{
-  "diagnostics": [],
-  "references": [
-    {
-      "id": "file:folder",
-      "name": "file:folder",
-      "range": [
-        14,
-        25,
-      ],
-      "value": {
-        "$mid": 1,
-        "path": "/workspace/folder/",
-        "scheme": "file",
-      },
+[
+  {
+    "id": "file:folder",
+    "name": "file:folder",
+    "range": [
+      14,
+      25,
+    ],
+    "value": {
+      "$mid": 1,
+      "path": "/workspace/folder/",
+      "scheme": "file",
     },
-  ],
-}
+  },
+]
 `;
 
 exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across same and different files 1`] = `
@@ -77,167 +74,183 @@ Fix these errors (See <attachments> above for file contents. You may not need to
 exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across same and different files 2`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across same and different files 3`] = `
-{
-  "diagnostics": [
-    {
-      "id": "file:///workspace/file.py:warning:2:1",
-      "name": "Msg1",
-      "range": undefined,
-      "value": ChatReferenceDiagnostic {
-        "diagnostics": [
+[
+  {
+    "id": "file:///workspace/file.py:warning:2:1",
+    "name": "Msg1",
+    "range": undefined,
+    "value": ChatReferenceDiagnostic {
+      "diagnostics": [
+        [
+          {
+            "$mid": 1,
+            "external": "file:///workspace/file.py",
+            "path": "/workspace/file.py",
+            "scheme": "file",
+          },
           [
             {
-              "$mid": 1,
-              "external": "file:///workspace/file.py",
-              "path": "/workspace/file.py",
-              "scheme": "file",
+              "code": "E001",
+              "message": "Msg1",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 1,
+                },
+                {
+                  "character": 0,
+                  "line": 1,
+                },
+              ],
+              "severity": "Warning",
+              "source": undefined,
             },
-            [
-              {
-                "code": "E001",
-                "message": "Msg1",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 1,
-                  },
-                  {
-                    "character": 0,
-                    "line": 1,
-                  },
-                ],
-                "severity": "Warning",
-                "source": undefined,
-              },
-              {
-                "code": "E004",
-                "message": "MsgD",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 1,
-                  },
-                  {
-                    "character": 0,
-                    "line": 1,
-                  },
-                ],
-                "severity": "Hint",
-                "source": undefined,
-              },
-            ],
           ],
         ],
-      },
+      ],
     },
-    {
-      "id": "file:///workspace/file.py:error:5:1",
-      "name": "MsgB",
-      "range": undefined,
-      "value": ChatReferenceDiagnostic {
-        "diagnostics": [
+  },
+  {
+    "id": "file:///workspace/file.py:error:5:1",
+    "name": "MsgB",
+    "range": undefined,
+    "value": ChatReferenceDiagnostic {
+      "diagnostics": [
+        [
+          {
+            "$mid": 1,
+            "external": "file:///workspace/file.py",
+            "path": "/workspace/file.py",
+            "scheme": "file",
+          },
           [
             {
-              "$mid": 1,
-              "external": "file:///workspace/file.py",
-              "path": "/workspace/file.py",
-              "scheme": "file",
+              "code": "E002",
+              "message": "MsgB",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 4,
+                },
+                {
+                  "character": 0,
+                  "line": 4,
+                },
+              ],
+              "severity": "Error",
+              "source": undefined,
             },
-            [
-              {
-                "code": "E002",
-                "message": "MsgB",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 4,
-                  },
-                  {
-                    "character": 0,
-                    "line": 4,
-                  },
-                ],
-                "severity": "Error",
-                "source": undefined,
-              },
-            ],
           ],
         ],
-      },
+      ],
     },
-    {
-      "id": "file:///workspace/file.py:info:7:1",
-      "name": "MsgC",
-      "range": undefined,
-      "value": ChatReferenceDiagnostic {
-        "diagnostics": [
+  },
+  {
+    "id": "file:///workspace/file.py:info:7:1",
+    "name": "MsgC",
+    "range": undefined,
+    "value": ChatReferenceDiagnostic {
+      "diagnostics": [
+        [
+          {
+            "$mid": 1,
+            "external": "file:///workspace/file.py",
+            "path": "/workspace/file.py",
+            "scheme": "file",
+          },
           [
             {
-              "$mid": 1,
-              "external": "file:///workspace/file.py",
-              "path": "/workspace/file.py",
-              "scheme": "file",
+              "code": "E003",
+              "message": "MsgC",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 6,
+                },
+                {
+                  "character": 0,
+                  "line": 6,
+                },
+              ],
+              "severity": "Information",
+              "source": undefined,
             },
-            [
-              {
-                "code": "E003",
-                "message": "MsgC",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 6,
-                  },
-                  {
-                    "character": 0,
-                    "line": 6,
-                  },
-                ],
-                "severity": "Information",
-                "source": undefined,
-              },
-            ],
           ],
         ],
-      },
+      ],
     },
-    {
-      "id": "file:///workspace/sample.py:warning:21:1",
-      "name": "Msg2",
-      "range": undefined,
-      "value": ChatReferenceDiagnostic {
-        "diagnostics": [
+  },
+  {
+    "id": "file:///workspace/file.py:hint:2:1",
+    "name": "MsgD",
+    "range": undefined,
+    "value": ChatReferenceDiagnostic {
+      "diagnostics": [
+        [
+          {
+            "$mid": 1,
+            "external": "file:///workspace/file.py",
+            "path": "/workspace/file.py",
+            "scheme": "file",
+          },
           [
             {
-              "$mid": 1,
-              "external": "file:///workspace/sample.py",
-              "path": "/workspace/sample.py",
-              "scheme": "file",
+              "code": "E004",
+              "message": "MsgD",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 1,
+                },
+                {
+                  "character": 0,
+                  "line": 1,
+                },
+              ],
+              "severity": "Hint",
+              "source": undefined,
             },
-            [
-              {
-                "code": "W001",
-                "message": "Msg2",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 20,
-                  },
-                  {
-                    "character": 0,
-                    "line": 20,
-                  },
-                ],
-                "severity": "Warning",
-                "source": undefined,
-              },
-            ],
           ],
         ],
-      },
+      ],
     },
-  ],
-  "references": [],
-}
+  },
+  {
+    "id": "file:///workspace/sample.py:warning:21:1",
+    "name": "Msg2",
+    "range": undefined,
+    "value": ChatReferenceDiagnostic {
+      "diagnostics": [
+        [
+          {
+            "$mid": 1,
+            "external": "file:///workspace/sample.py",
+            "path": "/workspace/sample.py",
+            "scheme": "file",
+          },
+          [
+            {
+              "code": "W001",
+              "message": "Msg2",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 20,
+                },
+                {
+                  "character": 0,
+                  "line": 20,
+                },
+              ],
+              "severity": "Warning",
+              "source": undefined,
+            },
+          ],
+        ],
+      ],
+    },
+  },
+]
 `;
 
 exports[`CopilotCLI Generate & parse prompts > files are attached as just references without content 1`] = `
@@ -271,34 +284,31 @@ exports[`CopilotCLI Generate & parse prompts > files are attached as just refere
 `;
 
 exports[`CopilotCLI Generate & parse prompts > files are attached as just references without content 3`] = `
-{
-  "diagnostics": [],
-  "references": [
-    {
-      "id": "file:file.ts",
-      "name": "file:file.ts",
-      "range": [
-        20,
-        32,
-      ],
-      "value": {
-        "$mid": 1,
-        "path": "/workspace/file.ts",
-        "scheme": "file",
-      },
+[
+  {
+    "id": "file:file.ts",
+    "name": "file:file.ts",
+    "range": [
+      20,
+      32,
+    ],
+    "value": {
+      "$mid": 1,
+      "path": "/workspace/file.ts",
+      "scheme": "file",
     },
-    {
-      "id": "sample.py",
-      "name": "sample.py",
-      "range": undefined,
-      "value": {
-        "$mid": 1,
-        "path": "/workspace/sample.py",
-        "scheme": "file",
-      },
+  },
+  {
+    "id": "sample.py",
+    "name": "sample.py",
+    "range": undefined,
+    "value": {
+      "$mid": 1,
+      "path": "/workspace/sample.py",
+      "scheme": "file",
     },
-  ],
-}
+  },
+]
 `;
 
 exports[`CopilotCLI Generate & parse prompts > groups diagnostics based on same range 1`] = `
@@ -330,113 +340,110 @@ Fix these errors (See <attachments> above for file contents. You may not need to
 exports[`CopilotCLI Generate & parse prompts > groups diagnostics based on same range 2`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > groups diagnostics based on same range 3`] = `
-{
-  "diagnostics": [
-    {
-      "id": "file:///workspace/file.py:warning:2:1",
-      "name": "Msg1",
-      "range": undefined,
-      "value": ChatReferenceDiagnostic {
-        "diagnostics": [
+[
+  {
+    "id": "file:///workspace/file.py:warning:2:1",
+    "name": "Msg1",
+    "range": undefined,
+    "value": ChatReferenceDiagnostic {
+      "diagnostics": [
+        [
+          {
+            "$mid": 1,
+            "external": "file:///workspace/file.py",
+            "path": "/workspace/file.py",
+            "scheme": "file",
+          },
           [
             {
-              "$mid": 1,
-              "external": "file:///workspace/file.py",
-              "path": "/workspace/file.py",
-              "scheme": "file",
+              "code": "E001",
+              "message": "Msg1",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 1,
+                },
+                {
+                  "character": 0,
+                  "line": 1,
+                },
+              ],
+              "severity": "Warning",
+              "source": undefined,
             },
-            [
-              {
-                "code": "E001",
-                "message": "Msg1",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 1,
-                  },
-                  {
-                    "character": 0,
-                    "line": 1,
-                  },
-                ],
-                "severity": "Warning",
-                "source": undefined,
-              },
-              {
-                "code": "E002",
-                "message": "MsgB",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 1,
-                  },
-                  {
-                    "character": 0,
-                    "line": 1,
-                  },
-                ],
-                "severity": "Error",
-                "source": undefined,
-              },
-            ],
+            {
+              "code": "E002",
+              "message": "MsgB",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 1,
+                },
+                {
+                  "character": 0,
+                  "line": 1,
+                },
+              ],
+              "severity": "Error",
+              "source": undefined,
+            },
           ],
         ],
-      },
+      ],
     },
-    {
-      "id": "file:///workspace/file.py:info:7:1",
-      "name": "MsgC",
-      "range": undefined,
-      "value": ChatReferenceDiagnostic {
-        "diagnostics": [
+  },
+  {
+    "id": "file:///workspace/file.py:info:7:1",
+    "name": "MsgC",
+    "range": undefined,
+    "value": ChatReferenceDiagnostic {
+      "diagnostics": [
+        [
+          {
+            "$mid": 1,
+            "external": "file:///workspace/file.py",
+            "path": "/workspace/file.py",
+            "scheme": "file",
+          },
           [
             {
-              "$mid": 1,
-              "external": "file:///workspace/file.py",
-              "path": "/workspace/file.py",
-              "scheme": "file",
+              "code": "E003",
+              "message": "MsgC",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 6,
+                },
+                {
+                  "character": 0,
+                  "line": 6,
+                },
+              ],
+              "severity": "Information",
+              "source": undefined,
             },
-            [
-              {
-                "code": "E003",
-                "message": "MsgC",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 6,
-                  },
-                  {
-                    "character": 0,
-                    "line": 6,
-                  },
-                ],
-                "severity": "Information",
-                "source": undefined,
-              },
-              {
-                "code": "E004",
-                "message": "MsgD",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 6,
-                  },
-                  {
-                    "character": 0,
-                    "line": 6,
-                  },
-                ],
-                "severity": "Hint",
-                "source": undefined,
-              },
-            ],
+            {
+              "code": "E004",
+              "message": "MsgD",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 6,
+                },
+                {
+                  "character": 0,
+                  "line": 6,
+                },
+              ],
+              "severity": "Hint",
+              "source": undefined,
+            },
           ],
         ],
-      },
+      ],
     },
-  ],
-  "references": [],
-}
+  },
+]
 `;
 
 exports[`CopilotCLI Generate & parse prompts > includes contents of regular prompt files 1`] = `
@@ -468,22 +475,19 @@ exports[`CopilotCLI Generate & parse prompts > includes contents of regular prom
 `;
 
 exports[`CopilotCLI Generate & parse prompts > includes contents of regular prompt files 3`] = `
-{
-  "diagnostics": [],
-  "references": [
-    {
-      "id": "vscode.prompt.file__file:///doit.prompt.md",
-      "modelDescription": "Prompt instruction file",
-      "name": "prompt:doit.prompt.md",
-      "value": {
-        "$mid": 1,
-        "external": "file:///doit.prompt.md",
-        "path": "/doit.prompt.md",
-        "scheme": "file",
-      },
+[
+  {
+    "id": "vscode.prompt.file__file:///doit.prompt.md",
+    "modelDescription": "Prompt instruction file",
+    "name": "prompt:doit.prompt.md",
+    "value": {
+      "$mid": 1,
+      "external": "file:///doit.prompt.md",
+      "path": "/doit.prompt.md",
+      "scheme": "file",
     },
-  ],
-}
+  },
+]
 `;
 
 exports[`CopilotCLI Generate & parse prompts > includes contents of untitled file 1`] = `
@@ -509,22 +513,19 @@ Process these files (See <attachments> above for file contents. You may not need
 exports[`CopilotCLI Generate & parse prompts > includes contents of untitled file 2`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > includes contents of untitled file 3`] = `
-{
-  "diagnostics": [],
-  "references": [
-    {
-      "id": "untitled:untitled-1",
-      "name": "file:untitled-1",
-      "range": undefined,
-      "value": {
-        "$mid": 1,
-        "external": "untitled:untitled-1",
-        "path": "untitled-1",
-        "scheme": "untitled",
-      },
+[
+  {
+    "id": "untitled:untitled-1",
+    "name": "file:untitled-1",
+    "range": undefined,
+    "value": {
+      "$mid": 1,
+      "external": "untitled:untitled-1",
+      "path": "untitled-1",
+      "scheme": "untitled",
     },
-  ],
-}
+  },
+]
 `;
 
 exports[`CopilotCLI Generate & parse prompts > includes contents of untitled prompt files 1`] = `
@@ -548,44 +549,36 @@ Process these files (See <attachments> above for file contents. You may not need
 exports[`CopilotCLI Generate & parse prompts > includes contents of untitled prompt files 2`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > includes contents of untitled prompt files 3`] = `
-{
-  "diagnostics": [],
-  "references": [
-    {
-      "id": "regular.ts",
-      "name": "regular.ts",
-      "range": undefined,
-      "value": {
-        "$mid": 1,
-        "path": "/workspace/regular.ts",
-        "scheme": "file",
-      },
+[
+  {
+    "id": "vscode.prompt.file__untitled:untitled-1",
+    "modelDescription": "Prompt instruction file",
+    "name": "prompt:Untitled-2",
+    "value": {
+      "$mid": 1,
+      "external": "untitled:untitled-1",
+      "path": "untitled-1",
+      "scheme": "untitled",
     },
-    {
-      "id": "vscode.prompt.file__untitled:untitled-1",
-      "modelDescription": "Prompt instruction file",
-      "name": "prompt:Untitled-2",
-      "value": {
-        "$mid": 1,
-        "external": "untitled:untitled-1",
-        "path": "untitled-1",
-        "scheme": "untitled",
-      },
+  },
+  {
+    "id": "regular.ts",
+    "name": "regular.ts",
+    "range": undefined,
+    "value": {
+      "$mid": 1,
+      "path": "/workspace/regular.ts",
+      "scheme": "file",
     },
-  ],
-}
+  },
+]
 `;
 
 exports[`CopilotCLI Generate & parse prompts > just the prompt without anything else 1`] = `"hello world"`;
 
 exports[`CopilotCLI Generate & parse prompts > just the prompt without anything else 2`] = `[]`;
 
-exports[`CopilotCLI Generate & parse prompts > just the prompt without anything else 3`] = `
-{
-  "diagnostics": [],
-  "references": [],
-}
-`;
+exports[`CopilotCLI Generate & parse prompts > just the prompt without anything else 3`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > parses locations including files with spaces 1`] = `
 "base
@@ -625,77 +618,74 @@ base (See <attachments> above for file contents. You may not need to search or r
 exports[`CopilotCLI Generate & parse prompts > parses locations including files with spaces 2`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > parses locations including files with spaces 3`] = `
-{
-  "diagnostics": [],
-  "references": [
-    {
-      "id": "{"uri":{"$mid":1,"path":"/workspace/file.ts","scheme":"file"},"range":[{"line":4,"character":0},{"line":4,"character":0}]}",
-      "name": "file:file.ts",
-      "range": undefined,
-      "value": {
-        "range": [
-          {
-            "character": 0,
-            "line": 4,
-          },
-          {
-            "character": 0,
-            "line": 4,
-          },
-        ],
-        "uri": {
-          "$mid": 1,
-          "path": "/workspace/file.ts",
-          "scheme": "file",
+[
+  {
+    "id": "{"uri":{"$mid":1,"path":"/workspace/file.ts","scheme":"file"},"range":[{"line":4,"character":0},{"line":4,"character":0}]}",
+    "name": "file:file.ts",
+    "range": undefined,
+    "value": {
+      "range": [
+        {
+          "character": 0,
+          "line": 4,
         },
+        {
+          "character": 0,
+          "line": 4,
+        },
+      ],
+      "uri": {
+        "$mid": 1,
+        "path": "/workspace/file.ts",
+        "scheme": "file",
       },
     },
-    {
-      "id": "{"uri":{"$mid":1,"path":"/workspace/hello world/sample.ts","scheme":"file"},"range":[{"line":4,"character":0},{"line":4,"character":0}]}",
-      "name": "file:sample.ts",
-      "range": undefined,
-      "value": {
-        "range": [
-          {
-            "character": 0,
-            "line": 4,
-          },
-          {
-            "character": 0,
-            "line": 4,
-          },
-        ],
-        "uri": {
-          "$mid": 1,
-          "path": "/workspace/hello world/sample.ts",
-          "scheme": "file",
+  },
+  {
+    "id": "{"uri":{"$mid":1,"path":"/workspace/hello world/sample.ts","scheme":"file"},"range":[{"line":4,"character":0},{"line":4,"character":0}]}",
+    "name": "file:sample.ts",
+    "range": undefined,
+    "value": {
+      "range": [
+        {
+          "character": 0,
+          "line": 4,
         },
+        {
+          "character": 0,
+          "line": 4,
+        },
+      ],
+      "uri": {
+        "$mid": 1,
+        "path": "/workspace/hello world/sample.ts",
+        "scheme": "file",
       },
     },
-    {
-      "id": "{"uri":{"$mid":1,"path":"/workspace/sample.py","scheme":"file"},"range":[{"line":3,"character":0},{"line":3,"character":0}]}",
-      "name": "file:sample.py",
-      "range": undefined,
-      "value": {
-        "range": [
-          {
-            "character": 0,
-            "line": 3,
-          },
-          {
-            "character": 0,
-            "line": 3,
-          },
-        ],
-        "uri": {
-          "$mid": 1,
-          "path": "/workspace/sample.py",
-          "scheme": "file",
+  },
+  {
+    "id": "{"uri":{"$mid":1,"path":"/workspace/sample.py","scheme":"file"},"range":[{"line":3,"character":0},{"line":3,"character":0}]}",
+    "name": "file:sample.py",
+    "range": undefined,
+    "value": {
+      "range": [
+        {
+          "character": 0,
+          "line": 3,
         },
+        {
+          "character": 0,
+          "line": 3,
+        },
+      ],
+      "uri": {
+        "$mid": 1,
+        "path": "/workspace/sample.py",
+        "scheme": "file",
       },
     },
-  ],
-}
+  },
+]
 `;
 
 exports[`CopilotCLI Generate & parse prompts > parses single error diagnostic 1`] = `
@@ -718,69 +708,56 @@ Fix this error (See <attachments> above for file contents. You may not need to s
 exports[`CopilotCLI Generate & parse prompts > parses single error diagnostic 2`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > parses single error diagnostic 3`] = `
-{
-  "diagnostics": [
-    {
-      "id": "file:///workspace/file.py:error:13:1",
-      "name": "Unterminated string",
-      "range": undefined,
-      "value": ChatReferenceDiagnostic {
-        "diagnostics": [
+[
+  {
+    "id": "file:///workspace/file.py:error:13:1",
+    "name": "Unterminated string",
+    "range": undefined,
+    "value": ChatReferenceDiagnostic {
+      "diagnostics": [
+        [
+          {
+            "$mid": 1,
+            "external": "file:///workspace/file.py",
+            "path": "/workspace/file.py",
+            "scheme": "file",
+          },
           [
             {
-              "$mid": 1,
-              "external": "file:///workspace/file.py",
-              "path": "/workspace/file.py",
-              "scheme": "file",
+              "code": "E001",
+              "message": "Unterminated string",
+              "range": [
+                {
+                  "character": 0,
+                  "line": 12,
+                },
+                {
+                  "character": 0,
+                  "line": 12,
+                },
+              ],
+              "severity": "Error",
+              "source": undefined,
             },
-            [
-              {
-                "code": "E001",
-                "message": "Unterminated string",
-                "range": [
-                  {
-                    "character": 0,
-                    "line": 12,
-                  },
-                  {
-                    "character": 0,
-                    "line": 12,
-                  },
-                ],
-                "severity": "Error",
-                "source": undefined,
-              },
-            ],
           ],
         ],
-      },
+      ],
     },
-  ],
-  "references": [],
-}
+  },
+]
 `;
 
 exports[`CopilotCLI Generate & parse prompts > returns original prompt unchanged for slash command 1`] = `"/help something"`;
 
 exports[`CopilotCLI Generate & parse prompts > returns original prompt unchanged for slash command 2`] = `[]`;
 
-exports[`CopilotCLI Generate & parse prompts > returns original prompt unchanged for slash command 3`] = `
-{
-  "diagnostics": [],
-  "references": [],
-}
-`;
+exports[`CopilotCLI Generate & parse prompts > returns original prompt unchanged for slash command 3`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > returns overridden prompt instead of using the request prompt 1`] = `"What is 1+2"`;
 
 exports[`CopilotCLI Generate & parse prompts > returns overridden prompt instead of using the request prompt 2`] = `[]`;
 
-exports[`CopilotCLI Generate & parse prompts > returns overridden prompt instead of using the request prompt 3`] = `
-{
-  "diagnostics": [],
-  "references": [],
-}
-`;
+exports[`CopilotCLI Generate & parse prompts > returns overridden prompt instead of using the request prompt 3`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > uses attachment id attribute for name/id 1`] = `
 "explain #sym:add
@@ -808,34 +785,31 @@ explain #sym:add (See <attachments> above for file contents. You may not need to
 exports[`CopilotCLI Generate & parse prompts > uses attachment id attribute for name/id 2`] = `[]`;
 
 exports[`CopilotCLI Generate & parse prompts > uses attachment id attribute for name/id 3`] = `
-{
-  "diagnostics": [],
-  "references": [
-    {
-      "id": "vscode.symbol/{"uri":{"$mid":1,"path":"/workspace/add.py","scheme":"file"},"range":[{"line":1,"character":0},{"line":3,"character":0}]}",
-      "name": "sym:add",
+[
+  {
+    "id": "vscode.symbol/{"uri":{"$mid":1,"path":"/workspace/add.py","scheme":"file"},"range":[{"line":1,"character":0},{"line":3,"character":0}]}",
+    "name": "sym:add",
+    "range": [
+      8,
+      15,
+    ],
+    "value": {
       "range": [
-        8,
-        15,
-      ],
-      "value": {
-        "range": [
-          {
-            "character": 0,
-            "line": 1,
-          },
-          {
-            "character": 0,
-            "line": 3,
-          },
-        ],
-        "uri": {
-          "$mid": 1,
-          "path": "/workspace/add.py",
-          "scheme": "file",
+        {
+          "character": 0,
+          "line": 1,
         },
+        {
+          "character": 0,
+          "line": 3,
+        },
+      ],
+      "uri": {
+        "$mid": 1,
+        "path": "/workspace/add.py",
+        "scheme": "file",
       },
     },
-  ],
-}
+  },
+]
 `;
