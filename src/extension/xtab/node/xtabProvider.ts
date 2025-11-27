@@ -194,7 +194,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			getOrDeduceSelectionFromLastEdit(request.getActiveDocument()),
 			pushEdit,
 			delaySession,
-			{ showLabel: false },
 			tracer,
 			logContext,
 			cancellationToken,
@@ -208,7 +207,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		selection: Range | null,
 		pushEdit: PushEdit,
 		delaySession: DelaySession,
-		opts: { showLabel: boolean },
 		parentTracer: ITracer,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
@@ -351,7 +349,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptPieces,
 			prediction,
 			{
-				showLabel: opts.showLabel,
 				shouldRemoveCursorTagFromResponse,
 				responseFormat,
 				retryState,
@@ -493,7 +490,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		promptPieces: PromptPieces,
 		prediction: Prediction | undefined,
 		opts: {
-			showLabel: boolean;
 			responseFormat: xtabPromptOptions.ResponseFormat;
 			shouldRemoveCursorTagFromResponse: boolean;
 			retryState: RetryState;
@@ -698,9 +694,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 
 		const diffOptions: ResponseProcessor.DiffParams = {
-			emitFastCursorLineChange: opts.showLabel
-				? false
-				: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService),
+			emitFastCursorLineChange: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService),
 			nLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabNNonSignificantLinesToConverge, this.expService),
 			nSignificantLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabNSignificantLinesToConverge, this.expService),
 		};
@@ -767,7 +761,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 							}
 						}
 
-						pushEdit(Result.ok({ edit: singleLineEdit, window: editWindow, showLabel: opts.showLabel }));
+						pushEdit(Result.ok({ edit: singleLineEdit, window: editWindow }));
 						i++;
 					}
 				}
@@ -854,11 +848,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 								new Range(nextCursorLineOneBased, nextCursorColumn, nextCursorLineOneBased, nextCursorColumn),
 								pushEdit,
 								delaySession,
-								{ showLabel: nextCursorLinePrediction === NextCursorLinePrediction.LabelOnlyWithEdit },
 								tracer,
 								logContext,
 								cancellationToken,
-								telemetryBuilder, RetryState.Retrying,
+								telemetryBuilder,
+								RetryState.Retrying,
 							);
 							return;
 						}
