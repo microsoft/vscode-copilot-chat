@@ -236,6 +236,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				tracer.trace(`failed to fetch next edit ${result.err.toString()}`);
 				telemetryBuilder.setStatus(`noEdit:${result.err.kind}`);
 				error = result.err;
+				if (error instanceof NoNextEditReason.NoSuggestions) {
+					logContext.markAsNoSuggestions();
+				}
 			} else {
 				targetDocumentId = result.val.docId ?? targetDocumentId;
 				const targetDoc = targetDocumentId ? this._workspace.getDocument(targetDocumentId)! : doc;
