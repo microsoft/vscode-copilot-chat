@@ -117,7 +117,6 @@ function getRelatedInformation(langCtx: LanguageContextResponse | undefined): st
 
 	const traits = langCtx.items
 		.filter(ctx => ctx.context.kind === ContextKind.Trait)
-		.filter(t => !t.onTimeout)
 		.map(t => t.context) as TraitContext[];
 
 	if (traits.length === 0) {
