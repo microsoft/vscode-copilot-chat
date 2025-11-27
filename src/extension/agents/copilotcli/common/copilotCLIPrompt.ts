@@ -76,6 +76,7 @@ function extractResources(prompt: string): ChatPromptReference[] {
 			// Skip prompt file attachments, handled elsewhere
 			continue;
 		}
+		const isUntitledFile = providedId?.startsWith('file:untitled-') || false;
 		// Attempt to extract fenced code block language
 		const fenceMatch = content.match(/```([^\n`]+)\n([\s\S]*?)```/);
 		const fencedLanguage = fenceMatch ? fenceMatch[1].trim() : undefined;
@@ -106,27 +107,27 @@ function extractResources(prompt: string): ChatPromptReference[] {
 		}
 
 		const linesMatch = content.match(/Excerpt from [^,]+,\s*lines\s+(\d+)\s+to\s+(\d+)/i);
-		if (!filePath || !linesMatch) { continue; }
-		const startLine = parseInt(linesMatch[1], 10);
-		const endLine = parseInt(linesMatch[2], 10);
-		if (isNaN(startLine) || isNaN(endLine)) { continue; }
-		const uri = URI.file(filePath);
-		const location = new Location(uri, new Range(startLine - 1, 0, endLine - 1, 0));
-		const locName = providedId ?? JSON.stringify(location);
+		if (!filePath) { continue; }
+		const startLine = linesMatch ? parseInt(linesMatch[1], 10) : undefined;
+		const endLine = linesMatch ? parseInt(linesMatch[2], 10) : undefined;
+		const uri = isUntitledFile ? URI.from({ scheme: 'untitled', path: filePath.substring('untitled:'.length) }) : URI.file(filePath);
+		const location = (typeof startLine === 'undefined' || typeof endLine === 'undefined' || isNaN(startLine) || isNaN(endLine)) ? undefined : new Location(uri, new Range(startLine - 1, 0, endLine - 1, 0));
+
+		const locName = providedId ?? (location ? JSON.stringify(location) : uri.toString());
 		let range: [number, number] | undefined = undefined;
-		let id = JSON.stringify(location);
+		let id = (location ? JSON.stringify(location) : uri.toString());
 		if (prompt.includes(`#${locName}`)) {
 			const idx = prompt.indexOf(`#${locName}`);
 			range = [idx, idx + locName.length];
 		}
 		if (locName.startsWith('sym:')) {
-			id = `vscode.symbol/${JSON.stringify(location)}`;
+			id = `vscode.symbol/${(location ? JSON.stringify(location) : uri.toString())}`;
 		}
 		references.push({
 			id,
 			name: locName,
 			range,
-			value: location
+			value: location ?? uri
 		});
 	}
 

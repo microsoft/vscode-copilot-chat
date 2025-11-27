@@ -26,9 +26,10 @@ export class TestChatRequest implements ChatRequest {
 	public sessionId = generateUuid();
 
 	constructor(
-		public prompt: string
+		public prompt: string,
+		references?: ChatPromptReference[]
 	) {
-		this.references = [];
+		this.references = references ?? [];
 		this.location = vscodeTypes.ChatLocation.Panel;
 		this.attempt = 0;
 		this.enableCommandDetection = false;

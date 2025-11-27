@@ -1,0 +1,644 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CopilotCLI Generate & parse prompts > Folders are attached with just references 1`] = `
+"list files in #file:folder
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</reminder>
+<attachments>
+<attachment id="file:folder" folderPath="/workspace/folder" />
+</attachments>
+<userRequest>
+list files in #file:folder (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > Folders are attached with just references 2`] = `
+[
+  {
+    "displayName": "file:folder",
+    "path": "/workspace/folder",
+    "type": "directory",
+  },
+]
+`;
+
+exports[`CopilotCLI Generate & parse prompts > Folders are attached with just references 3`] = `
+{
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "file:folder",
+      "name": "file:folder",
+      "range": [
+        14,
+        25,
+      ],
+      "value": {
+        "$mid": 1,
+        "path": "/workspace/folder/",
+        "scheme": "file",
+      },
+    },
+  ],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across same and different files 1`] = `
+"Fix these errors
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</reminder>
+<attachments>
+<error path="/workspace/file.py" line=2 code="E001" severity="warning">
+Msg1
+</error>
+<error path="/workspace/file.py" line=5 code="E002" severity="error">
+MsgB
+</error>
+<error path="/workspace/sample.py" line=21 code="W001" severity="warning">
+Msg2
+</error>
+
+</attachments>
+<userRequest>
+Fix these errors (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across same and different files 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across same and different files 3`] = `
+{
+  "diagnostics": [
+    {
+      "id": "file:///workspace/file.py:1",
+      "name": "Msg1",
+      "range": undefined,
+      "value": {
+        "diagnostics": [
+          [
+            {
+              "$mid": 1,
+              "external": "file:///workspace/file.py",
+              "path": "/workspace/file.py",
+              "scheme": "file",
+            },
+            [
+              {
+                "code": "E001",
+                "message": "Msg1",
+                "range": {
+                  "end": {
+                    "character": 0,
+                    "line": 1,
+                  },
+                  "start": {
+                    "character": 0,
+                    "line": 1,
+                  },
+                },
+                "severity": 1,
+                "source": "prompt",
+              },
+            ],
+          ],
+        ],
+      },
+    },
+    {
+      "id": "file:///workspace/file.py:4",
+      "name": "MsgB",
+      "range": undefined,
+      "value": {
+        "diagnostics": [
+          [
+            {
+              "$mid": 1,
+              "external": "file:///workspace/file.py",
+              "path": "/workspace/file.py",
+              "scheme": "file",
+            },
+            [
+              {
+                "code": "E002",
+                "message": "MsgB",
+                "range": {
+                  "end": {
+                    "character": 0,
+                    "line": 4,
+                  },
+                  "start": {
+                    "character": 0,
+                    "line": 4,
+                  },
+                },
+                "severity": 0,
+                "source": "prompt",
+              },
+            ],
+          ],
+        ],
+      },
+    },
+    {
+      "id": "file:///workspace/sample.py:20",
+      "name": "Msg2",
+      "range": undefined,
+      "value": {
+        "diagnostics": [
+          [
+            {
+              "$mid": 1,
+              "external": "file:///workspace/sample.py",
+              "path": "/workspace/sample.py",
+              "scheme": "file",
+            },
+            [
+              {
+                "code": "W001",
+                "message": "Msg2",
+                "range": {
+                  "end": {
+                    "character": 0,
+                    "line": 20,
+                  },
+                  "start": {
+                    "character": 0,
+                    "line": 20,
+                  },
+                },
+                "severity": 1,
+                "source": "prompt",
+              },
+            ],
+          ],
+        ],
+      },
+    },
+  ],
+  "references": [],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > files are attached as just references without content 1`] = `
+"explain contents of #file:file.ts and other files
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</reminder>
+<attachments>
+<attachment id="file:file.ts" filePath="/workspace/file.ts" />
+<attachment id="sample.py" filePath="/workspace/sample.py" />
+</attachments>
+<userRequest>
+explain contents of #file:file.ts and other files (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > files are attached as just references without content 2`] = `
+[
+  {
+    "displayName": "file:file.ts",
+    "path": "/workspace/file.ts",
+    "type": "file",
+  },
+  {
+    "displayName": "sample.py",
+    "path": "/workspace/sample.py",
+    "type": "file",
+  },
+]
+`;
+
+exports[`CopilotCLI Generate & parse prompts > files are attached as just references without content 3`] = `
+{
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "file:file.ts",
+      "name": "file:file.ts",
+      "range": [
+        20,
+        32,
+      ],
+      "value": {
+        "$mid": 1,
+        "path": "/workspace/file.ts",
+        "scheme": "file",
+      },
+    },
+    {
+      "id": "sample.py",
+      "name": "sample.py",
+      "range": undefined,
+      "value": {
+        "$mid": 1,
+        "path": "/workspace/sample.py",
+        "scheme": "file",
+      },
+    },
+  ],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > includes contents of regular prompt files 1`] = `
+"Process these files
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</reminder>
+<attachments>
+<attachment id="prompt:doit.prompt.md">
+// filepath: /doit.prompt.md
+This is a prompt file
+</attachment>
+
+</attachments>
+<userRequest>
+Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > includes contents of regular prompt files 2`] = `
+[
+  {
+    "displayName": "prompt:doit.prompt.md",
+    "path": "/doit.prompt.md",
+    "type": "file",
+  },
+]
+`;
+
+exports[`CopilotCLI Generate & parse prompts > includes contents of regular prompt files 3`] = `
+{
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "vscode.prompt.file__prompt:doit.prompt.md",
+      "modelDescription": "Prompt instruction file",
+      "name": "prompt:doit.prompt.md",
+      "value": {
+        "$mid": 1,
+        "path": "/",
+        "scheme": "file",
+      },
+    },
+  ],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > includes contents of untitled file 1`] = `
+"Process these files
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</reminder>
+<attachments>
+<attachment id="file:untitled-1">
+// filepath: untitled:untitled-1
+function example() {
+	console.log("This is an example");
+}
+</attachment>
+
+</attachments>
+<userRequest>
+Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > includes contents of untitled file 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > includes contents of untitled file 3`] = `
+{
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "untitled:untitled-1",
+      "name": "file:untitled-1",
+      "range": undefined,
+      "value": {
+        "$mid": 1,
+        "external": "untitled:untitled-1",
+        "path": "untitled-1",
+        "scheme": "untitled",
+      },
+    },
+  ],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > includes contents of untitled prompt files 1`] = `
+"Process these files
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</reminder>
+<attachments>
+<attachment id="prompt:Untitled-2">
+// filepath: untitled:/untitled-1
+This is a prompt file
+</attachment>
+<attachment id="regular.ts" filePath="/workspace/regular.ts" />
+</attachments>
+<userRequest>
+Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > includes contents of untitled prompt files 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > includes contents of untitled prompt files 3`] = `
+{
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "regular.ts",
+      "name": "regular.ts",
+      "range": undefined,
+      "value": {
+        "$mid": 1,
+        "path": "/workspace/regular.ts",
+        "scheme": "file",
+      },
+    },
+    {
+      "id": "vscode.prompt.file__prompt:Untitled-2",
+      "modelDescription": "Prompt instruction file",
+      "name": "prompt:Untitled-2",
+      "value": {
+        "$mid": 1,
+        "path": "/u",
+        "scheme": "file",
+      },
+    },
+  ],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > just the prompt without anything else 1`] = `"hello world"`;
+
+exports[`CopilotCLI Generate & parse prompts > just the prompt without anything else 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > just the prompt without anything else 3`] = `
+{
+  "diagnostics": [],
+  "references": [],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > parses locations includeing files with spaces 1`] = `
+"base
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</reminder>
+<attachments>
+<attachment id="file:file.ts">
+Excerpt from sample.ts, lines 5 to 5:
+\`\`\`plaintext
+// filepath: /workspace/hello world/sample.ts
+
+\`\`\`
+</attachment>
+<attachment id="file:sample.ts">
+Excerpt from sample.ts, lines 5 to 5:
+\`\`\`plaintext
+// filepath: /workspace/hello world/sample.ts
+
+\`\`\`
+</attachment>
+<attachment id="file:sample.py">
+Excerpt from sample.py, lines 4 to 4:
+\`\`\`plaintext
+// filepath: /workspace/sample.py
+def subtract
+\`\`\`
+</attachment>
+
+</attachments>
+<userRequest>
+base (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > parses locations includeing files with spaces 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > parses locations includeing files with spaces 3`] = `
+{
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "{"uri":{"$mid":1,"path":"/workspace/hello world/sample.ts","scheme":"file"},"range":[{"line":4,"character":0},{"line":4,"character":0}]}",
+      "name": "file:file.ts",
+      "range": undefined,
+      "value": {
+        "range": [
+          {
+            "character": 0,
+            "line": 4,
+          },
+          {
+            "character": 0,
+            "line": 4,
+          },
+        ],
+        "uri": {
+          "$mid": 1,
+          "path": "/workspace/hello world/sample.ts",
+          "scheme": "file",
+        },
+      },
+    },
+    {
+      "id": "{"uri":{"$mid":1,"path":"/workspace/hello world/sample.ts","scheme":"file"},"range":[{"line":4,"character":0},{"line":4,"character":0}]}",
+      "name": "file:sample.ts",
+      "range": undefined,
+      "value": {
+        "range": [
+          {
+            "character": 0,
+            "line": 4,
+          },
+          {
+            "character": 0,
+            "line": 4,
+          },
+        ],
+        "uri": {
+          "$mid": 1,
+          "path": "/workspace/hello world/sample.ts",
+          "scheme": "file",
+        },
+      },
+    },
+    {
+      "id": "{"uri":{"$mid":1,"path":"/workspace/sample.py","scheme":"file"},"range":[{"line":3,"character":0},{"line":3,"character":0}]}",
+      "name": "file:sample.py",
+      "range": undefined,
+      "value": {
+        "range": [
+          {
+            "character": 0,
+            "line": 3,
+          },
+          {
+            "character": 0,
+            "line": 3,
+          },
+        ],
+        "uri": {
+          "$mid": 1,
+          "path": "/workspace/sample.py",
+          "scheme": "file",
+        },
+      },
+    },
+  ],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > parses single error diagnostic 1`] = `
+"Fix this error
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</reminder>
+<attachments>
+<error path="/workspace/file.py" line=13 code="E001" severity="error">
+Unterminated string
+</error>
+
+</attachments>
+<userRequest>
+Fix this error (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > parses single error diagnostic 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > parses single error diagnostic 3`] = `
+{
+  "diagnostics": [
+    {
+      "id": "file:///workspace/file.py:12",
+      "name": "Unterminated string",
+      "range": undefined,
+      "value": {
+        "diagnostics": [
+          [
+            {
+              "$mid": 1,
+              "external": "file:///workspace/file.py",
+              "path": "/workspace/file.py",
+              "scheme": "file",
+            },
+            [
+              {
+                "code": "E001",
+                "message": "Unterminated string",
+                "range": {
+                  "end": {
+                    "character": 0,
+                    "line": 12,
+                  },
+                  "start": {
+                    "character": 0,
+                    "line": 12,
+                  },
+                },
+                "severity": 0,
+                "source": "prompt",
+              },
+            ],
+          ],
+        ],
+      },
+    },
+  ],
+  "references": [],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > returns original prompt unchanged for slash command 1`] = `"/help something"`;
+
+exports[`CopilotCLI Generate & parse prompts > returns original prompt unchanged for slash command 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > returns original prompt unchanged for slash command 3`] = `
+{
+  "diagnostics": [],
+  "references": [],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > returns overridden prompt instead of using the request prompt 1`] = `"What is 1+2"`;
+
+exports[`CopilotCLI Generate & parse prompts > returns overridden prompt instead of using the request prompt 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > returns overridden prompt instead of using the request prompt 3`] = `
+{
+  "diagnostics": [],
+  "references": [],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > uses attachment id attribute for name/id 1`] = `
+"explain #sym:add
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</reminder>
+<attachments>
+<attachment id="sym:add">
+Excerpt from add.py, lines 2 to 4:
+\`\`\`plaintext
+// filepath: /workspace/add.py
+def add(a, b):
+				return a + b
+			}
+\`\`\`
+</attachment>
+
+</attachments>
+<userRequest>
+explain #sym:add (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > uses attachment id attribute for name/id 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > uses attachment id attribute for name/id 3`] = `
+{
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "vscode.symbol/{"uri":{"$mid":1,"path":"/workspace/add.py","scheme":"file"},"range":[{"line":1,"character":0},{"line":3,"character":0}]}",
+      "name": "sym:add",
+      "range": [
+        8,
+        15,
+      ],
+      "value": {
+        "range": [
+          {
+            "character": 0,
+            "line": 1,
+          },
+          {
+            "character": 0,
+            "line": 3,
+          },
+        ],
+        "uri": {
+          "$mid": 1,
+          "path": "/workspace/add.py",
+          "scheme": "file",
+        },
+      },
+    },
+  ],
+}
+`;

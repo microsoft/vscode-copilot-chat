@@ -15,7 +15,7 @@ import { Schemas } from '../../../../util/vs/base/common/network';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest, FileType } from '../../../../vscodeTypes';
-import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isPromptFile } from '../../../prompt/common/chatVariablesCollection';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
@@ -138,8 +138,10 @@ async function renderResourceVariables(chatVariables: ChatVariablesCollection, f
 		if (!URI.isUri(uri)) {
 			return;
 		}
-		if (uri.scheme === Schemas.untitled) {
+		if (uri.scheme === Schemas.untitled || isPromptFile(variable)) {
 			// If its an untitled document, we always include a summary, as CLI cannot read untitled documents.
+			// Similarly prompt file contents need to be included in the prompt.
+			// Except when its attached as a regular file (but in that case `isPromptFile` would return false).
 			elements.push(<FileVariable
 				alwaysIncludeSummary={true}
 				filePathMode={FilePathMode.AsComment}
