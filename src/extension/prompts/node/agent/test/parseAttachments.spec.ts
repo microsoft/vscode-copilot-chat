@@ -62,7 +62,6 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		expect(resolved.prompt).toMatchSnapshot();
 		expect(fixFilePathsForTestComparison(resolved.attachments)).toMatchSnapshot();
 		expect(result).toMatchSnapshot();
-
 	});
 
 	test('returns overridden prompt instead of using the request prompt', async () => {
@@ -205,7 +204,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		expect(fixFilePathsForTestComparison(resolved.attachments)).toMatchSnapshot();
 		expect(result).toMatchSnapshot();
 	});
-	test('parses locations includeing files with spaces', async () => {
+	test('parses locations including files with spaces', async () => {
 		const tsUri = URI.file('/workspace/file.ts');
 		createMockFile(tsUri,
 			`function add(a: number, b: number) {
@@ -233,7 +232,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 			{
 				id: tsUri.toString(),
 				name: 'file:file.ts',
-				value: new Location(tsWithSpacesUri, new Range(4, 0, 4, 15))
+				value: new Location(tsUri, new Range(4, 0, 4, 15))
 			},
 			{
 				id: tsWithSpacesUri.toString(),
@@ -253,7 +252,6 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		expect(fixFilePathsForTestComparison(resolved.attachments)).toMatchSnapshot();
 		expect(result).toMatchSnapshot();
 	});
-
 
 	test('uses attachment id attribute for name/id', async () => {
 		const tsUri = URI.file('/workspace/add.py');

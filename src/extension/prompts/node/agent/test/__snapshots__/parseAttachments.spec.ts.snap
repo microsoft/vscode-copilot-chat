@@ -390,17 +390,17 @@ exports[`CopilotCLI Generate & parse prompts > just the prompt without anything 
 }
 `;
 
-exports[`CopilotCLI Generate & parse prompts > parses locations includeing files with spaces 1`] = `
+exports[`CopilotCLI Generate & parse prompts > parses locations including files with spaces 1`] = `
 "base
  <reminder>
 IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
 </reminder>
 <attachments>
 <attachment id="file:file.ts">
-Excerpt from sample.ts, lines 5 to 5:
+Excerpt from file.ts, lines 5 to 5:
 \`\`\`plaintext
-// filepath: /workspace/hello world/sample.ts
-
+// filepath: /workspace/file.ts
+function sub
 \`\`\`
 </attachment>
 <attachment id="file:sample.ts">
@@ -425,14 +425,14 @@ base (See <attachments> above for file contents. You may not need to search or r
 "
 `;
 
-exports[`CopilotCLI Generate & parse prompts > parses locations includeing files with spaces 2`] = `[]`;
+exports[`CopilotCLI Generate & parse prompts > parses locations including files with spaces 2`] = `[]`;
 
-exports[`CopilotCLI Generate & parse prompts > parses locations includeing files with spaces 3`] = `
+exports[`CopilotCLI Generate & parse prompts > parses locations including files with spaces 3`] = `
 {
   "diagnostics": [],
   "references": [
     {
-      "id": "{"uri":{"$mid":1,"path":"/workspace/hello world/sample.ts","scheme":"file"},"range":[{"line":4,"character":0},{"line":4,"character":0}]}",
+      "id": "{"uri":{"$mid":1,"path":"/workspace/file.ts","scheme":"file"},"range":[{"line":4,"character":0},{"line":4,"character":0}]}",
       "name": "file:file.ts",
       "range": undefined,
       "value": {
@@ -448,7 +448,7 @@ exports[`CopilotCLI Generate & parse prompts > parses locations includeing files
         ],
         "uri": {
           "$mid": 1,
-          "path": "/workspace/hello world/sample.ts",
+          "path": "/workspace/file.ts",
           "scheme": "file",
         },
       },
