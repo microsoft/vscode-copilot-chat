@@ -115,10 +115,12 @@ class EditAttemptsElement extends PromptElement<EditAttemptsElementProps> {
 
 		return <>
 			{this.props.editAttempts.map(([toolCall, result]) => {
-				<ToolMessage toolCallId={toolCall.id}>
-					<ToolResult content={result.content} />
-				</ToolMessage>;
-			})};
+				return (
+					<ToolMessage toolCallId={toolCall.id}>
+						<ToolResult content={result.content} />
+					</ToolMessage>
+				);
+			})}
 			<UserMessage>
 				{documentNow.version === this.props.documentVersionAtRequest && <>
 					<Tag name='feedback'>
