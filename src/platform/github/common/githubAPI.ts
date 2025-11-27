@@ -232,9 +232,13 @@ export async function makeSearchGraphQLRequest(
 		first
 	};
 
+	// TODO: Handle rate limiting
+	//       result.errors[0]
+	//         {type: 'RATE_LIMIT', code: 'graphql_rate_limit', message: 'API rate limit already exceeded for user ID xxxxxxx.'}
+
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
 
-	return result ? result.data.search.nodes : [];
+	return result.data?.search?.nodes ?? [];
 }
 
 export async function getPullRequestFromGlobalId(

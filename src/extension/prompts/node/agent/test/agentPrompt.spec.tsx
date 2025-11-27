@@ -29,6 +29,7 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../tools/common/toolsService';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
+import { PromptRegistry } from '../promptRegistry';
 
 const testFamilies = [
 	'default',
@@ -38,8 +39,10 @@ const testFamilies = [
 	'gpt-5.1-codex',
 	'gpt-5.1-codex-mini',
 	'claude-sonnet-4.5',
+	'claude-opus-4.5',
 	'gemini-2.0-flash',
-	'grok-code-fast-1'
+	'grok-code-fast-1',
+	'arctic-fox'
 ];
 
 testFamilies.forEach(family => {
@@ -91,12 +94,14 @@ testFamilies.forEach(family => {
 				promptContext = { ...promptContext, conversation };
 			}
 
+			const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
 			const baseProps = {
 				priority: 1,
 				endpoint,
 				location: ChatLocation.Panel,
 				promptContext,
-				...otherProps
+				...otherProps,
+				customizations
 			};
 
 			const props: AgentPromptProps = baseProps;

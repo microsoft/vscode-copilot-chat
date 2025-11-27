@@ -69,7 +69,8 @@ type ICompletionModelCapabilities = {
 
 export enum ModelSupportedEndpoint {
 	ChatCompletions = '/chat/completions',
-	Responses = '/responses'
+	Responses = '/responses',
+	Messages = '/v1/messages'
 }
 
 export interface IModelAPIResponse {
@@ -93,6 +94,7 @@ export type IChatModelInformation = IModelAPIResponse & {
 	capabilities: IChatModelCapabilities;
 	urlOrRequestMetadata?: string | RequestMetadata;
 	requestHeaders?: Readonly<Record<string, string>>;
+	zeroDataRetentionEnabled?: boolean;
 };
 
 export function isChatModelInformation(model: IModelAPIResponse): model is IChatModelInformation {

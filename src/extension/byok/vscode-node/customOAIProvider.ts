@@ -44,10 +44,11 @@ export function hasExplicitApiPath(url: string): boolean {
 	return url.includes('/responses') || url.includes('/chat/completions');
 }
 
-interface CustomOAIModelInfo extends LanguageModelChatInformation {
+export interface CustomOAIModelInfo extends LanguageModelChatInformation {
 	url: string;
 	thinking: boolean;
 	requestHeaders?: Record<string, string>;
+	zeroDataRetentionEnabled?: boolean;
 }
 
 export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIModelInfo> {
@@ -86,8 +87,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return modelInfo;
 	}
 
-	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }> {
-		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }>;
+	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string>; zeroDataRetentionEnabled?: boolean }> {
+		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string>; zeroDataRetentionEnabled?: boolean }>;
 		return modelConfig;
 	}
 
@@ -96,7 +97,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return userModelConfig[modelId]?.requiresAPIKey !== false;
 	}
 
-	private async getAllModels(): Promise<BYOKKnownModels> {
+	protected async getAllModels(): Promise<BYOKKnownModels> {
 		const modelConfig = this.getUserModelConfig();
 		const models: BYOKKnownModels = {};
 
@@ -113,13 +114,14 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 				maxOutputTokens: modelInfo.maxOutputTokens,
 				thinking: modelInfo.thinking,
 				editTools: modelInfo.editTools,
-				requestHeaders: modelInfo.requestHeaders ? { ...modelInfo.requestHeaders } : undefined
+				requestHeaders: modelInfo.requestHeaders ? { ...modelInfo.requestHeaders } : undefined,
+				zeroDataRetentionEnabled: modelInfo.zeroDataRetentionEnabled
 			};
 		}
 		return models;
 	}
 
-	private async getModelsWithAPIKeys(silent: boolean): Promise<BYOKKnownModels> {
+	protected async getModelsWithCredentials(silent: boolean): Promise<BYOKKnownModels> {
 		const models = await this.getAllModels();
 		const modelsWithApiKeys: BYOKKnownModels = {};
 		for (const [modelId, modelInfo] of Object.entries(models)) {
@@ -160,16 +162,17 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			},
 			thinking: capabilities.thinking || false,
 			requestHeaders: capabilities.requestHeaders,
+			zeroDataRetentionEnabled: capabilities.zeroDataRetentionEnabled
 		};
 		return baseInfo;
 	}
 
 	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<CustomOAIModelInfo[]> {
 		try {
-			let knownModels = await this.getModelsWithAPIKeys(options.silent);
+			let knownModels = await this.getModelsWithCredentials(options.silent);
 			if (Object.keys(knownModels).length === 0 && !options.silent) {
 				await new CustomOAIModelConfigurator(this._configurationService, this.providerName.toLowerCase(), this).configure(true);
-				knownModels = await this.getModelsWithAPIKeys(options.silent);
+				knownModels = await this.getModelsWithCredentials(options.silent);
 			}
 			return Object.entries(knownModels).map(([id, capabilities]) => {
 				return this.createModelInfo(id, capabilities);
@@ -199,6 +202,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			thinking: model.thinking,
 			editTools: model.capabilities.editTools?.filter(isEndpointEditToolName),
 			requestHeaders: model.requestHeaders,
+			zeroDataRetentionEnabled: model.zeroDataRetentionEnabled
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
 		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.requestInitiator, progress, token);
@@ -223,7 +227,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			name: model.name,
 			url: model.url,
 			thinking: model.thinking,
-			requestHeaders: model.requestHeaders
+			requestHeaders: model.requestHeaders,
+			zeroDataRetentionEnabled: model.zeroDataRetentionEnabled
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
 		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);

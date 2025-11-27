@@ -65,6 +65,8 @@ export class InlineEditRequestLogContext {
 		lines.push(`URL: ${this._endpointInfo?.url ?? '<NOT-SET>'}`);
 		lines.push('```');
 
+		lines.push(`Opportunity ID: ${this._context ? this._context.requestUuid : '<NOT-SET>'}`);
+
 		const isCachedStr = this._logContextOfCachedEdit ? `(cached #${this._logContextOfCachedEdit.requestId})` : '(not cached)';
 
 		if (this._nextEditRequest) {
@@ -135,6 +137,15 @@ export class InlineEditRequestLogContext {
 			lines.push("## Logs");
 			lines.push("<details open><summary>Logs</summary>\n");
 			lines.push(...this._logs);
+			lines.push("\n</details>\n");
+		}
+
+		if (this._trace.length > 0) {
+			lines.push("## Trace");
+			lines.push("<details open><summary>Trace</summary>\n");
+			lines.push("```");
+			lines.push(...this._trace);
+			lines.push("```");
 			lines.push("\n</details>\n");
 		}
 
@@ -372,6 +383,11 @@ export class InlineEditRequestLogContext {
 
 	setRecentEdit(edit: HistoryContext): void {
 		this._recentEdit = edit;
+	}
+
+	private _trace: string[] = [];
+	trace(msg: string): void {
+		this._trace.push(msg);
 	}
 
 	private _logs: string[] = [];

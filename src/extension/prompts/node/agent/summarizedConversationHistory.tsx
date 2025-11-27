@@ -35,7 +35,8 @@ import { NotebookSummary } from '../../../tools/node/notebookSummaryTool';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { AgentPrompt, AgentPromptProps, AgentUserMessage, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn, KeepGoingReminder } from './agentPrompt';
+import { AgentPrompt, AgentPromptProps, AgentUserMessage, AgentUserMessageCustomizations, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { DefaultOpenAIKeepGoingReminder } from './openai/defaultOpenAIPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -227,7 +228,12 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 		}
 
 		if (!this.props.promptContext.isContinuation) {
-			history.push(<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props)} />);
+			history.push(<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props, {
+				userQueryTagName: this.props.userQueryTagName,
+				attachmentHint: this.props.attachmentHint,
+				ReminderInstructionsClass: this.props.ReminderInstructionsClass,
+				ToolReferencesHintClass: this.props.ToolReferencesHintClass,
+			})} />);
 		}
 
 		// We may have a summary from earlier in the conversation, but skip history if we have a new summary
@@ -274,7 +280,12 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 				// We have a summary for a tool call round that was part of this turn
 				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} />);
 			} else if (!turn.isContinuation) {
-				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint)} />);
+				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint, {
+					userQueryTagName: this.props.userQueryTagName,
+					attachmentHint: this.props.attachmentHint,
+					ReminderInstructionsClass: this.props.ReminderInstructionsClass,
+					ToolReferencesHintClass: this.props.ToolReferencesHintClass,
+				})} />);
 			}
 
 			// Reverse the tool call rounds so they are in chronological order
@@ -310,7 +321,7 @@ export class SummarizedConversationHistoryMetadata extends PromptMetadata {
 	}
 }
 
-export interface SummarizedAgentHistoryProps extends BasePromptElementProps {
+export interface SummarizedAgentHistoryProps extends BasePromptElementProps, AgentUserMessageCustomizations {
 	readonly priority: number;
 	readonly endpoint: IChatEndpoint;
 	readonly location: ChatLocation;
@@ -734,7 +745,7 @@ class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 				{this.props.summaryText}
 			</Tag>
 			{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
-				<KeepGoingReminder modelFamily={this.props.endpoint.family} />
+				<DefaultOpenAIKeepGoingReminder />
 			</Tag>}
 		</UserMessage>;
 	}

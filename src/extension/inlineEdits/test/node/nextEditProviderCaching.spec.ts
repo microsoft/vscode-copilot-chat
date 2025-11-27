@@ -33,6 +33,7 @@ import { NextEditProviderTelemetryBuilder } from '../../node/nextEditProviderTel
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
+import { ITracer } from '../../../../util/common/tracing';
 
 describe('NextEditProvider Caching', () => {
 
@@ -60,7 +61,7 @@ describe('NextEditProvider Caching', () => {
 		const obsGit = new ObservableGit(gitExtensionService);
 		const statelessNextEditProvider: IStatelessNextEditProvider = {
 			ID: 'TestNextEditProvider',
-			provideNextEdit: async (request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) => {
+			provideNextEdit: async (request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) => {
 				const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request);
 				const lineEdit = LineEdit.createFromUnsorted(
 					[

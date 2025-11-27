@@ -8,10 +8,10 @@ import { TaskSingler } from '../../../util/common/taskSingler';
 import { AuthProviderId, IConfigurationService } from '../../configuration/common/configurationService';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { ILogService } from '../../log/common/logService';
-import { BaseAuthenticationService } from '../common/authentication';
+import { authProviderId, BaseAuthenticationService } from '../common/authentication';
 import { ICopilotTokenManager } from '../common/copilotTokenManager';
 import { ICopilotTokenStore } from '../common/copilotTokenStore';
-import { authProviderId, getAlignedSession, getAnyAuthSession } from './session';
+import { getAlignedSession, getAnyAuthSession } from './session';
 
 export class AuthenticationService extends BaseAuthenticationService {
 	private _taskSingler = new TaskSingler<AuthenticationSession | undefined>();

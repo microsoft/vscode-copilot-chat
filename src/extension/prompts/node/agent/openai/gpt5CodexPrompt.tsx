@@ -9,7 +9,7 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { InstructionMessage } from '../../base/instructionMessage';
 import { DefaultAgentPromptProps, detectToolCapabilities } from '../defaultAgentInstructions';
 import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
-import { IAgentPrompt, PromptConstructor, PromptRegistry } from '../promptRegistry';
+import { IAgentPrompt, PromptRegistry, SystemPrompt } from '../promptRegistry';
 
 class CodexStyleGpt5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -30,7 +30,7 @@ class CodexStyleGpt5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 			<br />
 			## Tool use<br />
 			- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
-			{tools[ToolName.RunTests] && <>- Use the {ToolName.RunTests} tool to run tests instead of running terminal commands.<br /></>}
+			{tools[ToolName.CoreRunTest] && <>- Use the {ToolName.CoreRunTest} tool to run tests instead of running terminal commands.<br /></>}
 			{tools[ToolName.CoreManageTodoList] && <>
 				<br />
 				## {ToolName.CoreManageTodoList} tool<br />
@@ -89,7 +89,7 @@ class Gpt5CodexResolver implements IAgentPrompt {
 		return endpoint.family === 'gpt-5-codex';
 	}
 
-	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		return CodexStyleGpt5CodexPrompt;
 	}
 }

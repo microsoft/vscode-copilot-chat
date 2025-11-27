@@ -5,8 +5,6 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AuthenticationSession } from 'vscode';
-import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
@@ -15,12 +13,14 @@ import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
+import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
-import { CopilotCLISessionOptions } from '../copilotCli';
+import { ToolCall } from '../../common/copilotCLITools';
+import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 
@@ -81,23 +81,25 @@ describe('CopilotCLISession', () => {
 	let logger: ILogService;
 	let gitService: IGitService;
 	let sessionOptions: CopilotCLISessionOptions;
-	let authService: IAuthenticationService;
 	let instaService: IInstantiationService;
+	let sdk: ICopilotCLISDK;
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logger = accessor.get(ILogService);
 		gitService = accessor.get(IGitService);
-		authService = new class extends mock<IAuthenticationService>() {
-			override async getAnyGitHubSession() {
+		sdk = new class extends mock<ICopilotCLISDK>() {
+			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 				return {
-					accessToken: '',
-				} satisfies Partial<AuthenticationSession> as AuthenticationSession;
+					type: 'token',
+					token: '',
+					host: 'https://github.com'
+				};
 			}
-		}();
+		};
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0].fsPath }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0] }, logger);
 		instaService = services.seal();
 	});
 
@@ -114,8 +116,8 @@ describe('CopilotCLISession', () => {
 			gitService,
 			logger,
 			workspaceService,
-			authService,
-			instaService
+			sdk,
+			instaService,
 		));
 	}
 
@@ -125,7 +127,7 @@ describe('CopilotCLISession', () => {
 
 		// Attach stream first, then invoke with new signature (no stream param)
 		session.attachStream(stream);
-		await session.handleRequest('Hello', [], undefined, CancellationToken.None);
+		await session.handleRequest('', 'Hello', [], undefined, CancellationToken.None);
 
 		expect(session.status).toBe(ChatSessionStatus.Completed);
 		expect(stream.output.join('\n')).toContain('Echo: Hello');
@@ -136,7 +138,7 @@ describe('CopilotCLISession', () => {
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('Hi', [], 'modelB', CancellationToken.None);
+		await session.handleRequest('', 'Hi', [], 'modelB', CancellationToken.None);
 
 		expect(sdkSession._selectedModel).toBe('modelB');
 	});
@@ -147,7 +149,7 @@ describe('CopilotCLISession', () => {
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('Boom', [], undefined, CancellationToken.None);
+		await session.handleRequest('', 'Boom', [], undefined, CancellationToken.None);
 
 		expect(session.status).toBe(ChatSessionStatus.Failed);
 		expect(stream.output.join('\n')).toContain('Error: network');
@@ -159,7 +161,7 @@ describe('CopilotCLISession', () => {
 		const listener = disposables.add(session.onDidChangeStatus(s => statuses.push(s)));
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('Status OK', [], 'modelA', CancellationToken.None);
+		await session.handleRequest('', 'Status OK', [], 'modelA', CancellationToken.None);
 		listener.dispose?.();
 
 		expect(statuses).toEqual([ChatSessionStatus.InProgress, ChatSessionStatus.Completed]);
@@ -174,7 +176,7 @@ describe('CopilotCLISession', () => {
 		const listener = disposables.add(session.onDidChangeStatus(s => statuses.push(s)));
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('Will Fail', [], undefined, CancellationToken.None);
+		await session.handleRequest('', 'Will Fail', [], undefined, CancellationToken.None);
 		listener.dispose?.();
 
 		expect(statuses).toEqual([ChatSessionStatus.InProgress, ChatSessionStatus.Failed]);
@@ -196,13 +198,13 @@ describe('CopilotCLISession', () => {
 		session.attachStream(stream);
 
 		// Path must be absolute within workspace, should auto-approve
-		await session.handleRequest('Test', [], undefined, CancellationToken.None);
+		await session.handleRequest('', 'Test', [], undefined, CancellationToken.None);
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: '/workingDirectory' }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -215,7 +217,7 @@ describe('CopilotCLISession', () => {
 		session.attachStream(stream);
 
 		// Path must be absolute within workspace, should auto-approve
-		await session.handleRequest('Test', [], undefined, CancellationToken.None);
+		await session.handleRequest('', 'Test', [], undefined, CancellationToken.None);
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
@@ -240,7 +242,7 @@ describe('CopilotCLISession', () => {
 		}));
 
 		// Path must be absolute within workspace, should auto-approve
-		await session.handleRequest('Test', [], undefined, CancellationToken.None);
+		await session.handleRequest('', 'Test', [], undefined, CancellationToken.None);
 		const file = path.join('/workingDirectory', 'file.ts');
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
 		expect(askedForPermission).not.toBeUndefined();
@@ -263,7 +265,7 @@ describe('CopilotCLISession', () => {
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
 
-		await session.handleRequest('Write', [], undefined, CancellationToken.None);
+		await session.handleRequest('', 'Write', [], undefined, CancellationToken.None);
 
 		expect(result).toEqual({ kind: 'approved' });
 	});
@@ -281,7 +283,7 @@ describe('CopilotCLISession', () => {
 		};
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('Write', [], undefined, CancellationToken.None);
+		await session.handleRequest('', 'Write', [], undefined, CancellationToken.None);
 
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
 	});
@@ -299,7 +301,7 @@ describe('CopilotCLISession', () => {
 		};
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('Write', [], undefined, CancellationToken.None);
+		await session.handleRequest('', 'Write', [], undefined, CancellationToken.None);
 
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
 	});
@@ -321,7 +323,7 @@ describe('CopilotCLISession', () => {
 		});
 
 		// Act: start handling request (do not await yet)
-		const requestPromise = session.handleRequest('Edits', [], undefined, CancellationToken.None);
+		const requestPromise = session.handleRequest('', 'Edits', [], undefined, CancellationToken.None);
 
 		// Wait a tick to ensure event listeners are registered inside handleRequest
 		await new Promise(r => setTimeout(r, 0));
@@ -329,11 +331,12 @@ describe('CopilotCLISession', () => {
 		// Emit 10 edit tool start events in rapid succession for the same file
 		const filePath = '/workspace/abc.py';
 		for (let i = 1; i <= 10; i++) {
-			sdkSession.emit('tool.execution_start', {
+			const editToolCall: ToolCall = {
+				toolName: 'edit',
 				toolCallId: String(i),
-				toolName: 'str_replace_editor',
-				arguments: { command: 'str_replace', path: filePath }
-			});
+				arguments: { path: filePath, new_str: 'new content' },
+			};
+			sdkSession.emit('tool.execution_start', editToolCall);
 		}
 
 		// Now request permissions sequentially AFTER all tool calls have been emitted
@@ -344,7 +347,8 @@ describe('CopilotCLISession', () => {
 				kind: 'write',
 				fileName: filePath,
 				intention: 'Apply edit',
-				diff: ''
+				diff: '',
+				toolCallId: String(i)
 			});
 			permissionResults.push(result);
 			// Complete the edit so the tracker (if it were real) would finish; emit completion event

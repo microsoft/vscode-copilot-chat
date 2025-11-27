@@ -381,19 +381,20 @@ function getResponseIdFromVSCodeChatHistoryTurn(turn: ChatRequestTurn | ChatResp
  */
 function createTurnFromVSCodeChatHistoryTurns(
 	accessor: ServicesAccessor,
-	chatRequestTurn: ChatRequestTurn2,
+	chatRequestTurn: ChatRequestTurn,
 	chatResponseTurn: ChatResponseTurn
 ): Turn {
 	const commandService = accessor.get(ICommandService);
 	const workspaceService = accessor.get(IWorkspaceService);
 	const instaService = accessor.get(IInstantiationService);
 
+	const chatRequestAsTurn2 = chatRequestTurn as ChatRequestTurn2;
 	const currentTurn = new Turn(
 		undefined,
 		{ message: chatRequestTurn.prompt, type: 'user' },
 		new ChatVariablesCollection(chatRequestTurn.references),
 		chatRequestTurn.toolReferences.map(InternalToolReference.from),
-		chatRequestTurn.editedFileEvents
+		chatRequestAsTurn2.editedFileEvents
 	);
 
 	// Take just the content messages

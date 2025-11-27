@@ -7,7 +7,7 @@ import { t } from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
-import { RepoStatus, ResolvedRepoEntry } from '../../../platform/remoteCodeSearch/node/codeSearchRepoTracker';
+import { RepoStatus, ResolvedRepoEntry } from '../../../platform/workspaceChunkSearch/node/codeSearch/repoManager';
 import { LocalEmbeddingsIndexStatus } from '../../../platform/workspaceChunkSearch/node/embeddingsChunkSearch';
 import { IWorkspaceChunkSearchService, WorkspaceIndexState } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
@@ -154,7 +154,7 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 						});
 					}
 
-					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.CheckingStatus || repo.status === RepoStatus.Initializing)) {
+					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.CheckingStatus || repo.status === RepoStatus.Resolving)) {
 						return this._writeStatusItem({
 							title: {
 								title: t('Remote index'),

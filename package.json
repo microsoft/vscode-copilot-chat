@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.107.20251119",
+		"vscode": "^1.107.0-20251119",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -189,9 +189,11 @@
 			{
 				"name": "copilot_listCodeUsages",
 				"toolReferenceName": "usages",
+				"legacyToolReferenceFullNames": [
+					"usages"
+				],
 				"displayName": "%copilot.tools.listCodeUsages.name%",
 				"icon": "$(references)",
-				"canBeReferencedInPrompt": true,
 				"userDescription": "%copilot.listCodeUsages.tool.description%",
 				"modelDescription": "Request to list all usages (references, definitions, implementations etc) of a function, class, method, variable etc. Use this tool when \n1. Looking for a sample implementation of an interface or class\n2. Checking how a function is used throughout the codebase.\n3. Including and updating all usages when changing a function, method, or constructor",
 				"tags": [
@@ -236,8 +238,7 @@
 						"query"
 					]
 				},
-				"tags": [],
-				"canBeReferencedInPrompt": true
+				"tags": []
 			},
 			{
 				"name": "copilot_findFiles",
@@ -329,7 +330,11 @@
 			{
 				"name": "copilot_readFile",
 				"toolReferenceName": "readFile",
+				"legacyToolReferenceFullNames": [
+					"search/readFile"
+				],
 				"displayName": "%copilot.tools.readFile.name%",
+				"userDescription": "%copilot.tools.readFile.userDescription%",
 				"modelDescription": "Read the contents of a file.\n\nYou must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads.",
 				"tags": [
 					"vscode_codesearch"
@@ -382,7 +387,9 @@
 				"name": "copilot_getErrors",
 				"displayName": "%copilot.tools.getErrors.name%",
 				"toolReferenceName": "problems",
-				"canBeReferencedInPrompt": true,
+				"legacyToolReferenceFullNames": [
+					"problems"
+				],
 				"icon": "$(error)",
 				"userDescription": "%copilot.tools.errors.description%",
 				"modelDescription": "Get any compile or lint errors in a specific file or across all files. If the user mentions errors or problems in a file, they may be referring to these. Use the tool to see the same errors that the user is seeing. If the user asks you to analyze all errors, or does not specify a file, use this tool to gather errors for all files. Also use this tool after editing a file to validate the change.",
@@ -410,8 +417,10 @@
 				"name": "copilot_getChangedFiles",
 				"displayName": "%copilot.tools.getChangedFiles.name%",
 				"toolReferenceName": "changes",
+				"legacyToolReferenceFullNames": [
+					"changes"
+				],
 				"icon": "$(diff)",
-				"canBeReferencedInPrompt": true,
 				"userDescription": "%copilot.tools.changes.description%",
 				"modelDescription": "Get git diffs of current file changes in a git repository. Don't forget that you can use run_in_terminal to run git commands in a terminal as well.",
 				"tags": [
@@ -442,6 +451,9 @@
 			{
 				"name": "copilot_testFailure",
 				"toolReferenceName": "testFailure",
+				"legacyToolReferenceFullNames": [
+					"testFailure"
+				],
 				"displayName": "%copilot.tools.testFailure.name%",
 				"icon": "$(beaker)",
 				"userDescription": "%copilot.testFailure.tool.description%",
@@ -453,8 +465,7 @@
 					"enable_other_tool_copilot_listDirectory",
 					"enable_other_tool_copilot_findFiles",
 					"enable_other_tool_copilot_runTests"
-				],
-				"canBeReferencedInPrompt": true
+				]
 			},
 			{
 				"name": "copilot_updateUserPreferences",
@@ -484,6 +495,9 @@
 				"name": "copilot_createNewWorkspace",
 				"displayName": "%github.copilot.tools.createNewWorkspace.name%",
 				"toolReferenceName": "newWorkspace",
+				"legacyToolReferenceFullNames": [
+					"new/newWorkspace"
+				],
 				"icon": "$(new-folder)",
 				"userDescription": "%github.copilot.tools.createNewWorkspace.userDescription%",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
@@ -510,6 +524,9 @@
 				"displayName": "%github.copilot.tools.getProjectSetupInfo.name%",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "getProjectSetupInfo",
+				"legacyToolReferenceFullNames": [
+					"new/getProjectSetupInfo"
+				],
 				"modelDescription": "Do not call this tool without first calling the tool to create a workspace. This tool provides a project setup information for a Visual Studio Code workspace based on a project type and programming language.",
 				"inputSchema": {
 					"type": "object",
@@ -530,6 +547,9 @@
 				"displayName": "Install Extension in VS Code",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "installExtension",
+				"legacyToolReferenceFullNames": [
+					"new/installExtension"
+				],
 				"modelDescription": "Install an extension in VS Code. Use this tool to install an extension in Visual Studio Code as part of a new workspace creation process only.",
 				"inputSchema": {
 					"type": "object",
@@ -554,7 +574,10 @@
 				"name": "copilot_runVscodeCommand",
 				"displayName": "Run VS Code Command",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
-				"toolReferenceName": "runVscodeCommand",
+				"toolReferenceName": "runCommand",
+				"legacyToolReferenceFullNames": [
+					"new/runVscodeCommand"
+				],
 				"modelDescription": "Run a command in VS Code. Use this tool to run a command in Visual Studio Code as part of a new workspace creation process only.",
 				"inputSchema": {
 					"type": "object",
@@ -586,7 +609,10 @@
 				"name": "copilot_createNewJupyterNotebook",
 				"displayName": "Create New Jupyter Notebook",
 				"icon": "$(notebook)",
-				"toolReferenceName": "newJupyterNotebook",
+				"toolReferenceName": "createJupyterNotebook",
+				"legacyToolReferenceFullNames": [
+					"newJupyterNotebook"
+				],
 				"modelDescription": "Generates a new Jupyter Notebook (.ipynb) in VS Code. Jupyter Notebooks are interactive documents commonly used for data exploration, analysis, visualization, and combining code with narrative text. Prefer creating plain Python files or similar unless a user explicitly requests creating a new Jupyter Notebook or already has a Jupyter Notebook opened or exists in the workspace.",
 				"userDescription": "%copilot.tools.newJupyterNotebook.description%",
 				"inputSchema": {
@@ -635,6 +661,9 @@
 			{
 				"name": "copilot_createFile",
 				"toolReferenceName": "createFile",
+				"legacyToolReferenceFullNames": [
+					"createFile"
+				],
 				"displayName": "%copilot.tools.createFile.name%",
 				"userDescription": "%copilot.tools.createFile.description%",
 				"modelDescription": "This is a tool for creating a new file in the workspace. The file will be created with the specified content. The directory will be created if it does not already exist. Never use this tool to edit a file that already exists.",
@@ -660,6 +689,9 @@
 			{
 				"name": "copilot_createDirectory",
 				"toolReferenceName": "createDirectory",
+				"legacyToolReferenceFullNames": [
+					"createDirectory"
+				],
 				"displayName": "%copilot.tools.createDirectory.name%",
 				"userDescription": "%copilot.tools.createDirectory.description%",
 				"modelDescription": "Create a new directory structure in the workspace. Will recursively create all directories in the path, like mkdir -p. You do not need to use this tool before using create_file, that tool will automatically create the needed directories.",
@@ -683,7 +715,9 @@
 				"modelDescription": "Preview a website or open a URL in the editor's Simple Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
 				"userDescription": "%copilot.tools.openSimpleBrowser.description%",
 				"toolReferenceName": "openSimpleBrowser",
-				"canBeReferencedInPrompt": true,
+				"legacyToolReferenceFullNames": [
+					"openSimpleBrowser"
+				],
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
@@ -782,7 +816,9 @@
 			{
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
+				"icon": "$(pencil)",
 				"displayName": "%copilot.tools.editNotebook.name%",
+				"userDescription": "%copilot.tools.editNotebook.userDescription%",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
 				"tags": [
 					"enable_other_tool_copilot_getNotebookSummary"
@@ -837,7 +873,10 @@
 			{
 				"name": "copilot_runNotebookCell",
 				"displayName": "%copilot.tools.runNotebookCell.name%",
-				"toolReferenceName": "runCell",
+				"toolReferenceName": "runNotebookCell",
+				"legacyToolReferenceFullNames": [
+					"runNotebooks/runCell"
+				],
 				"icon": "$(play)",
 				"modelDescription": "This is a tool for running a code cell in a notebook file directly in the notebook editor. The output from the execution will be returned. Code cells should be run as they are added or edited when working through a problem to bring the kernel state up to date and ensure the code executes successfully. Code cells are ready to run and don't require any pre-processing. If asked to run the first cell in a notebook, you should run the first code cell since markdown cells cannot be executed. NOTE: Avoid executing Markdown cells or providing Markdown cell IDs, as Markdown cells cannot be  executed.",
 				"userDescription": "%copilot.tools.runNotebookCell.description%",
@@ -873,6 +912,9 @@
 			{
 				"name": "copilot_getNotebookSummary",
 				"toolReferenceName": "getNotebookSummary",
+				"legacyToolReferenceFullNames": [
+					"runNotebooks/getNotebookSummary"
+				],
 				"displayName": "Get the structure of a notebook",
 				"modelDescription": "This is a tool returns the list of the Notebook cells along with the id, cell types, line ranges, language, execution information and output mime types for each cell. This is useful to get Cell Ids when executing a notebook or determine what cells have been executed and what order, or what cells have outputs. If required to read contents of a cell use this to determine the line range of a cells, and then use read_file tool to read a specific line range. Requery this tool if the contents of the notebook change.",
 				"tags": [],
@@ -893,6 +935,9 @@
 				"name": "copilot_readNotebookCellOutput",
 				"displayName": "%copilot.tools.getNotebookCellOutput.name%",
 				"toolReferenceName": "readNotebookCellOutput",
+				"legacyToolReferenceFullNames": [
+					"runNotebooks/readNotebookCellOutput"
+				],
 				"icon": "$(notebook-render-output)",
 				"modelDescription": "This tool will retrieve the output for a notebook cell from its most recent execution or restored from disk. The cell may have output even when it has not been run in the current kernel session. This tool has a higher token limit for output length than the runNotebookCell tool.",
 				"userDescription": "%copilot.tools.getNotebookCellOutput.description%",
@@ -920,8 +965,10 @@
 				"name": "copilot_fetchWebPage",
 				"displayName": "%copilot.tools.fetchWebPage.name%",
 				"toolReferenceName": "fetch",
+				"legacyToolReferenceFullNames": [
+					"fetch"
+				],
 				"when": "!isWeb",
-				"canBeReferencedInPrompt": true,
 				"icon": "$(globe)",
 				"userDescription": "%copilot.tools.fetchWebPage.description%",
 				"modelDescription": "Fetches the main content from a web page. This tool is useful for summarizing or analyzing the content of a webpage. You should use this tool when you think the user is looking for information from a specific webpage.",
@@ -1007,11 +1054,14 @@
 			{
 				"name": "copilot_githubRepo",
 				"toolReferenceName": "githubRepo",
+				"legacyToolReferenceFullNames": [
+					"githubRepo"
+				],
 				"displayName": "%github.copilot.tools.githubRepo.name%",
 				"modelDescription": "Searches a GitHub repository for relevant source code snippets. Only use this tool if the user is very clearly asking for code snippets from a specific GitHub repository. Do not use this tool for Github repos that the user has open in their workspace.",
 				"userDescription": "%github.copilot.tools.githubRepo.userDescription%",
 				"icon": "$(repo)",
-				"canBeReferencedInPrompt": true,
+				"when": "!config.github.copilot.chat.githubMcpServer.enabled",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -1131,7 +1181,10 @@
 				"userDescription": "Edit files",
 				"icon": "$(pencil)",
 				"displayName": "Edit Files",
-				"toolReferenceName": "editFiles"
+				"toolReferenceName": "editFiles",
+				"legacyToolReferenceFullNames": [
+					"editFiles"
+				]
 			}
 		],
 		"languageModelToolSets": [
@@ -1140,20 +1193,28 @@
 				"description": "%copilot.toolSet.editing.description%",
 				"icon": "$(pencil)",
 				"tools": [
-					"createFile",
 					"createDirectory",
-					"editNotebook",
-					"newJupyterNotebook",
-					"editFiles"
+					"createFile",
+					"createJupyterNotebook",
+					"editFiles",
+					"editNotebook"
 				]
 			},
 			{
-				"name": "runNotebooks",
-				"description": "%copilot.toolSet.runNotebook.description%",
-				"icon": "$(notebook)",
+				"name": "execute",
+				"description": "",
 				"tools": [
-					"runCell",
+					"runNotebookCell",
+					"testFailure"
+				]
+			},
+			{
+				"name": "read",
+				"description": "%copilot.toolSet.read.description%",
+				"icon": "$(eye)",
+				"tools": [
 					"getNotebookSummary",
+					"readFile",
 					"readNotebookCellOutput"
 				]
 			},
@@ -1162,23 +1223,35 @@
 				"description": "%copilot.toolSet.search.description%",
 				"icon": "$(search)",
 				"tools": [
-					"fileSearch",
-					"textSearch",
-					"listDirectory",
-					"readFile",
+					"changes",
 					"codebase",
-					"searchResults"
+					"fileSearch",
+					"listDirectory",
+					"problems",
+					"searchResults",
+					"textSearch",
+					"usages"
 				]
 			},
 			{
-				"name": "new",
-				"description": "%copilot.toolSet.new.description%",
-				"icon": "$(new-folder)",
+				"name": "vscode",
+				"description": "",
 				"tools": [
-					"newWorkspace",
-					"runVscodeCommand",
 					"getProjectSetupInfo",
-					"installExtension"
+					"installExtension",
+					"newWorkspace",
+					"openSimpleBrowser",
+					"runCommand",
+					"vscodeAPI"
+				]
+			},
+			{
+				"name": "web",
+				"description": "%copilot.toolSet.web.description%",
+				"icon": "$(globe)",
+				"tools": [
+					"fetch",
+					"githubRepo"
 				]
 			}
 		],
@@ -1769,6 +1842,12 @@
 				"when": "!github.copilot.interactiveSession.disabled"
 			}
 		],
+		"mcpServerDefinitionProviders": [
+			{
+				"id": "github",
+				"label": "GitHub"
+			}
+		],
 		"viewsWelcome": [
 			{
 				"view": "debug",
@@ -1821,12 +1900,6 @@
 			}
 		],
 		"chatViewsWelcome": [
-			{
-				"icon": "$(copilot-large)",
-				"title": "Ask Copilot",
-				"content": "%github.copilot.viewsWelcome.signIn%",
-				"when": "!github.copilot-chat.activated && !github.copilot.offline && !github.copilot.interactiveSession.individual.expired && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.chatDisabled && !github.copilot.interactiveSession.switchToReleaseChannel"
-			},
 			{
 				"icon": "$(copilot-large)",
 				"title": "Ask Copilot",
@@ -2341,6 +2414,10 @@
 				"icon": "$(refresh)"
 			},
 			{
+				"command": "github.copilot.cloud.resetWorkspaceConfirmations",
+				"title": "%github.copilot.command.resetCloudAgentWorkspaceConfirmations%"
+			},
+			{
 				"command": "github.copilot.cloud.sessions.openInBrowser",
 				"title": "%github.copilot.command.openCopilotAgentSessionsInBrowser%",
 				"icon": "$(link-external)"
@@ -2519,10 +2596,20 @@
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					},
+					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%"
+					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
+					},
+					"github.copilot.chat.agent.delegate.autoCommitAndPush": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agent.delegate.autoCommitAndPush%"
 					},
 					"github.copilot.enable": {
 						"type": "object",
@@ -2664,6 +2751,43 @@
 			{
 				"id": "experimental",
 				"properties": {
+					"github.copilot.chat.githubMcpServer.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.githubMcpServer.enabled%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.githubMcpServer.toolsets": {
+						"type": "array",
+						"default": [
+							"default"
+						],
+						"markdownDescription": "%github.copilot.config.githubMcpServer.toolsets%",
+						"items": {
+							"type": "string"
+						},
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.githubMcpServer.readonly": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.githubMcpServer.readonly%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.githubMcpServer.lockdown": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.githubMcpServer.lockdown%",
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.imageUpload.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -2988,7 +3112,7 @@
 							"fillHalf",
 							"fill"
 						],
-						"default": "minimal",
+						"default": "double",
 						"scope": "resource",
 						"tags": [
 							"experimental",
@@ -3087,6 +3211,22 @@
 						],
 						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
+					"github.copilot.chat.azureAuthType": {
+						"type": "string",
+						"enum": [
+							"entraId",
+							"apiKey"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.azureAuthType.entraId%",
+							"%github.copilot.config.azureAuthType.apiKey%"
+						],
+						"default": "entraId",
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.azureAuthType%"
+					},
 					"github.copilot.chat.azureModels": {
 						"type": "object",
 						"default": {},
@@ -3124,6 +3264,11 @@
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"zeroDataRetentionEnabled": {
+									"type": "boolean",
+									"default": false,
+									"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
 								},
 								"requestHeaders": {
 									"type": "object",
@@ -3201,6 +3346,11 @@
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
 								},
+								"zeroDataRetentionEnabled": {
+									"type": "boolean",
+									"default": false,
+									"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
+								},
 								"requestHeaders": {
 									"type": "object",
 									"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
@@ -3267,22 +3417,12 @@
 							"detailed"
 						]
 					},
-					"github.copilot.chat.anthropic.thinking.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.anthropic.thinking.maxTokens": {
+					"github.copilot.chat.anthropic.thinking.budgetTokens": {
 						"type": [
 							"number",
 							"null"
 						],
-						"default": null,
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.maxTokens%",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
 						"minimum": 1024,
 						"maximum": 32000,
 						"tags": [
@@ -3413,6 +3553,26 @@
 						"tags": [
 							"advanced",
 							"experimental"
+						]
+					},
+					"github.copilot.chat.edits.gemini3ReplaceStringOnly": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Use only the modern `replace_string_in_file` edit tool when generating edits with Gemini 3 models.",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.edits.gemini3MultiReplaceString": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Enable the modern `multi_replace_string_in_file` edit tool when generating edits with Gemini 3 models.",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.projectLabels.expanded": {
@@ -3615,7 +3775,7 @@
 					},
 					"github.copilot.chat.inlineEdits.diagnosticsContextProvider.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
 						"tags": [
 							"advanced",
@@ -3834,6 +3994,16 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.inlineEdits.renameSymbolSuggestions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.inlineEdits.renameSymbolSuggestions%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.suggestRelatedFilesFromGitHistory.useEmbeddings": {
 						"type": "boolean",
 						"default": false,
@@ -3847,6 +4017,15 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.isolation.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.cli.customAgents.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.customAgents.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"
@@ -4897,13 +5076,13 @@
 			{
 				"type": "copilotcli",
 				"name": "cli",
-				"displayName": "GitHub Copilot CLI Agent",
-				"icon": "$(copilot)",
-				"welcomeTitle": "GitHub Copilot CLI Agent",
-				"welcomeMessage": "Run local background tasks",
+				"displayName": "Background Agent",
+				"icon": "$(collection)",
+				"welcomeTitle": "Background Agent",
+				"welcomeMessage": "Run tasks in the background",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
-				"description": "The GitHub Copilot CLI Agent works on your local machine",
+				"description": "Delegate tasks to a background agent.",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
@@ -4922,12 +5101,9 @@
 					"copilot-swe-agent"
 				],
 				"name": "cloud",
-				"displayName": "GitHub Copilot Cloud Agent",
-				"icon": {
-					"light": "assets/copilot-cloud.svg",
-					"dark": "assets/copilot-cloud-dark.svg"
-				},
-				"welcomeTitle": "GitHub Copilot Cloud Agent",
+				"displayName": "Cloud Agent",
+				"icon": "$(cloud)",
+				"welcomeTitle": "Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 1,
@@ -5085,9 +5261,9 @@
 		"eslint-plugin-jsdoc": "^51.3.4",
 		"eslint-plugin-no-only-tests": "^3.3.0",
 		"fastq": "^1.19.1",
-		"glob": "^11.0.3",
+		"glob": "^11.1.0",
 		"husky": "^9.1.7",
-		"js-yaml": "^4.1.0",
+		"js-yaml": "^4.1.1",
 		"keyv": "^5.3.2",
 		"lint-staged": "15.2.9",
 		"minimist": "^1.2.8",
@@ -5129,11 +5305,12 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.68.0",
-		"@github/copilot": "^0.0.356",
+		"@github/copilot": "^0.0.365",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@vscode/copilot-api": "^0.2.0",
+		"@sinclair/typebox": "^0.34.41",
+		"@vscode/copilot-api": "^0.2.5",
 		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

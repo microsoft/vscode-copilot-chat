@@ -15,9 +15,12 @@ export class ChatResponseMarkdownPart {
 }
 
 export class ChatResponseCodeblockUriPart {
+	isEdit?: boolean;
 	value: vscode.Uri;
-	constructor(value: vscode.Uri) {
+	undoStopId?: string;
+	constructor(value: vscode.Uri, isEdit?: boolean, undoStopId?: string) {
 		this.value = value;
+		this.undoStopId = undoStopId;
 	}
 }
 
@@ -58,14 +61,14 @@ export class ChatResponseThinkingProgressPart {
 }
 
 export class ChatResponseExternalEditPart {
-	applied: Thenable<void>;
-	didGetApplied!: () => void;
+	applied: Thenable<string>;
+	didGetApplied!: (value: string) => void;
 
 	constructor(
 		public uris: vscode.Uri[],
 		public callback: () => Thenable<unknown>,
 	) {
-		this.applied = new Promise<void>((resolve) => {
+		this.applied = new Promise<string>((resolve) => {
 			this.didGetApplied = resolve;
 		});
 	}
@@ -442,6 +445,31 @@ export enum LanguageModelChatMessageRole {
 	User = 1,
 	Assistant = 2,
 	System = 3
+}
+
+export enum LanguageModelChatToolMode {
+	Auto = 1,
+	Required = 2
+}
+
+export class LanguageModelChatMessage implements vscode.LanguageModelChatMessage {
+	role: LanguageModelChatMessageRole;
+	content: Array<any>;
+	name: string | undefined;
+
+	constructor(role: LanguageModelChatMessageRole, content: string | Array<any>, name?: string) {
+		this.role = role;
+		this.content = typeof content === 'string' ? [{ type: 'text', value: content }] : content;
+		this.name = name;
+	}
+
+	static User(content: string | Array<any>, name?: string): LanguageModelChatMessage {
+		return new LanguageModelChatMessage(LanguageModelChatMessageRole.User, content, name);
+	}
+
+	static Assistant(content: string | Array<any>, name?: string): LanguageModelChatMessage {
+		return new LanguageModelChatMessage(LanguageModelChatMessageRole.Assistant, content, name);
+	}
 }
 
 export class ChatToolInvocationPart {

@@ -86,6 +86,8 @@ export import LanguageModelToolCallPart = vscode.LanguageModelToolCallPart;
 export import LanguageModelToolResultPart = vscode.LanguageModelToolResultPart;
 export import LanguageModelToolResultPart2 = vscode.LanguageModelToolResultPart2;
 export import LanguageModelChatMessageRole = vscode.LanguageModelChatMessageRole;
+export import LanguageModelChatMessage = vscode.LanguageModelChatMessage;
+export import LanguageModelChatToolMode = vscode.LanguageModelChatToolMode;
 export import TextEditorSelectionChangeKind = vscode.TextEditorSelectionChangeKind;
 export import TextDocumentChangeReason = vscode.TextDocumentChangeReason;
 export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;
@@ -104,4 +106,8 @@ export const l10n = {
 	 * use `import { l10n } from 'vscode'` or `import * as l10n from '@vscode/l10n'`.
 	 */
 	t: vscode.l10n.t
+};
+
+export const authentication = {
+	getSession: vscode.authentication.getSession,
 };

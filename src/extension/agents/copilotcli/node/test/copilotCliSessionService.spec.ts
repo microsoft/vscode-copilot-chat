@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { SessionOptions } from '@github/copilot/sdk';
+import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
@@ -15,9 +15,10 @@ import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
+import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { ICopilotCLISDK } from '../copilotCli';
+import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
@@ -54,12 +55,33 @@ export class MockCliSdkSessionManager {
 		return Promise.resolve(undefined);
 	}
 	listSessions() {
-		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime })));
+		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime, modifiedTime: s.startTime })));
 	}
 	deleteSession(id: string) { this.sessions.delete(id); return Promise.resolve(); }
 	closeSession(_id: string) { return Promise.resolve(); }
 }
 
+export class NullCopilotCLIAgents implements ICopilotCLIAgents {
+	_serviceBrand: undefined;
+	async getAgents(): Promise<SweCustomAgent[]> {
+		return [];
+	}
+	async getDefaultAgent(): Promise<string> {
+		return COPILOT_CLI_DEFAULT_AGENT_ID;
+	}
+	async getSessionAgent(_sessionId: string): Promise<string | undefined> {
+		return undefined;
+	}
+	resolveAgent(_agentId: string): Promise<SweCustomAgent | undefined> {
+		return Promise.resolve(undefined);
+	}
+	setDefaultAgent(_agent: string | undefined): Promise<void> {
+		return Promise.resolve();
+	}
+	trackSessionAgent(_sessionId: string, agent: string | undefined): Promise<void> {
+		return Promise.resolve();
+	}
+}
 
 describe('CopilotCLISessionService', () => {
 	const disposables = new DisposableStore();
@@ -67,11 +89,10 @@ describe('CopilotCLISessionService', () => {
 	let instantiationService: IInstantiationService;
 	let service: CopilotCLISessionService;
 	let manager: MockCliSdkSessionManager;
-
 	beforeEach(async () => {
 		vi.useRealTimers();
 		const sdk = {
-			getPackage: vi.fn(async () => ({ internal: { CLISessionManager: MockCliSdkSessionManager } }))
+			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager } }))
 		} as unknown as ICopilotCLISDK;
 
 		const services = disposables.add(createExtensionUnitTestingServices());
@@ -79,6 +100,7 @@ describe('CopilotCLISessionService', () => {
 		logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
 		const workspaceService = new NullWorkspaceService();
+		const cliAgents = new NullCopilotCLIAgents();
 		const authService = {
 			getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
 		} as unknown as IAuthenticationService;
@@ -87,12 +109,12 @@ describe('CopilotCLISessionService', () => {
 				return fn(accessor, ...args);
 			},
 			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
-				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, authService, instantiationService));
+				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService));
 			}
 		} as unknown as IInstantiationService;
 
 		const configurationService = accessor.get(IConfigurationService);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService)));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService), cliAgents));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
@@ -106,14 +128,14 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.createSession', () => {
 		it('get session will return the same session created using createSession', async () => {
-			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
+			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: URI.file('/tmp') }, CancellationToken.None);
 
 			const existingSession = await service.getSession(session.object.sessionId, { readonly: false }, CancellationToken.None);
 
 			expect(existingSession).toBe(session);
 		});
 		it('get session will return new once previous session is disposed', async () => {
-			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
+			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: URI.file('/tmp') }, CancellationToken.None);
 
 			session.dispose();
 			await new Promise(resolve => setTimeout(resolve, 0)); // allow dispose async cleanup to run
@@ -215,7 +237,7 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.getAllSessions', () => {
 		it('will not list created sessions', async () => {
-			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: '/tmp' }, CancellationToken.None);
+			const session = await service.createSession('   ', { model: 'gpt-test', workingDirectory: URI.file('/tmp') }, CancellationToken.None);
 			disposables.add(session);
 
 			const s1 = new MockCliSdkSession('s1', new Date(0));

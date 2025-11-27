@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AuthenticationGetSessionOptions, AuthenticationSession, AuthenticationSessionsChangeEvent, authentication } from 'vscode';
-import { URI } from '../../../util/vs/base/common/uri';
-import { AuthPermissionMode, AuthProviderId, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
-import { GITHUB_SCOPE_ALIGNED, GITHUB_SCOPE_READ_USER, GITHUB_SCOPE_USER_EMAIL, MinimalModeError } from '../common/authentication';
+import { authentication, AuthenticationGetSessionOptions, AuthenticationSession, AuthenticationSessionsChangeEvent } from 'vscode';
 import { mixin } from '../../../util/vs/base/common/objects';
+import { URI } from '../../../util/vs/base/common/uri';
+import { AuthPermissionMode, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { authProviderId, GITHUB_SCOPE_ALIGNED, GITHUB_SCOPE_READ_USER, GITHUB_SCOPE_USER_EMAIL, MinimalModeError } from '../common/authentication';
 
 export const SESSION_LOGIN_MESSAGE = 'You are not signed in to GitHub. Please sign in to use Copilot.';
 // These types are subsets of the "real" types AuthenticationSessionAccountInformation and
@@ -21,14 +21,6 @@ export type CopilotAuthenticationSession = {
 	accessToken: string;
 	account: CopilotAuthenticationSessionAccountInformation;
 };
-
-export function authProviderId(configurationService: IConfigurationService): AuthProviderId {
-	return (
-		configurationService.getConfig(ConfigKey.Shared.AuthProvider) === AuthProviderId.GitHubEnterprise
-			? AuthProviderId.GitHubEnterprise
-			: AuthProviderId.GitHub
-	);
-}
 
 async function getAuthSession(providerId: string, defaultScopes: string[], getSilentSession: () => Promise<AuthenticationSession | undefined>, options: AuthenticationGetSessionOptions = {}) {
 	const accounts = await authentication.getAccounts(providerId);

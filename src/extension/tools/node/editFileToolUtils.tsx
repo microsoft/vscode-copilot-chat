@@ -32,6 +32,7 @@ import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common
 import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { formatUriForFileWidget } from '../common/toolUtils';
+import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -582,7 +583,10 @@ export async function applyEdit(
 		old_string = old_string.replace(/\r?\n/g, eol);
 		new_string = new_string.replace(/\r?\n/g, eol);
 
-		if (old_string === '') {
+		if (isFalsyOrWhitespace(originalFile) && isFalsyOrWhitespace(old_string)) {
+			updatedFile = new_string;
+			edits.push(TextEdit.insert(new Position(0, 0), new_string));
+		} else if (old_string === '') {
 			if (originalFile !== '') {
 				// If the file already exists and we're creating a new file with empty old_string
 				throw new ContentFormatError('File already exists. Please provide a non-empty old_string for replacement.', filePath);
@@ -694,7 +698,7 @@ export async function applyEdit(
 		if (error instanceof EditError) {
 			throw error;
 		} else {
-			throw new EditError(`Failed to edit file: ${error.message}`, 'unknownError');
+			throw new EditError(`Failed to edit file: ${error.stack || error.message}`, 'unknownError');
 		}
 	}
 }

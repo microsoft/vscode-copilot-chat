@@ -20,7 +20,8 @@ import {
 	isCopilotCliEditToolCall,
 	processToolExecutionComplete,
 	processToolExecutionStart,
-	stripReminders
+	stripReminders,
+	ToolCall
 } from '../copilotCLITools';
 
 // Helper to extract invocation message text independent of MarkdownString vs string
@@ -160,21 +161,21 @@ describe('CopilotCLITools', () => {
 
 	describe('process tool execution lifecycle', () => {
 		it('marks tool invocation complete and confirmed on success', () => {
-			const pending = new Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
 			const startEvent: any = { type: 'tool.execution_start', data: { toolName: 'bash', toolCallId: 'bash-1', arguments: { command: 'echo hi' } } };
 			const part = processToolExecutionStart(startEvent, pending);
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 			const completeEvent: any = { type: 'tool.execution_complete', data: { toolName: 'bash', toolCallId: 'bash-1', success: true } };
-			const completed = processToolExecutionComplete(completeEvent, pending) as ChatToolInvocationPart;
+			const [completed,] = processToolExecutionComplete(completeEvent, pending)! as [ChatToolInvocationPart, ToolCall];
 			expect(completed.isComplete).toBe(true);
 			expect(completed.isError).toBe(false);
 			expect(completed.isConfirmed).toBe(true);
 		});
 		it('marks tool invocation error and unconfirmed when denied', () => {
-			const pending = new Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
 			processToolExecutionStart({ type: 'tool.execution_start', data: { toolName: 'bash', toolCallId: 'bash-2', arguments: { command: 'rm *' } } } as any, pending);
 			const completeEvent: any = { type: 'tool.execution_complete', data: { toolName: 'bash', toolCallId: 'bash-2', success: false, error: { message: 'Denied', code: 'denied' } } };
-			const completed = processToolExecutionComplete(completeEvent, pending) as ChatToolInvocationPart;
+			const [completed,] = processToolExecutionComplete(completeEvent, pending)! as [ChatToolInvocationPart, ToolCall];
 			expect(completed.isComplete).toBe(true);
 			expect(completed.isError).toBe(true);
 			expect(completed.isConfirmed).toBe(false);

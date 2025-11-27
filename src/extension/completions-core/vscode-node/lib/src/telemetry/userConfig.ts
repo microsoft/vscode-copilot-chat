@@ -53,6 +53,11 @@ export class TelemetryUserConfig extends Disposable implements ICompletionsTelem
 		super();
 
 		this._register(onCopilotToken(authenticationService, copilotToken => this.updateFromToken(copilotToken)));
+
+		const maybeToken = authenticationService.copilotToken;
+		if (maybeToken) {
+			this.updateFromToken(maybeToken);
+		}
 	}
 
 	getProperties() {

@@ -186,6 +186,11 @@ export class InlineChatIntent implements IIntent {
 			messages: renderResult.messages,
 			userInitiatedRequest: true,
 			location: ChatLocation.Editor,
+			telemetryProperties: {
+				messageId: telemetry.telemetryMessageId,
+				conversationId: conversation.sessionId,
+				messageSource: this.id
+			},
 			finishedCb: async (_text, _index, delta) => {
 
 				telemetry.markReceivedToken();
