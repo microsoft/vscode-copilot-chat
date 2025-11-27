@@ -10,11 +10,12 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceMap, ResourceSet } from '../../../../util/vs/base/common/map';
 import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { Change } from '../../../git/vscode/git';
 import { LogExecTime } from '../../../log/common/logExecTime';
 import { ILogService } from '../../../log/common/logService';
 import { ISimulationTestContext } from '../../../simulationTestContext/common/simulationTestContext';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
-import { CodeSearchDiff, CodeSearchRepoManager, RepoEntry, RepoStatus } from './repoManager';
+import { RepoEntry, RepoStatus } from './codeSearchChunkSearch';
 
 enum RepoState {
 	Initializing,
@@ -28,6 +29,15 @@ interface RepoDiffState {
 	readonly initialChanges: ResourceSet;
 }
 
+interface CodeSearchRepoTracker {
+	readonly onDidAddOrUpdateRepo: Event<RepoEntry>;
+	readonly onDidRemoveRepo: Event<RepoEntry>;
+
+	initialize(): Promise<void>;
+	getAllRepos(): Iterable<RepoEntry>;
+	diffWithIndexedCommit(repoInfo: RepoEntry): Promise<CodeSearchDiff | undefined>;
+}
+
 export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	private static readonly _diffRefreshInterval = 1000 * 60 * 2; // 2 minutes
@@ -36,7 +46,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	private readonly _repos = new ResourceMap<RepoDiffState>();
 
-	private readonly _repoTracker: CodeSearchRepoManager;
+	private readonly _repoTracker: CodeSearchRepoTracker;
 
 	/**
 	 * Tracks all files that have been changed in the workspace during this session.
@@ -52,7 +62,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 	public readonly initialized = this._initialized.p;
 
 	constructor(
-		repoTracker: CodeSearchRepoManager,
+		repoTracker: CodeSearchRepoTracker,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceFileIndex private readonly _workspaceFileIndex: IWorkspaceFileIndex,
 		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
@@ -229,5 +239,10 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 			repo.state = RepoState.Error;
 		}
 	}
+}
+
+export interface CodeSearchDiff {
+	readonly changes: readonly Change[];
+	readonly mayBeOutdated?: boolean;
 }
 
