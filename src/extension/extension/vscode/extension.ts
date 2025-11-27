@@ -74,6 +74,25 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		await contributions.waitForActivationBlockers();
 	});
 
+	// DEBUG: Test call to organization custom instructions service
+	instantiationService.invokeFunction(async accessor => {
+		const { IOrgCustomInstructionsService } = await import('../../../platform/customInstructions/common/orgCustomInstructionsService');
+		const orgInstructionsService = accessor.get(IOrgCustomInstructionsService);
+		console.log('[DEBUG] Testing OrgCustomInstructionsService...');
+		try {
+			const instructions = await orgInstructionsService.getOrgCustomInstructions();
+			if (instructions) {
+				console.log('[DEBUG] Successfully fetched org custom instructions:', instructions.substring(0, 200) + (instructions.length > 200 ? '...' : ''));
+			} else {
+				console.log('[DEBUG] No org custom instructions available');
+			}
+		} catch (error) {
+			console.error('[DEBUG] Error fetching org custom instructions:', error);
+		}
+	}).catch(error => {
+		console.error('[DEBUG] Failed to test OrgCustomInstructionsService:', error);
+	});
+
 	if (ExtensionMode.Test === context.extensionMode && !isScenarioAutomation) {
 		return instantiationService; // The returned accessor is used in tests
 	}
