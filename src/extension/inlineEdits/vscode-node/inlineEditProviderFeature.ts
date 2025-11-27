@@ -21,7 +21,6 @@ import { join } from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
-import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
@@ -41,7 +40,6 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 
 	private readonly _hideInternalInterface = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsHideInternalInterface);
 	private readonly _enableDiagnosticsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.InlineEditsEnableDiagnosticsProvider, this._expService);
-	private readonly _enableCompletionsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsEnableCompletionsProvider, this._expService);
 	private readonly _yieldToCopilot = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsYieldToCopilot, this._expService);
 	private readonly _excludedProviders = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsExcludedProviders, this._expService).map(v => v ? v.split(',').map(v => v.trim()).filter(v => v !== '') : []);
 	private readonly _copilotToken = observableFromEvent(this, this._authenticationService.onDidAuthenticationChange, () => this._authenticationService.copilotToken);
@@ -121,11 +119,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 				diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, git));
 			}
 
-			const completionsProvider = (this._enableCompletionsProvider.read(reader)
-				? reader.store.add(this._instantiationService.createInstance(CompletionsProvider, workspace))
-				: undefined);
-
-			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider, completionsProvider));
+			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider));
 
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
 

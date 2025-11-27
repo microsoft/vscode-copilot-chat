@@ -190,7 +190,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		telemetryBuilder.setIsNaturalLanguageDominated(LineCheck.isNaturalLanguageDominated(document, position));
 
 		const requestCancellationTokenSource = new CancellationTokenSource(token);
-		const completionsCts = new CancellationTokenSource(token);
 		let suggestionInfo: NesCompletionInfo | undefined;
 		try {
 			tracer.trace('invoking next edit provider');
@@ -198,18 +197,13 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			const { first, all } = raceAndAll([
 				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder),
 				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token),
-				this.model.completionsProvider?.getCompletions(doc.id, context, logContext, token) ?? raceCancellation(new Promise<undefined>(() => { }), completionsCts.token),
 			]);
 
-			let [providerSuggestion, diagnosticsSuggestion, completionAtCursor] = await first;
+			let [providerSuggestion, diagnosticsSuggestion] = await first;
 
-			// ensure completions promise resolves
-			completionsCts.cancel();
-
-			const hasCompletionAtCursor = completionAtCursor && completionAtCursor.result !== undefined;
 			const hasNonEmptyLlmNes = providerSuggestion && providerSuggestion.result !== undefined;
 
-			const shouldGiveMoreTimeToDiagnostics = !hasCompletionAtCursor && !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider;
+			const shouldGiveMoreTimeToDiagnostics = !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider;
 
 			if (shouldGiveMoreTimeToDiagnostics) {
 				tracer.trace('giving some more time to diagnostics provider');
@@ -229,9 +223,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 
 			// Determine which suggestion to use
-			if (completionAtCursor?.result) {
-				suggestionInfo = new LlmCompletionInfo(completionAtCursor, doc.id, document, context.requestUuid);
-			} else if (diagnosticsSuggestion?.result) {
+			if (diagnosticsSuggestion?.result) {
 				suggestionInfo = new DiagnosticsCompletionInfo(diagnosticsSuggestion, doc.id, document, context.requestUuid);
 			} else if (providerSuggestion) {
 				suggestionInfo = new LlmCompletionInfo(providerSuggestion, doc.id, document, context.requestUuid);
@@ -331,7 +323,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			throw e;
 		} finally {
 			requestCancellationTokenSource.dispose();
-			completionsCts.dispose();
 			this.logger.add(logContext);
 		}
 	}
