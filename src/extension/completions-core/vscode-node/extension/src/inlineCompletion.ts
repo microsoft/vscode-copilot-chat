@@ -82,7 +82,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		position: Position,
 		context: InlineCompletionContext,
 		token: CancellationToken
-	): Promise<InlineCompletionItem[] | InlineCompletionList | undefined> {
+	): Promise<InlineCompletionList | undefined> {
 		try {
 			return await this._provideInlineCompletionItems(doc, position, context, token);
 		} catch (e) {
@@ -95,7 +95,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		position: Position,
 		context: InlineCompletionContext,
 		token: CancellationToken
-	): Promise<InlineCompletionItem[] | InlineCompletionList | undefined> {
+	): Promise<InlineCompletionList | undefined> {
 		const pendingRequestDeferred = new Deferred();
 		this.pendingRequests.add(pendingRequestDeferred.promise);
 
