@@ -8,9 +8,9 @@ import { createFilepathRegexp } from '../../../../util/common/markdown';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatReferenceDiagnostic, Location, Range } from '../../../../vscodeTypes';
+import { Range as EditorRange } from '../../../../util/vs/editor/common/core/range';
+import { ChatReferenceDiagnostic, Diagnostic, DiagnosticSeverity, Location, Range } from '../../../../vscodeTypes';
 import { PromptFileIdPrefix } from '../../../prompt/common/chatVariablesCollection';
-
 
 /**
  * Parse the raw user prompt and extract diagnostics and file/line location references
@@ -270,7 +270,7 @@ function extractDiagnostics(prompt: string): {
 
 	// Parse diagnostics (<error ...> tags)
 	const errorRegex = /<error\s+([^>]+)>([\s\S]*?)<\/error>/gi;
-	const byFile = new Map<string, { uri: URI; diagnostics: { message: string; range: { start: { line: number; character: number }; end: { line: number; character: number } }; severity: number; code?: string; source: string }[] }>();
+	const byFile = new Map<string, { uri: URI; diagnostics: Diagnostic[] }>();
 	for (let m; (m = errorRegex.exec(block));) {
 		const attrText = m[1];
 		const message = m[2].trim();
@@ -289,34 +289,54 @@ function extractDiagnostics(prompt: string): {
 		if (!filePath || !lineStr) { continue; }
 		const lineNum = parseInt(lineStr, 10);
 		if (isNaN(lineNum) || lineNum < 1) { continue; }
-		const severityStr = (attrs['severity'] || 'error').toLowerCase();
-		const severityMap: Record<string, number> = { error: 0, warning: 1, info: 2, hint: 3 };
-		const severity = severityMap[severityStr] ?? 0;
 		const code = attrs['code'] && attrs['code'] !== 'undefined' ? attrs['code'] : undefined;
+		const severityStr = (attrs['severity'] || 'error').toLowerCase();
+		const severityMap: Record<string, number> = { error: DiagnosticSeverity.Error, warning: DiagnosticSeverity.Warning, info: DiagnosticSeverity.Information, hint: DiagnosticSeverity.Hint };
 		const uri = URI.file(filePath);
-		const range = { start: { line: lineNum - 1, character: 0 }, end: { line: lineNum - 1, character: 0 } };
+		const range = new Range(lineNum - 1, 0, lineNum - 1, 0);
 		const entry = byFile.get(filePath) || { uri, diagnostics: [] };
-		entry.diagnostics.push({ message, range, severity, code, source: 'prompt' });
+		const diagnostic = new Diagnostic(range, message, severityMap[severityStr]);
+		diagnostic.code = code;
+		entry.diagnostics.push(diagnostic);
 		byFile.set(filePath, entry);
 	}
 	if (byFile.size) {
 		for (const [, { uri, diagnostics: diags }] of byFile) {
-			diags.forEach(diagnostic => {
+			// Collect all diagnostics for this file and group based on the ranges.
+			const processed = new Set<Diagnostic>();
+			for (const diag of diags) {
+				if (processed.has(diag)) {
+					continue;
+				}
+				const diagsInRange = diags.filter(d => !processed.has(d) && d !== diag && EditorRange.areIntersectingOrTouching(toInternalRange(diag.range), toInternalRange(d.range)));
+				diagsInRange.unshift(diag);
+				diagsInRange.forEach(d => processed.add(d));
 				diagnostics.push({
-					id: `${uri.toString()}:${diagnostic.range.start.line}`,
-					name: diagnostic.message,
+					id: `${uri.toString()}:${severityToString(diag.severity)}:${diag.range.start.line + 1}:${diag.range.start.character + 1}`,
+					name: diag.message,
 					range: undefined,
-					value: {
-						diagnostics: [
-							[uri, [diagnostic]]
-						]
-					} as unknown as ChatReferenceDiagnostic
+					value: new ChatReferenceDiagnostic([
+						[uri, diagsInRange]
+					])
 				});
-			});
+			}
 		}
 	}
 
 	return diagnostics;
+}
+
+function severityToString(severity: DiagnosticSeverity): string {
+	switch (severity) {
+		case DiagnosticSeverity.Error: return 'error';
+		case DiagnosticSeverity.Warning: return 'warning';
+		case DiagnosticSeverity.Information: return 'info';
+		case DiagnosticSeverity.Hint: return 'hint';
+		default: return '';
+	}
+}
+function toInternalRange(range: Range): EditorRange {
+	return new EditorRange(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
 }
 
 

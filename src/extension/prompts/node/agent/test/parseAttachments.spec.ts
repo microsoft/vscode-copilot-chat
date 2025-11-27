@@ -160,6 +160,52 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		expect(result).toMatchSnapshot();
 	});
 
+	test('groups diagnostics based on same range', async () => {
+		const req = new TestChatRequest('Fix these errors', [
+			{
+				id: new Location(URI.file('/workspace/file.py'), new Range(12, 0, 12, 20)).toString(),
+				name: 'Unterminated string',
+				value: new ChatReferenceDiagnostic([
+					[
+						URI.file('/workspace/file.py'),
+						[
+							{
+								message: 'Msg1',
+								severity: DiagnosticSeverity.Warning,
+								range: new Range(1, 0, 1, 20),
+								code: 'E001'
+							},
+							{
+								message: 'MsgB',
+								severity: DiagnosticSeverity.Error,
+								range: new Range(1, 0, 4, 20),
+								code: 'E002'
+							},
+							{
+								message: 'MsgC',
+								severity: DiagnosticSeverity.Information,
+								range: new Range(6, 1, 6, 20),
+								code: 'E003'
+							},
+							{
+								message: 'MsgD',
+								severity: DiagnosticSeverity.Hint,
+								range: new Range(6, 10, 6, 15),
+								code: 'E004',
+							},
+						]
+					]
+				])
+			}
+		]);
+
+		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+
+		const result = extractChatPromptReferences(resolved.prompt);
+		expect(resolved.prompt).toMatchSnapshot();
+		expect(fixFilePathsForTestComparison(resolved.attachments)).toMatchSnapshot();
+		expect(result).toMatchSnapshot();
+	});
 	test('aggregates multiple errors across same and different files', async () => {
 		const req = new TestChatRequest('Fix these errors', [
 			{
@@ -180,6 +226,18 @@ suite('CopilotCLI Generate & parse prompts', () => {
 								severity: DiagnosticSeverity.Error,
 								range: new Range(4, 0, 4, 20),
 								code: 'E002'
+							},
+							{
+								message: 'MsgC',
+								severity: DiagnosticSeverity.Information,
+								range: new Range(6, 1, 6, 20),
+								code: 'E003'
+							},
+							{
+								message: 'MsgD',
+								severity: DiagnosticSeverity.Hint,
+								range: new Range(1, 1, 1, 10),
+								code: 'E004',
 							},
 						]
 					],

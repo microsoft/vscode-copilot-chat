@@ -311,6 +311,7 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[], getV
 				try {
 					const promptReferences = extractChatPromptReferences(event.data.content || '');
 					references.push(...promptReferences.references);
+					references.push(...promptReferences.diagnostics);
 				} catch (ex) {
 					// ignore errors from parsing references
 				}

@@ -57,6 +57,12 @@ Msg1
 <error path="/workspace/file.py" line=5 code="E002" severity="error">
 MsgB
 </error>
+<error path="/workspace/file.py" line=7 code="E003" severity="info">
+MsgC
+</error>
+<error path="/workspace/file.py" line=2 code="E004" severity="hint">
+MsgD
+</error>
 <error path="/workspace/sample.py" line=21 code="W001" severity="warning">
 Msg2
 </error>
@@ -74,10 +80,10 @@ exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across
 {
   "diagnostics": [
     {
-      "id": "file:///workspace/file.py:1",
+      "id": "file:///workspace/file.py:warning:2:1",
       "name": "Msg1",
       "range": undefined,
-      "value": {
+      "value": ChatReferenceDiagnostic {
         "diagnostics": [
           [
             {
@@ -90,18 +96,34 @@ exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across
               {
                 "code": "E001",
                 "message": "Msg1",
-                "range": {
-                  "end": {
+                "range": [
+                  {
                     "character": 0,
                     "line": 1,
                   },
-                  "start": {
+                  {
                     "character": 0,
                     "line": 1,
                   },
-                },
-                "severity": 1,
-                "source": "prompt",
+                ],
+                "severity": "Warning",
+                "source": undefined,
+              },
+              {
+                "code": "E004",
+                "message": "MsgD",
+                "range": [
+                  {
+                    "character": 0,
+                    "line": 1,
+                  },
+                  {
+                    "character": 0,
+                    "line": 1,
+                  },
+                ],
+                "severity": "Hint",
+                "source": undefined,
               },
             ],
           ],
@@ -109,10 +131,10 @@ exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across
       },
     },
     {
-      "id": "file:///workspace/file.py:4",
+      "id": "file:///workspace/file.py:error:5:1",
       "name": "MsgB",
       "range": undefined,
-      "value": {
+      "value": ChatReferenceDiagnostic {
         "diagnostics": [
           [
             {
@@ -125,18 +147,18 @@ exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across
               {
                 "code": "E002",
                 "message": "MsgB",
-                "range": {
-                  "end": {
+                "range": [
+                  {
                     "character": 0,
                     "line": 4,
                   },
-                  "start": {
+                  {
                     "character": 0,
                     "line": 4,
                   },
-                },
-                "severity": 0,
-                "source": "prompt",
+                ],
+                "severity": "Error",
+                "source": undefined,
               },
             ],
           ],
@@ -144,10 +166,45 @@ exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across
       },
     },
     {
-      "id": "file:///workspace/sample.py:20",
+      "id": "file:///workspace/file.py:info:7:1",
+      "name": "MsgC",
+      "range": undefined,
+      "value": ChatReferenceDiagnostic {
+        "diagnostics": [
+          [
+            {
+              "$mid": 1,
+              "external": "file:///workspace/file.py",
+              "path": "/workspace/file.py",
+              "scheme": "file",
+            },
+            [
+              {
+                "code": "E003",
+                "message": "MsgC",
+                "range": [
+                  {
+                    "character": 0,
+                    "line": 6,
+                  },
+                  {
+                    "character": 0,
+                    "line": 6,
+                  },
+                ],
+                "severity": "Information",
+                "source": undefined,
+              },
+            ],
+          ],
+        ],
+      },
+    },
+    {
+      "id": "file:///workspace/sample.py:warning:21:1",
       "name": "Msg2",
       "range": undefined,
-      "value": {
+      "value": ChatReferenceDiagnostic {
         "diagnostics": [
           [
             {
@@ -160,18 +217,18 @@ exports[`CopilotCLI Generate & parse prompts > aggregates multiple errors across
               {
                 "code": "W001",
                 "message": "Msg2",
-                "range": {
-                  "end": {
+                "range": [
+                  {
                     "character": 0,
                     "line": 20,
                   },
-                  "start": {
+                  {
                     "character": 0,
                     "line": 20,
                   },
-                },
-                "severity": 1,
-                "source": "prompt",
+                ],
+                "severity": "Warning",
+                "source": undefined,
               },
             ],
           ],
@@ -241,6 +298,144 @@ exports[`CopilotCLI Generate & parse prompts > files are attached as just refere
       },
     },
   ],
+}
+`;
+
+exports[`CopilotCLI Generate & parse prompts > groups diagnostics based on same range 1`] = `
+"Fix these errors
+ <reminder>
+IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task
+</reminder>
+<attachments>
+<error path="/workspace/file.py" line=2 code="E001" severity="warning">
+Msg1
+</error>
+<error path="/workspace/file.py" line=2 code="E002" severity="error">
+MsgB
+</error>
+<error path="/workspace/file.py" line=7 code="E003" severity="info">
+MsgC
+</error>
+<error path="/workspace/file.py" line=7 code="E004" severity="hint">
+MsgD
+</error>
+
+</attachments>
+<userRequest>
+Fix these errors (See <attachments> above for file contents. You may not need to search or read the file again.)
+</userRequest>
+"
+`;
+
+exports[`CopilotCLI Generate & parse prompts > groups diagnostics based on same range 2`] = `[]`;
+
+exports[`CopilotCLI Generate & parse prompts > groups diagnostics based on same range 3`] = `
+{
+  "diagnostics": [
+    {
+      "id": "file:///workspace/file.py:warning:2:1",
+      "name": "Msg1",
+      "range": undefined,
+      "value": ChatReferenceDiagnostic {
+        "diagnostics": [
+          [
+            {
+              "$mid": 1,
+              "external": "file:///workspace/file.py",
+              "path": "/workspace/file.py",
+              "scheme": "file",
+            },
+            [
+              {
+                "code": "E001",
+                "message": "Msg1",
+                "range": [
+                  {
+                    "character": 0,
+                    "line": 1,
+                  },
+                  {
+                    "character": 0,
+                    "line": 1,
+                  },
+                ],
+                "severity": "Warning",
+                "source": undefined,
+              },
+              {
+                "code": "E002",
+                "message": "MsgB",
+                "range": [
+                  {
+                    "character": 0,
+                    "line": 1,
+                  },
+                  {
+                    "character": 0,
+                    "line": 1,
+                  },
+                ],
+                "severity": "Error",
+                "source": undefined,
+              },
+            ],
+          ],
+        ],
+      },
+    },
+    {
+      "id": "file:///workspace/file.py:info:7:1",
+      "name": "MsgC",
+      "range": undefined,
+      "value": ChatReferenceDiagnostic {
+        "diagnostics": [
+          [
+            {
+              "$mid": 1,
+              "external": "file:///workspace/file.py",
+              "path": "/workspace/file.py",
+              "scheme": "file",
+            },
+            [
+              {
+                "code": "E003",
+                "message": "MsgC",
+                "range": [
+                  {
+                    "character": 0,
+                    "line": 6,
+                  },
+                  {
+                    "character": 0,
+                    "line": 6,
+                  },
+                ],
+                "severity": "Information",
+                "source": undefined,
+              },
+              {
+                "code": "E004",
+                "message": "MsgD",
+                "range": [
+                  {
+                    "character": 0,
+                    "line": 6,
+                  },
+                  {
+                    "character": 0,
+                    "line": 6,
+                  },
+                ],
+                "severity": "Hint",
+                "source": undefined,
+              },
+            ],
+          ],
+        ],
+      },
+    },
+  ],
+  "references": [],
 }
 `;
 
@@ -526,10 +721,10 @@ exports[`CopilotCLI Generate & parse prompts > parses single error diagnostic 3`
 {
   "diagnostics": [
     {
-      "id": "file:///workspace/file.py:12",
+      "id": "file:///workspace/file.py:error:13:1",
       "name": "Unterminated string",
       "range": undefined,
-      "value": {
+      "value": ChatReferenceDiagnostic {
         "diagnostics": [
           [
             {
@@ -542,18 +737,18 @@ exports[`CopilotCLI Generate & parse prompts > parses single error diagnostic 3`
               {
                 "code": "E001",
                 "message": "Unterminated string",
-                "range": {
-                  "end": {
+                "range": [
+                  {
                     "character": 0,
                     "line": 12,
                   },
-                  "start": {
+                  {
                     "character": 0,
                     "line": 12,
                   },
-                },
-                "severity": 0,
-                "source": "prompt",
+                ],
+                "severity": "Error",
+                "source": undefined,
               },
             ],
           ],
