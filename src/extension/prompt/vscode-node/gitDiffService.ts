@@ -114,22 +114,38 @@ export class GitDiffService implements IGitDiffService {
 		try {
 			const buffer = await workspace.fs.readFile(resource);
 			const relativePath = path.relative(repository.rootUri.fsPath, resource.fsPath);
+			const content = buffer.toString();
 
 			// Header
 			patch.push(`diff --git a/${relativePath} b/${relativePath}`);
-
-			// Add original/modified file paths
+			// 100644 is standard file mode for new git files. Saves us from trying to check file permissions and handling
+			// UNIX vs Windows permission differences. Skipping calculating the SHA1 hashes as well since they are not strictly necessary
+			// to apply the patch.
+			patch.push('new file mode 100644');
 			patch.push('--- /dev/null', `+++ b/${relativePath}`);
 
-			// Add range header
-			patch.push(`@@ -0,0 +1,${buffer.length} @@`);
+			// For non-empty files, add range header and content (empty files omit this)
+			if (content.length > 0) {
+				const lines = content.split('\n');
+				if (content.endsWith('\n')) {
+					// Prevent an extra empty line at the end
+					lines.pop();
+				}
 
-			// Add content
-			patch.push(...buffer.toString().split('\n').map(line => `+${line}`));
+				// Range header and content
+				patch.push(`@@ -0,0 +1,${lines.length} @@`);
+				patch.push(...lines.map(line => `+${line}`));
+
+				// Git standard to add this comment if the file does not end with a newline
+				if (!content.endsWith('\n')) {
+					patch.push('\\ No newline at end of file');
+				}
+			}
 		} catch (err) {
 			console.error(err, `Failed to generate patch file for untracked file: ${resource.toString()}`);
 		}
 
-		return patch.join('\n');
+		// The patch itself should always end with a newline per git patch standards
+		return patch.join('\n') + '\n';
 	}
 }
