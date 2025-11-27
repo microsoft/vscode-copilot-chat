@@ -174,6 +174,13 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			return undefined;
 		}
 
+		const ignoreWhenSuggestVisible = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsIgnoreWhenSuggestVisible, this._expService);
+
+		if (ignoreWhenSuggestVisible && context.selectedCompletionInfo && !unification) {
+			tracer.returns('suggest widget is showing, not providing NES');
+			return undefined;
+		}
+
 		const doc = this.model.workspace.getDocumentByTextDocument(document);
 		if (!doc) {
 			tracer.returns('document not found in workspace');
