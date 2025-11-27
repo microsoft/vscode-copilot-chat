@@ -216,6 +216,8 @@ export class ChatTelemetryBuilder {
 		this._repoInfoTelemetry = this.instantiationService.createInstance(RepoInfoTelemetry, this.baseUserTelemetry.properties.messageId);
 	}
 
+	public makeRequest(intent: IIntent, location: ChatLocation.Editor, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): InlineChatTelemetry;
+	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): PanelChatTelemetry;
 	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): InlineChatTelemetry | PanelChatTelemetry {
 
 		if (location === ChatLocation.Editor) {
@@ -285,6 +287,10 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 
 	public get editLineCount(): number {
 		return this._editLineCount;
+	}
+
+	public get sessionId(): string {
+		return this._sessionId;
 	}
 
 	constructor(
