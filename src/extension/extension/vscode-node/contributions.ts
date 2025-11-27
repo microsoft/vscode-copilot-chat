@@ -27,7 +27,7 @@ import { WalkthroughCommandContribution } from '../../getting-started/vscode-nod
 import * as newWorkspaceContribution from '../../getting-started/vscode-node/newWorkspace.contribution';
 import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribution';
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
-import { InlineEditProviderFeature } from '../../inlineEdits/vscode-node/inlineEditProviderFeature';
+import { InlineEditProviderFeatureContribution } from '../../inlineEdits/vscode-node/inlineEditProviderFeature';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
 import { TestGenLensContribution } from '../../intents/vscode-node/testGenLens';
 import { LoggingActionsContrib } from '../../log/vscode-node/loggingActions';
@@ -73,7 +73,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(DebugCommandsContribution),
 	asContributionFactory(LanguageModelAccess),
 	asContributionFactory(WalkthroughCommandContribution),
-	asContributionFactory(InlineEditProviderFeature),
+	asContributionFactory(InlineEditProviderFeatureContribution),
 	asContributionFactory(SettingsSchemaFeature),
 	asContributionFactory(WorkspaceRecorderFeature),
 	asContributionFactory(SurveyCommandContribution),
