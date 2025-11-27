@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, ToolMessage, UserMessage } from '@vscode/prompt-tsx';
+import { AssistantMessage, PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ExtendedLanguageModelToolResult } from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
@@ -113,12 +113,27 @@ class EditAttemptsElement extends PromptElement<EditAttemptsElementProps> {
 
 		const documentNow = this.props.data.document;
 
+		const assistantToolCalls: Required<ToolCall>[] = [];
+		const KeepWith = useKeepWith();
+
+		for (const [toolCall] of this.props.editAttempts) {
+			assistantToolCalls.push({
+				type: 'function',
+				id: toolCall.id,
+				function: { name: toolCall.name, arguments: toolCall.arguments },
+				keepWith: KeepWith
+			});
+		}
+
 		return <>
+			<AssistantMessage toolCalls={assistantToolCalls} />
 			{this.props.editAttempts.map(([toolCall, result]) => {
 				return (
-					<ToolMessage toolCallId={toolCall.id}>
-						<ToolResult content={result.content} />
-					</ToolMessage>
+					<KeepWith>
+						<ToolMessage toolCallId={toolCall.id}>
+							<ToolResult content={result.content} />
+						</ToolMessage>
+					</KeepWith>
 				);
 			})}
 			<UserMessage>
