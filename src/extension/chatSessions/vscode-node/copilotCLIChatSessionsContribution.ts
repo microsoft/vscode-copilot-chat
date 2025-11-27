@@ -5,7 +5,8 @@
 
 import { SweCustomAgent } from '@github/copilot/sdk';
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler, l10n, Uri } from 'vscode';
+import * as l10n from '@vscode/l10n';
+import { ChatExtendedRequestHandler, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';

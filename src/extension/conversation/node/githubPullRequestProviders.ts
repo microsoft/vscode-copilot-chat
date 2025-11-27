@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Disposable } from 'vscode';
+import * as l10n from '@vscode/l10n';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IReviewService } from '../../../platform/review/common/reviewService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { Extension, l10n, Uri } from '../../../vscodeTypes';
+import { Extension, Uri } from '../../../vscodeTypes';
 import { API, RepositoryDescription } from '../../githubPullRequest';
 import { GitHubPullRequestTitleAndDescriptionGenerator } from '../../prompt/node/githubPullRequestTitleAndDescriptionGenerator';
 import { GitHubPullRequestReviewerCommentsProvider } from '../../review/node/githubPullRequestReviewerCommentsProvider';
