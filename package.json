@@ -3914,6 +3914,16 @@
 							"onExp"
 						]
 					},
+					"github.copilot.nextEditSuggestions.preferredModel": {
+						"type": "string",
+						"default": "none",
+						"markdownDescription": "%github.copilot.config.nextEditSuggestions.preferredModel%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.suggestRelatedFilesFromGitHistory.useEmbeddings": {
 						"type": "boolean",
 						"default": false,
