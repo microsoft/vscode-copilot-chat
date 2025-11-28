@@ -615,8 +615,9 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 				if (lastPrompt === undefined) {
 					result.push(currReqTreeItem);
 				} else {
-					// Skip adding the primary entry as a child - it's already accessible via the parent
-					if (currReq.id === lastPrompt.primaryInfo.id) {
+					// Skip adding the primary entry as a child when primaryClickOpensEntry is enabled
+					// (it's already accessible via clicking the parent)
+					if (lastPrompt.token.primaryClickOpensEntry && currReq.id === lastPrompt.primaryInfo.id) {
 						continue;
 					}
 					const alreadyIncludesThisRequest = lastPrompt.children.find(existingChild => existingChild.id === currReqTreeItem.id);
@@ -686,12 +687,14 @@ class ChatPromptItem extends vscode.TreeItem {
 		if (hasSeen) {
 			this.description = '(Continued...)';
 		}
-		// Add command to open the main entry when clicking on this tree item
-		this.command = {
-			command: 'vscode.open',
-			title: '',
-			arguments: [vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: primaryInfo.id }))]
-		};
+		// Add command to open the main entry when clicking on this tree item (if enabled)
+		if (token.primaryClickOpensEntry) {
+			this.command = {
+				command: 'vscode.open',
+				title: '',
+				arguments: [vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: primaryInfo.id }))]
+			};
+		}
 	}
 
 	public withFilteredChildren(filter: (child: TreeChildItem) => boolean): ChatPromptItem {
