@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Event as vscodeEvent, window, workspace } from 'vscode';
 import * as l10n from '@vscode/l10n';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -152,7 +152,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
 		const label = `NES | ${basename(document.uri.fsPath)} (v${document.version})`;
-		const capturingToken = new CapturingToken(label, undefined, true);
+		const capturingToken = new CapturingToken(label, undefined, true, true);
 
 		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, context, token));
 	}

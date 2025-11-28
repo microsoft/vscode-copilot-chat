@@ -20,5 +20,11 @@ export class CapturingToken {
 		 * Whether to flatten a single child request under this token.
 		 */
 		public readonly flattenSingleChild: boolean,
+		/**
+		 * When true, the parent tree item becomes clickable and acts as the main entry.
+		 * The main entry (identified by debugName starting with the token's label prefix) is
+		 * excluded from the children list and its content is shown when clicking the parent.
+		 */
+		public readonly promoteMainEntry: boolean = false,
 	) { }
 }
