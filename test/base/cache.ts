@@ -26,21 +26,32 @@ async function getGitRoot(cwd: string): Promise<string> {
 	return stdout.trim();
 }
 
+// LFS pointer files start with this header
+const LFS_POINTER_HEADER = 'version https://git-lfs.github.com/spec/v1';
+
 /**
  * Checks if a file is a Git LFS pointer file instead of the actual content.
  * LFS pointer files start with "version https://git-lfs.github.com/spec/v1"
  */
 function isLfsPointerFile(filePath: string): boolean {
+	let fd: number | undefined;
 	try {
-		// Read only the first 50 bytes to check the header
-		const fd = fs.openSync(filePath, 'r');
-		const buffer = Buffer.alloc(50);
-		fs.readSync(fd, buffer, 0, 50, 0);
-		fs.closeSync(fd);
+		// Read only enough bytes to check the LFS header
+		fd = fs.openSync(filePath, 'r');
+		const buffer = Buffer.alloc(LFS_POINTER_HEADER.length);
+		fs.readSync(fd, buffer, 0, LFS_POINTER_HEADER.length, 0);
 		const content = buffer.toString('utf8');
-		return content.startsWith('version https://git-lfs.github.com/spec/v1');
+		return content.startsWith(LFS_POINTER_HEADER);
 	} catch {
 		return false;
+	} finally {
+		if (fd !== undefined) {
+			try {
+				fs.closeSync(fd);
+			} catch {
+				// Ignore close errors
+			}
+		}
 	}
 }
 
