@@ -93,10 +93,10 @@ export class CopilotCLISessionOptions {
 
 export interface ICopilotCLIModels {
 	readonly _serviceBrand: undefined;
-	toModelProvider(modelId: string): string;
-	getDefaultModel(): Promise<ChatSessionProviderOptionItem | undefined>;
-	setDefaultModel(model: ChatSessionProviderOptionItem): Promise<void>;
-	getAvailableModels(): Promise<ChatSessionProviderOptionItem[]>;
+	resolveModel(modelId: string): Promise<string | undefined>;
+	getDefaultModel(): Promise<string | undefined>;
+	setDefaultModel(modelId: string | undefined): Promise<void>;
+	getModels(): Promise<{ id: string; name: string }[]>;
 }
 
 export const ICopilotCLISDK = createServiceIdentifier<ICopilotCLISDK>('ICopilotCLISDK');
@@ -113,38 +113,36 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 	) {
 		this._availableModels = new Lazy<Promise<ChatSessionProviderOptionItem[]>>(() => this._getAvailableModels());
 	}
-	public toModelProvider(modelId: string) {
-		return modelId;
+	async resolveModel(modelId: string): Promise<string | undefined> {
+		const models = await this.getModels();
+		return models.find(m => m.id === modelId)?.id;
 	}
 	public async getDefaultModel() {
 		// First item in the list is always the default model (SDK sends the list ordered based on default preference)
-		const models = await this.getAvailableModels();
+		const models = await this.getModels();
 		if (!models.length) {
 			return;
 		}
 		const defaultModel = models[0];
 		const preferredModelId = this.extensionContext.globalState.get<string>(COPILOT_CLI_MODEL_MEMENTO_KEY, defaultModel.id);
 
-		return models.find(m => m.id === preferredModelId) ?? defaultModel;
+		return models.find(m => m.id === preferredModelId)?.id ?? defaultModel.id;
 	}
 
-	public async setDefaultModel(model: ChatSessionProviderOptionItem): Promise<void> {
-		await this.extensionContext.globalState.update(COPILOT_CLI_MODEL_MEMENTO_KEY, model.id);
+	public async setDefaultModel(modelId: string | undefined): Promise<void> {
+		await this.extensionContext.globalState.update(COPILOT_CLI_MODEL_MEMENTO_KEY, modelId);
 	}
 
-	public async getAvailableModels(): Promise<ChatSessionProviderOptionItem[]> {
+	public async getModels(): Promise<{ id: string; name: string }[]> {
 		// No need to query sdk multiple times, cache the result, this cannot change during a vscode session.
 		return this._availableModels.value;
 	}
 
-	private async _getAvailableModels(): Promise<ChatSessionProviderOptionItem[]> {
+	private async _getAvailableModels(): Promise<{ id: string; name: string }[]> {
 		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
 		try {
 			const models = await getAvailableModels(authInfo);
-			return models.map(model => ({
-				id: model.model,
-				name: model.label
-			} satisfies ChatSessionProviderOptionItem));
+			return models.map(model => ({ id: model.model, name: model.label }));
 		} catch (ex) {
 			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];

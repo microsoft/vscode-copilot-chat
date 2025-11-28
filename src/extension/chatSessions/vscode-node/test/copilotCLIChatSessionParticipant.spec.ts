@@ -63,8 +63,9 @@ class FakeWorktreeManager extends mock<CopilotCLIWorktreeManager>() {
 
 class FakeModels implements ICopilotCLIModels {
 	_serviceBrand: undefined;
-	getDefaultModel = vi.fn(async () => ({ id: 'base', name: 'Base' }));
-	getAvailableModels = vi.fn(async () => [{ id: 'base', name: 'Base' }]);
+	resolveModel = vi.fn(async (modelId: string) => modelId);
+	getDefaultModel = vi.fn(async () => 'base');
+	getModels = vi.fn(async () => [{ id: 'base', name: 'Base' }]);
 	setDefaultModel = vi.fn(async () => { });
 	toModelProvider = vi.fn((id: string) => id); // passthrough
 }
