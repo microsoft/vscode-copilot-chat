@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { SweCustomAgent } from '@github/copilot/sdk';
-import * as vscode from 'vscode';
 import * as l10n from '@vscode/l10n';
+import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -13,7 +13,9 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
+import { PromptFileParser } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -27,6 +29,7 @@ import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcl
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { PermissionRequest, requestPermission } from '../../agents/copilotcli/node/permissionHelpers';
+import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
@@ -412,6 +415,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@ILogService private readonly logService: ILogService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
 	}
@@ -454,13 +458,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const id = SessionIdForCLI.parse(resource);
 			const additionalReferences = this.previousReferences.get(id) || [];
 			this.previousReferences.delete(id);
-			const [{ prompt, attachments }, modelId, sessionAgent, defaultAgent] = await Promise.all([
+			const [{ prompt, attachments }, modelId, agent] = await Promise.all([
 				this.promptResolver.resolvePrompt(request, undefined, additionalReferences, token),
 				this.getModelId(id),
-				this.copilotCLIAgents.getSessionAgent(id),
-				this.copilotCLIAgents.getDefaultAgent()
+				this.getAgent(id, request),
 			]);
-			const agent = await this.copilotCLIAgents.resolveAgent(sessionAgent ?? defaultAgent);
 			const session = await this.getOrCreateSession(request, chatSessionContext, prompt, modelId, agent, stream, disposables, token);
 			if (!session || token.isCancellationRequested) {
 				return {};
@@ -499,6 +501,37 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			disposables.dispose();
 		}
 	}
+
+	/**
+	 * Gets the agent to be used.
+	 * If creating a new session, then uses the agent configured in settings.
+	 * If opening an existing session, then uses the agent associated with that session.
+	 * If creating a new session with a prompt file that specifies an agent, then uses that agent.
+	 */
+	private async getAgent(sessionId: string, request: vscode.ChatRequest): Promise<SweCustomAgent | undefined> {
+		const promptFile = new ChatVariablesCollection(request.references).find(isPromptFile);
+		if (promptFile && URI.isUri(promptFile.reference.value)) {
+			try {
+				const doc = await this.workspaceService.openTextDocument(promptFile.reference.value);
+				const parsedPrompt = new PromptFileParser().parse(promptFile.reference.value, doc.getText());
+				if (parsedPrompt.header?.agent) {
+					const agent = await this.copilotCLIAgents.resolveAgent(parsedPrompt.header.agent);
+					if (agent) {
+						return agent;
+					}
+				}
+			} catch (ex) {
+				this.logService.error(`Failed to determine the agent from prompt file: ${promptFile.reference.value.toString()}`);
+			}
+		}
+
+		const [sessionAgent, defaultAgent] = await Promise.all([
+			this.copilotCLIAgents.getSessionAgent(sessionId),
+			this.copilotCLIAgents.getDefaultAgent()
+		]);
+		return this.copilotCLIAgents.resolveAgent(sessionAgent ?? defaultAgent);
+	}
+
 
 	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, prompt: string, model: string | undefined, agent: SweCustomAgent | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
 		const { resource } = chatSessionContext.chatSessionItem;

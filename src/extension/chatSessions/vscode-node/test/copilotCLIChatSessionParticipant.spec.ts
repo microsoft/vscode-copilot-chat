@@ -188,7 +188,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			instantiationService,
 			configurationService,
 			copilotSDK,
-			logger
+			logger,
+			new NullWorkspaceService()
 		);
 	});
 
