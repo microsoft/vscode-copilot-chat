@@ -87,8 +87,13 @@ export class NesRenameContribution implements vscode.Disposable {
 			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, Date.now(), 200);
 
 			const tokenSource = new vscode.CancellationTokenSource();
-			const result = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
-			console.log('Prepare NES Rename result:', result);
+			const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
+			if (protocol.PrepareNesRenameResponse.isError(result)) {
+				this.logService.error('Prepare NES Rename error:', result.message);
+				return { canRename: false };
+			} else if (protocol.PrepareNesRenameResponse.isOk(result)) {
+				console.log(`Prepare NES Rename result for ${oldName} to ${newName}:`, result.body.canRename);
+			}
 			return { canRename: false };
 		});
 	}

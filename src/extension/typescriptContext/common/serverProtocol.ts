@@ -466,11 +466,18 @@ export namespace PingResponse {
 	};
 }
 
+export enum RenameKind {
+	no = 'no',
+	yes = 'yes',
+	maybe = 'maybe'
+}
+
 export type PrepareNesRenameResult = {
-	canRename: true;
+	canRename: RenameKind.yes | RenameKind.maybe;
 	oldName: string;
 } | {
-	canRename: false;
+	canRename: RenameKind.no;
+	timedOut: boolean;
 	reason?: string;
 }
 

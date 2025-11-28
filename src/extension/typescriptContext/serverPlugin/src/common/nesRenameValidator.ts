@@ -6,28 +6,29 @@ import type tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
-import type { PrepareNesRenameResponse } from './protocol';
+import type { __String } from 'typescript/lib/tsserverlibrary';
+import { PrepareNesRenameResponse, RenameKind } from './protocol';
 import { Symbols } from './typescripts';
 
 export class PrepareNesRenameResult {
 
-	private canRename: boolean;
+	private canRename: RenameKind;
 	private oldName: string | undefined;
 	private reason: string | undefined;
 	private timedOut: boolean;
 
 	constructor() {
-		this.canRename = false;
+		this.canRename = RenameKind.no;
 		this.oldName = undefined;
 		this.reason = undefined;
 		this.timedOut = false;
 	}
 
-	public setCanRename(value: false, reason?: string): PrepareNesRenameResult;
-	public setCanRename(value: true, oldName: string): PrepareNesRenameResult;
-	public setCanRename(value: boolean, str?: string): PrepareNesRenameResult {
+	public setCanRename(value: RenameKind.no, reason?: string): PrepareNesRenameResult;
+	public setCanRename(value: RenameKind.yes | RenameKind.maybe, oldName: string): PrepareNesRenameResult;
+	public setCanRename(value: RenameKind, str?: string): PrepareNesRenameResult {
 		this.canRename = value;
-		if (value) {
+		if (value !== RenameKind.no) {
 			this.oldName = str;
 		} else {
 			this.reason = str;
@@ -43,19 +44,19 @@ export class PrepareNesRenameResult {
 	public toJsonResponse(): PrepareNesRenameResponse.OK {
 		if (this.timedOut) {
 			return {
-				canRename: false,
+				canRename: RenameKind.no,
 				reason: this.reason,
 				timedOut: this.timedOut
 			};
 		} else {
-			if (this.canRename) {
+			if (this.canRename === RenameKind.yes || this.canRename === RenameKind.maybe) {
 				return {
-					canRename: true,
+					canRename: this.canRename,
 					oldName: this.oldName!,
 				};
 			} else {
 				return {
-					canRename: false,
+					canRename: RenameKind.no,
 					timedOut: false,
 					reason: this.reason,
 				};
@@ -68,20 +69,56 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 	const symbols = new Symbols(program);
 	const symbol = symbols.getLeafSymbolAtLocation(node);
 	if (symbol === undefined) {
-		result.setCanRename(false, 'No symbol found at location');
+		result.setCanRename(RenameKind.no, 'No symbol found at location');
 		return;
 	}
-	if (Symbols.isMethod(symbol)) {
-		const parent = Symbols.getParent(symbol);
-		if (parent !== undefined && (Symbols.isClass(parent) || Symbols.isInterface(parent))) {
-			const members = parent.members;
-			if (members !== undefined) {
-				const newSymbol = members.get(ts.escapeLeadingUnderscores(newName));
-				if (newSymbol === undefined) {
-					result.setCanRename(true, oldName);
+	const escapedNewName = ts.escapeLeadingUnderscores(newName);
+	// First see if the symbol has a parent. If so the new name must not conflict with existing members.
+	const parent = Symbols.getParent(symbol);
+	if (parent !== undefined) {
+		const members = parent.members;
+		if (members !== undefined && members.has(escapedNewName)) {
+			result.setCanRename(RenameKind.no, `A member with the name '${newName}' already exists on '${parent.getName()}'`);
+			return;
+		}
+		const exports = parent.exports;
+		if (exports !== undefined && exports.has(escapedNewName)) {
+			result.setCanRename(RenameKind.no, `An export with the name '${newName}' already exists on module '${parent.getName()}'`);
+			return;
+		}
+		if (Symbols.isClass(parent) || Symbols.isInterface(parent)) {
+			// check all super types.
+			for (const superType of symbols.getAllSuperTypes(parent)) {
+				const members = superType.members;
+				if (members !== undefined && members.has(escapedNewName)) {
+					result.setCanRename(RenameKind.no, `A member with the name '${newName}' already exists on base type '${superType.getName()}'`);
 					return;
 				}
 			}
+			result.setCanRename(RenameKind.yes, oldName);
+			return;
+		} else if (Symbols.isEnum(parent) || Symbols.isConstEnum(parent)) {
+			result.setCanRename(RenameKind.yes, oldName);
+			return;
 		}
 	}
+	token.throwIfCancellationRequested();
+	if (!isInScope(symbols, node, escapedNewName)) {
+		result.setCanRename(RenameKind.yes, oldName);
+		return;
+	} else {
+		result.setCanRename(RenameKind.no, `A symbol with the name '${newName}' already exists in the current scope`);
+		return;
+	}
+}
+
+function isInScope(symbols: Symbols, node: tt.Node, newName: __String): boolean {
+	const typeChecker = symbols.getTypeChecker();
+	const inScope = typeChecker.getSymbolsInScope(node, ts.SymbolFlags.All);
+	for (const symbol of inScope) {
+		if (symbol.escapedName === newName) {
+			return true;
+		}
+	}
+	return false;
 }
