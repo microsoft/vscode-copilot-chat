@@ -533,7 +533,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const doc = await this.workspaceService.openTextDocument(promptFile.reference.value);
 			return new PromptFileParser().parse(promptFile.reference.value, doc.getText());
 		} catch (ex) {
-			this.logService.error(`Failed to determine the agent from prompt file: ${promptFile.reference.value.toString()}`);
+			this.logService.error(`Failed to parse the prompt file: ${promptFile.reference.value.toString()}`, ex);
 			return undefined;
 		}
 	}
