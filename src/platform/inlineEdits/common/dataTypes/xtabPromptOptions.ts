@@ -58,6 +58,10 @@ export enum PromptingStrategy {
 	Xtab275 = 'xtab275',
 }
 
+export function isPromptingStrategy(value: string): value is PromptingStrategy {
+	return Object.values(PromptingStrategy).includes(value as PromptingStrategy);
+}
+
 export enum ResponseFormat {
 	CodeBlock = 'codeBlock',
 	UnifiedWithXml = 'unifiedWithXml',

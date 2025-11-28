@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Event as vscodeEvent, window, workspace } from 'vscode';
 import * as l10n from '@vscode/l10n';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -13,6 +13,7 @@ import { EditSurvivalReporter } from '../../../platform/editSurvivalTracking/com
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
+import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -27,7 +28,8 @@ import { findCell, findNotebook, isNotebookCell } from '../../../util/common/not
 import { ITracer, createTracer } from '../../../util/common/tracing';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IObservable } from '../../../util/vs/base/common/observable';
 import { basename } from '../../../util/vs/base/common/path';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -101,7 +103,7 @@ function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo
 const GoToNextEdit = l10n.t('Go To Inline Suggestion');
 
 
-export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
+export class InlineCompletionProviderImpl extends Disposable implements InlineCompletionItemProvider {
 	public readonly displayName = 'Inline Suggestion';
 
 	private readonly _tracer: ITracer;
@@ -109,6 +111,13 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
 	public readonly handleDidPartiallyAcceptCompletionItem = undefined;
 	public readonly handleDidRejectCompletionItem = undefined;
+
+	public modelInfo: InlineCompletionModelInfo | undefined;
+
+	private readonly _onDidChangeModelInfo = this._register(new Emitter<void>());
+	public onDidChangeModelInfo = this._onDidChangeModelInfo.event;
+
+	public setCurrentModelId: ((modelId: string) => Thenable<void>) | undefined;
 
 	private readonly _displayNextEditorNES: boolean;
 	private readonly _renameSymbolSuggestions: IObservable<boolean>;
@@ -129,10 +138,19 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@INotebookService private readonly _notebookService: INotebookService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@IInlineEditsModelService private readonly _modelService: IInlineEditsModelService,
 	) {
+		super();
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 		this._renameSymbolSuggestions = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsRenameSymbolSuggestions, this._expService);
+
+		this.modelInfo = this._modelService.modelInfo;
+		this._modelService.onModelListUpdated(() => {
+			this.modelInfo = this._modelService.modelInfo;
+			this._onDidChangeModelInfo.fire();
+		});
+		this.setCurrentModelId = (modelId: string) => this._modelService.setCurrentModelId(modelId);
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
