@@ -5088,7 +5088,7 @@
 					"supportsProblemAttachments": true,
 					"supportsToolAttachments": false,
 					"supportsSymbolAttachments": true,
-					"supportsSearchResultAttachments": false,
+					"supportsSearchResultAttachments": true,
 					"supportsSourceControlAttachments": true
 				},
 				"commands": [
