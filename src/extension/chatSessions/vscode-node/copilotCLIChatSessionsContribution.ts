@@ -13,7 +13,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
-import { PromptFileParser } from '../../../platform/promptFiles/common/promptsService';
+import { ParsedPromptFile, PromptFileParser } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
@@ -460,7 +460,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			this.previousReferences.delete(id);
 			const [{ prompt, attachments }, modelId, agent] = await Promise.all([
 				this.promptResolver.resolvePrompt(request, undefined, additionalReferences, token),
-				this.getModelId(id),
+				this.getModelId(id, request),
 				this.getAgent(id, request),
 			]);
 			const session = await this.getOrCreateSession(request, chatSessionContext, prompt, modelId, agent, stream, disposables, token);
@@ -508,30 +508,35 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * If opening an existing session, then uses the agent associated with that session.
 	 * If creating a new session with a prompt file that specifies an agent, then uses that agent.
 	 */
-	private async getAgent(sessionId: string, request: vscode.ChatRequest): Promise<SweCustomAgent | undefined> {
-		const promptFile = new ChatVariablesCollection(request.references).find(isPromptFile);
-		if (promptFile && URI.isUri(promptFile.reference.value)) {
-			try {
-				const doc = await this.workspaceService.openTextDocument(promptFile.reference.value);
-				const parsedPrompt = new PromptFileParser().parse(promptFile.reference.value, doc.getText());
-				if (parsedPrompt.header?.agent) {
-					const agent = await this.copilotCLIAgents.resolveAgent(parsedPrompt.header.agent);
-					if (agent) {
-						return agent;
-					}
-				}
-			} catch (ex) {
-				this.logService.error(`Failed to determine the agent from prompt file: ${promptFile.reference.value.toString()}`);
+	private async getAgent(sessionId: string | undefined, request: vscode.ChatRequest | undefined): Promise<SweCustomAgent | undefined> {
+		const promptFile = request ? await this.getPromptInfoFromRequest(request) : undefined;
+		if (promptFile?.header?.agent) {
+			const agent = await this.copilotCLIAgents.resolveAgent(promptFile.header.agent);
+			if (agent) {
+				return agent;
 			}
 		}
 
 		const [sessionAgent, defaultAgent] = await Promise.all([
-			this.copilotCLIAgents.getSessionAgent(sessionId),
+			sessionId ? this.copilotCLIAgents.getSessionAgent(sessionId) : Promise.resolve(undefined),
 			this.copilotCLIAgents.getDefaultAgent()
 		]);
 		return this.copilotCLIAgents.resolveAgent(sessionAgent ?? defaultAgent);
 	}
 
+	private async getPromptInfoFromRequest(request: vscode.ChatRequest): Promise<ParsedPromptFile | undefined> {
+		const promptFile = new ChatVariablesCollection(request.references).find(isPromptFile);
+		if (!promptFile || !URI.isUri(promptFile.reference.value)) {
+			return undefined;
+		}
+		try {
+			const doc = await this.workspaceService.openTextDocument(promptFile.reference.value);
+			return new PromptFileParser().parse(promptFile.reference.value, doc.getText());
+		} catch (ex) {
+			this.logService.error(`Failed to determine the agent from prompt file: ${promptFile.reference.value.toString()}`);
+			return undefined;
+		}
+	}
 
 	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, prompt: string, model: string | undefined, agent: SweCustomAgent | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
 		const { resource } = chatSessionContext.chatSessionItem;
@@ -563,7 +568,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return session;
 	}
 
-	private async getModelId(sessionId: string | undefined): Promise<string | undefined> {
+	private async getModelId(sessionId: string | undefined, request: vscode.ChatRequest | undefined): Promise<string | undefined> {
+		const promptFile = request ? await this.getPromptInfoFromRequest(request) : undefined;
+		const modelId = promptFile?.header?.model;
+		if (modelId) {
+			const models = await this.copilotCLIModels.getAvailableModels();
+			const model = models.find(m => m.id === modelId);
+			if (model) {
+				return model.id;
+			}
+		}
+
 		const preferredModelId = (sessionId ? _sessionModel.get(sessionId)?.id : undefined) ?? (await this.copilotCLIModels.getDefaultModel())?.id;
 		return preferredModelId ? this.copilotCLIModels.toModelProvider(preferredModelId) : undefined;
 	}
@@ -789,8 +804,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 		const [{ prompt, attachments }, model, agent] = await Promise.all([
 			this.promptResolver.resolvePrompt(request, requestPrompt, (references || []).concat([]), token),
-			this.getModelId(undefined),
-			this.copilotCLIAgents.getDefaultAgent().then(agent => this.copilotCLIAgents.resolveAgent(agent))
+			this.getModelId(undefined, undefined),
+			this.getAgent(undefined, undefined),
 		]);
 
 		const session = await this.sessionService.createSession(requestPrompt, { workingDirectory, isolationEnabled, agent, model }, token);
