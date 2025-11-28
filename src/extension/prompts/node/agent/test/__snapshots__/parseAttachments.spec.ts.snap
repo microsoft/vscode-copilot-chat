@@ -268,7 +268,7 @@ exports[`CopilotCLI Generate & parse prompts > extract Git Commit 1`] = `
 ]
 `;
 
-exports[`CopilotCLI Generate & parse prompts > extract Github PR/Issues 1`] = `
+exports[`CopilotCLI Generate & parse prompts > extract GitHub PR/Issues 1`] = `
 [
   {
     "id": "#17143 Kernel interrupt_mode "message" sends interrupt_request on shell channel instead of control channel",
