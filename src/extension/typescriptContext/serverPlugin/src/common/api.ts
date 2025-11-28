@@ -12,7 +12,8 @@ import { ContextProvider, ContextRunnableCollector, RequestContext, type Compute
 import { FunctionContextProvider } from './functionContextProvider';
 import { AccessorProvider, ConstructorContextProvider, MethodContextProvider } from './methodContextProvider';
 import { ModuleContextProvider } from './moduleContextProvider';
-import { type FilePath, type PrepareNesRenameResponse } from './protocol';
+import { validateNesRename, type PrepareNesRenameResult } from './nesRenameValidator';
+import { type FilePath } from './protocol';
 import { SourceFileContextProvider } from './sourceFileContextProvider';
 import { RecoverableError } from './types';
 import tss from './typescripts';
@@ -145,22 +146,39 @@ export function computeContext(result: ContextResult, session: ComputeContextSes
 	providers.execute(result, session, languageService, token);
 }
 
-export function prepareNesRename(languageService: tt.LanguageService, document: FilePath, position: number, newName: string, token: tt.CancellationToken): PrepareNesRenameResponse.OK {
+export function prepareNesRename(result: PrepareNesRenameResult, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, token: tt.CancellationToken): void {
+	if (typeof oldName !== 'string' || oldName.length === 0) {
+		result.setCanRename(false, 'No old name provided');
+		return;
+	}
+	if (typeof newName !== 'string' || newName.length === 0) {
+		result.setCanRename(false, 'No new name provided');
+		return;
+	}
 	const renameInfo = languageService.getRenameInfo(document, position, {});
 	if (!renameInfo.canRename) {
-		return { canRename: false, reason: renameInfo.localizedErrorMessage };
+		result.setCanRename(false, renameInfo.localizedErrorMessage);
+		return;
+	}
+	if (renameInfo.displayName !== oldName) {
+		result.setCanRename(false, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
+		return;
 	}
 	const program = languageService.getProgram();
 	if (program === undefined) {
-		return { canRename: false, reason: 'No program found on language service' };
+		result.setCanRename(false, 'No program found on language service');
+		return;
 	}
 	const sourceFile = program.getSourceFile(document);
 	if (sourceFile === undefined) {
-		return { canRename: false, reason: 'No source file found for document' };
+		result.setCanRename(false, 'No source file found for document');
+		return;
 	}
 	const tokenInfo = tss.getRelevantTokens(sourceFile, position);
 	if (tokenInfo.token === undefined) {
-		return { canRename: false, reason: 'No token found at position' };
+		result.setCanRename(false, 'No token found at position');
+		return;
 	}
-	return { canRename: false };
+	token.throwIfCancellationRequested();
+	validateNesRename(result, program, tokenInfo.token, oldName, newName, token);
 }

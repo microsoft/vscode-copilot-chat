@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import type tt from 'typescript/lib/tsserverlibrary';
-import { computeContext } from '../common/api';
+import { computeContext, prepareNesRename } from '../common/api';
 import { CharacterBudget, ContextResult, LanguageServerSession, RequestContext, TokenBudgetExhaustedError } from '../common/contextProvider';
 import { ErrorCode, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
 import { CancellationTokenWithTimer } from '../common/typescripts';
 
+import { PrepareNesRenameResult } from '../common/nesRenameValidator';
 import TS from '../common/typescript';
 import { NodeHost } from './host';
 const ts = TS();
@@ -97,7 +98,15 @@ const prepareNesRenameHandler = (request: PrepareNesRenameRequest): PrepareNesRe
 	if (request.arguments === undefined) {
 		return { response: { error: ErrorCode.noArguments, message: 'No arguments provided' }, responseRequired: true };
 	}
+
 	const args = request.arguments;
+	let startTime = request.arguments?.startTime ?? totalStart;
+	let timeBudget = typeof args.timeBudget === 'number' ? args.timeBudget : 100;
+	if (startTime + timeBudget > totalStart) {
+		startTime = totalStart;
+		timeBudget = 50;
+	}
+
 	const fileAndProject = languageServerSession?.getFileAndProject(args);
 	if (fileAndProject === undefined) {
 		return { response: { error: ErrorCode.noProject, message: 'No project found' }, responseRequired: true };
@@ -110,7 +119,21 @@ const prepareNesRenameHandler = (request: PrepareNesRenameRequest): PrepareNesRe
 	if (pos === undefined) {
 		return { response: { error: ErrorCode.invalidPosition, message: 'Position not valid' }, responseRequired: true };
 	}
-	return { response: { canRename: false }, responseRequired: true };
+	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, languageServerSession?.host.isDebugging() ?? false);
+	const result: PrepareNesRenameResult = new PrepareNesRenameResult();
+	try {
+		prepareNesRename(result, project.getLanguageService(), file, pos, request.arguments?.oldName, request.arguments?.newName, cancellationToken);
+	} catch (error) {
+		if (!(error instanceof ts.OperationCanceledException)) {
+			if (error instanceof Error) {
+				return { response: { error: ErrorCode.exception, message: error.message, stack: error.stack }, responseRequired: true };
+			} else {
+				return { response: { error: ErrorCode.exception, message: 'Unknown error' }, responseRequired: true };
+			}
+		}
+	}
+	result.setTimedOut(cancellationToken.isTimedOut());
+	return { response: result.toJsonResponse(), responseRequired: true };
 };
 
 export function create(info: tt.server.PluginCreateInfo): tt.LanguageService {

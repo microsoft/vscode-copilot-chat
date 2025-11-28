@@ -26,12 +26,15 @@ type PrepareNesRenameRequestArgs = Omit<protocol.PrepareNesRenameRequestArgs, 'f
 };
 
 namespace PrepareNesRenameRequestArgs {
-	export function create(document: vscode.TextDocument, position: vscode.Position, newName: string): PrepareNesRenameRequestArgs {
+	export function create(document: vscode.TextDocument, position: vscode.Position, oldName: string, newName: string, startTime: number, timeBudget: number): PrepareNesRenameRequestArgs {
 		return {
 			file: vscode.Uri.file(document.fileName),
 			line: position.line + 1,
 			offset: position.character + 1,
-			newName: newName
+			oldName: oldName,
+			newName: newName,
+			startTime: startTime,
+			timeBudget: timeBudget
 		};
 	}
 }
@@ -47,7 +50,7 @@ export class NesRenameContribution implements vscode.Disposable {
 		@ILogService readonly logService: ILogService,
 	) {
 		this.disposables = new DisposableStore();
-		vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, newName: string | undefined) => {
+		vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined) => {
 			let document: vscode.TextDocument | undefined;
 			if (uri !== undefined && position !== undefined) {
 				document = this.getDocument(uri);
@@ -66,6 +69,14 @@ export class NesRenameContribution implements vscode.Disposable {
 				return { canRename: false };
 			}
 
+			if (oldName === undefined) {
+				const wordRange = document.getWordRangeAtPosition(position);
+				if (wordRange === undefined) {
+					return { canRename: false };
+				}
+				oldName = document.getText(wordRange);
+			}
+
 			if (newName === undefined) {
 				newName = await vscode.window.showInputBox({ prompt: 'Enter the new name for NES rename' });
 			}
@@ -73,7 +84,7 @@ export class NesRenameContribution implements vscode.Disposable {
 				return { canRename: false };
 			}
 
-			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, newName);
+			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, Date.now(), 200);
 
 			const tokenSource = new vscode.CancellationTokenSource();
 			const result = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);

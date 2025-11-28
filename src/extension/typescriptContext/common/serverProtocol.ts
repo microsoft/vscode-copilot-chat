@@ -471,6 +471,7 @@ export type PrepareNesRenameResult = {
 	oldName: string;
 } | {
 	canRename: false;
+	reason?: string;
 }
 
 export interface PrepareNesRenameRequest extends tt.server.protocol.Request {
@@ -478,7 +479,10 @@ export interface PrepareNesRenameRequest extends tt.server.protocol.Request {
 }
 
 export interface PrepareNesRenameRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
+	oldName: string;
 	newName: string;
+	startTime: number;
+	timeBudget: number;
 }
 
 export namespace PrepareNesRenameResponse {
