@@ -378,11 +378,11 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		const sessionId = SessionIdForCLI.parse(resource);
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
-				this.copilotCLIModels.setDefaultModel(update.value);
+				void this.copilotCLIModels.setDefaultModel(update.value);
 				_sessionModel.set(sessionId, update.value);
 			} else if (update.optionId === AGENTS_OPTION_ID) {
-				this.copilotCLIAgents.setDefaultAgent(update.value);
-				this.copilotCLIAgents.trackSessionAgent(sessionId, update.value);
+				void this.copilotCLIAgents.setDefaultAgent(update.value);
+				void this.copilotCLIAgents.trackSessionAgent(sessionId, update.value);
 			} else if (update.optionId === ISOLATION_OPTION_ID) {
 				// Handle isolation option changes
 				await this.worktreeManager.setIsolationPreference(sessionId, update.value === 'enabled');
@@ -817,7 +817,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		]);
 
 		const session = await this.sessionService.createSession({ workingDirectory, isolationEnabled, agent, model }, token);
-		this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
+		void this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
 
 		// Do not await, we want this code path to be as fast as possible.
 		if (isolationEnabled && workingDirectory) {
