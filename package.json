@@ -5086,7 +5086,10 @@
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
-					"supportsToolAttachments": false
+					"supportsToolAttachments": false,
+					"supportsSymbolAttachments": true,
+					"supportsSearchResultAttachments": true,
+					"supportsSourceControlAttachments": true
 				},
 				"commands": [
 					{

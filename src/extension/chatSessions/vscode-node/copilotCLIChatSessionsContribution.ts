@@ -458,12 +458,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const id = SessionIdForCLI.parse(resource);
 			const additionalReferences = this.previousReferences.get(id) || [];
 			this.previousReferences.delete(id);
-			const [{ prompt, attachments }, modelId, agent] = await Promise.all([
-				this.promptResolver.resolvePrompt(request, undefined, additionalReferences, token),
+			const [modelId, agent] = await Promise.all([
+				this.getModelId(id),
 				this.getModelId(id, request),
 				this.getAgent(id, request),
 			]);
-			const session = await this.getOrCreateSession(request, chatSessionContext, prompt, modelId, agent, stream, disposables, token);
+			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, stream, disposables, token);
 			if (!session || token.isCancellationRequested) {
 				return {};
 			}
@@ -484,6 +484,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (request.prompt.startsWith('/delegate')) {
 				await this.handleDelegateCommand(session.object, request, context, stream, token);
 			} else {
+				// Construct the full prompt with references to be sent to CLI.
+				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, additionalReferences, session.object.options.isolationEnabled, token);
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 			}
 
@@ -538,7 +540,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, prompt: string, model: string | undefined, agent: SweCustomAgent | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
+	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, model: string | undefined, agent: SweCustomAgent | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
 		const { resource } = chatSessionContext.chatSessionItem;
 		const id = SessionIdForCLI.parse(resource);
 
@@ -549,7 +551,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const workingDirectory = workingDirectoryValue ? Uri.file(workingDirectoryValue) : undefined;
 
 		const session = chatSessionContext.isUntitled ?
-			await this.sessionService.createSession(prompt, { model, workingDirectory, isolationEnabled, agent }, token) :
+			await this.sessionService.createSession({ model, workingDirectory, isolationEnabled, agent }, token) :
 			await this.sessionService.getSession(id, { model, workingDirectory, isolationEnabled, readonly: false, agent }, token);
 		this.sessionItemProvider.notifySessionsChange();
 
@@ -803,12 +805,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			workingDirectory = await this.copilotCLISDK.getDefaultWorkingDirectory();
 		}
 		const [{ prompt, attachments }, model, agent] = await Promise.all([
-			this.promptResolver.resolvePrompt(request, requestPrompt, (references || []).concat([]), token),
+			this.promptResolver.resolvePrompt(request, requestPrompt, (references || []).concat([]), isolationEnabled, token),
 			this.getModelId(undefined, undefined),
 			this.getAgent(undefined, undefined),
 		]);
 
-		const session = await this.sessionService.createSession(requestPrompt, { workingDirectory, isolationEnabled, agent, model }, token);
+		const session = await this.sessionService.createSession({ workingDirectory, isolationEnabled, agent, model }, token);
 		this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
 
 		// Do not await, we want this code path to be as fast as possible.

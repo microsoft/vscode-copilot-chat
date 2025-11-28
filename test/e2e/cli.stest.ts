@@ -320,7 +320,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 		testRunner(async ({ sessionService, init }, scenariosPath, stream, disposables) => {
 			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
-			const session = await sessionService.createSession('What is 1+8?', { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -348,7 +348,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			let sessionId = '';
 			// Start session.
 			{
-				const session = await sessionService.createSession('What is 1+8?', { workingDirectory }, CancellationToken.None);
+				const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 				sessionId = session.object.sessionId;
 
 				await session.object.handleRequest('', 'What is 1+8?', [], undefined, CancellationToken.None);
@@ -386,7 +386,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			await init(workingDirectory);
 			const file = URI.joinPath(workingDirectory, 'sample.js');
 			const prompt = `Explain the contents of the file '${path.basename(file.fsPath)}'. There is no need to check for contents in the directory. This file exists on disc.`;
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -404,7 +404,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 
 			const externalFile = path.join(scenariosPath, 'wkspc2', 'foobar.js');
 			const prompt = `Explain the contents of the file '${externalFile}'. This file exists on disc but not in the current working directory. There's no need to search the directory, just read this file and explain its contents.`;
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 			let permissionRequested = false;
@@ -440,7 +440,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -462,7 +462,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -502,7 +502,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -522,7 +522,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -543,7 +543,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -570,7 +570,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			);
 			let contents = await fs.readFile(file, 'utf-8');
 			assert.ok(!contents.trim().endsWith('}'), '} is missing');
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -598,7 +598,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				[createDiagnosticReference(tsFile, [tsDiag]), createDiagnosticReference(pyFile, [pyDiag1, pyDiag2])],
 				promptResolver
 			);
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -622,7 +622,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				[],
 				promptResolver
 			);
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -683,8 +683,5 @@ function createDiagnosticReference(file: string, diag: Diagnostic[]): ChatPrompt
 
 
 function resolvePromptWithFileReferences(prompt: string, filesOrReferences: (string | ChatPromptReference)[], promptResolver: CopilotCLIPromptResolver): Promise<{ prompt: string; attachments: any[] }> {
-	return promptResolver.resolvePrompt(
-		createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [],
-		CancellationToken.None
-	);
+	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], false, CancellationToken.None);
 }

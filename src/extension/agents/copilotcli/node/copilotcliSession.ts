@@ -33,7 +33,10 @@ export interface ICopilotCLISession extends IDisposable {
 	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
 	readonly permissionRequested?: PermissionRequest;
 	readonly onPermissionRequested: vscode.Event<PermissionRequest>;
-
+	readonly options: {
+		readonly isolationEnabled: boolean;
+		readonly workingDirectory?: Uri;
+	};
 	attachPermissionHandler(handler: PermissionHandler): IDisposable;
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
 	handleRequest(
@@ -70,6 +73,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private _stream?: vscode.ChatResponseStream;
 	public get sdkSession() {
 		return this._sdkSession;
+	}
+	public get options() {
+		return {
+			isolationEnabled: this._options.isolationEnabled,
+			workingDirectory: this._options.workingDirectory,
+		};
 	}
 	private _lastUsedModel: string | undefined;
 
