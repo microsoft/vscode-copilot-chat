@@ -46,7 +46,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 	});
 	test('just the prompt without anything else', async () => {
 		const req = new TestChatRequest('hello world');
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -56,7 +56,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 
 	test('returns original prompt unchanged for slash command', async () => {
 		const req = new TestChatRequest('/help something');
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -66,7 +66,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 
 	test('returns overridden prompt instead of using the request prompt', async () => {
 		const req = new TestChatRequest('/help something');
-		const resolved = await resolver.resolvePrompt(req, 'What is 1+2', [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, 'What is 1+2', [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -107,7 +107,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 				value: pyUri
 			}
 		]);
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -127,7 +127,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 				value: folderUri
 			}
 		]);
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -152,7 +152,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 					]])
 			}
 		]);
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -199,7 +199,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 			}
 		]);
 
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -255,7 +255,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 			}
 		]);
 
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -303,7 +303,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 				value: new Location(pyUri, new Range(3, 0, 3, 15))
 			}
 		]);
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -331,7 +331,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 			}
 		]);
 
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -352,7 +352,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 			untitledTsFile
 		]);
 
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -378,7 +378,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 			regularFileRef
 		]);
 
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
@@ -398,7 +398,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 			promptFile
 		]);
 
-		const resolved = await resolver.resolvePrompt(req, undefined, [], CancellationToken.None);
+		const resolved = await resolver.resolvePrompt(req, undefined, [], false, CancellationToken.None);
 
 		const result = extractChatPromptReferences(resolved.prompt);
 		expect(resolved.prompt).toMatchSnapshot();
