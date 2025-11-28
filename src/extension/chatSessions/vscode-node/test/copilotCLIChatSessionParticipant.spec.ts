@@ -15,6 +15,7 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -190,7 +191,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			configurationService,
 			copilotSDK,
 			logger,
-			new NullWorkspaceService()
+			new PromptsServiceImpl(new NullWorkspaceService())
 		);
 	});
 
