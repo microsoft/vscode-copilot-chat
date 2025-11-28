@@ -459,7 +459,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const additionalReferences = this.previousReferences.get(id) || [];
 			this.previousReferences.delete(id);
 			const [modelId, agent] = await Promise.all([
-				this.getModelId(id),
 				this.getModelId(id, request),
 				this.getAgent(id, request),
 			]);
