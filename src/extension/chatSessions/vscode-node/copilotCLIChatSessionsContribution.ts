@@ -288,7 +288,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			this.copilotCLIModels.getDefaultModel(),
 			this.copilotCLIAgents.getSessionAgent(copilotcliSessionId),
 			this.copilotCLIAgents.getDefaultAgent(),
-			isUntitledSessionId(copilotcliSessionId) ? Promise.resolve(undefined) : await this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token)
+			isUntitledSessionId(copilotcliSessionId) ? Promise.resolve(undefined) : this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token)
 		]);
 
 		// If we have session in _sessionModel, use that (faster as its in memory), else get from existing session.
