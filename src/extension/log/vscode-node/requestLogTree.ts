@@ -615,6 +615,10 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 				if (lastPrompt === undefined) {
 					result.push(currReqTreeItem);
 				} else {
+					// Skip adding the primary entry as a child - it's already accessible via the parent
+					if (currReq.id === lastPrompt.primaryInfo.id) {
+						continue;
+					}
 					const alreadyIncludesThisRequest = lastPrompt.children.find(existingChild => existingChild.id === currReqTreeItem.id);
 					if (!alreadyIncludesThisRequest) {
 						lastPrompt.children.push(currReqTreeItem);
@@ -659,6 +663,7 @@ class ChatPromptItem extends vscode.TreeItem {
 	override readonly contextValue = 'chatprompt';
 	public children: TreeChildItem[] = [];
 	public override id: string | undefined;
+	public readonly primaryInfo: LoggedInfo;
 
 	public static create(info: LoggedInfo, request: CapturingToken, hasSeen: boolean) {
 		const existing = ChatPromptItem.ids.get(info);
@@ -666,24 +671,31 @@ class ChatPromptItem extends vscode.TreeItem {
 			return existing;
 		}
 
-		const item = new ChatPromptItem(request, hasSeen);
+		const item = new ChatPromptItem(info, request, hasSeen);
 		item.id = info.id + '-prompt';
 		ChatPromptItem.ids.set(info, item);
 		return item;
 	}
 
-	protected constructor(public readonly token: CapturingToken, public readonly hasSeen: boolean) {
+	protected constructor(primaryInfo: LoggedInfo, public readonly token: CapturingToken, public readonly hasSeen: boolean) {
 		super(token.label, vscode.TreeItemCollapsibleState.Expanded);
+		this.primaryInfo = primaryInfo;
 		if (token.icon) {
 			this.iconPath = new vscode.ThemeIcon(token.icon);
 		}
 		if (hasSeen) {
 			this.description = '(Continued...)';
 		}
+		// Add command to open the main entry when clicking on this tree item
+		this.command = {
+			command: 'vscode.open',
+			title: '',
+			arguments: [vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: primaryInfo.id }))]
+		};
 	}
 
 	public withFilteredChildren(filter: (child: TreeChildItem) => boolean): ChatPromptItem {
-		const item = new ChatPromptItem(this.token, this.hasSeen);
+		const item = new ChatPromptItem(this.primaryInfo, this.token, this.hasSeen);
 		item.children = this.children.filter(filter);
 		return item;
 	}
