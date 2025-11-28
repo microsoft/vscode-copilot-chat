@@ -357,8 +357,13 @@ export class InlineChatIntent implements IIntent {
 		const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
 		assertType(exitTool);
 
-		const agentTools = await getAgentTools(this._instantiationService, request);
-		const editTools = agentTools.filter(tool => InlineChatIntent._EDIT_TOOLS.has(tool.name));
+		// ALWAYS enable editing tools (only) and ignore what the client did send
+		const fakeRequest: vscode.ChatRequest = {
+			...request,
+			tools: new Map(Array.from(InlineChatIntent._EDIT_TOOLS).map(toolName => [toolName, true] as const))
+		};
+
+		const editTools = await getAgentTools(this._instantiationService, fakeRequest);
 
 		return [exitTool, ...editTools];
 	}
