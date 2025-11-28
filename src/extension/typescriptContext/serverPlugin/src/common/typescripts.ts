@@ -295,6 +295,20 @@ namespace tss {
 		}
 	}
 
+	export namespace TypeChecker {
+
+		interface InternalTypeChecker extends tt.TypeChecker {
+			getAccessibleSymbolChain(symbol: tt.Symbol, enclosingDeclaration: tt.Node | undefined, meaning: tt.SymbolFlags, useOnlyExternalAliasing: boolean): tt.Symbol[] | undefined;
+		}
+		export function getAccessibleSymbolChain(typeChecker: tt.TypeChecker, symbol: tt.Symbol, enclosingDeclaration: tt.Node | undefined, meaning: tt.SymbolFlags, useOnlyExternalAliasing: boolean): tt.Symbol[] | undefined {
+			const internalTypeChecker = typeChecker as InternalTypeChecker;
+			if (typeof internalTypeChecker.getAccessibleSymbolChain !== 'function') {
+				return undefined;
+			}
+			return internalTypeChecker.getAccessibleSymbolChain(symbol, enclosingDeclaration, meaning, useOnlyExternalAliasing);
+		}
+	}
+
 	export namespace Types {
 
 		export function isIntersection(type: tt.Type): type is tt.IntersectionType {
@@ -499,6 +513,10 @@ namespace tss {
 
 		public static isValueModule(symbol: tt.Symbol | undefined): boolean {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.ValueModule) !== 0;
+		}
+
+		public static isNamespaceModule(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.NamespaceModule) !== 0;
 		}
 
 		public static isEnum(symbol: tt.Symbol | undefined): boolean {

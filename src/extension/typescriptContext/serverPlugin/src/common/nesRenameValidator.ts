@@ -8,7 +8,7 @@ const ts = TS();
 
 import type { __String } from 'typescript/lib/tsserverlibrary';
 import { PrepareNesRenameResponse, RenameKind } from './protocol';
-import { Symbols } from './typescripts';
+import { Symbols, TypeChecker } from './typescripts';
 
 export class PrepareNesRenameResult {
 
@@ -103,6 +103,8 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 		}
 	}
 	token.throwIfCancellationRequested();
+	const symbolChain = TypeChecker.getAccessibleSymbolChain(symbols.getTypeChecker(), symbol, undefined, ts.SymbolFlags.All, false);
+	console.log(symbolChain);
 	if (!isInScope(symbols, node, escapedNewName)) {
 		result.setCanRename(RenameKind.yes, oldName);
 		return;
