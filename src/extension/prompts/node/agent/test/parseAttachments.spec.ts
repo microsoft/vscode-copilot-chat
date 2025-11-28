@@ -405,7 +405,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		expect(fixFilePathsForTestComparison(resolved.attachments)).toMatchSnapshot();
 		expect(result).toMatchSnapshot();
 	});
-	test('extract Github PR/Issues', async () => {
+	test('extract GitHub PR/Issues', async () => {
 		const result = extractChatPromptReferences(getPromptTextWithGithubIssuePR());
 		expect(result).toMatchSnapshot();
 	});
