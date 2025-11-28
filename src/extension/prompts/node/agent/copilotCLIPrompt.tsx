@@ -15,7 +15,7 @@ import { Schemas } from '../../../../util/vs/base/common/network';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest, FileType } from '../../../../vscodeTypes';
-import { ChatVariablesCollection, isPromptFile } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isPromptFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
@@ -53,8 +53,10 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		// We merely add a <attachments> tag to signal that there are file/folder attachments.
 		// This is because we want to avoid adding all fo the content of the file into the prompt.
 		// We leave that for Copilot CLI SDK to handle.
-		const nonResourceVariables = this.props.chatVariables.filter(variable => !URI.isUri(variable.value) && !isLocation(variable.value));
-		const resourceVariables = this.props.chatVariables.filter(variable => URI.isUri(variable.value) || isLocation(variable.value));
+		const isResourceVariable = (variable: PromptVariable) =>
+			!isScmEntry(variable.value) && (URI.isUri(variable.value) || isLocation(variable.value));
+		const resourceVariables = this.props.chatVariables.filter(isResourceVariable);
+		const nonResourceVariables = this.props.chatVariables.filter(variable => !isResourceVariable(variable));
 		const [nonResourceAttachments, resourceAttachments] = await Promise.all([
 			renderChatVariables(nonResourceVariables, this.fileSystemService, true, false, false, true, false),
 			renderResourceVariables(resourceVariables, this.fileSystemService, this.promptPathRepresentationService)
@@ -147,7 +149,7 @@ async function renderResourceVariables(chatVariables: ChatVariablesCollection, f
 		if (!URI.isUri(uri)) {
 			return;
 		}
-		if (uri.scheme === Schemas.untitled || isPromptFile(variable)) {
+		if (uri.scheme === Schemas.untitled || isPromptFile(variable) || isScmEntry(uri)) {
 			// If its an untitled document, we always include a summary, as CLI cannot read untitled documents.
 			// Similarly prompt file contents need to be included in the prompt.
 			// Except when its attached as a regular file (but in that case `isPromptFile` would return false).
@@ -182,3 +184,9 @@ async function renderResourceVariables(chatVariables: ChatVariablesCollection, f
 	return elements;
 }
 
+function isScmEntry(item: unknown): item is URI {
+	if (URI.isUri(item) && item.scheme === 'scm-history-item') {
+		return true;
+	}
+	return false;
+}

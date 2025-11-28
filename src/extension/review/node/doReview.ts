@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type { TextEditor, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
@@ -26,7 +27,6 @@ import { isCancellationError } from '../../../util/vs/base/common/errors';
 import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { l10n } from '../../../vscodeTypes';
 import { FeedbackGenerator, FeedbackResult } from '../../prompt/node/feedbackGenerator';
 import { CurrentChange, CurrentChangeInput } from '../../prompts/node/feedback/currentChange';
 import { githubReview } from './githubReviewAgent';

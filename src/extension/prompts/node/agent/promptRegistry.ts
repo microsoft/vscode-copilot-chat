@@ -6,14 +6,11 @@
 import { BasePromptElementProps, PromptElement } from '@vscode/prompt-tsx';
 import type { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ToolName } from '../../../tools/common/toolNames';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { SafetyRules } from '../base/safetyRules';
 import { DefaultAgentPrompt, DefaultAgentPromptProps, DefaultReminderInstructions, DefaultToolReferencesHint, ReminderInstructionsProps, ToolReferencesHintProps } from './defaultAgentInstructions';
 
 export type SystemPrompt = new (props: DefaultAgentPromptProps, ...args: any[]) => PromptElement<DefaultAgentPromptProps>;
-
-export type ToolAllowlist = Partial<Record<ToolName, boolean>>;
 
 export type ReminderInstructionsConstructor = new (props: ReminderInstructionsProps, ...args: any[]) => PromptElement<ReminderInstructionsProps>;
 
@@ -25,7 +22,6 @@ export type SafetyRulesConstructor = new (props: BasePromptElementProps, ...args
 
 export interface IAgentPrompt {
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined;
-	resolveToolAllowlist?(endpoint: IChatEndpoint): ToolAllowlist | Promise<ToolAllowlist> | undefined;
 	resolveReminderInstructions?(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined;
 	resolveToolReferencesHint?(endpoint: IChatEndpoint): ToolReferencesHintConstructor | undefined;
 	resolveCopilotIdentityRules?(endpoint: IChatEndpoint): CopilotIdentityRulesConstructor | undefined;
@@ -47,7 +43,6 @@ type PromptWithMatcher = IAgentPromptCtor & {
 };
 
 export interface AgentPromptCustomizations {
-	readonly toolAllowlist: ToolAllowlist;
 	readonly SystemPrompt: SystemPrompt;
 	readonly ReminderInstructionsClass: ReminderInstructionsConstructor;
 	readonly ToolReferencesHintClass: ToolReferencesHintConstructor;
@@ -105,15 +100,7 @@ export const PromptRegistry = new class {
 		const promptResolverCtor = await this.getPromptResolver(endpoint);
 		const agentPrompt = promptResolverCtor ? instantiationService.createInstance(promptResolverCtor) : undefined;
 
-		// Resolve tool allowlist
-		let toolAllowlist: ToolAllowlist = {};
-		if (agentPrompt?.resolveToolAllowlist) {
-			const result = agentPrompt.resolveToolAllowlist(endpoint);
-			toolAllowlist = (result instanceof Promise ? await result : result) ?? {};
-		}
-
 		return {
-			toolAllowlist,
 			SystemPrompt: agentPrompt?.resolveSystemPrompt(endpoint) ?? DefaultAgentPrompt,
 			ReminderInstructionsClass: agentPrompt?.resolveReminderInstructions?.(endpoint) ?? DefaultReminderInstructions,
 			ToolReferencesHintClass: agentPrompt?.resolveToolReferencesHint?.(endpoint) ?? DefaultToolReferencesHint,

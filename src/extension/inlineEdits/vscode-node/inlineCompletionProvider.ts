@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Event as vscodeEvent, window, workspace } from 'vscode';
+import * as l10n from '@vscode/l10n';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -50,14 +51,14 @@ const learnMoreAction: Command = {
 	tooltip: learnMoreLink
 };
 
-interface NesCompletionItem extends InlineCompletionItem {
+export interface NesCompletionItem extends InlineCompletionItem {
 	readonly telemetryBuilder: NextEditProviderTelemetryBuilder;
 	readonly info: NesCompletionInfo;
 	wasShown: boolean;
 	isEditInAnotherDocument?: boolean;
 }
 
-class NesCompletionList extends InlineCompletionList {
+export class NesCompletionList extends InlineCompletionList {
 
 	public override enableForwardStability = true;
 
@@ -106,6 +107,9 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	private readonly _tracer: ITracer;
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
+	public readonly handleDidPartiallyAcceptCompletionItem = undefined;
+	public readonly handleDidRejectCompletionItem = undefined;
+
 	private readonly _displayNextEditorNES: boolean;
 	private readonly _renameSymbolSuggestions: IObservable<boolean>;
 
@@ -418,7 +422,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		};
 	}
 
-	public handleDidShowCompletionItem(completionItem: NesCompletionItem, updatedInsertText: string): void {
+	public handleDidShowCompletionItem(completionItem: NesCompletionItem, _updatedInsertText: string): void {
 		completionItem.wasShown = true;
 		completionItem.telemetryBuilder.setAsShown();
 

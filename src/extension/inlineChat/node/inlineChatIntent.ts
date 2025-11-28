@@ -310,6 +310,8 @@ export class InlineChatIntent implements IIntent {
 					}
 
 					try {
+						stream.progress(l10n.t('Applying edits...'));
+
 						let input = isValidatedToolInput(validationResult)
 							? validationResult.inputObj
 							: JSON.parse(toolCall.arguments);
@@ -332,6 +334,7 @@ export class InlineChatIntent implements IIntent {
 
 						if (result.hasError) {
 							failedEdits.push([toolCall, result]);
+							stream.progress(l10n.t('Looking not yet good, trying again...'));
 						}
 
 						this._logService.trace(`Tool ${toolCall.name} invocation result: ${JSON.stringify(result)}`);
