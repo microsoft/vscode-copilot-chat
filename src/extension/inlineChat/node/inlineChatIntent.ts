@@ -157,7 +157,17 @@ export class InlineChatIntent implements IIntent {
 		const outcomeComputer = new InteractionOutcomeComputer(request.location2.document.uri);
 		const editSurvivalTracker = this._editSurvivalTrackerService.initialize(request.location2.document);
 
-		const availableTools = await this._getAvailableTools(request);
+		let availableTools: vscode.LanguageModelToolInformation[] | undefined;
+		try {
+			availableTools = await this._getAvailableTools(request);
+		} catch {
+			return {
+				errorDetails: {
+					message: l10n.t('Sorry, looks like inline chat lost its tools for the job.'),
+				}
+			};
+		}
+
 		const editAttempts: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
 		const toolCallRounds: ToolCallRound[] = [];
 		let telemetry: InlineChatTelemetry;
@@ -355,7 +365,10 @@ export class InlineChatIntent implements IIntent {
 	private async _getAvailableTools(request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> {
 
 		const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
-		assertType(exitTool);
+		if (!exitTool) {
+			this._logService.error('MISSING inline chat exit tool');
+			throw new Error();
+		}
 
 		// ALWAYS enable editing tools (only) and ignore what the client did send
 		const fakeRequest: vscode.ChatRequest = {
@@ -364,6 +377,11 @@ export class InlineChatIntent implements IIntent {
 		};
 
 		const editTools = await getAgentTools(this._instantiationService, fakeRequest);
+
+		if (editTools.length === 0) {
+			this._logService.error('MISSING inline chat edit tools');
+			throw new Error();
+		}
 
 		return [exitTool, ...editTools];
 	}
