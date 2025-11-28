@@ -95,6 +95,10 @@ export class CopilotCLIPromptResolver {
 			if (!URI.isUri(uri)) {
 				return;
 			}
+			// Attachment of Source control items.
+			if (uri.scheme === 'scm-history-item') {
+				return;
+			}
 
 			try {
 				const stat = await raceCancellation(this.fileSystemService.stat(uri), token);

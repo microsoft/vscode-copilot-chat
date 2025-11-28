@@ -7,11 +7,11 @@ import type { ChatPromptReference } from 'vscode';
 import { createFilepathRegexp } from '../../../../util/common/markdown';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import * as path from '../../../../util/vs/base/common/path';
+import { isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { Range as EditorRange } from '../../../../util/vs/editor/common/core/range';
 import { ChatReferenceDiagnostic, Diagnostic, DiagnosticSeverity, Location, Range } from '../../../../vscodeTypes';
 import { PromptFileIdPrefix } from '../../../prompt/common/chatVariablesCollection';
-import { isEqual } from '../../../../util/vs/base/common/resources';
-import { Range as EditorRange } from '../../../../util/vs/editor/common/core/range';
 
 /**
  * Parse the raw user prompt and extract diagnostics and file/line location references
@@ -33,11 +33,66 @@ export function extractChatPromptReferences(prompt: string): ChatPromptReference
 	}
 	const block = attachmentsBlockMatch[1];
 
+	// Helper: collect ordered tag texts (<attachment ...>...</attachment> or self-closing; <error ...>...</error>)
+	function collectOrderedTags(text: string): string[] {
+		const results: string[] = [];
+		let i = 0;
+		const len = text.length;
+		while (i < len) {
+			// Find next tag start
+			const nextAttachment = text.indexOf('<attachment', i);
+			const nextError = text.indexOf('<error', i);
+			let next = -1;
+			let tagType: 'attachment' | 'error' | undefined;
+			if (nextAttachment !== -1 && (nextError === -1 || nextAttachment < nextError)) {
+				next = nextAttachment;
+				tagType = 'attachment';
+			} else if (nextError !== -1) {
+				next = nextError;
+				tagType = 'error';
+			}
+			if (next === -1 || !tagType) { break; }
+			// Move to end of opening tag
+			const openEnd = text.indexOf('>', next);
+			if (openEnd === -1) { break; }
+			const openingTagText = text.slice(next, openEnd + 1);
+			// Self-closing?
+			const isSelfClosing = /<attachment\b[\s\S]*?\/>\s*$/i.test(openingTagText);
+			if (isSelfClosing) {
+				results.push(openingTagText);
+				i = openEnd + 1;
+				continue;
+			}
+			// Otherwise, find the matching closing tag, skipping fenced code blocks
+			const closing = tagType === 'attachment' ? '</attachment>' : '</error>';
+			let j = openEnd + 1;
+			let inFence = false;
+			while (j < len) {
+				// Toggle on triple backticks
+				if (text.startsWith('```', j)) {
+					inFence = !inFence;
+					j += 3;
+					continue;
+				}
+				if (!inFence && text.startsWith(closing, j)) {
+					const tagText = text.slice(next, j + closing.length);
+					results.push(tagText);
+					i = j + closing.length;
+					break;
+				}
+				j++;
+			}
+			if (j >= len) {
+				// No closing found; bail out to avoid infinite loop
+				break;
+			}
+		}
+		return results;
+	}
+
 	// Collect all tags with their positions, then delegate to specific extractors per tag
 	const ordered: ChatPromptReference[] = [];
-	const tagRegex = /<(attachment|error)\b[\s\S]*?(?:<\/(?:attachment|error)>|\/>)/gi;
-	for (let m; (m = tagRegex.exec(block));) {
-		const tagText = m[0];
+	for (const tagText of collectOrderedTags(block)) {
 		if (/^<attachment\b/i.test(tagText)) {
 			// Distinguish prompt attachments vs resource attachments
 			const promptIdMatch = tagText.match(/<attachment\s+id="(prompt:[^"]+)"[\s\S]*?>/i);
@@ -97,6 +152,13 @@ function extractResources(prompt: string): ChatPromptReference[] {
 		const content = m[0];
 		let filePath: string | undefined;
 		let providedId: string | undefined;
+
+		const githubPRIssue = extractGitHubIssueOrPRChatReference(content);
+		if (githubPRIssue) {
+			references.push(githubPRIssue);
+			continue;
+		}
+
 		const openingTagMatch = content.match(/<attachment\s+([^>]*)>/i);
 		if (openingTagMatch) {
 			const attrsStr = openingTagMatch[1];
@@ -369,6 +431,12 @@ function extractResourcesFromTag(prompt: string, tagText: string): ChatPromptRef
 	const content = tagText;
 	let filePath: string | undefined;
 	let providedId: string | undefined;
+
+	const githubPRIssue = extractGitHubIssueOrPRChatReference(content);
+	if (githubPRIssue) {
+		return githubPRIssue;
+	}
+
 	const openingTagMatch = content.match(/<attachment\s+([^>]*)>/i);
 	if (openingTagMatch) {
 		const attrsStr = openingTagMatch[1];
@@ -400,7 +468,36 @@ function extractResourcesFromTag(prompt: string, tagText: string): ChatPromptRef
 		if (excerptMatch) { filePath = excerptMatch[1].trim(); }
 	}
 	const linesMatch = content.match(/Excerpt from [^,]+,\s*lines\s+(\d+)\s+to\s+(\d+)/i);
-	if (!filePath) { return undefined; }
+	if (!filePath) {
+		// Possible this is an SCM item
+		try {
+			const attrs: Record<string, string> = {};
+			for (const attrMatch of tagText.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) {
+				attrs[attrMatch[1]] = attrMatch[2];
+			}
+			if (typeof attrs['filePath'] === 'string') {
+				filePath = attrs['filePath'];
+			}
+			if (filePath?.startsWith('scm-history-item:') && typeof attrs['id'] === 'string') {
+				let id = attrs['id'];
+				const value = URI.parse(filePath);
+				try {
+					// Extract id from query.
+					const historyItemId = JSON.parse(value.query).historyItemId;
+					if (typeof historyItemId === 'string' && historyItemId.length > 0) {
+						id = historyItemId;
+					}
+				} catch { }
+				return {
+					id,
+					name: attrs['id'],
+					value
+				} satisfies ChatPromptReference;
+			}
+		} catch { }
+
+		return undefined;
+	}
 	const startLine = linesMatch ? parseInt(linesMatch[1], 10) : undefined;
 	const endLine = linesMatch ? parseInt(linesMatch[2], 10) : undefined;
 	const uri = isUntitledFile && filePath.startsWith('untitled:') ? URI.from({ scheme: Schemas.untitled, path: filePath.substring('untitled:'.length) }) : URI.file(filePath);
@@ -464,6 +561,46 @@ function extractDiagnosticsFromTag(tagText: string): ChatPromptReference | undef
 		range: undefined,
 		value: new ChatReferenceDiagnostic([[uri, [diagnostic]]])
 	} as ChatPromptReference;
+}
+
+function extractGitHubIssueOrPRChatReference(content: string): ChatPromptReference | undefined {
+	const openingTagMatch = content.match(/<attachment\s+([^>]*)>/i);
+	if (!openingTagMatch) {
+		return;
+	}
+	const attrsStr = openingTagMatch[1];
+	const idAttrMatch = attrsStr.match(/\bid\s*=\s*"([^"]+)"/);
+	if (!idAttrMatch) {
+		return;
+	}
+	let providedId = idAttrMatch[1];
+	// If only id attribute is present and inner content is pure JSON, treat as JSON reference
+	const innerMatch = content.match(/<attachment[\s\S]*?>([\s\S]*?)<\/attachment>/i);
+	const innerText = innerMatch ? innerMatch[1].trim() : '';
+	if (!providedId || !innerText.startsWith('{') || !innerText.endsWith('}')) {
+		return;
+	}
+
+	try {
+		const body = JSON.parse(innerText);
+		if (typeof body.issueNumber !== 'number' && typeof body.prNumber !== 'number') {
+			// Not GitHub issue or PR reference
+			return;
+		}
+		// Possible that id is JSON encoded & contains special characters that fails parsing using regex, we could improve regex, but thats risky as we don't know all possible id formats & different attributes.
+		// In case of JSON content (Prs & issues, we know there's just an id attribute)
+		// Sample = 'id="#17143 Kernel interrupt_mode \\"message\\" sends interrupt_request on shell channel instead of control channel"'
+		const id = JSON.parse(openingTagMatch[1].substring("id=".length));
+		if (typeof id === 'string' && id.length > 0) {
+			providedId = id;
+		}
+	} catch { }
+	return {
+		id: providedId,
+		name: providedId,
+		range: undefined,
+		value: innerText
+	};
 }
 
 function toEditorRange(range: Range): EditorRange {
