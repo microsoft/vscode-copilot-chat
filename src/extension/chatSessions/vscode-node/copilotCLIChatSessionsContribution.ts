@@ -298,7 +298,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 
 		options[AGENTS_OPTION_ID] = sessionAgent ?? defaultAgent;
 
-		// Possible there are no models (e.g. all models have been turned off by policyt or the like).
+		// Possible there are no models (e.g. all models have been turned off by policy or the like).
 		if (model) {
 			options[MODELS_OPTION_ID] = model;
 		}
