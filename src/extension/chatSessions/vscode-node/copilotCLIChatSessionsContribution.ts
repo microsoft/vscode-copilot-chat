@@ -490,7 +490,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (isUntitled && !token.isCancellationRequested) {
 				// Delete old information stored for untitled session id.
 				_sessionModel.delete(id);
-				_sessionModel.set(id, modelId);
+				_sessionModel.set(session.object.sessionId, modelId);
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt });
 			}
 			return {};

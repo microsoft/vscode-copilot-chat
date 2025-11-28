@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
-import type { ChatSessionProviderOptionItem, Uri } from 'vscode';
+import type { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
@@ -105,13 +105,13 @@ export const ICopilotCLIModels = createServiceIdentifier<ICopilotCLIModels>('ICo
 
 export class CopilotCLIModels implements ICopilotCLIModels {
 	declare _serviceBrand: undefined;
-	private readonly _availableModels: Lazy<Promise<ChatSessionProviderOptionItem[]>>;
+	private readonly _availableModels: Lazy<Promise<{ id: string; name: string }[]>>;
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 	) {
-		this._availableModels = new Lazy<Promise<ChatSessionProviderOptionItem[]>>(() => this._getAvailableModels());
+		this._availableModels = new Lazy<Promise<{ id: string; name: string }[]>>(() => this._getAvailableModels());
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
