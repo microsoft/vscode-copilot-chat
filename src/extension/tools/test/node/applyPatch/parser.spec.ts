@@ -370,7 +370,7 @@ suite('applyPatch parser', () => {
 		};
 		const [parsed] = text_to_patch(patch, docs);
 		const commit = patch_to_commit(parsed, docs);
-		expect(Object.values(commit.changes).at(0)?.newContent).toMatchFileSnapshot(`${__dirname}/corpus/262549-output.txt`);
+		await expect(Object.values(commit.changes).at(0)?.newContent).toMatchFileSnapshot(`${__dirname}/corpus/262549-output.txt`);
 	});
 
 	it('reindents unindented code', async () => {
