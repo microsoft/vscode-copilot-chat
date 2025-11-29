@@ -26,6 +26,62 @@ async function getGitRoot(cwd: string): Promise<string> {
 	return stdout.trim();
 }
 
+// LFS pointer files start with this header
+const LFS_POINTER_HEADER = 'version https://git-lfs.github.com/spec/v1';
+
+/**
+ * Checks if a file is a Git LFS pointer file instead of the actual content.
+ * LFS pointer files start with "version https://git-lfs.github.com/spec/v1"
+ */
+function isLfsPointerFile(filePath: string): boolean {
+	let fd: number | undefined;
+	try {
+		// Read only enough bytes to check the LFS header
+		fd = fs.openSync(filePath, 'r');
+		const buffer = Buffer.alloc(LFS_POINTER_HEADER.length);
+		fs.readSync(fd, buffer, 0, LFS_POINTER_HEADER.length, 0);
+		const content = buffer.toString('utf8');
+		return content.startsWith(LFS_POINTER_HEADER);
+	} catch {
+		return false;
+	} finally {
+		if (fd !== undefined) {
+			try {
+				fs.closeSync(fd);
+			} catch {
+				// Ignore close errors
+			}
+		}
+	}
+}
+
+/**
+ * Error thrown when Git LFS files haven't been pulled
+ */
+export class GitLfsNotPulledError extends Error {
+	constructor(filePath: string) {
+		const message = `
+================================================================================
+                           GIT LFS FILES NOT PULLED
+================================================================================
+
+The file "${filePath}" is a Git LFS pointer file, not the actual SQLite database.
+
+This typically happens when you clone the repository without pulling the LFS files.
+
+To fix this, run:
+
+    git lfs pull
+
+Then try running the simulation tests again.
+
+================================================================================
+`;
+		super(message);
+		this.name = 'GitLfsNotPulledError';
+	}
+}
+
 export class Cache extends EventEmitter {
 	private static _Instance: Cache | undefined;
 	static get Instance() {
@@ -50,8 +106,15 @@ export class Cache extends EventEmitter {
 		this.layersPath = path.join(this.cachePath, 'layers');
 		this.externalLayersPath = process.env.EXTERNAL_CACHE_LAYERS_PATH;
 
-		if (!fs.existsSync(path.join(this.cachePath, 'base.sqlite'))) {
-			throw new Error(`Base cache file does not exist as ${path.join(this.cachePath, 'base.sqlite')}.`);
+		const baseSqlitePath = path.join(this.cachePath, 'base.sqlite');
+
+		if (!fs.existsSync(baseSqlitePath)) {
+			throw new Error(`Base cache file does not exist as ${baseSqlitePath}.`);
+		}
+
+		// Check if the base.sqlite file is an LFS pointer instead of the actual SQLite database
+		if (isLfsPointerFile(baseSqlitePath)) {
+			throw new GitLfsNotPulledError(baseSqlitePath);
 		}
 
 		if (this.externalLayersPath && !fs.existsSync(this.externalLayersPath)) {
@@ -59,7 +122,7 @@ export class Cache extends EventEmitter {
 		}
 
 		fs.mkdirSync(this.layersPath, { recursive: true });
-		this.base = new Keyv(new KeyvSqlite(path.join(this.cachePath, 'base.sqlite')));
+		this.base = new Keyv(new KeyvSqlite(baseSqlitePath));
 
 		this.layers = new Map();
 		let layerFiles = fs.readdirSync(this.layersPath)
@@ -74,6 +137,10 @@ export class Cache extends EventEmitter {
 		}
 
 		for (const layerFile of layerFiles) {
+			// Check if layer file is an LFS pointer instead of the actual SQLite database
+			if (isLfsPointerFile(layerFile)) {
+				throw new GitLfsNotPulledError(layerFile);
+			}
 			const name = path.basename(layerFile, path.extname(layerFile));
 			this.layers.set(name, new Keyv(new KeyvSqlite(layerFile)));
 		}

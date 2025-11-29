@@ -101,6 +101,14 @@ Finally, there are **simulation tests**. These tests reach out to Copilot API en
 
 Because LLM results are both random and costly, they are cached within the repo in `test/simulation/cache`. This means rerunning the simulation tests and benefiting from the cache will make the test run be both faster as well as deterministic.
 
+**Important:** Before running simulation tests, you must first pull the Git LFS files:
+
+```
+git lfs pull
+```
+
+The cache files (`*.sqlite`) are stored using Git LFS. If you skip this step, you will see a `TypeError: database.query is not a function` error because the SQLite database files haven't been downloaded.
+
 You can run the simulation tests with:
 
 ```
