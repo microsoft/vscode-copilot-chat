@@ -5,11 +5,13 @@
 
 import { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
+import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IIgnoreService } from '../../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { MockExtensionContext } from '../../../../../platform/test/node/extensionContext';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { ChatReferenceDiagnostic } from '../../../../../util/common/test/shims/chatTypes';
@@ -22,6 +24,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { Location } from '../../../../../util/vs/workbench/api/common/extHostTypes/location';
 import { Range } from '../../../../../util/vs/workbench/api/common/extHostTypes/range';
 import { extractChatPromptReferences } from '../../../../agents/copilotcli/common/copilotCLIPrompt';
+import { CopilotCLIImageSupport } from '../../../../agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../../../agents/copilotcli/node/copilotcliPromptResolver';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { TestChatRequest } from '../../../../test/node/testHelpers';
@@ -38,7 +41,8 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		fileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
 		workspaceService = accessor.get(IWorkspaceService) as TestWorkspaceService;
 		const logService = accessor.get(ILogService);
-		resolver = new CopilotCLIPromptResolver(logService, fileSystem, services.seal(), accessor.get(IIgnoreService));
+		const imageSupport = new CopilotCLIImageSupport(new MockExtensionContext() as unknown as IVSCodeExtensionContext, logService, workspaceService);
+		resolver = new CopilotCLIPromptResolver(imageSupport, logService, fileSystem, services.seal(), accessor.get(IIgnoreService));
 	});
 	afterEach(() => {
 		disposables.clear();

@@ -17,9 +17,11 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatReferenceBinaryData, FileType } from '../../../../vscodeTypes';
 import { ChatVariablesCollection, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
+import { CopilotCLIImageSupport } from './copilotCLIImageSupport';
 
 export class CopilotCLIPromptResolver {
 	constructor(
+		private readonly imageSupport: CopilotCLIImageSupport,
 		@ILogService private readonly logService: ILogService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -56,12 +58,14 @@ export class CopilotCLIPromptResolver {
 			if (isPromptInstruction(variable)) {
 				return;
 			}
-			// If isolution is enabled, and we have workspace repo information, skip it.
+			// If isolation is enabled, and we have workspace repo information, skip it.
 			if (isIsolationEnabled && isWorkspaceRepoInformationItem(variable)) {
 				return;
 			}
 			// Images will be attached using regular attachments via Copilot CLI SDK.
 			if (variable.value instanceof ChatReferenceBinaryData) {
+				validReferences.push(variable.reference);
+				fileFolderReferences.push(variable.reference);
 				return;
 			}
 			if (isLocation(variable.value)) {
@@ -95,6 +99,22 @@ export class CopilotCLIPromptResolver {
 	private async constructFileOrFolderAttachments(fileOrFolderReferences: vscode.ChatPromptReference[], token: vscode.CancellationToken): Promise<Attachment[]> {
 		const attachments: Attachment[] = [];
 		await Promise.all(fileOrFolderReferences.map(async ref => {
+			if (ref.value instanceof ChatReferenceBinaryData) {
+				// Handle image attachments
+				try {
+					const buffer = await ref.value.data();
+					const uri = await this.imageSupport.storeImage(buffer, ref.value.mimeType);
+					attachments.push({
+						type: 'file',
+						displayName: path.basename(uri.fsPath),
+						path: uri.fsPath
+					});
+				} catch (error) {
+					this.logService.error(`[CopilotCLISession] Failed to store image: ${error}`);
+				}
+				return;
+			}
+
 			const uri = ref.value;
 			if (!URI.isUri(uri)) {
 				return;
