@@ -19,6 +19,7 @@ import './githubRepoTool';
 import './insertEditTool';
 import './installExtensionTool';
 import './listDirTool';
+import './manageTodoListTool';
 import './manageTodoListToolEx';
 import './memoryTool';
 import './multiReplaceStringTool';
