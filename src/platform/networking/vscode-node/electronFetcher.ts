@@ -8,6 +8,8 @@ import { BaseFetchFetcher } from '../node/baseFetchFetcher';
 
 export class ElectronFetcher extends BaseFetchFetcher {
 
+	static readonly ID = 'electron-fetch' as const;
+
 	public static create(envService: IEnvService, userAgentLibraryUpdate?: (original: string) => string): ElectronFetcher | null {
 		const net = loadNetModule();
 		if (!net) {
@@ -16,8 +18,16 @@ export class ElectronFetcher extends BaseFetchFetcher {
 		return new ElectronFetcher(net.fetch, envService, userAgentLibraryUpdate);
 	}
 
+	private constructor(
+		fetchImpl: typeof import('electron').net.fetch,
+		envService: IEnvService,
+		userAgentLibraryUpdate?: (original: string) => string,
+	) {
+		super(fetchImpl, envService, userAgentLibraryUpdate, ElectronFetcher.ID);
+	}
+
 	getUserAgentLibrary(): string {
-		return 'electron-fetch';
+		return ElectronFetcher.ID;
 	}
 
 	isInternetDisconnectedError(e: any): boolean {

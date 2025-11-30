@@ -190,6 +190,7 @@ function createFakeResponse(statusCode: number, content: string) {
 		new FakeHeaders(),
 		() => Promise.resolve(content),
 		() => Promise.resolve(JSON.parse(content)),
-		async () => Readable.from([content])
+		async () => Readable.from([content]),
+		'test-stub'
 	);
 }

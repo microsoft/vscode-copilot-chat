@@ -10,15 +10,17 @@ import { Lazy } from '../../../util/vs/base/common/lazy';
 
 export class NodeFetchFetcher extends BaseFetchFetcher {
 
+	static readonly ID = 'node-fetch' as const;
+
 	constructor(
 		envService: IEnvService,
 		userAgentLibraryUpdate?: (original: string) => string,
 	) {
-		super(getFetch(), envService, userAgentLibraryUpdate);
+		super(getFetch(), envService, userAgentLibraryUpdate, NodeFetchFetcher.ID);
 	}
 
 	getUserAgentLibrary(): string {
-		return 'node-fetch';
+		return NodeFetchFetcher.ID;
 	}
 
 	isInternetDisconnectedError(_e: any): boolean {

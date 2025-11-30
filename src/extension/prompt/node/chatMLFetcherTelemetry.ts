@@ -5,6 +5,7 @@
 
 import { ChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
+import { FetcherId } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IChatRequestTelemetryProperties, IEndpointBody } from '../../../platform/networking/common/networking';
 import { ChatCompletion } from '../../../platform/networking/common/openai';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -22,6 +23,7 @@ export interface IChatMLFetcherSuccessfulData {
 	timeToFirstToken: number;
 	timeToFirstTokenEmitted: number;
 	hasImageMessages: boolean;
+	fetcher: FetcherId | undefined;
 }
 
 export interface IChatMLFetcherCancellationProperties {
@@ -34,6 +36,7 @@ export interface IChatMLFetcherCancellationProperties {
 	retryAfterError?: string;
 	connectivityTestError?: string;
 	retryAfterFilterCategory?: string;
+	fetcher: FetcherId | undefined;
 }
 
 export interface IChatMLFetcherCancellationMeasures {
@@ -62,7 +65,8 @@ export class ChatMLFetcherTelemetrySender {
 			promptTokenCount,
 			timeToFirstToken,
 			timeToFirstTokenEmitted,
-			hasImageMessages
+			hasImageMessages,
+			fetcher
 		}: IChatMLFetcherSuccessfulData,
 	) {
 		/* __GDPR__
@@ -81,6 +85,7 @@ export class ChatMLFetcherTelemetrySender {
 				"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
 				"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
 				"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
+				"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
 				"clientPromptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, locally counted", "isMeasurement": true },
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
@@ -116,6 +121,7 @@ export class ChatMLFetcherTelemetrySender {
 			associatedRequestId: baseTelemetry?.properties.associatedRequestId,
 			reasoningEffort: requestBody.reasoning?.effort,
 			reasoningSummary: requestBody.reasoning?.summary,
+			...(fetcher ? { fetcher } : {}),
 			...(baseTelemetry?.properties.retryAfterErrorCategory ? { retryAfterErrorCategory: baseTelemetry.properties.retryAfterErrorCategory } : {}),
 			...(baseTelemetry?.properties.retryAfterError ? { retryAfterError: baseTelemetry.properties.retryAfterError } : {}),
 			...(baseTelemetry?.properties.connectivityTestError ? { connectivityTestError: baseTelemetry.properties.connectivityTestError } : {}),
@@ -152,6 +158,7 @@ export class ChatMLFetcherTelemetrySender {
 			retryAfterError,
 			connectivityTestError,
 			retryAfterFilterCategory,
+			fetcher,
 		}: IChatMLFetcherCancellationProperties,
 		{
 			totalTokenMax,
@@ -174,6 +181,7 @@ export class ChatMLFetcherTelemetrySender {
 				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
 				"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
+				"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
@@ -195,6 +203,7 @@ export class ChatMLFetcherTelemetrySender {
 			requestId,
 			model,
 			associatedRequestId,
+			...(fetcher ? { fetcher } : {}),
 			...(retryAfterErrorCategory ? { retryAfterErrorCategory } : {}),
 			...(retryAfterError ? { retryAfterError } : {}),
 			...(connectivityTestError ? { connectivityTestError } : {}),
@@ -222,6 +231,7 @@ export class ChatMLFetcherTelemetrySender {
 		maxResponseTokens: number,
 		timeToFirstToken: number,
 		isVisionRequest: boolean,
+		fetcher: FetcherId | undefined,
 	) {
 		/* __GDPR__
 			"response.error" : {
@@ -237,6 +247,7 @@ export class ChatMLFetcherTelemetrySender {
 				"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
 				"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
 				"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
+				"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
@@ -261,6 +272,7 @@ export class ChatMLFetcherTelemetrySender {
 			apiType: chatEndpointInfo.apiType,
 			reasoningEffort: requestBody.reasoning?.effort,
 			reasoningSummary: requestBody.reasoning?.summary,
+			...(fetcher ? { fetcher } : {}),
 			associatedRequestId: telemetryProperties?.associatedRequestId,
 			...(telemetryProperties?.retryAfterErrorCategory ? { retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory } : {}),
 			...(telemetryProperties?.retryAfterError ? { retryAfterError: telemetryProperties.retryAfterError } : {}),

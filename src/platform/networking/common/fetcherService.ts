@@ -29,7 +29,8 @@ export class Response {
 		readonly headers: IHeaders,
 		private readonly getText: () => Promise<string>,
 		private readonly getJson: () => Promise<any>,
-		private readonly getBody: () => Promise<unknown | null>
+		private readonly getBody: () => Promise<unknown | null>,
+		readonly fetcher: FetcherId
 	) { }
 
 	async text(): Promise<string> {
@@ -46,7 +47,7 @@ export class Response {
 	}
 }
 
-export type FetcherId = 'electron-fetch' | 'node-fetch' | 'node-http';
+export type FetcherId = 'electron-fetch' | 'node-fetch' | 'node-http' | 'test-stub' | 'helix-fetch';
 
 /** These are the options we currently use, for ease of reference. */
 export interface FetchOptions {
