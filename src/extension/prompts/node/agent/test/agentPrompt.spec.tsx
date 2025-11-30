@@ -54,7 +54,7 @@ testFamilies.forEach(family => {
 		const fileTsUri = URI.file('/workspace/file.ts');
 
 		function getSnapshotFile(name: string): string {
-			return `./__snapshots__/agentPrompts-${name}-${family}.spec.snap`;
+			return `./__snapshots__/agentPrompts-${family}/${name}.spec.snap`;
 		}
 
 		let conversation: Conversation;
