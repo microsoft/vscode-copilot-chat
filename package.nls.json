@@ -30,6 +30,8 @@
 	"github.copilot.command.openUserPreferences": "Open User Preferences",
 	"github.copilot.command.openMemoryFolder": "Open Memory Folder",
 	"github.copilot.command.sendChatFeedback": "Send Chat Feedback",
+	"github.copilot.command.addExternalContext": "Add External Folder",
+	"github.copilot.command.manageExternalContexts": "Manage External Folders",
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
 	"github.copilot.viewsWelcome.individual.expired": "Your Copilot subscription has expired.\n\n[Review Copilot Settings](https://github.com/settings/copilot?editor=vscode)",
