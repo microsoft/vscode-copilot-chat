@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isGpt5Family } from '../../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt5Family, isGptCodexFamily } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
@@ -232,7 +232,7 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 class DefaultGpt5PromptResolver implements IAgentPrompt {
 
 	static matchesModel(endpoint: IChatEndpoint): boolean {
-		return isGpt5Family(endpoint);
+		return isGpt5Family(endpoint) && !isGptCodexFamily(endpoint);
 	}
 
 	static familyPrefixes = [];
