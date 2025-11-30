@@ -5,18 +5,17 @@
 
 import { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
-import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IIgnoreService } from '../../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../../platform/log/common/logService';
-import { MockExtensionContext } from '../../../../../platform/test/node/extensionContext';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { ChatReferenceDiagnostic } from '../../../../../util/common/test/shims/chatTypes';
 import { DiagnosticSeverity } from '../../../../../util/common/test/shims/enums';
 import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
+import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../../../util/vs/base/common/network';
@@ -41,7 +40,11 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		fileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
 		workspaceService = accessor.get(IWorkspaceService) as TestWorkspaceService;
 		const logService = accessor.get(ILogService);
-		const imageSupport = new CopilotCLIImageSupport(new MockExtensionContext() as unknown as IVSCodeExtensionContext, logService, workspaceService);
+		const imageSupport = new class extends mock<CopilotCLIImageSupport>() {
+			override storeImage(imageData: Uint8Array, mimeType: string): Promise<URI> {
+				throw new Error('Method not implemented.');
+			}
+		};
 		resolver = new CopilotCLIPromptResolver(imageSupport, logService, fileSystem, services.seal(), accessor.get(IIgnoreService));
 	});
 	afterEach(() => {
