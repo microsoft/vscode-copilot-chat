@@ -10,6 +10,7 @@ import { platform, tmpdir } from 'os';
 import * as path from 'path';
 import type { ChatPromptReference } from 'vscode';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/agents/copilotcli/node/copilotCli';
+import { CopilotCLIImageSupport } from '../../src/extension/agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/agents/copilotcli/node/copilotcliSessionService';
@@ -158,7 +159,8 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	const copilotCLISessionService = accessor.get(ICopilotCLISessionService);
 	const sdk = accessor.get(ICopilotCLISDK);
 	const instaService = accessor.get(IInstantiationService);
-	const promptResolver = instaService.createInstance(CopilotCLIPromptResolver);
+	const imageSupport = instaService.createInstance(CopilotCLIImageSupport);
+	const promptResolver = instaService.createInstance(CopilotCLIPromptResolver, imageSupport);
 
 	async function populateWorkspaceFiles(workingDirectory: string) {
 		const fileLanguages = new Map<string, string>([

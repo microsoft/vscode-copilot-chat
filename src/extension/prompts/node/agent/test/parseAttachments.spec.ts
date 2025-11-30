@@ -15,6 +15,7 @@ import { IWorkspaceService } from '../../../../../platform/workspace/common/work
 import { ChatReferenceDiagnostic } from '../../../../../util/common/test/shims/chatTypes';
 import { DiagnosticSeverity } from '../../../../../util/common/test/shims/enums';
 import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
+import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../../../util/vs/base/common/network';
@@ -22,6 +23,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { Location } from '../../../../../util/vs/workbench/api/common/extHostTypes/location';
 import { Range } from '../../../../../util/vs/workbench/api/common/extHostTypes/range';
 import { extractChatPromptReferences } from '../../../../agents/copilotcli/common/copilotCLIPrompt';
+import { CopilotCLIImageSupport } from '../../../../agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../../../agents/copilotcli/node/copilotcliPromptResolver';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { TestChatRequest } from '../../../../test/node/testHelpers';
@@ -38,7 +40,12 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		fileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
 		workspaceService = accessor.get(IWorkspaceService) as TestWorkspaceService;
 		const logService = accessor.get(ILogService);
-		resolver = new CopilotCLIPromptResolver(logService, fileSystem, services.seal(), accessor.get(IIgnoreService));
+		const imageSupport = new class extends mock<CopilotCLIImageSupport>() {
+			override storeImage(imageData: Uint8Array, mimeType: string): Promise<URI> {
+				throw new Error('Method not implemented.');
+			}
+		};
+		resolver = new CopilotCLIPromptResolver(imageSupport, logService, fileSystem, services.seal(), accessor.get(IIgnoreService));
 	});
 	afterEach(() => {
 		disposables.clear();

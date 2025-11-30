@@ -84,7 +84,7 @@ suite('ApplyPatch Tool', () => {
 		await tool.invoke({ input: input2, toolInvocationToken: undefined }, CancellationToken.None);
 
 		expect(seenEdits).toBe(1);
-		expect(workingCopyDocument.text).toMatchFileSnapshot('fixtures/4302.ts.txt.expected');
+		await expect(workingCopyDocument.text).toMatchFileSnapshot('fixtures/4302.ts.txt.expected');
 
 	});
 });

@@ -14,7 +14,7 @@ import { isLocation } from '../../../../util/common/types';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequest, FileType } from '../../../../vscodeTypes';
+import { ChatReferenceBinaryData, ChatRequest, FileType } from '../../../../vscodeTypes';
 import { ChatVariablesCollection, isPromptFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
@@ -55,17 +55,21 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		// We leave that for Copilot CLI SDK to handle.
 		const isResourceVariable = (variable: PromptVariable) =>
 			!isScmEntry(variable.value) && (URI.isUri(variable.value) || isLocation(variable.value));
-		const resourceVariables = this.props.chatVariables.filter(isResourceVariable);
-		const nonResourceVariables = this.props.chatVariables.filter(variable => !isResourceVariable(variable));
+		const isImageReference = (variable: PromptVariable) => variable.value && variable.value instanceof ChatReferenceBinaryData;
+
+		const resourceVariables = this.props.chatVariables.filter(variable => isResourceVariable(variable) && !isImageReference(variable));
+		const nonResourceVariables = this.props.chatVariables.filter(variable => !isResourceVariable(variable) && !isImageReference(variable));
 		const [nonResourceAttachments, resourceAttachments] = await Promise.all([
 			renderChatVariables(nonResourceVariables, this.fileSystemService, true, false, false, true, false),
 			renderResourceVariables(resourceVariables, this.fileSystemService, this.promptPathRepresentationService)
 		]);
-		const attachmentHint = this.props.chatVariables.hasVariables() ?
+
+		const hasVariables = resourceVariables.hasVariables() || nonResourceVariables.hasVariables();
+		const attachmentHint = hasVariables ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 
-		const hasCustomContext = this.props.chatVariables.hasVariables() || (this.props.editedFileEvents?.length ?? 0) > 0;
+		const hasCustomContext = hasVariables || (this.props.editedFileEvents?.length ?? 0) > 0;
 		const promptVariable = resourceVariables.find(v => isPromptFile(v));
 		// If we have a prompt file, we want to direct the model to follow instructions in that file.
 		// Otherwise we add a generic reminder to only use the context if its relevant.
@@ -95,7 +99,7 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					)
 				}
 				{
-					this.props.chatVariables.hasVariables() &&
+					hasVariables &&
 					<Tag name='attachments' priority={this.props.priority}>
 						{...nonResourceAttachments}
 						{...resourceAttachments}
