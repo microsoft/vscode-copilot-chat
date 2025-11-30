@@ -1834,10 +1834,6 @@
 		],
 		"commands": [
 			{
-				"command": "github.copilot.nes.prepareRename",
-				"title": "Check Prepare Rename"
-			},
-			{
 				"command": "github.copilot.chat.triggerPermissiveSignIn",
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
 			},
