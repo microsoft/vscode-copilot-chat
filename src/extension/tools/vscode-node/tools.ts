@@ -25,7 +25,11 @@ export class ToolsContribution extends Disposable {
 	) {
 		super();
 
+		const extensionVersion = vscode.extensions.getExtension('github.copilot-chat')?.packageJSON?.version;
+		console.log(`[CopilotTools] registering tools for github.copilot-chat@${extensionVersion ?? 'unknown'}`);
+
 		for (const [name, tool] of toolsService.copilotTools) {
+			console.log(`[CopilotTools] registering ${name}`);
 			this._register(vscode.lm.registerTool(getContributedToolName(name), tool));
 		}
 

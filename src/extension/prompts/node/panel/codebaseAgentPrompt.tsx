@@ -54,6 +54,11 @@ export class CodebaseAgentPrompt extends PromptElement<GenericBasePromptElementP
 							Remember that you can call multiple tools in one response.<br />
 							If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible, but do not call `{ToolName.Codebase}` in parallel.<br />
 							Use `{ToolName.Codebase}` to search for high level concepts or descriptions of functionality in the user's question.{!isCodesearchFast && ` Note that '${ToolName.Codebase}' is slow, so you should only run it if you are confident its results will be relevant.`}<br />
+							Always prefer symbolic navigation when applicable.
+							Use {ToolName.DocumentSymbols} After you have a likely file, call {ToolName.DocumentSymbols} to review its structure, and get accurate symbols and their line numbers for further navigation. Page through results with the "page" and "pageSize" options, or set "reset": true to rebuild the cache before paging. <br />
+							Use {ToolName.Definitions} When you know where you are in the file, use {ToolName.Definitions} to navigate straight to the target symbol, just like a developer would use f12. you must use the line number and symbol name as received from the {ToolName.DocumentSymbols} tool.<br />
+							Call {ToolName.Implementations} to enumerate concrete implementations when working or modifying with interfaces and you need to recognize their usages. you must use the line number and symbol name as received from the {ToolName.DocumentSymbols} tool.<br />
+							Call {ToolName.References} to find referenced usages of a symbol across the codeobase. very useful when modifying public functions signatures or data structures. you must use the line number and symbol name as received from the {ToolName.DocumentSymbols} tool.<br />
 							Prefer `{ToolName.SearchWorkspaceSymbols}` over `{ToolName.FindTextInFiles}` when you have precise code identifiers to search for.<br />
 							Prefer `{ToolName.FindTextInFiles}` over `{ToolName.Codebase}` when you have precise keywords to search for.<br />
 							When using a tool, follow the JSON schema very carefully and make sure to include all required fields.<br />

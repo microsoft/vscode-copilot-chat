@@ -8,6 +8,7 @@ import type * as vscode from 'vscode';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { RelativePattern } from '../../../platform/filesystem/common/fileTypes';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
+import { ILanguageFeaturesService } from '../../../platform/languages/common/languageFeaturesService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -18,7 +19,7 @@ import { isAbsolute } from '../../../util/vs/base/common/path';
 import { isEqual, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { LanguageModelPromptTsxPart, LanguageModelToolResult, Position, SymbolKind } from '../../../vscodeTypes';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 
 export function checkCancellation(token: CancellationToken): void {
@@ -122,4 +123,213 @@ export async function assertFileNotContentExcluded(accessor: ServicesAccessor, u
 	if (await ignoreService.isCopilotIgnored(uri)) {
 		throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is configured to be ignored by Copilot`);
 	}
+}
+
+export interface NormalizedSymbolPosition {
+	readonly position: Position;
+	readonly line: number;
+	readonly column: number;
+	readonly symbolId?: string;
+}
+
+export interface SymbolCandidate {
+	readonly symbolId: string;
+	readonly kind: string;
+	readonly name: string;
+	readonly column: number;
+}
+
+export class SymbolAmbiguityError extends Error {
+	constructor(
+		message: string,
+		public readonly candidates: SymbolCandidate[]
+	) {
+		super(message);
+		this.name = 'SymbolAmbiguityError';
+	}
+}
+
+export async function normalizeSymbolPosition(
+	document: vscode.TextDocument,
+	line: number,
+	symbolName: string,
+	expectedKind: string,
+	symbolId: string | undefined,
+	promptPathService: IPromptPathRepresentationService,
+	languageFeaturesService: ILanguageFeaturesService,
+	token: CancellationToken
+): Promise<NormalizedSymbolPosition> {
+	const normalizedLine = normalizePositiveInteger(line, 'line');
+	const zeroBasedLine = normalizedLine - 1;
+	if (zeroBasedLine < 0 || zeroBasedLine >= document.lineCount) {
+		throw new Error(`Line ${normalizedLine} is outside the range of ${promptPathService.getFilePath(document.uri)} (file has ${document.lineCount} lines).`);
+	}
+
+	const normalizedSymbolName = symbolName?.trim();
+	if (!normalizedSymbolName) {
+		throw new Error(`A non-empty symbolName is required to locate the symbol in ${promptPathService.getFilePath(document.uri)}.`);
+	}
+
+	// Get all document symbols
+	const allSymbols = await languageFeaturesService.getDocumentSymbols(document.uri);
+	checkCancellation(token);
+
+	// Find all symbols on the requested line with matching name
+	const candidates = findSymbolsOnLine(allSymbols, zeroBasedLine, normalizedSymbolName);
+
+	// If symbolId is provided, use it for direct lookup
+	if (symbolId) {
+		const match = candidates.find(c => c.symbolId === symbolId);
+		if (!match) {
+			throw new Error(`Symbol with ID "${symbolId}" was not found on line ${normalizedLine} of ${promptPathService.getFilePath(document.uri)}.`);
+		}
+		return {
+			position: new Position(zeroBasedLine, match.column),
+			line: normalizedLine,
+			column: match.column + 1,
+			symbolId: match.symbolId,
+		};
+	}
+
+	// Filter by expectedKind if provided
+	const filteredCandidates = candidates.filter(c => symbolKindMatches(c.kind, expectedKind));
+
+	// Case A: No candidates found
+	if (filteredCandidates.length === 0) {
+		if (candidates.length > 0) {
+			// Found symbols with the name but wrong kind
+			throw new Error(`No symbol named "${normalizedSymbolName}" with kind "${expectedKind}" found on line ${normalizedLine} of ${promptPathService.getFilePath(document.uri)}.`);
+		}
+		// Fallback to text search for backwards compatibility
+		const lineText = document.lineAt(zeroBasedLine).text;
+		const symbolColumn = findSymbolColumnIndex(lineText, normalizedSymbolName);
+		if (symbolColumn === undefined) {
+			throw new Error(`Symbol "${normalizedSymbolName}" was not found on line ${normalizedLine} of ${promptPathService.getFilePath(document.uri)}.`);
+		}
+		return {
+			position: new Position(zeroBasedLine, symbolColumn),
+			line: normalizedLine,
+			column: symbolColumn + 1,
+		};
+	}
+
+	// Case B: Exactly one candidate - use it
+	if (filteredCandidates.length === 1) {
+		const candidate = filteredCandidates[0];
+		return {
+			position: new Position(zeroBasedLine, candidate.column),
+			line: normalizedLine,
+			column: candidate.column + 1,
+			symbolId: candidate.symbolId,
+		};
+	}
+
+	// Case C: Multiple candidates - return ambiguity error
+	throw new SymbolAmbiguityError(
+		`Multiple symbols named "${normalizedSymbolName}" found on line ${normalizedLine} of ${promptPathService.getFilePath(document.uri)}. Please specify expectedKind or use symbolId from this response.`,
+		filteredCandidates
+	);
+}
+
+function findSymbolsOnLine(symbols: vscode.DocumentSymbol[], line: number, name: string): SymbolCandidate[] {
+	const candidates: SymbolCandidate[] = [];
+
+	function visit(symbol: vscode.DocumentSymbol, parentPath: string = '') {
+		// Check if symbol is on the target line
+		if (symbol.range.start.line <= line && symbol.range.end.line >= line) {
+			// Check if symbol name matches
+			if (symbol.name === name && symbol.selectionRange.start.line === line) {
+				const symbolPath = parentPath ? `${parentPath}.${symbol.name}` : symbol.name;
+				candidates.push({
+					symbolId: `${symbolPath}:${symbol.range.start.line}:${symbol.range.start.character}`,
+					kind: SymbolKind[symbol.kind],
+					name: symbol.name,
+					column: symbol.selectionRange.start.character,
+				});
+			}
+
+			// Recursively check children
+			if (symbol.children) {
+				const symbolPath = parentPath ? `${parentPath}.${symbol.name}` : symbol.name;
+				for (const child of symbol.children) {
+					visit(child, symbolPath);
+				}
+			}
+		}
+	}
+
+	for (const symbol of symbols) {
+		visit(symbol);
+	}
+
+	return candidates;
+}
+
+function symbolKindMatches(symbolKind: string, expectedKind: string): boolean {
+	// Normalize both to lowercase for comparison
+	const normalizedSymbolKind = symbolKind.toLowerCase();
+	const normalizedExpectedKind = expectedKind.toLowerCase();
+
+	// Direct match
+	if (normalizedSymbolKind === normalizedExpectedKind) {
+		return true;
+	}
+
+	// Map common aliases
+	const kindAliases: Record<string, string[]> = {
+		'type': ['class', 'interface', 'enum', 'struct'],
+		'class': ['type'],
+		'interface': ['type'],
+		'enum': ['type'],
+		'function': ['method'],
+		'method': ['function'],
+		'variable': ['field', 'property', 'local'],
+		'field': ['variable', 'property'],
+		'property': ['variable', 'field'],
+		'local': ['variable'],
+		'parameter': ['variable'],
+		'constant': ['variable', 'field'],
+	};
+
+	const aliases = kindAliases[normalizedExpectedKind] || [];
+	return aliases.includes(normalizedSymbolKind);
+}
+
+function findSymbolColumnIndex(lineText: string, symbolName: string): number | undefined {
+	const matches = collectSymbolMatches(lineText, symbolName);
+	for (const candidate of matches) {
+		if (isWholeIdentifierMatch(lineText, candidate, symbolName.length)) {
+			return candidate;
+		}
+	}
+
+	return matches[0];
+}
+
+function collectSymbolMatches(lineText: string, symbolName: string): number[] {
+	const matches: number[] = [];
+	let index = lineText.indexOf(symbolName);
+	while (index !== -1) {
+		matches.push(index);
+		index = lineText.indexOf(symbolName, index + Math.max(symbolName.length, 1));
+	}
+	return matches;
+}
+
+function isWholeIdentifierMatch(lineText: string, start: number, length: number): boolean {
+	const before = start === 0 ? undefined : lineText.charAt(start - 1);
+	const after = start + length >= lineText.length ? undefined : lineText.charAt(start + length);
+	return !isIdentifierCharacter(before) && !isIdentifierCharacter(after);
+}
+
+function isIdentifierCharacter(char: string | undefined): boolean {
+	return !!char && /[A-Za-z0-9_$]/.test(char);
+}
+
+function normalizePositiveInteger(value: number, field: string): number {
+	if (!Number.isFinite(value)) {
+		throw new Error(`The ${field} value must be a finite number.`);
+	}
+
+	return Math.max(1, Math.floor(value));
 }
