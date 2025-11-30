@@ -22,6 +22,7 @@ export namespace PromptFileLangageId {
  * A service that provides prompt file related functionalities: agents, instructions and prompt files.
  */
 export interface IPromptsService {
+	readonly _serviceBrand: undefined;
 	/**
 	 * Reads and parses the provided URI
 	 * @param uris
