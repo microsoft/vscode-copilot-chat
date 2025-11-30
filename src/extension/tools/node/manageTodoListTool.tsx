@@ -9,11 +9,14 @@ import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
+/**
+ * The tool definition and typical description is in core. This just lets us apply a model-specific override.
+ */
 class ManageTodoListTool implements ICopilotTool<unknown> {
 	public static readonly toolName = ToolName.CoreManageTodoList;
 
 	alternativeDefinition(tool: vscode.LanguageModelToolInformation, endpoint?: IChatEndpoint): vscode.LanguageModelToolInformation {
-		if (!isGpt5PlusFamily(endpoint?.model)) {
+		if (!isGpt5PlusFamily(endpoint)) {
 			return tool;
 		}
 
