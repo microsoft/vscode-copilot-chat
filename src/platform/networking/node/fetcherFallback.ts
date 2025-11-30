@@ -5,6 +5,7 @@
 
 import { Readable } from 'stream';
 import { ILogService } from '../../log/common/logService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { FetcherId, FetchOptions, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
 import { Config, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
@@ -16,7 +17,7 @@ const fetcherConfigKeys: Partial<Record<FetcherId, Config<boolean>>> = {
 	'node-http': ConfigKey.Shared.DebugUseNodeFetcher,
 };
 
-export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[], url: string, options: FetchOptions, knownBadFetchers: Set<string>, configurationService: IConfigurationService, logService: ILogService): Promise<{ response: Response; updatedFetchers?: IFetcher[]; updatedKnownBadFetchers?: Set<string> }> {
+export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[], url: string, options: FetchOptions, knownBadFetchers: Set<string>, configurationService: IConfigurationService, logService: ILogService, telemetryService: ITelemetryService | undefined): Promise<{ response: Response; updatedFetchers?: IFetcher[]; updatedKnownBadFetchers?: Set<string> }> {
 	if (options.retryFallbacks && availableFetchers.length > 1) {
 		let firstResult: { ok: boolean; response: Response } | { ok: false; err: any } | undefined;
 		const updatedKnownBadFetchers = new Set<string>();
@@ -35,6 +36,21 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 					return { response: retry.response };
 				}
 				logService.info(`FetcherService: using ${fetcher.getUserAgentLibrary()} from now on`);
+				/* __GDPR__
+					"fetcherFallback" : {
+						"owner": "chrmarti",
+						"comment": "Sent when the fetcher service switches to a fallback fetcher due to the primary fetcher failing",
+						"newFetcher": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the fetcher that is now being used" },
+						"knownBadFetchers": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of fetchers that are known to be failing" },
+						"knownBadFetchersCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of fetchers that are known to be failing" }
+					}
+				*/
+				telemetryService?.sendTelemetryEvent('fetcherFallback', { github: true, microsoft: true }, {
+					newFetcher: fetcher.getUserAgentLibrary(),
+					knownBadFetchers: Array.from(updatedKnownBadFetchers).join(','),
+				}, {
+					knownBadFetchersCount: updatedKnownBadFetchers.size,
+				});
 				const updatedFetchers = availableFetchers.slice();
 				updatedFetchers.splice(updatedFetchers.indexOf(fetcher), 1);
 				updatedFetchers.unshift(fetcher);
