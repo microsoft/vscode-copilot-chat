@@ -24,6 +24,10 @@ export class PrepareNesRenameResult {
 		this.timedOut = false;
 	}
 
+	public getCanRename(): RenameKind {
+		return this.canRename;
+	}
+
 	public setCanRename(value: RenameKind.no, reason?: string): PrepareNesRenameResult;
 	public setCanRename(value: RenameKind.yes | RenameKind.maybe, oldName: string): PrepareNesRenameResult;
 	public setCanRename(value: RenameKind, str?: string): PrepareNesRenameResult {

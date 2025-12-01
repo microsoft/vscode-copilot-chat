@@ -6,9 +6,10 @@ import assert from 'assert';
 
 import { type LanguageService } from 'typescript';
 
-import { computeContext as _computeContext } from '../../common/api';
+import { computeContext as _computeContext, prepareNesRename as _prepareNesRename } from '../../common/api';
 import { CharacterBudget, ContextResult, RequestContext, SingleLanguageServiceSession, type ComputeContextSession } from '../../common/contextProvider';
-import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type PriorityTag, type Trait } from '../../common/protocol';
+import { PrepareNesRenameResult } from '../../common/nesRenameValidator';
+import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type PriorityTag, type RenameKind, type Trait } from '../../common/protocol';
 import { NullCancellationToken } from '../../common/typescripts';
 import { NodeHost } from '../host';
 import { LanguageServices } from './languageServices';
@@ -124,6 +125,21 @@ export function computeContext(session: TestSession, document: string, position:
 	const pos = sourceFile.getPositionOfLineAndCharacter(position.line, position.character);
 	_computeContext(result, session.session, session.service, document, pos, new NullCancellationToken());
 	return result.items().filter((item) => item.kind === contextKind);
+}
+
+export function prepareNesRename(session: TestSession, document: string, position: { line: number; character: number }, oldName: string, newName: string): RenameKind | undefined {
+	const program = session.service.getProgram();
+	if (program === undefined) {
+		return;
+	}
+	const sourceFile = program.getSourceFile(document);
+	if (sourceFile === undefined) {
+		return;
+	}
+	const result = new PrepareNesRenameResult();
+	const pos = sourceFile.getPositionOfLineAndCharacter(position.line, position.character);
+	_prepareNesRename(result, session.service, document, pos, oldName, newName, new NullCancellationToken());
+	return result.getCanRename();
 }
 
 class LanguageServiceTestSession extends SingleLanguageServiceSession {

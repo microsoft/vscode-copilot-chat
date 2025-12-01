@@ -168,17 +168,6 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public getExtraHeaders(): Record<string, string> {
-		const isAnthropicModel = this.family.startsWith('claude') || this.family.startsWith('Anthropic');
-		const usesChatCompletionsEndpoint = !this.useMessagesApi && !this.useResponsesApi;
-		if (isAnthropicModel && usesChatCompletionsEndpoint) {
-			const thinkingBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
-			if (thinkingBudget) {
-				return {
-					...(this.modelMetadata.requestHeaders ?? {}),
-					'thinking_budget': String(thinkingBudget),
-				};
-			}
-		}
 		return this.modelMetadata.requestHeaders ?? {};
 	}
 
@@ -289,6 +278,14 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected customizeCapiBody(body: IEndpointBody): IEndpointBody {
+		const isAnthropicModel = this.family.startsWith('claude') || this.family.startsWith('Anthropic');
+		if (isAnthropicModel) {
+			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
+			if (configuredBudget) {
+				// Cap thinking budget to Anthropic's recommended max (32000), and ensure it's less than max output tokens
+				body.thinking_budget = Math.min(32000, this._maxOutputTokens - 1, configuredBudget);
+			}
+		}
 		return body;
 	}
 

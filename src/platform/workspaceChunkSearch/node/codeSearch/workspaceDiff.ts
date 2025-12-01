@@ -15,7 +15,8 @@ import { LogExecTime } from '../../../log/common/logExecTime';
 import { ILogService } from '../../../log/common/logService';
 import { ISimulationTestContext } from '../../../simulationTestContext/common/simulationTestContext';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
-import { CodeSearchRepoStatus, RepoEntry } from './codeSearchChunkSearch';
+import { RepoEntry } from './codeSearchChunkSearch';
+import { CodeSearchRepoStatus } from './codeSearchRepo';
 
 enum RepoState {
 	Initializing,

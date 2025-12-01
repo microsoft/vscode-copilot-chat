@@ -217,7 +217,7 @@ export class PromptFileContextContribution extends Disposable {
 	}
 
 	private getToolNames(): string[] {
-		return ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'runSubagent', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo', 'extensions', 'todos'];
+		return ['execute', 'read', 'edit', 'search', 'web', 'agent', 'todo'];
 	}
 
 
