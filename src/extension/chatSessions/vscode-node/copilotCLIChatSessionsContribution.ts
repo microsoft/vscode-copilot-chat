@@ -55,7 +55,7 @@ const _sessionModel: Map<string, string | undefined> = new Map();
 
 // When we start an untitled CLI session, the id of the session is `untitled:xyz`
 // As soon as we create a CLI session we have the real session id, lets say `cli-1234`
-// Once the session completes this will untitled session `untitled:xyz` will get swapped with the real session id `cli-1234`
+// Once the session completes, this untitled session `untitled:xyz` will get swapped with the real session id `cli-1234`
 // However if the session items provider is called while the session is still running, we need to return the same old `untitled:xyz` session id back to core.
 // There's an issue in core (about holding onto ref of the Chat Model).
 // As a temporary solution, return the same untitled session id back to core until the session is completed.
