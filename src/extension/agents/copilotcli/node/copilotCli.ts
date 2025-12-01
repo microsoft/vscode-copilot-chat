@@ -241,7 +241,8 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 
 	private cloneAgent(agent: SweCustomAgent): SweCustomAgent {
 		return {
-			...agent
+			...agent,
+			tools: agent.tools ? [...agent.tools] : agent.tools
 		};
 	}
 }
