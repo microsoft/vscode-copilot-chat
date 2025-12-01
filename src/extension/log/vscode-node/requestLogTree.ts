@@ -591,7 +591,7 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 
 			const pushLastPrompt = () => {
 				if (lastPrompt) {
-					if (lastPrompt.token.flattenSingleChild && lastPrompt.children.length === 1) {
+					if (lastPrompt.token.flattenSingleChild && lastPrompt.children.length === 1 && !lastPrompt.hasSeen) {
 						result.push(lastPrompt.children[0]);
 					} else {
 						result.push(lastPrompt);
