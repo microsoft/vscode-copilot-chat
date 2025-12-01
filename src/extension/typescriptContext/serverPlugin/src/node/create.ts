@@ -5,7 +5,7 @@
 import type tt from 'typescript/lib/tsserverlibrary';
 import { computeContext, prepareNesRename } from '../common/api';
 import { CharacterBudget, ContextResult, LanguageServerSession, RequestContext, TokenBudgetExhaustedError } from '../common/contextProvider';
-import { ErrorCode, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
+import { ErrorCode, RenameKind, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
 import { CancellationTokenWithTimer } from '../common/typescripts';
 
 import { PrepareNesRenameResult } from '../common/nesRenameValidator';
@@ -124,7 +124,9 @@ const prepareNesRenameHandler = (request: PrepareNesRenameRequest): PrepareNesRe
 	try {
 		prepareNesRename(result, project.getLanguageService(), file, pos, request.arguments?.oldName, request.arguments?.newName, cancellationToken);
 	} catch (error) {
-		if (!(error instanceof ts.OperationCanceledException)) {
+		if (error instanceof ts.OperationCanceledException) {
+			result.setCanRename(RenameKind.no, 'Operation canceled');
+		} else {
 			if (error instanceof Error) {
 				return { response: { error: ErrorCode.exception, message: error.message, stack: error.stack }, responseRequired: true };
 			} else {

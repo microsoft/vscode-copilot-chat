@@ -472,14 +472,23 @@ export enum RenameKind {
 	maybe = 'maybe'
 }
 
-export type PrepareNesRenameResult = {
-	canRename: RenameKind.yes | RenameKind.maybe;
-	oldName: string;
-} | {
-	canRename: RenameKind.no;
-	timedOut: boolean;
-	reason?: string;
+export namespace PrepareNesRenameResult {
+	export type Yes = {
+		canRename: RenameKind.yes;
+		oldName: string;
+	}
+	export type Maybe = {
+		canRename: RenameKind.maybe;
+		oldName: string;
+	}
+	export type No = {
+		canRename: RenameKind.no;
+		timedOut: boolean;
+		reason?: string;
+	}
 }
+
+export type PrepareNesRenameResult = PrepareNesRenameResult.Yes | PrepareNesRenameResult.Maybe | PrepareNesRenameResult.No;
 
 export interface PrepareNesRenameRequest extends tt.server.protocol.Request {
 	arguments?: PrepareNesRenameRequestArgs;
@@ -506,10 +515,10 @@ export namespace PrepareNesRenameResponse {
 		return (response.type === 'cancelled');
 	}
 
-	export function isOk(response: PrepareNesRenameResponse): response is tt.server.protocol.Response & { body: OK } {
+	export function isOk(response: PrepareNesRenameResponse): response is Omit<tt.server.protocol.Response, 'body'> & { body: OK } {
 		return response.type === 'response' && (response.body as OK).canRename !== undefined;
 	}
-	export function isError(response: PrepareNesRenameResponse): response is tt.server.protocol.Response & { body: Failed } {
+	export function isError(response: PrepareNesRenameResponse): response is Omit<tt.server.protocol.Response, 'body'> & { body: Failed } {
 		return response.type === 'response' && (response.body as Failed).error !== undefined;
 	}
 }

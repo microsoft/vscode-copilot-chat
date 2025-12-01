@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as protocol from '../common/serverProtocol';
 
@@ -39,19 +40,81 @@ namespace PrepareNesRenameRequestArgs {
 	}
 }
 
+class TelemetrySender {
+
+	private readonly telemetryService: ITelemetryService;
+	private readonly logService: ILogService;
+
+	constructor(telemetryService: ITelemetryService, logService: ILogService) {
+		this.telemetryService = telemetryService;
+		this.logService = logService;
+	}
+
+	public sendPrepareNesRenameTelemetry(requestId: string, timeTaken: number, canRename: protocol.RenameKind, timedOut: boolean): void {
+		/* __GDPR__
+			"typescript-context-plugin.nesRename.prepare.ok" : {
+				"owner": "dirkb",
+				"comment": "Telemetry for copilot inline completion context in success case",
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+				"canRename": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether NES rename can be performed" },
+				"timedOut": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request timed out" },
+				"timeTaken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time taken to prepare NES rename in ms" }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent(
+			'typescript-context-plugin.nesRename.prepare.ok',
+			{
+				requestId: requestId,
+				canRename: canRename.toString(),
+				timedOut: timedOut.toString()
+			},
+			{
+				timeTaken: timeTaken
+			}
+		);
+		this.logService.info(`NES Rename Prepare: canRename=${canRename}, timeTaken=${timeTaken}, timedOut=${timedOut}`);
+	}
+
+	public sendPrepareNesRenameFailureTelemetry(requestId: string, data: { error: protocol.ErrorCode; message: string; stack?: string }): void {
+		/* __GDPR__
+			"typescript-context-plugin.nesRename.prepare.failed" : {
+				"owner": "dirkb",
+				"comment": "Telemetry for copilot inline completion context in failure case",
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+				"code:": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The failure code" },
+				"message": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The failure message" },
+				"stack": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The failure stack" }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent(
+			'typescript-context-plugin.nesRename.prepare.failed',
+			{
+				requestId: requestId,
+				code: data.error,
+				message: data.message,
+				stack: data.stack ?? 'Not available'
+			}
+		);
+	}
+}
+
+
 export class NesRenameContribution implements vscode.Disposable {
 
 	private _isActivated: Promise<boolean> | undefined;
 	private disposables: DisposableStore;
+	private readonly telemetrySender: TelemetrySender;
 
 	private static readonly ExecConfig: ExecConfig = { executionTarget: ExecutionTarget.Semantic };
 
 	constructor(
+		@ITelemetryService readonly telemetryService: ITelemetryService,
 		@ILogService readonly logService: ILogService,
 	) {
+		this.telemetrySender = new TelemetrySender(telemetryService, logService);
 		this.disposables = new DisposableStore();
-		this.disposables.add(vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined): Promise<protocol.RenameKind> => {
-			const params = await this.resolveParams(uri, position, oldName, newName);
+		this.disposables.add(vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, requestId: string | undefined): Promise<protocol.RenameKind> => {
+			const params = await this.resolveParams(uri, position, oldName, newName, requestId);
 			if (params === undefined) {
 				return protocol.RenameKind.no;
 			}
@@ -59,22 +122,25 @@ export class NesRenameContribution implements vscode.Disposable {
 			position = params.position;
 			oldName = params.oldName;
 			newName = params.newName;
+			requestId = params.requestId;
 
 			const activated = await this.isActivated(document);
 			if (!activated) {
 				return protocol.RenameKind.no;
 			}
 
-			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, Date.now(), 300);
+			const startTime = Date.now();
+			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, startTime, 300);
 
 			const tokenSource = new vscode.CancellationTokenSource();
 			try {
 				const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
 				if (protocol.PrepareNesRenameResponse.isError(result)) {
-					this.logService.error('Prepare NES Rename error:', result.message);
+					this.telemetrySender.sendPrepareNesRenameFailureTelemetry(requestId, result.body);
 					return protocol.RenameKind.no;
 				} else if (protocol.PrepareNesRenameResponse.isOk(result)) {
-					this.logService.info(`Prepare NES Rename result for ${oldName} to ${newName}: ${result.body.canRename}`);
+					const timedOut = result.body.canRename === protocol.RenameKind.no ? result.body.timedOut : false;
+					this.telemetrySender.sendPrepareNesRenameTelemetry(requestId, Date.now() - startTime, result.body.canRename, timedOut);
 					return result.body.canRename;
 				} else {
 					return protocol.RenameKind.no;
@@ -157,13 +223,13 @@ export class NesRenameContribution implements vscode.Disposable {
 		return activated;
 	}
 
-	private resolveParams(uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined): { document: vscode.TextDocument; position: vscode.Position; oldName: string; newName: string } | undefined {
+	private resolveParams(uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, requestId: string | undefined): { document: vscode.TextDocument; position: vscode.Position; oldName: string; newName: string; requestId: string } | undefined {
 		if (uri === undefined) {
 			return undefined;
 		}
 		const document = this.getDocument(uri);
-		if (document !== undefined && position !== undefined && typeof oldName === 'string' && typeof newName === 'string') {
-			return { document, position, oldName, newName };
+		if (document !== undefined && position !== undefined && typeof oldName === 'string' && typeof newName === 'string' && typeof requestId === 'string') {
+			return { document, position, oldName, newName, requestId };
 		} else {
 			return undefined;
 		}

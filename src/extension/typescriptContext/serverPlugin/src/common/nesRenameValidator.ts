@@ -8,7 +8,7 @@ const ts = TS();
 
 import type { __String } from 'typescript/lib/tsserverlibrary';
 import { PrepareNesRenameResponse, RenameKind } from './protocol';
-import { Symbols, TypeChecker } from './typescripts';
+import { Symbols } from './typescripts';
 
 export class PrepareNesRenameResult {
 
@@ -94,6 +94,7 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 					result.setCanRename(RenameKind.no, `A member with the name '${newName}' already exists on base type '${superType.getName()}'`);
 					return;
 				}
+				token.throwIfCancellationRequested();
 			}
 			result.setCanRename(RenameKind.yes, oldName);
 			return;
@@ -103,8 +104,6 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 		}
 	}
 	token.throwIfCancellationRequested();
-	const symbolChain = TypeChecker.getAccessibleSymbolChain(symbols.getTypeChecker(), symbol, undefined, ts.SymbolFlags.All, false);
-	console.log(symbolChain);
 	if (!isInScope(symbols, node, escapedNewName)) {
 		result.setCanRename(RenameKind.yes, oldName);
 		return;
