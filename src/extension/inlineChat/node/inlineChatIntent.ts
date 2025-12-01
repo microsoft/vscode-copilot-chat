@@ -16,6 +16,7 @@ import { IEditSurvivalTrackerService } from '../../../platform/editSurvivalTrack
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
@@ -32,7 +33,7 @@ import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelTextPart,
 import { Intent } from '../../common/constants';
 import { getAgentTools } from '../../intents/node/agentIntent';
 import { IIntentService } from '../../intents/node/intentService';
-import { SelectionSplitKind, SummarizedDocumentData } from '../../intents/node/testIntent/summarizedDocumentWithSelection';
+import { SelectionSplitKind, SummarizedDocumentData, SummarizedDocumentSplitMetadata } from '../../intents/node/testIntent/summarizedDocumentWithSelection';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IToolCall } from '../../prompt/common/intents';
@@ -481,6 +482,16 @@ export class InlineChatIntent implements IIntent {
 			}
 		});
 
+		let prediction: Prediction | undefined;
+		const documentSplit = renderResult.metadata.get(SummarizedDocumentSplitMetadata)?.split;
+		if (documentSplit) {
+			prediction = {
+				type: 'content',
+				content: ''
+			};
+			prediction.content = `\`\`\`${documentContext.document.languageId}\n${documentSplit.codeSelected}\n\`\`\``;
+		}
+
 		const source = new AsyncIterableSource<IResponsePart>();
 		replyInterpreter.processResponse(new ResponseProcessorContext(conversation.sessionId, conversation.getLatestTurn(), renderResult.messages, outcomeComputer), source.asyncIterable, stream, token);
 
@@ -493,6 +504,10 @@ export class InlineChatIntent implements IIntent {
 				messageId: telemetry.telemetryMessageId,
 				conversationId: telemetry.sessionId,
 				messageSource: this.id
+			},
+			requestOptions: {
+				stream: true,
+				prediction
 			},
 			finishedCb: async (_text, _index, delta) => {
 				telemetry.markReceivedToken();
