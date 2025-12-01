@@ -117,7 +117,7 @@ class MockOctoKitService implements IOctoKitService {
 	getPullRequestFiles = async () => [];
 	closePullRequest = async () => false;
 	getFileContent = async () => '';
-	getOrgCustomInstructions = async () => [];
+	getOrgCustomInstructions = async () => undefined;
 
 	async getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]> {
 		return this.customAgents;
