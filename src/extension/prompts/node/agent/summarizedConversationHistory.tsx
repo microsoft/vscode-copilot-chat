@@ -154,6 +154,7 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 		const history = this.props.simpleMode ?
 			<SimpleSummarizedHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} /> :
 			<ConversationHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
+		const isOpus = this.props.endpoint.model.startsWith('claude-opus');
 		return (
 			<>
 				<SystemMessage priority={this.props.priority}>
@@ -163,7 +164,11 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
 				<UserMessage>
 					Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
-
+					{isOpus && <>
+						<br />
+						IMPORTANT: Do NOT call any tools. Your only task is to generate a text summary of the conversation. Do not attempt to execute any actions or make any tool calls.<br />
+					</>}
+					<br />
 					Focus particularly on:<br />
 					- The specific agent commands/tools that were just executed<br />
 					- The results returned from these recent tool calls (truncate if very long but preserve key information)<br />
