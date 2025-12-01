@@ -6,7 +6,7 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
-import * as vscode from 'vscode';
+import { l10n } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IStringDictionary } from '../../../util/vs/base/common/collections';
@@ -69,10 +69,10 @@ export class NuGetMcpSetup {
 			if (errorCode === 'ENOENT') {
 				return {
 					state: 'error',
-					error: vscode.l10n.t("The '{0}' command was not found. .NET SDK 10 or newer must be installed and available in PATH.", this.dotnet.command),
+					error: l10n.t("The '{0}' command was not found. .NET SDK 10 or newer must be installed and available in PATH.", this.dotnet.command),
 					errorType: ValidatePackageErrorType.MissingCommand,
 					helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
-					helpUriLabel: vscode.l10n.t("Install .NET SDK"),
+					helpUriLabel: l10n.t("Install .NET SDK"),
 				};
 			} else {
 				throw error;
@@ -84,10 +84,10 @@ export class NuGetMcpSetup {
 		if (dotnetMajorVersion < 10) {
 			return {
 				state: 'error',
-				error: vscode.l10n.t("The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
+				error: l10n.t("The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
 				errorType: ValidatePackageErrorType.BadCommandVersion,
 				helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
-				helpUriLabel: vscode.l10n.t("Update .NET SDK"),
+				helpUriLabel: l10n.t("Update .NET SDK"),
 			};
 		}
 
@@ -97,7 +97,7 @@ export class NuGetMcpSetup {
 			return {
 				state: 'error',
 				errorType: ValidatePackageErrorType.NotFound,
-				error: vscode.l10n.t("Package {0} does not exist on NuGet.org.", id)
+				error: l10n.t("Package {0} does not exist on NuGet.org.", id)
 			};
 		}
 
