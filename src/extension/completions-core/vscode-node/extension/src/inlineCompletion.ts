@@ -58,7 +58,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 	pendingRequests: Set<Promise<unknown>> = new Set();
 
 	public onDidChange = undefined;
-	public handleListEndOfLifetime = undefined;
+	public handleListEndOfLifetime: InlineCompletionItemProvider['handleListEndOfLifetime'] = undefined;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,

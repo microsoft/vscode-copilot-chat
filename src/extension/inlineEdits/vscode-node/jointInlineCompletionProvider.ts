@@ -17,7 +17,6 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { isNotebookCell } from '../../../util/common/notebooks';
 import { createTracer } from '../../../util/common/tracing';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
-import { StatefulPromise } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { autorun, derived, derivedDisposable, observableFromEvent } from '../../../util/vs/base/common/observable';
@@ -192,9 +191,9 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 				'*',
 				singularProvider,
 				{
-					displayName: 'completions+nes',
+					displayName: inlineEditProvider?.displayName,
 					debounceDelayMs: 0, // set 0 debounce to ensure consistent delays/timings
-					groupId: 'completions+nes', // FIXME@ulugbekna: is this ok?
+					groupId: 'nes',
 					excludes,
 				})
 			);
@@ -275,13 +274,23 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, token);
 			}
 
-			let nesP: StatefulPromise<NesCompletionList | undefined> | undefined;
+			let nesEndOfLifeReason: vscode.InlineCompletionsDisposeReason | undefined = undefined;
+			let nesP: Promise<NesCompletionList | undefined> | undefined;
 			if (this._inlineEditProvider === undefined) {
 				tracer.trace(`- no NES provider`);
 				nesP = undefined;
 			} else {
 				tracer.trace(`- requesting NES provideInlineCompletionItems`);
-				nesP = new StatefulPromise(this._inlineEditProvider.provideInlineCompletionItems(document, position, context, nesCts.token));
+				nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, context, nesCts.token).then(v => {
+					if (nesEndOfLifeReason !== undefined) {
+						for (const item of (v?.items as NesCompletionItem[]) ?? []) {
+							this._inlineEditProvider!.handleEndOfLifetime?.(item, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
+						}
+						this._inlineEditProvider!.handleListEndOfLifetime?.(v!, nesEndOfLifeReason);
+						return undefined;
+					}
+					return v;
+				});
 			}
 
 			tracer.trace(`waiting for completions response`);
@@ -289,15 +298,22 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			const completionsR = completionsP ? await completionsP : undefined;
 			tracer.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
 
-			if (completionsR && completionsR.items.length > 0) {
-				tracer.trace(`using completions response, cancelling NES provider`);
-				nesCts.cancel(); // cancel NES request if completions are available
-				const list: SingularCompletionList = toCompletionsList(completionsR);
-				tracer.returns(`use completions response in ${sw.elapsed()}ms`);
-				return list;
+			if (completionsR) {
+				if (completionsR.items.length === 0) {
+					this._completionsProvider?.handleListEndOfLifetime?.(completionsR, { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken });
+				} else {
+					tracer.trace(`using completions response, cancelling NES provider`);
+					nesCts.cancel(); // cancel NES request if completions are available
+					const list: SingularCompletionList = toCompletionsList(completionsR);
+					tracer.returns(`use completions response in ${sw.elapsed()}ms`);
+
+					nesEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.LostRace };
+
+					return list;
+				}
 			}
 
-			const nesR = nesP ? await nesP.promise : undefined;
+			const nesR = nesP ? await nesP : undefined;
 			tracer.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
 
 			if (nesR && nesR.items.length > 0) {
