@@ -118,6 +118,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
 					const id = metadata.sessionId;
+					const status = this._sessionWrappers.get(id)?.object.status;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
 					const label = metadata.summary ? labelFromPrompt(metadata.summary) : undefined;
@@ -129,6 +130,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							id,
 							label,
 							timing: { startTime, endTime },
+							status
 						} satisfies ICopilotCLISessionItem;
 					}
 					try {
@@ -145,6 +147,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
+							status,
 							timing: { startTime, endTime },
 						} satisfies ICopilotCLISessionItem;
 					} catch (error) {
