@@ -19,7 +19,7 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 	// Ensure the order is preserved, as that matters for PATH contributions.
 	// VS Code will apply them in order from its own cache.
 	// So when re-loading VS Code vscode first applies it from its cache, then we apply our contributions.
-	// If they are differnt, then user will be prompted to restart terminal to apply changes.
+	// If they are different, then user will be prompted to restart terminal to apply changes.
 	private readonly pathContributions: { contributor: string; path: string; description?: string | { command: string }; prepend: boolean }[] = [];
 
 	constructor(
