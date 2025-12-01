@@ -88,7 +88,9 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		// Copilot Cloud Agent - conditionally register based on configuration
 		const summarizer = instantiationService.createInstance(ChatSummarizerProvider);
 		const delegationSummary = instantiationService.createInstance(ChatDelegationSummaryService, summarizer);
-		this._register(vscode.workspace.registerTextDocumentContentProvider(delegationSummary.scheme, delegationSummary));
+		this._register(vscode.workspace.registerTextDocumentContentProvider(delegationSummary.scheme, {
+			provideTextDocumentContent: (uri: vscode.Uri): string | undefined => delegationSummary.provideTextDocumentContent(uri)
+		}));
 		this.copilotAgentInstaService = instantiationService.createChild(new ServiceCollection(
 			[IOctoKitService, new SyncDescriptor(OctoKitService)],
 			[IChatDelegationSummaryService, delegationSummary],

@@ -6,12 +6,10 @@
 import * as l10n from '@vscode/l10n';
 import type { CancellationToken, ChatContext, ChatPromptReference, ChatSummarizer, Uri } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
-import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Sequencer } from '../../../../util/vs/base/common/async';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
 const SummaryFileScheme = 'copilot-delegated-chat-summary';
 const DelegationSummaryMementoKey = 'github.copilot.chat.delegationSummary';
@@ -35,8 +33,6 @@ export class ChatDelegationSummaryService implements IChatDelegationSummaryServi
 	constructor(
 		private readonly _chatSummarizer: ChatSummarizer,
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
-		@IInstantiationService instantiationService: IInstantiationService,
-		@ILogService logService: ILogService,
 	) { }
 	async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
 		return (await this._chatSummarizer.provideChatSummary(context, token)) ?? undefined;

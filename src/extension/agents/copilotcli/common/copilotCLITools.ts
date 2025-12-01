@@ -343,7 +343,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					});
 
 				let prompt = stripReminders(event.data.content || '');
-				const info = isFirstUserMessage ? delegationSummaryService?.extractPrompt(sessionId, prompt) : undefined;
+				const info = isFirstUserMessage ? delegationSummaryService.extractPrompt(sessionId, prompt) : undefined;
 				if (info) {
 					prompt = info.prompt;
 					references.push(info.reference);
