@@ -79,6 +79,27 @@ export class NesRenameContribution implements vscode.Disposable {
 				return protocol.RenameKind.no;
 			}
 		});
+		vscode.commands.registerCommand('github.copilot.debug.validateNesRename', async () => {
+			const params = await this.getUserParams();
+			if (params === undefined) {
+				return;
+			}
+			const { document, position, oldName, newName } = params;
+			const activated = await this.isActivated(document);
+			if (!activated) {
+				vscode.window.showErrorMessage('TypeScript NES Rename plugin is not activated.');
+				return;
+			}
+
+			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, Date.now(), 300);
+			const tokenSource = new vscode.CancellationTokenSource();
+			const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
+			if (protocol.PrepareNesRenameResponse.isError(result)) {
+				vscode.window.showErrorMessage(`Prepare NES Rename error: ${result.message}`);
+			} else if (protocol.PrepareNesRenameResponse.isOk(result)) {
+				vscode.window.showInformationMessage(`Prepare NES Rename result for '${oldName}' to '${newName}': ${result.body.canRename}`);
+			}
+		});
 	}
 
 	public dispose(): void {
@@ -128,34 +149,14 @@ export class NesRenameContribution implements vscode.Disposable {
 		return activated;
 	}
 
-	private async resolveParams(uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined): Promise<{ document: vscode.TextDocument; position: vscode.Position; oldName: string; newName: string } | undefined> {
-		if (uri !== undefined) {
-			const document = this.getDocument(uri);
-			if (document !== undefined && position !== undefined && typeof oldName === 'string' && typeof newName === 'string') {
-				return { document, position, oldName, newName };
-			} else {
-				return undefined;
-			}
+	private resolveParams(uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined): { document: vscode.TextDocument; position: vscode.Position; oldName: string; newName: string } | undefined {
+		if (uri === undefined) {
+			return undefined;
+		}
+		const document = this.getDocument(uri);
+		if (document !== undefined && position !== undefined && typeof oldName === 'string' && typeof newName === 'string') {
+			return { document, position, oldName, newName };
 		} else {
-			if (vscode.window.activeTextEditor === undefined) {
-				return undefined;
-			}
-			const document = vscode.window.activeTextEditor.document;
-			position = vscode.window.activeTextEditor.selection.active;
-			if (typeof oldName !== 'string') {
-				const wordRange = document.getWordRangeAtPosition(position);
-				if (wordRange === undefined) {
-					return undefined;
-				}
-				oldName = document.getText(wordRange);
-			}
-
-			if (typeof newName !== 'string') {
-				newName = await vscode.window.showInputBox({ prompt: 'Enter the new name for NES rename' });
-			}
-			if (newName === undefined) {
-				return undefined;
-			}
 			return undefined;
 		}
 	}
@@ -168,5 +169,24 @@ export class NesRenameContribution implements vscode.Disposable {
 			document = vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === uri.toString());
 		}
 		return document;
+	}
+
+	private async getUserParams(): Promise<{ document: vscode.TextDocument; position: vscode.Position; oldName: string; newName: string } | undefined> {
+		if (vscode.window.activeTextEditor === undefined) {
+			return undefined;
+		}
+		const document = vscode.window.activeTextEditor.document;
+		const position = vscode.window.activeTextEditor.selection.active;
+		const wordRange = document.getWordRangeAtPosition(position);
+		if (wordRange === undefined) {
+			return undefined;
+		}
+		const oldName = document.getText(wordRange);
+		const newName = await vscode.window.showInputBox({ prompt: 'Enter the new name for NES rename' });
+		if (newName === undefined || newName.length === 0) {
+
+			return undefined;
+		}
+		return { document, position, oldName, newName };
 	}
 }

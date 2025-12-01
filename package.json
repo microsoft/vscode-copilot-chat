@@ -2074,6 +2074,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.validateNesRename",
+				"title": "%github.copilot.command.validateNesRename%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.debug.resetVirtualToolGroups",
 				"title": "%github.copilot.command.resetVirtualToolGroups%",
 				"icon": "$(inspect)",
