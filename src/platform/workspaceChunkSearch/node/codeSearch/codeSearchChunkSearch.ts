@@ -8,7 +8,7 @@ import { shouldInclude } from '../../../../util/common/glob';
 import { Result } from '../../../../util/common/result';
 import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { CancelablePromise, createCancelablePromise, DeferredPromise, IntervalTimer, raceCancellationError, raceTimeout, timeout } from '../../../../util/vs/base/common/async';
+import { IntervalTimer, raceCancellationError, raceTimeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
@@ -28,13 +28,12 @@ import { ComputeBatchInfo } from '../../../chunking/common/chunkingEndpointClien
 import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
 import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { RelativePattern } from '../../../filesystem/common/fileTypes';
-import { AdoRepoId, GithubRepoId, IGitService, ResolvedRepoRemoteInfo } from '../../../git/common/gitService';
+import { IGitService, ResolvedRepoRemoteInfo } from '../../../git/common/gitService';
 import { Change } from '../../../git/vscode/git';
-import { logExecTime, LogExecTime, measureExecTime } from '../../../log/common/logExecTime';
+import { logExecTime, LogExecTime } from '../../../log/common/logExecTime';
 import { ILogService } from '../../../log/common/logService';
 import { IAdoCodeSearchService } from '../../../remoteCodeSearch/common/adoCodeSearchService';
-import { IGithubCodeSearchService } from '../../../remoteCodeSearch/common/githubCodeSearchService';
-import { CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from '../../../remoteCodeSearch/common/remoteCodeSearch';
+import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ICodeSearchAuthenticationService } from '../../../remoteCodeSearch/node/codeSearchRepoAuth';
 import { isGitHubRemoteRepository } from '../../../remoteRepositories/common/utils';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
@@ -44,101 +43,9 @@ import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizi
 import { EmbeddingsChunkSearch } from '../embeddingsChunkSearch';
 import { TfIdfWithSemanticChunkSearch } from '../tfidfWithSemanticChunkSearch';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
+import { AdoCodeSearchRepo, BuildIndexTriggerReason, CodeSearchRepo, CodeSearchRepoStatus, GithubCodeSearchRepo, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
 import { CodeSearchRepoTracker, RepoInfo, TrackedRepoStatus } from './repoTracker';
 import { CodeSearchDiff, CodeSearchWorkspaceDiffTracker } from './workspaceDiff';
-
-export enum CodeSearchRepoStatus {
-	/** We could not resolve this repo */
-	NotResolvable = 'NotResolvable',
-
-	Resolving = 'Resolving',
-
-	/** We are checking the status of the remote index. */
-	CheckingStatus = 'CheckingStatus',
-
-	/** The remote index is indexable but not built yet */
-	NotYetIndexed = 'NotYetIndexed',
-
-	/** The remote index is not indexed and we cannot trigger indexing for it */
-	NotIndexable = 'NotIndexable',
-
-	/**
-	 * We failed to check the remote index status.
-	 *
-	 * This has a number of possible causes:
-	 *
-	 * - The repo doesn't exist
-	 * - The user cannot access the repo (most services won't differentiate with it not existing). If we know
-	 * 		for sure that the user cannot access the repo, we will instead use {@linkcode NotAuthorized}.
-	 * - The status endpoint returned an error.
-	 */
-	CouldNotCheckIndexStatus = 'CouldNotCheckIndexStatus',
-
-	/**
-	 * The user is not authorized to access the remote index.
-	 *
-	 * This is a special case of {@linkcode CouldNotCheckIndexStatus} that is shown when we know the user is not authorized.
-	 */
-	NotAuthorized = 'NotAuthorized',
-
-	/** The remote index is being build but is not ready for use  */
-	BuildingIndex = 'BuildingIndex',
-
-	/** The remote index is ready and usable */
-	Ready = 'Ready'
-}
-
-
-export type BuildIndexTriggerReason = 'auto' | 'manual';
-
-export interface TriggerIndexingError {
-	readonly id: string;
-	readonly userMessage: string;
-}
-
-export namespace TriggerRemoteIndexingError {
-	export const noGitRepos: TriggerIndexingError = {
-		id: 'no-git-repos',
-		userMessage: l10n.t("No git repos found")
-	};
-
-	export const stillResolving: TriggerIndexingError = {
-		id: 'still-resolving',
-		userMessage: l10n.t("Still resolving repos. Please try again shortly.")
-	};
-
-	export const noRemoteIndexableRepos: TriggerIndexingError = {
-		id: 'no-remote-indexable-repos',
-		userMessage: l10n.t("No remotely indexable repos found")
-	};
-
-	export const noValidAuthToken: TriggerIndexingError = {
-		id: 'no-valid-auth-token',
-		userMessage: l10n.t("No valid auth token")
-	};
-
-	export const alreadyIndexed: TriggerIndexingError = {
-		id: 'already-indexed',
-		userMessage: l10n.t("Already indexed")
-	};
-
-	export const alreadyIndexing: TriggerIndexingError = {
-		id: 'already-indexing',
-		userMessage: l10n.t("Already indexing")
-	};
-
-	export const couldNotCheckIndexStatus: TriggerIndexingError = {
-		id: 'could-not-check-index-status',
-		userMessage: l10n.t("Could not check the remote index status for this repo")
-	};
-
-	export function errorTriggeringIndexing(repoId: GithubRepoId | AdoRepoId): TriggerIndexingError {
-		return {
-			id: 'request-to-index-failed',
-			userMessage: l10n.t`Request to index '${repoId.toString()}' failed`
-		};
-	}
-}
 
 export interface RepoEntry {
 	readonly info: RepoInfo;
@@ -550,29 +457,25 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			return;
 		}
 
-		const allRepos = Array.from(this._codeSearchRepos.values(), entry => entry.repo);
-		const indexedRepos = allRepos.filter(repo => repo.status === CodeSearchRepoStatus.Ready);
-		const notYetIndexedRepos = allRepos.filter((repo) => repo.status === CodeSearchRepoStatus.NotYetIndexed);
-
-		if (!indexedRepos.length && !notYetIndexedRepos.length) {
-			return;
-		}
-
 		return logExecTime(this._logService, 'CodeSearchChunkSearch.searchWorkspace', async () => {
+			const allRepos = Array.from(this._codeSearchRepos.values(), entry => entry.repo);
+			await logExecTime(this._logService, 'CodeSearchChunkSearch.searchWorkspace.prepare', () => {
+				return raceCancellationError(
+					Promise.all(allRepos.map(repo => repo.prepareSearch(telemetryInfo.addCaller('CodeSearchChunkSearch::searchWorkspace'), token))),
+					token);
+			});
+
+			const indexedRepos = allRepos.filter(repo => repo.status === CodeSearchRepoStatus.Ready);
+			if (!indexedRepos.length) {
+				return;
+			}
+
 			const diffArray = await raceCancellationError(this.getLocalDiff(), token);
 			if (!Array.isArray(diffArray)) {
 				return;
 			}
 
-			if (notYetIndexedRepos.length) {
-				const instantIndexResults = await Promise.all(notYetIndexedRepos.map(repo => repo.tryToInstantIndexRepo(telemetryInfo, token)));
-				if (!instantIndexResults.every(x => x)) {
-					this._logService.error(`Instant indexing failed for some repos. Will not try code search.`);
-					return;
-				}
-			}
-
-			const diffFilePatten = diffArray.map(uri => new RelativePattern(uri, '*'));
+			const diffFilePattern = diffArray.map(uri => new RelativePattern(uri, '*'));
 
 			const localSearchCts = new CancellationTokenSource(token);
 
@@ -581,7 +484,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 			// Trigger code search for all files without any excludes for diffed files.
 			// This is needed incase local diff times out
-			const codeSearchOperation = this.doCodeSearch(query, [...indexedRepos, ...notYetIndexedRepos], sizing, options, innerTelemetryInfo, token).catch(e => {
+			const codeSearchOperation = this.doCodeSearch(query, indexedRepos, sizing, options, innerTelemetryInfo, token).catch(e => {
 				if (!isCancellationError(e)) {
 					this._logService.error(`Code search failed`, e);
 				}
@@ -643,9 +546,9 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			const mergedChunks: readonly FileChunkAndScore[] = localResults ?
 				[
 					...codeSearchResults.chunks
-						.filter(x => shouldInclude(x.chunk.file, { exclude: diffFilePatten })),
+						.filter(x => shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
 					...(localResults?.chunks ?? [])
-						.filter(x => shouldInclude(x.chunk.file, { include: diffFilePatten })),
+						.filter(x => shouldInclude(x.chunk.file, { include: diffFilePattern })),
 				]
 				// If there are no local results, use the full code search results without filtering
 				: codeSearchResults.chunks;
@@ -911,7 +814,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 	private async updateRepoStatuses(onlyReposOfType?: 'github' | 'ado'): Promise<void> {
 		await Promise.all(Array.from(this._codeSearchRepos.values(), entry => {
-			if (!onlyReposOfType || entry.repo.remoteInfo.repoId.type === onlyReposOfType) {
+			if (!onlyReposOfType || entry.repo.remoteInfo?.repoId.type === onlyReposOfType) {
 				return entry.repo.refreshStatusFromEndpoint(true, CancellationToken.None).catch(() => { });
 			}
 		}));
@@ -937,12 +840,12 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		// TODO: only handles first repos of each type, but our other services also don't track tokens for multiple
 		// repos in a workspace right now
-		const firstGithubRepo = notAuthorizedRepos.find(repo => repo.remoteInfo.repoId.type === 'github');
+		const firstGithubRepo = notAuthorizedRepos.find(repo => repo.remoteInfo?.repoId.type === 'github');
 		if (firstGithubRepo) {
 			await this._codeSearchAuthService.tryAuthenticating(firstGithubRepo.remoteInfo);
 		}
 
-		const firstAdoRepo = notAuthorizedRepos.find(repo => repo.remoteInfo.repoId.type === 'ado');
+		const firstAdoRepo = notAuthorizedRepos.find(repo => repo.remoteInfo?.repoId.type === 'ado');
 		if (firstAdoRepo) {
 			await this._codeSearchAuthService.tryAuthenticating(firstAdoRepo.remoteInfo);
 		}
@@ -998,377 +901,3 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 }
 
 
-type RemoteCodeSearchState =
-	{
-		readonly status: CodeSearchRepoStatus.BuildingIndex | CodeSearchRepoStatus.CheckingStatus | CodeSearchRepoStatus.CouldNotCheckIndexStatus | CodeSearchRepoStatus.NotAuthorized | CodeSearchRepoStatus.NotIndexable | CodeSearchRepoStatus.NotResolvable | CodeSearchRepoStatus.Resolving | CodeSearchRepoStatus.NotYetIndexed;
-	} | {
-		readonly status: CodeSearchRepoStatus.Ready;
-		readonly indexedCommit: string | undefined;
-	};
-
-interface CodeSearchRepo extends IDisposable {
-	readonly onDidChangeStatus: Event<CodeSearchRepoStatus>;
-	get status(): CodeSearchRepoStatus;
-	get indexedCommit(): string | undefined;
-
-	readonly repoInfo: RepoInfo;
-	readonly remoteInfo: ResolvedRepoRemoteInfo;
-
-	initialize(): Promise<void>;
-
-	searchRepo(
-		authOptions: { silent: boolean },
-		embeddingType: EmbeddingType,
-		resolvedQuery: string,
-		maxResultCountHint: number,
-		options: WorkspaceChunkSearchOptions,
-		telemetryInfo: TelemetryCorrelationId,
-		token: CancellationToken
-	): Promise<CodeSearchResult>;
-
-	tryToInstantIndexRepo(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<boolean>;
-
-	triggerRemoteIndexingOfRepo(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
-
-	refreshStatusFromEndpoint(force: boolean, token: CancellationToken): Promise<RemoteCodeSearchState | undefined>;
-}
-
-abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearchRepo {
-
-	// TODO: Switch to use backoff instead of polling at fixed intervals
-	private readonly _repoIndexPollingInterval = 3000; // ms
-	private readonly maxPollingAttempts = 120;
-
-	private _state: RemoteCodeSearchState;
-
-	public get status(): CodeSearchRepoStatus {
-		return this._state.status;
-	}
-
-	public get indexedCommit(): string | undefined {
-		if (this._state.status === CodeSearchRepoStatus.Ready) {
-			return this._state.indexedCommit;
-		}
-		return undefined;
-	}
-
-	private initTask: CancelablePromise<void>;
-
-	private _isDisposed = false;
-
-	private _onDidChangeStatus = this._register(new Emitter<CodeSearchRepoStatus>());
-	public readonly onDidChangeStatus = this._onDidChangeStatus.event;
-
-	private _repoIndexPolling?: {
-		readonly poll: IntervalTimer;
-		readonly deferredP: DeferredPromise<void>;
-		attemptNumber: number;
-	};
-
-	constructor(
-		public readonly repoInfo: RepoInfo,
-		public readonly remoteInfo: ResolvedRepoRemoteInfo,
-		@ILogService protected readonly _logService: ILogService,
-		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
-	) {
-		super();
-
-		this._state = {
-			status: CodeSearchRepoStatus.CheckingStatus,
-		};
-
-		this.initTask = createCancelablePromise<void>(initToken =>
-			this.refreshStatusFromEndpoint(false, initToken)
-				.then(() => void 0)
-				.catch(e => {
-					if (!isCancellationError(e)) {
-						this._logService.error(`CodeSearchChunkSearch.openGitRepo(${repoInfo.rootUri}). Failed to initialize repo state from endpoint. ${e}`);
-					}
-				}));
-	}
-
-	public override dispose(): void {
-		super.dispose();
-		this._isDisposed = true;
-	}
-
-	public async initialize(): Promise<void> {
-		try {
-			await this.initTask;
-		} catch (error) {
-			this._logService.error(`Error during repo initialization: ${error}`);
-		}
-	}
-
-	protected updateState(newState: RemoteCodeSearchState) {
-		if (this._state === newState) {
-			return;
-		}
-
-		this._state = newState;
-		this._onDidChangeStatus.fire(this._state.status);
-	}
-
-	public abstract searchRepo(authOptions: { silent: boolean }, embeddingType: EmbeddingType, resolvedQuery: string, maxResultCountHint: number, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<CodeSearchResult>;
-	public abstract triggerRemoteIndexingOfRepo(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
-	public abstract tryToInstantIndexRepo(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<boolean>;
-
-	public async refreshStatusFromEndpoint(force = false, token: CancellationToken): Promise<RemoteCodeSearchState | undefined> {
-		if (!force && this.status === CodeSearchRepoStatus.Ready) {
-			return;
-		}
-
-		this._logService.trace(`CodeSearchChunkSearch.updateRepoStateFromEndpoint(${this.repoInfo.rootUri}). Checking status from endpoint.`);
-
-		const newState = await raceCancellationError(this.fetchRemoteIndexState(token), token);
-		this._logService.trace(`CodeSearchChunkSearch.updateRepoStateFromEndpoint(${this.repoInfo.rootUri}). Updating state to ${newState.status}.`);
-
-		this.updateState(newState);
-
-		if (newState.status === CodeSearchRepoStatus.BuildingIndex) {
-			// Trigger polling but don't block
-			this.pollForRepoIndexingToComplete().catch(() => { });
-		}
-
-		return newState;
-	}
-
-	private async fetchRemoteIndexState(token: CancellationToken): Promise<RemoteCodeSearchState> {
-		this._logService.trace(`CodeSearchChunkSearch.getRepoIndexStatusFromEndpoint(${this.repoInfo.rootUri}`);
-
-		const statusResult = await this.doFetchRemoteIndexState(token);
-		if (!statusResult.isOk()) {
-			if (statusResult.err.type === 'not-authorized') {
-				this._logService.error(`CodeSearchChunkSearch::getIndexedStatus(${this.remoteInfo.repoId}). Failed to fetch indexing status. Unauthorized.`);
-				return { status: CodeSearchRepoStatus.NotAuthorized };
-			} else {
-				this._logService.error(`CodeSearchChunkSearch::getIndexedStatus(${this.remoteInfo.repoId}). Failed to fetch indexing status. Encountered error: ${statusResult.err.error}`);
-				return { status: CodeSearchRepoStatus.CouldNotCheckIndexStatus };
-			}
-		}
-
-		switch (statusResult.val.status) {
-			case RemoteCodeSearchIndexStatus.Ready: return { status: CodeSearchRepoStatus.Ready, indexedCommit: statusResult.val.indexedCommit };
-			case RemoteCodeSearchIndexStatus.BuildingIndex: return { status: CodeSearchRepoStatus.BuildingIndex };
-			case RemoteCodeSearchIndexStatus.NotYetIndexed: return { status: CodeSearchRepoStatus.NotYetIndexed };
-			case RemoteCodeSearchIndexStatus.NotIndexable: return { status: CodeSearchRepoStatus.NotResolvable };
-		}
-	}
-
-	protected abstract doFetchRemoteIndexState(token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>>;
-
-	private pollForRepoIndexingToComplete(): Promise<void> {
-		this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri})`);
-
-		const existing = this._repoIndexPolling;
-		if (existing) {
-			existing.attemptNumber = 0; // reset
-			return existing.deferredP.p;
-		}
-
-		const deferredP = new DeferredPromise<void>();
-		const poll = new IntervalTimer();
-
-		const pollEntry = { poll, deferredP, attemptNumber: 0 };
-		this._repoIndexPolling = pollEntry;
-
-		const onComplete = () => {
-			poll.cancel();
-			deferredP.complete();
-			this._repoIndexPolling = undefined;
-		};
-
-		poll.cancelAndSet(async () => {
-			if (this._isDisposed) {
-				// It's possible the repo has been closed since
-				this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri}). Repo no longer tracked.`);
-				return onComplete();
-			}
-
-			if (this.status === CodeSearchRepoStatus.BuildingIndex) {
-				const attemptNumber = pollEntry.attemptNumber++;
-				if (attemptNumber > this.maxPollingAttempts) {
-					this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri}). Max attempts reached.Stopping polling.`);
-					if (!this._isDisposed) {
-						this.updateState({ status: CodeSearchRepoStatus.CouldNotCheckIndexStatus });
-					}
-					return onComplete();
-				}
-
-				this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri}). Checking endpoint for status.`);
-				let polledState: RemoteCodeSearchState | undefined;
-				try {
-					polledState = await this.fetchRemoteIndexState(CancellationToken.None);
-				} catch {
-					// noop
-				}
-				this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri}). Got back new status from endpoint: ${polledState?.status}.`);
-
-				switch (polledState?.status) {
-					case CodeSearchRepoStatus.Ready: {
-						this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri}). Repo indexed successfully.`);
-						if (!this._isDisposed) {
-							this.updateState(polledState);
-						}
-						return onComplete();
-					}
-					case CodeSearchRepoStatus.BuildingIndex: {
-						// Poll again
-						return;
-					}
-					default: {
-						// We got some other state, so stop polling
-						if (!this._isDisposed) {
-							this.updateState(polledState ?? { status: CodeSearchRepoStatus.CouldNotCheckIndexStatus });
-						}
-						return onComplete();
-					}
-				}
-			} else {
-				this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri}). Found unknown repo state: ${this.status}. Stopping polling`);
-				return onComplete();
-			}
-		}, this._repoIndexPollingInterval);
-
-		return deferredP.p;
-	}
-}
-
-class GithubCodeSearchRepo extends BaseRemoteCodeSearchRepo {
-	constructor(
-		repoInfo: RepoInfo,
-		private readonly _githubRepoId: GithubRepoId,
-		remoteInfo: ResolvedRepoRemoteInfo,
-		@ILogService logService: ILogService,
-		@IGithubCodeSearchService private readonly _githubCodeSearchService: IGithubCodeSearchService,
-		@ITelemetryService telemetryService: ITelemetryService,
-	) {
-		super(repoInfo, remoteInfo, logService, telemetryService);
-	}
-
-	public searchRepo(authOptions: { silent: boolean }, embeddingType: EmbeddingType, resolvedQuery: string, maxResultCountHint: number, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<CodeSearchResult> {
-		return this._githubCodeSearchService.searchRepo(authOptions, embeddingType, {
-			githubRepoId: this._githubRepoId,
-			localRepoRoot: this.repoInfo.rootUri,
-			indexedCommit: undefined, // TODO
-		}, resolvedQuery, maxResultCountHint, options, telemetryInfo, token);
-	}
-
-	protected async doFetchRemoteIndexState(token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
-		return this._githubCodeSearchService.getRemoteIndexState({
-			silent: true,
-		}, this._githubRepoId, token);
-	}
-
-	public async triggerRemoteIndexingOfRepo(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		this._logService.trace(`Triggering indexing for repo: ${this.remoteInfo.repoId} `);
-
-		// Update UI state as soon as possible if triggered by the user
-		if (triggerReason === 'manual') {
-			this.updateState({ status: CodeSearchRepoStatus.BuildingIndex });
-		}
-
-		const triggerSuccess = await this._githubCodeSearchService.triggerIndexing({ silent: true }, triggerReason, this._githubRepoId, telemetryInfo);
-		if (!triggerSuccess) {
-			this._logService.error(`RepoTracker::TriggerRemoteIndexing(${triggerReason}). Failed to request indexing for '${this.remoteInfo.repoId}'.`);
-
-			this.updateState({ status: CodeSearchRepoStatus.NotYetIndexed });
-
-			return Result.error(TriggerRemoteIndexingError.errorTriggeringIndexing(this.remoteInfo.repoId));
-		}
-
-		this.updateState({ status: CodeSearchRepoStatus.BuildingIndex });
-
-		return Result.ok(true);
-	}
-
-	public async tryToInstantIndexRepo(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<boolean> {
-		// Amount of time we'll wait for instant indexing to finish before giving up
-		const unindexRepoInitTimeout = 8_000;
-
-		const startRepoStatus = this.status;
-
-		await measureExecTime(() => raceTimeout((async () => {
-			// Trigger indexing if we have not already
-			if (startRepoStatus === CodeSearchRepoStatus.NotYetIndexed) {
-				const triggerResult = await raceCancellationError(this.triggerRemoteIndexingOfRepo('auto', telemetryInfo), token);
-				if (triggerResult.isError()) {
-					throw new Error(`CodeSearchChunkSearch: Triggering indexing of '${this.remoteInfo.repoId}' failed: ${triggerResult.err.id}`);
-				}
-			}
-
-			if (this.status === CodeSearchRepoStatus.BuildingIndex) {
-				// Poll rapidly using endpoint to check if instant indexing has completed
-				let attemptsRemaining = 5;
-				const delayBetweenAttempts = 1000;
-
-				while (attemptsRemaining-- > 0) {
-					const currentStatus = (await raceCancellationError(this.refreshStatusFromEndpoint(false, token), token))?.status;
-					if (currentStatus === CodeSearchRepoStatus.Ready) {
-						// We're good to start searching
-						break;
-					} else if (currentStatus !== CodeSearchRepoStatus.BuildingIndex) {
-						throw new Error(`CodeSearchChunkSearch: Checking instant indexing status of '${this.remoteInfo.repoId}' failed. Found unexpected status: '${currentStatus}'`);
-					}
-
-					await raceCancellationError(timeout(delayBetweenAttempts), token);
-				}
-			}
-		})(), unindexRepoInitTimeout), (execTime, status) => {
-			const endRepoStatus = this.status;
-
-			/* __GDPR__
-				"codeSearchChunkSearch.perf.tryToInstantIndexRepo" : {
-					"owner": "mjbvz",
-					"comment": "Total time for instant indexing to complete",
-					"status": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the call succeeded or failed" },
-					"startRepoStatus": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Initial status of the repo" },
-					"endRepoStatus": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Final status of the repo" },
-					"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Time in milliseconds that the call took" }
-				}
-			*/
-			this._telemetryService.sendMSFTTelemetryEvent('codeSearchChunkSearch.perf.tryToInstantIndexRepo', {
-				status,
-				startRepoStatus,
-				endRepoStatus,
-			}, { execTime });
-		});
-
-		const currentStatus = this.status;
-		return currentStatus === CodeSearchRepoStatus.Ready || currentStatus === CodeSearchRepoStatus.BuildingIndex;
-	}
-}
-
-class AdoCodeSearchRepo extends BaseRemoteCodeSearchRepo {
-	constructor(
-		repoInfo: RepoInfo,
-		private readonly _adoRepoId: AdoRepoId,
-		remoteInfo: ResolvedRepoRemoteInfo,
-		@ILogService logService: ILogService,
-		@IAdoCodeSearchService private readonly _adoCodeSearchService: IAdoCodeSearchService,
-		@ITelemetryService telemetryService: ITelemetryService,
-	) {
-		super(repoInfo, remoteInfo, logService, telemetryService);
-	}
-
-	public searchRepo(authOptions: { silent: boolean }, _embeddingType: EmbeddingType, resolvedQuery: string, maxResultCountHint: number, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<CodeSearchResult> {
-		return this._adoCodeSearchService.searchRepo(authOptions, {
-			adoRepoId: this._adoRepoId,
-			localRepoRoot: this.repoInfo.rootUri,
-			indexedCommit: undefined, // TODO
-		}, resolvedQuery, maxResultCountHint, options, telemetryInfo, token);
-	}
-
-	public override async tryToInstantIndexRepo(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<boolean> {
-		// Not supported in ADO yet
-		return false;
-	}
-
-	public override async triggerRemoteIndexingOfRepo(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		return Result.error(TriggerRemoteIndexingError.noRemoteIndexableRepos);
-	}
-
-	protected override doFetchRemoteIndexState(token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
-		return this._adoCodeSearchService.getRemoteIndexState({ silent: true }, this._adoRepoId, token);
-	}
-}
