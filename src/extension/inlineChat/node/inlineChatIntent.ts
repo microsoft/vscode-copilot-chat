@@ -376,6 +376,7 @@ export class InlineChatIntent implements IIntent {
 	}
 
 	private async _getAvailableTools(request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> {
+		assertType(request.location2 instanceof ChatRequestEditorData);
 
 		const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
 		if (!exitTool) {
@@ -383,14 +384,20 @@ export class InlineChatIntent implements IIntent {
 			throw new Error();
 		}
 
+		const enabledTools = new Set(InlineChatIntent._EDIT_TOOLS);
+		if (!request.location2.selection.isEmpty) {
+			// only used the multi-replace when there is no selection
+			enabledTools.delete(ToolName.MultiReplaceString);
+		}
+
 		// ALWAYS enable editing tools (only) and ignore what the client did send
 		const fakeRequest: vscode.ChatRequest = {
 			...request,
-			tools: new Map(Array.from(InlineChatIntent._EDIT_TOOLS).map(toolName => [toolName, true] as const))
+			tools: new Map(Array.from(enabledTools).map(toolName => [toolName, true] as const))
 		};
 
 		const agentTools = await this._instantiationService.invokeFunction(getAgentTools, fakeRequest);
-		const editTools = agentTools.filter(tool => InlineChatIntent._EDIT_TOOLS.has(tool.name));
+		const editTools = agentTools.filter(tool => enabledTools.has(tool.name));
 
 		if (editTools.length === 0) {
 			this._logService.error('MISSING inline chat edit tools');
