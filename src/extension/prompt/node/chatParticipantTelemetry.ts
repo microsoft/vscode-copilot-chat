@@ -190,7 +190,8 @@ type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & {
 	selectionProblemsCount: number;
 	diagnosticsCount: number;
 	selectionDiagnosticsCount: number;
-	selectionAdjustRatio: number;
+	userSelectionLength: number;
+	adjustedSelectionLength: number;
 };
 
 //#endregion
@@ -814,7 +815,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 
 
 		const selectionData = this._getTelemetryData(DocumentToAstSelectionData);
-		const selectionAdjustRatio = selectionData ? selectionData.original.length / selectionData.adjusted.length : -1;
+		const userSelectionLength = selectionData?.original.length ?? -1;
+		const adjustedSelectionLength = selectionData?.adjusted.length ?? -1;
 
 		/* __GDPR__
 			"inline.request" : {
@@ -861,7 +863,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 				"toolCounts": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The number of times each tool was used" },
 				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
-				"selectionAdjustRatio": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The ratio between a user selection and the range of an AST node." }
+				"userSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the user selection" },
+				"adjustedSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the adjusted user selection" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('inline.request', {
@@ -904,7 +907,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			...getCustomInstructionTelemetry(this._references),
 			numToolCalls: toolCalls.length,
 			availableToolCount: this._availableToolCount,
-			selectionAdjustRatio: selectionAdjustRatio,
+			userSelectionLength,
+			adjustedSelectionLength,
 		} satisfies RequestInlineTelemetryMeasurements);
 	}
 
