@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { Raw } from '@vscode/prompt-tsx';
+import { OutputMode, Raw, RenderPromptResult } from '@vscode/prompt-tsx';
+import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
@@ -183,7 +184,19 @@ export class InlineChatIntent implements IIntent {
 				exitToolName: INLINE_CHAT_EXIT_TOOL_NAME,
 			});
 
-			const renderResult = await renderer.render(undefined, token, { trace: true });
+			let renderResult: RenderPromptResult<OutputMode.Raw>;
+			try {
+				renderResult = await renderer.render(undefined, token, { trace: true });
+			} catch (err) {
+				this._logService.error(err, 'InlineChatIntent: prompt rendering failed');
+				return {
+					errorDetails: {
+						message: err instanceof BudgetExceededError
+							? l10n.t('Sorry, this document is too large for inline chat.')
+							: toErrorMessage(err),
+					}
+				};
+			}
 
 			telemetry = chatTelemetry.makeRequest(this, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, [], availableTools.length);
 
