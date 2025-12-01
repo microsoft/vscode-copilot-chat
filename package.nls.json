@@ -380,6 +380,7 @@
 	"github.copilot.config.notebook.alternativeNESFormat.enabled": "Enable alternative format for Next Edit Suggestions in notebooks.",
 	"github.copilot.config.localWorkspaceRecording.enabled": "Enable local workspace recording for analysis.",
 	"github.copilot.config.editRecording.enabled": "Enable edit recording for analysis.",
+	"github.copilot.config.inlineChat.selectionRatioThreshold": "Threshold at which to switch editing strategies for inline chat. When a selection porition of code matches a parse tree node, only that is presented to the language model. This speeds up response times but might have lower quality results. Requires having a parse tree for the document and the `inlineChat.enableV2` setting. Values must be between 0 and 1, where 0 means off and 1 means the selection perfectly matches a parse tree node.",
 	"github.copilot.config.temporalContext.maxAge": "Maximum age (in editor changes) for temporal context.",
 	"github.copilot.config.temporalContext.preferSameLang": "Prefer same language files in temporal context.",
 	"github.copilot.config.debug.requestLogger.maxEntries": "Maximum number of entries to keep in the request logger for debugging purposes.",

@@ -73,7 +73,7 @@ export class SummarizedDocumentData {
 		private readonly formattingOptions: vscode.FormattingOptions | undefined,
 		private readonly structure: OverlayNode,
 		private readonly selection: vscode.Range,
-		private readonly offsetSelections: { adjusted: OffsetRange; original: OffsetRange },
+		readonly offsetSelections: { adjusted: OffsetRange; original: OffsetRange },
 		private readonly kind: SelectionSplitKind,
 	) {
 
