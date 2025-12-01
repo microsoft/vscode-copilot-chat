@@ -3910,7 +3910,7 @@
 					},
 					"github.copilot.chat.cli.isolation.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.isolation.enabled%",
 						"tags": [
 							"advanced",
