@@ -164,18 +164,6 @@ export interface CustomAgentDetails extends CustomAgentListItem {
 	prompt: string;
 }
 
-export interface CustomInstructionListItem {
-	name: string;
-	display_name: string;
-	description: string;
-	version: string;
-	metadata?: Record<string, string>;
-}
-
-export interface CustomInstructionDetails extends CustomInstructionListItem {
-	prompt: string;
-}
-
 export interface PullRequestFile {
 	filename: string;
 	status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
@@ -319,7 +307,7 @@ export interface IOctoKitService {
 	 * @param orgLogin The organization login
 	 * @returns An array of custom instruction list items with basic metadata
 	 */
-	getOrgCustomInstructions(orgLogin: string): Promise<CustomInstructionListItem[]>;
+	getOrgCustomInstructions(orgLogin: string): Promise<string | undefined>;
 }
 
 /**

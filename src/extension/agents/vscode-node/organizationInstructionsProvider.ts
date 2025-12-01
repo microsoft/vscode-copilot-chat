@@ -4,12 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import YAML from 'yaml';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IGitService } from '../../../platform/git/common/gitService';
-import { CustomInstructionListItem, IOctoKitService } from '../../../platform/github/common/githubService';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
@@ -38,6 +37,10 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 			return;
 		}
 		return vscode.Uri.joinPath(this.extensionContext.storageUri, 'githubInstructionsCache');
+	}
+
+	private getCacheFilename(orgLogin: string): string {
+		return orgLogin + InstructionFileExtension;
 	}
 
 	async provideInstructions(
@@ -79,26 +82,20 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 				return [];
 			}
 
-			const cacheContents = await this.readCacheContents(cacheDir);
-			if (cacheContents.size === 0) {
+			const cacheContents = await this.readCacheContents(orgLogin, cacheDir);
+			if (cacheContents === undefined) {
 				this.logService.trace(`[OrganizationInstructionsProvider] No cache found for org ${orgLogin}`);
 				return [];
 			}
 
 			const instructions: vscode.CustomAgentResource[] = [];
-
-			for (const [filename, text] of cacheContents) {
-				// Parse metadata from the file (name and description)
-				const metadata = this.parseInstructionMetadata(text, filename);
-				if (metadata) {
-					const fileUri = vscode.Uri.joinPath(cacheDir, filename);
-					instructions.push({
-						name: metadata.name,
-						description: metadata.description,
-						uri: fileUri,
-					});
-				}
-			}
+			const fileName = this.getCacheFilename(orgLogin);
+			const fileUri = vscode.Uri.joinPath(cacheDir, fileName);
+			instructions.push({
+				name: orgLogin,
+				description: '',
+				uri: fileUri,
+			});
 
 			this.logService.trace(`[OrganizationInstructionsProvider] Loaded ${instructions.length} instructions from cache for org ${orgLogin}`);
 			return instructions;
@@ -129,6 +126,11 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 				return;
 			}
 
+			if (!instructions) {
+				this.logService.trace(`[OrganizationInstructionsProvider] No custom instructions found for org ${orgLogin}`);
+				return;
+			}
+
 			// Ensure cache directory exists
 			try {
 				await this.fileSystem.stat(cacheDir);
@@ -137,42 +139,19 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 				await this.fileSystem.createDirectory(cacheDir);
 			}
 
-			// Read existing cache contents before updating
-			const existingContents = await this.readCacheContents(cacheDir);
-
-			// Generate new cache contents
-			const newContents = new Map<string, string>();
-			for (const instruction of instructions) {
-				const filename = this.sanitizeFilename(instruction.name) + InstructionFileExtension;
-
-				// Generate instruction markdown file content
-				const content = this.generateInstructionMarkdown(instruction);
-				newContents.set(filename, content);
-			}
-
-			// Compare contents to detect changes
-			const hasChanges = this.hasContentChanged(existingContents, newContents);
+			const existingInstructions = await this.readCacheContents(orgLogin, cacheDir);
+			const hasChanges = instructions !== existingInstructions;
 
 			if (!hasChanges) {
 				this.logService.trace(`[OrganizationInstructionsProvider] No changes detected in cache for org ${orgLogin}`);
 				return;
 			}
 
-			// Clear existing cache files
-			const existingFiles = await this.fileSystem.readDirectory(cacheDir);
-			for (const [filename, fileType] of existingFiles) {
-				if (fileType === FileType.File && filename.endsWith(InstructionFileExtension)) {
-					await this.fileSystem.delete(vscode.Uri.joinPath(cacheDir, filename));
-				}
-			}
+			const fileName = this.getCacheFilename(orgLogin);
+			const fileUri = vscode.Uri.joinPath(cacheDir, fileName);
+			await this.fileSystem.writeFile(fileUri, new TextEncoder().encode(instructions));
 
-			// Write new cache files
-			for (const [filename, content] of newContents) {
-				const fileUri = vscode.Uri.joinPath(cacheDir, filename);
-				await this.fileSystem.writeFile(fileUri, new TextEncoder().encode(content));
-			}
-
-			this.logService.trace(`[OrganizationInstructionsProvider] Updated cache with ${instructions.length} instructions for org ${orgLogin}`);
+			this.logService.trace(`[OrganizationInstructionsProvider] Updated cache with instructions for org ${orgLogin}`);
 
 			// Fire event to notify consumers that instructions have changed
 			this._onDidChangeInstructions.fire();
@@ -181,94 +160,20 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		}
 	}
 
-	private async readCacheContents(cacheDir: vscode.Uri): Promise<Map<string, string>> {
-		const contents = new Map<string, string>();
+	private async readCacheContents(orgLogin: string, cacheDir: vscode.Uri): Promise<string | undefined> {
 		try {
 			const files = await this.fileSystem.readDirectory(cacheDir);
 			for (const [filename, fileType] of files) {
-				if (fileType === FileType.File && filename.endsWith(InstructionFileExtension)) {
+				if (fileType === FileType.File && filename.endsWith(orgLogin + InstructionFileExtension)) {
 					const fileUri = vscode.Uri.joinPath(cacheDir, filename);
 					const content = await this.fileSystem.readFile(fileUri);
 					const text = new TextDecoder().decode(content);
-					contents.set(filename, text);
+					return text;
 				}
 			}
 		} catch {
 			// Directory might not exist yet or other errors
 		}
-		return contents;
-	}
-
-	private hasContentChanged(oldContents: Map<string, string>, newContents: Map<string, string>): boolean {
-		// Check if the set of files changed
-		if (oldContents.size !== newContents.size) {
-			return true;
-		}
-
-		// Check if any file content changed
-		for (const [filename, newContent] of newContents) {
-			const oldContent = oldContents.get(filename);
-			if (oldContent !== newContent) {
-				return true;
-			}
-		}
-
-		// Check if any old files are missing in new contents
-		for (const filename of oldContents.keys()) {
-			if (!newContents.has(filename)) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	private generateInstructionMarkdown(instruction: CustomInstructionListItem): string {
-		const frontmatterObj: Record<string, unknown> = {};
-
-		if (instruction.display_name) {
-			frontmatterObj.name = instruction.display_name;
-		}
-		if (instruction.description) {
-			// Escape newlines in description to keep it on a single line
-			frontmatterObj.description = instruction.description.replace(/\n/g, '\\n');
-		}
-
-		const frontmatter = YAML.stringify(frontmatterObj, { lineWidth: 0 }).trim();
-		// Note: We don't have the prompt content from the list API, so we'll just use empty body
-		// The actual prompt content would need to be fetched separately if needed
-		const body = '';
-
-		return `---\n${frontmatter}\n---\n${body}\n`;
-	}
-
-	private parseInstructionMetadata(content: string, filename: string): { name: string; description: string } | null {
-		try {
-			// Extract name from filename (e.g., "example.instruction.md" -> "example")
-			const name = filename.replace(InstructionFileExtension, '');
-			let description = '';
-
-			// Look for frontmatter (YAML between --- markers) and extract description
-			const lines = content.split('\n');
-			if (lines[0]?.trim() === '---') {
-				const endIndex = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
-				if (endIndex > 0) {
-					const frontmatter = lines.slice(1, endIndex).join('\n');
-					const descMatch = frontmatter.match(/description:\s*(.+)/);
-					if (descMatch) {
-						description = descMatch[1].trim();
-					}
-				}
-			}
-
-			return { name, description };
-		} catch (error) {
-			this.logService.error(`[OrganizationInstructionsProvider] Error parsing instruction metadata: ${error}`);
-			return null;
-		}
-	}
-
-	private sanitizeFilename(name: string): string {
-		return name.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+		return undefined;
 	}
 }
