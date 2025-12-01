@@ -152,7 +152,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
 		const label = `NES | ${basename(document.uri.fsPath)} (v${document.version})`;
-		const capturingToken = new CapturingToken(label, undefined, true);
+		const capturingToken = new CapturingToken(label, undefined, true, true);
 
 		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, context, token));
 	}

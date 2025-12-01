@@ -472,6 +472,21 @@ export enum RenameKind {
 	maybe = 'maybe'
 }
 
+export namespace RenameKind {
+	export function fromString(value: string): RenameKind {
+		switch (value) {
+			case 'no':
+				return RenameKind.no;
+			case 'yes':
+				return RenameKind.yes;
+			case 'maybe':
+				return RenameKind.maybe;
+			default:
+				return RenameKind.no;
+		}
+	}
+}
+
 export namespace PrepareNesRenameResult {
 	export type Yes = {
 		canRename: RenameKind.yes;
