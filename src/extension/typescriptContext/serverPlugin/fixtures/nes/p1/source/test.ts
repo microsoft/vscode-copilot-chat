@@ -50,6 +50,6 @@ type MyType = {
 type TypeOne = {
 }
 
-//// { "title": "Type - no rename", "oldName": "TypeTwo", "newName": "MyType", "expected": "no" }
+//// { "title": "Type - no rename", "oldName": "TypeTwo", "newName": "MyType", "expected": "no", "delta": 5 }
 type TypeTwo = {
 }
