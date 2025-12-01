@@ -425,15 +425,12 @@ Detailed prompt content
 			return [];
 		};
 
-		const queryOptions: vscode.CustomAgentQueryOptions = {
-			target: 'vscode' as any,
-		};
+		const queryOptions: vscode.CustomAgentQueryOptions = {};
 
 		await provider.provideCustomAgents(queryOptions, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		assert.ok(capturedOptions);
-		assert.equal(capturedOptions.target, 'vscode');
 		assert.deepEqual(capturedOptions.includeSources, ['org', 'enterprise']);
 	});
 
