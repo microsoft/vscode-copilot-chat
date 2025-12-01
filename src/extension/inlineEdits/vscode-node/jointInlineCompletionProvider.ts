@@ -284,9 +284,9 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, context, nesCts.token).then(v => {
 					if (nesEndOfLifeReason !== undefined) {
 						for (const item of (v?.items as NesCompletionItem[]) ?? []) {
-							this._inlineEditProvider!.handleEndOfLifetime?.(item, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
+							this._inlineEditProvider?.handleEndOfLifetime?.(item, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
 						}
-						this._inlineEditProvider!.handleListEndOfLifetime?.(v!, nesEndOfLifeReason);
+						this._inlineEditProvider?.handleListEndOfLifetime?.(v!, nesEndOfLifeReason);
 						return undefined;
 					}
 					return v;
