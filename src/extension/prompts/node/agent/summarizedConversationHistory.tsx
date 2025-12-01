@@ -168,7 +168,6 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 						<br />
 						IMPORTANT: Do NOT call any tools. Your only task is to generate a text summary of the conversation. Do not attempt to execute any actions or make any tool calls.<br />
 					</>}
-					<br />
 					Focus particularly on:<br />
 					- The specific agent commands/tools that were just executed<br />
 					- The results returned from these recent tool calls (truncate if very long but preserve key information)<br />
