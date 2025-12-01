@@ -376,7 +376,7 @@ export class InlineChatIntent implements IIntent {
 			tools: new Map(Array.from(InlineChatIntent._EDIT_TOOLS).map(toolName => [toolName, true] as const))
 		};
 
-		const agentTools = await getAgentTools(this._instantiationService, fakeRequest);
+		const agentTools = await this._instantiationService.invokeFunction(getAgentTools, fakeRequest);
 		const editTools = agentTools.filter(tool => InlineChatIntent._EDIT_TOOLS.has(tool.name));
 
 		if (editTools.length === 0) {

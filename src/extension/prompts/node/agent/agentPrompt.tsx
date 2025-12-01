@@ -36,7 +36,7 @@ import { NotebookFormat, NotebookReminderInstructions } from '../panel/notebookE
 import { NotebookSummaryChange } from '../panel/notebookSummaryChangePrompt';
 import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
+import { AgentMultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
 import './allAgentPrompts';
 import { AlternateGPTPrompt, DefaultReminderInstructions, DefaultToolReferencesHint, ReminderInstructionsProps, ToolReferencesHintProps } from './defaultAgentInstructions';
@@ -237,8 +237,7 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 			<Tag name='workspace_info'>
 				<AgentTasksInstructions availableTools={this.props.availableTools} />
 				<WorkspaceFoldersHint />
-				<MultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} /><br />
-				This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
+				<AgentMultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} availableTools={this.props.availableTools} />
 			</Tag>
 			<UserPreferences flexGrow={7} priority={800} />
 			{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
