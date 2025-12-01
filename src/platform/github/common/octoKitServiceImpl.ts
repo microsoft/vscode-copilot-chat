@@ -332,10 +332,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 				throw new Error(`Failed to fetch custom instructions for org ${orgLogin}: ${response.statusText}`);
 			}
 			const data = await response.json() as { prompt: string };
-			if (data) {
-				return data.prompt;
-			}
-			throw new Error('Invalid response format');
+			return data.prompt;
 		} catch (e) {
 			this._logService.error(e);
 			return undefined;
