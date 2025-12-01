@@ -164,7 +164,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		try {
 			const files = await this.fileSystem.readDirectory(cacheDir);
 			for (const [filename, fileType] of files) {
-				if (fileType === FileType.File && filename.endsWith(orgLogin + InstructionFileExtension)) {
+				if (fileType === FileType.File && filename === this.getCacheFilename(orgLogin)) {
 					const fileUri = vscode.Uri.joinPath(cacheDir, filename);
 					const content = await this.fileSystem.readFile(fileUri);
 					const text = new TextDecoder().decode(content);
