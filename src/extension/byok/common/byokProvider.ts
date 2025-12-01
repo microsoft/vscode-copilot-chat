@@ -164,22 +164,24 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 	if (!knownModels) {
 		return [];
 	}
-	return Object.entries(knownModels).map(([id, capabilities]) => {
-		return {
-			id,
-			name: capabilities.name,
-			version: '1.0.0',
-			maxOutputTokens: capabilities.maxOutputTokens,
-			maxInputTokens: capabilities.maxInputTokens,
-			detail: providerName,
-			family: providerName,
-			tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
-			capabilities: {
-				toolCalling: capabilities.toolCalling,
-				imageInput: capabilities.vision
-			},
-		} satisfies LanguageModelChatInformation;
-	});
+	return Object.entries(knownModels).map(([id, capabilities]) => byokKnownModelToAPIInfo(providerName, id, capabilities));
+}
+
+export function byokKnownModelToAPIInfo(providerName: string, id: string, capabilities: BYOKModelCapabilities): LanguageModelChatInformation {
+	return {
+		id,
+		name: capabilities.name,
+		version: '1.0.0',
+		maxOutputTokens: capabilities.maxOutputTokens,
+		maxInputTokens: capabilities.maxInputTokens,
+		detail: providerName,
+		family: providerName,
+		tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
+		capabilities: {
+			toolCalling: capabilities.toolCalling,
+			imageInput: capabilities.vision
+		}
+	};
 }
 
 export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {
