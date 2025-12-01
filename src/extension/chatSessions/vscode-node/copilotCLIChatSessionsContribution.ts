@@ -842,7 +842,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				prompt: requestPrompt
 			});
 		} catch {
-			// TODO@rebornix: handle potentional missing command
+			// TODO@rebornix: handle potential missing command
 			// We don't want to block the caller anymore.
 			// The caller is most likely a chat editor or the like.
 			// Now that we've delegated it to a session, we can get out of here.
