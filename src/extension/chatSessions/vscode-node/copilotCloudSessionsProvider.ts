@@ -478,6 +478,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			if (info) {
 				summaryReference.complete(info.reference);
 				prompt = info.prompt;
+			} else {
+				summaryReference.complete(undefined);
 			}
 			const titleMatch = prompt.match(/TITLE: \s*(.*)/i);
 			if (titleMatch && titleMatch[1]) {
