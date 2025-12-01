@@ -15,7 +15,7 @@ import { LogExecTime } from '../../../log/common/logExecTime';
 import { ILogService } from '../../../log/common/logService';
 import { ISimulationTestContext } from '../../../simulationTestContext/common/simulationTestContext';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
-import { RepoEntry, RepoStatus } from './codeSearchChunkSearch';
+import { CodeSearchRepoStatus, RepoEntry } from './codeSearchChunkSearch';
 
 enum RepoState {
 	Initializing,
@@ -72,10 +72,10 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 		this._repoTracker = repoTracker;
 
 		this._register(this._repoTracker.onDidAddOrUpdateRepo(repoEntry => {
-			if (repoEntry.status !== RepoStatus.Ready) {
+			if (repoEntry.status !== CodeSearchRepoStatus.Ready) {
 				return;
 			}
-			const entry = this._repos.get(repoEntry.repo.rootUri);
+			const entry = this._repos.get(repoEntry.info.rootUri);
 			if (entry) {
 				this.refreshRepoDiff(entry);
 			} else {
@@ -110,7 +110,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 			]);
 
 			await Promise.allSettled(Array.from(this._repoTracker.getAllRepos(), repo => {
-				if (repo.status === RepoStatus.Ready || repo.status === RepoStatus.NotYetIndexed) {
+				if (repo.status === CodeSearchRepoStatus.Ready || repo.status === CodeSearchRepoStatus.NotYetIndexed) {
 					return this.openRepo(repo);
 				}
 			}));
@@ -150,7 +150,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 	}
 
 	private async openRepo(info: RepoEntry) {
-		this._repos.delete(info.repo.rootUri);
+		this._repos.delete(info.info.rootUri);
 
 		const repoEntry: RepoDiffState = {
 			state: RepoState.Initializing,
@@ -158,17 +158,17 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 			initialChanges: new ResourceSet(),
 		};
 
-		this._repos.set(info.repo.rootUri, repoEntry);
+		this._repos.set(info.info.rootUri, repoEntry);
 		this.refreshRepoDiff(repoEntry);
 	}
 
 	private closeRepo(info: RepoEntry) {
-		this._repos.delete(info.repo.rootUri);
+		this._repos.delete(info.info.rootUri);
 	}
 
 	private async tryGetDiffedIndexedFiles(info: RepoEntry): Promise<URI[] | undefined> {
 		const diff = await this.tryGetDiff(info);
-		this._logService.trace(`CodeSearchWorkspaceDiff::tryGetDiffedIndexedFiles() Got ${diff?.changes.length ?? 0} initially changed files for ${info.repo.rootUri}`);
+		this._logService.trace(`CodeSearchWorkspaceDiff::tryGetDiffedIndexedFiles() Got ${diff?.changes.length ?? 0} initially changed files for ${info.info.rootUri}`);
 		if (!diff) {
 			return;
 		}
@@ -180,7 +180,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 			}
 		}));
 
-		this._logService.trace(`CodeSearchWorkspaceDiff::tryGetDiffedIndexedFiles() Returning ${initialChanges} changes for ${info.repo.rootUri}`);
+		this._logService.trace(`CodeSearchWorkspaceDiff::tryGetDiffedIndexedFiles() Returning ${initialChanges} changes for ${info.info.rootUri}`);
 
 		return Array.from(initialChanges);
 	}
@@ -195,11 +195,11 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 	}
 
 	private async refreshRepoDiff(repo: RepoDiffState) {
-		this._logService.trace(`CodeSearchWorkspaceDiff: refreshing diff for ${repo.info.repo.rootUri}`);
+		this._logService.trace(`CodeSearchWorkspaceDiff: refreshing diff for ${repo.info.info.rootUri}`);
 
 		if (this._simulationTestContext.isInSimulationTests) {
 			// In simulation tests, we don't want to refresh the diff
-			this._logService.trace(`CodeSearchWorkspaceDiff: Skipping diff refresh for ${repo.info.repo.rootUri} in simulation tests`);
+			this._logService.trace(`CodeSearchWorkspaceDiff: Skipping diff refresh for ${repo.info.info.rootUri} in simulation tests`);
 			repo.state = RepoState.Ready;
 			return;
 		}
@@ -213,11 +213,11 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 					repo.initialChanges.add(changedFile);
 				}
 
-				this._logService.trace(`CodeSearchWorkspaceDiff: Refreshed diff for ${repo.info.repo.rootUri}. New diff count: ${repo.initialChanges.size}`);
+				this._logService.trace(`CodeSearchWorkspaceDiff: Refreshed diff for ${repo.info.info.rootUri}. New diff count: ${repo.initialChanges.size}`);
 
 				// Delete any local changes that have no longer changed
 				for (const locallyChangedFile of this._locallyChangedFiles) {
-					if (isEqualOrParent(locallyChangedFile, repo.info.repo.rootUri)) {
+					if (isEqualOrParent(locallyChangedFile, repo.info.info.rootUri)) {
 						const file = this._workspaceFileIndex.get(locallyChangedFile);
 						if (file) {
 							// The diff git returns to use only includes the files from disk.
@@ -231,11 +231,11 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 				repo.state = RepoState.Ready;
 
 			} else {
-				this._logService.error(`CodeSearchWorkspaceDiff: Failed to get new diff for ${repo.info.repo.rootUri}.`);
+				this._logService.error(`CodeSearchWorkspaceDiff: Failed to get new diff for ${repo.info.info.rootUri}.`);
 				repo.state = RepoState.Error;
 			}
 		} catch (e) {
-			this._logService.error(`CodeSearchWorkspaceDiff: Failed to refresh diff for ${repo.info.repo.rootUri}.`, e);
+			this._logService.error(`CodeSearchWorkspaceDiff: Failed to refresh diff for ${repo.info.info.rootUri}.`, e);
 			repo.state = RepoState.Error;
 		}
 	}

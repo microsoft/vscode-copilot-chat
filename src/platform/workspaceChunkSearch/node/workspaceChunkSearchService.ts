@@ -36,8 +36,7 @@ import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../workspace/
 import { IGithubAvailableEmbeddingTypesService } from '../common/githubAvailableEmbeddingTypes';
 import { IRerankerService } from '../common/rerankerService';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
-import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearch/codeSearchChunkSearch';
-import { BuildIndexTriggerReason, RepoStatus, TriggerIndexingError } from './codeSearch/repoManager';
+import { BuildIndexTriggerReason, CodeSearchChunkSearch, CodeSearchRemoteIndexState, CodeSearchRepoStatus, TriggerIndexingError } from './codeSearch/codeSearchChunkSearch';
 import { EmbeddingsChunkSearch, LocalEmbeddingsIndexState, LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
 import { FullWorkspaceChunkSearch } from './fullWorkspaceChunkSearch';
 import { TfidfChunkSearch } from './tfidfChunkSearch';
@@ -320,7 +319,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 
 		const indexState = await this.getIndexState();
-		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === RepoStatus.Ready))
+		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready))
 			|| indexState.localIndexState.status === LocalEmbeddingsIndexStatus.Ready
 			|| await this._fullWorkspaceChunkSearch.mayBeAvailable(sizing);
 	}

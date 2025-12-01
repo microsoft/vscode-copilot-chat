@@ -25,7 +25,7 @@ import { ILogService } from '../../log/common/logService';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WorkspaceChunkSearchOptions } from '../common/workspaceChunkSearch';
-import { BuildIndexTriggerReason } from './codeSearch/repoManager';
+import { BuildIndexTriggerReason } from './codeSearch/codeSearchChunkSearch';
 import { createWorkspaceChunkAndEmbeddingCache, IWorkspaceChunkAndEmbeddingCache } from './workspaceChunkAndEmbeddingCache';
 import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
 

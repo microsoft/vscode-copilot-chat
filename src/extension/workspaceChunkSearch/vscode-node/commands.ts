@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { t } from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { TriggerRemoteIndexingError } from '../../../platform/workspaceChunkSearch/node/codeSearch/repoManager';
+import { TriggerRemoteIndexingError } from '../../../platform/workspaceChunkSearch/node/codeSearch/codeSearchChunkSearch';
 import { IWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { IWorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';

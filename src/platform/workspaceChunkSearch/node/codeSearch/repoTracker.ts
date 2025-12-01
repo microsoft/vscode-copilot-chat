@@ -165,6 +165,10 @@ export class CodeSearchRepoTracker extends Disposable {
 		}
 	}
 
+	public getAllTrackedRepos(): readonly TrackedRepoState[] {
+		return Array.from(this._repos.values());
+	}
+
 	private updateRepoEntry(repo: RepoInfo, entry: TrackedRepoState): void {
 		this._repos.set(repo.rootUri, entry);
 		this._onDidAddOrUpdateRepo.fire(entry);

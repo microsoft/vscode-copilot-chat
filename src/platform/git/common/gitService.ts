@@ -83,8 +83,10 @@ export function getGitHubRepoInfoFromContext(repoContext: RepoContext): { id: Gi
 
 export interface ResolvedRepoRemoteInfo {
 	readonly fetchUrl: string | undefined;
-	readonly repoId: GithubRepoId | AdoRepoId;
+	readonly repoId: ResolvedRepoId;
 }
+
+export type ResolvedRepoId = GithubRepoId | AdoRepoId;
 
 /**
  * Gets the repo info for any type of repo from the repo context.
