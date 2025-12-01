@@ -373,9 +373,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		cancellationToken: CancellationToken,
 	): Promise<LanguageContextResponse | undefined> {
 		const recordingEnabled = this.configService.getConfig<boolean>(ConfigKey.TeamInternal.InlineEditsLogContextRecorderEnabled);
-		const diagnosticsContextProviderEnabled = this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.DiagnosticsContextProvider, this.expService);
 
-		if (!promptOptions.languageContext.enabled && !recordingEnabled && !diagnosticsContextProviderEnabled) {
+		if (!promptOptions.languageContext.enabled && !recordingEnabled) {
 			return Promise.resolve(undefined);
 		}
 
@@ -998,6 +997,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			languageContext: this.determineLanguageContextOptions(activeDocument.languageId, {
 				enabled: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabled, this.expService),
 				enabledLanguages: this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabledLanguages),
+				enabledDiagnostics: this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.DiagnosticsContextProvider, this.expService),
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
 			}),
 			diffHistory: {
@@ -1084,10 +1084,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number }): LanguageContextOptions {
-		// Some languages are
+	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enabledDiagnostics: diagnosticsEnabled }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enabledDiagnostics: boolean }): LanguageContextOptions {
 		if (languageId in enabledLanguages) {
 			return { enabled: enabledLanguages[languageId], maxTokens };
+		}
+
+		if (diagnosticsEnabled) {
+			return { enabled: true, maxTokens };
 		}
 
 		return { enabled, maxTokens };
