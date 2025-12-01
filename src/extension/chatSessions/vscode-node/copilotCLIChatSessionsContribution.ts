@@ -332,7 +332,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
 		const isolationItems = [
-			{ id: 'enabled', name: 'Isolated' },
+			{ id: 'enabled', name: 'Worktree' },
 			{ id: 'disabled', name: 'Workspace' }
 		];
 
