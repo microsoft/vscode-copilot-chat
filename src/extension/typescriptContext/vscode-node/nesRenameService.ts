@@ -50,7 +50,7 @@ export class NesRenameContribution implements vscode.Disposable {
 		@ILogService readonly logService: ILogService,
 	) {
 		this.disposables = new DisposableStore();
-		vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined): Promise<protocol.RenameKind> => {
+		this.disposables.add(vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined): Promise<protocol.RenameKind> => {
 			const params = await this.resolveParams(uri, position, oldName, newName);
 			if (params === undefined) {
 				return protocol.RenameKind.no;
@@ -68,18 +68,22 @@ export class NesRenameContribution implements vscode.Disposable {
 			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, Date.now(), 300);
 
 			const tokenSource = new vscode.CancellationTokenSource();
-			const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
-			if (protocol.PrepareNesRenameResponse.isError(result)) {
-				this.logService.error('Prepare NES Rename error:', result.message);
-				return protocol.RenameKind.no;
-			} else if (protocol.PrepareNesRenameResponse.isOk(result)) {
-				this.logService.info(`Prepare NES Rename result for ${oldName} to ${newName}: ${result.body.canRename}`);
-				return result.body.canRename;
-			} else {
-				return protocol.RenameKind.no;
+			try {
+				const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
+				if (protocol.PrepareNesRenameResponse.isError(result)) {
+					this.logService.error('Prepare NES Rename error:', result.message);
+					return protocol.RenameKind.no;
+				} else if (protocol.PrepareNesRenameResponse.isOk(result)) {
+					this.logService.info(`Prepare NES Rename result for ${oldName} to ${newName}: ${result.body.canRename}`);
+					return result.body.canRename;
+				} else {
+					return protocol.RenameKind.no;
+				}
+			} finally {
+				tokenSource.dispose();
 			}
-		});
-		vscode.commands.registerCommand('github.copilot.debug.validateNesRename', async () => {
+		}));
+		this.disposables.add(vscode.commands.registerCommand('github.copilot.debug.validateNesRename', async () => {
 			const params = await this.getUserParams();
 			if (params === undefined) {
 				return;
@@ -93,13 +97,17 @@ export class NesRenameContribution implements vscode.Disposable {
 
 			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, Date.now(), 300);
 			const tokenSource = new vscode.CancellationTokenSource();
-			const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
-			if (protocol.PrepareNesRenameResponse.isError(result)) {
-				vscode.window.showErrorMessage(`Prepare NES Rename error: ${result.message}`);
-			} else if (protocol.PrepareNesRenameResponse.isOk(result)) {
-				vscode.window.showInformationMessage(`Prepare NES Rename result for '${oldName}' to '${newName}': ${result.body.canRename}`);
+			try {
+				const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
+				if (protocol.PrepareNesRenameResponse.isError(result)) {
+					vscode.window.showErrorMessage(`Prepare NES Rename error: ${result.message}`);
+				} else if (protocol.PrepareNesRenameResponse.isOk(result)) {
+					vscode.window.showInformationMessage(`Prepare NES Rename result for '${oldName}' to '${newName}': ${result.body.canRename}`);
+				}
+			} finally {
+				tokenSource.dispose();
 			}
-		});
+		}));
 	}
 
 	public dispose(): void {
@@ -184,7 +192,6 @@ export class NesRenameContribution implements vscode.Disposable {
 		const oldName = document.getText(wordRange);
 		const newName = await vscode.window.showInputBox({ prompt: 'Enter the new name for NES rename' });
 		if (newName === undefined || newName.length === 0) {
-
 			return undefined;
 		}
 		return { document, position, oldName, newName };
