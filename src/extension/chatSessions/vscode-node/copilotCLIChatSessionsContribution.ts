@@ -509,6 +509,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * If creating a new session, then uses the agent configured in settings.
 	 * If opening an existing session, then uses the agent associated with that session.
 	 * If creating a new session with a prompt file that specifies an agent, then uses that agent.
+	 * If the prompt file specifies tools, those tools override the agent's default tools.
 	 */
 	private async getAgent(sessionId: string | undefined, request: vscode.ChatRequest | undefined, token: vscode.CancellationToken): Promise<SweCustomAgent | undefined> {
 		const [sessionAgent, defaultAgent, promptFile] = await Promise.all([
