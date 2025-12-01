@@ -84,7 +84,8 @@
 		"onUri",
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings",
-		"onCustomAgentsProvider"
+		"onCustomAgentsProvider",
+		"onInstructionsProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
@@ -2501,6 +2502,11 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%"
+					},
+					"github.copilot.chat.customInstructions.showOrganizationInstructions": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.customInstructions.showOrganizationInstructions%"
 					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",

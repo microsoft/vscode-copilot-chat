@@ -9,7 +9,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, CustomInstructionListItem, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -311,5 +311,36 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			throw new Error('No GitHub authentication available');
 		}
 		return this.getFileContentWithToken(owner, repo, ref, path, authToken);
+	}
+
+	async getOrgCustomInstructions(orgLogin: string): Promise<CustomInstructionListItem[]> {
+		try {
+			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, {
+				type: RequestType.OrgCustomInstructions,
+				orgLogin
+			});
+			if (!response.ok) {
+				throw new Error(`Failed to fetch custom instructions for org ${orgLogin}: ${response.statusText}`);
+			}
+			const data = await response.json() as {
+				instructions?: CustomInstructionListItem[];
+			};
+			if (data && Array.isArray(data.instructions)) {
+				return data.instructions;
+			}
+			throw new Error('Invalid response format');
+		} catch (e) {
+			this._logService.error(e);
+			return [];
+		}
 	}
 }
