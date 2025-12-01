@@ -511,19 +511,27 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * If creating a new session with a prompt file that specifies an agent, then uses that agent.
 	 */
 	private async getAgent(sessionId: string | undefined, request: vscode.ChatRequest | undefined, token: vscode.CancellationToken): Promise<SweCustomAgent | undefined> {
-		const promptFile = request ? await this.getPromptInfoFromRequest(request, token) : undefined;
-		if (promptFile?.header?.agent) {
-			const agent = await this.copilotCLIAgents.resolveAgent(promptFile.header.agent);
-			if (agent) {
-				return agent;
+		const [sessionAgent, defaultAgent, promptFile] = await Promise.all([
+			sessionId ? this.copilotCLIAgents.getSessionAgent(sessionId) : Promise.resolve(undefined),
+			this.copilotCLIAgents.getDefaultAgent(),
+			request ? this.getPromptInfoFromRequest(request, token) : Promise.resolve(undefined)
+		]);
+
+		const agent = await this.copilotCLIAgents.resolveAgent(sessionAgent ?? defaultAgent);
+
+		// If we have a prompt file that specifies an agent or tools, use that.
+		if (promptFile?.header?.agent || Array.isArray(promptFile?.header?.tools)) {
+			const customAgent = promptFile.header.agent ? await this.copilotCLIAgents.resolveAgent(promptFile.header.agent) : undefined;
+			const agentToUse = customAgent ?? agent;
+			if (agentToUse) {
+				if (Array.isArray(promptFile.header.tools)) {
+					agentToUse.tools = promptFile.header.tools;
+				}
+				return agentToUse;
 			}
 		}
 
-		const [sessionAgent, defaultAgent] = await Promise.all([
-			sessionId ? this.copilotCLIAgents.getSessionAgent(sessionId) : Promise.resolve(undefined),
-			this.copilotCLIAgents.getDefaultAgent()
-		]);
-		return this.copilotCLIAgents.resolveAgent(sessionAgent ?? defaultAgent);
+		return agent;
 	}
 
 	private async getPromptInfoFromRequest(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<ParsedPromptFile | undefined> {

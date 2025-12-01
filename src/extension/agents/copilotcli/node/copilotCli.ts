@@ -155,7 +155,7 @@ export interface ICopilotCLIAgents {
 	getDefaultAgent(): Promise<string>;
 	resolveAgent(agentId: string): Promise<SweCustomAgent | undefined>;
 	setDefaultAgent(agent: string | undefined): Promise<void>;
-	getAgents(): Promise<SweCustomAgent[]>;
+	getAgents(): Promise<Readonly<SweCustomAgent>[]>;
 	trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void>;
 	getSessionAgent(sessionId: string): Promise<string | undefined>;
 }
@@ -217,10 +217,12 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 	}
 	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
 		const customAgents = await this.getAgents();
-		return customAgents.find(agent => agent.name === agentId);
+		const agent = customAgents.find(agent => agent.name === agentId);
+		// Return a clone to allow mutations (to tools, etc).
+		return agent ? this.cloneAgent(agent) : undefined;
 	}
 
-	async getAgents(): Promise<SweCustomAgent[]> {
+	async getAgents(): Promise<Readonly<SweCustomAgent>[]> {
 		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
 			return [];
 		}
@@ -233,7 +235,14 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 			this.logService.trace('[CopilotCLISession] No working directory available, cannot fetch custom agents');
 			return [];
 		}
-		return getCustomAgents(auth, workingDirectory.fsPath, undefined, getCopilotLogger(this.logService));
+		const agents = await getCustomAgents(auth, workingDirectory.fsPath, undefined, getCopilotLogger(this.logService));
+		return agents.map(agent => this.cloneAgent(agent));
+	}
+
+	private cloneAgent(agent: SweCustomAgent): SweCustomAgent {
+		return {
+			...agent
+		};
 	}
 }
 
