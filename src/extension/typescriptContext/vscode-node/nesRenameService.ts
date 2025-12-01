@@ -114,7 +114,7 @@ export class NesRenameContribution implements vscode.Disposable {
 		this.telemetrySender = new TelemetrySender(telemetryService, logService);
 		this.disposables = new DisposableStore();
 		this.disposables.add(vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, requestId: string | undefined): Promise<protocol.RenameKind> => {
-			const params = await this.resolveParams(uri, position, oldName, newName, requestId);
+			const params = this.resolveParams(uri, position, oldName, newName, requestId);
 			if (params === undefined) {
 				return protocol.RenameKind.no;
 			}
