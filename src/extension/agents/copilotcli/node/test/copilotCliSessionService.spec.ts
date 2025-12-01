@@ -5,6 +5,7 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ChatContext } from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
@@ -14,10 +15,12 @@ import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
+import { mock } from '../../../../../util/common/test/simpleMock';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
+import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService } from '../copilotcliSessionService';
@@ -104,12 +107,17 @@ describe('CopilotCLISessionService', () => {
 		const authService = {
 			getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
 		} as unknown as IAuthenticationService;
+		const delegationService = new class extends mock<IChatDelegationSummaryService>() {
+			override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
+				return undefined;
+			}
+		}();
 		instantiationService = {
 			invokeFunction(fn: (accessor: unknown, ...args: any[]) => any, ...args: any[]): any {
 				return fn(accessor, ...args);
 			},
 			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
-				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService));
+				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService, delegationService));
 			}
 		} as unknown as IInstantiationService;
 

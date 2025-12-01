@@ -16,11 +16,11 @@ import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/com
 import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { retry } from '../../../util/vs/base/common/async';
+import { DeferredPromise, retry } from '../../../util/vs/base/common/async';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
+import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { CopilotCloudGitOperationsManager } from './copilotCloudGitOperationsManager';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
@@ -142,7 +142,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private activeSessionPollingInterval: ReturnType<typeof setInterval> | undefined;
 	private readonly plainTextRenderer = new PlainTextRenderer();
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService, this.configurationService);
-	private readonly _summarizer: ChatSummarizerProvider;
 
 	// Title
 	private TITLE = vscode.l10n.t('Delegate to cloud agent');
@@ -174,9 +173,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IGithubRepositoryService private readonly _githubRepositoryService: IGithubRepositoryService,
+		@IChatDelegationSummaryService private readonly _chatDelegationSummaryService: IChatDelegationSummaryService,
 	) {
 		super();
-		this._summarizer = instantiationService.createInstance(ChatSummarizerProvider);
 		const interval = setInterval(async () => {
 			const repoId = await getRepoId(this._gitService);
 			// TODO: handle no auth token case more gracefully
@@ -460,16 +459,26 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		const pr = await this.findPR(pullRequestNumber);
+		const summaryReference = new DeferredPromise<vscode.ChatPromptReference | undefined>();
 		const getProblemStatement = async (sessions: SessionInfo[]) => {
 			if (sessions.length === 0) {
+				summaryReference.complete(undefined);
 				return undefined;
 			}
 			const repoId = await getRepoId(this._gitService);
 			if (!repoId) {
+				summaryReference.complete(undefined);
 				return undefined;
 			}
 			const jobInfo = await this._octoKitService.getJobBySessionId(repoId.org, repoId.repo, sessions[0].id, 'vscode-copilot-chat');
 			let prompt = jobInfo?.problem_statement || 'Initial Implementation';
+			// When delegating, we append the summary to the prompt, & that can be very large and doesn't look great.
+			// Turn the summary into a reference instead.
+			const info = this._chatDelegationSummaryService.extractPrompt(sessions[0].id, prompt);
+			if (info) {
+				summaryReference.complete(info.reference);
+				prompt = info.prompt;
+			}
 			const titleMatch = prompt.match(/TITLE: \s*(.*)/i);
 			if (titleMatch && titleMatch[1]) {
 				prompt = titleMatch[1].trim();
@@ -495,7 +504,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			);
 
 		// Get stored references for this session
-		const storedReferences = this.sessionReferencesMap.get(resource);
+		const storedReferences = summaryReference.p.then(summaryRef => {
+			return (this.sessionReferencesMap.get(resource) ?? []).concat(summaryRef ? [summaryRef] : []);
+		});
 
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
 		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId), storedReferences);
@@ -745,7 +756,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// TODO: Do this async/optimistically before delegation triggered
 		if (this.hasHistoryToSummarize(context.history)) {
 			stream.progress(vscode.l10n.t('Analyzing chat history'));
-			history = await this._summarizer.provideChatSummary(context, token);
+			history = await this._chatDelegationSummaryService.summarize(context, token);
 		}
 
 		let customAgentName: string | undefined;
@@ -766,7 +777,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			customAgentName,
 			head_ref,
 		);
-
+		if (history) {
+			void this._chatDelegationSummaryService.trackSummaryUsage(sessionId, history);
+		}
 		this.logService.debug(`Delegated to cloud agent for PR #${number} with session ID ${sessionId}`);
 
 		// Store references for this session

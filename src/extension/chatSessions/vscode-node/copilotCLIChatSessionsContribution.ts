@@ -23,13 +23,13 @@ import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
+import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { PermissionRequest, requestPermission } from '../../agents/copilotcli/node/permissionHelpers';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
-import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
@@ -405,7 +405,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		private readonly cloudSessionProvider: CopilotCloudSessionsProvider | undefined,
-		private readonly summarizer: ChatSummarizerProvider,
 		private readonly worktreeManager: CopilotCLIWorktreeManager,
 		@IGitService private readonly gitService: IGitService,
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
@@ -418,6 +417,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@ILogService private readonly logService: ILogService,
 		@IPromptsService private readonly promptsService: IPromptsService,
+		@IChatDelegationSummaryService private readonly chatDelegationSummaryService: IChatDelegationSummaryService,
 	) {
 		super();
 	}
@@ -804,12 +804,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		if (this.hasHistoryToSummarize(context.history)) {
 			stream.progress(vscode.l10n.t('Analyzing chat history'));
-			history = await this.summarizer.provideChatSummary(context, token);
+			history = await this.chatDelegationSummaryService.summarize(context, token);
+			history = history ? `**Summary**\n${history}` : undefined;
 		}
 
 		// Give priority to userPrompt if provided (e.g., from confirmation metadata)
 		userPrompt = userPrompt || request.prompt;
-		const requestPrompt = history ? `${userPrompt}\n**Summary**\n${history}` : userPrompt;
+		const requestPrompt = history ? `${userPrompt}\n${history}` : userPrompt;
 
 		// Create worktree if isolation is enabled and we don't have one yet
 		if (isolationEnabled && !workingDirectory) {
@@ -829,7 +830,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		const session = await this.sessionService.createSession({ workingDirectory, isolationEnabled, agent, model }, token);
 		void this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
-
+		if (history) {
+			void this.chatDelegationSummaryService.trackSummaryUsage(session.object.sessionId, history);
+		}
 		// Do not await, we want this code path to be as fast as possible.
 		if (isolationEnabled && workingDirectory) {
 			void this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory.fsPath);
