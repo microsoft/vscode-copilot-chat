@@ -500,7 +500,7 @@ export class InlineChatIntent implements IIntent {
 		}
 
 		const source = new AsyncIterableSource<IResponsePart>();
-		replyInterpreter.processResponse(new ResponseProcessorContext(conversation.sessionId, conversation.getLatestTurn(), renderResult.messages, outcomeComputer), source.asyncIterable, stream, token);
+		const responseProcessing = replyInterpreter.processResponse(new ResponseProcessorContext(conversation.sessionId, conversation.getLatestTurn(), renderResult.messages, outcomeComputer), source.asyncIterable, stream, token);
 
 		const fetchResult = await endpoint.makeChatRequest2({
 			debugName: 'InlineChat2Intent',
@@ -522,6 +522,10 @@ export class InlineChatIntent implements IIntent {
 				return undefined;
 			}
 		}, token);
+
+		source.resolve();
+
+		await responseProcessing;
 
 		const responseText = fetchResult.type === ChatFetchResponseType.Success ? fetchResult.value : '';
 		telemetry.sendTelemetry(
