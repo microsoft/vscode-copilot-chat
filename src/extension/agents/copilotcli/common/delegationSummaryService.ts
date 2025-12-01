@@ -72,13 +72,12 @@ export class ChatDelegationSummaryService implements IChatDelegationSummaryServi
 			return undefined;
 		}
 
-		let updatedMessage = message;
 		const index = message.indexOf(entry.summary);
 		if (index === -1) {
 			return undefined;
 		}
 		const uri = URI.from({ scheme: SummaryFileScheme, path: l10n.t("summary"), query: sessionId });
-		updatedMessage = message.substring(0, index).trimEnd() || l10n.t('Complete the task as described in the {0}', `[summary](${uri.toString()})`);
+		const prompt = message.substring(0, index).trimEnd() || l10n.t('Complete the task as described in the {0}', `[summary](${uri.toString()})`);
 		const summary = message.substring(index);
 		this._summaries.set(uri, summary);
 		const reference: ChatPromptReference = {
@@ -88,7 +87,7 @@ export class ChatDelegationSummaryService implements IChatDelegationSummaryServi
 			value: uri
 		};
 
-		return { prompt: updatedMessage, reference };
+		return { prompt, reference };
 	}
 
 
