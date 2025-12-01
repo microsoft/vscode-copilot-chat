@@ -289,6 +289,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 		try {
 			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true });
+			if (customAgents.length === 0) {
+				return { optionGroups: [] };
+			}
+
 			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 				{ id: DEFAULT_AGENT_ID, name: vscode.l10n.t('Agent') },
 				...customAgents.map(agent => ({
