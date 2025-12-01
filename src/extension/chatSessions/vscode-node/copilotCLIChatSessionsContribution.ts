@@ -340,6 +340,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			this.copilotCLIModels.getModels(),
 			this.copilotCLIAgents.getAgents()
 		]);
+		const hasAgents = agents.length > 0;
 		const modelItems: vscode.ChatSessionProviderOptionItem[] = models;
 		const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 			{ id: COPILOT_CLI_DEFAULT_AGENT_ID, name: l10n.t('Agent') }
@@ -348,14 +349,8 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			agentItems.push({ id: agent.name, name: agent.displayName || agent.description || agent.name });
 		});
 
-		return {
+		const options = {
 			optionGroups: [
-				{
-					id: AGENTS_OPTION_ID,
-					name: 'Agent',
-					description: 'Set Agent',
-					items: agentItems
-				},
 				{
 					id: MODELS_OPTION_ID,
 					name: 'Model',
@@ -370,6 +365,15 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 				}
 			]
 		};
+		if (hasAgents) {
+			options.optionGroups.unshift({
+				id: AGENTS_OPTION_ID,
+				name: 'Agent',
+				description: 'Set Agent',
+				items: agentItems
+			});
+		}
+		return options;
 	}
 
 	// Handle option changes for a session (store current state in a map)
