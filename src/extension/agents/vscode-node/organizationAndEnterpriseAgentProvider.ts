@@ -127,7 +127,6 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 			// Convert VS Code API options to internal options
 			const internalOptions = options ? {
-				target: options.target,
 				includeSources: ['org', 'enterprise'] // don't include 'repo' to avoid redundancy
 			} satisfies CustomAgentListOptions : undefined;
 
