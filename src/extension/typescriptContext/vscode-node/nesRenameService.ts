@@ -81,7 +81,7 @@ class TelemetrySender {
 				"owner": "dirkb",
 				"comment": "Telemetry for copilot inline completion context in failure case",
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
-				"code:": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The failure code" },
+				"code": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The failure code" },
 				"message": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The failure message" },
 				"stack": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The failure stack" }
 			}
