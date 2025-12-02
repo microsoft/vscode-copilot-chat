@@ -13,6 +13,7 @@ import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycl
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
+import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
@@ -23,16 +24,22 @@ import { ReasoningClassifier } from './reasoningClassifier';
 
 // Exact model names for reasoning-capable models (more capable, expensive models)
 const REASONING_MODELS = [
-	'GPT-5',
-	'Claude Sonnet 4.5',
-	'GPT-5',
-	'GPT-5-mini',
-	'CLaude Haiku 4.5'
+	'claude-sonnet-4.5',
+	'gpt-5-codex',
+	'gpt-5',
+	'gemini-3-pro-preview',
+	'claude-haiku-4.5',
+	'gpt-5-mini',
+	'grok-code-fast-1'
 ] as const;
 
 // Exact model names for low/no reasoning models (fast, cheaper models)
 const LOW_REASONING_MODELS = [
-	'GPT-4.1'
+	'claude-haiku-4.5',
+	'gpt-5-mini',
+	'gpt-4.1',
+	'gpt-5-nano',
+	'grok-code-fast-1'
 ] as const;
 
 interface AutoModeAPIResponse {
@@ -132,7 +139,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@IFetcherService private readonly _fetcherService: IFetcherService
+		@IFetcherService private readonly _fetcherService: IFetcherService,
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -151,7 +159,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		// Initialize reasoning classifier
 		// Use temp directory for model cache
 		const modelCacheDir = path.join(os.tmpdir(), '.vscode-copilot-models');
-		this._reasoningClassifier = this._register(new ReasoningClassifier(modelCacheDir, this._fetcherService, this._logService));
+		const extensionPath = this._extensionContext.extensionUri.fsPath;
+		this._reasoningClassifier = this._register(new ReasoningClassifier(modelCacheDir, extensionPath, this._fetcherService, this._logService));
 	}
 
 	override dispose(): void {
@@ -262,7 +271,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		if ((targetModels as readonly string[]).includes(autoModeResponse.selected_model)) {
 			const selectedEndpoint = knownEndpoints.find(e => e.model === autoModeResponse.selected_model);
 			if (selectedEndpoint) {
-				this._logService.trace(`Using server's selected ${modelType} model: ${selectedEndpoint.model}`);
+				this._logService.info(`Using server's selected ${modelType} model: ${selectedEndpoint.model}`);
 				return selectedEndpoint;
 			}
 		}
@@ -272,14 +281,14 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			if (autoModeResponse.available_models.includes(modelName)) {
 				const endpoint = knownEndpoints.find(e => e.model === modelName);
 				if (endpoint) {
-					this._logService.trace(`Selected ${modelType} model from available_models: ${endpoint.model}`);
+					this._logService.info(`Selected ${modelType} model from available_models: ${endpoint.model}`);
 					return endpoint;
 				}
 			}
 		}
 
 		// Fallback to the server's selected model or first available
-		this._logService.trace(`No matching ${modelType} model found, using server's selection: ${autoModeResponse.selected_model}`);
+		this._logService.info(`No matching ${modelType} model found, using server's selection: ${autoModeResponse.selected_model}`);
 		return knownEndpoints.find(e => e.model === autoModeResponse.selected_model) || knownEndpoints[0];
 	}
 

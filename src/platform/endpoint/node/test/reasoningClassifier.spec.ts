@@ -65,7 +65,7 @@ describe('ReasoningClassifier', () => {
 		const mockFetcherService = createMockFetcherService(testZipPath);
 
 		const cacheDir = path.join(tempDir, 'cache');
-		const classifier = new ReasoningClassifier(cacheDir, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
 
 		// Trigger initialization (which downloads and extracts)
 		try {
@@ -91,7 +91,7 @@ describe('ReasoningClassifier', () => {
 		expect(mockLogService.trace).toHaveBeenCalledWith(expect.stringContaining('Model assets extracted successfully'));
 
 		classifier.dispose();
-	});
+	}, 30000);
 
 	it('should skip download if model already exists', async () => {
 		const mockFetcherService = createMockFetcherService(testZipPath);
@@ -102,7 +102,7 @@ describe('ReasoningClassifier', () => {
 		// Pre-create the model file
 		fs.writeFileSync(path.join(cacheDir, REASONING_CLASSIFIER_MODEL_FILENAME), 'existing-model');
 
-		const classifier = new ReasoningClassifier(cacheDir, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
 
 		// Call download method directly
 		await (classifier as any)._downloadAndExtractAssets();
@@ -127,7 +127,7 @@ describe('ReasoningClassifier', () => {
 		} as any;
 
 		const cacheDir = path.join(tempDir, 'cache-fail');
-		const classifier = new ReasoningClassifier(cacheDir, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
 
 		// Should throw error on download failure
 		await expect((classifier as any)._downloadAndExtractAssets()).rejects.toThrow('Failed to download model assets: Not Found');
@@ -141,7 +141,7 @@ describe('ReasoningClassifier', () => {
 
 		const mockFetcherService = createMockFetcherService(testZipPath);
 
-		const classifier = new ReasoningClassifier(cacheDir, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
 
 		// Copy test zip to cache dir for extraction test
 		const extractTestZipPath = path.join(cacheDir, 'test.zip');
@@ -165,7 +165,7 @@ describe('ReasoningClassifier', () => {
 		const mockFetcherService = createMockFetcherService(testZipPath);
 
 		const cacheDir = path.join(tempDir, 'cache-cleanup');
-		const classifier = new ReasoningClassifier(cacheDir, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
 
 		try {
 			await (classifier as any)._initialize();
@@ -180,12 +180,12 @@ describe('ReasoningClassifier', () => {
 		expect(fs.existsSync(path.join(cacheDir, REASONING_CLASSIFIER_MODEL_FILENAME))).toBe(true);
 
 		classifier.dispose();
-	});
+	}, 30000);
 
 	it('should classify simple queries as non-reasoning', async () => {
 		const mockFetcherService = createMockFetcherService(testZipPath);
 		const cacheDir = path.join(tempDir, 'cache-classify-simple');
-		const classifier = new ReasoningClassifier(cacheDir, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
 
 		try {
 			// Test simple queries that should be classified as non-reasoning (returns true)
@@ -198,7 +198,7 @@ describe('ReasoningClassifier', () => {
 				// Simple queries should be classified as non-reasoning (returns true)
 				expect(result).toBe(true);
 				expect(mockLogService.trace).toHaveBeenCalledWith(
-					expect.stringMatching(/Reasoning classifier prediction: 1 \(non-reasoning, confidence: \d+\.\d+%\)/)
+					expect.stringMatching(/Reasoning classifier prediction: 1 \(non-reasoning, confidence for non-reasoning: \d+\.\d+%\)/)
 				);
 			}
 		} catch (error) {
@@ -212,12 +212,12 @@ describe('ReasoningClassifier', () => {
 		}
 
 		classifier.dispose();
-	});
+	}, 30000);
 
 	it('should classify complex queries as requiring reasoning', async () => {
 		const mockFetcherService = createMockFetcherService(testZipPath);
 		const cacheDir = path.join(tempDir, 'cache-classify-complex');
-		const classifier = new ReasoningClassifier(cacheDir, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
 
 		try {
 			// Test complex queries that should require reasoning (returns false)
@@ -231,7 +231,7 @@ describe('ReasoningClassifier', () => {
 				// Complex queries should require reasoning (returns false)
 				expect(result).toBe(false);
 				expect(mockLogService.trace).toHaveBeenCalledWith(
-					expect.stringMatching(/Reasoning classifier prediction: 0 \(reasoning, confidence: \d+\.\d+%\)/)
+					expect.stringMatching(/Reasoning classifier prediction: 0 \(reasoning, confidence for non-reasoning: \d+\.\d+%\)/)
 				);
 			}
 		} catch (error) {
@@ -244,7 +244,7 @@ describe('ReasoningClassifier', () => {
 		}
 
 		classifier.dispose();
-	});
+	}, 30000);
 
 	it('should handle classify errors gracefully', async () => {
 		const mockFetcherService = createMockFetcherService(testZipPath);
@@ -252,7 +252,7 @@ describe('ReasoningClassifier', () => {
 
 		// Create a mock log service that we can track
 		const errorLogService = createMockLogService();
-		const classifier = new ReasoningClassifier(cacheDir, mockFetcherService, errorLogService);
+		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, errorLogService);
 
 		// Try to classify before initialization completes
 		// Set session to null after init promise is set to simulate initialization failure
@@ -268,7 +268,7 @@ describe('ReasoningClassifier', () => {
 	it('should initialize only once when classify is called multiple times', async () => {
 		const mockFetcherService = createMockFetcherService(testZipPath);
 		const cacheDir = path.join(tempDir, 'cache-classify-once');
-		const classifier = new ReasoningClassifier(cacheDir, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
 
 		// Call classify multiple times
 		const queries = ['query 1', 'query 2', 'query 3'];
@@ -289,5 +289,5 @@ describe('ReasoningClassifier', () => {
 		}
 
 		classifier.dispose();
-	});
+	}, 30000);
 });

@@ -30,6 +30,7 @@ export class ReasoningClassifier extends Disposable {
 
 	constructor(
 		private readonly _modelCacheDir: string,
+		private readonly _extensionPath: string | undefined,
 		private readonly _fetcherService: IFetcherService,
 		private readonly _logService: ILogService
 	) {
@@ -46,6 +47,23 @@ export class ReasoningClassifier extends Disposable {
 			return;
 		}
 
+		// Ensure cache directory exists
+		if (!fs.existsSync(this._modelCacheDir)) {
+			fs.mkdirSync(this._modelCacheDir, { recursive: true });
+		}
+
+		// First, try to extract from bundled zip in extension directory
+		if (this._extensionPath) {
+			const bundledZipPath = path.join(this._extensionPath, 'dist', REASONING_CLASSIFIER_ZIP_FILENAME);
+			if (fs.existsSync(bundledZipPath)) {
+				this._logService.trace(`Extracting model assets from bundled zip: ${bundledZipPath}`);
+				await this._extractZip(bundledZipPath, this._modelCacheDir);
+				this._logService.trace('Model assets extracted from bundled zip successfully');
+				return;
+			}
+		}
+
+		// Fall back to downloading from remote URL
 		this._logService.trace(`Downloading model assets from ${REASONING_CLASSIFIER_ASSETS_URL}`);
 		const response = await this._fetcherService.fetch(REASONING_CLASSIFIER_ASSETS_URL, {});
 		if (!response.ok) {
@@ -59,9 +77,6 @@ export class ReasoningClassifier extends Disposable {
 
 		// Save zip file
 		const buffer = body as Uint8Array;
-		if (!fs.existsSync(this._modelCacheDir)) {
-			fs.mkdirSync(this._modelCacheDir, { recursive: true });
-		}
 		fs.writeFileSync(zipPath, buffer);
 		this._logService.trace('Model assets downloaded, extracting...');
 
@@ -118,7 +133,7 @@ export class ReasoningClassifier extends Disposable {
 		// Tokenize using @xenova/transformers AutoTokenizer
 		// No padding needed since ONNX model uses dynamic shapes
 		const encoded = await this._tokenizer(text, {
-			max_length: 512,
+			max_length: 4096,
 			truncation: true,
 			return_tensors: false
 		});
@@ -187,7 +202,7 @@ export class ReasoningClassifier extends Disposable {
 			const nonReasoningConfidence = probabilities[1];
 			const prediction = nonReasoningConfidence > REASONING_CLASSIFIER_CONFIDENCE_THRESHOLD ? 1 : 0;
 
-			this._logService.trace(`Reasoning classifier prediction: ${prediction} (${prediction === 1 ? 'non-reasoning' : 'reasoning'}, confidence: ${(nonReasoningConfidence * 100).toFixed(1)}%)`);
+			this._logService.trace(`Reasoning classifier prediction: ${prediction} (${prediction === 1 ? 'non-reasoning' : 'reasoning'}, confidence for non-reasoning: ${(nonReasoningConfidence * 100).toFixed(1)}%)`);
 			return prediction === 1; // true if non-reasoning
 		} catch (error) {
 			this._logService.error('Reasoning classification failed', error);
@@ -202,3 +217,4 @@ export class ReasoningClassifier extends Disposable {
 		super.dispose();
 	}
 }
+
