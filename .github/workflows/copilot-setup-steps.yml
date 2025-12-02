@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version-file: .nvmrc
 
       - name: Setup Python
         uses: actions/setup-python@v6
