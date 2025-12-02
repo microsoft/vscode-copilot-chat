@@ -94,7 +94,7 @@
 		]
 	},
 	"github.copilot.viewsWelcome.noPermissiveToken.contents": {
-		"message": "Additional GitHub permissions required to use Background Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
+		"message": "Additional GitHub permissions required to use Cloud Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:github.copilot.chat.triggerPermissiveSignIn)'}"
