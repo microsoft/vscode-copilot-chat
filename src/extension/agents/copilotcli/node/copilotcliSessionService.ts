@@ -6,13 +6,16 @@
 import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { CancellationToken, ChatRequest, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { disposableTimeout, raceCancellation, raceCancellationError, Sequencer } from '../../../../util/vs/base/common/async';
+import { disposableTimeout, raceCancellation, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
+import { StringSHA1 } from '../../../../util/vs/base/common/hash';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { joinPath } from '../../../../util/vs/base/common/resources';
@@ -67,7 +70,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private sessionMutexForGetSession = new Map<string, Mutex>();
 
-	private readonly _mementoUpdator = new Sequencer();
+	private readonly _sessionTracker: CopilotCLISessionWorkspaceTracker;
 	constructor(
 		@ILogService protected readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
@@ -85,6 +88,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				logger: getCopilotLogger(this.logService)
 			});
 		});
+		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}
 
 	protected monitorSessionFiles() {
@@ -112,15 +116,16 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	async _getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
-			const mementoUpdateCompleted = this._mementoUpdator.queue(async () => Promise.resolve());
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
 
-			// Wait for any pending memento updates to complete before filtering sessions.
-			await mementoUpdateCompleted;
+			await this._sessionTracker.initialize(sessionMetadataList.map(s => s.sessionId));
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
+					if (!this._sessionTracker.shouldShowSession(metadata.sessionId)) {
+						return;
+					}
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
@@ -199,6 +204,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 		const sdkSession = await sessionManager.createSession(options.toSessionOptions());
 		this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
+		void this._sessionTracker.trackSession(sdkSession.sessionId, 'add');
 
 		return this.createCopilotSession(sdkSession, options, sessionManager);
 	}
@@ -283,6 +289,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	public async deleteSession(sessionId: string): Promise<void> {
+		void this._sessionTracker.trackSession(sessionId, 'delete');
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -303,6 +310,85 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			// Possible the session was deleted in another vscode session or the like.
 			this._onDidChangeSessions.fire();
 		}
+	}
+}
+
+export class CopilotCLISessionWorkspaceTracker {
+	private readonly _initializeSessionStorageFiles: Lazy<Promise<{ global: Uri; workspace: Uri }>>;
+	private _oldGlobalSessions?: Set<string>;
+	private readonly _workspaceSessions = new Set<string>();
+	constructor(
+		@IFileSystemService private readonly fileSystem: IFileSystemService,
+		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+	) {
+		this._initializeSessionStorageFiles = new Lazy<Promise<{ global: Uri; workspace: Uri }>>(async () => {
+			const globalFile = joinPath(this.context.globalStorageUri, 'copilot.cli.oldSessions.json');
+			let workspaceFile = joinPath(this.context.globalStorageUri, 'copilot.cli.workspaceSessions.json');
+			// If we have more than one workspace, we do not track workspace sessions. Treat them as global sessions.
+			if (this.workspaceService.getWorkspaceFolders().length === 1) {
+				const sha = new StringSHA1();
+				sha.update(this.workspaceService.getWorkspaceFolders()[0].toString());
+				workspaceFile = joinPath(this.context.globalStorageUri, `copilot.cli.workspaceSessions.${sha.digest().substring(0, 8)}.json`);
+			}
+
+			await Promise.all([
+				this.fileSystem.createDirectory(this.context.globalStorageUri),
+				// Load old sessions
+				(async () => {
+					const oldSessions = await this.fileSystem.readFile(globalFile).then(c => new TextDecoder().decode(c).split(',')).catch(() => undefined);
+					if (oldSessions) {
+						this._oldGlobalSessions = new Set<string>(oldSessions);
+					}
+				})(),
+				// Load workspace sessions
+				(async () => {
+					const workspaceSessions = this.workspaceService.getWorkspaceFolders().length === 1 ?
+						await this.fileSystem.readFile(workspaceFile).then(c => new TextDecoder().decode(c).split(',')).catch(() => []) : [];
+					workspaceSessions.forEach(s => this._workspaceSessions.add(s));
+				})(),
+			]);
+
+			return { global: globalFile, workspace: workspaceFile };
+		});
+		void this._initializeSessionStorageFiles.value;
+	}
+
+	public async initialize(oldSessions: string[]): Promise<void> {
+		const { global } = await this._initializeSessionStorageFiles.value;
+		if (this._oldGlobalSessions) {
+			return;
+		}
+		this._oldGlobalSessions = new Set<string>(oldSessions);
+		// No need to block caller anymore, we've tracked in memory for now.
+		void this.fileSystem.writeFile(global, Buffer.from(oldSessions.join(',')));
+	}
+
+	public async trackSession(sessionId: string, operation: 'add' | 'delete'): Promise<void> {
+		// If we're not in a workspace, do not track sessions as these are global sessions.
+		if (this.workspaceService.getWorkspaceFolders().length !== 1) {
+			return;
+		}
+		if (operation === 'add') {
+			this._workspaceSessions.add(sessionId);
+		} else {
+			this._workspaceSessions.delete(sessionId);
+		}
+
+		const sessions = Array.from(this._workspaceSessions).join(',');
+		const { workspace } = await this._initializeSessionStorageFiles.value;
+		// No need to block caller anymore, we've tracked in memory for now.
+		void this.fileSystem.writeFile(workspace, Buffer.from(sessions));
+	}
+
+	/**
+	 * InitializeOldSessions should have been called before this.
+	 */
+	public shouldShowSession(sessionId: string): boolean {
+		if (this._oldGlobalSessions?.has(sessionId) || this.workspaceService.getWorkspaceFolders().length !== 1) {
+			return true;
+		}
+		return this._workspaceSessions.has(sessionId);
 	}
 }
 
