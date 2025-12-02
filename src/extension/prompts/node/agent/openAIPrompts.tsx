@@ -11,7 +11,7 @@ import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
-import { FileLinkificationInstructions, MathIntegrationRules } from '../panel/editorIntegrationRules';
+import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { KeepGoingReminder } from './agentPrompt';
 import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
@@ -722,8 +722,7 @@ class CodexStyleGPT51CodexPrompt extends PromptElement<DefaultAgentPromptProps> 
 				- Markdown text. Use structure only when it helps scanability.<br />
 				- Headers: optional; short Title Case (1-3 words) wrapped in **…**; no blank line before the first bullet; add only if they truly help.<br />
 				- Bullets: use - ; merge related points; keep to one line when possible; 4-6 per list ordered by importance; keep phrasing consistent.<br />
-				- Monospace: backticks for commands, env vars, and code identifiers; never combine with **.<br />
-				- File path and line number formatting rules are defined in the fileLinkification section below.<br />
+				- Monospace: backticks for commands/paths/env vars/code ids and inline examples; use for literal keyword bullets; never combine with **.<br />
 				- Code samples or multi-line snippets should be wrapped in fenced code blocks; include an info string as often as possible.<br />
 				- Structure: group related bullets; order sections general → specific → supporting; for subsections, start with a bolded keyword bullet, then items; match complexity to the task.<br />
 				- Tone: collaborative, concise, factual; present tense, active voice; self-contained; no "above/below"; parallel wording.<br />
@@ -731,10 +730,10 @@ class CodexStyleGPT51CodexPrompt extends PromptElement<DefaultAgentPromptProps> 
 				- Adaptation: code explanations → precise, structured with code refs; simple tasks → lead with outcome; big changes → logical walkthrough + rationale + next actions; casual one-offs → plain sentences, no headers/bullets.
 			</Tag>
 			<Tag name='special_formatting'>
-				Use proper Markdown formatting:
-				- Wrap symbol names (classes, methods, variables) in backticks: `MyClass`, `handleClick()`<br />
-				- When mentioning files or line numbers, always follow the rules in fileLinkification section below:
-				<FileLinkificationInstructions />
+				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				<Tag name='example'>
+					The class `Person` is in `src/models/person.ts`.
+				</Tag>
 				<MathIntegrationRules />
 			</Tag>
 		</InstructionMessage>;
