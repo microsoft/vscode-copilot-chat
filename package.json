@@ -1215,6 +1215,7 @@
 				"icon": "$(eye)",
 				"tools": [
 					"getNotebookSummary",
+					"problems",
 					"readFile",
 					"readNotebookCellOutput"
 				]
@@ -1228,7 +1229,6 @@
 					"codebase",
 					"fileSearch",
 					"listDirectory",
-					"problems",
 					"searchResults",
 					"textSearch",
 					"usages"
