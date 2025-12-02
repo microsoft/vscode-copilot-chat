@@ -73,7 +73,9 @@ export class ChatDelegationSummaryService implements IChatDelegationSummaryServi
 			return undefined;
 		}
 		const uri = URI.from({ scheme: SummaryFileScheme, path: l10n.t("summary"), query: sessionId });
-		const prompt = message.substring(0, index).trimEnd() || l10n.t('Complete the task as described in the {0}', `[summary](${uri.toString()})`);
+		const promtpSuffix = l10n.t('Complete the task as described in the {0}', `[summary](${uri.toString()})`);
+		const promptPrefix = message.substring(0, index).trimEnd() || '';
+		const prompt = promptPrefix ? `${promptPrefix}\n\n${promtpSuffix}` : promtpSuffix;
 		const summary = message.substring(index);
 		this._summaries.set(uri, summary);
 		const reference: ChatPromptReference = {
