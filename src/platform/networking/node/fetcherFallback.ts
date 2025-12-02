@@ -32,7 +32,7 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 				if ('response' in result) {
 					lastError = `${fetcherId}: ${result.response.status} ${result.response.statusText}`;
 				} else {
-					lastError = `${fetcherId}: ${collectSingleLineErrorMessage(result.err)}`;
+					lastError = `${fetcherId}: ${collectSingleLineErrorMessage(result.err, true)}`;
 				}
 				updatedKnownBadFetchers.add(fetcherId);
 				continue;
