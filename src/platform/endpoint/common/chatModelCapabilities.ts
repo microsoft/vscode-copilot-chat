@@ -75,7 +75,7 @@ export async function isHiddenModelC(model: LanguageModelChat | IChatEndpoint | 
 		return false;
 	}
 
-	const family = typeof model === 'string' ? model : "gpt-5.1-codex-max";
+	const family = typeof model === 'string' ? model : model.family;
 	const h = familyToHash.get(family) ?? await getCachedSha256Hash(family);
 	if (HIDDEN_MODEL_C_HASHES.includes(h)) {
 		familyToHash.set(family, h);
