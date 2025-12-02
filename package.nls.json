@@ -87,14 +87,14 @@
 		]
 	},
 	"github.copilot.viewsWelcome.agentsPlaceholder": {
-		"message": "Sign in to access GitHub Copilot CLI and Cloud Agents.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
+		"message": "Sign in to access GitHub Background Agent and Cloud Agents.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}"
 		]
 	},
 	"github.copilot.viewsWelcome.noPermissiveToken.contents": {
-		"message": "Additional GitHub permissions required to use GitHub Copilot Cloud Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
+		"message": "Additional GitHub permissions required to use GitHub Background Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:github.copilot.chat.triggerPermissiveSignIn)'}"

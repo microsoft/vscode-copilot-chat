@@ -82,7 +82,7 @@ export class CopilotCLIWorktreeManager {
 		}
 
 		return new Promise<string | undefined>((resolve) => {
-			stream.progress(vscode.l10n.t('Creating isolated worktree for Copilot CLI session...'), async progress => {
+			stream.progress(vscode.l10n.t('Creating isolated worktree for Background Agent session...'), async progress => {
 				const result = await this.tryCreateWorktree(progress);
 				resolve(result);
 				if (result) {
@@ -263,7 +263,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async createCopilotCLITerminal(): Promise<void> {
 		// TODO@rebornix should be set by CLI
-		const terminalName = process.env.COPILOTCLI_TERMINAL_TITLE || vscode.l10n.t('Copilot CLI');
+		const terminalName = process.env.COPILOTCLI_TERMINAL_TITLE || vscode.l10n.t('Background Agent');
 		await this.terminalIntegration.openTerminal(terminalName);
 	}
 
@@ -696,7 +696,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		const message =
-			vscode.l10n.t('Copilot CLI agent will work in an isolated worktree to implement your requested changes.')
+			vscode.l10n.t('Background Agent will work in an isolated worktree to implement your requested changes.')
 			+ '\n\n'
 			+ vscode.l10n.t('This workspace has uncommitted changes. Should these changes be included in the new worktree?');
 
@@ -707,7 +707,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		];
 
 		stream.confirmation(
-			vscode.l10n.t('Delegate to Copilot CLI agent'),
+			vscode.l10n.t('Delegate to Background Agent'),
 			message,
 			{
 				step: UncommittedChangesStep,
@@ -739,7 +739,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const selection = (request.prompt?.split(':')[0] || '').trim().toUpperCase();
 
 		if (!selection || selection === this.CLI_CANCEL.toUpperCase() || token.isCancellationRequested) {
-			stream.markdown(vscode.l10n.t('Copilot CLI agent delegation cancelled.'));
+			stream.markdown(vscode.l10n.t('Background Agent delegation cancelled.'));
 			return {};
 		}
 
@@ -985,7 +985,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
-		const title = vscode.l10n.t('Copilot CLI ({0})', sessionWorktreeName);
+		const title = vscode.l10n.t('Background Agent ({0})', sessionWorktreeName);
 		const multiDiffSourceUri = Uri.parse(`copilotcli-worktree-changes:/${sessionId}`);
 		const resources = repository.changes.indexChanges.map(change => {
 			switch (change.status) {
