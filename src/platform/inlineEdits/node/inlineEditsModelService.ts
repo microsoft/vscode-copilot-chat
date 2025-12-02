@@ -22,7 +22,7 @@ import { IFetcherService, Response } from '../../networking/common/fetcherServic
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WireTypes } from '../common/dataTypes/inlineEditsModelsTypes';
-import { isPromptingStrategy, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
+import { isPromptingStrategy, MODEL_CONFIGURATION_VALIDATOR, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
 import { IInlineEditsModelService } from '../common/inlineEditsModelService';
 
 type Model = {
@@ -344,10 +344,9 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			return undefined;
 		}
 
-		let parsedConfig: ModelConfiguration | undefined;
+		let parsedConfig: unknown;
 		try {
 			parsedConfig = JSON.parse(configString);
-			// FIXME@ulugbekna: validate parsedConfig structure
 		} catch (e: unknown) {
 			/* __GDPR__
 				"incorrectNesModelConfig" : {
@@ -359,8 +358,15 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				}
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)), configValue: configString });
+			return undefined;
 		}
 
-		return parsedConfig;
+		const validationResult = MODEL_CONFIGURATION_VALIDATOR.validate(parsedConfig);
+		if (validationResult.error) {
+			this._logService.error(`Invalid model configuration: ${validationResult.error.message}`);
+			return undefined;
+		}
+
+		return validationResult.content;
 	}
 }
