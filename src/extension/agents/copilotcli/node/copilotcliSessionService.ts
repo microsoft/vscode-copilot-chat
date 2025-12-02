@@ -153,6 +153,26 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				})
 			));
 
+			const diskSessionIds = new Set(diskSessions.map(s => s.id));
+			// If we have a new session that has started, then return that as well.
+			// Possible SDK has not yet persisted it to disk.
+			const newSessions = coalesce(Array.from(this._sessionWrappers.values())
+				.filter(session => !diskSessionIds.has(session.object.sessionId))
+				.filter(session => session.object.status === ChatSessionStatus.InProgress)
+				.map(session => {
+					const label = labelFromPrompt(session.object.pendingPrompt ?? '');
+					if (!label) {
+						return;
+					}
+
+					return {
+						id: session.object.sessionId,
+						label,
+						status: session.object.status,
+						timing: { startTime: Date.now() },
+					} satisfies ICopilotCLISessionItem;
+				}));
+
 			// Merge with cached sessions (new sessions not yet persisted by SDK)
 			const allSessions = diskSessions
 				.map(session => {
@@ -160,7 +180,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						...session,
 						status: this._sessionWrappers.get(session.id)?.object?.status
 					} satisfies ICopilotCLISessionItem;
-				});
+				}).concat(newSessions);
 
 			return allSessions;
 		} catch (error) {
