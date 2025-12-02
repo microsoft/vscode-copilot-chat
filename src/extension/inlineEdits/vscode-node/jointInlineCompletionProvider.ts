@@ -9,6 +9,7 @@ import { IAuthenticationService, IExperimentationService } from '../../../lib/no
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { JointCompletionsProviderStrategy } from '../../../platform/inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../platform/inlineEdits/common/observableGit';
 import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
@@ -240,6 +241,8 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	constructor(
 		private readonly _completionsProvider: CopilotInlineCompletionItemProvider | undefined,
 		private readonly _inlineEditProvider: InlineCompletionProviderImpl | undefined,
+		@IConfigurationService private readonly _configService: IConfigurationService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
@@ -251,6 +254,16 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	public async provideInlineCompletionItems(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken): Promise<SingularCompletionList | undefined> {
+		const strategy = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderStrategy, this._expService);
+		switch (strategy) {
+			case JointCompletionsProviderStrategy.Regular:
+				return this.provideInlineCompletionItemsRegular(document, position, context, token);
+			default:
+				assertNever(strategy);
+		}
+	}
+
+	public async provideInlineCompletionItemsRegular(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken): Promise<SingularCompletionList | undefined> {
 
 		const sw = new StopWatch();
 		const tracer = createTracer(['JointCompletionsProvider', 'provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)], (msg) => this._logService.trace(msg));
