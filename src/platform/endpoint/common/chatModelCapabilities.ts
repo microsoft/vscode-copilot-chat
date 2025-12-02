@@ -37,7 +37,9 @@ const HIDDEN_MODEL_B_HASHES = [
 
 const HIDDEN_MODEL_C_HASHES = [
 	'57bc0aad677492da7a00731e3e411055b9828c6439f502fa5abd8fddb7a8a260',
-	'c5f9e7e93624823213aa93017d0d970ce3203d99dfcd616a0446f7bae2d8caf4'
+	'c5f9e7e93624823213aa93017d0d970ce3203d99dfcd616a0446f7bae2d8caf4',
+	'3358d5de6b9eac13ed03cfe6be37e45750f2ff16f588b24d8697837933def2bb',
+	'd8eef280738090c0e91e0a38540e77d5dbad64ee63ddc4990c25701fff453de8',
 ];
 
 const HIDDEN_MODEL_D_HASHES = [
@@ -73,7 +75,7 @@ export async function isHiddenModelC(model: LanguageModelChat | IChatEndpoint | 
 		return false;
 	}
 
-	const family = typeof model === 'string' ? model : model.family;
+	const family = typeof model === 'string' ? model : "gpt-5.1-codex-max";
 	const h = familyToHash.get(family) ?? await getCachedSha256Hash(family);
 	if (HIDDEN_MODEL_C_HASHES.includes(h)) {
 		familyToHash.set(family, h);
