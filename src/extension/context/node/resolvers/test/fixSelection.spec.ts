@@ -158,12 +158,15 @@ describe('findDiagnosticForSelectionAndPrompt', () => {
 		it('returns filtered diagnostics when prompt matches some diagnostic messages', () => {
 			const service = new MockLanguageDiagnosticsService();
 			const uri = Uri.file('/test/file.ts');
+			// The filtering checks if the diagnostic message is contained in the prompt (prompt.includes(d.message))
 			const diagnostic1 = createDiagnostic('undefined is not a function', 5, 0, 5, 10);
 			const diagnostic2 = createDiagnostic('Type error', 5, 15, 5, 25);
-			const diagnostic3 = createDiagnostic('Another undefined is not a function issue', 5, 30, 5, 40);
+			// diagnostic3's message is NOT contained in the prompt (even though it contains similar words)
+			const diagnostic3 = createDiagnostic('null reference error', 5, 30, 5, 40);
 
 			service.setDiagnostics(uri, [diagnostic1, diagnostic2, diagnostic3]);
 			const selection = new Range(5, 0, 5, 50);
+			// Only diagnostic1's message appears verbatim in this prompt
 			const prompt = 'Please fix the undefined is not a function error in my code';
 
 			const result = findDiagnosticForSelectionAndPrompt(service, uri, selection, prompt);
