@@ -3,17 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
+import type { Session, SessionEvent, SessionOptions, SweCustomAgent, internal } from '@github/copilot/sdk';
 import type { CancellationToken, ChatRequest, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
-import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { disposableTimeout, raceCancellation, raceCancellationError, Sequencer } from '../../../../util/vs/base/common/async';
+import { disposableTimeout, raceCancellation, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -25,8 +23,6 @@ import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './c
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { getCopilotLogger } from './logger';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
-
-const COPILOT_CLI_WORKSPACE_SPECIFIC_SESSIONS_KEY = 'github.copilot.cli.workspaceSpecificSessions';
 
 export interface ICopilotCLISessionItem {
 	readonly id: string;
@@ -71,7 +67,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private sessionMutexForGetSession = new Map<string, Mutex>();
 
-	private readonly _mementoUpdator = new Sequencer();
 	constructor(
 		@ILogService protected readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
@@ -80,8 +75,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
-		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -118,18 +111,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	async _getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
-			const mementoUpdateCompleted = this._mementoUpdator.queue(async () => Promise.resolve());
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
 
-			// Wait for any pending memento updates to complete before filtering sessions.
-			await mementoUpdateCompleted;
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
-					if (this.shouldExcludeSession(metadata.sessionId)) {
-						return;
-					}
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
@@ -208,7 +195,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 		const sdkSession = await sessionManager.createSession(options.toSessionOptions());
 		this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
-		void this.updateSessionInWorkspace(sdkSession.sessionId, 'add');
+
 
 		return this.createCopilotSession(sdkSession, options, sessionManager);
 	}
@@ -293,7 +280,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	public async deleteSession(sessionId: string): Promise<void> {
-		void this.updateSessionInWorkspace(sessionId, 'delete');
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -315,37 +301,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			this._onDidChangeSessions.fire();
 		}
 	}
-
-	private async updateSessionInWorkspace(sessionId: string, operation: 'add' | 'delete'): Promise<void> {
-		// If we're not in a workspace, do not track sessions as these are global sessions.
-		if (this.workspaceService.getWorkspaceFolders().length === 0) {
-			return;
-		}
-		this._mementoUpdator.queue(async () => {
-			let trackedSessions = this.context.workspaceState.get<Record<string, { createdDateTime: number }>>(COPILOT_CLI_WORKSPACE_SPECIFIC_SESSIONS_KEY, {});
-			if (operation === 'add') {
-				trackedSessions[sessionId] = { createdDateTime: Date.now() };
-			} else {
-				delete trackedSessions[sessionId];
-			}
-
-			// If we have 100 entries or more, sort by created time and keep the recent 100 and drop the rest.
-			if (Object.keys(trackedSessions).length >= 100) {
-				const sortedSessions = Object.entries(trackedSessions).sort((a, b) => b[1].createdDateTime - a[1].createdDateTime);
-				trackedSessions = Object.fromEntries(sortedSessions.slice(0, 100));
-			}
-			await this.context.workspaceState.update(COPILOT_CLI_WORKSPACE_SPECIFIC_SESSIONS_KEY, trackedSessions);
-		});
-	}
-
-	private shouldExcludeSession(sessionId: string): boolean {
-		if (this.workspaceService.getWorkspaceFolders().length === 0) {
-			return false;
-		}
-		const trackedSessions = this.context.workspaceState.get<Record<string, { createdDateTime: number }>>(COPILOT_CLI_WORKSPACE_SPECIFIC_SESSIONS_KEY, {});
-		return !(sessionId in trackedSessions);
-	}
-
 }
 
 function labelFromPrompt(prompt: string): string {
