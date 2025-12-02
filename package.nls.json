@@ -108,7 +108,7 @@
 		]
 	},
 	"github.copilot.viewsWelcome.cliSessionsEmpty.contents": {
-		"message": "[Start CLI Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcli)",
+		"message": "[Start Background Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcli)",
 		"comment": [
 			"Do not translate what's inside of (...). It is link syntax.",
 			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilotcli)'}"
