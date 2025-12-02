@@ -339,11 +339,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private shouldExcludeSession(sessionId: string): boolean {
-		if (this.workspaceService.getWorkspaceFolders().length === 0) {
-			return false;
-		}
-		const trackedSessions = this.context.workspaceState.get<Record<string, { createdDateTime: number }>>(COPILOT_CLI_WORKSPACE_SPECIFIC_SESSIONS_KEY, {});
-		return !(sessionId in trackedSessions);
+		return false;
+		// if (this.workspaceService.getWorkspaceFolders().length === 0) {
+		// 	return false;
+		// }
+		// const trackedSessions = this.context.workspaceState.get<Record<string, { createdDateTime: number }>>(COPILOT_CLI_WORKSPACE_SPECIFIC_SESSIONS_KEY, {});
+		// return !(sessionId in trackedSessions);
 	}
 
 }
