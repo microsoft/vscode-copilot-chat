@@ -12,7 +12,8 @@ await Promise.all(
 	glob.sync(`${import.meta.dirname}/*.ts`)
 		.filter(file => !file.endsWith('index.ts') && !file.endsWith('utils.ts'))
 		.map(async file => {
-			rules[path.basename(file, '.ts')] = (await import(file)).default;
+			const normalizedPath = file.split(path.sep).join('/');
+			rules[path.basename(file, '.ts')] = (await import(normalizedPath)).default;
 		})
 );
 
