@@ -84,7 +84,7 @@ class PropertyClass {
 class AccessorClass {
 	private _value: number = 0;
 
-	//// { "title": "Getter - no rename conflicts with _value", "oldName": "getValue", "newName": "_value", "expected": "no" }
+	//// { "title": "Getter - no rename conflict with _value", "oldName": "getValue", "newName": "_value", "expected": "no" }
 	get getValue(): number {
 		return this._value;
 	}
