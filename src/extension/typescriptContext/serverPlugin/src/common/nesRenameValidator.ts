@@ -6,7 +6,6 @@ import type tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
-import type { __String } from 'typescript/lib/tsserverlibrary';
 import { PrepareNesRenameResponse, RenameKind } from './protocol';
 import { Symbols } from './typescripts';
 
@@ -108,7 +107,7 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 		}
 	}
 	token.throwIfCancellationRequested();
-	if (!isInScope(symbols, node, escapedNewName)) {
+	if (!isInScope(symbols, node, newName)) {
 		result.setCanRename(RenameKind.yes, oldName);
 		return;
 	} else {
@@ -117,13 +116,7 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 	}
 }
 
-function isInScope(symbols: Symbols, node: tt.Node, newName: __String): boolean {
+function isInScope(symbols: Symbols, node: tt.Node, newName: string): boolean {
 	const typeChecker = symbols.getTypeChecker();
-	const inScope = typeChecker.getSymbolsInScope(node, ts.SymbolFlags.All);
-	for (const symbol of inScope) {
-		if (symbol.escapedName === newName) {
-			return true;
-		}
-	}
-	return false;
+	return typeChecker.resolveName(newName, node, ts.SymbolFlags.All, /* excludeGlobals */ false) !== undefined;
 }
