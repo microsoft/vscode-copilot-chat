@@ -22,6 +22,7 @@ import { coalesce } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { autorun, derived, derivedDisposable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
@@ -251,7 +252,8 @@ type LastNesSuggestion = {
 
 class JointCompletionsProvider extends Disposable implements vscode.InlineCompletionItemProvider {
 
-	public onDidChange?: vscode.Event<void> | undefined;
+	private _onDidChange = this._register(new Emitter<void>());
+	public readonly onDidChange = this._onDidChange.event;
 
 	constructor(
 		private readonly _completionsProvider: CopilotInlineCompletionItemProvider | undefined,
@@ -261,7 +263,14 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
-		this.onDidChange = _inlineEditProvider?.onDidChange;
+		if (this._inlineEditProvider && this._inlineEditProvider.onDidChange) {
+			this._register(this._inlineEditProvider.onDidChange(() => {
+				this._onDidChange.fire();
+				// if (this._isDoingCompletionsRequest === 0) {
+				// 	// Never report a change event which would cause an interruption to the completions request.
+				// }
+			}));
+		}
 		softAssert(
 			_completionsProvider?.onDidChange === undefined,
 			'CompletionsProvider does not implement onDidChange'
@@ -282,6 +291,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	private lastNesSuggestion: null | LastNesSuggestion = null;
+	// private _isDoingCompletionsRequest = 0;
 	private provideInlineCompletionItemsInvocationCount = 0;
 
 	private async provideInlineCompletionItemsRegular(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken, tracer: ITracer): Promise<SingularCompletionList | undefined> {
@@ -369,13 +379,14 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			// prefer completions unless there are none
 			tracer.trace(`no last NES suggestion to consider`);
 			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
-			const nesP = this._invokeNESProvider(tracer, document, position, context, tokens, sw);
+			const nesP = this._invokeNESProvider(tracer, document, position, false, context, tokens, sw);
 			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 		}
 
 		tracer.trace(`last NES suggestion is for the current document, checking if it agrees with the current suggestion`);
 
-		const nesP = this._invokeNESProvider(tracer, document, position, context, tokens, sw);
+		const eliminateDebouncing = (lastNesSuggestion.docVersionId === document.version);
+		const nesP = this._invokeNESProvider(tracer, document, position, eliminateDebouncing, context, tokens, sw);
 		if (!nesP) {
 			tracer.trace(`no NES provider`);
 			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
@@ -443,7 +454,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 	}
 
-	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
+	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, eliminateDebouncing: boolean, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
 		let nesP: Promise<NesCompletionList | undefined> | undefined;
 		if (this._inlineEditProvider) {
 			tracer.trace(`- requesting NES provideInlineCompletionItems`);
