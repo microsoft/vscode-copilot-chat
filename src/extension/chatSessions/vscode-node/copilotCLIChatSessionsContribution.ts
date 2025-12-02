@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SweCustomAgent } from '@github/copilot/sdk';
+import { Attachment, SweCustomAgent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, Uri } from 'vscode';
@@ -434,6 +434,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 
 	private readonly previousReferences = new Map<string, vscode.ChatPromptReference[]>();
+	private readonly attachmentsForRequest = new Map<string, Attachment[]>();
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
 		const disposables = new DisposableStore();
@@ -493,6 +494,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			if (request.prompt.startsWith('/delegate')) {
 				await this.handleDelegateCommand(session.object, request, context, stream, token);
+			} else if (this.attachmentsForRequest.has(session.object.sessionId)) {
+				// This is a request that was created in createCLISessionAndSubmitRequest with attachments already resolved.
+				const attachments = this.attachmentsForRequest.get(session.object.sessionId)!;
+				this.attachmentsForRequest.delete(session.object.sessionId);
+				await session.object.handleRequest(request.id, request.prompt, attachments, modelId, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, additionalReferences, session.object.options.isolationEnabled, token);
@@ -811,31 +817,37 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult> {
 		let history: string | undefined;
+		const requestPromptPromise = async () => {
+			if (this.hasHistoryToSummarize(context.history)) {
+				stream.progress(vscode.l10n.t('Analyzing chat history'));
+				history = await this.chatDelegationSummaryService.summarize(context, token);
+				history = history ? `**Summary**\n${history}` : undefined;
+			}
 
-		if (this.hasHistoryToSummarize(context.history)) {
-			stream.progress(vscode.l10n.t('Analyzing chat history'));
-			history = await this.chatDelegationSummaryService.summarize(context, token);
-			history = history ? `**Summary**\n${history}` : undefined;
-		}
+			// Give priority to userPrompt if provided (e.g., from confirmation metadata)
+			userPrompt = userPrompt || request.prompt;
+			return history ? `${userPrompt}\n${history}` : userPrompt;
+		};
 
-		// Give priority to userPrompt if provided (e.g., from confirmation metadata)
-		userPrompt = userPrompt || request.prompt;
-		const requestPrompt = history ? `${userPrompt}\n${history}` : userPrompt;
+		const getWorkingDirectory = async () => {
+			// Create worktree if isolation is enabled and we don't have one yet
+			if (isolationEnabled && !workingDirectory) {
+				const workTreePath = await this.worktreeManager.createWorktree(stream);
+				workingDirectory = workTreePath ? URI.file(workTreePath) : undefined;
+			}
 
-		// Create worktree if isolation is enabled and we don't have one yet
-		if (isolationEnabled && !workingDirectory) {
-			const workTreePath = await this.worktreeManager.createWorktree(stream);
-			workingDirectory = workTreePath ? URI.file(workTreePath) : undefined;
-		}
+			// Fallback to default directory if worktree creation failed
+			if (!isolationEnabled && !workingDirectory) {
+				workingDirectory = await this.copilotCLISDK.getDefaultWorkingDirectory();
+			}
+		};
 
-		// Fallback to default directory if worktree creation failed
-		if (!workingDirectory && !isolationEnabled) {
-			workingDirectory = await this.copilotCLISDK.getDefaultWorkingDirectory();
-		}
-		const [{ prompt, attachments }, model, agent] = await Promise.all([
-			this.promptResolver.resolvePrompt(request, requestPrompt, (references || []).concat([]), isolationEnabled, token),
+		const [requestPrompt, { prompt, attachments }, model, agent] = await Promise.all([
+			requestPromptPromise(),
+			requestPromptPromise().then(prompt => this.promptResolver.resolvePrompt(request, prompt, (references || []).concat([]), isolationEnabled, token)),
 			this.getModelId(undefined, undefined, token),
 			this.getAgent(undefined, undefined, token),
+			getWorkingDirectory()
 		]);
 
 		const session = await this.sessionService.createSession({ workingDirectory, isolationEnabled, agent, model }, token);
@@ -849,12 +861,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		try {
+			this.attachmentsForRequest.set(session.object.sessionId, attachments);
 			this.sessionItemProvider.notifySessionsChange();
 			await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
 				resource: SessionIdForCLI.getResource(session.object.sessionId),
 				prompt: requestPrompt
 			});
 		} catch {
+			this.attachmentsForRequest.delete(session.object.sessionId);
 			// TODO@rebornix: handle potential missing command
 			// We don't want to block the caller anymore.
 			// The caller is most likely a chat editor or the like.
