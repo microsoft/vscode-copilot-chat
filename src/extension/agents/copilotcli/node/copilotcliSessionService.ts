@@ -127,9 +127,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
-					if (this.shouldExcludeSession(metadata.sessionId)) {
-						return;
-					}
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
@@ -337,11 +334,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			await this.context.workspaceState.update(COPILOT_CLI_WORKSPACE_SPECIFIC_SESSIONS_KEY, trackedSessions);
 		});
 	}
-
-	private shouldExcludeSession(sessionId: string): boolean {
-		return false;
-	}
-
 }
 
 function labelFromPrompt(prompt: string): string {
