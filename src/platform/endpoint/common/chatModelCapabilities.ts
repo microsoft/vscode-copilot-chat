@@ -109,7 +109,7 @@ export async function modelSupportsMultiReplaceString(model: LanguageModelChat |
  * without needing insert_edit_into_file.
  */
 export async function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code') || await isHiddenModelE(model);
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code') || await isHiddenModelE(model) || model.family.includes('gemini-3');
 }
 
 /**
@@ -117,7 +117,7 @@ export async function modelCanUseReplaceStringExclusively(model: LanguageModelCh
  * @note whether this is respected is currently controlled via EXP
  */
 export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IChatEndpoint) {
-	return model.family.includes('gemini');
+	return model.family.includes('gemini-2');
 }
 
 /**
