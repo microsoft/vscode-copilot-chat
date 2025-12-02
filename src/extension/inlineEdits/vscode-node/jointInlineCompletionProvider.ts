@@ -287,7 +287,8 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, token);
 			}
 
-			let nesEndOfLifeReason: vscode.InlineCompletionsDisposeReason | undefined = undefined;
+			let nesEndOfLifeReason: vscode.InlineCompletionsDisposeReason | undefined;
+
 			let nesP: Promise<NesCompletionList | undefined> | undefined;
 			if (this._inlineEditProvider === undefined) {
 				tracer.trace(`- no NES provider`);
@@ -295,14 +296,18 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			} else {
 				tracer.trace(`- requesting NES provideInlineCompletionItems`);
 				nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, context, nesCts.token).then(v => {
-					if (nesEndOfLifeReason !== undefined) {
-						for (const item of (v?.items as NesCompletionItem[]) ?? []) {
-							this._inlineEditProvider?.handleEndOfLifetime?.(item, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
-						}
-						this._inlineEditProvider?.handleListEndOfLifetime?.(v!, nesEndOfLifeReason);
+					if (v === undefined) {
 						return undefined;
 					}
-					return v;
+					if (nesEndOfLifeReason === undefined) {
+						return v;
+					}
+					// completions was picked over NES, mark NES items as ignored
+					for (const item of v.items) {
+						this._inlineEditProvider?.handleEndOfLifetime?.(item as NesCompletionItem, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
+					}
+					this._inlineEditProvider?.handleListEndOfLifetime?.(v!, nesEndOfLifeReason);
+					return undefined;
 				});
 			}
 
