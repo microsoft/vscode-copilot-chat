@@ -817,7 +817,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult> {
 		let history: string | undefined;
-		const requestPromptPromise = async () => {
+		const requestPromptPromise = (async () => {
 			if (this.hasHistoryToSummarize(context.history)) {
 				stream.progress(vscode.l10n.t('Analyzing chat history'));
 				history = await this.chatDelegationSummaryService.summarize(context, token);
@@ -827,7 +827,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Give priority to userPrompt if provided (e.g., from confirmation metadata)
 			userPrompt = userPrompt || request.prompt;
 			return history ? `${userPrompt}\n${history}` : userPrompt;
-		};
+		})();
 
 		const getWorkingDirectory = async () => {
 			// Create worktree if isolation is enabled and we don't have one yet
@@ -843,8 +843,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		};
 
 		const [requestPrompt, { prompt, attachments }, model, agent] = await Promise.all([
-			requestPromptPromise(),
-			requestPromptPromise().then(prompt => this.promptResolver.resolvePrompt(request, prompt, (references || []).concat([]), isolationEnabled, token)),
+			requestPromptPromise,
+			requestPromptPromise.then(prompt => this.promptResolver.resolvePrompt(request, prompt, (references || []).concat([]), isolationEnabled, token)),
 			this.getModelId(undefined, undefined, token),
 			this.getAgent(undefined, undefined, token),
 			getWorkingDirectory()
