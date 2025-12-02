@@ -177,7 +177,24 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				return disposables.add(session);
 			}
 		} as unknown as IInstantiationService;
-		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), mcpHandler, new NullCopilotCLIAgents()));
+		const state: Record<string, unknown> = {};
+		const workspaceState: vscode.Memento = {
+			keys: () => Object.keys(state),
+			get: <T>(key: string, defaultValue?: T): T => {
+				if (key in state) {
+					return state[key] as T;
+				}
+				state[key] = defaultValue;
+				return defaultValue as T;
+			},
+			update: async (key: string, value: unknown) => {
+				state[key] = value;
+			}
+		};
+		const context: IVSCodeExtensionContext = new class extends mock<IVSCodeExtensionContext>() {
+			override workspaceState: vscode.Memento = workspaceState;
+		}();
+		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), mcpHandler, new NullCopilotCLIAgents(), context, workspaceService));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
 
