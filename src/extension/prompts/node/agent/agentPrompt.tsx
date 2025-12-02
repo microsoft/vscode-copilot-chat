@@ -92,7 +92,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{this.props.endpoint.family.startsWith('gpt-5') || await isHiddenModelB(this.props.endpoint) || await isHiddenModelC(this.props.endpoint) || await isHiddenModelD(this.props.endpoint) ? (
+				{this.props.endpoint.family.startsWith('gpt-5') || this.props.endpoint.family.startsWith('arctic-fox') || await isHiddenModelB(this.props.endpoint) || await isHiddenModelC(this.props.endpoint) || await isHiddenModelD(this.props.endpoint) ? (
 					<>
 						<GPT5CopilotIdentityRule />
 						<Gpt5SafetyRule />
@@ -410,7 +410,7 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 			<Tag name='toolReferences'>
 				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
 				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')} <br />
-				{(this.props.modelFamily?.startsWith('gpt-5') || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily)) && <>
+				{(this.props.modelFamily?.startsWith('gpt-5') || this.props.modelFamily?.startsWith('arctic-fox') || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily)) && <>
 					Start by using the most relevant tool attached to this message—the user expects you to act with it first.<br />
 				</>}
 			</Tag>

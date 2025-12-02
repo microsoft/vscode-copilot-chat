@@ -743,11 +743,11 @@ class CodexStyleGPT51CodexPrompt extends PromptElement<DefaultAgentPromptProps> 
 
 class OpenAIPromptResolver implements IAgentPrompt {
 
-	static readonly familyPrefixes = ['gpt', 'o4-mini', 'o3-mini', 'OpenAI'];
+	static readonly familyPrefixes = ['gpt', 'o4-mini', 'o3-mini', 'OpenAI', 'arctic-fox'];
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
 
-		if (endpoint.model.startsWith('gpt-5.1-codex')) {
+		if (endpoint.model.startsWith('gpt-5.1-codex') || endpoint.model.startsWith('arctic-fox')) {
 			return CodexStyleGPT51CodexPrompt;
 		}
 
