@@ -118,12 +118,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	async _getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
-			const mementoUpdateCompeted = this._mementoUpdator.queue(async () => Promise.resolve());
+			const mementoUpdateCompleted = this._mementoUpdator.queue(async () => Promise.resolve());
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
 
 			// Wait for any pending memento updates to complete before filtering sessions.
-			await mementoUpdateCompeted;
+			await mementoUpdateCompleted;
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata) => {
@@ -323,7 +323,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			return false;
 		}
 		const trackedSessions = this.context.workspaceState.get<Record<string, { createdDateTime: number }>>(COPILOT_CLI_WORKSPACE_SPECIFIC_SESSIONS_KEY, {});
-		return Boolean(trackedSessions[sessionId]) ? false : true;
+		return !(sessionId in trackedSessions);
 	}
 
 }

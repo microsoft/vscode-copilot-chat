@@ -27,7 +27,7 @@ export interface IChatDelegationSummaryService {
 
 export class ChatDelegationSummaryService implements IChatDelegationSummaryService {
 	declare _serviceBrand: undefined;
-	private readonly _mementoUpdator = new Sequencer();
+	private readonly _mementoUpdater = new Sequencer();
 	private readonly _summaries = new ResourceMap<string>();
 	public readonly scheme = SummaryFileScheme;
 	constructor(
@@ -44,7 +44,7 @@ export class ChatDelegationSummaryService implements IChatDelegationSummaryServi
 			return;
 		}
 		summary = summary.substring(0, 100);
-		await this._mementoUpdator.queue(async () => {
+		await this._mementoUpdater.queue(async () => {
 			const details = this.context.globalState.get<Record<string, { summary: string; createdDateTime: number }>>(DelegationSummaryMementoKey, {});
 
 			details[sessionId] = { summary, createdDateTime: Date.now() };
