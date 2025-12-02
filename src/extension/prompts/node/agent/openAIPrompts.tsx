@@ -746,7 +746,7 @@ class OpenAIPromptResolver implements IAgentPrompt {
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
 
-		if (endpoint.model.startsWith('gpt-5.1-codex') || endpoint.model.startsWith('arctic-fox')) {
+		if (endpoint.model.startsWith('gpt-5.1-codex')) {
 			return CodexStyleGPT51CodexPrompt;
 		}
 
