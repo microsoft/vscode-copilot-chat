@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { assertNever } from '../../../../util/vs/base/common/assert';
-import { vBoolean, vEnum, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
+import { IValidator, vBoolean, vEnum, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
 
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
@@ -56,6 +56,10 @@ export enum PromptingStrategy {
 	Nes41Miniv3 = 'nes41miniv3',
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
+}
+
+export function isPromptingStrategy(value: string): value is PromptingStrategy {
+	return (Object.values(PromptingStrategy) as string[]).includes(value);
 }
 
 export enum ResponseFormat {
@@ -123,7 +127,7 @@ export interface ModelConfiguration {
 	includeTagsInCurrentFile: boolean;
 }
 
-export const MODEL_CONFIGURATION_VALIDATOR = vObj({
+export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vObj({
 	'modelName': vRequired(vString()),
 	'promptingStrategy': vUnion(vEnum(...Object.values(PromptingStrategy)), vUndefined()),
 	'includeTagsInCurrentFile': vRequired(vBoolean()),

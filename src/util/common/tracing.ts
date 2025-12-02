@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+
 type LogFn = (message: string) => void;
 
 export interface SubTracingOptions {
@@ -82,22 +83,43 @@ export class Tracer implements ITracer {
 	}
 
 	private stringify(value: unknown): string {
-		if (!value) {
-			return JSON.stringify(value);
-		}
-		if (typeof value === 'string') {
-			return value;
-		} else if (typeof value === 'object') {
-			const toStringValue = value.toString();
+
+		function stringifyObj(obj: Object): string {
+			const toStringValue = obj.toString();
 			if (toStringValue && toStringValue !== '[object Object]') {
 				return toStringValue;
 			}
-			if (value instanceof Error) {
-				return value.stack || value.message;
+			if (obj instanceof Error) {
+				return obj.stack || obj.message;
 			}
-			return JSON.stringify(value, null, '\t');
+			return JSON.stringify(obj, null, 2);
 		}
-		return value.toString();
+
+		if (!value) {
+			return JSON.stringify(value, null, 2);
+		}
+		if (typeof value === 'string') {
+			return value;
+		}
+
+		if (typeof value === 'object') {
+			return stringifyObj(value);
+		}
+
+		if (typeof value === 'function') {
+			return value.name ? `[Function: ${value.name}]` : '[Function]';
+		}
+
+		if (Array.isArray(value)) {
+			return `[${value.map(v => this.stringify(v)).join(', ')}]`;
+		}
+
+		const valueToString = value.toString();
+		if (valueToString && valueToString !== '[object Object]') {
+			return valueToString;
+		}
+
+		return stringifyObj(value as Object);
 	}
 }
 
