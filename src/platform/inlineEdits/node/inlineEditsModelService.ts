@@ -176,24 +176,19 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const useSlashModels = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUseSlashModels, this._expService);
 		if (useSlashModels && fetchedNesModels && fetchedNesModels.length > 0) {
-			tracer.trace('Processing fetched models...');
-			if (fetchedNesModels === undefined) {
-				tracer.trace('No fetched models available.');
-			} else {
-				tracer.trace(`Fetched ${fetchedNesModels.length} models.`);
-				const filteredFetchedModels = filterMap(fetchedNesModels, (m) => {
-					if (!isPromptingStrategy(m.capabilities.promptStrategy)) {
-						return undefined;
-					}
-					return {
-						modelName: m.name,
-						promptingStrategy: m.capabilities.promptStrategy,
-						includeTagsInCurrentFile: false, // FIXME@ulugbekna: determine this based on model capabilities and config
-					} satisfies Model;
-				});
-				tracer.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
-				pushMany(models, filteredFetchedModels);
-			}
+			tracer.trace(`Processing ${fetchedNesModels.length} fetched models...`);
+			const filteredFetchedModels = filterMap(fetchedNesModels, (m) => {
+				if (!isPromptingStrategy(m.capabilities.promptStrategy)) {
+					return undefined;
+				}
+				return {
+					modelName: m.name,
+					promptingStrategy: m.capabilities.promptStrategy,
+					includeTagsInCurrentFile: false, // FIXME@ulugbekna: determine this based on model capabilities and config
+				} satisfies Model;
+			});
+			tracer.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
+			pushMany(models, filteredFetchedModels);
 		} else {
 			// push default model if /models doesn't give us any models
 			tracer.trace(`adding built-in default model: useSlashModels ${useSlashModels}, fetchedNesModels ${fetchedNesModels}`);
