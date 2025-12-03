@@ -226,7 +226,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 
 			// For Anthropic models with thinking enabled, set the thinking on the first round
 			// so it gets rendered as the first thinking block after summarization
-			if (thinkingForFirstRoundAfterSummarization && toolCallRounds.length > 0 && !toolCallRounds[0].thinking) {
+			if ((this.props.endpoint.model.startsWith('claude') || this.props.endpoint.model.startsWith('Anthropic')) && thinkingForFirstRoundAfterSummarization && toolCallRounds.length > 0 && !toolCallRounds[0].thinking) {
 				toolCallRounds[0].thinking = thinkingForFirstRoundAfterSummarization;
 			}
 
@@ -741,7 +741,6 @@ export class SummarizedConversationHistoryPropsBuilder {
 			for (let i = props.promptContext.toolCallRounds.length - 1; i >= 0; i--) {
 				const round = props.promptContext.toolCallRounds[i];
 				if (round.thinking) {
-					console.log('saving thinking 1`');
 					return round.thinking;
 				}
 			}
