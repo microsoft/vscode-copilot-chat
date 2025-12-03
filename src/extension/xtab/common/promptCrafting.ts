@@ -72,7 +72,9 @@ ${areaAroundCodeToEdit}`;
 
 	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 && opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified;
 
-	const prompt = relatedInformation + (includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt) + postScript;
+	const packagedPrompt = includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt;
+	const mainPromptWithRelatedInfo = addRelatedInformation(relatedInformation, packagedPrompt, opts.languageContext.traitPosition);
+	const prompt = mainPromptWithRelatedInfo + postScript;
 
 	const trimmedPrompt = prompt.trim();
 
@@ -81,6 +83,20 @@ ${areaAroundCodeToEdit}`;
 
 function wrapInBackticks(content: string) {
 	return `\`\`\`\n${content}\n\`\`\``;
+}
+
+function addRelatedInformation(relatedInformation: string, prompt: string, position: 'before' | 'after'): string {
+	if (position === 'before') {
+		return appendWithNewLineIfNeeded(relatedInformation, prompt);
+	}
+	return appendWithNewLineIfNeeded(prompt, relatedInformation);
+}
+
+function appendWithNewLineIfNeeded(base: string, toAppend: string): string {
+	if (base.endsWith('\n') || toAppend.startsWith('\n')) {
+		return base + toAppend;
+	}
+	return base + '\n' + toAppend;
 }
 
 function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
@@ -134,7 +150,7 @@ function getRelatedInformation(langCtx: LanguageContextResponse | undefined): st
 		relatedInformation.push(`${trait.name}: ${trait.value}`);
 	}
 
-	return `Consider this related information:\n${relatedInformation.join('\n')}\n\n`;
+	return `Consider this related information:\n${relatedInformation.join('\n')}`;
 }
 
 function getEditDiffHistory(

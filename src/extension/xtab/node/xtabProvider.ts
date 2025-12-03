@@ -999,6 +999,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				enabledLanguages: this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabledLanguages),
 				enabledDiagnostics: this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.DiagnosticsContextProvider, this.expService),
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
+				traitPosition: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextTraitPosition, this.expService),
 			}),
 			diffHistory: {
 				nEntries: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this.expService),
@@ -1048,16 +1049,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enabledDiagnostics: diagnosticsEnabled }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enabledDiagnostics: boolean }): LanguageContextOptions {
+	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enabledDiagnostics: diagnosticsEnabled, traitPosition }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enabledDiagnostics: boolean; traitPosition: 'before' | 'after' }): LanguageContextOptions {
 		if (languageId in enabledLanguages) {
-			return { enabled: enabledLanguages[languageId], maxTokens };
+			return { enabled: enabledLanguages[languageId], maxTokens, traitPosition };
 		}
 
 		if (diagnosticsEnabled) {
-			return { enabled: true, maxTokens };
+			return { enabled: true, maxTokens, traitPosition };
 		}
 
-		return { enabled, maxTokens };
+		return { enabled, maxTokens, traitPosition };
 	}
 
 	private getEndpoint(configuredModelName: string | undefined): ChatEndpoint {
