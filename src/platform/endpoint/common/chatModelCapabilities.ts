@@ -26,6 +26,11 @@ const VSC_MODEL_HASHES_A = [
 	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
 ];
 
+const HIDDEN_MODEL_B_HASHES = [
+	'31a2d5282683edb3a22c565f199aa96fb9ffb3107af35aad92ee1cd567cfc25d',
+	'dd832404e8eeb90793f0369b96ed1702e0e22487a58eb4c1f285a4af5c4f6f21'
+];
+
 // Currently empty, will be used in future for a different set of VSC models
 const VSC_MODEL_HASHES_B: string[] = [];
 
@@ -47,6 +52,11 @@ function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 export function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	const h = getCachedSha256Hash(model.family);
 	return HIDDEN_MODEL_A_HASHES.includes(h);
+}
+
+export function isHiddenModelB(modelFamily: string) {
+	const h = getCachedSha256Hash(modelFamily);
+	return HIDDEN_MODEL_B_HASHES.includes(h);
 }
 
 export function isHiddenModelE(model: LanguageModelChat | IChatEndpoint) {
@@ -93,14 +103,14 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
  * Model supports apply_patch as an edit tool.
  */
 export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): boolean {
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || model.family === 'arctic-fox' || isVSCModelA(model) || isVSCModelB(model);
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || model.family === 'arctic-fox' || isVSCModelA(model) || isVSCModelB(model) || isHiddenModelB(model.family);
 }
 
 /**
  * Model prefers JSON notebook representation.
  */
 export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || model.family === 'arctic-fox';
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || model.family === 'arctic-fox' || isHiddenModelB(model.family);
 }
 
 /**
@@ -177,7 +187,7 @@ export function isGpt5PlusFamily(model: LanguageModelChat | IChatEndpoint | stri
 	}
 
 	const family = typeof model === 'string' ? model : model.family;
-	return !!family.startsWith('gpt-5') || family === 'arctic-fox';
+	return !!family.startsWith('gpt-5') || family === 'arctic-fox' || isHiddenModelB(family);
 }
 
 /**
