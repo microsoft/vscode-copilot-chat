@@ -310,6 +310,12 @@ export class InlineChatIntent implements IIntent {
 				}));
 			}
 
+			if (result.toolCalls.length === 0) {
+				// BAILOUT: when no tools have been used, invoke the exit tool manually
+				await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+				break;
+			}
+
 			if (result.failedEdits.length === 0 || token.isCancellationRequested) {
 				// DONE
 				break;
