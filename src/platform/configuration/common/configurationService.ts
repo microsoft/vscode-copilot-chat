@@ -664,9 +664,6 @@ export namespace ConfigKey {
 		export const WorkspacePreferredEmbeddingsModel = defineAndMigrateExpSetting<string>('chat.advanced.workspace.preferredEmbeddingsModel', 'chat.workspace.preferredEmbeddingsModel', '');
 		export const NotebookAlternativeDocumentFormat = defineAndMigrateExpSetting<AlternativeNotebookFormat>('chat.advanced.notebook.alternativeFormat', 'chat.notebook.alternativeFormat', AlternativeNotebookFormat.xml);
 		export const UseAlternativeNESNotebookFormat = defineAndMigrateExpSetting<boolean>('chat.advanced.notebook.alternativeNESFormat.enabled', 'chat.notebook.alternativeNESFormat.enabled', false);
-		/** Configure temporal context max age */
-		export const TemporalContextMaxAge = defineAndMigrateExpSetting<number>('chat.advanced.temporalContext.maxAge', 'chat.temporalContext.maxAge', 100);
-		export const TemporalContextPreferSameLang = defineAndMigrateExpSetting<boolean>('chat.advanced.temporalContext.preferSameLang', 'chat.temporalContext.preferSameLang', false);
 
 		export const InlineChatSelectionRatioThreshold = defineSetting<number>('chat.inlineChat.selectionRatioThreshold', ConfigType.ExperimentBased, 0);
 

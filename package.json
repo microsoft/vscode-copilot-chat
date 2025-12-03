@@ -3655,16 +3655,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.temporalContext.maxAge": {
-						"type": "number",
-						"default": 100,
-						"markdownDescription": "%github.copilot.config.temporalContext.maxAge%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.debug.requestLogger.maxEntries": {
 						"type": "number",
 						"default": 100,
@@ -3678,16 +3668,6 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.temporalContext.preferSameLang": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.temporalContext.preferSameLang%",
 						"tags": [
 							"advanced",
 							"experimental",
