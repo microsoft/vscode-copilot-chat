@@ -2507,11 +2507,6 @@
 						"default": true,
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
-					"github.copilot.chat.agent.delegate.autoCommitAndPush": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.agent.delegate.autoCommitAndPush%"
-					},
 					"github.copilot.enable": {
 						"type": "object",
 						"scope": "window",

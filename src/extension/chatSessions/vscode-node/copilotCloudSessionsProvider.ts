@@ -8,7 +8,6 @@ import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
@@ -141,7 +140,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private activeSessionIds: Set<string> = new Set();
 	private activeSessionPollingInterval: ReturnType<typeof setInterval> | undefined;
 	private readonly plainTextRenderer = new PlainTextRenderer();
-	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService, this.configurationService);
+	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService);
 
 	// Title
 	private TITLE = vscode.l10n.t('Delegate to cloud agent');
@@ -149,6 +148,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	// Buttons (used for matching, be careful changing!)
 	private readonly AUTHORIZE = vscode.l10n.t('Authorize');
 	private readonly COMMIT = vscode.l10n.t('Commit Changes');
+	private readonly PUSH_BRANCH = vscode.l10n.t('Push Branch');
 	private readonly DELEGATE = vscode.l10n.t('Delegate');
 	private readonly CANCEL = vscode.l10n.t('Cancel');
 
@@ -156,7 +156,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly BASE_MESSAGE = vscode.l10n.t('Cloud agent works asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
 	private readonly AUTHORIZE_MESSAGE = vscode.l10n.t('Cloud agent requires elevated GitHub access to proceed.');
 	private readonly COMMIT_MESSAGE = vscode.l10n.t('This workspace has uncommitted changes. Should these changes be pushed and included in cloud agent\'s work?');
-	private readonly NON_DEFAULT_BRANCH_MESSAGE = (baseBranch: string) => vscode.l10n.t('Cloud agent will start working from the checked out branch \'{0}\'.', baseBranch);
+	private readonly PUSH_BRANCH_MESSAGE = (baseRef: string, defaultBranch: string) => vscode.l10n.t('Push your currently checked out branch `{0}`, or start from the default branch `{1}`?', baseRef, defaultBranch);
 
 	// Workspace storage keys
 	private readonly WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
@@ -170,7 +170,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IGithubRepositoryService private readonly _githubRepositoryService: IGithubRepositoryService,
 		@IChatDelegationSummaryService private readonly _chatDelegationSummaryService: IChatDelegationSummaryService,
@@ -749,9 +748,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		context: vscode.ChatContext,
 		token: vscode.CancellationToken,
 		metadata: ConfirmationMetadata,
-		head_ref?: string): Promise<{ uri: vscode.Uri; title: string; description: string; author: string; linkTag: string }> {
-
-		await this.gitOperationsManager.validateRemoteHasBaseRef(stream);
+		base_ref?: string,
+		head_ref?: string
+	): Promise<{ uri: vscode.Uri; title: string; description: string; author: string; linkTag: string }> {
 
 		let history: string | undefined;
 
@@ -771,11 +770,21 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		const { result, processedReferences } = await this.extractReferences(metadata.references, !!head_ref);
 
+		if (!base_ref) {
+			const repoId = await getRepoId(this._gitService);
+			if (!repoId) {
+				throw new Error(vscode.l10n.t('Open a GitHub repository to use the cloud agent.'));
+			}
+			const { default_branch } = await this._githubRepositoryService.getRepositoryInfo(repoId.org, repoId.repo);
+			base_ref = default_branch;
+		}
+
 		const { number, sessionId } = await this.invokeRemoteAgent(
 			metadata.prompt,
 			[result, history].filter(Boolean).join('\n\n').trim(),
 			token,
 			stream,
+			base_ref,
 			customAgentName,
 			head_ref,
 		);
@@ -872,11 +881,30 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				this.logService.error(`Commit and push failed: ${error}`);
 				throw vscode.l10n.t('{0}. Commit or stash your changes and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to commit and push changes.'));
 			}
+		} else if (selection.includes(this.PUSH_BRANCH.toUpperCase())) {
+			try {
+				stream.progress(vscode.l10n.t('Pushing base branch to remote'));
+				const baseBranch = await this.gitOperationsManager.pushBaseRefToRemote();
+				stream.markdown(vscode.l10n.t('Base branch `{0}`pushed to remote.', baseBranch));
+			} catch (error) {
+				this.logService.error(`Push branch failed: ${error}`);
+				throw vscode.l10n.t('{0}. Push the current branch to remote and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to push current branch.'));
+			}
 		}
+
+		const base_ref: string = await (async () => {
+			const res = await this.checkBaseBranchPresentOnRemote();
+			if (!res) {
+				// Unexpected
+				throw new Error('Repo base branch is not detected on remote. Push your branch and try again.');
+			}
+			return (res?.missingOnRemote || !res?.baseRef) ? res.repoDefaultBranch : res?.baseRef;
+		})();
+		stream.progress(vscode.l10n.t('Validating branch `{0}` exists on remote', base_ref));
 
 		// Now trigger delegation
 		try {
-			await this.delegate(request, stream, context, token, metadata, head_ref);
+			await this.delegate(request, stream, context, token, metadata, base_ref, head_ref);
 		} catch (error) {
 			this.logService.error(`Failure in delegation: ${error}`);
 			throw new Error(vscode.l10n.t('{0}', (error instanceof Error ? error.message : String(error))));
@@ -915,20 +943,23 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	/**
-	 * Returns the base branch name if it differs from the default branch, otherwise returns undefined.
+	 *
 	 */
-	private async getNonDefaultBranchInfo(): Promise<string | undefined> {
+	private async checkBaseBranchPresentOnRemote(): Promise<{ missingOnRemote: boolean; baseRef: string; repoDefaultBranch: string } | undefined> {
 		try {
 			const repoId = await getRepoId(this._gitService);
 			if (!repoId) {
 				return undefined;
 			}
-			const { baseRef } = await this.gitOperationsManager.repoInfo();
-			const repoInfo = await this._githubRepositoryService.getRepositoryInfo(repoId.org, repoId.repo);
-			if (repoInfo.default_branch && baseRef !== repoInfo.default_branch) {
-				return baseRef;
+			const { baseRef, repository, remoteName } = await this.gitOperationsManager.repoInfo();
+			const remoteRepoInfo = await this._githubRepositoryService.getRepositoryInfo(repoId.org, repoId.repo);
+			const remoteHasRef = await this.gitOperationsManager.checkIfRemoteHasRef(repository, remoteName, baseRef);
+			if (remoteHasRef) {
+				// Remote HAS the base branch, no action needed.
+				return { missingOnRemote: false, baseRef, repoDefaultBranch: remoteRepoInfo.default_branch };
 			}
-			return undefined;
+			// Remote is MISSING the base branch
+			return { missingOnRemote: true, baseRef, repoDefaultBranch: remoteRepoInfo.default_branch };
 		} catch (error) {
 			this.logService.debug(`Failed to check default branch: ${error}`);
 			return undefined;
@@ -945,7 +976,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		const needsPermissiveAuth = !this._authenticationService.permissiveGitHubSession;
 		const hasUncommittedChanges = await this.detectedUncommittedChanges();
-		const nonDefaultBranch = await this.getNonDefaultBranchInfo();
+		const baseBranchInfo = await this.checkBaseBranchPresentOnRemote();
 
 		if (needsPermissiveAuth && hasUncommittedChanges) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
@@ -954,7 +985,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				vscode.l10n.t('{0} and {1}', this.AUTHORIZE, this.COMMIT),
 				this.AUTHORIZE,
 			);
-		} else if (needsPermissiveAuth) {
+		} else if (needsPermissiveAuth && baseBranchInfo?.missingOnRemote) {
+			const { baseRef, repoDefaultBranch } = baseBranchInfo;
+			message += '\n\n' + this.AUTHORIZE_MESSAGE;
+			message += '\n\n' + this.PUSH_BRANCH_MESSAGE(baseRef, repoDefaultBranch);
+			buttons.unshift(
+				vscode.l10n.t('{0} and {1}', this.AUTHORIZE, this.PUSH_BRANCH),
+				this.AUTHORIZE,
+			);
+		}
+		else if (needsPermissiveAuth) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
 			buttons.unshift(
 				this.AUTHORIZE,
@@ -965,10 +1005,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				vscode.l10n.t('{0} and {1}', this.COMMIT, this.DELEGATE),
 				this.DELEGATE,
 			);
-		}
-
-		if (nonDefaultBranch) {
-			message += '\n\n' + this.NON_DEFAULT_BRANCH_MESSAGE(nonDefaultBranch);
+		} else if (baseBranchInfo?.missingOnRemote) {
+			const { baseRef, repoDefaultBranch } = baseBranchInfo;
+			message += '\n\n' + this.PUSH_BRANCH_MESSAGE(baseRef, repoDefaultBranch);
+			buttons.unshift(
+				vscode.l10n.t('{0} and {1}', this.PUSH_BRANCH, this.DELEGATE),
+				this.DELEGATE,
+			);
 		}
 
 		// Check if the message has been modified from the default
@@ -1051,7 +1094,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					prompt: request.prompt,
 					references: request.references,
 					chatContext: context
-				} satisfies ConfirmationMetadata
+				} satisfies ConfirmationMetadata,
 			);
 		}
 	}
@@ -1510,10 +1553,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return undefined;
 	}
 
-	private async invokeRemoteAgent(prompt: string, problemContext: string, token: vscode.CancellationToken, stream: vscode.ChatResponseStream, customAgentName?: string, head_ref?: string): Promise<{ number: number; sessionId: string }> {
+	private async invokeRemoteAgent(prompt: string, problemContext: string, token: vscode.CancellationToken, stream: vscode.ChatResponseStream, base_ref: string, customAgentName?: string, head_ref?: string): Promise<{ number: number; sessionId: string }> {
 		const title = extractTitle(prompt, problemContext);
 		const { problemStatement, isTruncated } = truncatePrompt(this.logService, prompt, problemContext);
-		const { baseRef } = await this.gitOperationsManager.repoInfo();
 		const repoId = await getRepoId(this._gitService);
 
 		if (!repoId) {
@@ -1545,7 +1587,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			pull_request: {
 				title,
 				body_placeholder: formatBodyPlaceholder(title),
-				base_ref: baseRef,
+				base_ref,
 				body_suffix,
 				...(head_ref && { head_ref }),
 			}
@@ -1561,7 +1603,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				case 422:
 					// NOTE: Although earlier checks should prevent this, ensure that if we end up
 					//       with a 422 from the API, we give a useful error message
-					throw new Error(vscode.l10n.t('The cloud agent was unable to create a pull request with the specified base branch \'{0}\'. Please push branch to the remote and try again.', baseRef));
+					throw new Error(vscode.l10n.t('The cloud agent was unable to create a pull request with the specified base branch `{0}`. Please push branch to the remote and try again.', base_ref));
 				default:
 					throw new Error(vscode.l10n.t('Received invalid response {0} from cloud agent.', statusCode ? statusCode : ''));
 			}
