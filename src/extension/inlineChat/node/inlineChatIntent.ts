@@ -21,10 +21,10 @@ import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networ
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
+import { toErrorMessage } from '../../../util/common/errorMessage';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { toErrorMessage } from '../../../util/common/errorMessage';
 import { Event } from '../../../util/vs/base/common/event';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { assertType } from '../../../util/vs/base/common/types';
