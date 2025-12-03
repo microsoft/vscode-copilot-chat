@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
-import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
@@ -156,7 +155,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const copilotSDK = new CopilotCLISDK(vscodeExtensionContext, accessor.get(IEnvService), logger, accessor.get(IInstantiationService), accessor.get(IAuthenticationService), workspaceService);
 		const logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
-		const configurationService = accessor.get(IConfigurationService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
 			override async loadMcpConfig(_workingDirectory: Uri | undefined) {
 				return undefined;
@@ -204,7 +202,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			telemetry,
 			tools,
 			instantiationService,
-			configurationService,
 			copilotSDK,
 			logger,
 			new PromptsServiceImpl(new NullWorkspaceService()),
