@@ -80,10 +80,12 @@ import { NullGitExtensionService } from '../../platform/git/common/nullGitExtens
 import { IIgnoreService, NullIgnoreService } from '../../platform/ignore/common/ignoreService';
 import { DocumentId } from '../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../platform/inlineEdits/common/inlineEditLogContext';
+import { IInlineEditsModelService } from '../../platform/inlineEdits/common/inlineEditsModelService';
 import { ObservableGit } from '../../platform/inlineEdits/common/observableGit';
 import { IObservableDocument, ObservableWorkspace } from '../../platform/inlineEdits/common/observableWorkspace';
 import { NesHistoryContextProvider } from '../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
+import { InlineEditsModelService } from '../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILanguageContextProviderService } from '../../platform/languageContextProvider/common/languageContextProviderService';
 import { NullLanguageContextProviderService } from '../../platform/languageContextProvider/common/nullLanguageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../platform/languages/common/languageDiagnosticsService';
@@ -91,6 +93,8 @@ import { TestLanguageDiagnosticsService } from '../../platform/languages/common/
 import { ConsoleLog, ILogService, LogLevel as InternalLogLevel, LogServiceImpl } from '../../platform/log/common/logService';
 import { FetchOptions, IAbortController, IFetcherService, PaginationOptions } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
+import { IProxyModelsService } from '../../platform/proxyModels/common/proxyModelsService';
+import { ProxyModelsService } from '../../platform/proxyModels/node/proxyModelsService';
 import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../platform/requestLogger/node/requestLogger';
 import { ISimulationTestContext, NulSimulationTestContext } from '../../platform/simulationTestContext/common/simulationTestContext';
@@ -110,10 +114,6 @@ import { URI } from '../../util/vs/base/common/uri';
 import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
-import { IInlineEditsModelService } from '../../platform/inlineEdits/common/inlineEditsModelService';
-import { InlineEditsModelService } from '../../platform/inlineEdits/node/inlineEditsModelService';
-import { IProxyModelsService } from '../../platform/proxyModels/common/proxyModelsService';
-import { ProxyModelsService } from '../../platform/proxyModels/node/proxyModelsService';
 export {
 	IAuthenticationService, ICAPIClientService, IEndpointProvider, IExperimentationService, IIgnoreService, ILanguageContextProviderService
 };
@@ -614,7 +614,7 @@ export interface IInlineCompletionsProviderOptions {
 	readonly ignoreService?: IIgnoreService;
 	readonly waitForTreatmentVariables?: boolean;
 	readonly endpointProvider: IEndpointProvider;
-	readonly capiClientService: ICAPIClientService;
+	readonly capiClientService?: ICAPIClientService;
 	readonly citationHandler?: IInlineCompletionsCitationHandler;
 }
 
@@ -701,7 +701,8 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	builder.define(IExperimentationService, new SyncDescriptor(SimpleExperimentationService, [options.waitForTreatmentVariables]));
 	builder.define(IEndpointProvider, options.endpointProvider);
-	builder.define(ICAPIClientService, options.capiClientService);
+	builder.define(ICAPIClientService, options.capiClientService || new SyncDescriptor(CAPIClientImpl));
+	builder.define(IFetcherService, new SyncDescriptor(SingleFetcherService, [fetcher]));
 	builder.define(ICompletionsTelemetryService, new SyncDescriptor(CompletionsTelemetryServiceBridge));
 	builder.define(ICompletionsRuntimeModeService, RuntimeMode.fromEnvironment(options.isRunningInTest ?? false));
 	builder.define(ICompletionsCacheService, new CompletionsCache());
