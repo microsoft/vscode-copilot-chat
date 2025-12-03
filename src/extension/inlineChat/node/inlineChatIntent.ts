@@ -474,6 +474,7 @@ export class InlineChatIntent implements IIntent {
 
 		const outcomeComputer = new InteractionOutcomeComputer(request.location2.document.uri);
 		const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChatEditCodePrompt, {
+			ignoreCustomInstructions: true,
 			documentContext,
 			promptContext: {
 				query: request.prompt,
