@@ -328,10 +328,11 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		try {
 			const jsonData: unknown = await r.json();
-			if (!WireTypes.ModelList.is(jsonData)) {
-				throw new Error('Invalid model list response'); // TODO@ulugbekna: add telemetry
+			const validatedData = WireTypes.ModelList.validator.validate(jsonData);
+			if (validatedData.error) {
+				throw new Error(`Invalid /models response data: ${validatedData.error.message}`); // TODO@ulugbekna: add telemetry
 			}
-			return jsonData;
+			return validatedData.content;
 		} catch (e) {
 			this._logService.error(e, 'Failed to process /models response');
 			return;
