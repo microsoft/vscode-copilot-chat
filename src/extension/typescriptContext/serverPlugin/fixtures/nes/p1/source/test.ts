@@ -137,3 +137,30 @@ export namespace N1 {
 		return param.toString();
 	}
 }
+
+export function sameName(): void {
+}
+
+export namespace N2 {
+	function foo(): void {
+	}
+	//// { "title": "Namespace function - rename", "oldName": "bar", "newName": "sameName", "expected": "yes" }
+	function bar(): void {
+	}
+
+	//// { "title": "Namespace function - rename", "oldName": "baz", "newName": "foo", "expected": "no" }
+	function baz(): void {
+	}
+}
+
+export function myFunc(): void {
+	function foo(): void {
+	}
+	//// { "title": "Function function - rename", "oldName": "bar", "newName": "sameName", "expected": "yes" }
+	function bar(): void {
+	}
+
+	//// { "title": "Function function - rename", "oldName": "baz", "newName": "foo", "expected": "no" }
+	function baz(): void {
+	}
+}

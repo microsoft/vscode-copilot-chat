@@ -7,7 +7,7 @@ import TS from './typescript';
 const ts = TS();
 
 import { PrepareNesRenameResponse, RenameKind } from './protocol';
-import { Nodes, Symbols } from './typescripts';
+import { Symbols } from './typescripts';
 
 export class PrepareNesRenameResult {
 
@@ -185,16 +185,25 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 	}
 }
 
-function hasSameSymbolOnDeclarationSide(symbols: Symbols, symbol: tt.Symbol, declarations: tt.Declaration[], newName: string): boolean {
+function hasSameSymbolOnDeclarationSide(symbols: Symbols, _symbol: tt.Symbol, declarations: tt.Declaration[], newName: string): boolean {
 	const typeChecker = symbols.getTypeChecker();
+	let inModule: boolean | undefined = undefined;
 	for (const declaration of declarations) {
 		const inScope = typeChecker.resolveName(newName, declaration, ts.SymbolFlags.All, /*excludeGlobals*/ false);
 		if (inScope !== undefined) {
-			const block = Nodes.getParentOfKind(declaration, ts.SyntaxKind.Block);
-			if (block === undefined) {
-
+			inModule = inModule ?? isInModule(symbols, declarations);
+			if (!inModule) {
+				return true;
+			} else {
+				const block = getParentBlock(declaration);
+				if (block === undefined) {
+					return true;
+				} else {
+					if (isInSameBlockScopeDeclared(inScope, block)) {
+						return true;
+					}
+				}
 			}
-			return true;
 		}
 	}
 	return false;
@@ -209,4 +218,31 @@ function isInModule(symbols: Symbols, declarations: tt.Declaration[]): boolean {
 		}
 	}
 	return true;
+}
+
+function isInSameBlockScopeDeclared(symbol: tt.Symbol, block: tt.Block | tt.ModuleBlock | tt.SourceFile): boolean {
+	const declarations: tt.Declaration[] | undefined = symbol.getDeclarations();
+	if (declarations === undefined) {
+		return false;
+	}
+	for (const declaration of declarations) {
+		const parentBlock = getParentBlock(declaration);
+		if (parentBlock === block) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function getParentBlock(node: tt.Node): tt.Block | tt.ModuleBlock | tt.SourceFile | undefined {
+	let current: tt.Node | undefined = node;
+	while (current !== undefined) {
+		if (current.kind === ts.SyntaxKind.Block ||
+			current.kind === ts.SyntaxKind.ModuleBlock ||
+			current.kind === ts.SyntaxKind.SourceFile) {
+			return current as tt.Block | tt.ModuleBlock | tt.SourceFile;
+		}
+		current = current.parent;
+	}
+	return undefined;
 }
