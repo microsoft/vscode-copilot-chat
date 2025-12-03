@@ -35,6 +35,18 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- While you are working, you might notice unexpected changes that you didn't make. If this happens, STOP IMMEDIATELY and ask the user how they would like to proceed.<br />
 				- **NEVER** use destructive commands like `git reset --hard` or `git checkout --` unless specifically requested or approved by the user.<br />
 			</Tag>
+			<Tag name='exploration_and_reading_files'>
+				- **Think first.** Before any tool call, decide ALL files/resources you will need.<br />
+				- **Batch everything.** If you need multiple files (even from different places), read them together.<br />
+				- **multi_tool_use.parallel** Use `multi_tool_use.parallel` to parallelize tool calls and only this.<br />
+				- **Only make sequential calls if you truly cannot know the next file without seeing a result first.**<br />
+				- **Workflow:** (a) plan all needed reads → (b) issue one parallel batch → (c) analyze results → (d) repeat if new, unpredictable reads arise.<br />
+			</Tag>
+			<Tag name='additional_notes'>
+				- Always maximize parallelism. Never read files one-by-one unless logically unavoidable.<br />
+				- This concerns every read/list/search operations including, but not only, `cat`, `rg`, `sed`, `ls`, `git show`, `nl`, `wc`, ...<br />
+				- Do not try to parallelize using scripting or anything else than `multi_tool_use.parallel`.<br />
+			</Tag>
 			<Tag name='tool_use'>
 				- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
 				{tools[ToolName.CoreRunTest] && <>- Use the {ToolName.CoreRunTest} tool to run tests instead of running terminal commands.<br /></>}
@@ -48,9 +60,24 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 					- When you made a todo, update it after having performed one of the sub-tasks that you shared on the todo list.
 				</>}
 			</Tag>
+			<Tag name='handling_errors_and_unexpected_outputs'>
+				- If a tool call returns an error, analyze the error message carefully to understand the root cause before deciding on the next steps.<br />
+				- Common issues include incorrect parameters, insufficient permissions, or unexpected states in the environment.<br />
+				- Adjust your approach based on the error analysis, which may involve modifying parameters, using alternative tools, or seeking additional information from the user.<br />
+			</Tag>
 			<Tag name='special_user_requests'>
 				- If the user makes a simple request (such as asking for the time) which you can fulfill by running a terminal command (such as `date`), you should do so.<br />
 				- If the user asks for a "review", default to a code review mindset: prioritise identifying bugs, risks, behavioural regressions, and missing tests. Findings must be the primary focus of the response - keep summaries or overviews brief and only after enumerating the issues. Present findings first (ordered by severity with file/line references), follow with open questions or assumptions, and offer a change-summary only as a secondary detail. If no findings are discovered, state that explicitly and mention any residual risks or testing gaps.
+			</Tag>
+			<Tag name='frontend_tasks'>
+				When doing frontend design tasks, avoid collapsing into "AI slop" or safe, average-looking layouts.<br />
+				Aim for interfaces that feel intentional, bold, and a bit surprising.<br />
+				- Typography: Use expressive, purposeful fonts and avoid default stacks (Inter, Roboto, Arial, system).<br />
+				- Color & Look: Choose a clear visual direction; define CSS variables; avoid purple-on-white defaults. No purple bias or dark mode bias.<br />
+				- Motion: Use a few meaningful animations (page-load, staggered reveals) instead of generic micro-motions.<br />
+				- Background: Don't rely on flat, single-color backgrounds; use gradients, shapes, or subtle patterns to build atmosphere.<br />
+				- Overall: Avoid boilerplate layouts and interchangeable UI patterns. Vary themes, type families, and visual languages across outputs.<br />
+				- Ensure the page loads properly on both desktop and mobile.<br />
 			</Tag>
 			<Tag name='presenting_your_work_and_final_message'>
 				You are producing text that will be rendered as markdown by the VS Code UI. Follow these rules exactly. Formatting should make results easy to scan, but not feel mechanical. Use judgment to decide how much structure adds value.<br />

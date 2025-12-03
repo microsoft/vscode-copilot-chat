@@ -21,12 +21,13 @@ import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networ
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
+import { toErrorMessage } from '../../../util/common/errorMessage';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { Event } from '../../../util/vs/base/common/event';
 import { clamp } from '../../../util/vs/base/common/numbers';
+import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 import { assertType } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
@@ -137,6 +138,11 @@ export class InlineChatIntent implements IIntent {
 		});
 
 		const intent = await this._selectIntent(conversation.turns, documentContext, request);
+
+		if (isFalsyOrWhitespace(request.prompt)) {
+			request = { ...request, prompt: intent.description };
+		}
+
 		const handler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, conversation, request, stream, token, documentContext, ChatLocation.Editor, chatTelemetry, undefined, onPaused);
 		const result = await handler.getResult();
 
@@ -310,6 +316,12 @@ export class InlineChatIntent implements IIntent {
 				}));
 			}
 
+			if (result.toolCalls.length === 0) {
+				// BAILOUT: when no tools have been used, invoke the exit tool manually
+				await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+				break;
+			}
+
 			if (result.failedEdits.length === 0 || token.isCancellationRequested) {
 				// DONE
 				break;
@@ -468,6 +480,7 @@ export class InlineChatIntent implements IIntent {
 
 		const outcomeComputer = new InteractionOutcomeComputer(request.location2.document.uri);
 		const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChatEditCodePrompt, {
+			ignoreCustomInstructions: true,
 			documentContext,
 			promptContext: {
 				query: request.prompt,

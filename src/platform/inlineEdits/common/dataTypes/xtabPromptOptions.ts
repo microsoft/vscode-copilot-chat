@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { assertNever } from '../../../../util/vs/base/common/assert';
-import { vBoolean, vEnum, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
+import { IValidator, vBoolean, vEnum, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
 
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
@@ -51,11 +51,16 @@ export enum PromptingStrategy {
 	/**
 	 * Original Xtab unified model prompting strategy.
 	 */
+	CopilotNesXtab = 'copilotNesXtab',
 	UnifiedModel = 'xtabUnifiedModel',
 	Codexv21NesUnified = 'codexv21nesUnified',
 	Nes41Miniv3 = 'nes41miniv3',
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
+}
+
+export function isPromptingStrategy(value: string): value is PromptingStrategy {
+	return (Object.values(PromptingStrategy) as string[]).includes(value);
 }
 
 export enum ResponseFormat {
@@ -74,6 +79,7 @@ export namespace ResponseFormat {
 			case PromptingStrategy.Xtab275:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.SimplifiedSystemPrompt:
+			case PromptingStrategy.CopilotNesXtab:
 			case undefined:
 				return ResponseFormat.CodeBlock;
 			default:
@@ -123,7 +129,7 @@ export interface ModelConfiguration {
 	includeTagsInCurrentFile: boolean;
 }
 
-export const MODEL_CONFIGURATION_VALIDATOR = vObj({
+export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vObj({
 	'modelName': vRequired(vString()),
 	'promptingStrategy': vUnion(vEnum(...Object.values(PromptingStrategy)), vUndefined()),
 	'includeTagsInCurrentFile': vRequired(vBoolean()),

@@ -27,7 +27,7 @@ export interface IChatDelegationSummaryService {
 
 export class ChatDelegationSummaryService implements IChatDelegationSummaryService {
 	declare _serviceBrand: undefined;
-	private readonly _mementoUpdator = new Sequencer();
+	private readonly _mementoUpdater = new Sequencer();
 	private readonly _summaries = new ResourceMap<string>();
 	public readonly scheme = SummaryFileScheme;
 	constructor(
@@ -44,7 +44,7 @@ export class ChatDelegationSummaryService implements IChatDelegationSummaryServi
 			return;
 		}
 		summary = summary.substring(0, 100);
-		await this._mementoUpdator.queue(async () => {
+		await this._mementoUpdater.queue(async () => {
 			const details = this.context.globalState.get<Record<string, { summary: string; createdDateTime: number }>>(DelegationSummaryMementoKey, {});
 
 			details[sessionId] = { summary, createdDateTime: Date.now() };
@@ -73,7 +73,9 @@ export class ChatDelegationSummaryService implements IChatDelegationSummaryServi
 			return undefined;
 		}
 		const uri = URI.from({ scheme: SummaryFileScheme, path: l10n.t("summary"), query: sessionId });
-		const prompt = message.substring(0, index).trimEnd() || l10n.t('Complete the task as described in the {0}', `[summary](${uri.toString()})`);
+		const promptSuffix = l10n.t('Complete the task as described in the {0}', `[summary](${uri.toString()})`);
+		const promptPrefix = message.substring(0, index).trimEnd() || '';
+		const prompt = promptPrefix ? `${promptPrefix}\n\n${promptSuffix}` : promptSuffix;
 		const summary = message.substring(index);
 		this._summaries.set(uri, summary);
 		const reference: ChatPromptReference = {

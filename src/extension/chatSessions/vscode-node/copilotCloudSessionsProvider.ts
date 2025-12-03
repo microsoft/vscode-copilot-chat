@@ -885,7 +885,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			try {
 				stream.progress(vscode.l10n.t('Pushing base branch to remote'));
 				const baseBranch = await this.gitOperationsManager.pushBaseRefToRemote();
-				stream.markdown(vscode.l10n.t('Base branch `{0}`pushed to remote.', baseBranch));
+				stream.markdown(vscode.l10n.t('Base branch `{0}` pushed to remote.', baseBranch));
 			} catch (error) {
 				this.logService.error(`Push branch failed: ${error}`);
 				throw vscode.l10n.t('{0}. Push the current branch to remote and try again.', (error instanceof Error ? error.message : String(error)) ?? vscode.l10n.t('Failed to push current branch.'));
@@ -896,7 +896,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const res = await this.checkBaseBranchPresentOnRemote();
 			if (!res) {
 				// Unexpected
-				throw new Error('Repo base branch is not detected on remote. Push your branch and try again.');
+				throw new Error(vscode.l10n.t('Repo base branch is not detected on remote. Push your branch and try again.'));
 			}
 			return (res?.missingOnRemote || !res?.baseRef) ? res.repoDefaultBranch : res?.baseRef;
 		})();
@@ -943,7 +943,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	/**
-	 *
+	 * Checks if the current base branch exists on the remote repository.
+	 * Returns branch information including whether it's missing from remote, the base ref name, and the repository's default branch.
 	 */
 	private async checkBaseBranchPresentOnRemote(): Promise<{ missingOnRemote: boolean; baseRef: string; repoDefaultBranch: string } | undefined> {
 		try {
@@ -993,8 +994,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				vscode.l10n.t('{0} and {1}', this.AUTHORIZE, this.PUSH_BRANCH),
 				this.AUTHORIZE,
 			);
-		}
-		else if (needsPermissiveAuth) {
+		} else if (needsPermissiveAuth) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
 			buttons.unshift(
 				this.AUTHORIZE,
