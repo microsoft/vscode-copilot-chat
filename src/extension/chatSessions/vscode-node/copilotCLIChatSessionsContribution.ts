@@ -481,7 +481,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const additionalReferences = this.previousReferences.get(id) || [];
 			this.previousReferences.delete(id);
 			const [modelId, agent] = await Promise.all([
-				this.getModelId(id, request, token),
+				this.getModelId(id, request, false, token),
 				this.getAgent(id, request, token),
 			]);
 			if (isUntitled && (modelId || agent)) {
@@ -625,7 +625,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return session;
 	}
 
-	private async getModelId(sessionId: string | undefined, request: vscode.ChatRequest | undefined, token: vscode.CancellationToken): Promise<string | undefined> {
+	/**
+	 *
+	 * @param preferModelInRequest
+	 * If true, will prefer model specified in request over session model.
+	 * This is useful when delegating from another chat session, and we want to preserve the model in the previous chat editor/session.
+	 */
+	private async getModelId(sessionId: string | undefined, request: vscode.ChatRequest | undefined, preferModelInRequest: boolean, token: vscode.CancellationToken): Promise<string | undefined> {
 		const promptFile = request ? await this.getPromptInfoFromRequest(request, token) : undefined;
 		if (promptFile?.header?.model) {
 			const model = await this.copilotCLIModels.resolveModel(promptFile.header.model);
@@ -640,6 +646,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (sessionModelId) {
 				return sessionModelId;
 			}
+		}
+
+		// Get model from request.
+		const preferredModelInRequest = preferModelInRequest && request?.model.id ? await this.copilotCLIModels.resolveModel(request.model.id) : undefined;
+		if (preferredModelInRequest) {
+			return preferredModelInRequest;
 		}
 
 		return await this.copilotCLIModels.getDefaultModel();
@@ -870,7 +882,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const [requestPrompt, { prompt, attachments }, model, agent] = await Promise.all([
 			requestPromptPromise,
 			requestPromptPromise.then(prompt => this.promptResolver.resolvePrompt(request, prompt, (references || []).concat([]), isolationEnabled, token)),
-			this.getModelId(undefined, undefined, token),
+			this.getModelId(undefined, request, true, token), // prefer model in request, as we're delegating from another session here.
 			this.getAgent(undefined, undefined, token),
 			getWorkingDirectory()
 		]);
