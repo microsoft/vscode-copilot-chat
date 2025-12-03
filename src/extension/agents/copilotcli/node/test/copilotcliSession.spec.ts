@@ -5,6 +5,7 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ChatContext } from 'vscode';
 import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
@@ -20,6 +21,7 @@ import { createExtensionUnitTestingServices } from '../../../../test/node/servic
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
 import { ToolCall } from '../../common/copilotCLITools';
+import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
@@ -83,6 +85,11 @@ describe('CopilotCLISession', () => {
 	let sessionOptions: CopilotCLISessionOptions;
 	let instaService: IInstantiationService;
 	let sdk: ICopilotCLISDK;
+	const delegationService = new class extends mock<IChatDelegationSummaryService>() {
+		override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
+			return undefined;
+		}
+	}();
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
@@ -118,6 +125,7 @@ describe('CopilotCLISession', () => {
 			workspaceService,
 			sdk,
 			instaService,
+			delegationService
 		));
 	}
 

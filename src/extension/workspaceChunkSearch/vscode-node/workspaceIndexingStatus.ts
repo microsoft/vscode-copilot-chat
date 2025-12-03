@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { ResolvedRepoRemoteInfo } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
-import { CodeSearchRepoStatus } from '../../../platform/workspaceChunkSearch/node/codeSearch/codeSearchChunkSearch';
+import { CodeSearchRepoStatus } from '../../../platform/workspaceChunkSearch/node/codeSearch/codeSearchRepo';
 import { LocalEmbeddingsIndexStatus } from '../../../platform/workspaceChunkSearch/node/embeddingsChunkSearch';
 import { IWorkspaceChunkSearchService, WorkspaceIndexState } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { coalesce } from '../../../util/vs/base/common/arrays';

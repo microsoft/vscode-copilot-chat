@@ -19,7 +19,7 @@ let computeContext: typeof testing.computeContext;
 let create: typeof testing.create;
 
 // This is OK since we run tests in node loading a TS version installed in the workspace.
-const root = path.join(__dirname, '../../../fixtures');
+const root = path.join(__dirname, '../../../fixtures/context');
 
 // Use before hook to ensure async setup completes before tests run
 beforeAll(async function () {

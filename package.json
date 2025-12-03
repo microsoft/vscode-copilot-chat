@@ -83,7 +83,8 @@
 		"onLanguageModelChat:copilot",
 		"onUri",
 		"onFileSystem:ccreq",
-		"onFileSystem:ccsettings"
+		"onFileSystem:ccsettings",
+		"onCustomAgentsProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
@@ -3455,16 +3456,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.edits.gemini3ReplaceStringOnly": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "Use only the modern `replace_string_in_file` edit tool when generating edits with Gemini 3 models.",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.edits.gemini3MultiReplaceString": {
 						"type": "boolean",
 						"default": false,
@@ -3908,6 +3899,16 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.inlineEdits.renameSymbolSuggestions%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.nextEditSuggestions.preferredModel": {
+						"type": "string",
+						"default": "none",
+						"markdownDescription": "%github.copilot.config.nextEditSuggestions.preferredModel%",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -4992,12 +4993,12 @@
 				"welcomeMessage": "Run tasks in the background",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 2,
+				"canDelegate": true,
 				"description": "Delegate tasks to a background agent.",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
 					"supportsToolAttachments": false,
-					"supportsImageAttachments": true,
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
 					"supportsSourceControlAttachments": true
@@ -5021,6 +5022,7 @@
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 1,
+				"canDelegate": true,
 				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
 				"capabilities": {
 					"supportsFileAttachments": true

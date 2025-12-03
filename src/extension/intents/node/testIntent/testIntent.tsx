@@ -239,8 +239,9 @@ class RequestHandler extends DefaultIntentRequestHandler {
 		@IRequestLogger requestLogger: IRequestLogger,
 		@IEditSurvivalTrackerService editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService authenticationService: IAuthenticationService,
+		@IEndpointProvider endpointProvider: IEndpointProvider,
 	) {
-		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, onPaused, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService);
+		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, onPaused, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, endpointProvider);
 	}
 
 	/**

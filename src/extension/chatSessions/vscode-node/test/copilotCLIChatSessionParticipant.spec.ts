@@ -23,10 +23,11 @@ import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common/delegationSummaryService';
 import { CopilotCLISDK, type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISession } from '../../../agents/copilotcli/node/copilotcliSession';
-import { CopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
+import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../../../agents/copilotcli/node/copilotcliSessionService';
 import { ICopilotCLIMCPHandler } from '../../../agents/copilotcli/node/mcpHandler';
 import { MockCliSdkSession, MockCliSdkSessionManager, NullCopilotCLIAgents } from '../../../agents/copilotcli/node/test/copilotCliSessionService.spec';
 import { ChatSummarizerProvider } from '../../../prompt/node/summarizer';
@@ -161,12 +162,28 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				return undefined;
 			}
 		}();
+		const delegationService = new class extends mock<IChatDelegationSummaryService>() {
+			override async summarize(context: vscode.ChatContext, token: vscode.CancellationToken): Promise<string | undefined> {
+				return undefined;
+			}
+		}();
 		instantiationService = {
 			invokeFunction<R, TS extends any[] = []>(fn: (accessor: ServicesAccessor, ...args: TS) => R, ...args: TS): R {
 				return fn(accessor, ...args);
 			},
-			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
-				const session = new TestCopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService);
+			createInstance: (ctor: unknown, options: any, sdkSession: any) => {
+				if (ctor === CopilotCLISessionWorkspaceTracker) {
+					return new class extends mock<CopilotCLISessionWorkspaceTracker>() {
+						override async initialize(_oldSessions: string[]): Promise<void> { return; }
+						override async trackSession(_sessionId: string, _operation: 'add' | 'delete'): Promise<void> {
+							return;
+						}
+						override shouldShowSession(_sessionId: string): boolean {
+							return true;
+						}
+					}();
+				}
+				const session = new TestCopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService, delegationService);
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
@@ -179,7 +196,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			promptResolver,
 			itemProvider,
 			cloudProvider,
-			summarizer,
 			worktree,
 			git,
 			models,
@@ -191,7 +207,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			configurationService,
 			copilotSDK,
 			logger,
-			new PromptsServiceImpl(new NullWorkspaceService())
+			new PromptsServiceImpl(new NullWorkspaceService()),
+			delegationService
 		);
 	});
 

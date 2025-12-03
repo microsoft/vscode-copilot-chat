@@ -12,6 +12,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
+import { IChatDelegationSummaryService } from './delegationSummaryService';
 
 
 interface CreateTool {
@@ -283,14 +284,15 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(events: readonly SessionEvent[], getVSCodeRequestId?: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
 
 	let details: { requestId: string; toolIdEditMap: Record<string, string> } | undefined;
+	let isFirstUserMessage = true;
 	for (const event of events) {
-		details = getVSCodeRequestId?.(event.id) ?? details;
+		details = getVSCodeRequestId(event.id) ?? details;
 		switch (event.type) {
 			case 'user.message': {
 				// Flush any pending response parts before adding user message
@@ -339,7 +341,15 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[], getV
 							range
 						});
 					});
-				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, references, '', [], undefined, details?.requestId));
+
+				let prompt = stripReminders(event.data.content || '');
+				const info = isFirstUserMessage ? delegationSummaryService.extractPrompt(sessionId, prompt) : undefined;
+				if (info) {
+					prompt = info.prompt;
+					references.push(info.reference);
+				}
+				isFirstUserMessage = false;
+				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId));
 				break;
 			}
 			case 'assistant.message': {

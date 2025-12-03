@@ -37,7 +37,7 @@ export class CopilotCLIPromptResolver {
 	 * @returns
 	 */
 	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], isIsolationEnabled: boolean, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
-		const references = request.references.concat(additionalReferences);
+		const references = request.references.concat(additionalReferences.filter(ref => !request.references.includes(ref)));
 		prompt = prompt ?? request.prompt;
 		if (prompt.startsWith('/')) {
 			return { prompt, attachments: [] }; // likely a slash command, don't modify
