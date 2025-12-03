@@ -43,23 +43,23 @@ export async function createSha256Hash(data: string | Uint8Array): Promise<strin
 	return hashHex;
 }
 
-export function createSha256HashSync(data: string): string {
-	const sha256 = new StringSHA256();
-	sha256.update(data);
-	return sha256.digest();
-}
-
 const _cachedSha256Hashes = new Map<string, string>();
 export function getCachedSha256Hash(text: string): string {
 	if (_cachedSha256Hashes.has(text)) {
 		return _cachedSha256Hashes.get(text)!;
 	}
 
-	const hash = createSha256HashSync(text);
+	const hash = createSha256HashSyncInsecure(text);
 	_cachedSha256Hashes.set(text, hash);
 	return hash;
 }
 
+
+function createSha256HashSyncInsecure(data: string): string {
+	const sha256 = new StringSHA256Insecure();
+	sha256.update(data);
+	return sha256.digest();
+}
 
 const enum SHA256Constant {
 	BLOCK_SIZE = 64, // 512 / 8
@@ -80,7 +80,11 @@ function rightRotate(value: number, bits: number): number {
 	return ((value >>> bits) | (value << (32 - bits))) >>> 0;
 }
 
-export class StringSHA256 {
+/**
+ * A simple, synchronous implementation of SHA-256 for strings.
+ * Only to be used in non-security-critical paths where synchronous operation is required.
+ */
+class StringSHA256Insecure {
 	private static _k = [
 		0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
 		0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -239,9 +243,9 @@ export class StringSHA256 {
 	}
 
 	private _step(): void {
-		const bigBlock32 = StringSHA256._bigBlock32;
+		const bigBlock32 = StringSHA256Insecure._bigBlock32;
 		const data = this._buffDV;
-		const k = StringSHA256._k;
+		const k = StringSHA256Insecure._k;
 
 		// Copy chunk into first 16 words of message schedule
 		for (let j = 0; j < 64 /* 16*4 */; j += 4) {
