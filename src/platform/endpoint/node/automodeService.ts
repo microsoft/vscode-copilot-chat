@@ -27,10 +27,7 @@ const REASONING_MODELS = [
 	'claude-sonnet-4.5',
 	'gpt-5-codex',
 	'gpt-5',
-	'gemini-3-pro-preview',
-	'claude-haiku-4.5',
-	'gpt-5-mini',
-	'grok-code-fast-1'
+	'gemini-3-pro-preview'
 ] as const;
 
 // Exact model names for low/no reasoning models (fast, cheaper models)
@@ -182,15 +179,6 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 
 		const conversationId = getConversationId(chatRequest);
 		const entry = this._autoModelCache.get(conversationId);
-		if (entry) {
-			const entryToken = await entry.tokenBank.getToken();
-			if (entry.endpoint.model !== entryToken.selected_model) {
-				// Model changed during a token refresh -> map to new endpoint
-				const newModel = knownEndpoints.find(e => e.model === entryToken.selected_model) || knownEndpoints[0];
-				entry.endpoint = this._instantiationService.createInstance(AutoChatEndpoint, newModel, entryToken.session_token, entryToken.discounted_costs?.[newModel.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs));
-			}
-			return entry.endpoint;
-		}
 
 		// No entry yet -> Promote reserve token to active and repopulate reserve
 		const location = chatRequest?.location ?? ChatLocation.Panel;
@@ -204,6 +192,22 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 
 		// Check if a low reasoning model should be used based on the user's query
 		const shouldUseLowReasoning = await this._shouldUseLowReasoningModel(chatRequest);
+
+		// Check the current entry's model against the reasoning requirements and availability
+		if (entry) {
+			const targetModels = shouldUseLowReasoning ? LOW_REASONING_MODELS : REASONING_MODELS;
+			const currentModel = entry.endpoint.model;
+
+			// If current model is still available and matches reasoning requirements, keep it
+			if (reserveToken.available_models.includes(currentModel) &&
+				(targetModels as readonly string[]).includes(currentModel)) {
+				this._logService.info(`Keeping current model ${currentModel} - still available and matches ${shouldUseLowReasoning ? 'low reasoning' : 'reasoning'} requirements`);
+				return entry.endpoint;
+			}
+
+			this._logService.info(`Current model ${currentModel} needs to be changed - available: ${reserveToken.available_models.includes(currentModel)}, matches reasoning requirements: ${(targetModels as readonly string[]).includes(currentModel)}`);
+		}
+
 		const selectedModel = this._selectModelBasedOnReasoning(
 			knownEndpoints,
 			reserveToken,
@@ -239,8 +243,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	 * Determines if the user's query should use a low reasoning model (for simple queries)
 	 */
 	private async _shouldUseLowReasoningModel(chatRequest: ChatRequest | undefined): Promise<boolean> {
-		if (!chatRequest) {
-			return false;
+		if (!chatRequest || !chatRequest.prompt || chatRequest.prompt.trim().length === 0) {
+			return true;
 		}
 
 		try {
@@ -248,7 +252,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			// Classifier outputs: 0 = reasoning required, 1 = non-reasoning (simple)
 			const isSimpleQuery = await this._reasoningClassifier.classify(chatRequest.prompt);
 
-			this._logService.trace(`Low reasoning model should be used: ${isSimpleQuery}`);
+			this._logService.info(`Low reasoning model should be used: ${isSimpleQuery}`);
 			return isSimpleQuery;
 		} catch (error) {
 			this._logService.error('Failed to determine reasoning model requirement', error);

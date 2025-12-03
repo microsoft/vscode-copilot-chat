@@ -14,10 +14,10 @@ import { IFetcherService } from '../../networking/common/fetcherService';
 
 // ModernBERT reasoning classifier configuration
 
-export const REASONING_CLASSIFIER_ZIP_FILENAME = 'model_router_v0.zip';
+export const REASONING_CLASSIFIER_ZIP_FILENAME = 'model_router_v1.zip';
 export const REASONING_CLASSIFIER_MODEL_FILENAME = 'model_int8.onnx';
-const REASONING_CLASSIFIER_ASSETS_URL = 'https://your-model-host.com/model_router_v0.zip';
-const REASONING_CLASSIFIER_CONFIDENCE_THRESHOLD = 0.6;
+const REASONING_CLASSIFIER_ASSETS_URL = 'https://your-model-host.com/model_router_v1.zip';
+const REASONING_CLASSIFIER_CONFIDENCE_THRESHOLD = 0.5;
 
 /**
  * ModernBERT-based binary classifier for reasoning vs non-reasoning queries
