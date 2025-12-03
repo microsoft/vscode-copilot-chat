@@ -278,13 +278,21 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 }
 
-export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionContentProvider {
+export class CopilotCLIChatSessionContentProvider extends Disposable implements vscode.ChatSessionContentProvider {
+	private readonly _onDidChangeChatSessionOptions = this._register(new Emitter<vscode.ChatSessionOptionChangeEvent>());
+	readonly onDidChangeChatSessionOptions = this._onDidChangeChatSessionOptions.event;
 	constructor(
 		private readonly worktreeManager: CopilotCLIWorktreeManager,
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
-	) { }
+	) {
+		super();
+	}
+
+	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string }>): void {
+		this._onDidChangeChatSessionOptions.fire({ resource, updates });
+	}
 
 	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
@@ -413,6 +421,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private CLI_CANCEL = vscode.l10n.t('Cancel');
 
 	constructor(
+		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		private readonly cloudSessionProvider: CopilotCloudSessionsProvider | undefined,
@@ -475,6 +484,21 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.getModelId(id, request, token),
 				this.getAgent(id, request, token),
 			]);
+			if (isUntitled && (modelId || agent)) {
+				const promptFile = request ? await this.getPromptInfoFromRequest(request, token) : undefined;
+				if (promptFile) {
+					const changes: { optionId: string; value: string }[] = [];
+					if (agent) {
+						changes.push({ optionId: AGENTS_OPTION_ID, value: agent.name });
+					}
+					if (modelId) {
+						changes.push({ optionId: MODELS_OPTION_ID, value: modelId });
+					}
+					if (changes.length > 0) {
+						this.contentProvider.notifySessionOptionsChange(resource, changes);
+					}
+				}
+			}
 			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, stream, disposables, token);
 			if (!session || token.isCancellationRequested) {
 				return {};
