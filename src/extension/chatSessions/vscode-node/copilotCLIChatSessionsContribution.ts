@@ -8,7 +8,6 @@ import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
@@ -73,8 +72,12 @@ export class CopilotCLIWorktreeManager {
 	constructor(
 		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
+
+	isSupported() {
+		const repository = this.gitService.activeRepository.get();
+		return !!repository;
+	}
 
 	async createWorktree(stream?: vscode.ChatResponseStream): Promise<string | undefined> {
 		if (!stream) {
@@ -144,7 +147,7 @@ export class CopilotCLIWorktreeManager {
 	}
 
 	getDefaultIsolationPreference(): boolean {
-		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
+		if (!this.isSupported()) {
 			return false;
 		}
 		return this.extensionContext.globalState.get<boolean>(CopilotCLIWorktreeManager.COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, true);
@@ -281,7 +284,6 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
 
 	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
@@ -309,9 +311,9 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			options[MODELS_OPTION_ID] = model;
 		}
 
-		if (!existingSession && this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
-			options[ISOLATION_OPTION_ID] = isolationEnabled ? 'enabled' : 'disabled';
-		} else if (existingSession && workingDirectory && this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled)) {
+		if (!existingSession || !this.worktreeManager.isSupported()) {
+			options[ISOLATION_OPTION_ID] = this.worktreeManager.isSupported() && isolationEnabled ? 'enabled' : 'disabled';
+		} else if (existingSession && workingDirectory) {
 			// For existing sessions with a worktree, show the worktree branch name as a locked option
 			const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(copilotcliSessionId);
 			if (worktreeRelativePath) {
@@ -363,15 +365,17 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 					name: 'Model',
 					description: 'Pick Model',
 					items: modelItems
-				},
-				{
-					id: ISOLATION_OPTION_ID,
-					name: 'Isolation',
-					description: 'Choose Worktree or Workspace for this session',
-					items: isolationItems
 				}
 			]
 		};
+		if (this.worktreeManager.isSupported()) {
+			options.optionGroups.push({
+				id: ISOLATION_OPTION_ID,
+				name: 'Isolation',
+				description: 'Choose Worktree or Workspace for this session',
+				items: isolationItems
+			});
+		}
 		if (hasAgents) {
 			options.optionGroups.unshift({
 				id: AGENTS_OPTION_ID,
@@ -420,7 +424,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@ILogService private readonly logService: ILogService,
 		@IPromptsService private readonly promptsService: IPromptsService,
@@ -680,16 +683,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return await this.handleWorktreeConfirmationResponse(request, confirmationResults, context, stream, token);
 		}
 
-		// Initial request - check isolation setting first
-		const isolationEnabled = this.configurationService.getConfig(ConfigKey.Advanced.CLIIsolationEnabled);
-		if (!isolationEnabled) {
+		const currentRepository = this.gitService.activeRepository?.get();
+		if (!currentRepository) {
 			// No isolation, proceed without worktree
 			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, false, stream, token);
 		}
 
 		// Check for uncommitted changes
-		const currentRepository = this.gitService.activeRepository?.get();
-		const hasUncommittedChanges = currentRepository?.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
+		const hasUncommittedChanges = currentRepository.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
 		if (!hasUncommittedChanges) {
 			// No uncommitted changes, create worktree and proceed
 			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, true, stream, token);
@@ -746,7 +747,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const includeChanges = selection.includes(this.CLI_INCLUDE_CHANGES.toUpperCase());
 		const prompt = uncommittedChangesData.metadata.prompt;
 
-		if (includeChanges) {
+		if (includeChanges && this.worktreeManager.isSupported()) {
 			// Create worktree first
 			stream.progress(vscode.l10n.t('Creating worktree...'));
 			const worktreePathValue = await this.worktreeManager.createWorktree(stream);
@@ -802,7 +803,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, worktreePath, true, stream, token);
 		} else {
 			// Skip changes, just create worktree without migration
-			return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, undefined, true, stream, token);
+			return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, undefined, this.worktreeManager.isSupported(), stream, token);
 		}
 	}
 
