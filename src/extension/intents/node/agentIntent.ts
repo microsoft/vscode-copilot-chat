@@ -105,10 +105,6 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		allowTools[ToolName.MultiReplaceString] = false;
 	}
 
-	if (model.family.includes('gemini-3') && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gemini3ReplaceStringOnly, experimentationService)) {
-		allowTools[ToolName.ReplaceString] = true;
-		allowTools[ToolName.EditFile] = false;
-	}
 	if (model.family.includes('gemini-3') && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gemini3MultiReplaceString, experimentationService)) {
 		allowTools[ToolName.MultiReplaceString] = true;
 	}

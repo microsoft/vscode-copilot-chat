@@ -5,10 +5,11 @@
 
 import { describe, expect, it } from 'vitest';
 import { SimpleExperimentationService } from '../src/main';
+import { DefaultsOnlyConfigurationService } from '../src/_internal/platform/configuration/common/defaultsOnlyConfigurationService';
 
 describe('SimpleExperimentationService', () => {
 	it('should initialize with no treatment variables', async () => {
-		const service = new SimpleExperimentationService(false);
+		const service = new SimpleExperimentationService(false, new DefaultsOnlyConfigurationService());
 		await service.hasTreatments();
 
 		expect(service.getTreatmentVariable('nonexistent')).toBeUndefined();
@@ -17,7 +18,7 @@ describe('SimpleExperimentationService', () => {
 	});
 
 	it('should update multiple treatment variables at once', () => {
-		const service = new SimpleExperimentationService(false);
+		const service = new SimpleExperimentationService(false, new DefaultsOnlyConfigurationService());
 		const variables: Record<string, boolean | number | string> = {
 			'feature-a': true,
 			'feature-b': false,
@@ -36,7 +37,7 @@ describe('SimpleExperimentationService', () => {
 	});
 
 	it('should fire onDidTreatmentsChange event with all changed variables', () => {
-		const service = new SimpleExperimentationService(false);
+		const service = new SimpleExperimentationService(false, new DefaultsOnlyConfigurationService());
 		const events: string[][] = [];
 
 		service.onDidTreatmentsChange((event) => {
@@ -60,7 +61,7 @@ describe('SimpleExperimentationService', () => {
 	});
 
 	it('should not fire onDidTreatmentsChange event when no variables change', () => {
-		const service = new SimpleExperimentationService(false);
+		const service = new SimpleExperimentationService(false, new DefaultsOnlyConfigurationService());
 		const events: string[][] = [];
 
 		// Set initial value
@@ -85,7 +86,7 @@ describe('SimpleExperimentationService', () => {
 	});
 
 	it('should fire onDidTreatmentsChange event only for changed variables', () => {
-		const service = new SimpleExperimentationService(false);
+		const service = new SimpleExperimentationService(false, new DefaultsOnlyConfigurationService());
 
 		// Set initial values
 		const variables1: Record<string, boolean | number | string> = {
@@ -113,7 +114,7 @@ describe('SimpleExperimentationService', () => {
 	});
 
 	it('should overwrite existing treatment variables', () => {
-		const service = new SimpleExperimentationService(false);
+		const service = new SimpleExperimentationService(false, new DefaultsOnlyConfigurationService());
 
 		const variables1: Record<string, boolean | number | string> = {
 			'feature-flag': true
@@ -133,7 +134,7 @@ describe('SimpleExperimentationService', () => {
 	});
 
 	it('should wait for treatment variables when waitForTreatmentVariables = true', async () => {
-		const service = new SimpleExperimentationService(true);
+		const service = new SimpleExperimentationService(true, new DefaultsOnlyConfigurationService());
 
 		// hasTreatments() should not resolve until updateTreatmentVariables() is called
 		let hasTreatmentsResolved = false;
@@ -160,7 +161,7 @@ describe('SimpleExperimentationService', () => {
 	});
 
 	it('should remove treatment variable when omitted from update', () => {
-		const service = new SimpleExperimentationService(false);
+		const service = new SimpleExperimentationService(false, new DefaultsOnlyConfigurationService());
 
 		// Set initial variables
 		const variables1: Record<string, boolean | number | string> = {

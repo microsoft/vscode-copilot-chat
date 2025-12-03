@@ -1009,7 +1009,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			includePostScript: true,
 		};
 
-		const modelConfig = this.modelService.selectedModelConfiguration();
+		const selectedModelConfig = this.modelService.selectedModelConfiguration();
+		// proxy /models doesn't know about includeTagsInCurrentFile field as of now, so hard code it to true for CopilotNesXtab strategy
+		const modelConfig: xtabPromptOptions.ModelConfiguration = selectedModelConfig.promptingStrategy === xtabPromptOptions.PromptingStrategy.CopilotNesXtab
+			? { ...selectedModelConfig, includeTagsInCurrentFile: true }
+			: selectedModelConfig;
 		return XtabProvider.overrideModelConfig(sourcedModelConfig, modelConfig);
 	}
 
@@ -1036,8 +1040,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
-			default:
+			case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:
+			case undefined:
 				return systemPromptTemplate;
+			default:
+				assertNever(promptingStrategy);
 		}
 	}
 

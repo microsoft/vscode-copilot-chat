@@ -1215,6 +1215,7 @@
 				"icon": "$(eye)",
 				"tools": [
 					"getNotebookSummary",
+					"problems",
 					"readFile",
 					"readNotebookCellOutput"
 				]
@@ -1228,7 +1229,6 @@
 					"codebase",
 					"fileSearch",
 					"listDirectory",
-					"problems",
 					"searchResults",
 					"textSearch",
 					"usages"
@@ -3456,16 +3456,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.edits.gemini3ReplaceStringOnly": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "Use only the modern `replace_string_in_file` edit tool when generating edits with Gemini 3 models.",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.edits.gemini3MultiReplaceString": {
 						"type": "boolean",
 						"default": false,
@@ -3665,16 +3655,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.temporalContext.maxAge": {
-						"type": "number",
-						"default": 100,
-						"markdownDescription": "%github.copilot.config.temporalContext.maxAge%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.debug.requestLogger.maxEntries": {
 						"type": "number",
 						"default": 100,
@@ -3688,16 +3668,6 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.temporalContext.preferSameLang": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.temporalContext.preferSameLang%",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -5009,7 +4979,6 @@
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
 					"supportsToolAttachments": false,
-					"supportsImageAttachments": true,
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
 					"supportsSourceControlAttachments": true

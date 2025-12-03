@@ -15,10 +15,10 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { disposableTimeout, raceCancellation, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
-import { StringSHA1 } from '../../../../util/vs/base/common/hash';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { joinPath } from '../../../../util/vs/base/common/resources';
+import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
 import { stripReminders } from '../common/copilotCLITools';
@@ -26,6 +26,8 @@ import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './c
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { getCopilotLogger } from './logger';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
+
+const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
 
 export interface ICopilotCLISessionItem {
 	readonly id: string;
@@ -323,13 +325,16 @@ export class CopilotCLISessionWorkspaceTracker {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		this._initializeSessionStorageFiles = new Lazy<Promise<{ global: Uri; workspace: Uri }>>(async () => {
-			const globalFile = joinPath(this.context.globalStorageUri, 'copilot.cli.oldSessions.json');
+			const globalFile = joinPath(this.context.globalStorageUri, 'copilot.cli.oldGlobalSessions.json');
 			let workspaceFile = joinPath(this.context.globalStorageUri, 'copilot.cli.workspaceSessions.json');
-			// If we have more than one workspace, we do not track workspace sessions. Treat them as global sessions.
-			if (this.workspaceService.getWorkspaceFolders().length === 1) {
-				const sha = new StringSHA1();
-				sha.update(this.workspaceService.getWorkspaceFolders()[0].toString());
-				workspaceFile = joinPath(this.context.globalStorageUri, `copilot.cli.workspaceSessions.${sha.digest().substring(0, 8)}.json`);
+			// If we have workspace folders, track workspace sessions separately. Otherwise treat them as global sessions.
+			if (this.workspaceService.getWorkspaceFolders().length) {
+				let workspaceFileName = this.context.workspaceState.get<string | undefined>(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY);
+				if (!workspaceFileName) {
+					workspaceFileName = `copilot.cli.workspaceSessions.${generateUuid()}.json`;
+					await this.context.workspaceState.update(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY, workspaceFileName);
+				}
+				workspaceFile = joinPath(this.context.globalStorageUri, workspaceFileName);
 			}
 
 			await Promise.all([
@@ -343,7 +348,7 @@ export class CopilotCLISessionWorkspaceTracker {
 				})(),
 				// Load workspace sessions
 				(async () => {
-					const workspaceSessions = this.workspaceService.getWorkspaceFolders().length === 1 ?
+					const workspaceSessions = this.workspaceService.getWorkspaceFolders().length ?
 						await this.fileSystem.readFile(workspaceFile).then(c => new TextDecoder().decode(c).split(',')).catch(() => []) : [];
 					workspaceSessions.forEach(s => this._workspaceSessions.add(s));
 				})(),
@@ -366,7 +371,7 @@ export class CopilotCLISessionWorkspaceTracker {
 
 	public async trackSession(sessionId: string, operation: 'add' | 'delete'): Promise<void> {
 		// If we're not in a workspace, do not track sessions as these are global sessions.
-		if (this.workspaceService.getWorkspaceFolders().length !== 1) {
+		if (this.workspaceService.getWorkspaceFolders().length === 0) {
 			return;
 		}
 		if (operation === 'add') {
@@ -385,7 +390,7 @@ export class CopilotCLISessionWorkspaceTracker {
 	 * InitializeOldSessions should have been called before this.
 	 */
 	public shouldShowSession(sessionId: string): boolean {
-		if (this._oldGlobalSessions?.has(sessionId) || this.workspaceService.getWorkspaceFolders().length !== 1) {
+		if (this._oldGlobalSessions?.has(sessionId) || this.workspaceService.getWorkspaceFolders().length === 0) {
 			return true;
 		}
 		return this._workspaceSessions.has(sessionId);

@@ -29,6 +29,13 @@ const VSC_MODEL_HASHES_A = [
 // Currently empty, will be used in future for a different set of VSC models
 const VSC_MODEL_HASHES_B: string[] = [];
 
+// subset to allow replace string
+const VSC_MODEL_HASHES_SUBSET_C = [
+	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
+	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
+];
+
+
 const HIDDEN_MODEL_E_HASHES: string[] = [
 	'6013de0381f648b7f21518885c02b40b7583adfb33c6d9b64d3aed52c3934798'
 ];
@@ -58,6 +65,12 @@ export function isVSCModelB(model: LanguageModelChat | IChatEndpoint) {
 	const ID_hash = getCachedSha256Hash(getModelId(model));
 	const family_hash = getCachedSha256Hash(model.family);
 	return VSC_MODEL_HASHES_B.includes(ID_hash) || VSC_MODEL_HASHES_B.includes(family_hash);
+}
+
+export function isVSCModelC(model: LanguageModelChat | IChatEndpoint) {
+	const ID_hash = getCachedSha256Hash(getModelId(model));
+	const family_hash = getCachedSha256Hash(model.family);
+	return VSC_MODEL_HASHES_SUBSET_C.includes(ID_hash) || VSC_MODEL_HASHES_SUBSET_C.includes(family_hash);
 }
 
 /**
@@ -101,7 +114,7 @@ export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpo
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || isHiddenModelE(model);
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || isHiddenModelE(model) || isVSCModelC(model);
 }
 
 /**
@@ -109,7 +122,7 @@ export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChat
  * without needing insert_edit_into_file.
  */
 export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code') || isHiddenModelE(model);
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.includes('gemini-3') || isVSCModelC(model);
 }
 
 /**
@@ -117,7 +130,7 @@ export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | I
  * @note whether this is respected is currently controlled via EXP
  */
 export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IChatEndpoint) {
-	return model.family.includes('gemini');
+	return model.family.includes('gemini-2');
 }
 
 /**
