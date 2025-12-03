@@ -999,7 +999,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				enabledLanguages: this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabledLanguages),
 				enabledDiagnostics: this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.DiagnosticsContextProvider, this.expService),
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
-				traitPosition: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextTraitPosition, this.expService),
+				traitPosition: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextTraitsPosition, this.expService),
 			}),
 			diffHistory: {
 				nEntries: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this.expService),
