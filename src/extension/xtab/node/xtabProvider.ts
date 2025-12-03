@@ -6,7 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { ConfigKey, ExperimentBasedConfig, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { createProxyXtabEndpoint } from '../../../platform/endpoint/node/proxyXtabEndpoint';
@@ -18,6 +18,7 @@ import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/d
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
+import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
 import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
@@ -28,7 +29,6 @@ import { OptionalChatRequestParams, Prediction } from '../../../platform/network
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ISimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceFilter } from '../../../util/common/async';
 import * as errors from '../../../util/common/errors';
@@ -83,6 +83,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	private nextCursorPredictor: XtabNextCursorPredictor;
 
 	constructor(
+		@IInlineEditsModelService private readonly modelService: IInlineEditsModelService,
 		@ISimulationTestContext private readonly simulationCtx: ISimulationTestContext,
 		@IInstantiationService private readonly instaService: IInstantiationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -92,7 +93,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
-		@ITelemetryService private readonly telemetryService: ITelemetryService
 	) {
 		this.delayer = new Delayer(this.configService, this.expService);
 		this.nextCursorPredictor = this.instaService.createInstance(XtabNextCursorPredictor, XtabProvider.computeTokens);
@@ -1009,51 +1009,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			includePostScript: true,
 		};
 
-		const localOverridingModelConfig = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration);
-		if (localOverridingModelConfig) {
-			return XtabProvider.overrideModelConfig(sourcedModelConfig, localOverridingModelConfig);
-		}
-
-		const expBasedModelConfig = this.overrideByStringModelConfig(sourcedModelConfig, ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString);
-		if (expBasedModelConfig) {
-			return expBasedModelConfig;
-		}
-
-		const defaultModelConfig = this.overrideByStringModelConfig(sourcedModelConfig, ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString);
-		if (defaultModelConfig) {
-			return defaultModelConfig;
-		}
-
-		return sourcedModelConfig;
-	}
-
-	private overrideByStringModelConfig(originalModelConfig: ModelConfig, configKey: ExperimentBasedConfig<string | undefined>): ModelConfig | undefined {
-		const configString = this.configService.getExperimentBasedConfig(configKey, this.expService);
-		if (configString === undefined) {
-			return undefined;
-		}
-
-		let parsedConfig: xtabPromptOptions.ModelConfiguration | undefined;
-		try {
-			parsedConfig = JSON.parse(configString);
-		} catch (e: unknown) {
-			/* __GDPR__
-				"incorrectNesModelConfig" : {
-					"owner": "ulugbekna",
-					"comment": "Capture if model configuration string is invalid JSON.",
-					"configName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the configuration that failed to parse." },
-					"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error message from JSON.parse." },
-					"configValue": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The invalid JSON string." }
-				}
-			*/
-			this.telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)), configValue: configString });
-		}
-
-		if (parsedConfig) {
-			return XtabProvider.overrideModelConfig(originalModelConfig, parsedConfig);
-		}
-
-		return undefined;
+		const selectedModelConfig = this.modelService.selectedModelConfiguration();
+		// proxy /models doesn't know about includeTagsInCurrentFile field as of now, so hard code it to true for CopilotNesXtab strategy
+		const modelConfig: xtabPromptOptions.ModelConfiguration = selectedModelConfig.promptingStrategy === xtabPromptOptions.PromptingStrategy.CopilotNesXtab
+			? { ...selectedModelConfig, includeTagsInCurrentFile: true }
+			: selectedModelConfig;
+		return XtabProvider.overrideModelConfig(sourcedModelConfig, modelConfig);
 	}
 
 	private static overrideModelConfig(modelConfig: ModelConfig, overridingConfig: xtabPromptOptions.ModelConfiguration): ModelConfig {
@@ -1079,8 +1040,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
-			default:
+			case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:
+			case undefined:
 				return systemPromptTemplate;
+			default:
+				assertNever(promptingStrategy);
 		}
 	}
 

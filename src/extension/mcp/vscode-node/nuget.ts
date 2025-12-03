@@ -6,12 +6,12 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
+import { l10n } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IStringDictionary } from '../../../util/vs/base/common/collections';
 import { randomPath } from '../../../util/vs/base/common/extpath';
 import { isObject } from '../../../util/vs/base/common/types';
-import { localize } from '../../../util/vs/nls';
 import { ValidatePackageErrorType, ValidatePackageResult } from './commands';
 import { CommandExecutor, ICommandExecutor } from './util';
 
@@ -69,10 +69,10 @@ export class NuGetMcpSetup {
 			if (errorCode === 'ENOENT') {
 				return {
 					state: 'error',
-					error: localize("mcp.setup.dotnetNotFound", "The '{0}' command was not found. .NET SDK 10 or newer must be installed and available in PATH.", this.dotnet.command),
+					error: l10n.t("The '{0}' command was not found. .NET SDK 10 or newer must be installed and available in PATH.", this.dotnet.command),
 					errorType: ValidatePackageErrorType.MissingCommand,
 					helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
-					helpUriLabel: localize("mcp.setup.installDotNetSdk", "Install .NET SDK"),
+					helpUriLabel: l10n.t("Install .NET SDK"),
 				};
 			} else {
 				throw error;
@@ -84,10 +84,10 @@ export class NuGetMcpSetup {
 		if (dotnetMajorVersion < 10) {
 			return {
 				state: 'error',
-				error: localize("mcp.setup.badDotnetSdkVersion", "The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
+				error: l10n.t("The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
 				errorType: ValidatePackageErrorType.BadCommandVersion,
 				helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
-				helpUriLabel: localize("mcp.setup.installDotNetSdk", "Update .NET SDK"),
+				helpUriLabel: l10n.t("Update .NET SDK"),
 			};
 		}
 
@@ -97,7 +97,7 @@ export class NuGetMcpSetup {
 			return {
 				state: 'error',
 				errorType: ValidatePackageErrorType.NotFound,
-				error: localize("mcp.setup.nugetPackageNotFound", "Package {0} does not exist on NuGet.org.", id)
+				error: l10n.t("Package {0} does not exist on NuGet.org.", id)
 			};
 		}
 

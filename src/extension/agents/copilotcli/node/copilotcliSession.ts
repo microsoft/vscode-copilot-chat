@@ -38,6 +38,7 @@ export interface ICopilotCLISession extends IDisposable {
 		readonly isolationEnabled: boolean;
 		readonly workingDirectory?: Uri;
 	};
+	readonly pendingPrompt: string | undefined;
 	attachPermissionHandler(handler: PermissionHandler): IDisposable;
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
 	handleRequest(
@@ -82,7 +83,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		};
 	}
 	private _lastUsedModel: string | undefined;
-
+	private _pendingPrompt: string | undefined;
+	public get pendingPrompt(): string | undefined {
+		return this._pendingPrompt;
+	}
 	constructor(
 		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
@@ -127,6 +131,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
+		this._pendingPrompt = prompt;
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
 
@@ -259,6 +264,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this.logService.error(`[CopilotCLISession] Invoking session (error) ${this.sessionId}`, error);
 			this._stream?.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 		} finally {
+			this._pendingPrompt = undefined;
 			disposables.dispose();
 		}
 	}
