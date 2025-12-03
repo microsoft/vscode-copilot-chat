@@ -108,7 +108,6 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 			}
 			const result = await this.cache.get(req);
 			if (result) {
-				await Promise.all(result.map(model => this.cacheModelHashes(model)));
 				return result;
 			}
 

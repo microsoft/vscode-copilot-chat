@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelChat } from 'vscode';
-import { getSha256Hash } from '../../../util/common/crypto';
+import { getCachedSha256Hash } from '../../../util/common/crypto';
 import type { IChatEndpoint } from '../../networking/common/networking';
 
 const HIDDEN_MODEL_A_HASHES = [
@@ -38,25 +38,25 @@ function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 }
 
 export function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
-	const h = getSha256Hash(model.family);
+	const h = getCachedSha256Hash(model.family);
 	return HIDDEN_MODEL_A_HASHES.includes(h);
 }
 
 export function isHiddenModelE(model: LanguageModelChat | IChatEndpoint) {
-	const h = getSha256Hash(model.family);
+	const h = getCachedSha256Hash(model.family);
 	return HIDDEN_MODEL_E_HASHES.includes(h);
 }
 
 export function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
 
-	const ID_hash = getSha256Hash(getModelId(model));
-	const family_hash = getSha256Hash(model.family);
+	const ID_hash = getCachedSha256Hash(getModelId(model));
+	const family_hash = getCachedSha256Hash(model.family);
 	return VSC_MODEL_HASHES_A.includes(ID_hash) || VSC_MODEL_HASHES_A.includes(family_hash);
 }
 
 export function isVSCModelB(model: LanguageModelChat | IChatEndpoint) {
-	const ID_hash = getSha256Hash(getModelId(model));
-	const family_hash = getSha256Hash(model.family);
+	const ID_hash = getCachedSha256Hash(getModelId(model));
+	const family_hash = getCachedSha256Hash(model.family);
 	return VSC_MODEL_HASHES_B.includes(ID_hash) || VSC_MODEL_HASHES_B.includes(family_hash);
 }
 
