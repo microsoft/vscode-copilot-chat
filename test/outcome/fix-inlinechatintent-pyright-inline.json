@@ -2,139 +2,140 @@
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-10-15) object not subscriptable",
 		"requests": [
-			"31c70fe06ba83e7f0cdffb0aeb1e6c07a49e875e19d90d8e2a8ba5d17e35c611"
+			"720e4ecefa821224a42be70458c38dce33f3fe8b61f4e0c770113f5089a76916"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-10-2) can not be assigned 1",
 		"requests": [
-			"c4a8ecdef6368121f9075298bfedd2b2c924cb5dbcb5d9b72c13c5e74a691ab0"
+			"748688f029872c51246a76e349001fbc5ea2d2cb104ddb61cdc3fda6cbd81acd"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-10-29) instance of bool has no to_string member",
 		"requests": [
-			"d68db7883728fbee2be21188ac5fff88676f514ef7bc9761ad948bfba423f4e0"
+			"0ccccd804afcd27da2fc60a523e8c102c9cd1fe8bdca535b2b5f4f1d6dbe6c80"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-10-35) can not access member",
 		"requests": [
-			"54f03ec60b265efa9a88e9152d9f54a8703c47ac6c1cbe8c97b50fba9322cbce",
-			"ea07043284d481bcb2272705ddba063b658e72568d7a98258977bdf5b1e2031e"
+			"23efa3fda07f0db92eec1d4f3f15f848aa1dc846703db63e2e0c8ee18c65c1cb"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-10-36) can not be assigned 2",
 		"requests": [
-			"c06f545ae361247a2788190f9bc3a234b52790bb0f5d1895aa89cf97e2bf51e0"
+			"54a1871e8b4b9c8cd0f47cbec7e4d7af9538bf72ea1039a484401b06d838c0fc"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-10-4) parameter already assigned",
 		"requests": [
-			"75f11702672c8e509c69aebbbf8a66cacf0530d505b4a85d149670bdbe544e94"
+			"ed2679b8699be587bfffebd76926d30b685aa562e75481d38eec98608f7e819a"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-10-48) can not be assigned 3",
 		"requests": [
-			"c0efe1a56136ac32d67b8f0b388982f297fac671cc25592a0a939dda8d420ad0"
+			"af31f9d96f33b306d80e188837bca8c175af9bfcdcdb701f98ff9b16becf731c"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-10-58) not defined",
 		"requests": [
-			"04f0f3eef2e23124d7c8cedd209de6fdad1e721abe0d0afc8716abaa2d512570",
-			"b4d823e4918501036a1e677d8accb1ccf97fd3b65a00b48b8378ad3b008adc14"
+			"f61d600c9a8d637c341e7bf76498bd4565a8643a52b5e13168e3164ba6dbc6a3"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-8-110) not defined",
 		"requests": [
-			"d45ac20e9bf6a9faabe770f8b5e0c18860a914d03d54de44106eb9c5a0722b09"
+			"01fbfae4c2334b81942f9e8dc654c4f69908844fbf66bb0d76d222f4b15d3e0d"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-8-73) no value for argument in function call",
 		"requests": [
-			"0aaa558147c92c89a0c18062d41b003e8bcfdd570564c21c324f0f0f4fd17b50"
+			"e514c61c5d29c3b960a8b14a51d164004269b37dd7a40d5d124ee2df1be2f6eb"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - all Annotated types should include at least two type arguments",
 		"requests": [
-			"4b81b0a0dfc5051595b75b32571b93a07241603fa327a6b1193aabcd1d163c78"
+			"5d6fd11956916c508fee2c6c53394ac6abf97b542896e7cbf984c82126276243"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - async cannot be used in a non-async function",
 		"requests": [
-			"5efe11dafd20ae8aba5f7bad422568641206e4484e5e5fbd818453b6c74ef303"
+			"d24b049c7a79f95d48cdc0aa2743f4adfd4f5d18f60961a6cbf2f099b4aae8f9"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - await cannot be used in a non-async function",
 		"requests": [
-			"c227231014fe04d5054969e48aeef2f2e7f5fdbe45d1182a8e9d55372b3b3a32"
+			"b854af4e1a9136002b81bc34e803758b8e5de98e99325af4465d2a689379c284"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - bad token",
 		"requests": [
-			"3f390aa45754bdf680f5f32ea03c69027bd57f549dafc304ec1b7f2325acb40b",
-			"662aeaad6b10c5212cc233dcfc2c514a460894bf65ae7157afa1faa2a61e30d4",
+			"502d69aebdd401e9d05772c96c5027e07206265a52157914b7ac177730b7c1c0",
 			"92416661a3040cfe13ef19ebdd56f23f7c2e9871fd58d8a761bdb164fc5d0e03",
-			"c3ce46d083cb1131281b00662a8ff4cfbb876315e875955370def9efd838e8ca"
+			"c3ce46d083cb1131281b00662a8ff4cfbb876315e875955370def9efd838e8ca",
+			"d2ff451f68e264bf45c85f3950cbbcd4b2aa5ec110e89baf54014b352ddefcf1"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - Bar does not define a do_something2 method",
 		"requests": [
-			"9f83ad5dbe255248fdd71fcd4827f1d998aae63cd513b58cee7685f2e435959b"
+			"d0a24c872a9a146bc2e3e37519a7f826b53fe84d6b97d0243459e552b0e16303"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - cannot instantiate abstract class",
 		"requests": [
-			"ea90f86f2184d0696ff1f9e2720a16869be6685555300b720ff0ad481ddc2a37"
+			"188908a88ee5fd7a97881aca4994874590f1fc5a5fcdd70a2f56071a12389e87"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - general type issue",
 		"requests": [
-			"259dbdf08b45154bb4b985c94cce1258560d2ba5fed6861da87cfd1d16a4d57f"
+			"240866786927851bbac9f65ec72253a24642c165ca120ad4bd0e2809e31aaf28"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - import missing",
 		"requests": [
-			"75306be129b5e38836737186331637d88f8c2abc9f30147464fa3e19acf7370f",
-			"9d6d998f58ba0f973d23054cdd2ac8c3d92ff1fc1ae31b1711e1aa0e789098a7"
+			"116ef39211075509a51fa96faf85dda704b44c5ad3e1652bfe9753226ae73241",
+			"53b7c08772426ca152b3d1be3a70eedbf6b381edfaf7403cf089d7f6d65dbd22",
+			"7e809228a89169b4c2065459ab88d08474c6f0d7552802971da64a0ae6221cde",
+			"992279f9df1d03ffe23194f157509ef1938dd48921274ff66380a2abcf8e36ee",
+			"9a39560d13d911f439d8f2ef432ff85f3b400ba8e22e08f128f9a97fd670712f"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - optional member access",
 		"requests": [
-			"cb8d61e5e8ec9ec3577dcdf458694c28bc6c522cb49a87276111997e5d4e720b"
+			"cc9178f27e0e686bd1618cd7d1979e5de47577c32d40052cfdc6a2be4b072c18"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - should not generate an error for variables declared in outer scopes",
 		"requests": [
-			"9ee22af0c46077a957f1f25674dacbabe4b150a334376776a941821898635dd0"
+			"a337aa40ab93e950af9e46979d162eb547fd890eccecdfaddbd0c563978fd503"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - unbound variable",
 		"requests": [
-			"1b3659a8cd73ed1f838f2bdada5d75c980911b4f30c96f4fd963f5f14c242ace"
+			"9de51c9ddc6618ad310df2c645dd3403cda18f29cfb0ab613d0746e422fc88ee"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (pyright) [inline] [python] - undefined variable",
 		"requests": [
-			"8eb6c43365f03d4112312dce2c8f81697a7203b8b69de8b329a043623bd9a12b"
+			"5375bc05c5ef8889d4832da0190cac7af8b235dcfe2f4781b0d2a837ba2b576b"
 		]
 	}
 ]
