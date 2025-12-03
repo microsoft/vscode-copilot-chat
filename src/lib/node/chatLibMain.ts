@@ -110,6 +110,8 @@ import { URI } from '../../util/vs/base/common/uri';
 import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
+import { IInlineEditsModelService } from '../../platform/inlineEdits/common/inlineEditsModelService';
+import { InlineEditsModelService } from '../../platform/inlineEdits/node/inlineEditsModelService';
 export {
 	IAuthenticationService, ICAPIClientService, IEndpointProvider, IExperimentationService, IIgnoreService, ILanguageContextProviderService
 };
@@ -366,6 +368,7 @@ function setupServices(options: INESProviderOptions) {
 		topP: 1,
 		rejectionMessage: 'Sorry, but I can only assist with programming related questions.',
 	});
+	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	return builder.seal();
 }
 
@@ -382,6 +385,7 @@ export class SimpleExperimentationService extends Disposable implements IExperim
 
 	constructor(
 		waitForTreatmentVariables: boolean | undefined,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
 		if (waitForTreatmentVariables) {
@@ -423,6 +427,7 @@ export class SimpleExperimentationService extends Disposable implements IExperim
 		}
 		if (changedVariables.length > 0) {
 			this._onDidTreatmentsChange.fire({ affectedTreatmentVariables: changedVariables });
+			this._configurationService.updateExperimentBasedConfiguration(changedVariables);
 		}
 		this.resolveWaitFor();
 	}
@@ -690,6 +695,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(IAuthenticationService, authService);
 	builder.define(IIgnoreService, options.ignoreService || new NullIgnoreService());
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [new UnwrappingTelemetrySender(telemetrySender)]));
+	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	builder.define(IExperimentationService, new SyncDescriptor(SimpleExperimentationService, [options.waitForTreatmentVariables]));
 	builder.define(IEndpointProvider, options.endpointProvider);
 	builder.define(ICAPIClientService, options.capiClientService);
