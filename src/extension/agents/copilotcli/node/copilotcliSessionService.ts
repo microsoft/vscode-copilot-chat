@@ -329,8 +329,9 @@ export class CopilotCLISessionWorkspaceTracker {
 			let workspaceFile = joinPath(this.context.globalStorageUri, 'copilot.cli.workspaceSessions.json');
 			// If we have more than one workspace, we do not track workspace sessions. Treat them as global sessions.
 			if (this.workspaceService.getWorkspaceFolders().length) {
-				const workspaceFileName = this.context.workspaceState.get(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY, `copilot.cli.workspaceSessions.${generateUuid()}.json`);
-				if (workspaceFileName !== this.context.workspaceState.get(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY, undefined)) {
+				let workspaceFileName = this.context.workspaceState.get(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY);
+				if (!workspaceFileName) {
+					workspaceFileName = `copilot.cli.workspaceSessions.${generateUuid()}.json`;
 					await this.context.workspaceState.update(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY, workspaceFileName);
 				}
 				workspaceFile = joinPath(this.context.globalStorageUri, workspaceFileName);
