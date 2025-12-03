@@ -21,7 +21,7 @@ import { IExperimentationService } from '../../../../platform/telemetry/common/n
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { ITokenizer } from '../../../../util/common/tokenizer';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { toErrorMessage } from '../../../../util/vs/base/common/errorMessage';
+import { toErrorMessage } from '../../../../util/common/errorMessage';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { URI, UriComponents } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';

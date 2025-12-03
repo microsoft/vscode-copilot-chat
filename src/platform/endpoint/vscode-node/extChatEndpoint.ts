@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import { FetchStreamRecorder } from '../../../platform/chat/common/chatMLFetcher';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
-import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
+import { toErrorMessage } from '../../../util/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
