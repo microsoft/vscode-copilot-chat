@@ -9,10 +9,10 @@ import path from 'path';
 // Re-export all .ts files as rules
 const rules: Record<string, LooseRuleDefinition> = {};
 await Promise.all(
-	glob.sync(`${import.meta.dirname}/*.ts`)
+	glob.sync('*.ts', { cwd: import.meta.dirname })
 		.filter(file => !file.endsWith('index.ts') && !file.endsWith('utils.ts'))
 		.map(async file => {
-			rules[path.basename(file, '.ts')] = (await import(file)).default;
+			rules[path.basename(file, '.ts')] = (await import('./' + file)).default;
 		})
 );
 
