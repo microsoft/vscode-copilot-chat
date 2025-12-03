@@ -83,6 +83,7 @@ export class ProxyModelsService extends Disposable implements IProxyModelsServic
 				},
 				method: 'GET',
 				timeout: 10_000,
+				signal: abortController.signal,
 			});
 		} catch (e) {
 			this._logService.error('Failed to fetch model list', e);
