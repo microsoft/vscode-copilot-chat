@@ -3,11 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { isDeepStrictEqual } from 'util';
-import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { autorun, observableFromEvent } from '../../../util/vs/base/common/observable';
+import { derivedWithCancellationToken, observableFromEvent, ObservablePromise } from '../../../util/vs/base/common/observable';
 import { CopilotToken } from '../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
@@ -34,24 +33,12 @@ export class ProxyModelsService extends Disposable implements IProxyModelsServic
 
 		const copilotTokenObs = observableFromEvent(this, this._tokenStore.onDidStoreUpdate, () => this._tokenStore.copilotToken);
 
-		this._register(autorun(reader => {
+		this._modelsObs = derivedWithCancellationToken((reader, token) => {
 			const copilotToken = copilotTokenObs.read(reader);
-			const cts = new CancellationTokenSource();
-			this._fetchLatestModels(copilotToken, cts.token).then(models => {
-				if (models === undefined) {
-					return;
-				}
-				if (cts.token.isCancellationRequested) {
-					return;
-				}
-				if (isDeepStrictEqual(this._models, models)) {
-					return;
-				}
-				this._models = models;
-				this._onModelListUpdated.fire();
-			});
-			reader.store.add({ dispose: () => cts.dispose(true) });
-		}));
+			return new ObservablePromise(this._fetchLatestModels(copilotToken, token)).resolvedValue;
+		}).flatten().recomputeInitiallyAndOnChange(this._store);
+
+		Event.fromObservable
 	}
 
 	get models(): WireTypes.ModelList.t | undefined {
