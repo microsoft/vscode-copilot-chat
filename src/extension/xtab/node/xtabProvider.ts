@@ -45,8 +45,9 @@ import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange'
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Position as VscodePosition } from '../../../vscodeTypes';
-import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
+import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
+import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
@@ -76,7 +77,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
 
-	private readonly delayer: Delayer;
+	private readonly userinteractionMonitor: UserInteractionMonitor;
 
 	private forceUseDefaultModel: boolean = false;
 
@@ -94,16 +95,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
-		this.delayer = new Delayer(this.configService, this.expService);
+		this.userinteractionMonitor = new UserInteractionMonitor(this.configService, this.expService);
 		this.nextCursorPredictor = this.instaService.createInstance(XtabNextCursorPredictor, XtabProvider.computeTokens);
 	}
 
 	public handleAcceptance(): void {
-		this.delayer.handleAcceptance();
+		this.userinteractionMonitor.handleAcceptance();
 	}
 
 	public handleRejection(): void {
-		this.delayer.handleRejection();
+		this.userinteractionMonitor.handleRejection();
 	}
 
 	public provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
@@ -163,7 +164,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return StatelessNextEditResult.noEdit(new NoNextEditReason.ActiveDocumentHasNoEdits(), telemetry);
 			}
 
-			const delaySession = this.delayer.createDelaySession(request.providerRequestStartDateTime);
+			const delaySession = this.userinteractionMonitor.createDelaySession(request.providerRequestStartDateTime);
 
 			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetry, RetryState.NotRetrying);
 
@@ -280,7 +281,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
 
-		const aggressivenessLevel = this.configService.getExperimentBasedConfig<xtabPromptOptions.AggressivenessLevel | undefined>(ConfigKey.TeamInternal.InlineEditsXtabAggressivenessLevel, this.expService) ?? xtabPromptOptions.AggressivenessLevel.Medium;
+		const aggressivenessLevel = this.userinteractionMonitor.getAggressivenessLevel();
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
