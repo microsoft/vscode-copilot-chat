@@ -44,6 +44,8 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
+import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
+import { ProxyModelsService } from '../../../platform/proxyModels/node/proxyModelsService';
 import { AdoCodeSearchService, IAdoCodeSearchService } from '../../../platform/remoteCodeSearch/common/adoCodeSearchService';
 import { GithubCodeSearchService, IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
@@ -206,6 +208,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
 	builder.define(IRerankerService, new SyncDescriptor(RerankerService));
+	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 }
 

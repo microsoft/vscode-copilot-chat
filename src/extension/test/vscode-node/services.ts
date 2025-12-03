@@ -60,6 +60,7 @@ import { INotificationService, NullNotificationService } from '../../../platform
 import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
 import { PromptsServiceImpl } from '../../../platform/promptFiles/common/promptsServiceImpl';
 import { IPromptPathRepresentationService, PromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { IProxyModelsService, NullProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
 import { IRemoteRepositoriesService, RemoteRepositoriesService } from '../../../platform/remoteRepositories/vscode/remoteRepositories';
 import { NullRequestLogger } from '../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -189,6 +190,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
+	testingServiceCollection.define(IProxyModelsService, new SyncDescriptor(NullProxyModelsService));
 	testingServiceCollection.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 
 	return testingServiceCollection;
