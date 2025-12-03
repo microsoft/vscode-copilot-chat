@@ -73,19 +73,19 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		allowTools[ToolName.ApplyPatch] = learned.includes(ToolName.ApplyPatch);
 	} else {
 		allowTools[ToolName.EditFile] = true;
-		allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
-		allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
+		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model);
+		allowTools[ToolName.ApplyPatch] = modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-		if (allowTools[ToolName.ApplyPatch] && await modelCanUseApplyPatchExclusively(model)) {
+		if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model)) {
 			allowTools[ToolName.EditFile] = false;
 		}
 
-		if (await modelCanUseReplaceStringExclusively(model)) {
+		if (modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;
 			allowTools[ToolName.EditFile] = false;
 		}
 
-		if (allowTools[ToolName.ReplaceString] && await modelSupportsMultiReplaceString(model)) {
+		if (allowTools[ToolName.ReplaceString] && modelSupportsMultiReplaceString(model)) {
 			allowTools[ToolName.MultiReplaceString] = true;
 		}
 	}
@@ -118,7 +118,7 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		return undefined;
 	});
 
-	if (await modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gpt5AlternativePatch, experimentationService)) {
+	if (modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gpt5AlternativePatch, experimentationService)) {
 		const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
 		if (ap !== -1) {
 			tools[ap] = { ...tools[ap], description: applyPatch5Description };

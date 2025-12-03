@@ -112,6 +112,8 @@ import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/desc
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
 import { IInlineEditsModelService } from '../../platform/inlineEdits/common/inlineEditsModelService';
 import { InlineEditsModelService } from '../../platform/inlineEdits/node/inlineEditsModelService';
+import { IProxyModelsService } from '../../platform/proxyModels/common/proxyModelsService';
+import { ProxyModelsService } from '../../platform/proxyModels/node/proxyModelsService';
 export {
 	IAuthenticationService, ICAPIClientService, IEndpointProvider, IExperimentationService, IIgnoreService, ILanguageContextProviderService
 };
@@ -368,6 +370,7 @@ function setupServices(options: INESProviderOptions) {
 		topP: 1,
 		rejectionMessage: 'Sorry, but I can only assist with programming related questions.',
 	});
+	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	return builder.seal();
 }
