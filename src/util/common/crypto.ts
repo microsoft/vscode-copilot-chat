@@ -41,12 +41,20 @@ export async function createSha256Hash(data: string | Uint8Array): Promise<strin
 }
 
 const _cachedSha256Hashes = new Map<string, string>();
-export async function getCachedSha256Hash(text: string): Promise<string> {
+export async function cacheSha256Hash(text: string): Promise<void> {
 	if (_cachedSha256Hashes.has(text)) {
-		return _cachedSha256Hashes.get(text)!;
+		return;
 	}
 
+	_cachedSha256Hashes.set(text, ''); // Placeholder to avoid duplicate work
 	const hash = await createSha256Hash(text);
 	_cachedSha256Hashes.set(text, hash);
+}
+export function getSha256Hash(text: string): string {
+	const hash = _cachedSha256Hashes.get(text);
+	if (!hash) {
+		throw new Error(`Expected hash to already be cached: '${text}'`);
+	}
+
 	return hash;
 }

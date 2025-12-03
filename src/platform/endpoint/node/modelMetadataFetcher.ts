@@ -5,7 +5,7 @@
 
 import { RequestType } from '@vscode/copilot-api';
 import type { LanguageModelChat } from 'vscode';
-import { createRequestHMAC } from '../../../util/common/crypto';
+import { cacheSha256Hash, createRequestHMAC } from '../../../util/common/crypto';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -139,6 +139,9 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		if (!resolvedModel) {
 			throw this._lastFetchError;
 		}
+
+		// Cache the model hashes for later use in detecting hidden models
+		await this.cacheModelHashes(resolvedModel);
 
 		// If it's a chat model, update max prompt tokens based on settings + exp
 		if (isChatModelInformation(resolvedModel) && (resolvedModel.capabilities.limits)) {
@@ -348,6 +351,13 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		}
 
 		return modelPickerOverrides[resolvedModel.id] ?? resolvedModel.model_picker_enabled;
+	}
+
+	protected cacheModelHashes(model: IModelAPIResponse): Promise<void> {
+		return Promise.all([
+			model.id,
+			model.capabilities.family,
+		].map(cacheSha256Hash)).then(() => { });
 	}
 }
 
