@@ -329,7 +329,7 @@ export class CopilotCLISessionWorkspaceTracker {
 			let workspaceFile = joinPath(this.context.globalStorageUri, 'copilot.cli.workspaceSessions.json');
 			// If we have workspace folders, track workspace sessions separately. Otherwise treat them as global sessions.
 			if (this.workspaceService.getWorkspaceFolders().length) {
-				let workspaceFileName = this.context.workspaceState.get(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY);
+				let workspaceFileName = this.context.workspaceState.get<string | undefined>(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY);
 				if (!workspaceFileName) {
 					workspaceFileName = `copilot.cli.workspaceSessions.${generateUuid()}.json`;
 					await this.context.workspaceState.update(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY, workspaceFileName);
