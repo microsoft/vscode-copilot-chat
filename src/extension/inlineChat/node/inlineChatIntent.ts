@@ -27,6 +27,7 @@ import { AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { clamp } from '../../../util/vs/base/common/numbers';
+import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 import { assertType } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
@@ -137,6 +138,11 @@ export class InlineChatIntent implements IIntent {
 		});
 
 		const intent = await this._selectIntent(conversation.turns, documentContext, request);
+
+		if (isFalsyOrWhitespace(request.prompt)) {
+			request = { ...request, prompt: intent.description };
+		}
+
 		const handler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, conversation, request, stream, token, documentContext, ChatLocation.Editor, chatTelemetry, undefined, onPaused);
 		const result = await handler.getResult();
 
