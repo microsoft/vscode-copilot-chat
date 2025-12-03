@@ -327,7 +327,7 @@ export class CopilotCLISessionWorkspaceTracker {
 		this._initializeSessionStorageFiles = new Lazy<Promise<{ global: Uri; workspace: Uri }>>(async () => {
 			const globalFile = joinPath(this.context.globalStorageUri, 'copilot.cli.oldGlobalSessions.json');
 			let workspaceFile = joinPath(this.context.globalStorageUri, 'copilot.cli.workspaceSessions.json');
-			// If we have more than one workspace, we do not track workspace sessions. Treat them as global sessions.
+			// If we have workspace folders, track workspace sessions separately. Otherwise treat them as global sessions.
 			if (this.workspaceService.getWorkspaceFolders().length) {
 				let workspaceFileName = this.context.workspaceState.get(COPILOT_CLI_WORKSPACE_JSON_FILE_KEY);
 				if (!workspaceFileName) {
