@@ -3844,15 +3844,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.copilotCLI.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.copilotCLI.enabled%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.gpt5AlternativePatch": {
 						"type": "boolean",
 						"default": false,
@@ -3919,15 +3910,6 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.suggestRelatedFilesFromGitHistory.useEmbeddings%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.cli.isolation.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.cli.isolation.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"

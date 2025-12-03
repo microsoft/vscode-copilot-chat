@@ -401,8 +401,6 @@
 	"github.copilot.config.tools.defaultToolsGrouped": "Group default tools in prompts.",
 	"github.copilot.config.claudeCode.enabled": "Enable Claude Code agent.",
 	"github.copilot.config.claudeCode.debug": "Enable debug mode for Claude Code agent.",
-	"github.copilot.config.copilotCLI.enabled": "Enable Background Agent.",
-	"github.copilot.config.cli.isolation.enabled": "Enable isolation for Background Agent sessions.",
 	"github.copilot.config.cli.customAgents.enabled": "Enable Custom Agents for Background Agents.",
 	"github.copilot.config.cli.mcp.enabled": "Enable Model Context Protocol (MCP) server for Background Agents.",
 	"github.copilot.config.copilotCodingAgent.enabled": "Enable Copilot Coding Agent (cloud).",
