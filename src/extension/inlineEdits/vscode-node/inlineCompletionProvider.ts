@@ -35,6 +35,7 @@ import { basename } from '../../../util/vs/base/common/path';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
+import { createCorrelationId } from '../common/correlationId';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
@@ -251,6 +252,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			requestCancellationTokenSource.cancel();
 
 			const emptyList = new NesCompletionList(context.requestUuid, undefined, [], telemetryBuilder);
+			const correlationId = createCorrelationId('nes');
 
 			if (token.isCancellationRequested) {
 				tracer.returns('lost race to cancellation');
@@ -279,6 +281,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 					wasShown: false,
 					telemetryBuilder,
 					jumpToPosition,
+					correlationId
 				};
 				return new NesCompletionList(context.requestUuid, jumpToPositionCompletionItem, [], telemetryBuilder);
 			}
@@ -357,7 +360,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				isInlineEdit: !isInlineCompletion,
 				showInlineEditMenu: !serveAsCompletionsProvider,
 				wasShown: false,
-				supportsRename
+				supportsRename,
+				correlationId,
 			};
 
 			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
