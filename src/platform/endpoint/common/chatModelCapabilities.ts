@@ -37,7 +37,8 @@ const HIDDEN_MODEL_B_HASHES = [
 
 const HIDDEN_MODEL_C_HASHES = [
 	'57bc0aad677492da7a00731e3e411055b9828c6439f502fa5abd8fddb7a8a260',
-	'c5f9e7e93624823213aa93017d0d970ce3203d99dfcd616a0446f7bae2d8caf4'
+	'c5f9e7e93624823213aa93017d0d970ce3203d99dfcd616a0446f7bae2d8caf4',
+
 ];
 
 const HIDDEN_MODEL_D_HASHES = [
@@ -129,14 +130,14 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
  * Model supports apply_patch as an edit tool.
  */
 export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || await isHiddenModelA(model) || await isHiddenModelB(model) || await isHiddenModelC(model) || await isHiddenModelD(model) || await isVSCModelA(model) || await isVSCModelB(model);
+	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || await isHiddenModelA(model) || await isHiddenModelB(model) || await isHiddenModelC(model) || await isHiddenModelD(model) || await isVSCModelA(model) || await isVSCModelB(model) || model.family.includes('arctic-fox');
 }
 
 /**
  * Model prefers JSON notebook representation.
  */
 export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
-	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini';
+	return (model.family.includes('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || model.family.includes('arctic-fox');
 }
 
 /**
@@ -188,7 +189,7 @@ export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): b
  * without needing insert_edit_into_file.
  */
 export async function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('gpt-5') || await isHiddenModelB(model) || await isHiddenModelC(model) || await isHiddenModelD(model) || await isVSCModelA(model) || await isVSCModelB(model);
+	return model.family.startsWith('gpt-5') || model.family.startsWith('arctic-fox') || await isHiddenModelB(model) || await isHiddenModelC(model) || await isHiddenModelD(model) || await isVSCModelA(model) || await isVSCModelB(model);
 }
 
 /**
@@ -204,7 +205,7 @@ export function modelNeedsStrongReplaceStringHint(model: LanguageModelChat | ICh
  * Model can take the simple, modern apply_patch instructions.
  */
 export async function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('gpt-5') || await isHiddenModelB(model) || await isHiddenModelC(model) || await isHiddenModelD(model) || await isVSCModelA(model) || await isVSCModelB(model);
+	return model.family.startsWith('gpt-5') || model.family.startsWith('arctic-fox') || await isHiddenModelB(model) || await isHiddenModelC(model) || await isHiddenModelD(model) || await isVSCModelA(model) || await isVSCModelB(model);
 }
 
 /**
