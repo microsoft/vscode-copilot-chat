@@ -16,7 +16,7 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { LanguageContextLanguages, LanguageContextOptions, PromptingStrategy } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
@@ -269,7 +269,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			promptOptions,
 			XtabProvider.computeTokens,
-			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: false } }
+			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness } }
 		);
 
 		if (taggedCurrentFileContentResult.isError()) {
@@ -279,6 +279,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const { taggedCurrentDocLines, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
+
+		const aggressivenessLevel = this.configService.getExperimentBasedConfig<xtabPromptOptions.AggressivenessLevel | undefined>(ConfigKey.TeamInternal.InlineEditsXtabAggressivenessLevel, this.expService) ?? xtabPromptOptions.AggressivenessLevel.Medium;
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
@@ -304,6 +306,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			langCtx,
+			aggressivenessLevel,
 			XtabProvider.computeTokens,
 			promptOptions
 		);
@@ -1033,6 +1036,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt:
 				return simplifiedPrompt;
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
+			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
