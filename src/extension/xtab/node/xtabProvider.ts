@@ -77,7 +77,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
 
-	private readonly userinteractionMonitor: UserInteractionMonitor;
+	private readonly userInteractionMonitor: UserInteractionMonitor;
 
 	private forceUseDefaultModel: boolean = false;
 
@@ -95,16 +95,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
-		this.userinteractionMonitor = new UserInteractionMonitor(this.configService, this.expService);
+		this.userInteractionMonitor = new UserInteractionMonitor(this.configService, this.expService);
 		this.nextCursorPredictor = this.instaService.createInstance(XtabNextCursorPredictor, XtabProvider.computeTokens);
 	}
 
 	public handleAcceptance(): void {
-		this.userinteractionMonitor.handleAcceptance();
+		this.userInteractionMonitor.handleAcceptance();
 	}
 
 	public handleRejection(): void {
-		this.userinteractionMonitor.handleRejection();
+		this.userInteractionMonitor.handleRejection();
 	}
 
 	public provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
@@ -164,7 +164,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return StatelessNextEditResult.noEdit(new NoNextEditReason.ActiveDocumentHasNoEdits(), telemetry);
 			}
 
-			const delaySession = this.userinteractionMonitor.createDelaySession(request.providerRequestStartDateTime);
+			const delaySession = this.userInteractionMonitor.createDelaySession(request.providerRequestStartDateTime);
 
 			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetry, RetryState.NotRetrying);
 
@@ -281,7 +281,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
 
-		const aggressivenessLevel = this.userinteractionMonitor.getAggressivenessLevel();
+		const aggressivenessLevel = this.userInteractionMonitor.getAggressivenessLevel();
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
