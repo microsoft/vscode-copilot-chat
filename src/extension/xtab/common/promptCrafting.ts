@@ -104,7 +104,7 @@ function appendWithNewLineIfNeeded(base: string, toAppend: string, minNewLines: 
 
 	// Add newlines to reach the minimum required
 	const newLinesToAdd = Math.max(0, minNewLines - existingNewLines);
-	return base + '\n'.repeat(newLinesToAdd) + toAppend;
+	return (base + '\n'.repeat(newLinesToAdd) + toAppend).trim();
 }
 
 function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
