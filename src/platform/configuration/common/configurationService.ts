@@ -836,7 +836,6 @@ export namespace ConfigKey {
 	export const CodeFeedbackInstructions = defineSetting('chat.reviewSelection.instructions', ConfigType.Simple, [] as CodeGenerationInstruction[]);
 
 	export const UseProjectTemplates = defineSetting('chat.useProjectTemplates', ConfigType.Simple, true);
-	export const AgentDelegateAutoCommitAndPush = defineSetting('chat.agent.delegate.autoCommitAndPush', ConfigType.Simple, false);
 	export const ExplainScopeSelection = defineSetting('chat.scopeSelection', ConfigType.Simple, false);
 	export const EnableCodeActions = defineSetting('editor.enableCodeActions', ConfigType.Simple, true);
 	export const LocaleOverride = defineSetting('chat.localeOverride', ConfigType.Simple, 'auto');
