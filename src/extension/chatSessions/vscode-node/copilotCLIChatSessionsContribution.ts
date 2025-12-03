@@ -446,7 +446,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 
 	private readonly previousReferences = new Map<string, vscode.ChatPromptReference[]>();
-	private readonly attachmentsForRequest = new Map<string, Attachment[]>();
+	private readonly contextForRequest = new Map<string, { prompt: string; attachments: Attachment[] }>();
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
 		const disposables = new DisposableStore();
@@ -519,13 +519,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return await this.handleConfirmationData(request, session.object, request.prompt, confirmationResults, context, stream, token);
 			}
 
+			// Check if we have context stored for this request (created in createCLISessionAndSubmitRequest, work around)
+			const contextForRequest = this.contextForRequest.get(session.object.sessionId);
+			this.contextForRequest.delete(session.object.sessionId);
 			if (request.prompt.startsWith('/delegate')) {
 				await this.handleDelegateCommand(session.object, request, context, stream, token);
-			} else if (this.attachmentsForRequest.has(session.object.sessionId)) {
+			} else if (contextForRequest) {
 				// This is a request that was created in createCLISessionAndSubmitRequest with attachments already resolved.
-				const attachments = this.attachmentsForRequest.get(session.object.sessionId)!;
-				this.attachmentsForRequest.delete(session.object.sessionId);
-				await session.object.handleRequest(request.id, request.prompt, attachments, modelId, token);
+				const { prompt, attachments } = contextForRequest;
+				this.contextForRequest.delete(session.object.sessionId);
+				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, additionalReferences, session.object.options.isolationEnabled, token);
@@ -841,17 +844,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult> {
-		let history: string | undefined;
+		let summary: string | undefined;
 		const requestPromptPromise = (async () => {
 			if (this.hasHistoryToSummarize(context.history)) {
 				stream.progress(vscode.l10n.t('Analyzing chat history'));
-				history = await this.chatDelegationSummaryService.summarize(context, token);
-				history = history ? `**Summary**\n${history}` : undefined;
+				summary = await this.chatDelegationSummaryService.summarize(context, token);
+				summary = summary ? `**Summary**\n${summary}` : undefined;
 			}
 
 			// Give priority to userPrompt if provided (e.g., from confirmation metadata)
 			userPrompt = userPrompt || request.prompt;
-			return history ? `${userPrompt}\n${history}` : userPrompt;
+			return summary ? `${userPrompt}\n${summary}` : userPrompt;
 		})();
 
 		const getWorkingDirectory = async () => {
@@ -867,8 +870,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 		};
 
-		const [requestPrompt, { prompt, attachments }, model, agent] = await Promise.all([
-			requestPromptPromise,
+		const [{ prompt, attachments }, model, agent] = await Promise.all([
 			requestPromptPromise.then(prompt => this.promptResolver.resolvePrompt(request, prompt, (references || []).concat([]), isolationEnabled, token)),
 			this.getModelId(undefined, undefined, token),
 			this.getAgent(undefined, undefined, token),
@@ -877,8 +879,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		const session = await this.sessionService.createSession({ workingDirectory, isolationEnabled, agent, model }, token);
 		void this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
-		if (history) {
-			void this.chatDelegationSummaryService.trackSummaryUsage(session.object.sessionId, history);
+		if (summary) {
+			void this.chatDelegationSummaryService.trackSummaryUsage(session.object.sessionId, summary);
 		}
 		// Do not await, we want this code path to be as fast as possible.
 		if (isolationEnabled && workingDirectory) {
@@ -886,14 +888,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		try {
-			this.attachmentsForRequest.set(session.object.sessionId, attachments);
+			this.contextForRequest.set(session.object.sessionId, { prompt, attachments });
 			this.sessionItemProvider.notifySessionsChange();
 			await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
 				resource: SessionIdForCLI.getResource(session.object.sessionId),
-				prompt: requestPrompt
+				prompt: userPrompt || request.prompt
 			});
 		} catch {
-			this.attachmentsForRequest.delete(session.object.sessionId);
+			this.contextForRequest.delete(session.object.sessionId);
 			// TODO@rebornix: handle potential missing command
 			// We don't want to block the caller anymore.
 			// The caller is most likely a chat editor or the like.
