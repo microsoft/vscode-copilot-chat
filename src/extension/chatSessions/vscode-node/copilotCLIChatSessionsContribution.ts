@@ -61,7 +61,7 @@ const _sessionModel: Map<string, string | undefined> = new Map();
 // As a temporary solution, return the same untitled session id back to core until the session is completed.
 const _untitledSessionIdMap = new Map<string, string>();
 function isUntitledSessionId(sessionId: string): boolean {
-	return sessionId.startsWith('untitled:');
+	return sessionId.startsWith('untitled:') || sessionId.startsWith('untitled-');
 }
 
 export class CopilotCLIWorktreeManager {
