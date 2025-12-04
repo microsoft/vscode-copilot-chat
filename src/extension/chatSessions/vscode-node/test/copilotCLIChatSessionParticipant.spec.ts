@@ -33,6 +33,7 @@ import { ChatSummarizerProvider } from '../../../prompt/node/summarizer';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
+import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLIWorktreeManager } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 
@@ -310,6 +311,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 	it('starts a new chat session and submits the request', async () => {
 		const request = new TestChatRequest('Push this');
+		(request as Record<string, any>).model = mockLanguageModelChat;
 		const context = { chatSessionContext: undefined, chatSummary: undefined } as unknown as vscode.ChatContext;
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;

@@ -9,7 +9,6 @@ import { MarkdownString } from '../../../util/vs/base/common/htmlContent';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import * as vscodeTypes from '../../../vscodeTypes';
-import { mockLanguageModelChat } from '../../tools/node/test/searchToolTestUtils';
 
 export class TestChatRequest implements ChatRequest {
 	public command: string | undefined;
@@ -21,7 +20,7 @@ export class TestChatRequest implements ChatRequest {
 	public isParticipantDetected: boolean;
 	public toolReferences = [];
 	public toolInvocationToken: never = undefined as never;
-	public model = mockLanguageModelChat;
+	public model = null!;
 	public tools = new Map();
 	public id = generateUuid();
 	public sessionId = generateUuid();
