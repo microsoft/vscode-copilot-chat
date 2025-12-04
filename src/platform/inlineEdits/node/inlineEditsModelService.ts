@@ -3,16 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { isDeepStrictEqual } from 'util';
 import type * as vscode from 'vscode';
 import { filterMap } from '../../../util/common/arrays';
 import * as errors from '../../../util/common/errors';
 import { createTracer } from '../../../util/common/tracing';
 import { pushMany } from '../../../util/vs/base/common/arrays';
 import { softAssert } from '../../../util/vs/base/common/assert';
-import { Emitter } from '../../../util/vs/base/common/event';
+import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { autorun, observableFromEvent } from '../../../util/vs/base/common/observable';
+import { derived, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { CopilotToken } from '../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ConfigKey, ExperimentBasedConfig, IConfigurationService } from '../../configuration/common/configurationService';
@@ -28,6 +27,11 @@ type Model = {
 	modelName: string;
 	promptingStrategy: PromptingStrategy | undefined;
 	includeTagsInCurrentFile: boolean;
+}
+
+type ModelInfo = {
+	models: Model[];
+	currentModelId: string;
 }
 
 export class InlineEditsModelService extends Disposable implements IInlineEditsModelService {
@@ -56,10 +60,11 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	private _expBasedModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString, this._expService);
 	private _defaultModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString, this._expService);
 
-	private _modelInfo: { readonly modelList: readonly Model[]; readonly currentModelId: string };
+	private _models: IObservable<Model[]>;
+	private _currentModelIdObs: IObservable<Model>;
+	private _modelInfo: IObservable<ModelInfo>;
 
-	private readonly _onModelListUpdated = this._register(new Emitter<void>());
-	public readonly onModelListUpdated = this._onModelListUpdated.event;
+	public readonly onModelListUpdated: Event<void>;
 
 	private _tracer = createTracer(['NES', 'ModelsService'], (msg) => this._logService.trace(msg));
 
@@ -75,77 +80,86 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const tracer = this._tracer.sub('constructor');
 
-		const defaultModel = this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
-
-		this._modelInfo = { modelList: [defaultModel], currentModelId: defaultModel.modelName };
-
-		tracer.trace('initial modelInfo', this._modelInfo);
-
-		this._register(autorun((reader) => {
-			this.refreshModelsInfo({
+		this._models = derived((reader) => {
+			tracer.trace('computing models');
+			return this.computeModelInfo({
 				copilotToken: this._copilotTokenObs.read(reader),
 				fetchedNesModels: this._fetchedModelsObs.read(reader),
-				preferredModelName: this._preferredModelNameObs.read(reader),
 				localModelConfig: this._localModelConfigObs.read(reader),
 				modelConfigString: this._expBasedModelConfigObs.read(reader),
 				defaultModelConfigString: this._defaultModelConfigObs.read(reader),
 			});
-		}));
+		}).recomputeInitiallyAndOnChange(this._store);
 
-		tracer.trace('updated model info', this._modelInfo);
+		this._currentModelIdObs = derived<Model, void>((reader) => {
+			tracer.trace('computing current model');
+			return this._pickModel({
+				preferredModelName: this._preferredModelNameObs.read(reader),
+				models: this._models.read(reader),
+			});
+		}).recomputeInitiallyAndOnChange(this._store);
+
+		this._modelInfo = derived((reader) => {
+			tracer.trace('computing model info');
+			return {
+				models: this._models.read(reader),
+				currentModelId: this._currentModelIdObs.read(reader).modelName,
+			};
+		}).recomputeInitiallyAndOnChange(this._store);
+
+		this.onModelListUpdated = Event.fromObservableLight(this._modelInfo);
 	}
 
 	get modelInfo(): vscode.InlineCompletionModelInfo | undefined {
-		const tracer = this._tracer.sub('modelInfo.getter');
-
-		tracer.trace('model info', this._modelInfo);
-
-		const models: vscode.InlineCompletionModel[] = this._modelInfo.modelList.map(m => ({
+		const models: vscode.InlineCompletionModel[] = this._models.get().map(m => ({
 			id: m.modelName,
 			name: m.modelName,
 		}));
 
+		const currentModel = this._currentModelIdObs.get();
+
 		return {
 			models,
-			currentModelId: this._modelInfo.currentModelId,
+			currentModelId: currentModel.modelName,
 		};
 	}
 
 
 	async setCurrentModelId(modelId: string): Promise<void> {
-		if (this._modelInfo.currentModelId === modelId) {
+		const preferredModel = this._configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsPreferredModel, this._expService);
+
+		const isSameModel = preferredModel === modelId;
+		if (isSameModel) {
 			return;
 		}
-		if (!this._modelInfo.modelList.some(m => m.modelName === modelId)) {
+
+		if (!this._models.get().some(m => m.modelName === modelId)) {
 			this._logService.warn(`Trying to set unknown model id: ${modelId}`);
 			return;
 		}
-		this._modelInfo = { ...this._modelInfo, currentModelId: modelId };
+
+		// if user picks same as the default model, we should reset the user setting
+		// otherwise, update the model
+
 		await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, modelId);
-		this._onModelListUpdated.fire();
 	}
 
-	async refreshModelsInfo(
+	private computeModelInfo(
 		{
 			copilotToken,
 			fetchedNesModels,
-			preferredModelName,
 			localModelConfig,
 			modelConfigString,
 			defaultModelConfigString,
 		}: {
 			copilotToken: CopilotToken | undefined;
 			fetchedNesModels: WireTypes.Model.t[] | undefined;
-			preferredModelName: string;
 			localModelConfig: ModelConfiguration | undefined;
 			modelConfigString: string | undefined;
 			defaultModelConfigString: string | undefined;
 		},
-	): Promise<void> {
-
-		const tracer = this._tracer.sub('refreshModelsInfo');
-
-		tracer.trace('Fetching latest models...');
+	): Model[] {
+		const tracer = this._tracer.sub('computeModelInfo');
 
 		const models: Model[] = [];
 
@@ -204,23 +218,14 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			}
 		}
 
-		const hasModelListChanged = !isDeepStrictEqual(this._modelInfo.modelList, models);
-
-		if (!hasModelListChanged) {
-			tracer.trace('Model list unchanged, not updating.');
-		} else {
-			this._modelInfo = {
-				modelList: models,
-				currentModelId: this._pickModel({ preferredModelName, models }),
-			};
-			tracer.trace('Model list updated, firing event.');
-			this._onModelListUpdated.fire();
-		}
+		return models;
 	}
 
 	public selectedModelConfiguration(): ModelConfiguration {
 		const tracer = this._tracer.sub('selectedModelConfiguration');
-		const model = this._modelInfo.modelList.find(m => m.modelName === this._modelInfo.currentModelId);
+		const currentModel = this._currentModelIdObs.get();
+		tracer.trace(`Current model id: ${currentModel.modelName}`);
+		const model = this._models.get().find(m => m.modelName === currentModel.modelName);
 		if (model) {
 			tracer.trace(`Selected model found: ${model.modelName}`);
 			return {
@@ -256,22 +261,26 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}: {
 		preferredModelName: string;
 		models: Model[];
-	}): string {
+	}): Model {
 		const userHasPreferredModel = preferredModelName !== 'none';
 
 		// FIXME@ulugbekna: respect exp-set model name
 
-		if (userHasPreferredModel && models.some(m => m.modelName === preferredModelName)) {
-			return preferredModelName;
+		if (userHasPreferredModel) {
+			const preferredModel = models.find(m => m.modelName === preferredModelName);
+			if (preferredModel) {
+				return preferredModel;
+			}
 		}
 
 		softAssert(models.length > 0, 'InlineEdits model list should have at least one model');
 
-		if (models.length > 0) {
-			return models[0].modelName;
+		const model = models.at(0);
+		if (model) {
+			return model;
 		}
 
-		return this.determineDefaultModel(undefined, undefined).modelName;
+		return this.determineDefaultModel(undefined, undefined);
 	}
 
 	private parseModelConfigStringSetting(configKey: ExperimentBasedConfig<string | undefined>): ModelConfiguration | undefined {
