@@ -38,6 +38,23 @@ const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
 const ISOLATION_OPTION_ID = 'isolation';
 
+const disabledIsolation: Readonly<vscode.ChatSessionProviderOptionItem> = {
+	id: 'disabled',
+	name: 'Workspace',
+	description: vscode.l10n.t('Use the current workspace for this session')
+};
+const disabledIsolationLocked: Readonly<vscode.ChatSessionProviderOptionItem> = { ...disabledIsolation, locked: true };
+
+function getDisabledIsolationOption(name: string): vscode.ChatSessionProviderOptionItem {
+	return {
+		id: 'enabled',
+		name,
+		description: vscode.l10n.t('Using worktree for this session'),
+		locked: true,
+		icon: new vscode.ThemeIcon('git-branch')
+	};
+}
+
 const UncommittedChangesStep = 'uncommitted-changes';
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CLIConfirmationMetadata };
 interface CLIConfirmationMetadata {
@@ -326,13 +343,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			// For existing sessions with a worktree, show the worktree branch name as a locked option
 			const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(copilotcliSessionId);
 			if (worktreeRelativePath) {
-				options[ISOLATION_OPTION_ID] = {
-					id: 'enabled',
-					name: worktreeRelativePath,
-					description: vscode.l10n.t('Using worktree for this session'),
-					locked: true,
-					icon: new vscode.ThemeIcon('git-branch')
-				};
+				options[ISOLATION_OPTION_ID] = getDisabledIsolationOption(worktreeRelativePath);
 			}
 		}
 		const history = existingSession?.object?.getChatHistory() || [];
@@ -352,7 +363,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
 		const isolationItems = [
 			{ id: 'enabled', name: 'Worktree', description: vscode.l10n.t('Use a git worktree for this session') },
-			{ id: 'disabled', name: 'Workspace', description: vscode.l10n.t('Use the current workspace for this session') }
+			disabledIsolation
 		];
 
 		const [models, agents] = await Promise.all([
@@ -510,16 +521,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// For existing sessions with a worktree, show the worktree branch name as a locked option
 				const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.object.sessionId);
 				if (worktreeRelativePath) {
-					changes.push({
-						optionId: ISOLATION_OPTION_ID, value: {
-							id: 'enabled',
-							name: worktreeRelativePath,
-							description: vscode.l10n.t('Using worktree for this session'),
-							locked: true,
-							icon: new vscode.ThemeIcon('git-branch')
-						}
-					});
+					changes.push({ optionId: ISOLATION_OPTION_ID, value: getDisabledIsolationOption(worktreeRelativePath) });
+					this.contentProvider.notifySessionOptionsChange(resource, changes);
 				}
+			} else if (isUntitled && (!session.object.options.isolationEnabled || !this.worktreeManager.isSupported())) {
+				const changes: { optionId: string; value: vscode.ChatSessionProviderOptionItem }[] = [];
+				changes.push({ optionId: ISOLATION_OPTION_ID, value: disabledIsolationLocked });
 				this.contentProvider.notifySessionOptionsChange(resource, changes);
 			}
 
