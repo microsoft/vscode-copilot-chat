@@ -100,7 +100,7 @@ export class SubagentToolCallingLoop extends ToolCallingLoop<ISubagentToolCallin
 	}
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
-		const allTools = await getAgentTools(this.instantiationService, this.options.request);
+		const allTools = await this.instantiationService.invokeFunction(getAgentTools, this.options.request);
 
 		if (this.options.allowedTools) {
 			// If allowedTools is specified, only include those tools
