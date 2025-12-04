@@ -245,6 +245,7 @@ export function stripReminders(text: string): string {
 		.replace(/<context>[\s\S]*?<\/context>\s*/g, '')
 		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
 		.replace(/<pr_metadata[^>]*\/?>\s*/g, '')
+		.replace(/<user_query[^>]*\/?>\s*/g, '')
 		.trim();
 }
 
