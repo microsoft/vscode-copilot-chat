@@ -11,7 +11,7 @@ import { pushMany } from '../../../util/vs/base/common/arrays';
 import { softAssert } from '../../../util/vs/base/common/assert';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { derived, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
+import { derived, IObservable, ISettableObservable, observableFromEvent, observableValue } from '../../../util/vs/base/common/observable';
 import { CopilotToken } from '../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ConfigKey, ExperimentBasedConfig, IConfigurationService } from '../../configuration/common/configurationService';
@@ -95,6 +95,8 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const tracer = this._tracer.sub('constructor');
 
+		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
+
 		this._modelsObs = derived((reader) => {
 			tracer.trace('computing models');
 			return this.computeModelInfo({
@@ -111,6 +113,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			return this._pickModel({
 				preferredModelName: this._preferredModelNameObs.read(reader),
 				models: this._modelsObs.read(reader),
+				undesiredModelIds: this._undesiredModelsManager.modelsObservable.read(reader),
 			});
 		}).recomputeInitiallyAndOnChange(this._store);
 
@@ -123,8 +126,6 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}).recomputeInitiallyAndOnChange(this._store);
 
 		this.onModelListUpdated = Event.fromObservableLight(this._modelInfoObs);
-
-		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
 	}
 
 	get modelInfo(): vscode.InlineCompletionModelInfo | undefined {
@@ -296,10 +297,12 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	private _pickModel({
 		preferredModelName,
-		models
+		models,
+		undesiredModelIds
 	}: {
 		preferredModelName: string;
 		models: Model[];
+		undesiredModelIds: string[];
 	}): Model {
 		// priority of picking a model:
 		// 0. model from modelConfigurationString setting from ExP, unless marked as undesired
@@ -308,7 +311,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const expConfiguredModel = models.find(m => m.source === ModelSource.ExpConfig);
 		if (expConfiguredModel) {
-			const isUndesiredModelId = this._undesiredModelsManager.isUndesiredModelId(expConfiguredModel.modelName);
+			const isUndesiredModelId = undesiredModelIds.includes(expConfiguredModel.modelName);
 			if (isUndesiredModelId) {
 				this._tracer.trace(`Exp-configured model ${expConfiguredModel.modelName} is marked as undesired by the user. Skipping.`);
 			} else {
@@ -369,39 +372,42 @@ namespace UndesiredModels {
 
 	export class Manager {
 
+		private readonly _modelsObs: ISettableObservable<string[]>;
+
 		constructor(
 			private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
 		) {
+			const initialModels = this._vscodeExtensionContext.globalState.get<UndesiredModelsValue>(UNDESIRED_MODELS_KEY) ?? [];
+			this._modelsObs = observableValue('undesiredModels', initialModels);
+		}
+
+		get modelsObservable(): IObservable<string[]> {
+			return this._modelsObs;
 		}
 
 		isUndesiredModelId(modelId: string) {
-			const models = this._getModels();
+			const models = this._modelsObs.get();
 			return models.includes(modelId);
 		}
 
 		async addUndesiredModelId(modelId: string): Promise<void> {
-			const models = this._getModels();
+			const models = this._modelsObs.get();
 			if (!models.includes(modelId)) {
-				models.push(modelId);
-				return this._setModels(models);
+				const newModels = [...models, modelId];
+				await this._vscodeExtensionContext.globalState.update(UNDESIRED_MODELS_KEY, newModels);
+				this._modelsObs.set(newModels, undefined);
 			}
 		}
 
 		async removeUndesiredModelId(modelId: string): Promise<void> {
-			const models = this._getModels();
+			const models = this._modelsObs.get();
 			const index = models.indexOf(modelId);
 			if (index !== -1) {
-				models.splice(index, 1);
-				return this._setModels(models);
+				const newModels = [...models];
+				newModels.splice(index, 1);
+				await this._vscodeExtensionContext.globalState.update(UNDESIRED_MODELS_KEY, newModels);
+				this._modelsObs.set(newModels, undefined);
 			}
-		}
-
-		private _getModels(): string[] {
-			return this._vscodeExtensionContext.globalState.get<UndesiredModelsValue>(UNDESIRED_MODELS_KEY) ?? [];
-		}
-
-		private _setModels(models: string[]): Thenable<void> {
-			return this._vscodeExtensionContext.globalState.update(UNDESIRED_MODELS_KEY, models);
 		}
 	}
 }
