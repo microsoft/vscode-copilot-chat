@@ -368,14 +368,13 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			// prefer completions unless there are none
 			tracer.trace(`no last NES suggestion to consider`);
 			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
-			const nesP = this._invokeNESProvider(tracer, document, position, false, context, tokens, sw);
+			const nesP = this._invokeNESProvider(tracer, document, position, context, tokens, sw);
 			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 		}
 
 		tracer.trace(`last NES suggestion is for the current document, checking if it agrees with the current suggestion`);
 
-		const eliminateDebouncing = (lastNesSuggestion.docVersionId === document.version);
-		const nesP = this._invokeNESProvider(tracer, document, position, eliminateDebouncing, context, tokens, sw);
+		const nesP = this._invokeNESProvider(tracer, document, position, context, tokens, sw);
 		if (!nesP) {
 			tracer.trace(`no NES provider`);
 			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
@@ -445,7 +444,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 	}
 
-	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, eliminateDebouncing: boolean, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
+	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
 		let nesP: Promise<NesCompletionList | undefined> | undefined;
 		if (this._inlineEditProvider) {
 			tracer.trace(`- requesting NES provideInlineCompletionItems`);
