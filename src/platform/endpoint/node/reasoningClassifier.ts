@@ -8,7 +8,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 
 // Remote reasoning classifier configuration
-export const REASONING_CLASSIFIER_API_URL = 'https://model-router-v0.yellowforest-598004f3.westus3.azurecontainerapps.io/predict';
+export const REASONING_CLASSIFIER_API_URL = 'https://model-router-v1.yellowforest-598004f3.westus3.azurecontainerapps.io/predict';
 
 interface ReasoningClassifierResponse {
 	text: string;
