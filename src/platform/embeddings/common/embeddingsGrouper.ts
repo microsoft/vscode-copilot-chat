@@ -443,7 +443,7 @@ export class EmbeddingsGrouper<T> {
 			// Additional safety check in case embedding has different dimensions
 			const embeddingLength = Math.min(embedding.length, dimensions);
 			for (let i = 0; i < embeddingLength; i++) {
-				centroid[i] += embedding[i] || 0; // Handle NaN/undefined values
+				centroid[i] += (typeof embedding[i] === 'number' && !isNaN(embedding[i])) ? embedding[i] : 0; // Handle NaN/undefined values, preserve valid zeros
 			}
 		}
 
