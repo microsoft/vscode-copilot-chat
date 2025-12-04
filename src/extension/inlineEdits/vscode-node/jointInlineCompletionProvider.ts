@@ -99,7 +99,7 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 			}
 
 			const inlineEditFeature = _instantiationService.createInstance(InlineEditProviderFeature);
-			this._register(inlineEditFeature.rolloutFeature());
+			reader.store.add(inlineEditFeature.rolloutFeature());
 			inlineEditFeature.setContext();
 
 			const unificationState = unificationStateObservable(this);
