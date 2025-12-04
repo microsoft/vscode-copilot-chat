@@ -527,7 +527,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					if (!firstTokenReceived.isSettled) {
 						firstTokenReceived.complete();
 					}
-					if (ttft === undefined) {
+					if (ttft === undefined && text !== '') {
 						ttft = fetchRequestStopWatch.elapsed();
 						logContext.addLog(`TTFT ${ttft} ms`);
 					}
