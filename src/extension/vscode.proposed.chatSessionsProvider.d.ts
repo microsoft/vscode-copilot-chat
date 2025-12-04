@@ -137,7 +137,36 @@ declare module 'vscode' {
 			 * Number of deletions made during the session.
 			 */
 			deletions: number;
+
+			/**
+			 * File changes from the session.
+			 */
+			details?: readonly ChatSessionChangedFile[];
 		};
+	}
+
+	export class ChatSessionChangedFile {
+		/**
+		 * URI of the file.
+		 */
+		uri: Uri;
+
+		/**
+		 * File opened when the user takes the 'compare' action.
+		 */
+		compareUri?: Uri;
+
+		/**
+		 * Number of insertions made during the session.
+		 */
+		insertions: number;
+
+		/**
+		 * Number of deletions made during the session.
+		 */
+		deletions: number;
+
+		constructor(uri: Uri, insertions: number, deletions: number, compareUri?: Uri);
 	}
 
 	export interface ChatSession {

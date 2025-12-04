@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -204,6 +205,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
 		@ICopilotCLITerminalIntegration private readonly terminalIntegration: ICopilotCLITerminalIntegration,
 		@IGitService private readonly gitService: IGitService,
+		@IGitExtensionService private readonly gitExtensionService: IGitExtensionService,
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 	) {
 		super();
@@ -239,7 +241,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const label = session.label;
 		const tooltipLines = [vscode.l10n.t(`Background agent session: {0}`, label)];
 		let description: vscode.MarkdownString | undefined;
-		let statistics: { files: number; insertions: number; deletions: number } | undefined;
+		let statistics: vscode.ChatSessionItem['statistics'] | undefined;
 
 		if (worktreePath && worktreeRelativePath) {
 			const worktreeUri = Uri.file(worktreePath);
@@ -252,8 +254,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 			// Statistics
 			// Make sure the repository is opened
-			await this.gitService.getRepository(worktreeUri);
-			statistics = await this.gitService.diffIndexWithHEADShortStats(worktreeUri);
+			statistics = await this.getStatisticsForWorktree(worktreeUri);
 		}
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
@@ -266,6 +267,44 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			statistics,
 			status
 		} satisfies vscode.ChatSessionItem;
+	}
+
+	private async getStatisticsForWorktree(worktreeUri: Uri) {
+		const repository = await this.gitService.getRepository(worktreeUri);
+		const statistics = await this.gitService.diffIndexWithHEADShortStats(worktreeUri);
+		const details: vscode.ChatSessionChangedFile[] = [];
+		if (repository?.changes) {
+			const allChanges = [...repository.changes.indexChanges, ...repository.changes.workingTree];
+			const gitAPI = this.gitExtensionService.getExtensionApi();
+			const gitRepository = gitAPI?.getRepository(worktreeUri);
+
+			for (const change of allChanges) {
+				let insertions = 0;
+				let deletions = 0;
+
+				if (gitRepository && gitRepository.diffIndexWithHEADShortStats) {
+					try {
+						const fileStats = await gitRepository.diffIndexWithHEADShortStats(change.uri.fsPath);
+						if (fileStats) {
+							insertions = fileStats.insertions;
+							deletions = fileStats.deletions;
+						}
+					} catch (error) { }
+				}
+
+				details.push(new vscode.ChatSessionChangedFile(
+					change.uri,
+					insertions,
+					deletions,
+				));
+			}
+		}
+		return {
+			files: statistics?.files || 0,
+			insertions: statistics?.insertions || 0,
+			deletions: statistics?.deletions || 0,
+			details
+		};
 	}
 
 	public async createCopilotCLITerminal(): Promise<void> {
