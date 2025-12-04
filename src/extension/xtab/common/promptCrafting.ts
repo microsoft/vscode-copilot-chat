@@ -93,7 +93,7 @@ function addRelatedInformation(relatedInformation: string, prompt: string, posit
 	return appendWithNewLineIfNeeded(prompt, relatedInformation, 2);
 }
 
-function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string, aggressivenessLevel: AggressivenessLevel): string {
+function appendWithNewLineIfNeeded(base: string, toAppend: string, minNewLines: number): string {
 	// Count existing newlines at the end of base and start of toAppend
 	let existingNewLines = 0;
 	for (let i = base.length - 1; i >= 0 && base[i] === '\n'; i--) {
@@ -108,7 +108,7 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 	return (base + '\n'.repeat(newLinesToAdd) + toAppend).trim();
 }
 
-function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
+function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string, aggressivenessLevel: AggressivenessLevel) {
 	let postScript: string | undefined;
 	switch (strategy) {
 		case PromptingStrategy.Codexv21NesUnified:
