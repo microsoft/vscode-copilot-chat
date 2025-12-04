@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { isDeepStrictEqual } from 'util';
+import * as errors from '../../../util/common/errors';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -49,8 +50,9 @@ export class ProxyModelsService extends Disposable implements IProxyModelsServic
 				}
 				this._models = models;
 				this._onModelListUpdated.fire();
-			}).catch(e => {
-				this._logService.error(e, 'Failed to fetch models in autorun');
+			}).catch((e: unknown) => {
+				const err = errors.fromUnknown(e);
+				this._logService.error(err, 'Failed to fetch models in autorun');
 			});
 			reader.store.add({ dispose: () => cts.dispose(true) });
 		}));
@@ -75,10 +77,11 @@ export class ProxyModelsService extends Disposable implements IProxyModelsServic
 
 		const url = `${this._capiClient.proxyBaseURL}/models`;
 
+		const abortController = this._fetchService.makeAbortController();
+		const disposable = token.onCancellationRequested(() => abortController.abort());
+
 		let r: Response;
 		try {
-			const abortController = this._fetchService.makeAbortController();
-			token.onCancellationRequested(() => abortController.abort());
 			r = await this._fetchService.fetch(url, {
 				headers: {
 					'Authorization': `Bearer ${copilotToken.token}`,
@@ -87,9 +90,12 @@ export class ProxyModelsService extends Disposable implements IProxyModelsServic
 				timeout: 10_000,
 				signal: abortController.signal,
 			});
-		} catch (e) {
-			this._logService.error('Failed to fetch model list', e);
+		} catch (e: unknown) {
+			const err = errors.fromUnknown(e);
+			this._logService.error(err, 'Failed to fetch model list');
 			return;
+		} finally {
+			disposable.dispose();
 		}
 
 		if (!r.ok) {
@@ -104,8 +110,9 @@ export class ProxyModelsService extends Disposable implements IProxyModelsServic
 				throw new Error(`Invalid /models response data: ${validatedData.error.message}`); // TODO@ulugbekna: add telemetry
 			}
 			return validatedData.content;
-		} catch (e) {
-			this._logService.error(e, 'Failed to process /models response');
+		} catch (e: unknown) {
+			const err = errors.fromUnknown(e);
+			this._logService.error(err, 'Failed to process /models response');
 			return;
 		}
 	}
