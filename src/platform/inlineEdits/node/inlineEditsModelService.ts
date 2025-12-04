@@ -15,6 +15,7 @@ import { derived, IObservable, observableFromEvent } from '../../../util/vs/base
 import { CopilotToken } from '../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ConfigKey, ExperimentBasedConfig, IConfigurationService } from '../../configuration/common/configurationService';
+import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
 import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -71,17 +72,20 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	private _expBasedModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString, this._expService);
 	private _defaultModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString, this._expService);
 
-	private _models: IObservable<Model[]>;
-	private _currentModelIdObs: IObservable<Model>;
-	private _modelInfo: IObservable<ModelInfo>;
+	private _modelsObs: IObservable<Model[]>;
+	private _currentModelObs: IObservable<Model>;
+	private _modelInfoObs: IObservable<ModelInfo>;
 
 	public readonly onModelListUpdated: Event<void>;
 
 	private _tracer = createTracer(['NES', 'ModelsService'], (msg) => this._logService.trace(msg));
 
+	private _undesiredModelsManager: UndesiredModels.Manager;
+
 	constructor(
 		@ICopilotTokenStore private readonly _tokenStore: ICopilotTokenStore,
 		@IProxyModelsService private readonly _proxyModelsService: IProxyModelsService,
+		@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -91,9 +95,9 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const tracer = this._tracer.sub('constructor');
 
-		this._models = derived((reader) => {
+		this._modelsObs = derived((reader) => {
 			tracer.trace('computing models');
-			return this.computeModelInfo({
+			return this.aggregateModels({
 				copilotToken: this._copilotTokenObs.read(reader),
 				fetchedNesModels: this._fetchedModelsObs.read(reader),
 				localModelConfig: this._localModelConfigObs.read(reader),
@@ -102,32 +106,34 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			});
 		}).recomputeInitiallyAndOnChange(this._store);
 
-		this._currentModelIdObs = derived<Model, void>((reader) => {
+		this._currentModelObs = derived<Model, void>((reader) => {
 			tracer.trace('computing current model');
 			return this._pickModel({
 				preferredModelName: this._preferredModelNameObs.read(reader),
-				models: this._models.read(reader),
+				models: this._modelsObs.read(reader),
 			});
 		}).recomputeInitiallyAndOnChange(this._store);
 
-		this._modelInfo = derived((reader) => {
+		this._modelInfoObs = derived((reader) => {
 			tracer.trace('computing model info');
 			return {
-				models: this._models.read(reader),
-				currentModelId: this._currentModelIdObs.read(reader).modelName,
+				models: this._modelsObs.read(reader),
+				currentModelId: this._currentModelObs.read(reader).modelName,
 			};
 		}).recomputeInitiallyAndOnChange(this._store);
 
-		this.onModelListUpdated = Event.fromObservableLight(this._modelInfo);
+		this.onModelListUpdated = Event.fromObservableLight(this._modelInfoObs);
+
+		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
 	}
 
 	get modelInfo(): vscode.InlineCompletionModelInfo | undefined {
-		const models: vscode.InlineCompletionModel[] = this._models.get().map(m => ({
+		const models: vscode.InlineCompletionModel[] = this._modelsObs.get().map(m => ({
 			id: m.modelName,
 			name: m.modelName,
 		}));
 
-		const currentModel = this._currentModelIdObs.get();
+		const currentModel = this._currentModelObs.get();
 
 		return {
 			models,
@@ -136,26 +142,48 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}
 
 
-	async setCurrentModelId(modelId: string): Promise<void> {
-		const preferredModel = this._configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsPreferredModel, this._expService);
+	// FIXME@ulugbekna: don't do async risking race condition; use a TaskQueue to serialize updates?
+	async setCurrentModelId(newPreferredModelId: string): Promise<void> {
+		const currentPreferredModelId = this._configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsPreferredModel, this._expService);
 
-		const isSameModel = preferredModel === modelId;
+		const isSameModel = currentPreferredModelId === newPreferredModelId;
 		if (isSameModel) {
 			return;
 		}
 
-		if (!this._models.get().some(m => m.modelName === modelId)) {
-			this._logService.warn(`Trying to set unknown model id: ${modelId}`);
+		// snapshot before async calls
+		const currentPreferredModel = this._currentModelObs.get();
+
+		const models = this._modelsObs.get();
+		const newPreferredModel = models.find(m => m.modelName === newPreferredModelId);
+
+		if (newPreferredModel === undefined) {
+			this._logService.error(`New preferred model id ${newPreferredModelId} not found in model list.`);
 			return;
 		}
 
 		// if user picks same as the default model, we should reset the user setting
 		// otherwise, update the model
+		const expectedDefaultModel = this._pickModel({ preferredModelName: 'none', models });
+		if (newPreferredModelId === expectedDefaultModel.modelName) {
+			this._tracer.trace(`New preferred model id ${newPreferredModelId} is the same as the default model, resetting user setting.`);
+			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, 'none');
+		} else {
+			this._tracer.trace(`New preferred model id ${newPreferredModelId} is different from the default model, updating user setting to ${newPreferredModelId}.`);
+			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, newPreferredModelId);
+		}
 
-		await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, modelId);
+		// if currently selected model is from exp config, then mark that model as undesired
+		if (currentPreferredModel.source === ModelSource.ExpConfig) {
+			await this._undesiredModelsManager.addUndesiredModelId(currentPreferredModel.modelName);
+		}
+
+		if (this._undesiredModelsManager.isUndesiredModelId(newPreferredModelId)) {
+			await this._undesiredModelsManager.removeUndesiredModelId(newPreferredModelId);
+		}
 	}
 
-	private computeModelInfo(
+	private aggregateModels(
 		{
 			copilotToken,
 			fetchedNesModels,
@@ -170,7 +198,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			defaultModelConfigString: string | undefined;
 		},
 	): Model[] {
-		const tracer = this._tracer.sub('computeModelInfo');
+		const tracer = this._tracer.sub('aggregateModels');
 
 		const models: Model[] = [];
 
@@ -235,9 +263,9 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	public selectedModelConfiguration(): ModelConfiguration {
 		const tracer = this._tracer.sub('selectedModelConfiguration');
-		const currentModel = this._currentModelIdObs.get();
+		const currentModel = this._currentModelObs.get();
 		tracer.trace(`Current model id: ${currentModel.modelName}`);
-		const model = this._models.get().find(m => m.modelName === currentModel.modelName);
+		const model = this._modelsObs.get().find(m => m.modelName === currentModel.modelName);
 		if (model) {
 			tracer.trace(`Selected model found: ${model.modelName}`);
 			return {
@@ -274,9 +302,22 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		preferredModelName: string;
 		models: Model[];
 	}): Model {
-		const userHasPreferredModel = preferredModelName !== 'none';
+		// priority of picking a model:
+		// 0. model from modelConfigurationString setting from ExP, unless marked as undesired
+		// 1. user preferred model
+		// 2. first model in the list
 
-		// FIXME@ulugbekna: respect exp-set model name
+		const expConfiguredModel = models.find(m => m.source === ModelSource.ExpConfig);
+		if (expConfiguredModel) {
+			const isUndesiredModelId = this._undesiredModelsManager.isUndesiredModelId(expConfiguredModel.modelName);
+			if (isUndesiredModelId) {
+				this._tracer.trace(`Exp-configured model ${expConfiguredModel.modelName} is marked as undesired by the user. Skipping.`);
+			} else {
+				return expConfiguredModel;
+			}
+		}
+
+		const userHasPreferredModel = preferredModelName !== 'none';
 
 		if (userHasPreferredModel) {
 			const preferredModel = models.find(m => m.modelName === preferredModelName);
@@ -319,5 +360,53 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}
 
 		return parsedConfig;
+	}
+}
+
+namespace UndesiredModels {
+
+	const UNDESIRED_MODELS_KEY = 'copilot.chat.nextEdits.undesiredModelIds';
+	type UndesiredModelsValue = string[];
+
+	export class Manager {
+
+		constructor(
+			private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
+		) {
+		}
+
+		isUndesiredModelId(modelId: string) {
+			const models = this._getModels();
+			return models.includes(modelId);
+		}
+
+		addUndesiredModelId(modelId: string): Promise<void> {
+			const models = this._getModels();
+			if (!models.includes(modelId)) {
+				models.push(modelId);
+				return this._setModels(models);
+			}
+			return Promise.resolve();
+		}
+
+		removeUndesiredModelId(modelId: string): Promise<void> {
+			const models = this._getModels();
+			const index = models.indexOf(modelId);
+			if (index !== -1) {
+				models.splice(index, 1);
+				return this._setModels(models);
+			}
+			return Promise.resolve();
+		}
+
+		private _getModels(): string[] {
+			return this._vscodeExtensionContext.globalState.get<UndesiredModelsValue>(UNDESIRED_MODELS_KEY) ?? [];
+		}
+
+		private _setModels(models: string[]): Promise<void> {
+			return new Promise((resolve, reject) => {
+				this._vscodeExtensionContext.globalState.update(UNDESIRED_MODELS_KEY, models).then(resolve, reject);
+			});
+		}
 	}
 }
