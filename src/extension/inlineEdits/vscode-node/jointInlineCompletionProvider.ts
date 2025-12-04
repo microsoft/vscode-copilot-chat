@@ -22,7 +22,7 @@ import { coalesce } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, derived, derivedDisposable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -31,10 +31,12 @@ import { Range } from '../../../util/vs/editor/common/core/range';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
-import { createContext, registerUnificationCommands, setup } from '../../completions-core/vscode-node/completionsServiceBridges';
+import { registerUnificationCommands } from '../../completions-core/vscode-node/completionsServiceBridges';
 import { CopilotInlineCompletionItemProvider } from '../../completions-core/vscode-node/extension/src/inlineCompletion';
+import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
+import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
@@ -82,6 +84,7 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 	constructor(
 		@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ICopilotInlineCompletionItemProviderService private readonly _copilotInlineCompletionItemProviderService: ICopilotInlineCompletionItemProviderService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
@@ -178,13 +181,14 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 					// @ulugbekna: note that we don't want it if modelUnification is on
 					const modelUnification = unificationStateValue?.modelUnification ?? false;
 					if (!modelUnification || unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
-						completionsProvider = this._getOrCreateProvider();
+						completionsProvider = this._copilotInlineCompletionItemProviderService.getOrCreateProvider() as CopilotInlineCompletionItemProvider;
 					}
 
 					void vscode.commands.executeCommand('setContext', 'github.copilot.extensionUnification.activated', extensionUnification);
 
-					if (extensionUnification && this._completionsInstantiationService) {
-						reader.store.add(this._completionsInstantiationService.invokeFunction(registerUnificationCommands));
+					if (extensionUnification && completionsProvider) {
+						const completionsInstaService = this._copilotInlineCompletionItemProviderService.getOrCreateInstantiationService();
+						reader.store.add(completionsInstaService.invokeFunction(registerUnificationCommands));
 					}
 				}
 
@@ -210,19 +214,6 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 			}));
 		}));
 	}
-
-	private _provider: CopilotInlineCompletionItemProvider | undefined;
-	private _completionsInstantiationService: IInstantiationService | undefined;
-	private _getOrCreateProvider() {
-		if (!this._provider) {
-			const disposables = this._register(new DisposableStore());
-			this._completionsInstantiationService = this._instantiationService.invokeFunction(createContext, disposables);
-			this._completionsInstantiationService.invokeFunction(setup, disposables);
-			this._provider = disposables.add(this._completionsInstantiationService.createInstance(CopilotInlineCompletionItemProvider));
-		}
-		return this._provider;
-	}
-
 }
 
 type SingularCompletionItem =
@@ -369,13 +360,14 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			// prefer completions unless there are none
 			tracer.trace(`no last NES suggestion to consider`);
 			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
-			const nesP = this._invokeNESProvider(tracer, document, position, context, tokens, sw);
+			const nesP = this._invokeNESProvider(tracer, document, position, true, context, tokens, sw);
 			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 		}
 
 		tracer.trace(`last NES suggestion is for the current document, checking if it agrees with the current suggestion`);
 
-		const nesP = this._invokeNESProvider(tracer, document, position, context, tokens, sw);
+		const enforceCacheDelay = (lastNesSuggestion.docVersionId !== document.version);
+		const nesP = this._invokeNESProvider(tracer, document, position, enforceCacheDelay, context, tokens, sw);
 		if (!nesP) {
 			tracer.trace(`no NES provider`);
 			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
@@ -443,11 +435,12 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 	}
 
-	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
+	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, enforceCacheDelay: boolean, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
+		const nesContext: NESInlineCompletionContext = { ...context, enforceCacheDelay };
 		let nesP: Promise<NesCompletionList | undefined> | undefined;
 		if (this._inlineEditProvider) {
 			tracer.trace(`- requesting NES provideInlineCompletionItems`);
-			nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, context, tokens.nesCts.token);
+			nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, nesContext, tokens.nesCts.token);
 			nesP.then((nesR) => {
 				tracer.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
 			}).catch((e) => {

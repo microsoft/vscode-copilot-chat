@@ -78,6 +78,12 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 			return [];
 		}
 
+		const languageId = request.documentContext.languageId;
+		const languageEnablement = this.experimentationService.getTreatmentVariable<boolean>(`config.github.copilot.chat.inlineEdits.diagnosticsContextProvider.${languageId}`);
+		if (!languageEnablement) {
+			return [];
+		}
+
 		const requestedFileResource = URI.parse(request.documentContext.uri);
 		const cursor = new Position(request.documentContext.position.line + 1, request.documentContext.position.character + 1);
 		const linesAbove = this.configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderNLinesAbove, this.experimentationService) ?? N_LINES_ABOVE;

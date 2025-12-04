@@ -36,6 +36,7 @@ import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
 import { createCorrelationId } from '../common/correlationId';
+import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
@@ -174,19 +175,19 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	public async provideInlineCompletionItems(
 		document: TextDocument,
 		position: Position,
-		context: InlineCompletionContext,
+		context: InlineCompletionContext | NESInlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
 		const label = `NES | ${basename(document.uri.fsPath)} (v${document.version})`;
 		const capturingToken = new CapturingToken(label, undefined, true, true);
-
-		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, context, token));
+		const nesContext: NESInlineCompletionContext = { enforceCacheDelay: true, ...context };
+		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, nesContext, token));
 	}
 
 	private async _provideInlineCompletionItems(
 		document: TextDocument,
 		position: Position,
-		context: InlineCompletionContext,
+		context: NESInlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
 		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
