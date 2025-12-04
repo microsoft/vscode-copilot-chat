@@ -19,7 +19,7 @@ import { isNotebookCell } from '../../../util/common/notebooks';
 import { createTracer, ITracer } from '../../../util/common/tracing';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
-import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
+import { raceCancellation, raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { autorun, derived, derivedDisposable, observableFromEvent } from '../../../util/vs/base/common/observable';
