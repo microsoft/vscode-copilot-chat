@@ -365,7 +365,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			{ id: COPILOT_CLI_DEFAULT_AGENT_ID, name: l10n.t('Agent') }
 		];
 		agents.forEach(agent => {
-			agentItems.push({ id: agent.name, name: agent.displayName || agent.description || agent.name });
+			agentItems.push({ id: agent.name, name: agent.displayName || agent.name, description: agent.description });
 		});
 
 		const options = {
