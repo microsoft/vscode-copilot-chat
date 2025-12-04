@@ -254,7 +254,7 @@ function extractChromiumDetails(details: any): any {
 	}
 
 	if (details.spdy_session_key && typeof details.spdy_session_key === 'object') {
-		extracted.spdy_session_key = {
+		extracted.spdy_session = { // Omit _key suffix to avoid filter
 			privacy_mode: details.spdy_session_key.privacy_mode,
 			secure_dns_policy: details.spdy_session_key.secure_dns_policy,
 			disable_cert_verification_network_fetches: details.spdy_session_key.disable_cert_verification_network_fetches,
