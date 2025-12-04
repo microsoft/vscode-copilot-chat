@@ -23,10 +23,19 @@ import { WireTypes } from '../common/dataTypes/inlineEditsModelsTypes';
 import { isPromptingStrategy, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
 import { IInlineEditsModelService } from '../common/inlineEditsModelService';
 
+const enum ModelSource {
+	LocalConfig = 'localConfig',
+	ExpConfig = 'expConfig',
+	ExpDefaultConfig = 'expDefaultConfig',
+	Fetched = 'fetched',
+	HardCodedDefault = 'hardCodedDefault',
+}
+
 type Model = {
 	modelName: string;
 	promptingStrategy: PromptingStrategy | undefined;
 	includeTagsInCurrentFile: boolean;
+	source: ModelSource;
 }
 
 type ModelInfo = {
@@ -42,12 +51,14 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		modelName: 'copilot-nes-xtab',
 		promptingStrategy: PromptingStrategy.CopilotNesXtab,
 		includeTagsInCurrentFile: true,
+		source: ModelSource.HardCodedDefault,
 	};
 
 	private static readonly COPILOT_NES_OCT: Model = {
 		modelName: 'copilot-nes-oct',
 		promptingStrategy: PromptingStrategy.Xtab275,
 		includeTagsInCurrentFile: false,
+		source: ModelSource.HardCodedDefault,
 	};
 
 	private _copilotTokenObs = observableFromEvent(this, this._tokenStore.onDidStoreUpdate, () => this._tokenStore.copilotToken);
@@ -173,7 +184,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				tracer.trace('Local model configuration already exists in the model list, skipping.');
 			} else {
 				tracer.trace(`Adding local model configuration: ${localModelConfig.modelName}`);
-				models.push({ ...localModelConfig });
+				models.push({ ...localModelConfig, source: ModelSource.LocalConfig });
 			}
 		}
 
@@ -182,7 +193,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			const parsedConfig = this.parseModelConfigStringSetting(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString);
 			if (parsedConfig && !models.some(m => m.modelName === parsedConfig.modelName)) {
 				tracer.trace(`Adding model from modelConfigurationString: ${parsedConfig.modelName}`);
-				models.push({ ...parsedConfig });
+				models.push({ ...parsedConfig, source: ModelSource.ExpConfig });
 			} else {
 				tracer.trace('No valid model found in modelConfigurationString.');
 			}
@@ -199,6 +210,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 					modelName: m.name,
 					promptingStrategy: m.capabilities.promptStrategy,
 					includeTagsInCurrentFile: false, // FIXME@ulugbekna: determine this based on model capabilities and config
+					source: ModelSource.Fetched,
 				} satisfies Model;
 			});
 			tracer.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
@@ -243,7 +255,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		if (defaultModelConfigString) {
 			const parsedConfig = this.parseModelConfigStringSetting(ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString);
 			if (parsedConfig) {
-				return { ...parsedConfig };
+				return { ...parsedConfig, source: ModelSource.ExpDefaultConfig };
 			}
 		}
 
