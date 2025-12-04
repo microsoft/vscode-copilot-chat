@@ -3,20 +3,23 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Attachment } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference } from 'vscode';
 import { isLocation } from '../../../util/common/types';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { Codicon } from '../../../util/vs/base/common/codicons';
+import { ResourceSet } from '../../../util/vs/base/common/map';
 import { basename } from '../../../util/vs/base/common/resources';
 import { isNumber, isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Range as InternalRange } from '../../../util/vs/editor/common/core/range';
 import { SymbolKind } from '../../../util/vs/workbench/api/common/extHostTypes/symbolInformation';
 import { ChatReferenceDiagnostic, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, Range, Uri } from '../../../vscodeTypes';
-import { Attachment } from '@github/copilot/sdk';
-import { ResourceSet } from '../../../util/vs/base/common/map';
 
+/**
+ * Converts a ChatPromptReference into a PromptVariable entry thats used in VS code.
+ */
 export function convertReferenceToVariable(ref: ChatPromptReference, attachments: readonly Attachment[]) {
 	const value = ref.value;
 	const range = ref.range ? { start: ref.range[0], endExclusive: ref.range[1] } : undefined;
@@ -63,8 +66,8 @@ export function convertReferenceToVariable(ref: ChatPromptReference, attachments
 	}
 
 	const folders = new ResourceSet(attachments.filter(att => att.type === 'directory').map(att => URI.file(att.path)));
-	const isFile = URI.isUri(value) || (value && typeof value === 'object' && 'uri' in value);
-	const isFolder = isFile && URI.isUri(value) && (value.path.endsWith('/') || folders.has(value));
+	const isFile = URI.isUri(value) || isLocation(value);
+	const isFolder = URI.isUri(value) && (value.path.endsWith('/') || folders.has(value));
 	return {
 		id: ref.id,
 		name: ref.name,
@@ -204,7 +207,7 @@ namespace DiagnosticConverter {
 			message: value.message,
 			source: value.source,
 			code,
-			severity: DiagnosticSeverityConveter.from(value.severity),
+			severity: DiagnosticSeverityConverter.from(value.severity),
 			relatedInformation: value.relatedInformation && value.relatedInformation.map(DiagnosticRelatedInformationConverter.from),
 			tags: Array.isArray(value.tags) ? coalesce(value.tags.map(DiagnosticTagConverter.from)) : undefined,
 		};
@@ -221,7 +224,7 @@ namespace DiagnosticRelatedInformationConverter {
 	}
 }
 
-namespace DiagnosticSeverityConveter {
+namespace DiagnosticSeverityConverter {
 	export enum MarkerSeverity {
 		Hint = 1,
 		Info = 2,
