@@ -49,6 +49,8 @@ export class ProxyModelsService extends Disposable implements IProxyModelsServic
 				}
 				this._models = models;
 				this._onModelListUpdated.fire();
+			}).catch(e => {
+				this._logService.error(e, 'Failed to fetch models in autorun');
 			});
 			reader.store.add({ dispose: () => cts.dispose(true) });
 		}));
