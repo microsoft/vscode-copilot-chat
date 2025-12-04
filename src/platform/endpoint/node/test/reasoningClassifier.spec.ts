@@ -3,13 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
-import { REASONING_CLASSIFIER_MODEL_FILENAME, REASONING_CLASSIFIER_ZIP_FILENAME, ReasoningClassifier } from '../reasoningClassifier';
+import { REASONING_CLASSIFIER_API_URL, ReasoningClassifier } from '../reasoningClassifier';
 
 // Mock services
 const createMockLogService = (): ILogService => ({
@@ -21,273 +18,179 @@ const createMockLogService = (): ILogService => ({
 	getLevel: vi.fn(),
 	flush: vi.fn(),
 	dispose: vi.fn(),
+	show: vi.fn(),
 	_serviceBrand: undefined
-} as any);
+} as unknown as ILogService);
 
-const createMockFetcherService = (zipFilePath: string): IFetcherService => ({
+interface MockApiResponse {
+	text: string;
+	predicted_label: 'needs_reasoning' | 'no_reasoning';
+	confidence: number;
+	scores: {
+		needs_reasoning: number;
+		no_reasoning: number;
+	};
+}
+
+const createMockFetcherService = (response: MockApiResponse): IFetcherService => ({
 	fetch: vi.fn().mockResolvedValue({
 		ok: true,
 		statusText: 'OK',
-		body: vi.fn().mockResolvedValue(fs.readFileSync(zipFilePath))
+		text: vi.fn().mockResolvedValue(JSON.stringify(response))
 	}),
 	_serviceBrand: undefined
-} as any);
+} as unknown as IFetcherService);
+
+const createFailingFetcherService = (statusText: string): IFetcherService => ({
+	fetch: vi.fn().mockResolvedValue({
+		ok: false,
+		statusText,
+		text: vi.fn()
+	}),
+	_serviceBrand: undefined
+} as unknown as IFetcherService);
 
 describe('ReasoningClassifier', () => {
-	let tempDir: string;
-	let testZipPath: string;
 	let mockLogService: ILogService;
 
 	beforeEach(() => {
-		// Create a temporary directory for test cache
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reasoning-classifier-test-'));
-
-		// Use the actual model_router_v0.zip from the test directory
-		testZipPath = path.join(__dirname, REASONING_CLASSIFIER_ZIP_FILENAME);
-
-		// Verify the test zip file exists
-		if (!fs.existsSync(testZipPath)) {
-			throw new Error(`Test zip file not found at ${testZipPath}. Please ensure ${REASONING_CLASSIFIER_ZIP_FILENAME} exists in the test directory.`);
-		}
-
 		mockLogService = createMockLogService();
 	});
 
 	afterEach(() => {
-		// Clean up temp directory
-		if (fs.existsSync(tempDir)) {
-			fs.rmSync(tempDir, { recursive: true, force: true });
-		}
+		vi.clearAllMocks();
 	});
 
-	it('should download and extract model assets', async () => {
-		// Use the real model_router_v0.zip file
-		const mockFetcherService = createMockFetcherService(testZipPath);
+	it('should classify query requiring reasoning correctly', async () => {
+		const mockResponse: MockApiResponse = {
+			text: 'design a scalable microservices architecture',
+			predicted_label: 'needs_reasoning',
+			confidence: 0.75,
+			scores: {
+				needs_reasoning: 0.75,
+				no_reasoning: 0.25
+			}
+		};
+		const mockFetcherService = createMockFetcherService(mockResponse);
 
-		const cacheDir = path.join(tempDir, 'cache');
-		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(mockFetcherService, mockLogService);
+		const result = await classifier.classify('design a scalable microservices architecture');
 
-		// Trigger initialization (which downloads and extracts)
-		try {
-			await (classifier as any)._initialize();
-		} catch (error) {
-			// May fail at ONNX session creation or tokenizer loading, but extraction should succeed
-			// This is expected if the zip contains a real model but incompatible with test environment
-		}
-
-		// Verify files were extracted
-		expect(fs.existsSync(path.join(cacheDir, REASONING_CLASSIFIER_MODEL_FILENAME))).toBe(true);
-		expect(fs.existsSync(path.join(cacheDir, 'tokenizer.json'))).toBe(true);
-
-		// Verify fetcher was called
+		// needs_reasoning should return false (reasoning IS required)
+		expect(result).toBe(false);
 		expect(mockFetcherService.fetch).toHaveBeenCalledWith(
-			expect.stringContaining(REASONING_CLASSIFIER_ZIP_FILENAME),
-			{}
+			REASONING_CLASSIFIER_API_URL,
+			expect.objectContaining({
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ text: 'design a scalable microservices architecture' })
+			})
 		);
-
-		// Verify logging
-		expect(mockLogService.trace).toHaveBeenCalledWith(expect.stringContaining('Downloading model assets'));
-		expect(mockLogService.trace).toHaveBeenCalledWith(expect.stringContaining('Model assets downloaded, extracting'));
-		expect(mockLogService.trace).toHaveBeenCalledWith(expect.stringContaining('Model assets extracted successfully'));
-
-		classifier.dispose();
-	}, 30000);
-
-	it('should skip download if model already exists', async () => {
-		const mockFetcherService = createMockFetcherService(testZipPath);
-
-		const cacheDir = path.join(tempDir, 'cache-skip');
-		fs.mkdirSync(cacheDir, { recursive: true });
-
-		// Pre-create the model file
-		fs.writeFileSync(path.join(cacheDir, REASONING_CLASSIFIER_MODEL_FILENAME), 'existing-model');
-
-		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
-
-		// Call download method directly
-		await (classifier as any)._downloadAndExtractAssets();
-
-		// Verify fetcher was NOT called
-		expect(mockFetcherService.fetch).not.toHaveBeenCalled();
-
-		// Verify logging shows skip
-		expect(mockLogService.trace).toHaveBeenCalledWith('Model assets already exist, skipping download');
-
-		classifier.dispose();
+		expect(mockLogService.trace).toHaveBeenCalledWith(
+			expect.stringContaining('needs_reasoning')
+		);
 	});
 
-	it('should handle download failure gracefully', async () => {
-		const mockFetcherService: IFetcherService = {
-			fetch: vi.fn().mockResolvedValue({
-				ok: false,
-				statusText: 'Not Found',
-				body: vi.fn()
-			}),
-			_serviceBrand: undefined
-		} as any;
+	it('should classify simple query as non-reasoning', async () => {
+		const mockResponse: MockApiResponse = {
+			text: 'what is the syntax for a for loop',
+			predicted_label: 'no_reasoning',
+			confidence: 0.85,
+			scores: {
+				needs_reasoning: 0.15,
+				no_reasoning: 0.85
+			}
+		};
+		const mockFetcherService = createMockFetcherService(mockResponse);
 
-		const cacheDir = path.join(tempDir, 'cache-fail');
-		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
+		const classifier = new ReasoningClassifier(mockFetcherService, mockLogService);
+		const result = await classifier.classify('what is the syntax for a for loop');
 
-		// Should throw error on download failure
-		await expect((classifier as any)._downloadAndExtractAssets()).rejects.toThrow('Failed to download model assets: Not Found');
-
-		classifier.dispose();
+		// no_reasoning should return true (reasoning is NOT required)
+		expect(result).toBe(true);
+		expect(mockLogService.trace).toHaveBeenCalledWith(
+			expect.stringContaining('no_reasoning')
+		);
 	});
 
-	it('should extract zip file correctly', async () => {
-		const cacheDir = path.join(tempDir, 'cache-extract');
-		fs.mkdirSync(cacheDir, { recursive: true });
+	it('should handle API failure gracefully', async () => {
+		const mockFetcherService = createFailingFetcherService('Service Unavailable');
 
-		const mockFetcherService = createMockFetcherService(testZipPath);
+		const classifier = new ReasoningClassifier(mockFetcherService, mockLogService);
 
-		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
-
-		// Copy test zip to cache dir for extraction test
-		const extractTestZipPath = path.join(cacheDir, 'test.zip');
-		fs.copyFileSync(testZipPath, extractTestZipPath);
-
-		// Call extract method directly
-		await (classifier as any)._extractZip(extractTestZipPath, cacheDir);
-
-		// Verify files were extracted
-		expect(fs.existsSync(path.join(cacheDir, REASONING_CLASSIFIER_MODEL_FILENAME))).toBe(true);
-		expect(fs.existsSync(path.join(cacheDir, 'tokenizer.json'))).toBe(true);
-
-		// Verify the extracted model file is not empty
-		const extractedModelStats = fs.statSync(path.join(cacheDir, REASONING_CLASSIFIER_MODEL_FILENAME));
-		expect(extractedModelStats.size).toBeGreaterThan(0);
-
-		classifier.dispose();
+		await expect(classifier.classify('test query')).rejects.toThrow('Reasoning classifier API request failed: Service Unavailable');
+		expect(mockLogService.error).toHaveBeenCalledWith(
+			'Reasoning classification failed',
+			expect.any(Error)
+		);
 	});
 
-	it('should clean up zip file after extraction', async () => {
-		const mockFetcherService = createMockFetcherService(testZipPath);
-
-		const cacheDir = path.join(tempDir, 'cache-cleanup');
-		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
-
-		try {
-			await (classifier as any)._initialize();
-		} catch (error) {
-			// May fail at ONNX session creation or tokenizer loading
-		}
-
-		// Verify zip file was deleted
-		expect(fs.existsSync(path.join(cacheDir, REASONING_CLASSIFIER_ZIP_FILENAME))).toBe(false);
-
-		// Verify extracted files remain
-		expect(fs.existsSync(path.join(cacheDir, REASONING_CLASSIFIER_MODEL_FILENAME))).toBe(true);
-
-		classifier.dispose();
-	}, 30000);
-
-	it('should classify simple queries as non-reasoning', async () => {
-		const mockFetcherService = createMockFetcherService(testZipPath);
-		const cacheDir = path.join(tempDir, 'cache-classify-simple');
-		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
-
-		try {
-			// Test simple queries that should be classified as non-reasoning (returns true)
-			const simpleQueries = [
-				'i dont want to use loadEnv'
-			];
-
-			for (const query of simpleQueries) {
-				const result = await classifier.classify(query);
-				// Simple queries should be classified as non-reasoning (returns true)
-				expect(result).toBe(true);
-				expect(mockLogService.trace).toHaveBeenCalledWith(
-					expect.stringMatching(/Reasoning classifier prediction: 1 \(non-reasoning, confidence for non-reasoning: \d+\.\d+%\)/)
-				);
+	it('should send correct request format to API', async () => {
+		const mockResponse: MockApiResponse = {
+			text: 'Help me write a python function',
+			predicted_label: 'needs_reasoning',
+			confidence: 0.52,
+			scores: {
+				needs_reasoning: 0.52,
+				no_reasoning: 0.48
 			}
-		} catch (error) {
-			// If the model can't be loaded in test environment, that's acceptable
-			// The test verifies the code structure is correct
-			if ((error as Error).message.includes('not initialized')) {
-				// Expected in some test environments
-			} else {
-				throw error;
+		};
+		const mockFetcherService = createMockFetcherService(mockResponse);
+
+		const classifier = new ReasoningClassifier(mockFetcherService, mockLogService);
+		await classifier.classify('Help me write a python function');
+
+		expect(mockFetcherService.fetch).toHaveBeenCalledTimes(1);
+		expect(mockFetcherService.fetch).toHaveBeenCalledWith(
+			expect.any(String),
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: '{"text":"Help me write a python function"}'
 			}
-		}
-
-		classifier.dispose();
-	}, 30000);
-
-	it('should classify complex queries as requiring reasoning', async () => {
-		const mockFetcherService = createMockFetcherService(testZipPath);
-		const cacheDir = path.join(tempDir, 'cache-classify-complex');
-		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
-
-		try {
-			// Test complex queries that should require reasoning (returns false)
-			const complexQueries = [
-				'design a scalable microservices architecture for an e-commerce platform'
-
-			];
-
-			for (const query of complexQueries) {
-				const result = await classifier.classify(query);
-				// Complex queries should require reasoning (returns false)
-				expect(result).toBe(false);
-				expect(mockLogService.trace).toHaveBeenCalledWith(
-					expect.stringMatching(/Reasoning classifier prediction: 0 \(reasoning, confidence for non-reasoning: \d+\.\d+%\)/)
-				);
-			}
-		} catch (error) {
-			// If the model can't be loaded in test environment, that's acceptable
-			if ((error as Error).message.includes('not initialized')) {
-				// Expected in some test environments
-			} else {
-				throw error;
-			}
-		}
-
-		classifier.dispose();
-	}, 30000);
-
-	it('should handle classify errors gracefully', async () => {
-		const mockFetcherService = createMockFetcherService(testZipPath);
-		const cacheDir = path.join(tempDir, 'cache-classify-error');
-
-		// Create a mock log service that we can track
-		const errorLogService = createMockLogService();
-		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, errorLogService);
-
-		// Try to classify before initialization completes
-		// Set session to null after init promise is set to simulate initialization failure
-		(classifier as any)._initPromise = Promise.resolve();
-		(classifier as any)._session = null;
-
-		// This should throw "Reasoning classifier not initialized"
-		await expect(classifier.classify('test query')).rejects.toThrow('Reasoning classifier not initialized');
-
-		classifier.dispose();
+		);
 	});
 
-	it('should initialize only once when classify is called multiple times', async () => {
-		const mockFetcherService = createMockFetcherService(testZipPath);
-		const cacheDir = path.join(tempDir, 'cache-classify-once');
-		const classifier = new ReasoningClassifier(cacheDir, undefined, mockFetcherService, mockLogService);
-
-		// Call classify multiple times
-		const queries = ['query 1', 'query 2', 'query 3'];
-
-		try {
-			for (const query of queries) {
-				await classifier.classify(query);
+	it('should log classification results with confidence scores', async () => {
+		const mockResponse: MockApiResponse = {
+			text: 'test query',
+			predicted_label: 'no_reasoning',
+			confidence: 0.65,
+			scores: {
+				needs_reasoning: 0.35,
+				no_reasoning: 0.65
 			}
+		};
+		const mockFetcherService = createMockFetcherService(mockResponse);
 
-			// Verify fetcher was called only once (initialization happens only once)
-			expect(mockFetcherService.fetch).toHaveBeenCalledTimes(1);
-		} catch (error) {
-			// If model can't be loaded, verify at least the fetch was attempted once
-			if (mockFetcherService.fetch) {
-				const callCount = (mockFetcherService.fetch as any).mock.calls.length;
-				expect(callCount).toBeLessThanOrEqual(1);
+		const classifier = new ReasoningClassifier(mockFetcherService, mockLogService);
+		await classifier.classify('test query');
+
+		expect(mockLogService.trace).toHaveBeenCalledWith(
+			expect.stringMatching(/no_reasoning.*confidence.*65\.0%.*needs_reasoning.*35\.0%.*no_reasoning.*65\.0%/)
+		);
+	});
+
+	it('should handle multiple consecutive classifications', async () => {
+		const mockResponse: MockApiResponse = {
+			text: 'query',
+			predicted_label: 'no_reasoning',
+			confidence: 0.7,
+			scores: {
+				needs_reasoning: 0.3,
+				no_reasoning: 0.7
 			}
-		}
+		};
+		const mockFetcherService = createMockFetcherService(mockResponse);
 
-		classifier.dispose();
-	}, 30000);
+		const classifier = new ReasoningClassifier(mockFetcherService, mockLogService);
+
+		// Make multiple classifications
+		await classifier.classify('query 1');
+		await classifier.classify('query 2');
+		await classifier.classify('query 3');
+
+		// Each classification should make a separate API call
+		expect(mockFetcherService.fetch).toHaveBeenCalledTimes(3);
+	});
 });

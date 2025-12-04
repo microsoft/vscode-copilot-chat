@@ -1,0 +1,100 @@
+{"text":"What is the syntax for a for loop in Python?","label":1}
+{"text":"How do I declare a variable in JavaScript?","label":1}
+{"text":"What is the difference between let and const?","label":1}
+{"text":"How do I print Hello World in Java?","label":1}
+{"text":"What is the file extension for TypeScript files?","label":1}
+{"text":"How do I create a new array in JavaScript?","label":1}
+{"text":"What is the command to install npm packages?","label":1}
+{"text":"How do I comment out code in Python?","label":1}
+{"text":"What is the shortcut to format code in VS Code?","label":1}
+{"text":"How do I check the Node.js version?","label":1}
+{"text":"What does the === operator do in JavaScript?","label":1}
+{"text":"How do I import a module in Python?","label":1}
+{"text":"What is the git command to check status?","label":1}
+{"text":"How do I create a function in JavaScript?","label":1}
+{"text":"What is the syntax for an if statement in C#?","label":1}
+{"text":"How do I convert a string to integer in Python?","label":1}
+{"text":"What is the command to run a Python script?","label":1}
+{"text":"How do I add an element to a list in Python?","label":1}
+{"text":"What is the default port for React development server?","label":1}
+{"text":"How do I exit vim?","label":1}
+{"text":"What is the syntax for a switch statement in Java?","label":1}
+{"text":"How do I check if a key exists in a dictionary?","label":1}
+{"text":"What is the git command to create a new branch?","label":1}
+{"text":"How do I read a file in Python?","label":1}
+{"text":"What is the keyboard shortcut to open terminal in VS Code?","label":1}
+{"text":"How do I reverse a string in JavaScript?","label":1}
+{"text":"What is the syntax for try-catch in Python?","label":1}
+{"text":"How do I install a specific version of a package with npm?","label":1}
+{"text":"What is the command to initialize a git repository?","label":1}
+{"text":"How do I get the length of a list in Python?","label":1}
+{"text":"What does async/await do?","label":1}
+{"text":"How do I concatenate strings in Java?","label":1}
+{"text":"What is the syntax for a lambda function in Python?","label":1}
+{"text":"How do I sort an array in JavaScript?","label":1}
+{"text":"What is the command to start a Docker container?","label":1}
+{"text":"How do I remove duplicates from a list in Python?","label":1}
+{"text":"What is the syntax for string interpolation in C#?","label":1}
+{"text":"How do I check the type of a variable in Python?","label":1}
+{"text":"What is the command to build a TypeScript project?","label":1}
+{"text":"How do I use map function in JavaScript?","label":1}
+{"text":"What is the syntax for destructuring in JavaScript?","label":1}
+{"text":"How do I parse JSON in Python?","label":1}
+{"text":"What is the git command to undo last commit?","label":1}
+{"text":"How do I create a class in Python?","label":1}
+{"text":"What is the difference between == and equals() in Java?","label":1}
+{"text":"How do I use spread operator in JavaScript?","label":1}
+{"text":"What is the command to run tests with pytest?","label":1}
+{"text":"How do I handle null values in TypeScript?","label":1}
+{"text":"What is the syntax for a list comprehension in Python?","label":1}
+{"text":"How do I make an HTTP request in JavaScript?","label":1}
+{"text":"Design a scalable microservices architecture for an e-commerce platform with high availability and fault tolerance","label":0}
+{"text":"Help me architect a real-time collaborative document editing system like Google Docs","label":0}
+{"text":"Create a comprehensive strategy for migrating a monolithic application to microservices without downtime","label":0}
+{"text":"Design a machine learning pipeline for detecting fraudulent transactions with explainability requirements","label":0}
+{"text":"Develop a caching strategy for a multi-region distributed application with consistency guarantees","label":0}
+{"text":"Architect a serverless event-driven system for processing millions of IoT sensor readings per second","label":0}
+{"text":"Design a secure authentication and authorization system with SSO, MFA, and role-based access control","label":0}
+{"text":"Create a data lake architecture for analytics with real-time and batch processing capabilities","label":0}
+{"text":"Help me design a recommendation engine that balances personalization with diversity and fairness","label":0}
+{"text":"Architect a CI/CD pipeline with canary deployments, feature flags, and automated rollback capabilities","label":0}
+{"text":"Design a distributed consensus algorithm for a blockchain-based voting system","label":0}
+{"text":"Create an API versioning and deprecation strategy for a public API with thousands of consumers","label":0}
+{"text":"Help me architect a multi-tenant SaaS platform with data isolation and customization options","label":0}
+{"text":"Design a disaster recovery strategy with RTO of 15 minutes and RPO of 5 minutes","label":0}
+{"text":"Develop a testing strategy for a complex distributed system with eventual consistency","label":0}
+{"text":"Architect a search system that handles fuzzy matching, relevance ranking, and personalization","label":0}
+{"text":"Design a rate limiting and throttling system that handles bursty traffic fairly","label":0}
+{"text":"Create a monitoring and observability strategy for a Kubernetes-based microservices platform","label":0}
+{"text":"Help me design a data synchronization system between mobile apps and backend with conflict resolution","label":0}
+{"text":"Architect a notification system that delivers messages across multiple channels with delivery guarantees","label":0}
+{"text":"Design a workflow orchestration engine for complex business processes with compensation logic","label":0}
+{"text":"Create a content delivery strategy for a global video streaming platform with adaptive bitrate","label":0}
+{"text":"Help me architect a financial trading system with sub-millisecond latency requirements","label":0}
+{"text":"Design an A/B testing framework that handles feature interactions and statistical significance","label":0}
+{"text":"Develop a schema evolution strategy for a large-scale data warehouse with backward compatibility","label":0}
+{"text":"Architect a secrets management system with automatic rotation and audit logging","label":0}
+{"text":"Design a queue-based system for processing long-running jobs with priority and fairness","label":0}
+{"text":"Create a database sharding strategy for a social network with complex relationship queries","label":0}
+{"text":"Help me design a plugin architecture that allows third-party extensions while maintaining security","label":0}
+{"text":"Architect an image processing pipeline that handles millions of uploads with resizing and optimization","label":0}
+{"text":"Design a compliance and audit logging system that meets GDPR and SOC2 requirements","label":0}
+{"text":"Create a load balancing strategy for WebSocket connections with sticky sessions and failover","label":0}
+{"text":"Help me architect a real-time analytics dashboard with sub-second query latency on petabyte data","label":0}
+{"text":"Design a configuration management system for distributed applications with feature flags and gradual rollout","label":0}
+{"text":"Develop a cost optimization strategy for a multi-cloud infrastructure with reserved and spot instances","label":0}
+{"text":"Architect a billing and subscription management system with usage-based pricing and invoicing","label":0}
+{"text":"Design a graph database schema for a knowledge graph with efficient traversal queries","label":0}
+{"text":"Create a blue-green deployment strategy for stateful services with zero-downtime database migrations","label":0}
+{"text":"Help me design a service mesh architecture with mTLS, traffic management, and observability","label":0}
+{"text":"Architect a document storage system with versioning, access control, and full-text search","label":0}
+{"text":"Design a machine learning model serving infrastructure with A/B testing and model versioning","label":0}
+{"text":"Create a data governance framework for a regulated industry with data lineage and quality checks","label":0}
+{"text":"Help me architect a geospatial data platform for real-time location tracking and route optimization","label":0}
+{"text":"Design an event sourcing system with CQRS pattern for a banking application","label":0}
+{"text":"Develop a capacity planning strategy for a rapidly growing SaaS platform with predictable scaling","label":0}
+{"text":"Architect a federated identity system that integrates with multiple enterprise identity providers","label":0}
+{"text":"Design a chaos engineering framework for testing system resilience in production","label":0}
+{"text":"Create a data pipeline architecture that handles schema-on-read with data quality validation","label":0}
+{"text":"Help me design an API gateway with request transformation, rate limiting, and circuit breaking","label":0}
+{"text":"Architect a distributed tracing system for debugging requests across hundreds of microservices","label":0}

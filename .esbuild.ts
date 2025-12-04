@@ -40,9 +40,6 @@ const baseNodeBuildOptions = {
 		'sqlite3',
 		'node-pty', // Required by @github/copilot
 		'@github/copilot',
-		'@xenova/transformers', // Has native dependencies (onnxruntime-node)
-		'onnxruntime-web', // ONNX runtime for reasoning classifier
-		'adm-zip', // ZIP extraction for reasoning classifier
 		'sharp', // Image processing with native bindings
 		...(isDev ? [] : ['dotenv', 'source-map-support'])
 	],

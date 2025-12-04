@@ -4,8 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
-import * as os from 'os';
-import * as path from 'path';
 import type { ChatRequest } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { TimeoutTimer } from '../../../util/vs/base/common/async';
@@ -13,7 +11,6 @@ import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycl
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
@@ -136,8 +133,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
-		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext
+		@IFetcherService private readonly _fetcherService: IFetcherService
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -153,11 +149,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		}));
 		this._serviceBrand = undefined;
 
-		// Initialize reasoning classifier
-		// Use temp directory for model cache
-		const modelCacheDir = path.join(os.tmpdir(), '.vscode-copilot-models');
-		const extensionPath = this._extensionContext.extensionUri.fsPath;
-		this._reasoningClassifier = this._register(new ReasoningClassifier(modelCacheDir, extensionPath, this._fetcherService, this._logService));
+		// Initialize reasoning classifier (uses remote API)
+		this._reasoningClassifier = this._register(new ReasoningClassifier(this._fetcherService, this._logService));
 	}
 
 	override dispose(): void {
