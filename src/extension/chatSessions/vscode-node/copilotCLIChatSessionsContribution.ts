@@ -45,7 +45,7 @@ const disabledIsolation: Readonly<vscode.ChatSessionProviderOptionItem> = {
 };
 const disabledIsolationLocked: Readonly<vscode.ChatSessionProviderOptionItem> = { ...disabledIsolation, locked: true };
 
-function getDisabledIsolationOption(name: string): vscode.ChatSessionProviderOptionItem {
+function getLockedIsolationOption(name: string): vscode.ChatSessionProviderOptionItem {
 	return {
 		id: 'enabled',
 		name,
@@ -343,7 +343,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			// For existing sessions with a worktree, show the worktree branch name as a locked option
 			const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(copilotcliSessionId);
 			if (worktreeRelativePath) {
-				options[ISOLATION_OPTION_ID] = getDisabledIsolationOption(worktreeRelativePath);
+				options[ISOLATION_OPTION_ID] = getLockedIsolationOption(worktreeRelativePath);
 			}
 		}
 		const history = existingSession?.object?.getChatHistory() || [];
@@ -521,7 +521,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// For existing sessions with a worktree, show the worktree branch name as a locked option
 				const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.object.sessionId);
 				if (worktreeRelativePath) {
-					changes.push({ optionId: ISOLATION_OPTION_ID, value: getDisabledIsolationOption(worktreeRelativePath) });
+					changes.push({ optionId: ISOLATION_OPTION_ID, value: getLockedIsolationOption(worktreeRelativePath) });
 					this.contentProvider.notifySessionOptionsChange(resource, changes);
 				}
 			} else if (isUntitled && (!session.object.options.isolationEnabled || !this.worktreeManager.isSupported())) {
