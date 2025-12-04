@@ -83,7 +83,7 @@ export function isValidEmbedding(value: unknown): value is Embedding {
 	}
 
 	const asEmbedding = value as Embedding;
-	if (!(asEmbedding.type instanceof EmbeddingType)) {
+	if (!asEmbedding.type) {
 		return false;
 	}
 
