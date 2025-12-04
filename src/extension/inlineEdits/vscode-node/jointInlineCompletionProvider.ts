@@ -187,7 +187,7 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 					}
 				}
 
-				const singularProvider = this._instantiationService.createInstance(JointCompletionsProvider, completionsProvider, inlineEditProvider);
+				const singularProvider = reader.store.add(this._instantiationService.createInstance(JointCompletionsProvider, completionsProvider, inlineEditProvider));
 
 				if (unificationStateValue?.modelUnification) {
 					if (!excludes.includes('github.copilot')) {
