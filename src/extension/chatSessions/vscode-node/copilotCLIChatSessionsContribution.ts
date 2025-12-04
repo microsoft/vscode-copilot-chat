@@ -922,9 +922,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		try {
 			this.contextForRequest.set(session.object.sessionId, { prompt, attachments });
 			this.sessionItemProvider.notifySessionsChange();
-			if (model) {
-				// _sessionModel.set(session.object.sessionId, model);
-			}
 			await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
 				resource: SessionIdForCLI.getResource(session.object.sessionId),
 				prompt: userPrompt || request.prompt,
