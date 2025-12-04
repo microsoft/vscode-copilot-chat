@@ -40,7 +40,6 @@ const baseNodeBuildOptions = {
 		'sqlite3',
 		'node-pty', // Required by @github/copilot
 		'@github/copilot',
-		'sharp', // Image processing with native bindings
 		...(isDev ? [] : ['dotenv', 'source-map-support'])
 	],
 	platform: 'node',
