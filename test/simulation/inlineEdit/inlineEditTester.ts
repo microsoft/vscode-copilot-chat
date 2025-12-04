@@ -5,12 +5,11 @@
 
 import { rename } from 'fs/promises';
 import { basename, dirname, join } from 'path';
-import type { InlineCompletionContext } from 'vscode';
 import { VisualizationTestRun } from '../../../src/extension/inlineChat/node/rendererVisualization';
 import { IRecordingInformation, ObservableWorkspaceRecordingReplayer } from '../../../src/extension/inlineEdits/common/observableWorkspaceRecordingReplayer';
 import { createNextEditProvider } from '../../../src/extension/inlineEdits/node/createNextEditProvider';
 import { DebugRecorder } from '../../../src/extension/inlineEdits/node/debugRecorder';
-import { NextEditProvider } from '../../../src/extension/inlineEdits/node/nextEditProvider';
+import { NESInlineCompletionContext, NextEditProvider } from '../../../src/extension/inlineEdits/node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../../src/extension/inlineEdits/node/nextEditProviderTelemetry';
 import { NextEditResult } from '../../../src/extension/inlineEdits/node/nextEditResult';
 import { ConfigKey, IConfigurationService } from '../../../src/platform/configuration/common/configurationService';
@@ -164,7 +163,7 @@ export class InlineEditTester {
 
 		const historyContext = historyContextProvider.getHistoryContext(docId)!;
 		const activeDocument = historyContext.getMostRecentDocument(); // TODO
-		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now(), earliestShownDateTime: Date.now() + 200 };
+		const context: NESInlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now(), earliestShownDateTime: Date.now() + 200, enforceCacheDelay: false };
 		const logContext = new InlineEditRequestLogContext(activeDocument.docId.toString(), 1, context);
 		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, notebookService, workspaceService, nextEditProvider.ID, workspace.getDocument(activeDocument.docId)!);
 

@@ -49,7 +49,7 @@ import { ICompletionsPromiseQueueService, PromiseQueue } from '../../extension/c
 import { ICompletionsRuntimeModeService, RuntimeMode } from '../../extension/completions-core/vscode-node/lib/src/util/runtimeMode';
 import { DocumentContext, WorkspaceFolder } from '../../extension/completions-core/vscode-node/types/src';
 import { DebugRecorder } from '../../extension/inlineEdits/node/debugRecorder';
-import { INextEditProvider, NextEditProvider } from '../../extension/inlineEdits/node/nextEditProvider';
+import { INextEditProvider, NESInlineCompletionContext, NextEditProvider } from '../../extension/inlineEdits/node/nextEditProvider';
 import { LlmNESTelemetryBuilder, NextEditProviderTelemetryBuilder, TelemetrySender } from '../../extension/inlineEdits/node/nextEditProviderTelemetry';
 import { INextEditResult } from '../../extension/inlineEdits/node/nextEditResult';
 import { ChatMLFetcherImpl } from '../../extension/prompt/node/chatMLFetcher';
@@ -277,12 +277,13 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		const docId = DocumentId.create(documentUri.toString());
 
 		// Create minimal required context objects
-		const context: vscode.InlineCompletionContext = {
+		const context: NESInlineCompletionContext = {
 			triggerKind: 1, // Invoke
 			selectedCompletionInfo: undefined,
 			requestUuid: generateUuid(),
 			requestIssuedDateTime: Date.now(),
 			earliestShownDateTime: Date.now() + 200,
+			enforceCacheDelay: true,
 		};
 
 		// Create log context

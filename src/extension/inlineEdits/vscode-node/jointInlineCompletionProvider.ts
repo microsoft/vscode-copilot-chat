@@ -36,6 +36,7 @@ import { CopilotInlineCompletionItemProvider } from '../../completions-core/vsco
 import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
+import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
@@ -359,13 +360,14 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			// prefer completions unless there are none
 			tracer.trace(`no last NES suggestion to consider`);
 			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
-			const nesP = this._invokeNESProvider(tracer, document, position, context, tokens, sw);
+			const nesP = this._invokeNESProvider(tracer, document, position, true, context, tokens, sw);
 			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 		}
 
 		tracer.trace(`last NES suggestion is for the current document, checking if it agrees with the current suggestion`);
 
-		const nesP = this._invokeNESProvider(tracer, document, position, context, tokens, sw);
+		const enforceCacheDelay = (lastNesSuggestion.docVersionId !== document.version);
+		const nesP = this._invokeNESProvider(tracer, document, position, enforceCacheDelay, context, tokens, sw);
 		if (!nesP) {
 			tracer.trace(`no NES provider`);
 			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
@@ -433,11 +435,12 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 	}
 
-	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
+	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, enforceCacheDelay: boolean, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
+		const nesContext: NESInlineCompletionContext = { ...context, enforceCacheDelay };
 		let nesP: Promise<NesCompletionList | undefined> | undefined;
 		if (this._inlineEditProvider) {
 			tracer.trace(`- requesting NES provideInlineCompletionItems`);
-			nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, context, tokens.nesCts.token);
+			nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, nesContext, tokens.nesCts.token);
 			nesP.then((nesR) => {
 				tracer.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
 			}).catch((e) => {
