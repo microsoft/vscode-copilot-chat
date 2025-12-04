@@ -32,6 +32,7 @@ import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatV
 import { IToolsService } from '../../tools/common/toolsService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
+import { convertReferenceToVariable } from './copilotPromptReferences';
 
 const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
@@ -850,7 +851,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async createCLISessionAndSubmitRequest(
 		request: vscode.ChatRequest,
 		userPrompt: string | undefined,
-		references: readonly vscode.ChatPromptReference[] | undefined,
+		otherReferences: readonly vscode.ChatPromptReference[] | undefined,
 		context: vscode.ChatContext,
 		workingDirectory: Uri | undefined,
 		isolationEnabled: boolean,
@@ -883,8 +884,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 		};
 
-		const [{ prompt, attachments }, model, agent] = await Promise.all([
-			requestPromptPromise.then(prompt => this.promptResolver.resolvePrompt(request, prompt, (references || []).concat([]), isolationEnabled, token)),
+		const [{ prompt, attachments, references }, model, agent] = await Promise.all([
+			requestPromptPromise.then(prompt => this.promptResolver.resolvePrompt(request, prompt, (otherReferences || []).concat([]), isolationEnabled, token)),
 			this.getModelId(undefined, request, true, token), // prefer model in request, as we're delegating from another session here.
 			this.getAgent(undefined, undefined, token),
 			getWorkingDirectory()
@@ -905,7 +906,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			this.sessionItemProvider.notifySessionsChange();
 			await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
 				resource: SessionIdForCLI.getResource(session.object.sessionId),
-				prompt: userPrompt || request.prompt
+				prompt: userPrompt || request.prompt,
+				attachedContext: references.map(ref => convertReferenceToVariable(ref, attachments))
 			});
 		} catch {
 			this.contextForRequest.delete(session.object.sessionId);
