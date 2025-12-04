@@ -328,6 +328,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				options[ISOLATION_OPTION_ID] = {
 					id: 'enabled',
 					name: worktreeRelativePath,
+					description: vscode.l10n.t('Using worktree for this session'),
 					locked: true,
 					icon: new vscode.ThemeIcon('git-branch')
 				};
@@ -349,8 +350,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
 		const isolationItems = [
-			{ id: 'enabled', name: 'Worktree' },
-			{ id: 'disabled', name: 'Workspace' }
+			{ id: 'enabled', name: 'Worktree', description: vscode.l10n.t('Use a git worktree for this session') },
+			{ id: 'disabled', name: 'Workspace', description: vscode.l10n.t('Use the current workspace for this session') }
 		];
 
 		const [models, agents] = await Promise.all([
@@ -370,8 +371,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			optionGroups: [
 				{
 					id: MODELS_OPTION_ID,
-					name: 'Model',
-					description: 'Pick Model',
+					name: vscode.l10n.t('Model'),
+					description: vscode.l10n.t('Pick Model'),
 					items: modelItems
 				}
 			]
@@ -379,16 +380,16 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		if (this.worktreeManager.isSupported()) {
 			options.optionGroups.push({
 				id: ISOLATION_OPTION_ID,
-				name: 'Isolation',
-				description: 'Choose Worktree or Workspace for this session',
+				name: vscode.l10n.t('Isolation'),
+				description: vscode.l10n.t('Choose Worktree or Workspace for this session'),
 				items: isolationItems
 			});
 		}
 		if (hasAgents) {
 			options.optionGroups.unshift({
 				id: AGENTS_OPTION_ID,
-				name: 'Agent',
-				description: 'Set Agent',
+				name: vscode.l10n.t('Agent'),
+				description: vscode.l10n.t('Set Agent'),
 				items: agentItems
 			});
 		}
