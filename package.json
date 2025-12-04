@@ -1319,7 +1319,7 @@
 				"commands": [
 					{
 						"name": "generate",
-						"when": "!config.chat.edits2.enabled",
+						"when": "!config.inlineChat.enableV2",
 						"description": "%copilot.workspace.generate.description%",
 						"disambiguation": [
 							{
@@ -1333,7 +1333,7 @@
 					},
 					{
 						"name": "edit",
-						"when": "!config.chat.edits2.enabled",
+						"when": "!config.inlineChat.enableV2",
 						"description": "%copilot.workspace.edit.inline.description%",
 						"disambiguation": [
 							{
@@ -1347,7 +1347,7 @@
 					},
 					{
 						"name": "doc",
-						"when": "!config.chat.edits2.enabled",
+						"when": "!config.inlineChat.enableV2",
 						"description": "%copilot.workspace.doc.description%",
 						"disambiguation": [
 							{
@@ -1361,7 +1361,7 @@
 					},
 					{
 						"name": "fix",
-						"when": "!config.chat.edits2.enabled",
+						"when": "!config.inlineChat.enableV2",
 						"description": "%copilot.workspace.fix.description%",
 						"disambiguation": [
 							{
@@ -1375,7 +1375,7 @@
 					},
 					{
 						"name": "tests",
-						"when": "!config.chat.edits2.enabled",
+						"when": "!config.inlineChat.enableV2",
 						"description": "%copilot.workspace.tests.description%",
 						"disambiguation": [
 							{
