@@ -37,7 +37,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 	private _getThinkingBudget(modelId: string, maxOutputTokens: number): number | undefined {
 		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._experimentationService);
-		if (!configuredBudget) {
+		if (!configuredBudget || configuredBudget === 0) {
 			return undefined;
 		}
 
@@ -46,7 +46,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		if (!modelSupportsThinking) {
 			return undefined;
 		}
-		return Math.min(32000, maxOutputTokens - 1, configuredBudget);
+		const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
+		return Math.min(32000, maxOutputTokens - 1, normalizedBudget);
 	}
 
 	/**

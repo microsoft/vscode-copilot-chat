@@ -3319,7 +3319,7 @@
 							"null"
 						],
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
-						"minimum": 1024,
+						"minimum": 0,
 						"maximum": 32000,
 						"tags": [
 							"experimental",
