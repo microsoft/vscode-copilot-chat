@@ -74,10 +74,10 @@ class MockOctoKitService implements IOctoKitService {
  * Mock implementation of extension context for testing
  */
 class MockExtensionContext {
-	storageUri: vscode.Uri | undefined;
+	globalStorageUri: vscode.Uri | undefined;
 
-	constructor(storageUri?: vscode.Uri) {
-		this.storageUri = storageUri;
+	constructor(globalStorageUri?: vscode.Uri) {
+		this.globalStorageUri = globalStorageUri;
 	}
 }
 
@@ -131,7 +131,7 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 	});
 
 	test('returns empty array when no storage URI available', async () => {
-		mockExtensionContext.storageUri = undefined;
+		mockExtensionContext.globalStorageUri = undefined;
 		const provider = createProvider();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -142,10 +142,12 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 	test('returns cached agents on first call', async () => {
 		const provider = createProvider();
 
-		// Pre-populate cache
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		mockFileSystem.mockDirectory(cacheDir, [['test_agent.agent.md', FileType.File]]);
-		const agentFile = URI.joinPath(cacheDir, 'test_agent.agent.md');
+		// Pre-populate cache with org folder
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
+		mockFileSystem.mockDirectory(orgDir, [['test_agent.agent.md', FileType.File]]);
+		const agentFile = URI.joinPath(orgDir, 'test_agent.agent.md');
 		const agentContent = `---
 name: Test Agent
 description: A test agent
@@ -183,18 +185,23 @@ Test prompt content`;
 		};
 		mockOctoKitService.setAgentDetails('api_agent', mockDetails);
 
-		// First call returns cached (empty) results
+		// First call returns cached (empty) results and triggers background fetch
 		const agents1 = await provider.provideCustomAgents({}, {} as any);
 		assert.deepEqual(agents1, []);
 
 		// Wait for background fetch to complete
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		// Second call should return newly cached agents
+		// Second call should return newly cached agents from memory
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
 		assert.equal(agents2[0].name, 'api_agent');
 		assert.equal(agents2[0].description, 'An agent from API');
+
+		// Third call should also return from memory cache without file I/O
+		const agents3 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents3.length, 1);
+		assert.equal(agents3[0].name, 'api_agent');
 	});
 
 	test('generates correct markdown format for agents', async () => {
@@ -225,8 +232,9 @@ Test prompt content`;
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check cached file content
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'full_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'full_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -271,8 +279,9 @@ Detailed prompt content
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check that file was created with sanitized name
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'agent_with_spaces___.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'agent_with_spaces___.agent.md');
 		try {
 			const contentBytes = await mockFileSystem.readFile(agentFile);
 			const content = new TextDecoder().decode(contentBytes);
@@ -282,7 +291,7 @@ Detailed prompt content
 		}
 	});
 
-	test('fires change event when cache is updated', async () => {
+	test('fires change event when cache is updated on first fetch', async () => {
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -304,21 +313,16 @@ Detailed prompt content
 		};
 		mockOctoKitService.setAgentDetails('changing_agent', mockDetails);
 
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
-
 		let eventFired = false;
 		provider.onDidChangeCustomAgents(() => {
 			eventFired = true;
 		});
 
-		// Update the agent details
-		mockDetails.prompt = 'Updated prompt';
-		mockOctoKitService.setAgentDetails('changing_agent', mockDetails);
-
+		// First call triggers background fetch
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
 
+		// Event should fire after initial successful fetch
 		assert.equal(eventFired, true);
 	});
 
@@ -411,16 +415,29 @@ Detailed prompt content
 			prompt: 'Agent 1 prompt',
 		});
 
+		// Pre-populate file cache with the first agent to simulate previous successful state
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
+		mockFileSystem.mockDirectory(orgDir, [['agent1.agent.md', FileType.File]]);
+		const agentContent = `---
+name: Agent 1
+description: First agent
+---
+Agent 1 prompt`;
+		mockFileSystem.mockFile(URI.joinPath(orgDir, 'agent1.agent.md'), agentContent);
+
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		// Should cache only the successful agent
+		// With error handling, partial failures skip cache update for that org
+		// So the existing file cache is returned with the one successful agent
 		const cachedAgents = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents.length, 1);
 		assert.equal(cachedAgents[0].name, 'agent1');
 	});
 
-	test('detects when new agents are added to API', async () => {
+	test('caches agents in memory after first successful fetch', async () => {
 		const provider = createProvider();
 
 		// Initial setup with one agent
@@ -444,12 +461,12 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		let changeEventFired = false;
-		provider.onDidChangeCustomAgents(() => {
-			changeEventFired = true;
-		});
+		// After successful fetch, subsequent calls return from memory
+		const agents1 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents1.length, 1);
+		assert.equal(agents1[0].name, 'initial_agent');
 
-		// Add a new agent
+		// Even if API is updated, memory cache is used
 		const newAgent: CustomAgentListItem = {
 			name: 'new_agent',
 			repo_owner_id: 1,
@@ -467,15 +484,13 @@ Detailed prompt content
 			prompt: 'New prompt',
 		});
 
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 150));
-
-		assert.equal(changeEventFired, true);
-		const agents = await provider.provideCustomAgents({}, {} as any);
-		assert.equal(agents.length, 2);
+		// Memory cache returns old results without refetching
+		const agents2 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents2.length, 1);
+		assert.equal(agents2[0].name, 'initial_agent');
 	});
 
-	test('detects when agents are removed from API', async () => {
+	test('memory cache persists after first successful fetch', async () => {
 		const provider = createProvider();
 
 		// Initial setup with two agents
@@ -510,21 +525,18 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		let changeEventFired = false;
-		provider.onDidChangeCustomAgents(() => {
-			changeEventFired = true;
-		});
+		// Verify both agents are cached
+		const cachedAgents1 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(cachedAgents1.length, 2);
 
-		// Remove one agent
+		// Remove one agent from API
 		mockOctoKitService.setCustomAgents([agents[0]]);
 
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 150));
-
-		assert.equal(changeEventFired, true);
-		const cachedAgents = await provider.provideCustomAgents({}, {} as any);
-		assert.equal(cachedAgents.length, 1);
-		assert.equal(cachedAgents[0].name, 'agent1');
+		// Memory cache still returns both agents (no refetch)
+		const cachedAgents2 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(cachedAgents2.length, 2);
+		assert.equal(cachedAgents2[0].name, 'agent1');
+		assert.equal(cachedAgents2[1].name, 'agent2');
 	});
 
 	test('does not fire change event when content is identical', async () => {
@@ -563,7 +575,7 @@ Detailed prompt content
 		assert.equal(changeEventCount, 0);
 	});
 
-	test('handles empty agent list from API', async () => {
+	test('memory cache persists even when API returns empty list', async () => {
 		const provider = createProvider();
 
 		// Setup with initial agents
@@ -587,20 +599,17 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		let changeEventFired = false;
-		provider.onDidChangeCustomAgents(() => {
-			changeEventFired = true;
-		});
+		// Verify agent is cached
+		const agents1 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents1.length, 1);
 
 		// API now returns empty array
 		mockOctoKitService.setCustomAgents([]);
 
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 150));
-
-		assert.equal(changeEventFired, true);
-		const agents = await provider.provideCustomAgents({}, {} as any);
-		assert.equal(agents.length, 0);
+		// Memory cache still returns the agent (no refetch)
+		const agents2 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents2.length, 1);
+		assert.equal(agents2[0].name, 'temporary_agent');
 	});
 
 	test('generates markdown with only required fields', async () => {
@@ -629,8 +638,9 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'minimal_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'minimal_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -667,8 +677,9 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'wildcard_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'wildcard_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -680,8 +691,10 @@ Detailed prompt content
 		const provider = createProvider();
 
 		// Pre-populate cache with mixed valid and malformed content
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		mockFileSystem.mockDirectory(cacheDir, [
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
+		mockFileSystem.mockDirectory(orgDir, [
 			['valid_agent.agent.md', FileType.File],
 			['no_frontmatter.agent.md', FileType.File],
 		]);
@@ -691,11 +704,11 @@ name: Valid Agent
 description: A valid agent
 ---
 Valid prompt`;
-		mockFileSystem.mockFile(URI.joinPath(cacheDir, 'valid_agent.agent.md'), validContent);
+		mockFileSystem.mockFile(URI.joinPath(orgDir, 'valid_agent.agent.md'), validContent);
 
 		// File without frontmatter - parser extracts name from filename, description is empty
 		const noFrontmatterContent = `Just some content without any frontmatter`;
-		mockFileSystem.mockFile(URI.joinPath(cacheDir, 'no_frontmatter.agent.md'), noFrontmatterContent);
+		mockFileSystem.mockFile(URI.joinPath(orgDir, 'no_frontmatter.agent.md'), noFrontmatterContent);
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
@@ -756,8 +769,9 @@ Valid prompt`;
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'world_domination.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'world_domination.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -800,8 +814,9 @@ You are a world-class computer scientist.
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'special_chars_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'special_chars_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -842,8 +857,9 @@ Test prompt with special characters
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'multiline_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'multiline_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 

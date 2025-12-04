@@ -20,6 +20,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
 
 	private isFetching = false;
+	private memoryCache: vscode.CustomAgentResource[] | undefined = undefined;
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
@@ -30,11 +31,8 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		super();
 	}
 
-	private getCacheDir(): vscode.Uri | undefined {
-		if (!this.extensionContext.storageUri) {
-			return;
-		}
-		return vscode.Uri.joinPath(this.extensionContext.storageUri, 'githubAgentsCache');
+	private getCacheDir(): vscode.Uri {
+		return vscode.Uri.joinPath(this.extensionContext.globalStorageUri, 'githubAgentsCache');
 	}
 
 	async provideCustomAgents(
@@ -42,15 +40,20 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		_token: vscode.CancellationToken
 	): Promise<vscode.CustomAgentResource[]> {
 		try {
-			// Read from cache first
-			const cachedAgents = await this.readFromCache();
+			// If we have successfully fetched and cached in memory, return from memory
+			if (this.memoryCache !== undefined) {
+				return this.memoryCache;
+			}
+
+			// Read from file cache first
+			const fileCachedAgents = await this.readFromCache();
 
 			// Trigger async fetch to update cache
 			this.fetchAndUpdateCache(options).catch(error => {
 				this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in background fetch: ${error}`);
 			});
 
-			return cachedAgents;
+			return fileCachedAgents;
 		} catch (error) {
 			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in provideCustomAgents: ${error}`);
 			return [];
@@ -65,24 +68,37 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 				return [];
 			}
 
-			const cacheContents = await this.readCacheContents(cacheDir);
-			if (cacheContents.size === 0) {
+			const agents: vscode.CustomAgentResource[] = [];
+
+			// Check if cache directory exists
+			try {
+				await this.fileSystem.stat(cacheDir);
+			} catch {
 				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No cache found');
 				return [];
 			}
 
-			const agents: vscode.CustomAgentResource[] = [];
+			// Read all org folders
+			const entries = await this.fileSystem.readDirectory(cacheDir);
+			for (const [entry, fileType] of entries) {
+				if (fileType !== FileType.Directory) {
+					continue;
+				}
 
-			for (const [filename, text] of cacheContents) {
-				// Parse metadata from the file (name and description)
-				const metadata = this.parseAgentMetadata(text, filename);
-				if (metadata) {
-					const fileUri = vscode.Uri.joinPath(cacheDir, filename);
-					agents.push({
-						name: metadata.name,
-						description: metadata.description,
-						uri: fileUri,
-					});
+				const orgDir = vscode.Uri.joinPath(cacheDir, entry);
+				const cacheContents = await this.readCacheContents(orgDir);
+
+				for (const [filename, text] of cacheContents) {
+					// Parse metadata from the file (name and description)
+					const metadata = this.parseAgentMetadata(text, filename);
+					if (metadata) {
+						const fileUri = vscode.Uri.joinPath(orgDir, filename);
+						agents.push({
+							name: metadata.name,
+							description: metadata.description,
+							uri: fileUri,
+						});
+					}
 				}
 			}
 
@@ -118,13 +134,18 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 			// Convert VS Code API options to internal options
 			const internalOptions = options ? {
-				includeSources: ['org', 'enterprise'] // don't include 'repo' to avoid redundancy
+				includeSources: ['org', 'enterprise'] // don't include 'repo'
 			} satisfies CustomAgentListOptions : undefined;
 
 			// Fetch agents from all organizations
-			const allAgents: CustomAgentListItem[] = [];
+			const agentsByOrg = new Map<string, Map<string, CustomAgentListItem>>();
+			let hadAnyFetchErrors = false;
+
 			for (const org of organizations) {
 				try {
+					const agentsForOrg = new Map<string, CustomAgentListItem>();
+					agentsByOrg.set(org, agentsForOrg);
+
 					// Get the first repository for this organization to use in the API call
 					// We can't just use .github-private because user may not have access to it
 					const repos = await this.octoKitService.getOrganizationRepositories(org);
@@ -135,26 +156,17 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 					const repoName = repos[0];
 					const agents = await this.octoKitService.getCustomAgents(org, repoName, internalOptions);
-					allAgents.push(...agents);
+					for (const agent of agents) {
+						agentsForOrg.set(agent.name, agent);
+					}
 					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName}`);
 				} catch (error) {
 					this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error fetching agents from ${org}: ${error}`);
-				}
-			}
-
-			// Deduplicate agents by name (keep first occurrence)
-			const uniqueAgents = new Map<string, CustomAgentListItem>();
-			for (const agent of allAgents) {
-				if (!uniqueAgents.has(agent.name)) {
-					uniqueAgents.set(agent.name, agent);
+					hadAnyFetchErrors = true;
 				}
 			}
 
 			const cacheDir = this.getCacheDir();
-			if (!cacheDir) {
-				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No workspace open, cannot use cache');
-				return;
-			}
 
 			// Ensure cache directory exists
 			try {
@@ -164,52 +176,126 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 				await this.fileSystem.createDirectory(cacheDir);
 			}
 
-			// Read existing cache contents before updating
-			const existingContents = await this.readCacheContents(cacheDir);
+			let totalAgents = 0;
+			let hasChanges = false;
 
-			// Generate new cache contents
-			const newContents = new Map<string, string>();
-			for (const agent of uniqueAgents.values()) {
-				const filename = this.sanitizeFilename(agent.name) + AgentFileExtension;
+			// Get list of currently cached organizations
+			const cachedOrgDirs = new Set<string>();
+			try {
+				const entries = await this.fileSystem.readDirectory(cacheDir);
+				for (const [entry, fileType] of entries) {
+					if (fileType === FileType.Directory) {
+						cachedOrgDirs.add(entry);
+					}
+				}
+			} catch {
+				// Cache directory might not exist yet
+			}
 
-				// Fetch full agent details including prompt content
-				const agentDetails = await this.octoKitService.getCustomAgentDetails(
-					agent.repo_owner,
-					agent.repo_name,
-					agent.name,
-					agent.version
-				);
+			// Track which orgs we've successfully processed
+			const processedOrgDirs = new Set<string>();
 
-				// Generate agent markdown file content
-				if (agentDetails) {
-					const content = this.generateAgentMarkdown(agentDetails);
-					newContents.set(filename, content);
+			// Process each organization
+			for (const org of agentsByOrg.keys()) {
+				const sanitizedOrgName = this.sanitizeFilename(org);
+				const orgDir = vscode.Uri.joinPath(cacheDir, sanitizedOrgName);
+				const orgAgents = agentsByOrg.get(org) || new Map();
+
+				// Track that we're processing this org
+				processedOrgDirs.add(sanitizedOrgName);
+
+				// Ensure org directory exists
+				try {
+					await this.fileSystem.stat(orgDir);
+				} catch (error) {
+					await this.fileSystem.createDirectory(orgDir);
+				}
+
+				// Read existing cache contents for this org
+				const existingContents = await this.readCacheContents(orgDir);
+
+				// Generate new cache contents for this org
+				const newContents = new Map<string, string>();
+				let hadFetchError = false;
+				for (const agent of orgAgents.values()) {
+					try {
+						const filename = this.sanitizeFilename(agent.name) + AgentFileExtension;
+
+						// Fetch full agent details including prompt content
+						const agentDetails = await this.octoKitService.getCustomAgentDetails(
+							agent.repo_owner,
+							agent.repo_name,
+							agent.name,
+							agent.version
+						);
+
+						// Generate agent markdown file content
+						if (agentDetails) {
+							const content = this.generateAgentMarkdown(agentDetails);
+							newContents.set(filename, content);
+							totalAgents++;
+						}
+					} catch (error) {
+						this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error fetching details for agent ${agent.name} from ${org}: ${error}`);
+						hadFetchError = true;
+					}
+				}
+
+				// Skip cache update if we had any errors fetching agent details
+				if (hadFetchError) {
+					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Skipping cache update for ${org} due to fetch errors`);
+					hadAnyFetchErrors = true;
+					continue;
+				}
+
+				// Compare contents to detect changes for this org
+				const orgHasChanges = this.hasContentChanged(existingContents, newContents);
+
+				if (orgHasChanges) {
+					hasChanges = true;
+
+					// Clear existing cache files for this org
+					const existingFiles = await this.fileSystem.readDirectory(orgDir);
+					for (const [filename, fileType] of existingFiles) {
+						if (fileType === FileType.File && filename.endsWith(AgentFileExtension)) {
+							await this.fileSystem.delete(vscode.Uri.joinPath(orgDir, filename));
+						}
+					}
+
+					// Write new cache files for this org
+					for (const [filename, content] of newContents) {
+						const fileUri = vscode.Uri.joinPath(orgDir, filename);
+						await this.fileSystem.writeFile(fileUri, new TextEncoder().encode(content));
+					}
 				}
 			}
 
-			// Compare contents to detect changes
-			const hasChanges = this.hasContentChanged(existingContents, newContents);
+			// Delete cache directories for organizations the user no longer belongs to
+			for (const cachedOrgDir of cachedOrgDirs) {
+				if (!processedOrgDirs.has(cachedOrgDir)) {
+					const orgDirToDelete = vscode.Uri.joinPath(cacheDir, cachedOrgDir);
+					try {
+						await this.fileSystem.delete(orgDirToDelete, { recursive: true, useTrash: false });
+						this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Deleted cache for organization no longer accessible: ${cachedOrgDir}`);
+						hasChanges = true;
+					} catch (error) {
+						this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error deleting cache directory ${cachedOrgDir}: ${error}`);
+					}
+				}
+			}
+
+			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Updated cache with ${totalAgents} agents from ${organizations.length} organizations`);
+
+			// If all fetch operations succeeded, populate memory cache
+			if (!hadAnyFetchErrors && this.memoryCache === undefined) {
+				this.memoryCache = await this.readFromCache();
+				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Successfully populated memory cache');
+			}
 
 			if (!hasChanges) {
 				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No changes detected in cache');
 				return;
 			}
-
-			// Clear existing cache files
-			const existingFiles = await this.fileSystem.readDirectory(cacheDir);
-			for (const [filename, fileType] of existingFiles) {
-				if (fileType === FileType.File && filename.endsWith(AgentFileExtension)) {
-					await this.fileSystem.delete(vscode.Uri.joinPath(cacheDir, filename));
-				}
-			}
-
-			// Write new cache files
-			for (const [filename, content] of newContents) {
-				const fileUri = vscode.Uri.joinPath(cacheDir, filename);
-				await this.fileSystem.writeFile(fileUri, new TextEncoder().encode(content));
-			}
-
-			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Updated cache with ${uniqueAgents.size} unique agents from ${organizations.length} organizations`);
 
 			// Fire event to notify consumers that agents have changed
 			this._onDidChangeCustomAgents.fire();
