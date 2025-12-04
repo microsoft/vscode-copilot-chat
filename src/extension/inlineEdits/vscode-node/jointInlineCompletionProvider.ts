@@ -330,7 +330,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		} finally {
 
 			// Only save the last NES suggestion if this is the latest invocation
-			if (invocationId >= this.provideInlineCompletionItemsInvocationCount) {
+			if (invocationId === this.provideInlineCompletionItemsInvocationCount) {
 				this.lastNesSuggestion = saveLastNesSuggestion;
 				if (this.lastNesSuggestion) {
 					tracer.trace(`Set the last NES suggestion for document ${this.lastNesSuggestion.docUri.toString()}`);
