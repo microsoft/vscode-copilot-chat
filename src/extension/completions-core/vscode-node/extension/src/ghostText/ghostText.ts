@@ -20,6 +20,7 @@ import {
 	window,
 } from 'vscode';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
 import { getInlineCompletions } from '../../../lib/src/inlineCompletion';
@@ -64,11 +65,16 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 		const items = rawCompletions.map(completion => {
 			const { start, end } = completion.range;
 			const newRange = new Range(start.line, start.character, end.line, end.character);
-			return new InlineCompletionItem(completion.insertText, newRange, {
-				title: 'Completion Accepted', // Unused
-				command: postInsertCmdName,
-				arguments: [completion],
-			});
+			return {
+				insertText: completion.insertText,
+				range: newRange,
+				command: {
+					title: 'Completion Accepted', // Unused
+					command: postInsertCmdName,
+					arguments: [completion],
+				},
+				correlationId: createCorrelationId('completions'),
+			};
 		});
 
 		return { items };

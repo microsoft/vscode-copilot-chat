@@ -102,16 +102,16 @@ export class Tracer implements ITracer {
 			return value;
 		}
 
-		if (typeof value === 'object') {
-			return stringifyObj(value);
-		}
-
 		if (typeof value === 'function') {
 			return value.name ? `[Function: ${value.name}]` : '[Function]';
 		}
 
 		if (Array.isArray(value)) {
 			return `[${value.map(v => this.stringify(v)).join(', ')}]`;
+		}
+
+		if (typeof value === 'object') {
+			return stringifyObj(value);
 		}
 
 		const valueToString = value.toString();

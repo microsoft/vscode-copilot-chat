@@ -37,6 +37,7 @@ export class DocumentToAstSelectionData extends TelemetryData {
 }
 
 export interface InlineChatEditCodePromptProps extends GenericInlinePromptProps {
+	readonly ignoreCustomInstructions?: boolean;
 }
 
 export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePromptProps> {
@@ -99,7 +100,7 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 				</HistoryWithInstructions>
 				{useProjectLabels && <ProjectLabels priority={600} embeddedInsideUserMessage={false} />}
 				<UserMessage>
-					<CustomInstructions priority={725} chatVariables={chatVariables} languageId={languageId} />
+					{!this.props.ignoreCustomInstructions && <CustomInstructions priority={725} chatVariables={chatVariables} languageId={languageId} />}
 					<LanguageServerContextPrompt priority={700} document={document} position={context.selection.start} requestId={this.props.promptContext.requestId} source={KnownSources.chat} />
 				</UserMessage>
 				<ChatToolReferences priority={750} promptContext={this.props.promptContext} flexGrow={1} embeddedInsideUserMessage={false} />

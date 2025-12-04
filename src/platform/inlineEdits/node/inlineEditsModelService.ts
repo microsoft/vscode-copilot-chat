@@ -16,9 +16,8 @@ import { autorun, observableFromEvent } from '../../../util/vs/base/common/obser
 import { CopilotToken } from '../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ConfigKey, ExperimentBasedConfig, IConfigurationService } from '../../configuration/common/configurationService';
-import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService, Response } from '../../networking/common/fetcherService';
+import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WireTypes } from '../common/dataTypes/inlineEditsModelsTypes';
@@ -31,40 +30,13 @@ type Model = {
 	includeTagsInCurrentFile: boolean;
 }
 
-const IN_TESTING = false;
-const STUB_MODELS_FOR_TESTING: WireTypes.ModelList.t = {
-	models: [
-		{
-			name: 'model-1',
-			api_provider: 'openai',
-			capabilities: {
-				promptStrategy: 'codexv21nesUnified',
-			},
-		},
-		{
-			name: 'model-2',
-			api_provider: 'openai',
-			capabilities: {
-				promptStrategy: 'xtabUnifiedModel',
-			},
-		},
-		{
-			name: 'model-3',
-			api_provider: 'openai',
-			capabilities: {
-				promptStrategy: 'xtab-v1',
-			},
-		}
-	],
-};
-
 export class InlineEditsModelService extends Disposable implements IInlineEditsModelService {
 
 	_serviceBrand: undefined;
 
 	private static readonly COPILOT_NES_XTAB_MODEL: Model = {
 		modelName: 'copilot-nes-xtab',
-		promptingStrategy: undefined,
+		promptingStrategy: PromptingStrategy.CopilotNesXtab,
 		includeTagsInCurrentFile: true,
 	};
 
@@ -75,6 +47,9 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	};
 
 	private _copilotTokenObs = observableFromEvent(this, this._tokenStore.onDidStoreUpdate, () => this._tokenStore.copilotToken);
+
+	// TODO@ulugbekna: use a derived observable such that it fires only when nesModels change
+	private _fetchedModelsObs = observableFromEvent(this, this._proxyModelsService.onModelListUpdated, () => this._proxyModelsService.nesModels);
 
 	private _preferredModelNameObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsPreferredModel, this._expService);
 	private _localModelConfigObs = this._configService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration);
@@ -89,9 +64,8 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	private _tracer = createTracer(['NES', 'ModelsService'], (msg) => this._logService.trace(msg));
 
 	constructor(
-		@ICAPIClientService private readonly _capiClient: ICAPIClientService,
-		@IFetcherService private readonly _fetchService: IFetcherService,
 		@ICopilotTokenStore private readonly _tokenStore: ICopilotTokenStore,
+		@IProxyModelsService private readonly _proxyModelsService: IProxyModelsService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -110,6 +84,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		this._register(autorun((reader) => {
 			this.refreshModelsInfo({
 				copilotToken: this._copilotTokenObs.read(reader),
+				fetchedNesModels: this._fetchedModelsObs.read(reader),
 				preferredModelName: this._preferredModelNameObs.read(reader),
 				localModelConfig: this._localModelConfigObs.read(reader),
 				modelConfigString: this._expBasedModelConfigObs.read(reader),
@@ -153,12 +128,14 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	async refreshModelsInfo(
 		{
 			copilotToken,
+			fetchedNesModels,
 			preferredModelName,
 			localModelConfig,
 			modelConfigString,
 			defaultModelConfigString,
 		}: {
 			copilotToken: CopilotToken | undefined;
+			fetchedNesModels: WireTypes.Model.t[] | undefined;
 			preferredModelName: string;
 			localModelConfig: ModelConfiguration | undefined;
 			modelConfigString: string | undefined;
@@ -169,10 +146,22 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		const tracer = this._tracer.sub('refreshModelsInfo');
 
 		tracer.trace('Fetching latest models...');
-		const useSlashModels = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUseSlashModels, this._expService);
-		const fetchModelsPromise = useSlashModels ? this._fetchLatestModels(copilotToken) : Promise.resolve(undefined);
 
 		const models: Model[] = [];
+
+		// priority of adding models to the list:
+		// 0. model from user local setting
+		// 1. model from modelConfigurationString setting (set through ExP)
+		// 2. fetched models from /models endpoint (if useSlashModels is true)
+
+		if (localModelConfig) {
+			if (models.some(m => m.modelName === localModelConfig.modelName)) {
+				tracer.trace('Local model configuration already exists in the model list, skipping.');
+			} else {
+				tracer.trace(`Adding local model configuration: ${localModelConfig.modelName}`);
+				models.push({ ...localModelConfig });
+			}
+		}
 
 		if (modelConfigString) {
 			tracer.trace('Parsing modelConfigurationString...');
@@ -185,44 +174,33 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			}
 		}
 
-		if (copilotToken) {
-			tracer.trace('Awaiting fetched models...');
-			const fetchedModels = await fetchModelsPromise;
-			if (fetchedModels === undefined) {
-				tracer.trace('No fetched models available.');
-			} else {
-				tracer.trace(`Fetched ${fetchedModels.models.length} models.`);
-				const filteredFetchedModels = filterMap(fetchedModels.models, (m) => {
-					if (!isPromptingStrategy(m.capabilities.promptStrategy)) {
-						return undefined;
-					}
-					return {
-						modelName: m.name,
-						promptingStrategy: m.capabilities.promptStrategy,
-						includeTagsInCurrentFile: false, // FIXME@ulugbekna: determine this based on model capabilities and config
-					} satisfies Model;
-				});
-				tracer.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
-				pushMany(models, filteredFetchedModels);
-			}
-		}
+		const useSlashModels = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUseSlashModels, this._expService);
+		if (useSlashModels && fetchedNesModels && fetchedNesModels.length > 0) {
+			tracer.trace(`Processing ${fetchedNesModels.length} fetched models...`);
+			const filteredFetchedModels = filterMap(fetchedNesModels, (m) => {
+				if (!isPromptingStrategy(m.capabilities.promptStrategy)) {
+					return undefined;
+				}
+				return {
+					modelName: m.name,
+					promptingStrategy: m.capabilities.promptStrategy,
+					includeTagsInCurrentFile: false, // FIXME@ulugbekna: determine this based on model capabilities and config
+				} satisfies Model;
+			});
+			tracer.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
+			pushMany(models, filteredFetchedModels);
+		} else {
+			// push default model if /models doesn't give us any models
+			tracer.trace(`adding built-in default model: useSlashModels ${useSlashModels}, fetchedNesModels ${fetchedNesModels}`);
 
-		if (localModelConfig) {
-			if (models.some(m => m.modelName === localModelConfig.modelName)) {
-				tracer.trace('Local model configuration already exists in the model list, skipping.');
-			} else {
-				tracer.trace(`Adding local model configuration: ${localModelConfig.modelName}`);
-				models.push({ ...localModelConfig });
-			}
-		}
-
-		const defaultModel = this.determineDefaultModel(copilotToken, defaultModelConfigString);
-		if (defaultModel) {
-			if (models.some(m => m.modelName === defaultModel.modelName)) {
-				tracer.trace('Default model configuration already exists in the model list, skipping.');
-			} else {
-				tracer.trace(`Adding default model configuration: ${defaultModel.modelName}`);
-				models.push(defaultModel);
+			const defaultModel = this.determineDefaultModel(copilotToken, defaultModelConfigString);
+			if (defaultModel) {
+				if (models.some(m => m.modelName === defaultModel.modelName)) {
+					tracer.trace('Default model configuration already exists in the model list, skipping.');
+				} else {
+					tracer.trace(`Adding default model configuration: ${defaultModel.modelName}`);
+					models.push(defaultModel);
+				}
 			}
 		}
 
@@ -233,7 +211,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		} else {
 			this._modelInfo = {
 				modelList: models,
-				currentModelId: this._pickedModel({ preferredModelName, models }),
+				currentModelId: this._pickModel({ preferredModelName, models }),
 			};
 			tracer.trace('Model list updated, firing event.');
 			this._onModelListUpdated.fire();
@@ -272,7 +250,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}
 	}
 
-	private _pickedModel({
+	private _pickModel({
 		preferredModelName,
 		models
 	}: {
@@ -294,48 +272,6 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}
 
 		return this.determineDefaultModel(undefined, undefined).modelName;
-	}
-
-	private async _fetchLatestModels(copilotToken: CopilotToken | undefined): Promise<WireTypes.ModelList.t | undefined> {
-		if (!copilotToken) {
-			return undefined;
-		}
-
-		if (IN_TESTING) {
-			return STUB_MODELS_FOR_TESTING;
-		}
-
-		const url = `${this._capiClient.proxyBaseURL}/models`;
-
-		let r: Response;
-		try {
-			r = await this._fetchService.fetch(url, {
-				headers: {
-					'Authorization': `Bearer ${copilotToken.token}`,
-				},
-				method: 'GET',
-				timeout: 10_000,
-			});
-		} catch (e) {
-			this._logService.error('Failed to fetch model list', e);
-			return;
-		}
-
-		if (!r.ok) {
-			this._logService.error(`Failed to fetch model list: ${r.status} ${r.statusText}`);
-			return;
-		}
-
-		try {
-			const jsonData: unknown = await r.json();
-			if (!WireTypes.ModelList.is(jsonData)) {
-				throw new Error('Invalid model list response'); // TODO@ulugbekna: add telemetry
-			}
-			return jsonData;
-		} catch (e) {
-			this._logService.error(e, 'Failed to process /models response');
-			return;
-		}
 	}
 
 	private parseModelConfigStringSetting(configKey: ExperimentBasedConfig<string | undefined>): ModelConfiguration | undefined {

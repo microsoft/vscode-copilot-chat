@@ -9,19 +9,25 @@ import { IAuthenticationService, IExperimentationService } from '../../../lib/no
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { JointCompletionsProviderStrategy } from '../../../platform/inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../platform/inlineEdits/common/observableGit';
 import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isNotebookCell } from '../../../util/common/notebooks';
-import { createTracer } from '../../../util/common/tracing';
+import { createTracer, ITracer } from '../../../util/common/tracing';
+import { coalesce } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
-import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
+import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { autorun, derived, derivedDisposable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
+import { StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
+import { Range } from '../../../util/vs/editor/common/core/range';
+import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { createContext, registerUnificationCommands, setup } from '../../completions-core/vscode-node/completionsServiceBridges';
@@ -82,122 +88,125 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 	) {
 		super();
 
-		const useJointCompletionsProvider = _configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderEnabled, _expService);
+		const useJointCompletionsProviderObs = _configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderEnabled, _expService);
 
-		if (!useJointCompletionsProvider) {
-			this._register(_instantiationService.createInstance(InlineEditProviderFeatureContribution));
-			this._register(_instantiationService.createInstance(CompletionsCoreContribution));
-			return;
-		}
+		this._register(autorun((reader) => { // FX
+			const useJointCompletionsProvider = useJointCompletionsProviderObs.read(reader);
+			if (!useJointCompletionsProvider) {
+				reader.store.add(_instantiationService.createInstance(InlineEditProviderFeatureContribution));
+				reader.store.add(_instantiationService.createInstance(CompletionsCoreContribution));
+				return;
+			}
 
-		const inlineEditFeature = _instantiationService.createInstance(InlineEditProviderFeature);
-		this._register(inlineEditFeature.rolloutFeature());
-		inlineEditFeature.setContext();
+			const inlineEditFeature = _instantiationService.createInstance(InlineEditProviderFeature);
+			reader.store.add(inlineEditFeature.rolloutFeature());
+			inlineEditFeature.setContext();
 
-		const unificationState = unificationStateObservable(this);
+			const unificationState = unificationStateObservable(this);
 
-		this._register(autorun((reader) => {
-			const unificationStateValue = unificationState.read(reader);
+			reader.store.add(autorun((reader) => {
+				const unificationStateValue = unificationState.read(reader);
 
-			const excludes = this._excludedProviders.read(reader).slice();
+				const excludes = this._excludedProviders.read(reader).slice();
 
-			let inlineEditProvider: InlineCompletionProviderImpl | undefined = undefined;
-			if (this.inlineEditsEnabled.read(reader)) {
-				const logger = reader.store.add(this._instantiationService.createInstance(InlineEditLogger));
+				let inlineEditProvider: InlineCompletionProviderImpl | undefined = undefined;
+				if (this.inlineEditsEnabled.read(reader)) {
+					const logger = reader.store.add(this._instantiationService.createInstance(InlineEditLogger));
 
-				const statelessProviderId = this._inlineEditsProviderId.read(reader);
+					const statelessProviderId = this._inlineEditsProviderId.read(reader);
 
-				const workspace = this._workspace.read(reader);
-				const git = reader.store.add(this._instantiationService.createInstance(ObservableGit));
-				const historyContextProvider = new NesHistoryContextProvider(workspace, git);
+					const workspace = this._workspace.read(reader);
+					const git = reader.store.add(this._instantiationService.createInstance(ObservableGit));
+					const historyContextProvider = new NesHistoryContextProvider(workspace, git);
 
-				let diagnosticsProvider: DiagnosticsNextEditProvider | undefined = undefined;
-				if (this._enableDiagnosticsProvider.read(reader)) {
-					diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, git));
-				}
-
-				const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider));
-
-				const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
-
-				const isInlineEditLogFileEnabled = this.isInlineEditsLogFileEnabledObservable.read(reader);
-
-				let logContextRecorder: LogContextRecorder | undefined;
-				if (isInlineEditLogFileEnabled) {
-					logContextRecorder = reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger));
-				} else {
-					void LogContextRecorder.cleanupOldRecordings(recordingDirPath);
-				}
-
-				const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
-
-				const telemetrySender = reader.store.add(this._instantiationService.createInstance(TelemetrySender));
-
-				inlineEditProvider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender);
-
-				reader.store.add(vscode.commands.registerCommand(learnMoreCommandId, () => {
-					this._envService.openExternal(URI.parse(learnMoreLink));
-				}));
-
-				reader.store.add(vscode.commands.registerCommand(clearCacheCommandId, () => {
-					model.nextEditProvider.clearCache();
-				}));
-
-				reader.store.add(vscode.commands.registerCommand(reportNotebookNESIssueCommandId, () => {
-					const activeNotebook = vscode.window.activeNotebookEditor;
-					const document = vscode.window.activeTextEditor?.document;
-					if (!activeNotebook || !document || !isNotebookCell(document.uri)) {
-						return;
-					}
-					const doc = model.workspace.getDocumentByTextDocument(document);
-					const selection = activeNotebook.selection;
-					if (!selection || !doc) {
-						return;
+					let diagnosticsProvider: DiagnosticsNextEditProvider | undefined = undefined;
+					if (this._enableDiagnosticsProvider.read(reader)) {
+						diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, git));
 					}
 
-					const logContext = new InlineEditRequestLogContext(doc.id.uri, document.version, undefined);
-					logContext.recordingBookmark = model.debugRecorder.createBookmark();
-					void vscode.commands.executeCommand(reportFeedbackCommandId, { logContext });
-				}));
-			}
+					const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider));
 
-			let completionsProvider: CopilotInlineCompletionItemProvider | undefined;
-			{
-				const configEnabled = this._configurationService.getExperimentBasedConfigObservable<boolean>(ConfigKey.TeamInternal.InlineEditsEnableGhCompletionsProvider, this._expService).read(reader);
-				const extensionUnification = unificationStateValue?.extensionUnification ?? false;
+					const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
 
-				// @ulugbekna: note that we don't want it if modelUnification is on
-				const modelUnification = unificationStateValue?.modelUnification ?? false;
-				if (!modelUnification || unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
-					completionsProvider = this._getOrCreateProvider();
+					const isInlineEditLogFileEnabled = this.isInlineEditsLogFileEnabledObservable.read(reader);
+
+					let logContextRecorder: LogContextRecorder | undefined;
+					if (isInlineEditLogFileEnabled) {
+						logContextRecorder = reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger));
+					} else {
+						void LogContextRecorder.cleanupOldRecordings(recordingDirPath);
+					}
+
+					const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
+
+					const telemetrySender = reader.store.add(this._instantiationService.createInstance(TelemetrySender));
+
+					inlineEditProvider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender);
+
+					reader.store.add(vscode.commands.registerCommand(learnMoreCommandId, () => {
+						this._envService.openExternal(URI.parse(learnMoreLink));
+					}));
+
+					reader.store.add(vscode.commands.registerCommand(clearCacheCommandId, () => {
+						model.nextEditProvider.clearCache();
+					}));
+
+					reader.store.add(vscode.commands.registerCommand(reportNotebookNESIssueCommandId, () => {
+						const activeNotebook = vscode.window.activeNotebookEditor;
+						const document = vscode.window.activeTextEditor?.document;
+						if (!activeNotebook || !document || !isNotebookCell(document.uri)) {
+							return;
+						}
+						const doc = model.workspace.getDocumentByTextDocument(document);
+						const selection = activeNotebook.selection;
+						if (!selection || !doc) {
+							return;
+						}
+
+						const logContext = new InlineEditRequestLogContext(doc.id.uri, document.version, undefined);
+						logContext.recordingBookmark = model.debugRecorder.createBookmark();
+						void vscode.commands.executeCommand(reportFeedbackCommandId, { logContext });
+					}));
 				}
 
-				void vscode.commands.executeCommand('setContext', 'github.copilot.extensionUnification.activated', extensionUnification);
-
-				if (extensionUnification && this._completionsInstantiationService) {
-					reader.store.add(this._completionsInstantiationService.invokeFunction(registerUnificationCommands));
-				}
-			}
-
-			const singularProvider = this._instantiationService.createInstance(JointCompletionsProvider, completionsProvider, inlineEditProvider);
-
-			if (unificationStateValue?.modelUnification) {
-				if (!excludes.includes('github.copilot')) {
-					excludes.push('github.copilot');
-				}
-			}
-
-			reader.store.add(vscode.languages.registerInlineCompletionItemProvider(
-				'*',
-				singularProvider,
+				let completionsProvider: CopilotInlineCompletionItemProvider | undefined;
 				{
-					displayName: inlineEditProvider?.displayName,
-					debounceDelayMs: 0, // set 0 debounce to ensure consistent delays/timings
-					groupId: 'nes',
-					excludes,
-				})
-			);
+					const configEnabled = this._configurationService.getExperimentBasedConfigObservable<boolean>(ConfigKey.TeamInternal.InlineEditsEnableGhCompletionsProvider, this._expService).read(reader);
+					const extensionUnification = unificationStateValue?.extensionUnification ?? false;
 
+					// @ulugbekna: note that we don't want it if modelUnification is on
+					const modelUnification = unificationStateValue?.modelUnification ?? false;
+					if (!modelUnification || unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
+						completionsProvider = this._getOrCreateProvider();
+					}
+
+					void vscode.commands.executeCommand('setContext', 'github.copilot.extensionUnification.activated', extensionUnification);
+
+					if (extensionUnification && this._completionsInstantiationService) {
+						reader.store.add(this._completionsInstantiationService.invokeFunction(registerUnificationCommands));
+					}
+				}
+
+				const singularProvider = this._instantiationService.createInstance(JointCompletionsProvider, completionsProvider, inlineEditProvider);
+
+				if (unificationStateValue?.modelUnification) {
+					if (!excludes.includes('github.copilot')) {
+						excludes.push('github.copilot');
+					}
+				}
+
+				reader.store.add(vscode.languages.registerInlineCompletionItemProvider(
+					'*',
+					singularProvider,
+					{
+						displayName: inlineEditProvider?.displayName,
+						debounceDelayMs: 0, // set 0 debounce to ensure consistent delays/timings
+						groupId: 'nes',
+						excludes,
+					})
+				);
+
+			}));
 		}));
 	}
 
@@ -240,6 +249,8 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	constructor(
 		private readonly _completionsProvider: CopilotInlineCompletionItemProvider | undefined,
 		private readonly _inlineEditProvider: InlineCompletionProviderImpl | undefined,
+		@IConfigurationService private readonly _configService: IConfigurationService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
@@ -251,9 +262,62 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	public async provideInlineCompletionItems(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken): Promise<SingularCompletionList | undefined> {
+		const tracer = createTracer(['JointCompletionsProvider', shortenOpportunityId(context.requestUuid), 'provideInlineCompletionItems'], (msg) => this._logService.trace(msg));
+
+		const strategy = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderStrategy, this._expService);
+
+		switch (strategy) {
+			case JointCompletionsProviderStrategy.Regular:
+				return this.provideInlineCompletionItemsRegular(document, position, context, token, tracer);
+			default:
+				assertNever(strategy);
+		}
+	}
+
+	private lastNesSuggestion: null | { docUri: vscode.Uri; docWithNesEditApplied: StringText } = null;
+
+	private async provideInlineCompletionItemsRegular(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken, tracer: ITracer): Promise<SingularCompletionList | undefined> {
+
+		const completionsCts = new CancellationTokenSource(token);
+		const nesCts = new CancellationTokenSource(token);
+
+		try {
+			const docSnapshot = new StringText(document.getText());
+			const list = await this._provideInlineCompletionItemsRegular({ document, docSnapshot }, position, context, tracer, { coreToken: token, completionsCts, nesCts });
+
+			// update last NES suggestion if the first item is a valid NES suggestion
+			if (list?.source === 'inlineEdits' && list.items.length > 0 && list.items[0].range && typeof list.items[0].insertText === 'string') {
+				tracer.trace(`updating last NES suggestion`);
+				const range = list.items[0].range;
+				const rangeOneBased = new Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
+				const offsetRange = docSnapshot.getTransformer().getOffsetRange(rangeOneBased);
+				const edit = new StringReplacement(offsetRange, list.items[0].insertText);
+				const bigEdit = edit.toEdit();
+				const applied = bigEdit.apply(docSnapshot.getValue());
+				this.lastNesSuggestion = {
+					docUri: document.uri,
+					docWithNesEditApplied: new StringText(applied),
+				};
+			} else {
+				tracer.trace(`clearing last NES suggestion`);
+				this.lastNesSuggestion = null;
+			}
+			return list;
+		} finally {
+			completionsCts.dispose();
+			nesCts.dispose();
+		}
+	}
+
+	private async _provideInlineCompletionItemsRegular(
+		{ document, docSnapshot }: { document: vscode.TextDocument; docSnapshot: StringText },
+		position: vscode.Position,
+		context: vscode.InlineCompletionContext,
+		tracer: ITracer,
+		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
+	): Promise<SingularCompletionList | undefined> {
 
 		const sw = new StopWatch();
-		const tracer = createTracer(['JointCompletionsProvider', 'provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)], (msg) => this._logService.trace(msg));
 
 		if (this._completionsProvider === undefined && this._inlineEditProvider === undefined) {
 			tracer.returns('neither completions nor NES provider available');
@@ -262,73 +326,143 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 
 		tracer.trace('requesting completions');
 
-		const nesCts = new CancellationTokenSource(token);
+		const completionsDelay = this._configService.getExperimentBasedConfig<number>(ConfigKey.TeamInternal.InlineEditsJointCompletionGhostTextDelayIfLastNes, this._expService);
 
-		try {
-			let completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined;
-			if (this._completionsProvider === undefined) {
-				tracer.trace(`- no completions provider`);
-				completionsP = undefined;
-			} else {
-				tracer.trace(`- requesting completions provideInlineCompletionItems`);
-				completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, token);
-			}
+		let completionsEndOfLifeReason: vscode.InlineCompletionsDisposeReason | undefined;
+		let nesEndOfLifeReason: vscode.InlineCompletionsDisposeReason | undefined;
 
-			let nesEndOfLifeReason: vscode.InlineCompletionsDisposeReason | undefined = undefined;
-			let nesP: Promise<NesCompletionList | undefined> | undefined;
-			if (this._inlineEditProvider === undefined) {
-				tracer.trace(`- no NES provider`);
-				nesP = undefined;
-			} else {
-				tracer.trace(`- requesting NES provideInlineCompletionItems`);
-				nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, context, nesCts.token).then(v => {
-					if (nesEndOfLifeReason !== undefined) {
-						for (const item of (v?.items as NesCompletionItem[]) ?? []) {
-							this._inlineEditProvider?.handleEndOfLifetime?.(item, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
-						}
-						this._inlineEditProvider?.handleListEndOfLifetime?.(v!, nesEndOfLifeReason);
-						return undefined;
-					}
+		let completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined;
+		if (this._completionsProvider === undefined) {
+			tracer.trace(`- no completions provider`);
+			completionsP = undefined;
+		} else {
+			tracer.trace(`- requesting completions provideInlineCompletionItems`);
+			completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, tokens.completionsCts.token).then(v => {
+				if (v === undefined) {
+					return undefined;
+				}
+				if (completionsEndOfLifeReason === undefined) {
 					return v;
-				});
-			}
+				}
+				// completions was picked over NES, mark completions items as ignored
+				for (const item of v.items) {
+					this._completionsProvider?.handleEndOfLifetime?.(item as vscode.InlineCompletionItem, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
+				}
+				this._completionsProvider?.handleListEndOfLifetime?.(v!, completionsEndOfLifeReason);
+				return undefined;
+			});
+		}
 
-			tracer.trace(`waiting for completions response`);
+		let nesP: Promise<NesCompletionList | undefined> | undefined;
+		if (this._inlineEditProvider === undefined) {
+			tracer.trace(`- no NES provider`);
+			nesP = undefined;
+		} else {
+			tracer.trace(`- requesting NES provideInlineCompletionItems`);
+			nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, context, tokens.nesCts.token).then(v => {
+				if (v === undefined) {
+					return undefined;
+				}
+				if (nesEndOfLifeReason === undefined) {
+					return v;
+				}
+				// completions was picked over NES, mark NES items as ignored
+				for (const item of v.items) {
+					this._inlineEditProvider?.handleEndOfLifetime?.(item as NesCompletionItem, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
+				}
+				this._inlineEditProvider?.handleListEndOfLifetime?.(v!, nesEndOfLifeReason);
+				return undefined;
+			});
+		}
 
-			const completionsR = completionsP ? await completionsP : undefined;
-			tracer.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
+		if (this.lastNesSuggestion) {
+			if (this.lastNesSuggestion.docUri.toString() !== document.uri.toString()) {
+				tracer.trace('last NES suggestion is not for the current document, ignoring');
+				this.lastNesSuggestion = null;
+			} else {
+				tracer.trace(`last NES suggestion is for the current document, checking if it agrees with the current suggestion`);
+				const providerCallSw = new StopWatch();
+				const suggestionsList = await raceCancellation(Promise.race(coalesce([
+					completionsP?.then(async res => {
+						const delayFor = Math.max(0, completionsDelay - providerCallSw.elapsed());
+						if (delayFor > 0 && !tokens.completionsCts.token.isCancellationRequested) {
+							tracer.trace(`delaying completions response by ${delayFor}ms because last suggestion was NES`);
+							await timeout(delayFor);
+						}
+						return { type: 'completions' as const, res };
+					}),
+					nesP?.then(res => ({ type: 'nes' as const, res })),
+				])), tokens.coreToken);
 
-			if (completionsR) {
-				if (completionsR.items.length === 0) {
-					this._completionsProvider?.handleListEndOfLifetime?.(completionsR, { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken });
+				// got cancelled
+				if (suggestionsList === undefined) {
+					tracer.trace(`suggestions request was cancelled`);
+					completionsEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.TokenCancellation };
+					nesEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.TokenCancellation };
+					tokens.completionsCts.cancel();
+					tokens.nesCts.cancel();
+					return undefined;
+				}
+
+				// got nes
+				if (suggestionsList.type === 'nes' && suggestionsList.res !== undefined && this.doesNesSuggestionAgree(docSnapshot, this.lastNesSuggestion.docWithNesEditApplied, (suggestionsList.res.items as NesCompletionItem[]).at(0))) {
+					tracer.trace('last NES suggestion agrees with the current suggestion, using NES');
+					// cancel completions
+					completionsEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken };
+					tokens.completionsCts.cancel();
+					return toInlineEditsList(suggestionsList.res!);
 				} else {
-					tracer.trace(`using completions response, cancelling NES provider`);
-					nesCts.cancel(); // cancel NES request if completions are available
-					const list: SingularCompletionList = toCompletionsList(completionsR);
-					tracer.returns(`use completions response in ${sw.elapsed()}ms`);
-
-					nesEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.LostRace };
-
-					return list;
+					tracer.trace('last NES suggestion does not agree with the current suggestion, ignoring last NES suggestion');
+					this.lastNesSuggestion = null;
 				}
 			}
+		}
 
-			const nesR = nesP ? await nesP : undefined;
-			tracer.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
+		tracer.trace(`waiting for completions response`);
 
-			if (nesR && nesR.items.length > 0) {
-				const list: SingularCompletionList = toInlineEditsList(nesR);
-				tracer.returns(`returning NES result in ${sw.elapsed()}ms`);
+		const completionsR = completionsP ? await completionsP : undefined;
+		tracer.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
+
+		if (completionsR) {
+			if (completionsR.items.length === 0) {
+				completionsEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken };
+			} else {
+				tracer.trace(`using completions response, cancelling NES provider`);
+				tokens.nesCts.cancel(); // cancel NES request if completions are available
+				const list: SingularCompletionList = toCompletionsList(completionsR);
+				tracer.returns(`use completions response in ${sw.elapsed()}ms`);
+
+				nesEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.LostRace };
+
 				return list;
 			}
-
-			// return completions if any (could be empty), prefer completions over empty NES
-			const list: SingularCompletionList = toCompletionsList(completionsR ?? { items: [] });
-			tracer.returns(`returning completions (possibly empty) in ${sw.elapsed()}ms`);
-			return list;
-		} finally {
-			nesCts.dispose();
 		}
+
+		const nesR = nesP ? await nesP : undefined;
+		tracer.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
+
+		if (nesR && nesR.items.length > 0) {
+			const list: SingularCompletionList = toInlineEditsList(nesR);
+			tracer.returns(`returning NES result in ${sw.elapsed()}ms`);
+			return list;
+		}
+
+		// return completions if any (could be empty), prefer completions over empty NES
+		const list: SingularCompletionList = toCompletionsList(completionsR ?? { items: [] });
+		tracer.returns(`returning completions (possibly empty) in ${sw.elapsed()}ms`);
+		return list;
+	}
+
+	private doesNesSuggestionAgree(doc: StringText, docWithNesEditApplied: StringText, nesEdit: NesCompletionItem | undefined): boolean {
+		if (nesEdit === undefined || nesEdit.range === undefined || typeof nesEdit.insertText !== 'string') {
+			return false;
+		}
+		const range = nesEdit.range;
+		const rangeOneBased = new Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
+		const offsetRange = doc.getTransformer().getOffsetRange(rangeOneBased);
+		const edit = new StringReplacement(offsetRange, nesEdit.insertText);
+		const bigEdit = edit.toEdit();
+		return bigEdit.apply(doc.getValue()) === docWithNesEditApplied.getValue();
 	}
 
 	public handleDidShowCompletionItem?(completionItem: SingularCompletionItem, updatedInsertText: string): void {

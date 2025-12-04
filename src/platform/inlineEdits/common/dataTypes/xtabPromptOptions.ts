@@ -17,6 +17,7 @@ export type LanguageContextLanguages = { [languageId: string]: boolean };
 export type LanguageContextOptions = {
 	readonly enabled: boolean;
 	readonly maxTokens: number;
+	readonly traitPosition: 'before' | 'after';
 }
 
 export type DiffHistoryOptions = {
@@ -57,6 +58,7 @@ export enum PromptingStrategy {
 	/**
 	 * Original Xtab unified model prompting strategy.
 	 */
+	CopilotNesXtab = 'copilotNesXtab',
 	UnifiedModel = 'xtabUnifiedModel',
 	Codexv21NesUnified = 'codexv21nesUnified',
 	Nes41Miniv3 = 'nes41miniv3',
@@ -86,6 +88,7 @@ export namespace ResponseFormat {
 			case PromptingStrategy.XtabAggressiveness:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.SimplifiedSystemPrompt:
+			case PromptingStrategy.CopilotNesXtab:
 			case undefined:
 				return ResponseFormat.CodeBlock;
 			default:
@@ -112,6 +115,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 	languageContext: {
 		enabled: false,
 		maxTokens: 2000,
+		traitPosition: 'after',
 	},
 	diffHistory: {
 		nEntries: 25,

@@ -3,13 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import './anthropicPrompts';
-import './geminiPrompts';
-import './openai/defaultOpenAIPrompt';
-import './openai/gpt51CodexPrompt';
-import './openai/gpt51Prompt';
-import './openai/gpt5CodexPrompt';
-import './openai/gpt5Prompt';
-import './openai/hiddenModelBPrompt';
-import './vscModelPrompts';
-import './xAIPrompts';
+export enum JointCompletionsProviderStrategy {
+	Regular = 'regular',
+}

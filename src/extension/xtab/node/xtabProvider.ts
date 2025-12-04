@@ -531,7 +531,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					if (!firstTokenReceived.isSettled) {
 						firstTokenReceived.complete();
 					}
-					if (ttft === undefined) {
+					if (ttft === undefined && text !== '') {
 						ttft = fetchRequestStopWatch.elapsed();
 						logContext.addLog(`TTFT ${ttft} ms`);
 					}
@@ -1003,6 +1003,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				enabledLanguages: this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabledLanguages),
 				enabledDiagnostics: this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.DiagnosticsContextProvider, this.expService),
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
+				traitPosition: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextTraitsPosition, this.expService),
 			}),
 			diffHistory: {
 				nEntries: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this.expService),
@@ -1013,7 +1014,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			includePostScript: true,
 		};
 
-		const modelConfig = this.modelService.selectedModelConfiguration();
+		const selectedModelConfig = this.modelService.selectedModelConfiguration();
+		// proxy /models doesn't know about includeTagsInCurrentFile field as of now, so hard code it to true for CopilotNesXtab strategy
+		const modelConfig: xtabPromptOptions.ModelConfiguration = selectedModelConfig.promptingStrategy === xtabPromptOptions.PromptingStrategy.CopilotNesXtab
+			? { ...selectedModelConfig, includeTagsInCurrentFile: true }
+			: selectedModelConfig;
 		return XtabProvider.overrideModelConfig(sourcedModelConfig, modelConfig);
 	}
 
@@ -1041,21 +1046,24 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
-			default:
+			case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:
+			case undefined:
 				return systemPromptTemplate;
+			default:
+				assertNever(promptingStrategy);
 		}
 	}
 
-	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enabledDiagnostics: diagnosticsEnabled }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enabledDiagnostics: boolean }): LanguageContextOptions {
+	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enabledDiagnostics: diagnosticsEnabled, traitPosition }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enabledDiagnostics: boolean; traitPosition: 'before' | 'after' }): LanguageContextOptions {
 		if (languageId in enabledLanguages) {
-			return { enabled: enabledLanguages[languageId], maxTokens };
+			return { enabled: enabledLanguages[languageId], maxTokens, traitPosition };
 		}
 
 		if (diagnosticsEnabled) {
-			return { enabled: true, maxTokens };
+			return { enabled: true, maxTokens, traitPosition };
 		}
 
-		return { enabled, maxTokens };
+		return { enabled, maxTokens, traitPosition };
 	}
 
 	private getEndpoint(configuredModelName: string | undefined): ChatEndpoint {

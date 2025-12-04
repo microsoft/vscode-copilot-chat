@@ -68,8 +68,8 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const attachmentHint = hasVariables ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
-
-		const hasCustomContext = hasVariables || (this.props.editedFileEvents?.length ?? 0) > 0;
+		const hasEditedFileEvents = (this.props.editedFileEvents?.length ?? 0) > 0;
+		const hasCustomContext = hasVariables || hasEditedFileEvents;
 		const promptVariable = resourceVariables.find(v => isPromptFile(v));
 		// If we have a prompt file, we want to direct the model to follow instructions in that file.
 		// Otherwise we add a generic reminder to only use the context if its relevant.
@@ -106,7 +106,7 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					</Tag>
 				}
 				{
-					(this.props.editedFileEvents?.length ?? 0) > 0 &&
+					hasEditedFileEvents &&
 					<Tag name='context'>
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 					</Tag>

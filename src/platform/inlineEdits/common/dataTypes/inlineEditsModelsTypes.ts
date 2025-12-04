@@ -22,19 +22,22 @@ export namespace WireTypes {
 
 	export namespace Model {
 		export type t = {
+			serviceType: string;
 			name: string;
-			api_provider: string;
+			provider: string;
 			capabilities: Capabilities.t;
 		};
 		export const validator: IValidator<t> = vObj({
+			serviceType: vString(),
 			name: vString(),
-			api_provider: vString(),
+			provider: vString(),
 			capabilities: Capabilities.validator,
 		});
 		export function is(obj: unknown): obj is t {
 			return !!obj && typeof obj === 'object' &&
+				typeof (obj as t).serviceType === 'string' &&
 				typeof (obj as t).name === 'string' &&
-				typeof (obj as t).api_provider === 'string' &&
+				typeof (obj as t).provider === 'string' &&
 				Capabilities.is((obj as t).capabilities);
 		}
 	}
