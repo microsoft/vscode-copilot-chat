@@ -681,7 +681,10 @@ export class EmbeddingsGrouper<T> {
 			return [];
 		}
 
-		const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+		const magnitude = Math.sqrt(vector.reduce((sum, val) => {
+			const num = typeof val === 'number' && !isNaN(val) ? val : 0;
+			return sum + num * num;
+		}, 0));
 
 		if (magnitude === 0) {
 			return vector.slice(); // Return copy of zero vector
