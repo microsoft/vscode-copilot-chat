@@ -9,90 +9,12 @@ import * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { GithubRepoId, IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { constObservable, observableValue } from '../../../../util/vs/base/common/observable';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { OrganizationAndEnterpriseAgentProvider } from '../organizationAndEnterpriseAgentProvider';
-
-/**
- * Mock implementation of IGitService for testing
- */
-class MockGitService implements IGitService {
-	_serviceBrand: undefined;
-	isInitialized = true;
-	activeRepository = observableValue<RepoContext | undefined>(this, undefined);
-	onDidOpenRepository = Event.None;
-	onDidCloseRepository = Event.None;
-	onDidFinishInitialization = Event.None;
-
-	get repositories(): RepoContext[] {
-		const repo = this.activeRepository.get();
-		return repo ? [repo] : [];
-	}
-
-	setActiveRepository(repoId: GithubRepoId | undefined) {
-		if (repoId) {
-			this.activeRepository.set({
-				rootUri: URI.file('/test/repo'),
-				headBranchName: undefined,
-				headCommitHash: undefined,
-				upstreamBranchName: undefined,
-				upstreamRemote: undefined,
-				isRebasing: false,
-				remoteFetchUrls: [`https://github.com/${repoId.org}/${repoId.repo}.git`],
-				remotes: [],
-				changes: undefined,
-				headBranchNameObs: constObservable(undefined),
-				headCommitHashObs: constObservable(undefined),
-				upstreamBranchNameObs: constObservable(undefined),
-				upstreamRemoteObs: constObservable(undefined),
-				isRebasingObs: constObservable(false),
-				isIgnored: async () => false,
-			}, undefined);
-		} else {
-			this.activeRepository.set(undefined, undefined);
-		}
-	}
-
-	async getRepository(uri: URI): Promise<RepoContext | undefined> {
-		return undefined;
-	}
-
-	async getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> {
-		return undefined;
-	}
-
-	async initialize(): Promise<void> { }
-	async add(uri: URI, paths: string[]): Promise<void> { }
-	async log(uri: URI, options?: any): Promise<any[] | undefined> {
-		return [];
-	}
-	async diffBetween(uri: URI, ref1: string, ref2: string): Promise<any[] | undefined> {
-		return [];
-	}
-	async diffWith(uri: URI, ref: string): Promise<any[] | undefined> {
-		return [];
-	}
-	async diffIndexWithHEADShortStats(uri: URI): Promise<any | undefined> {
-		return undefined;
-	}
-	async fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void> { }
-	async getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined> {
-		return undefined;
-	}
-	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
-		return undefined;
-	}
-	async deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void> { }
-	async migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void> { }
-
-	dispose() { }
-}
 
 /**
  * Mock implementation of IOctoKitService for testing
@@ -102,6 +24,8 @@ class MockOctoKitService implements IOctoKitService {
 
 	private customAgents: CustomAgentListItem[] = [];
 	private agentDetails: Map<string, CustomAgentDetails> = new Map();
+
+	private userOrganizations: string[] = ['testorg'];
 
 	getCurrentAuthedUser = async () => ({ login: 'testuser', name: 'Test User', avatar_url: '' });
 	getCopilotPullRequestsForUser = async () => [];
@@ -117,6 +41,7 @@ class MockOctoKitService implements IOctoKitService {
 	getPullRequestFiles = async () => [];
 	closePullRequest = async () => false;
 	getFileContent = async () => '';
+	getUserOrganizations = async () => this.userOrganizations;
 
 	async getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]> {
 		return this.customAgents;
@@ -132,6 +57,10 @@ class MockOctoKitService implements IOctoKitService {
 
 	setAgentDetails(name: string, details: CustomAgentDetails) {
 		this.agentDetails.set(name, details);
+	}
+
+	setUserOrganizations(orgs: string[]) {
+		this.userOrganizations = orgs;
 	}
 
 	clearAgents() {
@@ -153,7 +82,6 @@ class MockExtensionContext {
 
 suite('OrganizationAndEnterpriseAgentProvider', () => {
 	let disposables: DisposableStore;
-	let mockGitService: MockGitService;
 	let mockOctoKitService: MockOctoKitService;
 	let mockFileSystem: MockFileSystemService;
 	let mockExtensionContext: MockExtensionContext;
@@ -164,7 +92,6 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		disposables = new DisposableStore();
 
 		// Create mocks first
-		mockGitService = new MockGitService();
 		mockOctoKitService = new MockOctoKitService();
 		const storageUri = URI.file('/test/storage');
 		mockExtensionContext = new MockExtensionContext(storageUri);
@@ -186,7 +113,6 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		provider = new OrganizationAndEnterpriseAgentProvider(
 			mockOctoKitService,
 			accessor.get(ILogService),
-			mockGitService,
 			mockExtensionContext as any,
 			mockFileSystem
 		);
@@ -194,8 +120,8 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		return provider;
 	}
 
-	test('returns empty array when no active repository', async () => {
-		mockGitService.setActiveRepository(undefined);
+	test('returns empty array when user has no organizations', async () => {
+		mockOctoKitService.setUserOrganizations([]);
 		const provider = createProvider();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -205,7 +131,6 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 
 	test('returns empty array when no storage URI available', async () => {
 		mockExtensionContext.storageUri = undefined;
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -214,7 +139,6 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 	});
 
 	test('returns cached agents on first call', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Pre-populate cache
@@ -236,7 +160,6 @@ Test prompt content`;
 	});
 
 	test('fetches and caches agents from API', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Mock API response
@@ -274,7 +197,6 @@ Test prompt content`;
 	});
 
 	test('generates correct markdown format for agents', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -323,7 +245,6 @@ Detailed prompt content
 	});
 
 	test('sanitizes filenames correctly', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -361,7 +282,6 @@ Detailed prompt content
 	});
 
 	test('fires change event when cache is updated', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -402,7 +322,6 @@ Detailed prompt content
 	});
 
 	test('handles API errors gracefully', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Make the API throw an error
@@ -416,7 +335,6 @@ Detailed prompt content
 	});
 
 	test('passes query options to API correctly', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		let capturedOptions: CustomAgentListOptions | undefined;
@@ -435,7 +353,6 @@ Detailed prompt content
 	});
 
 	test('prevents concurrent fetches when called multiple times rapidly', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		let apiCallCount = 0;
@@ -459,7 +376,6 @@ Detailed prompt content
 	});
 
 	test('handles partial agent detail fetch failures gracefully', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const agents: CustomAgentListItem[] = [
@@ -504,7 +420,6 @@ Detailed prompt content
 	});
 
 	test('detects when new agents are added to API', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Initial setup with one agent
@@ -560,7 +475,6 @@ Detailed prompt content
 	});
 
 	test('detects when agents are removed from API', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Initial setup with two agents
@@ -613,7 +527,6 @@ Detailed prompt content
 	});
 
 	test('does not fire change event when content is identical', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -650,7 +563,6 @@ Detailed prompt content
 	});
 
 	test('handles empty agent list from API', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Setup with initial agents
@@ -691,7 +603,6 @@ Detailed prompt content
 	});
 
 	test('generates markdown with only required fields', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Agent with minimal fields (no optional fields)
@@ -731,7 +642,6 @@ Detailed prompt content
 	});
 
 	test('excludes tools field when array contains only wildcard', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -766,7 +676,6 @@ Detailed prompt content
 	});
 
 	test('handles malformed frontmatter in cached files', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Pre-populate cache with mixed valid and malformed content
@@ -797,39 +706,29 @@ Valid prompt`;
 		assert.equal(agents[1].description, '');
 	});
 
-	test('handles repository context changes between calls', async () => {
+	test('fetches agents from all user organizations', async () => {
 		const provider = createProvider();
 
-		// First call with repo A
-		mockGitService.setActiveRepository(new GithubRepoId('orgA', 'repoA'));
+		// Set up multiple organizations
+		mockOctoKitService.setUserOrganizations(['orgA', 'orgB', 'orgC']);
 
-		let capturedOwner: string | undefined;
-		let capturedRepo: string | undefined;
+		const capturedOrgs: string[] = [];
 		mockOctoKitService.getCustomAgents = async (owner: string, repo: string) => {
-			capturedOwner = owner;
-			capturedRepo = repo;
+			capturedOrgs.push(owner);
 			return [];
 		};
 
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		assert.equal(capturedOwner, 'orgA');
-		assert.equal(capturedRepo, 'repoA');
-
-		// Change to repo B
-		mockGitService.setActiveRepository(new GithubRepoId('orgB', 'repoB'));
-
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
-
-		// Should fetch from new repository
-		assert.equal(capturedOwner, 'orgB');
-		assert.equal(capturedRepo, 'repoB');
+		// Should have fetched from all three organizations
+		assert.equal(capturedOrgs.length, 3);
+		assert.ok(capturedOrgs.includes('orgA'));
+		assert.ok(capturedOrgs.includes('orgB'));
+		assert.ok(capturedOrgs.includes('orgC'));
 	});
 
 	test('generates markdown with long description on single line', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Agent with a very long description that would normally be wrapped at 80 characters
@@ -874,7 +773,6 @@ You are a world-class computer scientist.
 	});
 
 	test('generates markdown with special characters properly escaped in description', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Agent with description containing YAML special characters that need proper handling
@@ -917,7 +815,6 @@ Test prompt with special characters
 	});
 
 	test('generates markdown with multiline description containing newlines', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Agent with description containing actual newline characters

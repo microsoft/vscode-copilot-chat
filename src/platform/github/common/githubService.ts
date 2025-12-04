@@ -301,6 +301,12 @@ export interface IOctoKitService {
 	 * @returns The file content as a string
 	 */
 	getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string>;
+
+	/**
+	 * Gets the list of organizations that the authenticated user belongs to.
+	 * @returns An array of organization logins
+	 */
+	getUserOrganizations(): Promise<string[]>;
 }
 
 /**
@@ -374,6 +380,14 @@ export class BaseOctoKitService {
 
 		this._logService.error(`Failed to get file content for ${owner}/${repo}/${path} at ref ${ref}`);
 		return '';
+	}
+
+	protected async getUserOrganizationsWithToken(token: string): Promise<string[]> {
+		const result = await this._makeGHAPIRequest('user/orgs', 'GET', token);
+		if (!result || !Array.isArray(result)) {
+			return [];
+		}
+		return result.map((org: { login: string }) => org.login);
 	}
 
 	private async getBlobContentWithToken(owner: string, repo: string, sha: string, token: string): Promise<string | undefined> {

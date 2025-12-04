@@ -8,11 +8,9 @@ import YAML from 'yaml';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
-import { IGitService } from '../../../platform/git/common/gitService';
-import { CustomAgentDetails, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
+import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
 
 const AgentFileExtension = '.agent.md';
 
@@ -26,7 +24,6 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@ILogService private readonly logService: ILogService,
-		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 	) {
@@ -45,21 +42,11 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		_token: vscode.CancellationToken
 	): Promise<vscode.CustomAgentResource[]> {
 		try {
-			// Get repository information from the active git repository
-			const repoId = await getRepoId(this.gitService);
-			if (!repoId) {
-				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No active repository found');
-				return [];
-			}
-
-			const repoOwner = repoId.org;
-			const repoName = repoId.repo;
-
 			// Read from cache first
-			const cachedAgents = await this.readFromCache(repoOwner, repoName);
+			const cachedAgents = await this.readFromCache();
 
 			// Trigger async fetch to update cache
-			this.fetchAndUpdateCache(repoOwner, repoName, options).catch(error => {
+			this.fetchAndUpdateCache(options).catch(error => {
 				this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in background fetch: ${error}`);
 			});
 
@@ -70,10 +57,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		}
 	}
 
-	private async readFromCache(
-		repoOwner: string,
-		repoName: string,
-	): Promise<vscode.CustomAgentResource[]> {
+	private async readFromCache(): Promise<vscode.CustomAgentResource[]> {
 		try {
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
@@ -83,7 +67,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 			const cacheContents = await this.readCacheContents(cacheDir);
 			if (cacheContents.size === 0) {
-				this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] No cache found for ${repoOwner}/${repoName}`);
+				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No cache found');
 				return [];
 			}
 
@@ -102,7 +86,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 				}
 			}
 
-			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Loaded ${agents.length} agents/prompts from cache for ${repoOwner}/${repoName}`);
+			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Loaded ${agents.length} agents/prompts from cache`);
 			return agents;
 		} catch (error) {
 			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error reading from cache: ${error}`);
@@ -111,8 +95,6 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	}
 
 	private async fetchAndUpdateCache(
-		repoOwner: string,
-		repoName: string,
 		options: vscode.CustomAgentQueryOptions
 	): Promise<void> {
 		// Prevent concurrent fetches
@@ -123,14 +105,43 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 		this.isFetching = true;
 		try {
-			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetching custom agents for ${repoOwner}/${repoName}`);
+			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Fetching custom agents from all user organizations');
+
+			// Get all organizations the user belongs to
+			const organizations = await this.octoKitService.getUserOrganizations();
+			if (organizations.length === 0) {
+				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User does not belong to any organizations');
+				return;
+			}
+
+			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Found ${organizations.length} organizations: ${organizations.join(', ')}`);
 
 			// Convert VS Code API options to internal options
 			const internalOptions = options ? {
 				includeSources: ['org', 'enterprise'] // don't include 'repo' to avoid redundancy
 			} satisfies CustomAgentListOptions : undefined;
 
-			const agents = await this.octoKitService.getCustomAgents(repoOwner, repoName, internalOptions);
+			// Fetch agents from all organizations
+			const allAgents: CustomAgentListItem[] = [];
+			for (const org of organizations) {
+				try {
+					// Use a dummy repo name since we're only interested in org/enterprise agents
+					const agents = await this.octoKitService.getCustomAgents(org, '.github', internalOptions);
+					allAgents.push(...agents);
+					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org}`);
+				} catch (error) {
+					this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error fetching agents from ${org}: ${error}`);
+				}
+			}
+
+			// Deduplicate agents by name (keep first occurrence)
+			const uniqueAgents = new Map<string, CustomAgentListItem>();
+			for (const agent of allAgents) {
+				if (!uniqueAgents.has(agent.name)) {
+					uniqueAgents.set(agent.name, agent);
+				}
+			}
+
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
 				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No workspace open, cannot use cache');
@@ -150,7 +161,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 			// Generate new cache contents
 			const newContents = new Map<string, string>();
-			for (const agent of agents) {
+			for (const agent of uniqueAgents.values()) {
 				const filename = this.sanitizeFilename(agent.name) + AgentFileExtension;
 
 				// Fetch full agent details including prompt content
@@ -172,7 +183,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			const hasChanges = this.hasContentChanged(existingContents, newContents);
 
 			if (!hasChanges) {
-				this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] No changes detected in cache for ${repoOwner}/${repoName}`);
+				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] No changes detected in cache');
 				return;
 			}
 
@@ -190,7 +201,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 				await this.fileSystem.writeFile(fileUri, new TextEncoder().encode(content));
 			}
 
-			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Updated cache with ${agents.length} agents for ${repoOwner}/${repoName}`);
+			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Updated cache with ${uniqueAgents.size} unique agents from ${organizations.length} organizations`);
 
 			// Fire event to notify consumers that agents have changed
 			this._onDidChangeCustomAgents.fire();
