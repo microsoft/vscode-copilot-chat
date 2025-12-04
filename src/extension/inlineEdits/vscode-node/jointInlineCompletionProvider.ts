@@ -433,7 +433,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		}
 
 		// got NES first
-		if (suggestionsList && suggestionsList.type === 'nes' && suggestionsList.res && this.doesNesSuggestionAgree(docSnapshot, lastNesSuggestion.docWithNesEditApplied, (suggestionsList.res.items as NesCompletionItem[]).at(0))) {
+		if (suggestionsList.type === 'nes' && suggestionsList.res && this.doesNesSuggestionAgree(docSnapshot, lastNesSuggestion.docWithNesEditApplied, (suggestionsList.res.items as NesCompletionItem[]).at(0))) {
 			tracer.trace('last NES suggestion agrees with the current suggestion, using NES');
 			const list: SingularCompletionList = toInlineEditsList(suggestionsList.res);
 			tracer.returns(`returning NES result in ${sw.elapsed()}ms`);
