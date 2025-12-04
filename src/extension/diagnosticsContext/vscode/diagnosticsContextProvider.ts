@@ -79,7 +79,7 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 		}
 
 		const languageId = request.documentContext.languageId;
-		const languageEnablement = this.experimentationService.getTreatmentVariable<boolean>(`config.github.copilot.chat.advanced.inlineEdits.diagnosticsContextProvider.${languageId}`);
+		const languageEnablement = this.experimentationService.getTreatmentVariable<boolean>(`config.github.copilot.chat.inlineEdits.diagnosticsContextProvider.${languageId}`);
 		if (!languageEnablement) {
 			return [];
 		}
