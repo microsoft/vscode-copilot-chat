@@ -424,23 +424,32 @@ export class EmbeddingsGrouper<T> {
 			return [];
 		}
 
-		if (embeddings.length === 1) {
-			return [...embeddings[0]]; // Copy to avoid mutations
+		// Filter out invalid embeddings
+		const validEmbeddings = embeddings.filter(embedding => embedding && Array.isArray(embedding) && embedding.length > 0);
+
+		if (validEmbeddings.length === 0) {
+			return [];
 		}
 
-		const dimensions = embeddings[0].length;
+		if (validEmbeddings.length === 1) {
+			return [...validEmbeddings[0]]; // Copy to avoid mutations
+		}
+
+		const dimensions = validEmbeddings[0].length;
 		const centroid = new Array(dimensions).fill(0);
 
 		// Sum all embeddings
-		for (const embedding of embeddings) {
-			for (let i = 0; i < dimensions; i++) {
-				centroid[i] += embedding[i];
+		for (const embedding of validEmbeddings) {
+			// Additional safety check in case embedding has different dimensions
+			const embeddingLength = Math.min(embedding.length, dimensions);
+			for (let i = 0; i < embeddingLength; i++) {
+				centroid[i] += embedding[i] || 0; // Handle NaN/undefined values
 			}
 		}
 
 		// Divide by count to get mean
 		for (let i = 0; i < dimensions; i++) {
-			centroid[i] /= embeddings.length;
+			centroid[i] /= validEmbeddings.length;
 		}
 
 		// L2 normalize the centroid
@@ -667,6 +676,11 @@ export class EmbeddingsGrouper<T> {
 	 * L2 normalize a vector
 	 */
 	private normalizeVector(vector: EmbeddingVector): EmbeddingVector {
+		// Handle undefined or null vectors
+		if (!vector || vector.length === 0) {
+			return [];
+		}
+
 		const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
 
 		if (magnitude === 0) {
