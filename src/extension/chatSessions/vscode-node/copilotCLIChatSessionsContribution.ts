@@ -291,7 +291,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		super();
 	}
 
-	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string }>): void {
+	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void {
 		this._onDidChangeChatSessionOptions.fire({ resource, updates });
 	}
 
@@ -365,7 +365,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			{ id: COPILOT_CLI_DEFAULT_AGENT_ID, name: l10n.t('Agent') }
 		];
 		agents.forEach(agent => {
-			agentItems.push({ id: agent.name, name: agent.displayName || agent.description || agent.name });
+			agentItems.push({ id: agent.name, name: agent.displayName || agent.description || agent.name, description: agent.description });
 		});
 
 		const options = {
@@ -505,6 +505,24 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (!session || token.isCancellationRequested) {
 				return {};
 			}
+			if (isUntitled && session.object.options.isolationEnabled && session.object.options.workingDirectory && this.worktreeManager.isSupported()) {
+				const changes: { optionId: string; value: vscode.ChatSessionProviderOptionItem }[] = [];
+				// For existing sessions with a worktree, show the worktree branch name as a locked option
+				const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.object.sessionId);
+				if (worktreeRelativePath) {
+					changes.push({
+						optionId: ISOLATION_OPTION_ID, value: {
+							id: 'enabled',
+							name: worktreeRelativePath,
+							description: vscode.l10n.t('Using worktree for this session'),
+							locked: true,
+							icon: new vscode.ThemeIcon('git-branch')
+						}
+					});
+				}
+				this.contentProvider.notifySessionOptionsChange(resource, changes);
+			}
+
 			this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
 			if (isUntitled) {
 				_untitledSessionIdMap.set(session.object.sessionId, id);
@@ -904,6 +922,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		try {
 			this.contextForRequest.set(session.object.sessionId, { prompt, attachments });
 			this.sessionItemProvider.notifySessionsChange();
+			if (model) {
+				// _sessionModel.set(session.object.sessionId, model);
+			}
 			await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
 				resource: SessionIdForCLI.getResource(session.object.sessionId),
 				prompt: userPrompt || request.prompt,
