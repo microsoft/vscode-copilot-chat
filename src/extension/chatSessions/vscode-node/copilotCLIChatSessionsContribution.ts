@@ -252,7 +252,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			// Statistics
 			// Make sure the repository is opened
 			await this.gitService.getRepository(worktreeUri);
-			statistics = await this.gitService.diffIndexWithHEADShortStats(Uri.file(worktreePath));
+			statistics = await this.gitService.diffIndexWithHEADShortStats(worktreeUri);
 		}
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
