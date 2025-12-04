@@ -25,6 +25,7 @@ import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
 import { extUriBiasedIgnorePathCase, normalizePath } from '../../../util/vs/base/common/resources';
+import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
@@ -32,7 +33,6 @@ import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common
 import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { formatUriForFileWidget } from '../common/toolUtils';
-import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -821,8 +821,9 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 	};
 
 	function checkUri(uri: URI) {
-		const workspaceFolder = workspaceService.getWorkspaceFolder(uri);
-		if (!workspaceFolder && !customInstructionsService.isExternalInstructionsFile(uri) && uri.scheme !== Schemas.untitled) {
+		const normalizedUri = normalizePath(uri);
+		const workspaceFolder = workspaceService.getWorkspaceFolder(normalizedUri);
+		if (!workspaceFolder && uri.scheme !== Schemas.untitled) { // don't allow to edit external instruction files
 			return ConfirmationCheckResult.OutsideWorkspace;
 		}
 

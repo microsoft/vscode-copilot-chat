@@ -668,6 +668,10 @@ describe('makeUriConfirmationChecker', async () => {
 			return this.externalFiles.has(uri.toString());
 		}
 
+		isExternalInstructionsFolder(uri: URI): boolean {
+			return false;
+		}
+
 		fetchInstructionsFromSetting(): Promise<any[]> {
 			return Promise.resolve([]);
 		}

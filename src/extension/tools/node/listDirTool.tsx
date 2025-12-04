@@ -19,6 +19,7 @@ import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
 import { checkCancellation, resolveToolInputPath } from './toolUtils';
+import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 
 interface IListDirParams {
 	path: string;
@@ -32,12 +33,14 @@ class ListDirTool implements vscode.LanguageModelTool<IListDirParams> {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IListDirParams>, token: CancellationToken) {
 		const uri = resolveToolInputPath(options.input.path, this.promptPathRepresentationService);
-		const relativeToWorkspace = this.workspaceService.getWorkspaceFolder(normalizePath(uri));
-		if (!relativeToWorkspace) {
+		const normalizedUri = normalizePath(uri);
+		const relativeToWorkspace = this.workspaceService.getWorkspaceFolder(normalizedUri);
+		if (!relativeToWorkspace && !this.customInstructionsService.isExternalInstructionsFolder(normalizedUri)) {
 			throw new Error(`Directory ${options.input.path} is outside of the workspace and can't be read`);
 		}
 
