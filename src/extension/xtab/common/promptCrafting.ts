@@ -6,14 +6,17 @@
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
+import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import { Result } from '../../../util/common/result';
 import { pushMany, range } from '../../../util/vs/base/common/arrays';
+import { assertNever } from '../../../util/vs/base/common/assert';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
+import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { PromptTags } from './tags';
@@ -69,7 +72,9 @@ ${areaAroundCodeToEdit}`;
 
 	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 && opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified;
 
-	const prompt = relatedInformation + (includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt) + postScript;
+	const packagedPrompt = includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt;
+	const packagedPromptWithRelatedInfo = addRelatedInformation(relatedInformation, packagedPrompt, opts.languageContext.traitPosition);
+	const prompt = packagedPromptWithRelatedInfo + postScript;
 
 	const trimmedPrompt = prompt.trim();
 
@@ -78,6 +83,28 @@ ${areaAroundCodeToEdit}`;
 
 function wrapInBackticks(content: string) {
 	return `\`\`\`\n${content}\n\`\`\``;
+}
+
+function addRelatedInformation(relatedInformation: string, prompt: string, position: 'before' | 'after'): string {
+	if (position === 'before') {
+		return appendWithNewLineIfNeeded(relatedInformation, prompt, 2);
+	}
+	return appendWithNewLineIfNeeded(prompt, relatedInformation, 2);
+}
+
+function appendWithNewLineIfNeeded(base: string, toAppend: string, minNewLines: number): string {
+	// Count existing newlines at the end of base and start of toAppend
+	let existingNewLines = 0;
+	for (let i = base.length - 1; i >= 0 && base[i] === '\n'; i--) {
+		existingNewLines++;
+	}
+	for (let i = 0; i < toAppend.length && toAppend[i] === '\n'; i++) {
+		existingNewLines++;
+	}
+
+	// Add newlines to reach the minimum required
+	const newLinesToAdd = Math.max(0, minNewLines - existingNewLines);
+	return (base + '\n'.repeat(newLinesToAdd) + toAppend).trim();
 }
 
 function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
@@ -95,7 +122,8 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Provide the revised code that was between the \`${PromptTags.EDIT_WINDOW.start}\` and \`${PromptTags.EDIT_WINDOW.end}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.`;
 			break;
 		case PromptingStrategy.SimplifiedSystemPrompt:
-		default:
+		case PromptingStrategy.CopilotNesXtab:
+		case undefined:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
 Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
 position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
@@ -104,6 +132,8 @@ they would have made next. Provide the revised code that was between the \`${Pro
 // Your revised code goes here
 \`\`\``;
 			break;
+		default:
+			assertNever(strategy);
 	}
 
 	const formattedPostScript = postScript === undefined ? '' : `\n\n${postScript}`;
@@ -117,7 +147,6 @@ function getRelatedInformation(langCtx: LanguageContextResponse | undefined): st
 
 	const traits = langCtx.items
 		.filter(ctx => ctx.context.kind === ContextKind.Trait)
-		.filter(t => !t.onTimeout)
 		.map(t => t.context) as TraitContext[];
 
 	if (traits.length === 0) {
@@ -129,7 +158,7 @@ function getRelatedInformation(langCtx: LanguageContextResponse | undefined): st
 		relatedInformation.push(`${trait.name}: ${trait.value}`);
 	}
 
-	return `Consider this related information:\n${relatedInformation.join('\n')}\n\n`;
+	return `Consider this related information:\n${relatedInformation.join('\n')}`;
 }
 
 function getEditDiffHistory(
@@ -602,4 +631,72 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	];
 
 	return Result.ok(taggedCurrentFileContent);
+}
+
+export function constructTaggedFile(
+	currentDocument: CurrentDocument,
+	editWindowLinesRange: OffsetRange,
+	areaAroundEditWindowLinesRange: OffsetRange,
+	promptOptions: xtabPromptOptions.PromptOptions,
+	computeTokens: (s: string) => number,
+	opts: {
+		includeLineNumbers: { areaAroundCodeToEdit: boolean; currentFileContent: boolean };
+	}
+) {
+	const contentWithCursorAsLinesOriginal = (() => {
+		const addCursorTagEdit = StringEdit.single(StringReplacement.insert(currentDocument.cursorOffset, PromptTags.CURSOR));
+		const contentWithCursor = addCursorTagEdit.applyOnText(currentDocument.content);
+		return contentWithCursor.getLines();
+	})();
+
+	const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx}| ${line}`);
+
+	const contentWithCursorAsLines = opts.includeLineNumbers.areaAroundCodeToEdit
+		? addLineNumbers(contentWithCursorAsLinesOriginal)
+		: contentWithCursorAsLinesOriginal;
+
+	const editWindowWithCursorAsLines = contentWithCursorAsLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+
+	const areaAroundCodeToEdit = [
+		PromptTags.AREA_AROUND.start,
+		...contentWithCursorAsLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
+		PromptTags.EDIT_WINDOW.start,
+		...editWindowWithCursorAsLines,
+		PromptTags.EDIT_WINDOW.end,
+		...contentWithCursorAsLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
+		PromptTags.AREA_AROUND.end
+	].join('\n');
+
+	const currentFileContentWithCursorLines = opts.includeLineNumbers.currentFileContent
+		? addLineNumbers(contentWithCursorAsLinesOriginal)
+		: contentWithCursorAsLinesOriginal;
+	const currentFileContentLines = opts.includeLineNumbers.currentFileContent
+		? addLineNumbers(currentDocument.lines)
+		: currentDocument.lines;
+
+	let areaAroundCodeToEditForCurrentFile: string;
+	if (promptOptions.currentFile.includeTags && opts.includeLineNumbers.currentFileContent === opts.includeLineNumbers.areaAroundCodeToEdit) {
+		areaAroundCodeToEditForCurrentFile = areaAroundCodeToEdit;
+	} else {
+		const editWindowLines = currentFileContentLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+		areaAroundCodeToEditForCurrentFile = [
+			...currentFileContentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
+			...editWindowLines,
+			...currentFileContentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
+		].join('\n');
+	}
+
+	const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
+		currentFileContentLines,
+		areaAroundCodeToEditForCurrentFile,
+		areaAroundEditWindowLinesRange,
+		computeTokens,
+		promptOptions.pagedClipping.pageSize,
+		promptOptions.currentFile,
+	);
+
+	return taggedCurrentFileContentResult.map(taggedCurrentDocLines => ({
+		taggedCurrentDocLines,
+		areaAroundCodeToEdit,
+	}));
 }

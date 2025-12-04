@@ -130,6 +130,27 @@ export interface CustomAgentListItem {
 	description: string;
 	tools: string[];
 	version: string;
+	argument_hint?: string;
+	metadata?: Record<string, string>;
+	target?: string;
+	config_error?: string;
+	'mcp-servers'?: {
+		[serverName: string]: {
+			type: string;
+			command?: string;
+			args?: string[];
+			tools?: string[];
+			env?: { [key: string]: string };
+			headers?: { [key: string]: string };
+		};
+	};
+}
+
+export interface CustomAgentListOptions {
+	target?: 'github-copilot' | 'vscode';
+	excludeInvalidConfig?: boolean;
+	dedupe?: boolean;
+	includeSources?: ('repo' | 'org' | 'enterprise')[];
 }
 
 export interface CustomAgentListOptions {
@@ -141,16 +162,6 @@ export interface CustomAgentListOptions {
 
 export interface CustomAgentDetails extends CustomAgentListItem {
 	prompt: string;
-	'mcp-servers'?: {
-		[serverName: string]: {
-			type: string;
-			command?: string;
-			args?: string[];
-			tools?: string[];
-			env?: { [key: string]: string };
-			headers?: { [key: string]: string };
-		};
-	};
 }
 
 export interface PullRequestFile {
@@ -252,6 +263,16 @@ export interface IOctoKitService {
 	 * @returns An array of custom agent list items with basic metadata
 	 */
 	getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]>;
+
+	/**
+	 * Gets the full configuration for a specific custom agent.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param agentName The name of the custom agent
+	 * @param version Optional git ref (branch, tag, or commit SHA) to fetch from
+	 * @returns The complete custom agent configuration including the prompt
+	 */
+	getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined>;
 
 	/**
 	 * Gets the list of files changed in a pull request.

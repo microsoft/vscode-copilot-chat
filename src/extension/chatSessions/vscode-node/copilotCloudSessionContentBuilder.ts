@@ -109,7 +109,7 @@ export class ChatSessionContentBuilder {
 		sessions: SessionInfo[],
 		pullRequest: PullRequestSearchItem,
 		getLogsForSession: (id: string) => Promise<string>,
-		initialReferences?: readonly vscode.ChatPromptReference[],
+		initialReferences: Promise<vscode.ChatPromptReference[]>,
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
 		const history: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
@@ -121,14 +121,15 @@ export class ChatSessionContentBuilder {
 				const turns: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
 				// Create request turn with references for the first session
-				const references = sessionIndex === 0 && initialReferences ? Array.from(initialReferences) : [];
+				const references = sessionIndex === 0 ? Array.from(await initialReferences) : [];
 				turns.push(new ChatRequestTurn2(
 					problemStatement || session.name,
 					undefined, // command
 					references, // references
 					this.type,
 					[], // toolReferences
-					[]
+					[],
+					undefined
 				));
 
 				// Create the PR card right after problem statement for first session

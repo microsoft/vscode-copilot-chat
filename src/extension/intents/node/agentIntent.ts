@@ -26,7 +26,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
@@ -38,6 +38,7 @@ import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIn
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
+import { AgentPromptCustomizations, PromptRegistry } from '../../prompts/node/agent/promptRegistry';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
@@ -52,85 +53,80 @@ import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 
-export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
-	instaService.invokeFunction(async accessor => {
-		const toolsService = accessor.get<IToolsService>(IToolsService);
-		const testService = accessor.get<ITestProvider>(ITestProvider);
-		const tasksService = accessor.get<ITasksService>(ITasksService);
-		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
-		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
-		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
-		const editToolLearningService = accessor.get<IEditToolLearningService>(IEditToolLearningService);
-		const model = await endpointProvider.getChatEndpoint(request);
+export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.ChatRequest) => {
+	const toolsService = accessor.get<IToolsService>(IToolsService);
+	const testService = accessor.get<ITestProvider>(ITestProvider);
+	const tasksService = accessor.get<ITasksService>(ITasksService);
+	const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
+	const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
+	const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
+	const editToolLearningService = accessor.get<IEditToolLearningService>(IEditToolLearningService);
+	const model = await endpointProvider.getChatEndpoint(request);
 
-		const allowTools: Record<string, boolean> = {};
+	const allowTools: Record<string, boolean> = {};
 
-		const learned = editToolLearningService.getPreferredEndpointEditTool(model);
-		if (learned) { // a learning-enabled (BYOK) model, we should go with what it prefers
-			allowTools[ToolName.EditFile] = learned.includes(ToolName.EditFile);
-			allowTools[ToolName.ReplaceString] = learned.includes(ToolName.ReplaceString);
-			allowTools[ToolName.MultiReplaceString] = learned.includes(ToolName.MultiReplaceString);
-			allowTools[ToolName.ApplyPatch] = learned.includes(ToolName.ApplyPatch);
-		} else {
-			allowTools[ToolName.EditFile] = true;
-			allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
-			allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
+	const learned = editToolLearningService.getPreferredEndpointEditTool(model);
+	if (learned) { // a learning-enabled (BYOK) model, we should go with what it prefers
+		allowTools[ToolName.EditFile] = learned.includes(ToolName.EditFile);
+		allowTools[ToolName.ReplaceString] = learned.includes(ToolName.ReplaceString);
+		allowTools[ToolName.MultiReplaceString] = learned.includes(ToolName.MultiReplaceString);
+		allowTools[ToolName.ApplyPatch] = learned.includes(ToolName.ApplyPatch);
+	} else {
+		allowTools[ToolName.EditFile] = true;
+		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model);
+		allowTools[ToolName.ApplyPatch] = modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-			if (allowTools[ToolName.ApplyPatch] && await modelCanUseApplyPatchExclusively(model)) {
-				allowTools[ToolName.EditFile] = false;
-			}
-
-			if (await modelCanUseReplaceStringExclusively(model)) {
-				allowTools[ToolName.ReplaceString] = true;
-				allowTools[ToolName.EditFile] = false;
-			}
-
-			if (allowTools[ToolName.ReplaceString] && await modelSupportsMultiReplaceString(model)) {
-				allowTools[ToolName.MultiReplaceString] = true;
-			}
-		}
-
-		allowTools[ToolName.CoreRunTest] = await testService.hasAnyTests();
-		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
-
-		if (model.family === 'gpt-5-codex' || model.family.includes('grok-code')) {
-			allowTools[ToolName.CoreManageTodoList] = false;
-		}
-
-		allowTools[ToolName.EditFilesPlaceholder] = false;
-		if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
-			allowTools[ToolName.ApplyPatch] = false;
+		if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model)) {
 			allowTools[ToolName.EditFile] = false;
-			allowTools[ToolName.ReplaceString] = false;
-			allowTools[ToolName.MultiReplaceString] = false;
 		}
 
-		if (model.family.includes('gemini-3') && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gemini3ReplaceStringOnly, experimentationService)) {
+		if (modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;
 			allowTools[ToolName.EditFile] = false;
 		}
-		if (model.family.includes('gemini-3') && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gemini3MultiReplaceString, experimentationService)) {
+
+		if (allowTools[ToolName.ReplaceString] && modelSupportsMultiReplaceString(model)) {
 			allowTools[ToolName.MultiReplaceString] = true;
 		}
+	}
 
-		const tools = toolsService.getEnabledTools(request, model, tool => {
-			if (typeof allowTools[tool.name] === 'boolean') {
-				return allowTools[tool.name];
-			}
+	allowTools[ToolName.CoreRunTest] = await testService.hasAnyTests();
+	allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
-			// Must return undefined to fall back to other checks
-			return undefined;
-		});
+	if (model.family.includes('grok-code')) {
+		allowTools[ToolName.CoreManageTodoList] = false;
+	}
 
-		if (await modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gpt5AlternativePatch, experimentationService)) {
-			const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
-			if (ap !== -1) {
-				tools[ap] = { ...tools[ap], description: applyPatch5Description };
-			}
+	allowTools[ToolName.EditFilesPlaceholder] = false;
+	if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
+		allowTools[ToolName.ApplyPatch] = false;
+		allowTools[ToolName.EditFile] = false;
+		allowTools[ToolName.ReplaceString] = false;
+		allowTools[ToolName.MultiReplaceString] = false;
+	}
+
+	if (model.family.includes('gemini-3') && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gemini3MultiReplaceString, experimentationService)) {
+		allowTools[ToolName.MultiReplaceString] = true;
+	}
+
+	const tools = toolsService.getEnabledTools(request, model, tool => {
+		if (typeof allowTools[tool.name] === 'boolean') {
+			return allowTools[tool.name];
 		}
 
-		return tools;
+		// Must return undefined to fall back to other checks
+		return undefined;
 	});
+
+	if (modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gpt5AlternativePatch, experimentationService)) {
+		const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
+		if (ap !== -1) {
+			tools[ap] = { ...tools[ap], description: applyPatch5Description };
+		}
+	}
+
+	return tools;
+};
 
 export class AgentIntent extends EditCodeIntent {
 
@@ -160,7 +156,7 @@ export class AgentIntent extends EditCodeIntent {
 	}
 
 	private async listTools(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
-		const editingTools = await getAgentTools(this.instantiationService, request);
+		const editingTools = await this.instantiationService.invokeFunction(getAgentTools, request);
 		const grouping = this._toolGroupingService.create(conversation.sessionId, editingTools);
 
 		let str = 'Available tools:\n';
@@ -209,6 +205,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 	protected extraPromptProps: Partial<AgentPromptProps> | undefined;
 
+	private _resolvedCustomizations: AgentPromptCustomizations | undefined;
+
 	constructor(
 		intent: IIntent,
 		location: ChatLocation,
@@ -233,7 +231,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 	}
 
 	public override getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
-		return getAgentTools(this.instantiationService, this.request);
+		return this.instantiationService.invokeFunction(getAgentTools, this.request);
 	}
 
 	override async buildPrompt(
@@ -241,6 +239,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart>,
 		token: vscode.CancellationToken
 	): Promise<IBuildPromptResult> {
+		this._resolvedCustomizations = await PromptRegistry.resolveAllCustomizations(this.instantiationService, this.endpoint);
 		// Add any references from the codebase invocation to the request
 		const codebase = await this._getCodebaseReferences(promptContext, token);
 
@@ -283,7 +282,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			},
 			location: this.location,
 			enableCacheBreakpoints: summarizationEnabled,
-			...this.extraPromptProps
+			...this.extraPromptProps,
+			customizations: this._resolvedCustomizations
 		};
 		try {
 			const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);

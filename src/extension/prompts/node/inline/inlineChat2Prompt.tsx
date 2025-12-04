@@ -3,23 +3,28 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
+import { AssistantMessage, PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
+import type { ExtendedLanguageModelToolResult } from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ChatRequest, ChatRequestEditorData } from '../../../../vscodeTypes';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
+import { IToolCall } from '../../../prompt/common/intents';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { ChatVariables, UserQuery } from '../panel/chatVariables';
 import { CodeBlock } from '../panel/safeElements';
+import { ToolResult } from '../panel/toolCalling';
 
 
 export type InlineChat2PromptProps = PromptElementProps<{
 	request: ChatRequest;
+	snapshotAtRequest: TextDocumentSnapshot;
 	data: ChatRequestEditorData;
 	exitToolName: string;
+	editAttempts: [IToolCall, ExtendedLanguageModelToolResult][];
 }>;
 
 export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
@@ -34,20 +39,20 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 
 	override render(state: void, sizing: PromptSizing): Promise<any> {
 
-		const snapshot = TextDocumentSnapshot.create(this.props.data.document);
+		const snapshotAtRequest = this.props.snapshotAtRequest;
 
 		// the full lines of the selection
 		// TODO@jrieken
 		// * if the selection is empty and if the line with the selection is empty we could hint to add code and
 		//   generally with empty selections we could allow the model to be a bit more creative
 		// * use the true selected text (now we extend to full lines)
-		const selectedLines = snapshot.getText(this.props.data.selection.with({
+		const selectedLines = snapshotAtRequest.getText(this.props.data.selection.with({
 			start: this.props.data.selection.start.with({ character: 0 }),
 			end: this.props.data.selection.end.with({ character: Number.MAX_SAFE_INTEGER }),
 		}));
 
 		const variables = new ChatVariablesCollection(this.props.request.references);
-		const filepath = this._promptPathRepresentationService.getFilePath(snapshot.uri);
+		const filepath = this._promptPathRepresentationService.getFilePath(snapshotAtRequest.uri);
 
 		// TODO@jrieken APPLY_PATCH_INSTRUCTIONS
 		return (
@@ -56,7 +61,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					<CopilotIdentityRules />
 					<SafetyRules />
 					<Tag name='instructions'>
-						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. The filepath is `{filepath}` and that is the ONLY file you are editing. There is a tool to make these code changes.<br />
+						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. You ONLY edit that file and use a tool to make these edits.<br />
 						The user is interested in code changes grounded in the user's prompt. So, focus on replying with tool calls, avoid wordy explanations, and do not ask back for clarifications.<br />
 						Do not make code changes that are not directly and logically related to the user's prompt, instead invoke the {this.props.exitToolName} tool which can handle this.<br />
 					</Tag>
@@ -64,13 +69,13 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 				</SystemMessage>
 				<UserMessage>
 					<>
-						This is the file you are editing:
+						The filepath is `{filepath}` and this is its content:<br />
 					</>
 					<Tag name='file'>
-						<CodeBlock includeFilepath={false} languageId={snapshot.languageId} uri={snapshot.uri} references={[new PromptReference(snapshot.uri, undefined, undefined)]} code={snapshot.getText()} />
+						<CodeBlock includeFilepath={false} languageId={snapshotAtRequest.languageId} uri={snapshotAtRequest.uri} references={[new PromptReference(snapshotAtRequest.uri, undefined, undefined)]} code={snapshotAtRequest.getText()} />
 					</Tag>
 					<Tag name='file-selection'>
-						<CodeBlock includeFilepath={false} languageId={snapshot.languageId} uri={snapshot.uri} references={[new PromptReference(snapshot.uri, undefined, undefined)]} code={selectedLines} />
+						<CodeBlock includeFilepath={false} languageId={snapshotAtRequest.languageId} uri={snapshotAtRequest.uri} references={[new PromptReference(snapshotAtRequest.uri, undefined, undefined)]} code={selectedLines} />
 					</Tag>
 					<ChatVariables flexGrow={3} priority={898} chatVariables={variables} useFixCookbook={true} />
 					<Tag name='reminder'>
@@ -87,7 +92,67 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
 				</UserMessage>
+				<EditAttemptsElement editAttempts={this.props.editAttempts} data={this.props.data} documentVersionAtRequest={this.props.snapshotAtRequest.version} />
 			</>
 		);
+	}
+}
+
+export type EditAttemptsElementProps = PromptElementProps<{
+	editAttempts: [IToolCall, ExtendedLanguageModelToolResult][];
+	data: ChatRequestEditorData;
+	documentVersionAtRequest: number;
+}>;
+
+class EditAttemptsElement extends PromptElement<EditAttemptsElementProps> {
+
+	override render() {
+		if (this.props.editAttempts.length === 0) {
+			return;
+		}
+
+		const documentNow = this.props.data.document;
+
+		const assistantToolCalls: Required<ToolCall>[] = [];
+		const KeepWith = useKeepWith();
+
+		for (const [toolCall] of this.props.editAttempts) {
+			assistantToolCalls.push({
+				type: 'function',
+				id: toolCall.id,
+				function: { name: toolCall.name, arguments: toolCall.arguments },
+				keepWith: KeepWith
+			});
+		}
+
+		return <>
+			<AssistantMessage toolCalls={assistantToolCalls} />
+			{this.props.editAttempts.map(([toolCall, result]) => {
+				return (
+					<KeepWith>
+						<ToolMessage toolCallId={toolCall.id}>
+							<ToolResult content={result.content} />
+						</ToolMessage>
+					</KeepWith>
+				);
+			})}
+			<UserMessage>
+				{documentNow.version === this.props.documentVersionAtRequest && <>
+					<Tag name='feedback'>
+						Editing this file did not produce the desired result. No changes were made. Understand the previous edit attempts and the original file content, and <br />
+						produce a better edit.<br />
+					</Tag>
+				</>}
+				{documentNow.version !== this.props.documentVersionAtRequest && <>
+					<Tag name='feedback'>
+						Editing this file did not produce the desired result. Understand the previous edit attempts and the current file content, and <br />
+						produce a better edit. This is the current file content:<br />
+					</Tag>
+					<Tag name='file'>
+						<CodeBlock includeFilepath={false} languageId={documentNow.languageId} uri={documentNow.uri} references={[new PromptReference(documentNow.uri, undefined, undefined)]} code={documentNow.getText()} />
+					</Tag>
+				</>}
+			</UserMessage>
+		</>;
 	}
 }

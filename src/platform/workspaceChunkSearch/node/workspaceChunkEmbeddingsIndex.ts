@@ -22,10 +22,10 @@ import { distance, Embedding, EmbeddingType, rankEmbeddings } from '../../embedd
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { logExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
-import { BuildIndexTriggerReason } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WorkspaceChunkSearchOptions } from '../common/workspaceChunkSearch';
+import { BuildIndexTriggerReason } from './codeSearch/codeSearchRepo';
 import { createWorkspaceChunkAndEmbeddingCache, IWorkspaceChunkAndEmbeddingCache } from './workspaceChunkAndEmbeddingCache';
 import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
 

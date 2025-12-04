@@ -17,12 +17,12 @@ import { ISessionTurnStorage, OutcomeAnnotation } from '../../inlineChat/node/pr
 import { IContributedLinkifierFactory } from '../../linkify/common/linkifyService';
 import { StreamPipe, forEachStreamed } from '../../prompts/node/inline/utils/streaming';
 import { ContributedToolName } from '../../tools/common/toolNames';
+import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { Conversation, PromptMetadata, Turn } from '../common/conversation';
 import { IBuildPromptContext } from '../common/intents';
 import { ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { IDocumentContext } from './documentContext';
 import { AsyncReader, ClassifiedTextPiece, IStreamingEditsStrategy, IStreamingTextPieceClassifier, StreamingEditsResult, TextPieceKind, streamLines } from './streamingEdits';
-import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 
 export interface IIntentSlashCommandInfo {
 
@@ -149,8 +149,11 @@ export const promptResultMetadata = (metadata: PromptMetadata[]): MetadataMap =>
  * Generic marker type of telemetry data that can be passed
  * along in an opaque way
  */
-export abstract class TelemetryData {
-	readonly _marker: undefined;
+export class TelemetryData extends PromptMetadata {
+
+	override toString(): string {
+		return `[TelemetryData](${super.toString()})`;
+	}
 }
 
 export interface IBuildPromptResult extends RenderPromptResult {

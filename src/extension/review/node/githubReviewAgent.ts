@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
+import * as l10n from '@vscode/l10n';
 import * as readline from 'readline';
 import type { Selection, TextDocument, TextEditor } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
@@ -24,7 +25,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import * as path from '../../../util/vs/base/common/path';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { l10n, MarkdownString, Range, Uri } from '../../../vscodeTypes';
+import { MarkdownString, Range, Uri } from '../../../vscodeTypes';
 import { FeedbackResult } from '../../prompt/node/feedbackGenerator';
 
 

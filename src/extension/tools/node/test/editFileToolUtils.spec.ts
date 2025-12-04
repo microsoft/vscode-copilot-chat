@@ -333,6 +333,12 @@ describe('replace_string_in_file - applyEdit', () => {
 		expect(result.updatedFile).toBe('function() {\n    proper indentation\n}');
 	});
 
+	test('writes an empty file with LF', async () => {
+		setText('');
+		const result = await doApplyEdit('\n', 'hello world!');
+		expect(result.updatedFile).toBe('hello world!');
+	});
+
 	test('return value structure', async () => {
 		setText('old content');
 		const result = await doApplyEdit('old', 'new');

@@ -6,7 +6,7 @@
 import { Readable } from 'stream';
 import { IEnvService } from '../../env/common/envService';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
-import { FetchOptions, IAbortController, PaginationOptions, Response } from '../common/fetcherService';
+import { FetcherId, FetchOptions, IAbortController, PaginationOptions, Response } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export abstract class BaseFetchFetcher implements IFetcher {
@@ -14,7 +14,8 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	constructor(
 		private readonly _fetchImpl: typeof fetch | typeof import('electron').net.fetch,
 		private readonly _envService: IEnvService,
-		private readonly userAgentLibraryUpdate?: (original: string) => string,
+		private readonly userAgentLibraryUpdate: ((original: string) => string) | undefined,
+		private readonly _fetcherId: FetcherId,
 	) {
 	}
 
@@ -46,7 +47,12 @@ export abstract class BaseFetchFetcher implements IFetcher {
 			throw new Error(`Illegal arguments! 'signal' must be an instance of AbortSignal!`);
 		}
 
-		return this._fetch(url, method, headers, body, signal);
+		try {
+			return await this._fetch(url, method, headers, body, signal);
+		} catch (e) {
+			e.fetcherId = this._fetcherId;
+			throw e;
+		}
 	}
 
 	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
@@ -88,7 +94,8 @@ export abstract class BaseFetchFetcher implements IFetcher {
 					return Readable.from([]);
 				}
 				return Readable.fromWeb(resp.body);
-			}
+			},
+			this._fetcherId
 		);
 	}
 

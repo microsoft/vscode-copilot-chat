@@ -170,7 +170,7 @@ export async function getConfirmationToolParams(instaService: IInstantiationServ
 	return {
 		tool: ToolName.CoreConfirmationTool,
 		input: {
-			title: 'Copilot CLI Permission Request',
+			title: 'Background Agent Permission Request',
 			message: codeBlock(permissionRequest),
 			confirmationType: 'basic'
 		}

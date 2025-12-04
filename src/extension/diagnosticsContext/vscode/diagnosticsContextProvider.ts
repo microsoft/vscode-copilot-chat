@@ -118,7 +118,7 @@ function diagnosticsToTraits(diagnostics: Diagnostic[]): Copilot.Trait[] {
 	if (diagnostics.length > 0) {
 		traits.push({
 			name: "Problems near the user's cursor",
-			value: diagnostics.map(d => `\t${diagnosticsToString(d)}`).join('\n'),
+			value: diagnostics.map(d => `\n\t${diagnosticsToString(d)}`).join(''),
 		});
 	}
 

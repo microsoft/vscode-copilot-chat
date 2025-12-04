@@ -11,9 +11,9 @@ import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
-import { KeepGoingReminder } from './agentPrompt';
 import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
-import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
+import { FileLinkificationInstructions } from './fileLinkificationInstructions';
+import { IAgentPrompt, PromptRegistry, SystemPrompt } from './promptRegistry';
 
 class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -24,7 +24,6 @@ class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptPro
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
 				Your main goal is to complete the user's request, denoted within the &lt;user_query&gt; tag.<br />
-				<KeepGoingReminder modelFamily={this.props.modelFamily} />
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
 				{!this.props.codesearchMode && <>If the user wants you to implement a feature and they have not specified the files to edit, first break down the user's request into smaller concepts and think about the kinds of files you need to grasp each concept.<br /></>}
@@ -105,12 +104,8 @@ class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptPro
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
-				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.<br />
-					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
-					You can find the configuration in `config/app.config.json`.
-				</Tag>
+				Use proper Markdown formatting. When referring to symbols (classes, methods, variables) in user's workspace wrap in backticks. For file paths and line number rules, see fileLinkification section below<br />
+				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
@@ -121,10 +116,13 @@ class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptPro
 class XAIPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['grok-code'];
 
-	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		return DefaultGrokCodeFastAgentPrompt;
 	}
-}
 
+	resolveUserQueryTagName(endpoint: IChatEndpoint): string | undefined {
+		return 'user_query';
+	}
+}
 
 PromptRegistry.registerPrompt(XAIPromptResolver);

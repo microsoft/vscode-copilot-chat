@@ -15,40 +15,57 @@ import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, FileType } from '../../../../vscodeTypes';
-import { ChatVariablesCollection, isPromptFile, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
+import { CopilotCLIImageSupport } from './copilotCLIImageSupport';
 
 export class CopilotCLIPromptResolver {
 	constructor(
+		private readonly imageSupport: CopilotCLIImageSupport,
 		@ILogService private readonly logService: ILogService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) { }
 
-	public async resolvePrompt(request: vscode.ChatRequest, additionalReferences: vscode.ChatPromptReference[], token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
-		const references = request.references.concat(additionalReferences);
-		if (request.prompt.startsWith('/')) {
-			return { prompt: request.prompt, attachments: [] }; // likely a slash command, don't modify
+	/**
+	 * Generates the final prompt for the Copilot CLI agent, resolving variables and preparing attachments.
+	 * @param request
+	 * @param prompt Provide a prompt to override the request prompt
+	 * @param additionalReferences
+	 * @param token
+	 * @returns
+	 */
+	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], isIsolationEnabled: boolean, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
+		const references = request.references.concat(additionalReferences.filter(ref => !request.references.includes(ref)));
+		prompt = prompt ?? request.prompt;
+		if (prompt.startsWith('/')) {
+			return { prompt, attachments: [] }; // likely a slash command, don't modify
 		}
-		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(references), token);
+		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(references), isIsolationEnabled, token);
 		if (token.isCancellationRequested) {
-			return { prompt: request.prompt, attachments: [] };
+			return { prompt, attachments: [] };
 		}
-		const prompt = await raceCancellation(generateUserPrompt(request, variables, this.instantiationService), token);
+		prompt = await raceCancellation(generateUserPrompt(request, prompt, variables, this.instantiationService), token);
 		return { prompt: prompt ?? '', attachments };
 	}
 
-	private async constructChatVariablesAndAttachments(variables: ChatVariablesCollection, token: vscode.CancellationToken): Promise<[variables: ChatVariablesCollection, Attachment[]]> {
+	private async constructChatVariablesAndAttachments(variables: ChatVariablesCollection, isIsolationEnabled: boolean, token: vscode.CancellationToken): Promise<[variables: ChatVariablesCollection, Attachment[]]> {
 		const validReferences: vscode.ChatPromptReference[] = [];
 		const fileFolderReferences: vscode.ChatPromptReference[] = [];
 		await Promise.all(Array.from(variables).map(async variable => {
 			// Unsupported references.
-			if (isPromptInstruction(variable) || isPromptFile(variable)) {
+			if (isPromptInstruction(variable)) {
+				return;
+			}
+			// If isolation is enabled, and we have workspace repo information, skip it.
+			if (isIsolationEnabled && isWorkspaceRepoInformationItem(variable)) {
 				return;
 			}
 			// Images will be attached using regular attachments via Copilot CLI SDK.
 			if (variable.value instanceof ChatReferenceBinaryData) {
+				validReferences.push(variable.reference);
+				fileFolderReferences.push(variable.reference);
 				return;
 			}
 			if (isLocation(variable.value)) {
@@ -82,8 +99,28 @@ export class CopilotCLIPromptResolver {
 	private async constructFileOrFolderAttachments(fileOrFolderReferences: vscode.ChatPromptReference[], token: vscode.CancellationToken): Promise<Attachment[]> {
 		const attachments: Attachment[] = [];
 		await Promise.all(fileOrFolderReferences.map(async ref => {
+			if (ref.value instanceof ChatReferenceBinaryData) {
+				// Handle image attachments
+				try {
+					const buffer = await ref.value.data();
+					const uri = await this.imageSupport.storeImage(buffer, ref.value.mimeType);
+					attachments.push({
+						type: 'file',
+						displayName: path.basename(uri.fsPath),
+						path: uri.fsPath
+					});
+				} catch (error) {
+					this.logService.error(`[CopilotCLISession] Failed to store image: ${error}`);
+				}
+				return;
+			}
+
 			const uri = ref.value;
 			if (!URI.isUri(uri)) {
+				return;
+			}
+			// Attachment of Source control items.
+			if (uri.scheme === 'scm-history-item') {
 				return;
 			}
 
@@ -109,4 +146,23 @@ export class CopilotCLIPromptResolver {
 
 		return attachments;
 	}
+}
+
+/**
+ * Never include this variable in Copilot CLI prompts when using git worktrees (isolation).
+ * This causes issues as the repository information will not match the worktree state.
+ * https://github.com/microsoft/vscode/issues/279865
+ */
+function isWorkspaceRepoInformationItem(variable: PromptVariable): boolean {
+	const ref = variable.reference;
+	if (typeof ref.value !== 'string') {
+		return false;
+	}
+	if (!ref.modelDescription) {
+		return false;
+	}
+	return (
+		(ref.modelDescription).startsWith('Information about one of the current repositories') || (ref.modelDescription).startsWith('Information about the current repository'))
+		&&
+		ref.value.startsWith('Repository name:');
 }

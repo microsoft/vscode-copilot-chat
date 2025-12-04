@@ -13,8 +13,8 @@ import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
-import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from '../common/anthropicMessageConverter';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart } from '../common/byokProvider';
@@ -35,14 +35,18 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		@IExperimentationService private readonly _experimentationService: IExperimentationService
 	) { }
 
-	private _enableThinking(modelId: string): boolean {
-		const thinkingEnabledInConfig = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingEnabled, this._experimentationService);
-		if (!thinkingEnabledInConfig) {
-			return false;
+	private _getThinkingBudget(modelId: string, maxOutputTokens: number): number | undefined {
+		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._experimentationService);
+		if (!configuredBudget) {
+			return undefined;
 		}
 
 		const modelCapabilities = this._knownModels?.[modelId];
-		return modelCapabilities?.thinking ?? false;
+		const modelSupportsThinking = modelCapabilities?.thinking ?? false;
+		if (!modelSupportsThinking) {
+			return undefined;
+		}
+		return Math.min(32000, maxOutputTokens - 1, configuredBudget);
 	}
 
 	/**
@@ -62,11 +66,6 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			normalized.startsWith('claude-haiku-4-5') ||
 			normalized.startsWith('claude-opus-4-1') ||
 			normalized.startsWith('claude-opus-4');
-	}
-
-	private _calculateThinkingBudget(maxOutputTokens: number): number {
-		const maxBudget = this._configurationService.getConfig(ConfigKey.MaxAnthropicThinkingTokens) ?? 32000;
-		return Math.min(maxOutputTokens - 1, maxBudget);
 	}
 
 	// Filters the byok known models based on what the anthropic API knows as well
@@ -267,11 +266,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			tools.push(webSearchTool);
 		}
 
-		const thinkingEnabled = this._enableThinking(model.id);
+		const thinkingBudget = this._getThinkingBudget(model.id, model.maxOutputTokens);
 
 		// Build betas array for beta API features
 		const betas: string[] = [];
-		if (thinkingEnabled) {
+		if (thinkingBudget) {
 			betas.push('interleaved-thinking-2025-05-14');
 		}
 		if (hasMemoryTool) {
@@ -285,9 +284,9 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			stream: true,
 			system: [system],
 			tools: tools.length > 0 ? tools : undefined,
-			thinking: thinkingEnabled ? {
+			thinking: thinkingBudget ? {
 				type: 'enabled',
-				budget_tokens: this._calculateThinkingBudget(model.maxOutputTokens)
+				budget_tokens: thinkingBudget
 			} : undefined
 		};
 

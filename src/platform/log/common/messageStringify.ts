@@ -28,8 +28,19 @@ export function messageToMarkdown(message: Raw.ChatMessage, ignoreStatefulMarker
 				return JSON.stringify(item);
 			} else if (item.type === Raw.ChatCompletionContentPartKind.Opaque) {
 				const asThinking = rawPartAsThinkingData(item);
-				if (asThinking?.encrypted?.length) {
-					return `[reasoning.encrypted_content=${asThinking.encrypted.length} chars, id=${asThinking.id}]\n`;
+				if (asThinking) {
+					const parts: string[] = [];
+					if (asThinking.text) {
+						const thinkingText = Array.isArray(asThinking.text) ? asThinking.text.join('\n') : asThinking.text;
+						parts.push(`reasoning: ${thinkingText}`);
+					}
+					if (asThinking.encrypted?.length) {
+						parts.push(`encrypted_content=${asThinking.encrypted.length} chars`);
+					}
+
+					if (parts.length) {
+						return parts.join('\n');
+					}
 				}
 			}
 		}).join('\n');

@@ -6,7 +6,6 @@
 import { promises as fs } from 'fs';
 import { Terminal, TerminalOptions, ThemeIcon, ViewColumn, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -48,7 +47,6 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService logService: ILogService
@@ -59,10 +57,6 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	}
 
 	private async initialize(): Promise<void> {
-		const enabled = this.configurationService.getConfig(ConfigKey.Advanced.CopilotCLIEnabled);
-		if (!enabled) {
-			return;
-		}
 		const globalStorageUri = this.context.globalStorageUri;
 		if (!globalStorageUri) {
 			// globalStorageUri is not available in extension tests

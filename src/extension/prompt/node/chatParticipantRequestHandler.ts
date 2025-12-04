@@ -381,19 +381,20 @@ function getResponseIdFromVSCodeChatHistoryTurn(turn: ChatRequestTurn | ChatResp
  */
 function createTurnFromVSCodeChatHistoryTurns(
 	accessor: ServicesAccessor,
-	chatRequestTurn: ChatRequestTurn2,
+	chatRequestTurn: ChatRequestTurn,
 	chatResponseTurn: ChatResponseTurn
 ): Turn {
 	const commandService = accessor.get(ICommandService);
 	const workspaceService = accessor.get(IWorkspaceService);
 	const instaService = accessor.get(IInstantiationService);
 
+	const chatRequestAsTurn2 = chatRequestTurn as ChatRequestTurn2;
 	const currentTurn = new Turn(
 		undefined,
 		{ message: chatRequestTurn.prompt, type: 'user' },
 		new ChatVariablesCollection(chatRequestTurn.references),
 		chatRequestTurn.toolReferences.map(InternalToolReference.from),
-		chatRequestTurn.editedFileEvents
+		chatRequestAsTurn2.editedFileEvents
 	);
 
 	// Take just the content messages
@@ -446,10 +447,12 @@ function anchorPartToMarkdown(workspaceService: IWorkspaceService, anchor: ChatR
 
 	if (URI.isUri(anchor.value)) {
 		path = getWorkspaceFileDisplayPath(workspaceService, anchor.value);
-		text = `\`${path}\``;
+		const label = anchor.title ?? path;
+		text = `\`${label}\``;
 	} else if (isLocation(anchor.value)) {
 		path = getWorkspaceFileDisplayPath(workspaceService, anchor.value.uri);
-		text = `\`${path}\``;
+		const label = anchor.title ?? `${path}#L${anchor.value.range.start.line + 1}${anchor.value.range.start.line === anchor.value.range.end.line ? '' : `-${anchor.value.range.end.line + 1}`}`;
+		text = `\`${label}\``;
 	} else if (isSymbolInformation(anchor.value)) {
 		path = getWorkspaceFileDisplayPath(workspaceService, anchor.value.location.uri);
 		text = `\`${anchor.value.name}\``;

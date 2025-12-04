@@ -7,6 +7,7 @@ import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/pro
 import type { LanguageModelToolInformation } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { isGpt5PlusFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -16,10 +17,9 @@ import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { CodeBlockFormattingRules, EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
-import { KeepGoingReminder } from './agentPrompt';
 
 // Types and interfaces for reusable components
-interface ToolCapabilities extends Partial<Record<ToolName, boolean>> {
+export interface ToolCapabilities extends Partial<Record<ToolName, boolean>> {
 	readonly hasSomeEditTool: boolean;
 }
 
@@ -44,6 +44,65 @@ export interface DefaultAgentPromptProps extends BasePromptElementProps {
 	readonly codesearchMode: boolean | undefined;
 }
 
+export interface ToolReferencesHintProps extends BasePromptElementProps {
+	readonly toolReferences: readonly { name: string }[];
+}
+
+export class DefaultToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
+	async render() {
+		if (!this.props.toolReferences.length) {
+			return;
+		}
+
+		return <>
+			<Tag name='toolReferences'>
+				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
+				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')}
+			</Tag>
+		</>;
+	}
+}
+
+export interface ReminderInstructionsProps extends BasePromptElementProps {
+	readonly endpoint: IChatEndpoint;
+	readonly hasTodoTool: boolean;
+	readonly hasEditFileTool: boolean;
+	readonly hasReplaceStringTool: boolean;
+	readonly hasMultiReplaceStringTool: boolean;
+}
+
+export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringTool: boolean, useStrongReplaceStringHint: boolean, hasMultiStringReplace: boolean) {
+	const lines = [];
+	if (hasEditFileTool) {
+		lines.push(<>When using the {ToolName.EditFile} tool, avoid repeating existing code, instead use a line comment with \`{EXISTING_CODE_MARKER}\` to represent regions of unchanged code.<br /></>);
+	}
+	if (hasReplaceStringTool) {
+		lines.push(<>
+			When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br />
+			{hasMultiStringReplace && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience. Do not announce which tool you're using (for example, avoid saying "I'll implement all the changes using multi_replace_string_in_file").<br /></>}
+		</>);
+	}
+	if (hasEditFileTool && hasReplaceStringTool) {
+		const eitherOr = hasMultiStringReplace ? `${ToolName.ReplaceString} or ${ToolName.MultiReplaceString} tools` : `${ToolName.ReplaceString} tool`;
+		if (useStrongReplaceStringHint) {
+			lines.push(<>You must always try making file edits using the {eitherOr}. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
+		} else {
+			lines.push(<>It is much faster to edit using the {eitherOr}. Prefer the {eitherOr} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
+		}
+	}
+
+	return lines;
+}
+
+export class DefaultReminderInstructions extends PromptElement<ReminderInstructionsProps> {
+	async render(state: void, sizing: PromptSizing) {
+		return <>
+			{/* Tool-dependent editing reminders that apply to all models */}
+			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
+		</>;
+	}
+}
+
 /**
  * Base system prompt for agent mode
  */
@@ -55,7 +114,6 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
-				<KeepGoingReminder modelFamily={this.props.modelFamily} />
 				{tools[ToolName.SearchSubagent] && <>For any context searching, use {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
@@ -158,7 +216,6 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 		return <InstructionMessage>
 			<Tag name='gptAgentInstructions'>
 				You are a highly sophisticated coding agent with expert-level knowledge across programming languages and frameworks.<br />
-				<KeepGoingReminder modelFamily={this.props.modelFamily} />
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized. You can use the {ToolName.ReadFile} tool to read more context, but only do this if the attached file is incomplete.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
 				Use multiple tools as needed, and do not give up until the task is complete or impossible.<br />

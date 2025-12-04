@@ -55,7 +55,8 @@ class TestFetcher implements IFetcher {
 			headers,
 			async () => responseText || '',
 			async () => JSON.parse(responseText || ''),
-			async () => stream.Readable.from([responseText || ''])
+			async () => stream.Readable.from([responseText || '']),
+			'node-http'
 		);
 	}
 

@@ -11,8 +11,9 @@ import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
-import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
-import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
+import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, getEditingReminder, McpToolInstructions, NotebookInstructions, ReminderInstructionsProps } from './defaultAgentInstructions';
+import { FileLinkificationInstructions } from './fileLinkificationInstructions';
+import { IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SystemPrompt } from './promptRegistry';
 
 class VSCModelPromptA extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -20,7 +21,7 @@ class VSCModelPromptA extends PromptElement<DefaultAgentPromptProps> {
 		return <InstructionMessage>
 			{tools[ToolName.CoreManageTodoList] &&
 				<Tag name='planning_instructions'>
-					You have access to a manage_todo_list tool which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious.<br />
+					You have access to a {ToolName.CoreManageTodoList} tool which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious.<br />
 					Use this tool to create and manage a structured todo list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.<br />
 					It also helps the user understand the progress of the task and overall progress of their requests.<br />
 					<br />
@@ -65,7 +66,7 @@ class VSCModelPromptA extends PromptElement<DefaultAgentPromptProps> {
 					<br />
 					The content of your plan should not involve doing anything that you aren't capable of doing (i.e. don't try to test things that you can't test). Do not use plans for simple or single-step queries that you can just do or answer immediately.<br />
 					<br />
-					The model should NOT use **manage_todo_list** tool if the user's request is very trivial. Some examples for very trivial requests (questions):<br />
+					The model should NOT use **{ToolName.CoreManageTodoList}** tool if the user's request is very trivial. Some examples for very trivial requests (questions):<br />
 					- "Fix this typo in the README"<br />
 					- "Add a console.log statement to debug"<br />
 					- "Update the version number in package.json"<br />
@@ -211,15 +212,15 @@ class VSCModelPromptB extends PromptElement<DefaultAgentPromptProps> {
 					- Missing quotes: {'`{path:"."}`'} WRONG → {'`{"path":"."}`'} CORRECT<br />
 					- Missing commas between properties: {'`{"pattern":"..." "isRegexp":true}`'} requires commas WRONG → {'`{"query":"...", "isRegexp":true}`'} CORRECT<br />
 					- Mismatched braces: Ensure every {'`{`'} has exactly one matching {'`}`'} and every {'`[`'} has exactly one matching {'`]`'}<br />
-					- Wrong parameter names: For grep_search use `query` not `pattern` WRONG → {'`{"query":"...", "isRegexp":true}`'} CORRECT<br />
+					- Wrong parameter names: For {ToolName.FindTextInFiles} use `query` not `pattern` WRONG → {'`{"query":"...", "isRegexp":true}`'} CORRECT<br />
 					- MUST use absolute paths (e.g., {'`{"path":"/home/user/code"}`'}) NOT relative paths like `"."` or `".."`.<br />
 					No need to ask permission before using a tool.<br />
-					NEVER say the name of a tool to a user. For example, instead of saying that you'll use the run_in_terminal tool, say "I'll run the command in a terminal".<br />
-					If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible, but do not call semantic_search in parallel.<br />
+					NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.CoreRunInTerminal} tool, say "I'll run the command in a terminal".<br />
+					If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible, but do not call {ToolName.Codebase} in parallel.<br />
 					<br />
 					{tools[ToolName.CoreManageTodoList] &&
 						<Tag name='planning_instructions'>
-							You have access to an manage_todo_list tool which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. <br />
+							You have access to an {ToolName.CoreManageTodoList} which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. <br />
 							<br />
 							CRITICAL: If no such tool is exposed, do not substitute manual plans or plain-text progress updates—simply proceed without a checklist until one becomes available.<br />
 							<br />
@@ -330,6 +331,7 @@ class VSCModelPromptB extends PromptElement<DefaultAgentPromptProps> {
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				<FileLinkificationInstructions />
 				{tools[ToolName.CoreRunInTerminal] ? <>
 					When commands are required, run them yourself in a terminal and summarize the results. Do not print runnable commands unless the user asks. If you must show them for documentation, make them clearly optional and keep one command per line.<br />
 				</> : <>
@@ -351,18 +353,18 @@ class VSCModelPromptB extends PromptElement<DefaultAgentPromptProps> {
 	}
 }
 
-
-
-
-
 class VSCModelPromptResolverA implements IAgentPrompt {
 	static readonly familyPrefixes = ['vscModelA'];
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
 		return isVSCModelA(endpoint);
 	}
 
-	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		return VSCModelPromptA;
+	}
+
+	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
+		return VSCModelReminderInstructions;
 	}
 }
 
@@ -372,8 +374,25 @@ class VSCModelPromptResolverB implements IAgentPrompt {
 		return isVSCModelB(endpoint);
 	}
 
-	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		return VSCModelPromptB;
+	}
+
+	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
+		return VSCModelReminderInstructions;
+	}
+}
+
+class VSCModelReminderInstructions extends PromptElement<ReminderInstructionsProps> {
+	async render(state: void, sizing: PromptSizing) {
+		return <>
+			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
+			Follow the guidance in &lt;preamble_instructions&gt; from the system prompt.<br />
+			You MUST preface each tool call batch with a brief status update.<br />
+			Focus on findings and next steps. Vary your openings—avoid repeating "I'll" or "I will" consecutively.<br />
+			When you have a finding, be enthusiastic and specific (2 sentences). Otherwise, state your next action only (1 sentence).<br />
+			Don't over-express your thoughts in preamble, do not use preamble to think or reason. This is a strict and strong requirement.<br />
+		</>;
 	}
 }
 

@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import type tt from 'typescript/lib/tsserverlibrary';
-import { computeContext } from '../common/api';
+import { computeContext, prepareNesRename } from '../common/api';
 import { CharacterBudget, ContextResult, LanguageServerSession, RequestContext, TokenBudgetExhaustedError } from '../common/contextProvider';
-import { ErrorCode, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type PingResponse } from '../common/protocol';
+import { ErrorCode, RenameKind, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
 import { CancellationTokenWithTimer } from '../common/typescripts';
 
+import { PrepareNesRenameResult } from '../common/nesRenameValidator';
 import TS from '../common/typescript';
 import { NodeHost } from './host';
 const ts = TS();
@@ -16,8 +17,12 @@ interface ComputeContextHandlerResponse extends tt.server.HandlerResponse {
 	response: ComputeContextResponse.OK | ComputeContextResponse.Failed;
 }
 
+interface PrepareNesRenameHandlerResponse extends tt.server.HandlerResponse {
+	response: PrepareNesRenameResponse.OK | PrepareNesRenameResponse.Failed;
+}
+
 let installAttempted: boolean = false;
-let computeContextSession: LanguageServerSession | undefined = undefined;
+let languageServerSession: LanguageServerSession | undefined = undefined;
 let languageServiceHost: tt.LanguageServiceHost | undefined = undefined;
 let pingResult: PingResponse.OK | PingResponse.Error = { kind: 'error', message: 'Attempt to install context handler failed' };
 
@@ -27,7 +32,7 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 		return { response: { error: ErrorCode.noArguments, message: 'No arguments provided' }, responseRequired: true };
 	}
 	const args = request.arguments;
-	const fileAndProject = computeContextSession?.getFileAndProject(args);
+	const fileAndProject = languageServerSession?.getFileAndProject(args);
 	if (fileAndProject === undefined) {
 		return { response: { error: ErrorCode.noProject, message: 'No project found' }, responseRequired: true };
 	}
@@ -35,7 +40,7 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 		return { response: { error: ErrorCode.invalidArguments, message: 'No project found' }, responseRequired: true };
 	}
 	const { file, project } = fileAndProject;
-	const pos = computeContextSession?.getPositionInFile(args, file);
+	const pos = languageServerSession?.getPositionInFile(args, file);
 	if (pos === undefined) {
 		return { response: { error: ErrorCode.invalidPosition, message: 'Position not valid' }, responseRequired: true };
 	}
@@ -68,11 +73,11 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 		}
 	}
 	const clientSideRunnableResults: Map<ContextRunnableResultId, CachedContextRunnableResult> = args.clientSideRunnableResults !== undefined ? new Map(args.clientSideRunnableResults.map(item => [item.id, item])) : new Map();
-	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, computeContextSession?.host.isDebugging() ?? false);
-	const requestContext = new RequestContext(computeContextSession!, normalizedPaths, clientSideRunnableResults, !!args.includeDocumentation);
+	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, languageServerSession?.host.isDebugging() ?? false);
+	const requestContext = new RequestContext(languageServerSession!, normalizedPaths, clientSideRunnableResults, !!args.includeDocumentation);
 	const result: ContextResult = new ContextResult(primaryCharacterBudget, secondaryCharacterBudget, requestContext);
 	try {
-		computeContext(result, computeContextSession!, languageService, file, pos, cancellationToken);
+		computeContext(result, languageServerSession!, languageService, file, pos, cancellationToken);
 	} catch (error) {
 		if (!(error instanceof ts.OperationCanceledException) && !(error instanceof TokenBudgetExhaustedError)) {
 			if (error instanceof Error) {
@@ -86,6 +91,51 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 	result.addTimings(endTime - totalStart, endTime - computeStart);
 	result.setTimedOut(cancellationToken.isTimedOut());
 	return { response: result.toJson(), responseRequired: true };
+};
+
+const prepareNesRenameHandler = (request: PrepareNesRenameRequest): PrepareNesRenameHandlerResponse => {
+	const totalStart = Date.now();
+	if (request.arguments === undefined) {
+		return { response: { error: ErrorCode.noArguments, message: 'No arguments provided' }, responseRequired: true };
+	}
+
+	const args = request.arguments;
+	let startTime = request.arguments?.startTime ?? totalStart;
+	let timeBudget = typeof args.timeBudget === 'number' ? args.timeBudget : 100;
+	if (startTime + timeBudget > totalStart) {
+		startTime = totalStart;
+		timeBudget = 50;
+	}
+
+	const fileAndProject = languageServerSession?.getFileAndProject(args);
+	if (fileAndProject === undefined) {
+		return { response: { error: ErrorCode.noProject, message: 'No project found' }, responseRequired: true };
+	}
+	if (typeof args.line !== 'number' || typeof args.offset !== 'number') {
+		return { response: { error: ErrorCode.invalidArguments, message: 'No project found' }, responseRequired: true };
+	}
+	const { file, project } = fileAndProject;
+	const pos = languageServerSession?.getPositionInFile(args, file);
+	if (pos === undefined) {
+		return { response: { error: ErrorCode.invalidPosition, message: 'Position not valid' }, responseRequired: true };
+	}
+	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, languageServerSession?.host.isDebugging() ?? false);
+	const result: PrepareNesRenameResult = new PrepareNesRenameResult();
+	try {
+		prepareNesRename(result, project.getLanguageService(), file, pos, request.arguments?.oldName, request.arguments?.newName, cancellationToken);
+	} catch (error) {
+		if (error instanceof ts.OperationCanceledException) {
+			result.setCanRename(RenameKind.no, 'Operation canceled');
+		} else {
+			if (error instanceof Error) {
+				return { response: { error: ErrorCode.exception, message: error.message, stack: error.stack }, responseRequired: true };
+			} else {
+				return { response: { error: ErrorCode.exception, message: 'Unknown error' }, responseRequired: true };
+			}
+		}
+	}
+	result.setTimedOut(cancellationToken.isTimedOut());
+	return { response: result.toJsonResponse(), responseRequired: true };
 };
 
 export function create(info: tt.server.PluginCreateInfo): tt.LanguageService {
@@ -102,9 +152,10 @@ export function create(info: tt.server.PluginCreateInfo): tt.LanguageService {
 				const versionSupported = isSupportedVersion();
 				pingResult = { kind: 'ok', session: true, supported: versionSupported, version: ts.version };
 				if (versionSupported) {
-					computeContextSession = new LanguageServerSession(info.session, new NodeHost());
+					languageServerSession = new LanguageServerSession(info.session, new NodeHost());
 					languageServiceHost = info.languageServiceHost;
 					info.session.addProtocolHandler('_.copilot.context', computeContextHandler);
+					info.session.addProtocolHandler('_.copilot.prepareNesRename', prepareNesRenameHandler);
 				}
 
 			} catch (e) {

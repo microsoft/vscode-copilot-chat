@@ -5,10 +5,10 @@
 
 import { BasePromptElementProps, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import type { ChatLanguageModelToolReference } from 'vscode';
-import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
@@ -26,11 +26,11 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 
 	constructor(
 		props: PromptFileProps,
-		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@ILogService private readonly logService: ILogService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
-		@IIgnoreService private readonly ignoreService: IIgnoreService
+		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super(props);
 	}
@@ -62,8 +62,8 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 
 	private async getBodyContent(fileUri: URI, toolReferences: readonly ChatLanguageModelToolReference[] | undefined): Promise<string | undefined> {
 		try {
-			const fileContents = await this.fileSystemService.readFile(fileUri);
-			let content = new TextDecoder().decode(fileContents);
+			const doc = await this.workspaceService.openTextDocument(fileUri);
+			let content = doc.getText();
 			if (toolReferences && toolReferences.length > 0) {
 				content = await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences);
 			}

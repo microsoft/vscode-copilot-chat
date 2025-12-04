@@ -107,6 +107,10 @@ declare module 'vscode' {
 	 */
 	export class ChatRequestTurn2 {
 		/**
+		 * The id of the chat request. Used to identity an interaction with any of the chat surfaces.
+		 */
+		readonly id?: string;
+		/**
 		 * The prompt as entered by the user.
 		 *
 		 * Information about references used in this request is stored in {@link ChatRequestTurn.references}.
@@ -144,7 +148,7 @@ declare module 'vscode' {
 		/**
 		 * @hidden
 		 */
-		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined);
+		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined, id: string | undefined);
 	}
 
 	export class ChatResponseTurn2 {
@@ -306,6 +310,67 @@ declare module 'vscode' {
 
 	export namespace lm {
 		export function registerLanguageModelProxyProvider(provider: LanguageModelProxyProvider): Disposable;
+	}
+
+	// #endregion
+
+	// #region CustomAgentsProvider
+
+	/**
+	 * Represents a custom agent resource file (e.g., .agent.md or .prompt.md) available for a repository.
+	 */
+	export interface CustomAgentResource {
+		/**
+		 * The unique identifier/name of the custom agent resource.
+		 */
+		readonly name: string;
+
+		/**
+		 * A description of what the custom agent resource does.
+		 */
+		readonly description: string;
+
+		/**
+		 * The URI to the agent or prompt resource file.
+		 */
+		readonly uri: Uri;
+
+		/**
+		 * Indicates whether the custom agent resource is editable. Defaults to false.
+		 */
+		readonly isEditable?: boolean;
+	}
+
+	/**
+	 * Options for querying custom agents.
+	 */
+	export interface CustomAgentQueryOptions { }
+
+	/**
+	 * A provider that supplies custom agent resources (from .agent.md and .prompt.md files) for repositories.
+	 */
+	export interface CustomAgentsProvider {
+		/**
+		 * An optional event to signal that custom agents have changed.
+		 */
+		readonly onDidChangeCustomAgents?: Event<void>;
+
+		/**
+		 * Provide the list of custom agent resources available for a given repository.
+		 * @param options Optional query parameters.
+		 * @param token A cancellation token.
+		 * @returns An array of custom agent resources or a promise that resolves to such.
+		 */
+		provideCustomAgents(options: CustomAgentQueryOptions, token: CancellationToken): ProviderResult<CustomAgentResource[]>;
+	}
+
+	export namespace chat {
+		/**
+		 * Register a provider for custom agents.
+		 * @param provider The custom agents provider.
+		 * @returns A disposable that unregisters the provider when disposed.
+		 */
+		export function registerCustomAgentsProvider(provider: CustomAgentsProvider): Disposable;
 	}
 
 	// #endregion

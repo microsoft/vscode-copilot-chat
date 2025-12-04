@@ -19,6 +19,8 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { IGitService } from '../../../platform/git/common/gitService';
 import { NullGitDiffService } from '../../../platform/git/common/nullGitDiffService';
 import { NullGitExtensionService } from '../../../platform/git/common/nullGitExtensionService';
+import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
+import { InlineEditsModelService } from '../../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
@@ -26,6 +28,7 @@ import { IAlternativeNotebookContentService } from '../../../platform/notebook/c
 import { AlternativeNotebookContentEditGenerator, IAlternativeNotebookContentEditGenerator } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { INotebookSummaryTracker } from '../../../platform/notebook/common/notebookSummaryTracker';
+import { IProxyModelsService, NullProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
 import { AdoCodeSearchService, IAdoCodeSearchService } from '../../../platform/remoteCodeSearch/common/adoCodeSearchService';
 import { GithubCodeSearchService, IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
 import { ISimulationTestContext, NulSimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
@@ -94,6 +97,8 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(TestToolsService, [new Set()]));
 	testingServiceCollection.define(IClaudeCodeSdkService, new SyncDescriptor(MockClaudeCodeSdkService));
 	testingServiceCollection.define(IEditLogService, new SyncDescriptor(EditLogService));
+	testingServiceCollection.define(IProxyModelsService, new SyncDescriptor(NullProxyModelsService));
+	testingServiceCollection.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	testingServiceCollection.define(IMultiFileEditInternalTelemetryService, new SyncDescriptor(MultiFileEditInternalTelemetryService));
 	testingServiceCollection.define(ICodeMapperService, new SyncDescriptor(CodeMapperService));
 	testingServiceCollection.define(IAlternativeNotebookContentService, new SyncDescriptor(SimulationAlternativeNotebookContentService));

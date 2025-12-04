@@ -26,9 +26,10 @@ export class TestChatRequest implements ChatRequest {
 	public sessionId = generateUuid();
 
 	constructor(
-		public prompt: string
+		public prompt: string,
+		references?: ChatPromptReference[]
 	) {
-		this.references = [];
+		this.references = references ?? [];
 		this.location = vscodeTypes.ChatLocation.Panel;
 		this.attempt = 0;
 		this.enableCommandDetection = false;
@@ -51,12 +52,13 @@ export class MockChatResponseStream extends ChatResponseStreamImpl {
 		this.uris.push(uri.toString());
 	}
 
-	override externalEdit<T>(target: Uri | Uri[], callback: () => Thenable<T>): Thenable<T> {
+	override async externalEdit(target: Uri | Uri[], callback: () => Thenable<void>): Promise<string> {
 		if (Array.isArray(target)) {
 			this.externalEditUris.push(...target);
 		} else {
 			this.externalEditUris.push(target);
 		}
-		return callback();
+		await callback();
+		return '';
 	}
 }

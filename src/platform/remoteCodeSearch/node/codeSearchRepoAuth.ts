@@ -5,15 +5,15 @@
 
 import { createDecorator as createServiceIdentifier } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { ResolvedRepoEntry } from './codeSearchRepoTracker';
+import { ResolvedRepoRemoteInfo } from '../../git/common/gitService';
 
 export const ICodeSearchAuthenticationService = createServiceIdentifier<ICodeSearchAuthenticationService>('ICodeSearchAuthentication');
 
 export interface ICodeSearchAuthenticationService {
 	readonly _serviceBrand: undefined;
 
-	tryAuthenticating(repo: ResolvedRepoEntry | undefined): Promise<void>;
-	tryReauthenticating(repo: ResolvedRepoEntry | undefined): Promise<void>;
+	tryAuthenticating(repo: ResolvedRepoRemoteInfo | undefined): Promise<void>;
+	tryReauthenticating(repo: ResolvedRepoRemoteInfo | undefined): Promise<void>;
 
 	promptForExpandedLocalIndexing(fileCount: number): Promise<boolean>;
 }
@@ -26,8 +26,8 @@ export class BasicCodeSearchAuthenticationService implements ICodeSearchAuthenti
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 	) { }
 
-	async tryAuthenticating(repo: ResolvedRepoEntry | undefined): Promise<void> {
-		if (repo?.remoteInfo.repoId.type === 'ado') {
+	async tryAuthenticating(remoteInfo: ResolvedRepoRemoteInfo | undefined): Promise<void> {
+		if (remoteInfo?.repoId?.type === 'ado') {
 			await this._authenticationService.getAdoAccessTokenBase64({ createIfNone: true });
 			return;
 		}
@@ -35,8 +35,8 @@ export class BasicCodeSearchAuthenticationService implements ICodeSearchAuthenti
 		await this._authenticationService.getAnyGitHubSession({ createIfNone: true });
 	}
 
-	async tryReauthenticating(repo: ResolvedRepoEntry | undefined): Promise<void> {
-		if (repo?.remoteInfo.repoId.type === 'ado') {
+	async tryReauthenticating(remoteInfo: ResolvedRepoRemoteInfo | undefined): Promise<void> {
+		if (remoteInfo?.repoId?.type === 'ado') {
 			await this._authenticationService.getAdoAccessTokenBase64({ createIfNone: true });
 			return;
 		}

@@ -18,7 +18,6 @@ import { Disposable, DisposableMap, IDisposable, MutableDisposable } from '../..
 import { IObservableSignal, observableSignal } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { TextDocumentChangeReason } from '../../../vscodeTypes';
-import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
 import { createTimeout } from '../common/common';
 import { createNextEditProvider } from '../node/createNextEditProvider';
 import { DebugRecorder } from '../node/debugRecorder';
@@ -45,7 +44,6 @@ export class InlineEditModel extends Disposable {
 		public readonly workspace: VSCodeWorkspace,
 		historyContextProvider: NesHistoryContextProvider,
 		public readonly diagnosticsBasedProvider: DiagnosticsNextEditProvider | undefined,
-		public readonly completionsProvider: CompletionsProvider | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,

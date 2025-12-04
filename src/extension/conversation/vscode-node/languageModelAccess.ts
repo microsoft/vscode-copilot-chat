@@ -31,7 +31,6 @@ import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelatio
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isBoolean, isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
-import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtensionMode } from '../../../vscodeTypes';
 import type { LMResponsePart } from '../../byok/common/byokProvider';
@@ -142,16 +141,16 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				modelDescription = endpoint.degradationReason;
 			} else if (endpoint instanceof AutoChatEndpoint) {
 				if (this._authenticationService.copilotToken?.isNoAuthUser || (endpoint.discountRange.low === 0 && endpoint.discountRange.high === 0)) {
-					modelDescription = localize('languageModel.autoTooltipNoAuth', 'Auto selects the best model for your request based on capacity and performance.');
+					modelDescription = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance.');
 				} else if (endpoint.discountRange.low === endpoint.discountRange.high) {
-					modelDescription = localize('languageModel.autoTooltipSameDiscount', 'Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% discount.', endpoint.discountRange.low * 100);
+					modelDescription = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% discount.', endpoint.discountRange.low * 100);
 				} else {
-					modelDescription = localize('languageModel.autoTooltipDiffDiscount', 'Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% to {1}% discount.', endpoint.discountRange.low * 100, endpoint.discountRange.high * 100);
+					modelDescription = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% to {1}% discount.', endpoint.discountRange.low * 100, endpoint.discountRange.high * 100);
 				}
 			} else if (endpoint.multiplier) {
-				modelDescription = localize('languageModel.costTooltip', '{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
+				modelDescription = vscode.l10n.t('{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
 			} else if (endpoint.isFallback && endpoint.multiplier === 0) {
-				modelDescription = localize('languageModel.baseTooltip', '{0} ({1}) does not count towards your premium request limit. This model may be slowed during times of high congestion.', sanitizedModelName, endpoint.version);
+				modelDescription = vscode.l10n.t('{0} ({1}) does not count towards your premium request limit. This model may be slowed during times of high congestion.', sanitizedModelName, endpoint.version);
 			} else {
 				modelDescription = `${sanitizedModelName} (${endpoint.version})`;
 			}
@@ -160,11 +159,11 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			if (endpoint instanceof AutoChatEndpoint) {
 				modelCategory = { label: '', order: Number.MIN_SAFE_INTEGER };
 			} else if (endpoint.isPremium === undefined || this._authenticationService.copilotToken?.isFreeUser) {
-				modelCategory = { label: localize('languageModelHeader.copilot', "Copilot Models"), order: 0 };
+				modelCategory = { label: vscode.l10n.t("Copilot Models"), order: 0 };
 			} else if (endpoint.isPremium) {
-				modelCategory = { label: localize('languageModelHeader.premium', "Premium Models"), order: 1 };
+				modelCategory = { label: vscode.l10n.t("Premium Models"), order: 1 };
 			} else {
-				modelCategory = { label: localize('languageModelHeader.standard', "Standard Models"), order: 0 };
+				modelCategory = { label: vscode.l10n.t("Standard Models"), order: 0 };
 			}
 
 			// Counting tokens requires instantiating the tokenizers, which makes this process use a lot of memory.
@@ -183,7 +182,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				const customModel = endpoint.customModel;
 				modelDetail = customModel.owner_name;
 				modelDescription = `${endpoint.name} is contributed by ${customModel.owner_name} using ${customModel.key_name}`;
-				modelCategory = { label: localize('languageModelHeader.custom_models', "Custom Models"), order: 2 };
+				modelCategory = { label: vscode.l10n.t("Custom Models"), order: 2 };
 			}
 
 			const session = this._authenticationService.anyGitHubSession;
@@ -348,7 +347,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IEnvService private readonly _envService: IEnvService
+		@IEnvService private readonly _envService: IEnvService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 	) {
 		super();
 	}
@@ -463,7 +463,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				this._blockedExtensionService.reportBlockedExtension(extensionId, result.retryAfter);
 				throw vscode.LanguageModelError.Blocked(blockedExtensionMessage);
 			} else if (result.type === ChatFetchResponseType.QuotaExceeded) {
-				const details = getErrorDetailsFromChatFetchError(result, (await this._authenticationService.getCopilotToken()).copilotPlan);
+				const details = getErrorDetailsFromChatFetchError(result, await this._endpointProvider.getChatEndpoint('copilot-base'), (await this._authenticationService.getCopilotToken()).copilotPlan);
 				const err = new vscode.LanguageModelError(details.message);
 				err.name = 'ChatQuotaExceeded';
 				throw err;

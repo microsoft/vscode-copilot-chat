@@ -9,7 +9,8 @@ import { modelNeedsStrongReplaceStringHint, modelPrefersInstructionsAfterHistory
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { isLocation, isUri } from '../../../../util/common/types';
 import { ToolName } from '../../../tools/common/toolNames';
-import { AgentPromptProps, getEditingReminder } from '../agent/agentPrompt';
+import { AgentPromptProps } from '../agent/agentPrompt';
+import { getEditingReminder } from '../agent/defaultAgentInstructions';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';

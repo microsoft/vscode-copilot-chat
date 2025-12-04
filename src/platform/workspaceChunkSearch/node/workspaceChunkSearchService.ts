@@ -29,7 +29,6 @@ import { IIgnoreService } from '../../ignore/common/ignoreService.js';
 import { logExecTime, LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
-import { BuildIndexTriggerReason, RepoStatus, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -37,7 +36,8 @@ import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../workspace/
 import { IGithubAvailableEmbeddingTypesService } from '../common/githubAvailableEmbeddingTypes';
 import { IRerankerService } from '../common/rerankerService';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
-import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearchChunkSearch';
+import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearch/codeSearchChunkSearch';
+import { BuildIndexTriggerReason, CodeSearchRepoStatus, TriggerIndexingError } from './codeSearch/codeSearchRepo';
 import { EmbeddingsChunkSearch, LocalEmbeddingsIndexState, LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
 import { FullWorkspaceChunkSearch } from './fullWorkspaceChunkSearch';
 import { TfidfChunkSearch } from './tfidfChunkSearch';
@@ -320,7 +320,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 
 		const indexState = await this.getIndexState();
-		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === RepoStatus.Ready))
+		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready))
 			|| indexState.localIndexState.status === LocalEmbeddingsIndexStatus.Ready
 			|| await this._fullWorkspaceChunkSearch.mayBeAvailable(sizing);
 	}

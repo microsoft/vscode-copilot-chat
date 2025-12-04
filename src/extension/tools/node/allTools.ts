@@ -19,7 +19,7 @@ import './githubRepoTool';
 import './insertEditTool';
 import './installExtensionTool';
 import './listDirTool';
-import './manageTodoListToolEx';
+import './manageTodoListTool';
 import './memoryTool';
 import './multiReplaceStringTool';
 import './newNotebookTool';

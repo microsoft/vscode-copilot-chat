@@ -32,17 +32,15 @@ import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
-import { Range } from '../../../util/vs/editor/common/core/range';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency } from '../common/editRebase';
-import { jumpToPositionCommandId } from '../common/jumpToCursorPosition';
 import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
-import { INextEditDisplayLocation, INextEditResult, NextEditResult } from './nextEditResult';
+import { INextEditResult, NextEditResult } from './nextEditResult';
 
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
@@ -194,7 +192,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		let edit: StringReplacement | undefined;
-		let showLabel: boolean | undefined;
 		let currentDocument: StringText | undefined;
 		let error: NoNextEditReason | undefined;
 		let req: NextEditFetchRequest;
@@ -249,7 +246,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					logContext.setIsSkipped();
 				} else {
 					const suggestedNextEdit = result.val.rebasedEdit || result.val.edit;
-					showLabel = result.val.showLabel;
 					if (!suggestedNextEdit) {
 						tracer.trace('empty edits');
 						telemetryBuilder.setStatus('emptyEdits');
@@ -265,28 +261,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		if (error instanceof NoNextEditReason.FetchFailure || error instanceof NoNextEditReason.Unexpected) {
 			tracer.throws('has throwing error', error.error);
 			throw error.error;
-		} else if (error instanceof NoNextEditReason.NoSuggestions && error.nextCursorPosition !== undefined) {
-			tracer.trace('no suggestions but has next cursor position');
-			const transformer = documentAtInvocationTime.getTransformer();
-
-			const currentSelection = selections.at(0);
-
-			if (currentSelection) {
-				const currentCursorPosition = transformer.getRange(currentSelection);
-				const displayLocation: INextEditDisplayLocation = {
-					label: 'Jump to next edit',
-					range: currentCursorPosition,
-				};
-
-				const commandJumpToEditRange: vscode.Command = {
-					command: jumpToPositionCommandId,
-					title: "Jump to next edit",
-					arguments: [error.nextCursorPosition]
-				};
-
-				const edit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
-
-				return new NextEditResult(logContext.requestId, req, { edit, displayLocation, documentBeforeEdits: documentAtInvocationTime, action: commandJumpToEditRange });
+		} else if (error instanceof NoNextEditReason.NoSuggestions) {
+			if (error.nextCursorPosition === undefined) {
+				logContext.markAsNoSuggestions();
+			} else {
+				telemetryBuilder.setStatus('emptyEditsButHasNextCursorPosition');
+				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime });
 			}
 		}
 
@@ -319,44 +299,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const showRangePreference = this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit;
 
-		let nextEditResult: NextEditResult;
-		const currentSelection = selections.at(0);
-		const transformer = documentAtInvocationTime.getTransformer();
-		const currentCursorPosition: Range | undefined = currentSelection ? transformer.getRange(currentSelection) : undefined;
-		const editPosition = transformer.getRange(edit.replaceRange);
-
-		if (!showLabel || !currentCursorPosition || /* is close enough to not show label */ currentCursorPosition.startLineNumber - 2 <= editPosition.startLineNumber && editPosition.endLineNumber <= currentCursorPosition.endLineNumber + 5) { // TODO@ulugbekna
-			tracer.trace('providing edit without label');
-			nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
-		} else {
-			tracer.trace('providing edit with label');
-			const lineWithCode = documentAtInvocationTime.getLineAt(editPosition.startLineNumber);
-			const trimmedLineWithCode = lineWithCode.trimStart();
-			const shortenedLineWithCode = trimmedLineWithCode.slice(0, 40);
-			const label = ['.ts', '.tsx', '.js', '.jsx'].includes(docId.extension) && this._configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsNextCursorPredictionDisplayLine, this._expService)
-				? `Jump to line ${editPosition.startLineNumber} | ${shortenedLineWithCode.length === trimmedLineWithCode.length ? shortenedLineWithCode : trimmedLineWithCode + '...'}`
-				: `Jump to line ${editPosition.startLineNumber}`;
-			const displayLocation: INextEditDisplayLocation = {
-				label,
-				range: currentCursorPosition,
-			};
-
-			// const commandJumpToEditRange: vscode.Command = {
-			// 	command: jumpToPositionCommandId,
-			// 	title: "Jump to next edit",
-			// 	arguments: [editPosition.getStartPosition()],
-			// };
-
-			// const noopEdit = StringReplacement.replace(new OffsetRange(0, 0), ''); // should be no-op edit
-			nextEditResult = new NextEditResult(logContext.requestId, req, {
-				edit, //: noopEdit,
-				showRangePreference,
-				documentBeforeEdits: currentDocument,
-				targetDocumentId,
-				displayLocation,
-				// action: commandJumpToEditRange
-			});
-		}
+		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
 
 		telemetryBuilder.setHasNextEdit(true);
 
@@ -656,7 +599,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				const targetDocState = statePerDoc.get(result.val.targetDocument ?? curDocId);
 
 				const singleLineEdit = result.val.edit;
-				const showLabel = result.val.showLabel;
 				const lineEdit = new LineEdit([singleLineEdit]);
 				const edit = convertLineEditToEdit(lineEdit, targetDocState.docId);
 				const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
@@ -685,9 +627,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				}
 
 				if (!firstEdit.isSettled) {
-					if (cachedEdit) {
-						cachedEdit.showLabel = showLabel;
-					}
 					myTracer.trace('resolving firstEdit promise');
 					logContext.setResult(new RootedLineEdit(targetDocState.docContents, lineEdit)); // this's correct without rebasing because this's the first edit
 					firstEdit.complete(cachedEdit ? Result.ok(cachedEdit) : Result.error(new NoNextEditReason.Unexpected(new Error('No cached edit'))));
@@ -807,7 +746,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		assertType(suggestion.result, '@ulugbekna: undefined edit cannot be rejected?');
 
 		const shownDuration = Date.now() - this._lastShownTime;
-		if (shownDuration > 1000 && suggestion.result) {
+		if (shownDuration > 1000 && suggestion.result.edit) {
 			// we can argue that the user had the time to review this
 			// so it wasn't an accidental rejection
 			this._rejectionCollector.reject(docId, suggestion.result.edit);
@@ -822,7 +761,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
 
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
-		if (suggestion.result === undefined) {
+		if (suggestion.result === undefined || suggestion.result.edit === undefined) {
 			return;
 		}
 		this._snippyService.handlePostInsertion(docId.toUri(), suggestion.result.documentBeforeEdits, suggestion.result.edit);

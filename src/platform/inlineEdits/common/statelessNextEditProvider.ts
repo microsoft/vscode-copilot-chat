@@ -31,7 +31,7 @@ export const enum ShowNextEditPreference {
 	AroundEdit = 'aroundEdit',
 }
 
-export type PushEdit = (edit: Result<{ edit: LineReplacement; window?: OffsetRange; targetDocument?: DocumentId; showLabel?: boolean }, NoNextEditReason>) => void;
+export type PushEdit = (edit: Result<{ edit: LineReplacement; window?: OffsetRange; targetDocument?: DocumentId }, NoNextEditReason>) => void;
 
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
@@ -212,7 +212,7 @@ export namespace NoNextEditReason {
 	}
 	export class GotCancelled extends NoNextEditReason {
 		public readonly kind = 'gotCancelled';
-		constructor(public readonly message: 'afterDebounce' | 'afterGettingEndpoint' | 'afterLanguageContextAwait' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest') {
+		constructor(public readonly message: 'afterDebounce' | 'afterGettingEndpoint' | 'afterLanguageContextAwait' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest' | 'afterArtificialDelay') {
 			super();
 		}
 

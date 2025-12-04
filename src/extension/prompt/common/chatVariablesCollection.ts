@@ -113,5 +113,7 @@ export function isPromptInstruction(variable: PromptVariable): boolean {
  * Check if provided variable is a "prompt file".
  */
 export function isPromptFile(variable: PromptVariable): boolean {
-	return variable.reference.id.startsWith('vscode.prompt.file');
+	return variable.reference.id.startsWith(PromptFileIdPrefix);
 }
+
+export const PromptFileIdPrefix = 'vscode.prompt.file';

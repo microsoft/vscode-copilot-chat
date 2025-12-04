@@ -65,6 +65,8 @@ export class InlineEditRequestLogContext {
 		lines.push(`URL: ${this._endpointInfo?.url ?? '<NOT-SET>'}`);
 		lines.push('```');
 
+		lines.push(`Opportunity ID: ${this._context ? this._context.requestUuid : '<NOT-SET>'}`);
+
 		const isCachedStr = this._logContextOfCachedEdit ? `(cached #${this._logContextOfCachedEdit.requestId})` : '(not cached)';
 
 		if (this._nextEditRequest) {
