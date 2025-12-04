@@ -4913,7 +4913,7 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 3,
 				"description": "The Claude Code Agent works on your local machine",
-				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
+				"when": "config.github.copilot.chat.claudeCode.enabled",
 				"canDelegate": false,
 				"capabilities": {
 					"supportsFileAttachments": true
