@@ -301,6 +301,13 @@ export interface IOctoKitService {
 	 * @returns The file content as a string
 	 */
 	getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string>;
+
+	/**
+	 * Gets the custom instructions prompt for an organization.
+	 * @param orgLogin The organization login
+	 * @returns The prompt string or undefined if not available
+	 */
+	getOrgCustomInstructions(orgLogin: string): Promise<string | undefined>;
 }
 
 /**
