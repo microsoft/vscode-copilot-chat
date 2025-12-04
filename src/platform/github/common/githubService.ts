@@ -398,7 +398,7 @@ export class BaseOctoKitService {
 	}
 
 	protected async getOrganizationRepositoriesWithToken(org: string, token: string): Promise<string[]> {
-		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=1&sort=updated`, 'GET', token);
+		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=5&sort=updated`, 'GET', token);
 		if (!result || !Array.isArray(result) || result.length === 0) {
 			return [];
 		}
