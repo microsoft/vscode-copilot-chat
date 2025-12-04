@@ -733,7 +733,7 @@ describe('makeUriConfirmationChecker', async () => {
 
 		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
 		const result = await checker(externalInstruction);
-		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+		expect(result).toBe(ConfirmationCheckResult.OutsideWorkspace); // do not edits to external instructions files
 	});
 
 	test('respects autoApprove patterns - allows matching files', async () => {
