@@ -424,32 +424,38 @@ export class EmbeddingsGrouper<T> {
 			return [];
 		}
 
-		// Filter out invalid embeddings
+		// Filter out invalid embeddings and ensure consistent dimensions
 		const validEmbeddings = embeddings.filter(embedding => embedding && Array.isArray(embedding) && embedding.length > 0);
 
 		if (validEmbeddings.length === 0) {
 			return [];
 		}
 
-		if (validEmbeddings.length === 1) {
-			return [...validEmbeddings[0]]; // Copy to avoid mutations
+		// Ensure all embeddings have the same dimensions as the first valid one
+		const expectedDimensions = validEmbeddings[0].length;
+		const consistentEmbeddings = validEmbeddings.filter(embedding => embedding.length === expectedDimensions);
+
+		if (consistentEmbeddings.length === 0) {
+			return [];
 		}
 
-		const dimensions = validEmbeddings[0].length;
+		if (consistentEmbeddings.length === 1) {
+			return [...consistentEmbeddings[0]]; // Copy to avoid mutations
+		}
+
+		const dimensions = expectedDimensions;
 		const centroid = new Array(dimensions).fill(0);
 
 		// Sum all embeddings
-		for (const embedding of validEmbeddings) {
-			// Additional safety check in case embedding has different dimensions
-			const embeddingLength = Math.min(embedding.length, dimensions);
-			for (let i = 0; i < embeddingLength; i++) {
+		for (const embedding of consistentEmbeddings) {
+			for (let i = 0; i < dimensions; i++) {
 				centroid[i] += (typeof embedding[i] === 'number' && !isNaN(embedding[i])) ? embedding[i] : 0; // Handle NaN/undefined values, preserve valid zeros
 			}
 		}
 
 		// Divide by count to get mean
 		for (let i = 0; i < dimensions; i++) {
-			centroid[i] /= validEmbeddings.length;
+			centroid[i] /= consistentEmbeddings.length;
 		}
 
 		// L2 normalize the centroid
