@@ -18,7 +18,7 @@ import { SymbolKind } from '../../../util/vs/workbench/api/common/extHostTypes/s
 import { ChatReferenceDiagnostic, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, Range, Uri } from '../../../vscodeTypes';
 
 /**
- * Converts a ChatPromptReference into a PromptVariable entry thats used in VS code.
+ * Converts a ChatPromptReference into a PromptVariable entry that is used in VS code.
  */
 export function convertReferenceToVariable(ref: ChatPromptReference, attachments: readonly Attachment[]) {
 	const value = ref.value;
