@@ -77,6 +77,10 @@ export interface Embedding {
 	readonly value: EmbeddingVector;
 }
 
+/**
+ * Validates if a value is a proper Embedding object with enhanced robustness checks.
+ * Includes validation for NaN, infinity, and proper numeric values.
+ */
 export function isValidEmbedding(value: unknown): value is Embedding {
 	if (typeof value !== 'object' || value === null) {
 		return false;
@@ -91,9 +95,13 @@ export function isValidEmbedding(value: unknown): value is Embedding {
 		return false;
 	}
 
-	return true;
+	// Enhanced validation: check for NaN, infinity, and proper numeric values
+	return asEmbedding.value.every(val =>
+		typeof val === 'number' &&
+		isFinite(val) &&
+		!isNaN(val)
+	);
 }
-
 export interface Embeddings {
 	readonly type: EmbeddingType;
 	readonly values: readonly Embedding[];

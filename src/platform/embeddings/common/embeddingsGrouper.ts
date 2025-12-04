@@ -58,11 +58,6 @@ export class EmbeddingsGrouper<T> {
 	 * or create a new singleton cluster.
 	 */
 	addNode(node: Node<T>): void {
-		// Skip nodes with invalid embeddings early
-		if (!node.embedding || !node.embedding.value || !Array.isArray(node.embedding.value) || node.embedding.value.length === 0) {
-			return;
-		}
-
 		this.nodes.push(node);
 		// Cache normalized embedding for this node
 		this.normalizedEmbeddings.set(node, this.normalizeVector(node.embedding.value));
@@ -96,17 +91,8 @@ export class EmbeddingsGrouper<T> {
 			return;
 		}
 
-		// Filter out nodes with invalid embeddings before adding
-		const validNodes = nodes.filter(node =>
-			node.embedding && node.embedding.value && Array.isArray(node.embedding.value) && node.embedding.value.length > 0
-		);
-
-		if (validNodes.length === 0) {
-			return;
-		}
-
-		// Batch add all valid nodes
-		for (const node of validNodes) {
+		// Batch add all nodes
+		for (const node of nodes) {
 			this.nodes.push(node);
 		}
 		// Invalidate cached similarities since we added nodes
@@ -463,7 +449,7 @@ export class EmbeddingsGrouper<T> {
 		// Sum all embeddings
 		for (const embedding of consistentEmbeddings) {
 			for (let i = 0; i < dimensions; i++) {
-				centroid[i] += (typeof embedding[i] === 'number' && !isNaN(embedding[i])) ? embedding[i] : 0; // Handle NaN/undefined values, preserve valid zeros
+				centroid[i] += embedding[i];
 			}
 		}
 
@@ -701,10 +687,7 @@ export class EmbeddingsGrouper<T> {
 			return [];
 		}
 
-		const magnitude = Math.sqrt(vector.reduce((sum, val) => {
-			const num = typeof val === 'number' && !isNaN(val) ? val : 0;
-			return sum + num * num;
-		}, 0));
+		const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
 
 		if (magnitude === 0) {
 			return vector.slice(); // Return copy of zero vector

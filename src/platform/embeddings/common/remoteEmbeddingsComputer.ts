@@ -20,7 +20,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IEmbeddingsEndpoint, postRequest } from '../../networking/common/networking';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { ComputeEmbeddingsOptions, Embedding, EmbeddingType, EmbeddingTypeInfo, EmbeddingVector, Embeddings, IEmbeddingsComputer, getWellKnownEmbeddingTypeInfo } from './embeddingsComputer';
+import { ComputeEmbeddingsOptions, Embedding, EmbeddingType, EmbeddingTypeInfo, EmbeddingVector, Embeddings, IEmbeddingsComputer, getWellKnownEmbeddingTypeInfo, isValidEmbedding } from './embeddingsComputer';
 
 interface CAPIEmbeddingResults {
 	readonly type: 'success';
@@ -137,10 +137,20 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 					throw new Error(`Mismatched embedding result count. Expected: ${batch.length}. Got: ${jsonResponse.embeddings.length}`);
 				}
 
-				embeddingsOut.push(...jsonResponse.embeddings.map(embedding => ({
+				// Validate embeddings at service boundary
+				const potentialEmbeddings = jsonResponse.embeddings.map(embedding => ({
 					type: resolvedType,
 					value: embedding.embedding,
-				})));
+				}));
+
+				const validatedEmbeddings = potentialEmbeddings.filter(embedding => {
+					const isValid = isValidEmbedding(embedding);
+					if (!isValid) {
+						this._logService.warn(`Invalid embedding received from GitHub API, filtering out invalid embedding`);
+					}
+					return isValid;
+				});
+				embeddingsOut.push(...validatedEmbeddings);
 			}
 
 			return { type: embeddingType, values: embeddingsOut };
@@ -289,7 +299,17 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 				embedding: number[];
 			};
 			if (response.status === 200 && jsonResponse.data) {
-				return { type: 'success', embeddings: jsonResponse.data.map((d: EmbeddingResponse) => d.embedding) };
+				// Validate embeddings at service boundary
+				const validatedEmbeddings = jsonResponse.data
+					.map((d: EmbeddingResponse) => d.embedding)
+					.filter((embedding: number[]) => {
+						if (!Array.isArray(embedding) || embedding.length === 0 || embedding.some(val => typeof val !== 'number' || !isFinite(val))) {
+							this._logService.warn(`Invalid embedding received from CAPI, filtering out invalid embedding with ${embedding?.length || 0} dimensions`);
+							return false;
+						}
+						return true;
+					});
+				return { type: 'success', embeddings: validatedEmbeddings };
 			} else {
 				return { type: 'failed', reason: jsonResponse.error };
 			}
