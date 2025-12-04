@@ -58,6 +58,11 @@ export class EmbeddingsGrouper<T> {
 	 * or create a new singleton cluster.
 	 */
 	addNode(node: Node<T>): void {
+		// Skip nodes with invalid embeddings early
+		if (!node.embedding || !node.embedding.value || !Array.isArray(node.embedding.value) || node.embedding.value.length === 0) {
+			return;
+		}
+
 		this.nodes.push(node);
 		// Cache normalized embedding for this node
 		this.normalizedEmbeddings.set(node, this.normalizeVector(node.embedding.value));
@@ -91,8 +96,17 @@ export class EmbeddingsGrouper<T> {
 			return;
 		}
 
-		// Batch add all nodes and cache their normalized embeddings
-		for (const node of nodes) {
+		// Filter out nodes with invalid embeddings before adding
+		const validNodes = nodes.filter(node =>
+			node.embedding && node.embedding.value && Array.isArray(node.embedding.value) && node.embedding.value.length > 0
+		);
+
+		if (validNodes.length === 0) {
+			return;
+		}
+
+		// Batch add all valid nodes
+		for (const node of validNodes) {
 			this.nodes.push(node);
 		}
 		// Invalidate cached similarities since we added nodes
