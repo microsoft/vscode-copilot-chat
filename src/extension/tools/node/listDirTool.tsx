@@ -14,6 +14,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { normalizePath } from '../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { IExternalContextService } from '../../context/node/externalContextService';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
@@ -32,12 +33,14 @@ class ListDirTool implements vscode.LanguageModelTool<IListDirParams> {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+		@IExternalContextService private readonly externalContextService: IExternalContextService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IListDirParams>, token: CancellationToken) {
 		const uri = resolveToolInputPath(options.input.path, this.promptPathRepresentationService);
-		const relativeToWorkspace = this.workspaceService.getWorkspaceFolder(normalizePath(uri));
-		if (!relativeToWorkspace) {
+		const workspaceFolder = this.workspaceService.getWorkspaceFolder(normalizePath(uri));
+		const isExternalPath = this.externalContextService.isExternalPath(uri);
+		if (!workspaceFolder && !isExternalPath) {
 			throw new Error(`Directory ${options.input.path} is outside of the workspace and can't be read`);
 		}
 

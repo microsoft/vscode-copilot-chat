@@ -1869,6 +1869,18 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.chat.addExternalContext",
+				"title": "%github.copilot.command.addExternalContext%",
+				"category": "Chat",
+				"icon": "$(folder-library)"
+			},
+			{
+				"command": "github.copilot.chat.manageExternalContexts",
+				"title": "%github.copilot.command.manageExternalContexts%",
+				"category": "Chat",
+				"icon": "$(list-selection)"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
