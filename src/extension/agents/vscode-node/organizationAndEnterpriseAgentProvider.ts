@@ -125,10 +125,18 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			const allAgents: CustomAgentListItem[] = [];
 			for (const org of organizations) {
 				try {
-					// Use a dummy repo name since we're only interested in org/enterprise agents
-					const agents = await this.octoKitService.getCustomAgents(org, '.github', internalOptions);
+					// Get the first repository for this organization to use in the API call
+					// We can't just use .github-private because user may not have access to it
+					const repos = await this.octoKitService.getOrganizationRepositories(org);
+					if (repos.length === 0) {
+						this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] No repositories found for ${org}, skipping`);
+						continue;
+					}
+
+					const repoName = repos[0];
+					const agents = await this.octoKitService.getCustomAgents(org, repoName, internalOptions);
 					allAgents.push(...agents);
-					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org}`);
+					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName}`);
 				} catch (error) {
 					this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error fetching agents from ${org}: ${error}`);
 				}
