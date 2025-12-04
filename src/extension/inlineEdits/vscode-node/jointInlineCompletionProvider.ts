@@ -242,6 +242,12 @@ function toInlineEditsList(list: NesCompletionList): SingularCompletionList {
 	return { ...list, items: list.items.map(item => ({ ...item, source: 'inlineEdits' })), source: 'inlineEdits' };
 }
 
+type LastNesSuggestion = {
+	docUri: vscode.Uri;
+	docVersionId: number;
+	docWithNesEditApplied: StringText;
+};
+
 class JointCompletionsProvider extends Disposable implements vscode.InlineCompletionItemProvider {
 
 	public onDidChange?: vscode.Event<void> | undefined;
@@ -274,36 +280,67 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		}
 	}
 
-	private lastNesSuggestion: null | { docUri: vscode.Uri; docWithNesEditApplied: StringText } = null;
+	private lastNesSuggestion: null | LastNesSuggestion = null;
+	private provideInlineCompletionItemsInvocationCount = 0;
 
 	private async provideInlineCompletionItemsRegular(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken, tracer: ITracer): Promise<SingularCompletionList | undefined> {
 
+		const invocationId = ++this.provideInlineCompletionItemsInvocationCount;
 		const completionsCts = new CancellationTokenSource(token);
 		const nesCts = new CancellationTokenSource(token);
 
+		let saveLastNesSuggestion: null | LastNesSuggestion = null;
 		try {
 			const docSnapshot = new StringText(document.getText());
-			const list = await this._provideInlineCompletionItemsRegular({ document, docSnapshot }, position, context, tracer, { coreToken: token, completionsCts, nesCts });
+			const docVersionId = document.version;
 
-			// update last NES suggestion if the first item is a valid NES suggestion
-			if (list?.source === 'inlineEdits' && list.items.length > 0 && list.items[0].range && typeof list.items[0].insertText === 'string') {
-				tracer.trace(`updating last NES suggestion`);
-				const range = list.items[0].range;
-				const rangeOneBased = new Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
-				const offsetRange = docSnapshot.getTransformer().getOffsetRange(rangeOneBased);
-				const edit = new StringReplacement(offsetRange, list.items[0].insertText);
-				const bigEdit = edit.toEdit();
-				const applied = bigEdit.apply(docSnapshot.getValue());
-				this.lastNesSuggestion = {
-					docUri: document.uri,
-					docWithNesEditApplied: new StringText(applied),
-				};
-			} else {
-				tracer.trace(`clearing last NES suggestion`);
+			if (this.lastNesSuggestion && this.lastNesSuggestion.docUri.toString() !== document.uri.toString()) {
+				tracer.trace('last NES suggestion is not for the current document, ignoring');
 				this.lastNesSuggestion = null;
 			}
+
+			const list = await this._provideInlineCompletionItemsRegular({ document, docSnapshot }, position, this.lastNesSuggestion, context, tracer, { coreToken: token, completionsCts, nesCts });
+
+			if (token.isCancellationRequested) {
+				return list;
+			}
+
+			if (!list || list.source !== 'inlineEdits' || list.items.length === 0) {
+				return list;
+			}
+
+			const firstItem = list.items[0];
+			if (!firstItem.range || typeof firstItem.insertText !== 'string') {
+				return list;
+			}
+
+			if (firstItem.uri && firstItem.uri.toString() !== document.uri.toString()) {
+				tracer.trace(`The NES suggestion is for a different document (${firstItem.uri.toString()} vs ${document.uri.toString()}), not saving as last NES suggestion`);
+				return list;
+			}
+
+			const applied = applyTextEdit(docSnapshot, firstItem.range, firstItem.insertText);
+			saveLastNesSuggestion = {
+				docUri: document.uri,
+				docVersionId,
+				docWithNesEditApplied: new StringText(applied),
+			};
+
 			return list;
 		} finally {
+
+			// Only save the last NES suggestion if this is the latest invocation
+			if (invocationId >= this.provideInlineCompletionItemsInvocationCount) {
+				this.lastNesSuggestion = saveLastNesSuggestion;
+				if (this.lastNesSuggestion) {
+					tracer.trace(`Set the last NES suggestion for document ${this.lastNesSuggestion.docUri.toString()}`);
+				} else {
+					tracer.trace(`Cleared the last NES suggestion`);
+				}
+			} else {
+				tracer.trace(`Not setting the last NES suggestion because a newer invocation exists`);
+			}
+
 			completionsCts.dispose();
 			nesCts.dispose();
 		}
@@ -312,6 +349,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	private async _provideInlineCompletionItemsRegular(
 		{ document, docSnapshot }: { document: vscode.TextDocument; docSnapshot: StringText },
 		position: vscode.Position,
+		lastNesSuggestion: null | LastNesSuggestion,
 		context: vscode.InlineCompletionContext,
 		tracer: ITracer,
 		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
@@ -324,132 +362,175 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			return undefined;
 		}
 
-		tracer.trace('requesting completions');
+		tracer.trace('requesting completions and/or NES');
 
-		const completionsDelay = this._configService.getExperimentBasedConfig<number>(ConfigKey.TeamInternal.InlineEditsJointCompletionGhostTextDelayIfLastNes, this._expService);
-
-		let completionsEndOfLifeReason: vscode.InlineCompletionsDisposeReason | undefined;
-		let nesEndOfLifeReason: vscode.InlineCompletionsDisposeReason | undefined;
-
-		let completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined;
-		if (this._completionsProvider === undefined) {
-			tracer.trace(`- no completions provider`);
-			completionsP = undefined;
-		} else {
-			tracer.trace(`- requesting completions provideInlineCompletionItems`);
-			completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, tokens.completionsCts.token).then(v => {
-				if (v === undefined) {
-					return undefined;
-				}
-				if (completionsEndOfLifeReason === undefined) {
-					return v;
-				}
-				// completions was picked over NES, mark completions items as ignored
-				for (const item of v.items) {
-					this._completionsProvider?.handleEndOfLifetime?.(item as vscode.InlineCompletionItem, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
-				}
-				this._completionsProvider?.handleListEndOfLifetime?.(v!, completionsEndOfLifeReason);
-				return undefined;
-			});
+		if (!lastNesSuggestion) {
+			// prefer completions unless there are none
+			tracer.trace(`no last NES suggestion to consider`);
+			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
+			const nesP = this._invokeNESProvider(tracer, document, position, false, context, tokens, sw);
+			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 		}
 
-		let nesP: Promise<NesCompletionList | undefined> | undefined;
-		if (this._inlineEditProvider === undefined) {
-			tracer.trace(`- no NES provider`);
-			nesP = undefined;
-		} else {
-			tracer.trace(`- requesting NES provideInlineCompletionItems`);
-			nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, context, tokens.nesCts.token).then(v => {
-				if (v === undefined) {
-					return undefined;
-				}
-				if (nesEndOfLifeReason === undefined) {
-					return v;
-				}
-				// completions was picked over NES, mark NES items as ignored
-				for (const item of v.items) {
-					this._inlineEditProvider?.handleEndOfLifetime?.(item as NesCompletionItem, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
-				}
-				this._inlineEditProvider?.handleListEndOfLifetime?.(v!, nesEndOfLifeReason);
-				return undefined;
-			});
+		tracer.trace(`last NES suggestion is for the current document, checking if it agrees with the current suggestion`);
+
+		const eliminateDebouncing = (lastNesSuggestion.docVersionId === document.version);
+		const nesP = this._invokeNESProvider(tracer, document, position, eliminateDebouncing, context, tokens, sw);
+		if (!nesP) {
+			tracer.trace(`no NES provider`);
+			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
+			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
 		}
 
-		if (this.lastNesSuggestion) {
-			if (this.lastNesSuggestion.docUri.toString() !== document.uri.toString()) {
-				tracer.trace('last NES suggestion is not for the current document, ignoring');
-				this.lastNesSuggestion = null;
-			} else {
-				tracer.trace(`last NES suggestion is for the current document, checking if it agrees with the current suggestion`);
-				const providerCallSw = new StopWatch();
-				const suggestionsList = await raceCancellation(Promise.race(coalesce([
-					completionsP?.then(async res => {
-						const delayFor = Math.max(0, completionsDelay - providerCallSw.elapsed());
-						if (delayFor > 0 && !tokens.completionsCts.token.isCancellationRequested) {
-							tracer.trace(`delaying completions response by ${delayFor}ms because last suggestion was NES`);
-							await timeout(delayFor);
-						}
-						return { type: 'completions' as const, res };
-					}),
-					nesP?.then(res => ({ type: 'nes' as const, res })),
-				])), tokens.coreToken);
+		const NES_CACHE_WAIT_MS = 10;
+		// scoping the variables
+		{
+			tracer.trace(`giving the NES provider ${NES_CACHE_WAIT_MS}ms to return what it has in its cache`);
+			const fastNesResult = await raceCancellation(
+				raceTimeout(
+					nesP,
+					NES_CACHE_WAIT_MS
+				),
+				tokens.coreToken
+			);
 
-				// got cancelled
-				if (suggestionsList === undefined) {
-					tracer.trace(`suggestions request was cancelled`);
-					completionsEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.TokenCancellation };
-					nesEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.TokenCancellation };
-					tokens.completionsCts.cancel();
-					tokens.nesCts.cancel();
-					return undefined;
-				}
-
-				// got nes
-				if (suggestionsList.type === 'nes' && suggestionsList.res !== undefined && this.doesNesSuggestionAgree(docSnapshot, this.lastNesSuggestion.docWithNesEditApplied, (suggestionsList.res.items as NesCompletionItem[]).at(0))) {
-					tracer.trace('last NES suggestion agrees with the current suggestion, using NES');
-					// cancel completions
-					completionsEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken };
-					tokens.completionsCts.cancel();
-					return toInlineEditsList(suggestionsList.res!);
-				} else {
-					tracer.trace('last NES suggestion does not agree with the current suggestion, ignoring last NES suggestion');
-					this.lastNesSuggestion = null;
-				}
-			}
-		}
-
-		tracer.trace(`waiting for completions response`);
-
-		const completionsR = completionsP ? await completionsP : undefined;
-		tracer.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
-
-		if (completionsR) {
-			if (completionsR.items.length === 0) {
-				completionsEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken };
-			} else {
-				tracer.trace(`using completions response, cancelling NES provider`);
-				tokens.nesCts.cancel(); // cancel NES request if completions are available
-				const list: SingularCompletionList = toCompletionsList(completionsR);
-				tracer.returns(`use completions response in ${sw.elapsed()}ms`);
-
-				nesEndOfLifeReason = { kind: vscode.InlineCompletionsDisposeReasonKind.LostRace };
-
+			// got nes quickly
+			if (fastNesResult && this.doesNesSuggestionAgree(docSnapshot, lastNesSuggestion.docWithNesEditApplied, (fastNesResult.items as NesCompletionItem[]).at(0))) {
+				tracer.trace('last NES suggestion agrees with the current suggestion, using NES');
+				const list: SingularCompletionList = toInlineEditsList(fastNesResult);
+				tracer.returns(`returning NES result in ${sw.elapsed()}ms`);
 				return list;
 			}
+
+			if (tokens.coreToken.isCancellationRequested) {
+				tracer.trace(`suggestions request was cancelled`);
+				void setEndOfLifeReason(this._completionsProvider, undefined, { kind: vscode.InlineCompletionsDisposeReasonKind.TokenCancellation });
+				void setEndOfLifeReason(this._inlineEditProvider, nesP, { kind: vscode.InlineCompletionsDisposeReasonKind.TokenCancellation });
+				tokens.completionsCts.cancel();
+				tokens.nesCts.cancel();
+				return undefined;
+			}
 		}
 
-		const nesR = nesP ? await nesP : undefined;
-		tracer.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
+		tracer.trace(`the NES provider did not return in ${NES_CACHE_WAIT_MS}ms so we are triggering the completions provider too`);
+		const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
 
-		if (nesR && nesR.items.length > 0) {
-			const list: SingularCompletionList = toInlineEditsList(nesR);
+		const suggestionsList = await raceCancellation(
+			Promise.race(coalesce([
+				completionsP?.then(res => ({ type: 'completions' as const, res })),
+				nesP?.then(res => ({ type: 'nes' as const, res })),
+			])),
+			tokens.coreToken
+		);
+
+		// got cancelled
+		if (suggestionsList === undefined) {
+			tracer.trace(`suggestions request was cancelled`);
+			void setEndOfLifeReason(this._completionsProvider, completionsP, { kind: vscode.InlineCompletionsDisposeReasonKind.TokenCancellation });
+			void setEndOfLifeReason(this._inlineEditProvider, nesP, { kind: vscode.InlineCompletionsDisposeReasonKind.TokenCancellation });
+			tokens.completionsCts.cancel();
+			tokens.nesCts.cancel();
+			return undefined;
+		}
+
+		// got NES first
+		if (suggestionsList && suggestionsList.type === 'nes' && suggestionsList.res && this.doesNesSuggestionAgree(docSnapshot, lastNesSuggestion.docWithNesEditApplied, (suggestionsList.res.items as NesCompletionItem[]).at(0))) {
+			tracer.trace('last NES suggestion agrees with the current suggestion, using NES');
+			const list: SingularCompletionList = toInlineEditsList(suggestionsList.res);
 			tracer.returns(`returning NES result in ${sw.elapsed()}ms`);
 			return list;
 		}
 
-		// return completions if any (could be empty), prefer completions over empty NES
-		const list: SingularCompletionList = toCompletionsList(completionsR ?? { items: [] });
-		tracer.returns(`returning completions (possibly empty) in ${sw.elapsed()}ms`);
+		tracer.trace('falling back to the default because completions came first or NES disagreed');
+		return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
+	}
+
+	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, eliminateDebouncing: boolean, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
+		let nesP: Promise<NesCompletionList | undefined> | undefined;
+		if (this._inlineEditProvider) {
+			tracer.trace(`- requesting NES provideInlineCompletionItems`);
+			nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, context, tokens.nesCts.token);
+			nesP.then((nesR) => {
+				tracer.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
+			});
+		} else {
+			tracer.trace(`- no NES provider`);
+			nesP = undefined;
+		}
+		return nesP;
+	}
+
+	private _invokeCompletionsProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
+		let completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined;
+		if (this._completionsProvider) {
+			tracer.trace(`- requesting completions provideInlineCompletionItems`);
+			completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, tokens.completionsCts.token);
+			completionsP.then((completionsR) => {
+				tracer.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
+			});
+		} else {
+			tracer.trace(`- no completions provider`);
+			completionsP = undefined;
+		}
+		return completionsP;
+	}
+
+	private async _returnCompletionsOrOtherwiseNES(
+		completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined,
+		nesP: Promise<NesCompletionList | undefined> | undefined,
+		sw: StopWatch,
+		tracer: ITracer,
+		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
+	) {
+		tracer.trace(`waiting for completions and/or NES responses`);
+
+		const completionsR = completionsP ? await completionsP : undefined;
+		tracer.trace(`completions response received`);
+
+		if (completionsR && completionsR.items.length > 0) {
+			tracer.trace(`using completions response, cancelling NES provider`);
+			return this._returnCompletions(completionsR, { kind: vscode.InlineCompletionsDisposeReasonKind.LostRace }, nesP, sw, tracer, tokens);
+		}
+
+		const nesR = nesP ? await nesP : undefined;
+		tracer.trace(`NES response received`);
+
+		if (nesR && nesR.items.length > 0) {
+			tracer.trace(`using NES response`);
+			return this._returnNES(nesR, { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken }, completionsP, sw, tracer, tokens);
+		}
+
+		// return empty completions
+		return this._returnCompletions(completionsR ?? { items: [] }, { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken }, nesP, sw, tracer, tokens);
+	}
+
+	private _returnCompletions(
+		completionsR: vscode.InlineCompletionList,
+		nesDisposeReason: vscode.InlineCompletionsDisposeReason,
+		nesP: Promise<NesCompletionList | undefined> | undefined,
+		sw: StopWatch,
+		tracer: ITracer,
+		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
+	) {
+		void setEndOfLifeReason(this._inlineEditProvider, nesP, nesDisposeReason);
+		tokens.nesCts.cancel(); // cancel NES request if still pending
+		const list: SingularCompletionList = toCompletionsList(completionsR);
+		tracer.returns(`use completions response in ${sw.elapsed()}ms`);
+		return list;
+	}
+
+	private _returnNES(
+		nesR: NesCompletionList,
+		completionsDisposeReason: vscode.InlineCompletionsDisposeReason,
+		completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined,
+		sw: StopWatch,
+		tracer: ITracer,
+		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
+	) {
+		void setEndOfLifeReason(this._completionsProvider, completionsP, completionsDisposeReason);
+		tokens.completionsCts.cancel(); // cancel completions request if still pending
+		const list: SingularCompletionList = toInlineEditsList(nesR);
+		tracer.returns(`returning NES result in ${sw.elapsed()}ms`);
 		return list;
 	}
 
@@ -457,12 +538,8 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		if (nesEdit === undefined || nesEdit.range === undefined || typeof nesEdit.insertText !== 'string') {
 			return false;
 		}
-		const range = nesEdit.range;
-		const rangeOneBased = new Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
-		const offsetRange = doc.getTransformer().getOffsetRange(rangeOneBased);
-		const edit = new StringReplacement(offsetRange, nesEdit.insertText);
-		const bigEdit = edit.toEdit();
-		return bigEdit.apply(doc.getValue()) === docWithNesEditApplied.getValue();
+		const applied = applyTextEdit(doc, nesEdit.range, nesEdit.insertText);
+		return applied === docWithNesEditApplied.getValue();
 	}
 
 	public handleDidShowCompletionItem?(completionItem: SingularCompletionItem, updatedInsertText: string): void {
@@ -521,3 +598,24 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	public handleDidRejectCompletionItem = undefined;
 }
 
+function applyTextEdit(doc: StringText, range: vscode.Range, insertText: string): string {
+	const rangeOneBased = new Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
+	const offsetRange = doc.getTransformer().getOffsetRange(rangeOneBased);
+	const edit = new StringReplacement(offsetRange, insertText);
+	const bigEdit = edit.toEdit();
+	return bigEdit.apply(doc.getValue());
+}
+
+async function setEndOfLifeReason(provider: vscode.InlineCompletionItemProvider | undefined, promise: Promise<vscode.InlineCompletionList | undefined> | undefined, reason: vscode.InlineCompletionsDisposeReason) {
+	if (promise === undefined) {
+		return;
+	}
+	const result = await promise;
+	if (result === undefined) {
+		return;
+	}
+	for (const item of result.items) {
+		provider?.handleEndOfLifetime?.(item, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Ignored, userTypingDisagreed: false });
+	}
+	provider?.handleListEndOfLifetime?.(result, reason);
+}
