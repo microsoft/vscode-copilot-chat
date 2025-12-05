@@ -168,6 +168,8 @@ export interface IMakeChatRequestOptions {
 	enableRetryOnError?: boolean;
 	/** Which fetcher to use, overrides the default. */
 	useFetcher?: FetcherId;
+	/** Disable extended thinking for this request. Used when resuming from tool call errors where the original thinking blocks are not available. */
+	disableThinking?: boolean;
 }
 
 export type IChatRequestTelemetryProperties = {

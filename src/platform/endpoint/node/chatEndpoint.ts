@@ -261,7 +261,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			return this.customizeMessagesBody(body);
 		} else {
 			const body = createCapiRequestBody(options, this.model, this.getCompletionsCallback());
-			return this.customizeCapiBody(body);
+			return this.customizeCapiBody(body, options);
 		}
 	}
 
@@ -277,9 +277,9 @@ export class ChatEndpoint implements IChatEndpoint {
 		return body;
 	}
 
-	protected customizeCapiBody(body: IEndpointBody): IEndpointBody {
+	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
 		const isAnthropicModel = this.family.startsWith('claude') || this.family.startsWith('Anthropic');
-		if (isAnthropicModel) {
+		if (isAnthropicModel && !options.disableThinking) {
 			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
 			if (configuredBudget) {
 				// Cap thinking budget to Anthropic's recommended max (32000), and ensure it's less than max output tokens

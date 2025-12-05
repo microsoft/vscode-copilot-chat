@@ -82,7 +82,7 @@ export interface IToolCallingBuiltPromptEvent {
 	tools: LanguageModelToolInformation[];
 }
 
-export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>>;
+export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>> & Pick<IMakeChatRequestOptions, 'disableThinking'>;
 
 /**
  * This is a base class that can be used to implement a tool calling loop
@@ -433,6 +433,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
+		// When continuing from a tool call error, disable thinking because we don't have
+		// the original thinking blocks to include in the resumed assistant message.
+		// Anthropic requires thinking blocks to precede tool_use blocks when thinking is enabled.
+		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+		const isAnthropicModel = endpoint.family.startsWith('claude') || endpoint.family.startsWith('Anthropic');
+		const disableThinking = isContinuation && isAnthropicModel;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {
@@ -463,7 +469,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.isSubagent
+			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.isSubagent,
+			disableThinking,
 		}, token);
 
 		fetchStreamSource?.resolve();
