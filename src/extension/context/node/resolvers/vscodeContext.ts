@@ -140,7 +140,7 @@ export async function parseSettingsAndCommands(workbenchService: IWorkbenchServi
 }
 
 type ParsedItem = {
-	type: "command" | "setting";
+	type: 'command' | 'setting';
 	details: {
 		key: string;
 		value?: string;

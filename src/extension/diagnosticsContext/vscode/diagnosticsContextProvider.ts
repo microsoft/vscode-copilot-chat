@@ -44,7 +44,7 @@ export class DiagnosticsContextContribution extends Disposable {
 			const resolver = new ContextResolver(this.diagnosticsService, this.configurationService, this.experimentationService);
 			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'diagnostics-context-provider',
-				selector: "*",
+				selector: '*',
 				resolver: resolver
 			};
 			disposables.add(this.languageContextProviderService.registerContextProvider(provider, [ProviderTarget.NES]));
@@ -123,7 +123,7 @@ function diagnosticsToTraits(diagnostics: Diagnostic[]): Copilot.Trait[] {
 	const traits: Copilot.Trait[] = [];
 	if (diagnostics.length > 0) {
 		traits.push({
-			name: "Problems near the user's cursor",
+			name: `Problems near the user's cursor`,
 			value: diagnostics.map(d => `\n\t${diagnosticsToString(d)}`).join(''),
 		});
 	}

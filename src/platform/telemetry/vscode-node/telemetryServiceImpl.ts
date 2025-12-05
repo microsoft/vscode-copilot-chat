@@ -33,7 +33,7 @@ export class TelemetryService extends BaseTelemetryService {
 		@IDomainService domainService: IDomainService,
 		@IFetcherService fetcherService: IFetcherService
 	) {
-		const customFetcher: CustomFetcher = async (url: string, init?: { method: "POST"; headers?: Record<string, string>; body?: string }) => {
+		const customFetcher: CustomFetcher = async (url: string, init?: { method: 'POST'; headers?: Record<string, string>; body?: string }) => {
 			return fetcherService.fetch(url, {
 				method: init?.method,
 				headers: init?.headers,

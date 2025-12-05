@@ -278,6 +278,7 @@ export default tseslint.config(
 				}
 			],
 			'local/no-nls-localize': ['error'],
+			'local/no-unexternalized-strings': ['error'],
 		}
 	},
 	{

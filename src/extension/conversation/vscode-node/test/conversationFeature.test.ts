@@ -57,7 +57,7 @@ suite('Conversation feature test suite', function () {
 		extensionContext.subscriptions.forEach(sub => sub.dispose());
 	});
 
-	test.skip("If the 'interactive' namespace is not available, the feature is not enabled and not activated", function () {
+	test.skip(`If the 'interactive' namespace is not available, the feature is not enabled and not activated`, function () {
 		// TODO: The vscode module cannot be stubbed
 		sandbox.stub(vscode, 'interactive').value(undefined);
 
@@ -70,7 +70,7 @@ suite('Conversation feature test suite', function () {
 		}
 	});
 
-	test("If the 'interactive' version does not match, the feature is not enabled and not activated", function () {
+	test(`If the 'interactive' version does not match, the feature is not enabled and not activated`, function () {
 		const conversationFeature = instaService.createInstance(ConversationFeature);
 		try {
 			assert.deepStrictEqual(conversationFeature.enabled, false);

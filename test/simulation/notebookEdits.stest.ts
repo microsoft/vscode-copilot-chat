@@ -135,7 +135,7 @@ export function notebookCellToCellData(cell: NotebookCell): NotebookCellData {
 							assertWorkspaceEdit(outcome);
 							assert.equal(notebookDocument.cellCount, 2);
 							assert.ok(notebookDocument.cellAt(0).document.getText().includes('class Point3D'), 'Point3D class not found');
-							assert.ok(notebookDocument.cellAt(1).document.getText().includes('distance_from_origin(point: Point3D)') || notebookDocument.cellAt(1).document.getText().includes("distance_from_origin(point: 'Point3D')"), 'distance_from_origin not updated');
+							assert.ok(notebookDocument.cellAt(1).document.getText().includes('distance_from_origin(point: Point3D)') || notebookDocument.cellAt(1).document.getText().includes(`distance_from_origin(point: 'Point3D')`), 'distance_from_origin not updated');
 						}
 					}
 				]
@@ -510,26 +510,26 @@ export function notebookCellToCellData(cell: NotebookCell): NotebookCellData {
 				await simulatePanelCodeMapperEx(testingServiceCollection, {
 					files: [
 						toFile({
-							fileName: "multiFile/issue-13868/data.csv",
+							fileName: 'multiFile/issue-13868/data.csv',
 							fileContents: [
-								"Duration,Pulse,Maxpulse,Calories\n",
-								"60,110,130,409.1\n",
-								"60,117,145,479.0\n",
-								"60,103,135,340.0\n",
-								"45,109,175,282.4\n",
-								"45,117,148,406.0\n",
-								"60,102,127,300.0\n",
-								"60,110,136,374.0\n",
-								"45,104,134,253.3\n",
-								"30,109,133,195.1\n",
-								"60,98,124,269.0\n",
-								"60,103,147,329.3\n",
-								"60,100,120,250.7\n",
-								"60,106,128,345.3\n",
-								"60,104,132,379.3\n",
-								"60,98,123,275.0\n",
-								"60,98,120,215.2\n",
-								"60,100,120,300.0\n"
+								'Duration,Pulse,Maxpulse,Calories\n',
+								'60,110,130,409.1\n',
+								'60,117,145,479.0\n',
+								'60,103,135,340.0\n',
+								'45,109,175,282.4\n',
+								'45,117,148,406.0\n',
+								'60,102,127,300.0\n',
+								'60,110,136,374.0\n',
+								'45,104,134,253.3\n',
+								'30,109,133,195.1\n',
+								'60,98,124,269.0\n',
+								'60,103,147,329.3\n',
+								'60,100,120,250.7\n',
+								'60,106,128,345.3\n',
+								'60,104,132,379.3\n',
+								'60,98,123,275.0\n',
+								'60,98,120,215.2\n',
+								'60,100,120,300.0\n'
 							].join('')
 						}),
 					],
@@ -537,7 +537,7 @@ export function notebookCellToCellData(cell: NotebookCell): NotebookCellData {
 						{
 							file: undefined,
 							selection: undefined,
-							query: "create a new notebook to analyze #file:data.csv ",
+							query: 'create a new notebook to analyze #file:data.csv ',
 							validate: async (outcome, workspace, accessor) => {
 								assertWorkspaceEdit(outcome);
 								// assert.strictEqual((await getWorkspaceDiagnostics(accessor, workspace, 'tsc')).filter(d => d.kind === 'syntactic').length, 0);

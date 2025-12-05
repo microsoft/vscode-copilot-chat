@@ -64,7 +64,7 @@ suite('"Fetch" unit tests', function () {
 		assert.deepStrictEqual(res.type, 'success');
 		// keep the type checker happy
 		if (res.type !== 'success') {
-			throw new Error("internal error: res.type is not 'success'");
+			throw new Error(`internal error: res.type is not 'success'`);
 		}
 		const stream = res.choices;
 		const results = [];

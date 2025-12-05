@@ -68,7 +68,7 @@ export class NotebookFormat extends PromptElement<NotebookFormatPromptProps> {
 		if (notebookRelatedUris.length || queryContainsNotebookSpecificKeywords(this.props.query)) {
 			const notebookUris = getNotebookUris(notebookRelatedUris, this._workspaceService);
 			return <>
-				<Tag name="notebookFormatInstructions">
+				<Tag name='notebookFormatInstructions'>
 					{this.getNotebookFormatInstructions(notebookUris)}
 				</Tag>
 				{this.getListOfNotebookFiles(notebookUris)}
@@ -169,8 +169,8 @@ export class NotebookXmlFormatPrompt extends PromptElement<NotebookFormatCommonP
 			<br />
 			Here is sample content of a Notebook document:<br />
 			<br />
-			<Tag name="example">
-				<ExampleCodeBlock languageId="xml" examplePath={this.props.tsExampleFilePath} includeFilepath={true} minNumberOfBackticks={4}
+			<Tag name='example'>
+				<ExampleCodeBlock languageId='xml' examplePath={this.props.tsExampleFilePath} includeFilepath={true} minNumberOfBackticks={4}
 					code={[
 						`<VSCode.Cell id="f8939937" language="markdown">`,
 						`# Import Required Libraries`,
@@ -205,8 +205,8 @@ class NotebookJsonFormatPrompt extends PromptElement<NotebookFormatCommonPromptP
 			<br />
 			Here is sample content of a Notebook document:<br />
 			<br />
-			<Tag name="example">
-				<ExampleCodeBlock languageId="json" examplePath={this.props.tsExampleFilePath} includeFilepath={true} minNumberOfBackticks={4}
+			<Tag name='example'>
+				<ExampleCodeBlock languageId='json' examplePath={this.props.tsExampleFilePath} includeFilepath={true} minNumberOfBackticks={4}
 					code={[
 						`{`,
 						`  cells: [`,
@@ -260,8 +260,8 @@ class NotebookTextFormatPrompt extends PromptElement<NotebookFormatCommonPromptP
 			<br />
 			Here is sample content of a Notebook document:<br />
 			<br />
-			<Tag name="example">
-				<ExampleCodeBlock languageId="python" examplePath={this.props.tsExampleFilePath} includeFilepath={true} minNumberOfBackticks={4}
+			<Tag name='example'>
+				<ExampleCodeBlock languageId='python' examplePath={this.props.tsExampleFilePath} includeFilepath={true} minNumberOfBackticks={4}
 					code={[
 						`#%% vscode.cell [id=0fd89b28] [language=markdown]`,
 						`"""`,

@@ -56,17 +56,17 @@ export class SummarizeDocumentPlayground {
 		return {
 			...{ $fileExtension: 'jsonUi.w' },
 			value: { charLimit: this._charLimit.get() },
-			"schema": {
-				"title": "data",
-				"type": "object",
-				"properties": {
-					"charLimit": {
-						"type": "number",
-						"format": "range",
-						"default": 500,
-						"minimum": 0,
-						"maximum": 10000,
-						"step": 1
+			'schema': {
+				'title': 'data',
+				'type': 'object',
+				'properties': {
+					'charLimit': {
+						'type': 'number',
+						'format': 'range',
+						'default': 500,
+						'minimum': 0,
+						'maximum': 10000,
+						'step': 1
 					}
 				}
 			},

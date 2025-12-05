@@ -164,9 +164,9 @@ export class TSServerClient {
 			// send "open" notifications
 			for (const file of files) {
 				tsServerRpc.emit({
-					"type": "request",
-					"command": "open",
-					"arguments": { "file": file.filePath }
+					'type': 'request',
+					'command': 'open',
+					'arguments': { 'file': file.filePath }
 				});
 			}
 		})();
@@ -180,8 +180,8 @@ export class TSServerClient {
 		}
 
 		await this._state.tsServerRpc.send({
-			"type": "request",
-			"command": "exit",
+			'type': 'request',
+			'command': 'exit',
 		});
 
 		await cleanTempDirWithRetry(this._state.workspacePath);
@@ -204,7 +204,7 @@ export class TSServerClient {
 
 		const response = await this._state.tsServerRpc.send(
 			{
-				type: "request",
+				type: 'request',
 				command,
 				arguments: {
 					file: this._state.files.find(file => file.fileName === fileName)!.filePath,
@@ -250,17 +250,17 @@ export class TSServerClient {
 		if (!hasTSConfigFile) {
 			const tsconfigPath = path.join(workspacePath, 'tsconfig.json');
 			await fs.promises.writeFile(tsconfigPath, JSON.stringify({
-				"compilerOptions": {
-					"target": "es2021",
-					"strict": true,
-					"module": "commonjs",
-					"outDir": "out",
-					"sourceMap": true
+				'compilerOptions': {
+					'target': 'es2021',
+					'strict': true,
+					'module': 'commonjs',
+					'outDir': 'out',
+					'sourceMap': true
 				},
-				"exclude": [
-					"node_modules",
-					"outcome",
-					"scenarios"
+				'exclude': [
+					'node_modules',
+					'outcome',
+					'scenarios'
 				]
 			}));
 		}

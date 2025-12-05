@@ -105,7 +105,7 @@ export class InlineChatIntent implements IIntent {
 		if (await this._ignoreService.isCopilotIgnored(request.location2.document.uri, token)) {
 			return {
 				errorDetails: {
-					message: l10n.t('inlineChat.ignored', "Copilot is disabled for this file."),
+					message: l10n.t('inlineChat.ignored', 'Copilot is disabled for this file.'),
 				}
 			};
 		}
@@ -115,7 +115,7 @@ export class InlineChatIntent implements IIntent {
 		if (!endpoint.supportsToolCalls) {
 			return {
 				errorDetails: {
-					message: l10n.t('inlineChat.model', "{0} cannot be used for inline chat", endpoint.name),
+					message: l10n.t('inlineChat.model', '{0} cannot be used for inline chat', endpoint.name),
 				}
 			};
 		}

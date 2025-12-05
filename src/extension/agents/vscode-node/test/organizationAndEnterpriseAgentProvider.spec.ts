@@ -791,7 +791,7 @@ You are a world-class computer scientist.
 		const provider = createProvider();
 
 		// Agent with description containing YAML special characters that need proper handling
-		const descriptionWithSpecialChars = "Agent with \"double quotes\", 'single quotes', colons:, and #comments in the description";
+		const descriptionWithSpecialChars = `Agent with "double quotes", 'single quotes', colons:, and #comments in the description`;
 		const mockAgent: CustomAgentListItem = {
 			name: 'special_chars_agent',
 			repo_owner_id: 1,

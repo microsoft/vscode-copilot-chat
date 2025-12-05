@@ -12,7 +12,7 @@ import * as types from '../vs/base/common/types';
 function exceptionToErrorMessage(exception: unknown, verbose: boolean): string {
 	if (verbose && ((exception as any).stack || (exception as any).stacktrace)) {
 		const stackStr = stackToString((exception as any).stack) || stackToString((exception as any).stacktrace);
-		return l10n.t('stackTrace.format', "{0}: {1}", detectSystemErrorMessage(exception), stackStr || '');
+		return l10n.t('stackTrace.format', '{0}: {1}', detectSystemErrorMessage(exception), stackStr || '');
 	}
 
 	return detectSystemErrorMessage(exception);
@@ -35,10 +35,10 @@ function detectSystemErrorMessage(exception: any): string {
 
 	// See https://nodejs.org/api/errors.html#errors_class_system_error
 	if (typeof exception.code === 'string' && typeof exception.errno === 'number' && typeof exception.syscall === 'string') {
-		return l10n.t('nodeExceptionMessage', "A system error occurred ({0})", exception.message);
+		return l10n.t('nodeExceptionMessage', 'A system error occurred ({0})', exception.message);
 	}
 
-	return exception.message || l10n.t('error.defaultMessage', "An unknown error occurred. Please consult the log for more details.");
+	return exception.message || l10n.t('error.defaultMessage', 'An unknown error occurred. Please consult the log for more details.');
 }
 
 /**
@@ -49,7 +49,7 @@ function detectSystemErrorMessage(exception: any): string {
  */
 export function toErrorMessage(error: any = null, verbose: boolean = false): string {
 	if (!error) {
-		return l10n.t('error.defaultMessage', "An unknown error occurred. Please consult the log for more details.");
+		return l10n.t('error.defaultMessage', 'An unknown error occurred. Please consult the log for more details.');
 	}
 
 	if (Array.isArray(error)) {
@@ -57,7 +57,7 @@ export function toErrorMessage(error: any = null, verbose: boolean = false): str
 		const msg = toErrorMessage(errors[0], verbose);
 
 		if (errors.length > 1) {
-			return l10n.t('error.moreErrors', "{0} ({1} errors in total)", msg, errors.length);
+			return l10n.t('error.moreErrors', '{0} ({1} errors in total)', msg, errors.length);
 		}
 
 		return msg;
@@ -87,5 +87,5 @@ export function toErrorMessage(error: any = null, verbose: boolean = false): str
 		return error.message;
 	}
 
-	return l10n.t('error.defaultMessage', "An unknown error occurred. Please consult the log for more details.");
+	return l10n.t('error.defaultMessage', 'An unknown error occurred. Please consult the log for more details.');
 }

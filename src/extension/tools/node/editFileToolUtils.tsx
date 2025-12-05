@@ -290,7 +290,7 @@ function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResul
 			editPosition,
 			strategy: 'exact',
 			matchPositions,
-			suggestion: "Multiple exact matches found. Make your search string more specific."
+			suggestion: 'Multiple exact matches found. Make your search string more specific.'
 		};
 	}
 	// Exactly one exact match found.
@@ -344,7 +344,7 @@ function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string
 			type: 'multiple',
 			editPosition: [],
 			matchPositions: positions.map(p => convert.positionToOffset(p.start)),
-			suggestion: "Multiple matches found with flexible whitespace. Make your search string more unique.",
+			suggestion: 'Multiple matches found with flexible whitespace. Make your search string more unique.',
 			strategy: 'whitespace',
 		};
 	}
@@ -399,7 +399,7 @@ function tryFuzzyMatch(text: string, oldStr: string, newStr: string, eol: string
 			text,
 			type: 'multiple',
 			editPosition: [],
-			suggestion: "Multiple fuzzy matches found. Try including more context in your search string.",
+			suggestion: 'Multiple fuzzy matches found. Try including more context in your search string.',
 			strategy: 'fuzzy',
 			matchPositions: matches.map(match => match.index || 0),
 		};

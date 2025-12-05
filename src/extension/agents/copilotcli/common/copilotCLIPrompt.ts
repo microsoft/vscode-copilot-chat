@@ -324,7 +324,7 @@ function extractGitHubIssueOrPRChatReference(content: string): ChatPromptReferen
 		// Possible that id is JSON encoded & contains special characters that fails parsing using regex, we could improve regex, but thats risky as we don't know all possible id formats & different attributes.
 		// In case of JSON content (Prs & issues, we know there's just an id attribute)
 		// Sample = 'id="#17143 Kernel interrupt_mode \\"message\\" sends interrupt_request on shell channel instead of control channel"'
-		const id = JSON.parse(openingTagMatch[1].substring("id=".length));
+		const id = JSON.parse(openingTagMatch[1].substring('id='.length));
 		if (typeof id === 'string' && id.length > 0) {
 			providedId = id;
 		}

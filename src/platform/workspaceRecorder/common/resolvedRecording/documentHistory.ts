@@ -13,7 +13,7 @@ import { DocumentEventLogEntryData, LogEntry } from '../workspaceLog';
 import {
 	DocumentChangedOperation, DocumentClosedOperation, DocumentFocusChangedOperation, DocumentId,
 	DocumentOpenedOperation, DocumentRestoreContentOperation, DocumentSelectionChangedOperation, DocumentSetContentOperation, DocumentStateId, InlineCompletionFetchRequest, Operation
-} from "./operation";
+} from './operation';
 
 export class DocumentRecording {
 	private readonly _docOperationsByStateIdBefore: DocumentChange[] = [];
@@ -92,14 +92,14 @@ export class DocumentRecording {
 				const data = e.data as DocumentEventLogEntryData;
 				const referencedOp = this._documentVersionAfterToOperation.get(data.v);
 				switch (data.sourceId) {
-					case "InlineCompletions.fetch":
+					case 'InlineCompletions.fetch':
 						if (referencedOp) {
 							const req = new InlineCompletionFetchRequest(data.requestId);
 							referencedOp.inlineCompletionFetchRequests.push(req);
 							fetchRequests.set(req.requestId, req);
 						}
 						break;
-					case "TextModel.setChangeReason":
+					case 'TextModel.setChangeReason':
 						if (referencedOp) {
 							referencedOp.reason = data.source;
 						}

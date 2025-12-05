@@ -17,7 +17,7 @@ export interface ICompletionsCopilotTokenManager {
 	primeToken(): Promise<boolean>;
 	getToken(): Promise<CopilotToken>;
 	resetToken(httpError?: number): void;
-	getLastToken(): Omit<CopilotToken, "token"> | undefined;
+	getLastToken(): Omit<CopilotToken, 'token'> | undefined;
 }
 
 export class CopilotTokenManagerImpl extends Disposable implements ICompletionsCopilotTokenManager {
@@ -66,7 +66,7 @@ export class CopilotTokenManagerImpl extends Disposable implements ICompletionsC
 		this.authenticationService.resetCopilotToken();
 	}
 
-	getLastToken(): Omit<CopilotToken, "token"> | undefined {
+	getLastToken(): Omit<CopilotToken, 'token'> | undefined {
 		return this.authenticationService.copilotToken;
 	}
 }

@@ -296,7 +296,7 @@ const configDefaults = new Map<ConfigKeyType, unknown>([
 	[ConfigKey.UseSplitContextPrompt, true],
 
 	// These are defaults from package.json
-	[ConfigKey.Enable, { "*": true, "plaintext": false, "markdown": false, "scminput": false }],
+	[ConfigKey.Enable, { '*': true, 'plaintext': false, 'markdown': false, 'scminput': false }],
 	[ConfigKey.UserSelectedCompletionModel, ''],
 
 	// These are advanced defaults from package.json

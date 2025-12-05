@@ -260,7 +260,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 		const [fullMatch, uri, title, description, author, linkTag] = match;
 		// Unescape XML entities
 		const unescapeXml = (text: string) => text
-			.replace(/&apos;/g, "'")
+			.replace(/&apos;/g, `'`)
 			.replace(/&quot;/g, '"')
 			.replace(/&gt;/g, '>')
 			.replace(/&lt;/g, '<')
@@ -304,7 +304,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				// TODO @DonJayamanne Temporary work around until we get the zod types.
 				type Attachment = {
 					path: string;
-					type: "file" | "directory";
+					type: 'file' | 'directory';
 					displayName: string;
 				};
 				// Filter out vscode instruction files from references when building session history

@@ -182,7 +182,7 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 	});
 }
 
-export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {
+export function isBYOKEnabled(copilotToken: Omit<CopilotToken, 'token'>, capiClientService: ICAPIClientService): boolean {
 	if (isScenarioAutomation) {
 		return true;
 	}
