@@ -42,6 +42,7 @@ import { unificationStateObservable } from '../../completions/vscode-node/comple
 import { NesChangeHint } from '../common/nesTriggerHint';
 import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
+import { ExpectedEditCaptureController } from './components/expectedEditCaptureController';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
@@ -152,7 +153,13 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 
 					const telemetrySender = reader.store.add(this._instantiationService.createInstance(TelemetrySender));
 
-					inlineEditProvider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender);
+					// Create the expected edit capture controller
+					const expectedEditCaptureController = reader.store.add(this._instantiationService.createInstance(
+						ExpectedEditCaptureController,
+						model.debugRecorder
+					));
+
+					inlineEditProvider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender, expectedEditCaptureController);
 
 					reader.store.add(vscode.commands.registerCommand(learnMoreCommandId, () => {
 						this._envService.openExternal(URI.parse(learnMoreLink));

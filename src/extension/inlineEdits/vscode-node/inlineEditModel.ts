@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ObservableGit } from '../../../platform/inlineEdits/common/observableGit';
 import { IStatelessNextEditProvider } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
@@ -34,7 +33,6 @@ export class InlineEditModel extends Disposable {
 	constructor(
 		private readonly _predictorId: string | undefined,
 		public readonly workspace: VSCodeWorkspace,
-		git: ObservableGit | undefined,
 		historyContextProvider: NesHistoryContextProvider,
 		public readonly diagnosticsBasedProvider: DiagnosticsNextEditProvider | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
@@ -43,7 +41,7 @@ export class InlineEditModel extends Disposable {
 	) {
 		super();
 
-		this.debugRecorder = this._register(new DebugRecorder(this.workspace, git));
+		this.debugRecorder = this._register(new DebugRecorder(this.workspace));
 
 		this._predictor = createNextEditProvider(this._predictorId, this._instantiationService);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
