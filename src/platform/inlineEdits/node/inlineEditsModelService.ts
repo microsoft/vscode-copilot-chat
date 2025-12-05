@@ -95,6 +95,8 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const tracer = this._tracer.sub('constructor');
 
+		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
+
 		this._modelsObs = derived((reader) => {
 			tracer.trace('computing models');
 			return this.aggregateModels({
@@ -123,8 +125,6 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}).recomputeInitiallyAndOnChange(this._store);
 
 		this.onModelListUpdated = Event.fromObservableLight(this._modelInfoObs);
-
-		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
 	}
 
 	get modelInfo(): vscode.InlineCompletionModelInfo | undefined {
@@ -162,17 +162,6 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			return;
 		}
 
-		// if user picks same as the default model, we should reset the user setting
-		// otherwise, update the model
-		const expectedDefaultModel = this._pickModel({ preferredModelName: 'none', models });
-		if (newPreferredModelId === expectedDefaultModel.modelName) {
-			this._tracer.trace(`New preferred model id ${newPreferredModelId} is the same as the default model, resetting user setting.`);
-			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, 'none');
-		} else {
-			this._tracer.trace(`New preferred model id ${newPreferredModelId} is different from the default model, updating user setting to ${newPreferredModelId}.`);
-			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, newPreferredModelId);
-		}
-
 		// if currently selected model is from exp config, then mark that model as undesired
 		if (currentPreferredModel.source === ModelSource.ExpConfig) {
 			await this._undesiredModelsManager.addUndesiredModelId(currentPreferredModel.modelName);
@@ -180,6 +169,19 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		if (this._undesiredModelsManager.isUndesiredModelId(newPreferredModelId)) {
 			await this._undesiredModelsManager.removeUndesiredModelId(newPreferredModelId);
+		}
+
+		// if user picks same as the default model, we should reset the user setting
+		// otherwise, update the model
+		const expectedDefaultModel = this._pickModel({ preferredModelName: 'none', models });
+		if (newPreferredModel.source === ModelSource.ExpConfig || // because exp-configured model already takes highest priority
+			(newPreferredModelId === expectedDefaultModel.modelName && !models.some(m => m.source === ModelSource.ExpConfig))
+		) {
+			this._tracer.trace(`New preferred model id ${newPreferredModelId} is the same as the default model, resetting user setting.`);
+			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, 'none');
+		} else {
+			this._tracer.trace(`New preferred model id ${newPreferredModelId} is different from the default model, updating user setting to ${newPreferredModelId}.`);
+			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, newPreferredModelId);
 		}
 	}
 
@@ -234,6 +236,10 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				if (!isPromptingStrategy(m.capabilities.promptStrategy)) {
 					return undefined;
 				}
+				if (models.some(knownModel => knownModel.modelName === m.name)) {
+					tracer.trace(`Fetched model ${m.name} already exists in the model list, skipping.`);
+					return undefined;
+				}
 				return {
 					modelName: m.name,
 					promptingStrategy: m.capabilities.promptStrategy,
@@ -263,9 +269,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	public selectedModelConfiguration(): ModelConfiguration {
 		const tracer = this._tracer.sub('selectedModelConfiguration');
-		const currentModel = this._currentModelObs.get();
-		tracer.trace(`Current model id: ${currentModel.modelName}`);
-		const model = this._modelsObs.get().find(m => m.modelName === currentModel.modelName);
+		const model = this._currentModelObs.get();
 		if (model) {
 			tracer.trace(`Selected model found: ${model.modelName}`);
 			return {
