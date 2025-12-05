@@ -274,6 +274,10 @@ export class InlineEditRequestLogContext {
 		this._endpointInfo = { url, modelName };
 	}
 
+	public get endpointInfo(): { url: string; modelName: string } | undefined {
+		return this._endpointInfo;
+	}
+
 	public _prompt: string | undefined = undefined;
 
 	get prompt(): string | undefined {

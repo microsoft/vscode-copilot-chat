@@ -23,6 +23,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IExtensionContribution } from '../../common/contributions';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
+import { ExpectedEditCaptureController } from './components/expectedEditCaptureController';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
@@ -48,7 +49,7 @@ export class InlineEditProviderFeatureContribution extends Disposable implements
 		const inlineEditProviderFeature = this._instantiationService.createInstance(InlineEditProviderFeature);
 		this._register(inlineEditProviderFeature.rolloutFeature());
 		this._register(inlineEditProviderFeature.registerProvider());
-		inlineEditProviderFeature.setContext();
+		this._register(inlineEditProviderFeature.setContext());
 
 		tracer.returns();
 	}
@@ -95,10 +96,16 @@ export class InlineEditProviderFeature {
 	) {
 	}
 
-	public setContext(): void {
+	public setContext(): IDisposable {
 		// TODO: this should be reactive to config changes
 		const enableEnhancedNotebookNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, this._expService);
 		commands.executeCommand('setContext', useEnhancedNotebookNESContextKey, enableEnhancedNotebookNES);
+
+		// Set context key for inline edits enabled state (used for keybindings)
+		return autorun((reader) => {
+			const enabled = this.inlineEditsEnabled.read(reader);
+			void commands.executeCommand('setContext', 'github.copilot.inlineEditsEnabled', enabled);
+		});
 	}
 
 	public rolloutFeature(): IDisposable {
@@ -147,7 +154,7 @@ export class InlineEditProviderFeature {
 				diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, git));
 			}
 
-			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider));
+			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, git, historyContextProvider, diagnosticsProvider));
 
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
 
@@ -164,7 +171,13 @@ export class InlineEditProviderFeature {
 
 			const telemetrySender = reader.store.add(this._instantiationService.createInstance(TelemetrySender));
 
-			const provider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender);
+			// Create the expected edit capture controller
+			const expectedEditCaptureController = reader.store.add(this._instantiationService.createInstance(
+				ExpectedEditCaptureController,
+				model.debugRecorder
+			));
+
+			const provider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender, expectedEditCaptureController);
 
 			const unificationStateValue = unificationState.read(reader);
 			let excludes = this._excludedProviders.read(reader);
@@ -210,6 +223,19 @@ export class InlineEditProviderFeature {
 				logContext.recordingBookmark = model.debugRecorder.createBookmark();
 				void commands.executeCommand(reportFeedbackCommandId, { logContext });
 			}));
+
+			// Register expected edit capture commands
+			reader.store.add(commands.registerCommand(captureExpectedStartCommandId, () => {
+				void expectedEditCaptureController.startCapture('manual');
+			}));
+
+			reader.store.add(commands.registerCommand(captureExpectedConfirmCommandId, () => {
+				void expectedEditCaptureController.confirmCapture();
+			}));
+
+			reader.store.add(commands.registerCommand(captureExpectedAbortCommandId, () => {
+				void expectedEditCaptureController.abortCapture();
+			}));
 		});
 	}
 }
@@ -220,3 +246,6 @@ export const learnMoreLink = 'https://aka.ms/vscode-nes';
 
 export const clearCacheCommandId = 'github.copilot.debug.inlineEdit.clearCache';
 export const reportNotebookNESIssueCommandId = 'github.copilot.debug.inlineEdit.reportNotebookNESIssue';
+const captureExpectedStartCommandId = 'github.copilot.nes.captureExpected.start';
+const captureExpectedConfirmCommandId = 'github.copilot.nes.captureExpected.confirm';
+const captureExpectedAbortCommandId = 'github.copilot.nes.captureExpected.abort';
