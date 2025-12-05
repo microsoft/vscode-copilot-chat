@@ -304,12 +304,13 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 
 			// Reverse the tool call rounds so they are in chronological order
 			toolCallRounds.reverse();
+			const isHistorical = !((toolCallResultInNextTurn || this.props.promptContext.isContinuation) && i === this.props.promptContext.history.length - 1);
 			turnComponents.push(<ChatToolCalls
 				flexGrow={1}
 				promptContext={this.props.promptContext}
 				toolCallRounds={toolCallRounds}
 				toolCallResults={toolCallResults}
-				isHistorical={!(toolCallResultInNextTurn && i === this.props.promptContext.history.length - 1)}
+				isHistorical={isHistorical}
 				truncateAt={this.props.maxToolResultLength}
 			/>);
 
