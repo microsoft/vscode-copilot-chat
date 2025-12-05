@@ -1006,7 +1006,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				this.AUTHORIZE,
 			);
 		} else if (needsPermissiveAuth && isOnNonDefaultBranch) {
-			const { baseRef, repoDefaultBranch } = baseBranchInfo;
+			const { baseRef, repoDefaultBranch } = baseBranchInfo!;
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
 			message += '\n\n' + this.CHOOSE_BRANCH_MESSAGE(baseRef, repoDefaultBranch);
 			buttons.unshift(
@@ -1033,7 +1033,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			);
 		} else if (isOnNonDefaultBranch) {
 			// User is on a non-default branch that exists on remote
-			const { baseRef, repoDefaultBranch } = baseBranchInfo;
+			const { baseRef, repoDefaultBranch } = baseBranchInfo!;
 			message += '\n\n' + this.CHOOSE_BRANCH_MESSAGE(baseRef, repoDefaultBranch);
 			buttons.unshift(
 				this.USE_CURRENT_BRANCH,
