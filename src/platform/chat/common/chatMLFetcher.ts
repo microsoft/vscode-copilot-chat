@@ -125,7 +125,7 @@ export class FetchStreamRecorder {
 		callback: FinishedCallback | undefined
 	) {
 		this.callback = async (text: string, index: number, delta: IResponseDelta): Promise<number | undefined> => {
-			if (this._firstTokenEmittedTime === undefined && (delta.text || delta.beginToolCalls || (typeof delta.thinking?.text === 'string' && delta.thinking?.text || delta.thinking?.text?.length) || delta.copilotToolCalls)) {
+			if (this._firstTokenEmittedTime === undefined && (delta.text || delta.beginToolCalls || (typeof delta.thinking?.text === 'string' && delta.thinking?.text || delta.thinking?.text?.length) || delta.copilotToolCalls || delta.copilotToolCallStreamUpdates)) {
 				this._firstTokenEmittedTime = Date.now();
 			}
 
