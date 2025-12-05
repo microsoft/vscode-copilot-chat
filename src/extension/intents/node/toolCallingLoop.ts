@@ -39,6 +39,7 @@ import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { PauseController } from './pauseController';
 import { cancelText, IToolCallIterationIncrease } from '../../prompt/common/specialRequestTypes';
+import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 
 
 export const enum ToolCallLimitBehavior {
@@ -437,8 +438,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		// the original thinking blocks to include in the resumed assistant message.
 		// Anthropic requires thinking blocks to precede tool_use blocks when thinking is enabled.
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
-		const isAnthropicModel = endpoint.family.startsWith('claude') || endpoint.family.startsWith('Anthropic');
-		const disableThinking = isContinuation && isAnthropicModel;
+		const disableThinking = isContinuation && isAnthropicFamily(endpoint);
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {

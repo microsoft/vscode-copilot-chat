@@ -32,6 +32,7 @@ import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
+import { isAnthropicFamily } from '../common/chatModelCapabilities';
 
 /**
  * The default processor for the stream format from CAPI
@@ -278,8 +279,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
-		const isAnthropicModel = this.family.startsWith('claude') || this.family.startsWith('Anthropic');
-		if (isAnthropicModel && !options.disableThinking) {
+		if (isAnthropicFamily(this) && !options.disableThinking) {
 			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
 			if (configuredBudget) {
 				// Cap thinking budget to Anthropic's recommended max (32000), and ensure it's less than max output tokens

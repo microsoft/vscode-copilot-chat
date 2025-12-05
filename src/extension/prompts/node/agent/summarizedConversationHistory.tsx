@@ -39,6 +39,7 @@ import { ChatToolCalls } from '../panel/toolCalling';
 import { AgentPrompt, AgentPromptProps, AgentUserMessage, AgentUserMessageCustomizations, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
 import { DefaultOpenAIKeepGoingReminder } from './openai/defaultOpenAIPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
+import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
 	readonly simpleMode?: boolean;
@@ -226,7 +227,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 
 			// For Anthropic models with thinking enabled, set the thinking on the first round
 			// so it gets rendered as the first thinking block after summarization
-			if ((this.props.endpoint.model.startsWith('claude') || this.props.endpoint.model.startsWith('Anthropic')) && thinkingForFirstRoundAfterSummarization && toolCallRounds.length > 0 && !toolCallRounds[0].thinking) {
+			if (isAnthropicFamily(this.props.endpoint) && thinkingForFirstRoundAfterSummarization && toolCallRounds.length > 0 && !toolCallRounds[0].thinking) {
 				toolCallRounds[0].thinking = thinkingForFirstRoundAfterSummarization;
 			}
 
@@ -718,8 +719,7 @@ export class SummarizedConversationHistoryPropsBuilder {
 		// For Anthropic models with thinking enabled, find the last assistant message with thinking
 		// from all rounds being summarized (both current toolCallRounds and history).
 		// This thinking will be used as the first thinking block after summarization.
-		const isAnthropic = props.endpoint.model.startsWith('claude') || props.endpoint.model.startsWith('Anthropic');
-		const summarizedThinking = isAnthropic ? this.findLastThinking(props) : undefined;
+		const summarizedThinking = isAnthropicFamily(props.endpoint) ? this.findLastThinking(props) : undefined;
 		const promptContext = {
 			...props.promptContext,
 			toolCallRounds,
