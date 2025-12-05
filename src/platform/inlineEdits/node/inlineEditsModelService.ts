@@ -95,6 +95,8 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const tracer = this._tracer.sub('constructor');
 
+		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
+
 		this._modelsObs = derived((reader) => {
 			tracer.trace('computing models');
 			return this.aggregateModels({
@@ -123,8 +125,6 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}).recomputeInitiallyAndOnChange(this._store);
 
 		this.onModelListUpdated = Event.fromObservableLight(this._modelInfoObs);
-
-		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
 	}
 
 	get modelInfo(): vscode.InlineCompletionModelInfo | undefined {
