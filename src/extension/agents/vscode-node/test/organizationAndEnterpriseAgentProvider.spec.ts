@@ -888,7 +888,7 @@ Test prompt
 			callCount++;
 			if (callCount === 1) {
 				// Sign out user after first call
-				mockOctoKitService.getCurrentAuthedUser = async () => undefined;
+				mockOctoKitService.getCurrentAuthedUser = async () => undefined as any;
 			}
 			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options);
 		};
