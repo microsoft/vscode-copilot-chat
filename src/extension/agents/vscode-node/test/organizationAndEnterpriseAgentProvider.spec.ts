@@ -873,4 +873,30 @@ Test prompt
 
 		assert.equal(content, expectedContent);
 	});
+
+	test('aborts fetch if user signs out during process', async () => {
+		const provider = createProvider();
+
+		// Setup multiple organizations to ensure we have multiple steps
+		mockOctoKitService.setUserOrganizations(['org1', 'org2']);
+		mockOctoKitService.getOrganizationRepositories = async (org) => ['repo'];
+
+		// Mock getCustomAgents to simulate sign out after first org
+		let callCount = 0;
+		const originalGetCustomAgents = mockOctoKitService.getCustomAgents;
+		mockOctoKitService.getCustomAgents = async (owner, repo, options) => {
+			callCount++;
+			if (callCount === 1) {
+				// Sign out user after first call
+				mockOctoKitService.getCurrentAuthedUser = async () => undefined;
+			}
+			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options);
+		};
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		// Should have aborted after first org, so second org shouldn't be processed
+		assert.equal(callCount, 1);
+	});
 });
