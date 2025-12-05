@@ -24,6 +24,12 @@ class MockAuthenticationService implements IAuthenticationService {
 	readonly onDidAuthenticationChange = this._onDidAuthenticationChange.event;
 	readonly onDidAccessTokenChange = new Emitter<void>().event;
 	readonly anyGitHubSession: vscode.AuthenticationSession | undefined;
+
+	readonly isMinimalMode = false;
+	readonly permissiveGitHubSession: vscode.AuthenticationSession | undefined;
+	speculativeDecodingEndpointToken: string | undefined;
+	readonly onDidAdoAuthenticationChange = new Emitter<void>().event;
+
 	async getAnyGitHubSession(options?: vscode.AuthenticationGetSessionOptions): Promise<vscode.AuthenticationSession | undefined> {
 		return undefined;
 	}
@@ -32,6 +38,14 @@ class MockAuthenticationService implements IAuthenticationService {
 	}
 	readonly copilotToken = undefined;
 	async getCopilotToken(forceRefresh?: boolean): Promise<any> {
+		return undefined;
+	}
+
+	resetCopilotToken(httpError?: number): void {
+		// no-op
+	}
+
+	async getAdoAccessTokenBase64(options?: vscode.AuthenticationGetSessionOptions): Promise<string | undefined> {
 		return undefined;
 	}
 
