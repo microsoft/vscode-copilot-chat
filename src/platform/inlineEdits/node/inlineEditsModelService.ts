@@ -174,7 +174,9 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		// if user picks same as the default model, we should reset the user setting
 		// otherwise, update the model
 		const expectedDefaultModel = this._pickModel({ preferredModelName: 'none', models });
-		if (newPreferredModelId === expectedDefaultModel.modelName && !models.some(m => m.source === ModelSource.ExpConfig)) {
+		if (newPreferredModel.source === ModelSource.ExpConfig || // because exp-configured model already takes highest priority
+			(newPreferredModelId === expectedDefaultModel.modelName && !models.some(m => m.source === ModelSource.ExpConfig))
+		) {
 			this._tracer.trace(`New preferred model id ${newPreferredModelId} is the same as the default model, resetting user setting.`);
 			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, 'none');
 		} else {
