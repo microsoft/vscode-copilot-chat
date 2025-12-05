@@ -5,10 +5,13 @@
 
 import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
+import { platform, PlatformToString } from '../../../util/vs/base/common/platform';
 import { isObject } from '../../../util/vs/base/common/types';
+import { URI } from '../../../util/vs/base/common/uri';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
+import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { packageJson } from '../../env/common/packagejson';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
@@ -147,6 +150,54 @@ class DevDeviceIdFilterProvider implements IExperimentationFilterProvider {
 	}
 }
 
+class PlatformAndReleaseDateFilterProvider implements IExperimentationFilterProvider {
+	private _releaseDate: string | undefined;
+
+	constructor(
+		envService: IEnvService,
+		fileSystemService: IFileSystemService,
+		private _logService: ILogService
+	) {
+		this._initReleaseDate(envService, fileSystemService);
+	}
+
+	private async _initReleaseDate(envService: IEnvService, fileSystemService: IFileSystemService): Promise<void> {
+		try {
+			const productJsonUri = URI.joinPath(URI.file(envService.appRoot), 'product.json');
+			const content = await fileSystemService.readFile(productJsonUri);
+			const product = JSON.parse(new TextDecoder().decode(content));
+			this._releaseDate = this._formatReleaseDate(product.date ?? '');
+		} catch {
+			this._logService.warn(`[PlatformAndReleaseDateFilterProvider]::_initReleaseDate Failed to read product.json for release date`);
+		}
+	}
+
+	private _formatReleaseDate(iso: string): string {
+		if (!iso) {
+			return '';
+		}
+		const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2})/.exec(iso);
+		if (!match) {
+			return '';
+		}
+		return match.slice(1, 5).join('');
+	}
+
+	getFilters(): Map<string, string> {
+		const filters = new Map<string, string>();
+
+		const platformString = PlatformToString(platform);
+		filters.set('X-VSCode-Platform', platformString);
+
+		if (this._releaseDate) {
+			filters.set('X-VSCode-ReleaseDate', this._releaseDate);
+		}
+
+		this._logService.trace(`[PlatformAndReleaseDateFilterProvider]::getFilters Filters: ${JSON.stringify(Array.from(filters.entries()))}`);
+		return filters;
+	}
+}
+
 export class MicrosoftExperimentationService extends BaseExperimentationService {
 	constructor(
 		@ITelemetryService telemetryService: ITelemetryService,
@@ -155,7 +206,8 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IFetcherService fetcherService: IFetcherService,
-		@ILogService logService: ILogService
+		@ILogService logService: ILogService,
+		@IFileSystemService fileSystemService: IFileSystemService
 	) {
 
 		const id = context.extension.id;
@@ -176,6 +228,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
 				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService),
 				new DevDeviceIdFilterProvider(vscode.env.devDeviceId),
+				new PlatformAndReleaseDateFilterProvider(envService, fileSystemService, logService),
 			);
 		};
 
