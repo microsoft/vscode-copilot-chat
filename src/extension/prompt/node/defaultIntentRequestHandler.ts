@@ -35,7 +35,7 @@ import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEdi
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { PauseController } from '../../intents/node/pauseController';
-import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
+import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallExecutionError, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
@@ -45,7 +45,7 @@ import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualT
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
-import { isToolCallLimitCancellation } from '../common/specialRequestTypes';
+import { IContinueOnErrorConfirmation, isToolCallLimitCancellation } from '../common/specialRequestTypes';
 import { ChatTelemetry, ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { IntentInvocationMetadata } from './conversation';
 import { IDocumentContext } from './documentContext';
@@ -155,6 +155,19 @@ export class DefaultIntentRequestHandler {
 				return CanceledResult;
 			} else if (err instanceof EmptyPromptError) {
 				return {};
+			} else if (err instanceof ToolCallExecutionError) {
+				this._logService.error(err);
+				const errorMessage = err.message;
+				const chatResult = {
+					errorDetails: {
+						message: errorMessage,
+						confirmationButtons: [
+							{ data: { copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation, label: l10n.t('Try Again') },
+						]
+					}
+				};
+				this.turn.setResponse(TurnStatus.Error, { message: errorMessage, type: 'meta' }, undefined, chatResult);
+				return chatResult;
 			}
 
 			this._logService.error(err);
