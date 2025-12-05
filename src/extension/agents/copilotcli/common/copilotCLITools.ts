@@ -384,12 +384,14 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
 					const editedUris = getAffectedUrisForEditTool(toolCall);
 					if (isCopilotCliEditToolCall(toolCall) && editId && editedUris.length > 0) {
+						responsePart.presentation = 'hidden';
+						currentResponseParts.push(responsePart);
 						for (const uri of editedUris) {
 							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
 							currentResponseParts.push(new ChatResponseCodeblockUriPart(uri, true, editId));
-							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
 							currentResponseParts.push(new ChatResponseTextEditPart(uri, []));
 							currentResponseParts.push(new ChatResponseTextEditPart(uri, true));
+							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
 						}
 					} else {
 						currentResponseParts.push(responsePart);
