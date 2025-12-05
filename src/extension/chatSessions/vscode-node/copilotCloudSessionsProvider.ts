@@ -151,12 +151,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly PUSH_BRANCH = vscode.l10n.t('Push Branch');
 	private readonly DELEGATE = vscode.l10n.t('Delegate');
 	private readonly CANCEL = vscode.l10n.t('Cancel');
+	private readonly USE_CURRENT_BRANCH = vscode.l10n.t('Use Current Branch');
+	private readonly USE_DEFAULT_BRANCH = vscode.l10n.t('Use Default Branch');
 
 	// Messages
 	private readonly BASE_MESSAGE = vscode.l10n.t('Cloud agent works asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
 	private readonly AUTHORIZE_MESSAGE = vscode.l10n.t('Cloud agent requires elevated GitHub access to proceed.');
 	private readonly COMMIT_MESSAGE = vscode.l10n.t('This workspace has uncommitted changes. Should these changes be pushed and included in cloud agent\'s work?');
 	private readonly PUSH_BRANCH_MESSAGE = (baseRef: string, defaultBranch: string) => vscode.l10n.t('Push your currently checked out branch `{0}`, or start from the default branch `{1}`?', baseRef, defaultBranch);
+	private readonly CHOOSE_BRANCH_MESSAGE = (baseRef: string, defaultBranch: string) => vscode.l10n.t('Continue on your currently checked out branch `{0}`, or start from the default branch `{1}`?', baseRef, defaultBranch);
 
 	// Workspace storage keys
 	private readonly WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
@@ -892,11 +895,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
+		// Determine if user explicitly chose to use the default branch
+		const useDefaultBranch = selection.includes(this.USE_DEFAULT_BRANCH.toUpperCase());
+
 		const base_ref: string = await (async () => {
 			const res = await this.checkBaseBranchPresentOnRemote();
 			if (!res) {
 				// Unexpected
 				throw new Error(vscode.l10n.t('Repo base branch is not detected on remote. Push your branch and try again.'));
+			}
+			// If user explicitly chose default branch, use it
+			if (useDefaultBranch) {
+				return res.repoDefaultBranch;
 			}
 			return (res?.missingOnRemote || !res?.baseRef) ? res.repoDefaultBranch : res?.baseRef;
 		})();
@@ -978,6 +988,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const needsPermissiveAuth = !this._authenticationService.permissiveGitHubSession;
 		const hasUncommittedChanges = await this.detectedUncommittedChanges();
 		const baseBranchInfo = await this.checkBaseBranchPresentOnRemote();
+		const isOnNonDefaultBranch = baseBranchInfo && !baseBranchInfo.missingOnRemote && baseBranchInfo.baseRef !== baseBranchInfo.repoDefaultBranch;
 
 		if (needsPermissiveAuth && hasUncommittedChanges) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
@@ -993,6 +1004,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			buttons.unshift(
 				vscode.l10n.t('{0} and {1}', this.AUTHORIZE, this.PUSH_BRANCH),
 				this.AUTHORIZE,
+			);
+		} else if (needsPermissiveAuth && isOnNonDefaultBranch) {
+			const { baseRef, repoDefaultBranch } = baseBranchInfo;
+			message += '\n\n' + this.AUTHORIZE_MESSAGE;
+			message += '\n\n' + this.CHOOSE_BRANCH_MESSAGE(baseRef, repoDefaultBranch);
+			buttons.unshift(
+				vscode.l10n.t('{0} and {1}', this.AUTHORIZE, this.USE_CURRENT_BRANCH),
+				vscode.l10n.t('{0} and {1}', this.AUTHORIZE, this.USE_DEFAULT_BRANCH),
 			);
 		} else if (needsPermissiveAuth) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
@@ -1011,6 +1030,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			buttons.unshift(
 				vscode.l10n.t('{0} and {1}', this.PUSH_BRANCH, this.DELEGATE),
 				this.DELEGATE,
+			);
+		} else if (isOnNonDefaultBranch) {
+			// User is on a non-default branch that exists on remote
+			const { baseRef, repoDefaultBranch } = baseBranchInfo;
+			message += '\n\n' + this.CHOOSE_BRANCH_MESSAGE(baseRef, repoDefaultBranch);
+			buttons.unshift(
+				this.USE_CURRENT_BRANCH,
+				this.USE_DEFAULT_BRANCH,
 			);
 		}
 
