@@ -20,7 +20,7 @@ export class BaseTelemetryService implements ITelemetryService {
 	private _disposables: IDisposable[] = [];
 	constructor(
 		protected readonly _tokenStore: ICopilotTokenStore,
-		private readonly _capiClientServiece: ICAPIClientService,
+		private readonly _capiClientService: ICAPIClientService,
 		protected readonly _microsoftTelemetrySender: BaseMsftTelemetrySender,
 		protected readonly _ghTelemetrySender: BaseGHTelemetrySender,
 	) {
@@ -144,7 +144,7 @@ export class BaseTelemetryService implements ITelemetryService {
 				value += `;${assignment}`;
 			}
 		}
-		this._capiClientServiece.abExpContext = value;
+		this._capiClientService.abExpContext = value;
 		this._sharedProperties['abexp.assignmentcontext'] = value;
 	}
 
