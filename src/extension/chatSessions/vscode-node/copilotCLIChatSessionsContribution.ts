@@ -40,6 +40,23 @@ const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
 const ISOLATION_OPTION_ID = 'isolation';
 
+const disabledIsolation: Readonly<vscode.ChatSessionProviderOptionItem> = {
+	id: 'disabled',
+	name: 'Workspace',
+	description: vscode.l10n.t('Use the current workspace for this session')
+};
+const disabledIsolationLocked: Readonly<vscode.ChatSessionProviderOptionItem> = { ...disabledIsolation, locked: true };
+
+function getLockedIsolationOption(name: string): vscode.ChatSessionProviderOptionItem {
+	return {
+		id: 'enabled',
+		name,
+		description: vscode.l10n.t('Using worktree for this session'),
+		locked: true,
+		icon: new vscode.ThemeIcon('git-branch')
+	};
+}
+
 const UncommittedChangesStep = 'uncommitted-changes';
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CLIConfirmationMetadata };
 interface CLIConfirmationMetadata {
@@ -375,15 +392,14 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			// For existing sessions with a worktree, show the worktree branch name as a locked option
 			const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(copilotcliSessionId);
 			if (worktreeRelativePath) {
-				options[ISOLATION_OPTION_ID] = {
-					id: 'enabled',
-					name: worktreeRelativePath,
-					description: vscode.l10n.t('Using worktree for this session'),
-					locked: true,
-					icon: new vscode.ThemeIcon('git-branch')
-				};
+				options[ISOLATION_OPTION_ID] = getLockedIsolationOption(worktreeRelativePath);
+			} else {
+				options[ISOLATION_OPTION_ID] = disabledIsolationLocked;
 			}
+		} else if (existingSession) {
+			options[ISOLATION_OPTION_ID] = disabledIsolationLocked;
 		}
+
 		const history = existingSession?.object?.getChatHistory() || [];
 		existingSession?.dispose();
 		// Always keep track of this in memory.
@@ -401,7 +417,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
 		const isolationItems = [
 			{ id: 'enabled', name: 'Worktree', description: vscode.l10n.t('Use a git worktree for this session') },
-			{ id: 'disabled', name: 'Workspace', description: vscode.l10n.t('Use the current workspace for this session') }
+			disabledIsolation
 		];
 
 		const [models, agents] = await Promise.all([
@@ -414,7 +430,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			{ id: COPILOT_CLI_DEFAULT_AGENT_ID, name: l10n.t('Agent') }
 		];
 		agents.forEach(agent => {
-			agentItems.push({ id: agent.name, name: agent.displayName || agent.description || agent.name, description: agent.description });
+			agentItems.push({ id: agent.name, name: agent.displayName || agent.name, description: agent.description });
 		});
 
 		const options = {
@@ -561,16 +577,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// For existing sessions with a worktree, show the worktree branch name as a locked option
 				const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.object.sessionId);
 				if (worktreeRelativePath) {
-					changes.push({
-						optionId: ISOLATION_OPTION_ID, value: {
-							id: 'enabled',
-							name: worktreeRelativePath,
-							description: vscode.l10n.t('Using worktree for this session'),
-							locked: true,
-							icon: new vscode.ThemeIcon('git-branch')
-						}
-					});
+					changes.push({ optionId: ISOLATION_OPTION_ID, value: getLockedIsolationOption(worktreeRelativePath) });
+					this.contentProvider.notifySessionOptionsChange(resource, changes);
 				}
+			} else if (isUntitled && (!session.object.options.isolationEnabled || !this.worktreeManager.isSupported())) {
+				const changes: { optionId: string; value: vscode.ChatSessionProviderOptionItem }[] = [];
+				changes.push({ optionId: ISOLATION_OPTION_ID, value: disabledIsolationLocked });
 				this.contentProvider.notifySessionOptionsChange(resource, changes);
 			}
 
@@ -1000,7 +1012,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				});
 		}
 
-		stream.markdown(vscode.l10n.t('{0} agent has begun working on your request. Follow its progress in the Agents View.', 'Background Agent'));
+		stream.markdown(vscode.l10n.t('{0} has begun working on your request. Follow its progress in the Agents View.', 'Background Agent'));
 
 		return {};
 	}
@@ -1027,7 +1039,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		session.addUserMessage(userPrompt);
 
 		// Add assistant message event with embedded PR metadata
-		const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri.toString()}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
+		const assistantMessage = `Cloud Agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri.toString()}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
 		session.addUserAssistantMessage(assistantMessage);
 	}
 }
@@ -1126,12 +1138,16 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		await vscode.commands.executeCommand('_workbench.openMultiDiffEditor', { multiDiffSourceUri, title, resources });
 	}));
 
-	const applyChanges = async (sessionItemResource?: vscode.Uri) => {
-		if (!sessionItemResource) {
+	const applyChanges = async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		const resource = sessionItemOrResource instanceof vscode.Uri
+			? sessionItemOrResource
+			: sessionItemOrResource?.resource;
+
+		if (!resource) {
 			return;
 		}
 
-		const sessionId = SessionIdForCLI.parse(sessionItemResource);
+		const sessionId = SessionIdForCLI.parse(resource);
 		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
 
 		if (!sessionWorktree) {

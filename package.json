@@ -3325,7 +3325,7 @@
 							"null"
 						],
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
-						"minimum": 1024,
+						"minimum": 0,
 						"maximum": 32000,
 						"tags": [
 							"experimental",
@@ -4553,6 +4553,11 @@
 			],
 			"chat/chatSessions": [
 				{
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+					"when": "chatSessionType == copilotcli",
+					"group": "inline@0"
+				},
+				{
 					"command": "github.copilot.cli.sessions.resumeInTerminal",
 					"when": "chatSessionType == copilotcli",
 					"group": "inline@1"
@@ -4930,7 +4935,7 @@
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
 				"order": 3,
 				"description": "The Claude Code Agent works on your local machine",
-				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
+				"when": "config.github.copilot.chat.claudeCode.enabled",
 				"canDelegate": false,
 				"capabilities": {
 					"supportsFileAttachments": true
@@ -5193,7 +5198,7 @@
 		"yargs": "^17.7.2"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-code": "^1.0.120",
+		"@anthropic-ai/claude-agent-sdk": "0.1.55",
 		"@anthropic-ai/sdk": "^0.68.0",
 		"@github/copilot": "^0.0.366",
 		"@google/genai": "^1.22.0",
