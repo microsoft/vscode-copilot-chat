@@ -507,7 +507,7 @@ export async function simulateEditingScenario(
 			{
 				// TODO@Alex: extract to host object
 				const response = requestHandler.conversation.getLatestTurn()?.getMetadata(CopilotInteractiveEditorResponse);
-				intent = (response && response.kind === 'ok' ? response.promptQuery.intent : undefined);
+				intent = (response ? response.promptQuery.intent : undefined);
 			}
 			annotations = annotations.concat(requestHandler.conversation.getLatestTurn()?.getMetadata(InteractionOutcome)?.annotations ?? []);
 
