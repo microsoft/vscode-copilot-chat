@@ -40,7 +40,6 @@ import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IToolCall } from '../../prompt/common/intents';
 import { ToolCallRound } from '../../prompt/common/toolCallRound';
 import { ChatTelemetryBuilder, InlineChatTelemetry } from '../../prompt/node/chatParticipantTelemetry';
-import { IntentInvocationMetadata } from '../../prompt/node/conversation';
 import { DefaultIntentRequestHandler } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent, NoopReplyInterpreter, ReplyInterpreterMetaData, TelemetryData } from '../../prompt/node/intents';
@@ -188,11 +187,9 @@ export class InlineChatIntent implements IIntent {
 		assertType(documentContext);
 
 		const editSurvivalTracker = this._editSurvivalTrackerService.initialize(request.location2.document);
-		let didSeeAnyEdit = false;
 
 		stream = ChatResponseStreamImpl.spy(stream, part => {
 			if (part instanceof ChatResponseTextEditPart) {
-				didSeeAnyEdit = true;
 				editSurvivalTracker.collectAIEdits(part.edits);
 			}
 		});
@@ -242,18 +239,11 @@ export class InlineChatIntent implements IIntent {
 
 		// store metadata for telemetry sending
 		const turn = conversation.getLatestTurn();
-		turn.setMetadata(new InteractionOutcome(didSeeAnyEdit ? 'inlineEdit' : 'none', []));
 		turn.setMetadata(new CopilotInteractiveEditorResponse(
-			'ok', undefined,
+			undefined,
 			{ ...documentContext, query: request.prompt, intent: this },
 			result.telemetry.telemetryMessageId, result.telemetry, editSurvivalTracker
 		));
-		turn.setMetadata(new IntentInvocationMetadata({ // UGLY fake intent invocation
-			location: ChatLocation.Editor,
-			intent: this,
-			endpoint,
-			buildPrompt: () => { throw new Error(); },
-		}));
 
 		if (result.lastResponse.type !== ChatFetchResponseType.Success) {
 			const details = getErrorDetailsFromChatFetchError(result.lastResponse, await this._endpointProvider.getChatEndpoint('copilot-base'), (await this._authenticationService.getCopilotToken()).copilotPlan);
