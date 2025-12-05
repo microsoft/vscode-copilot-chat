@@ -1157,6 +1157,6 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	};
 
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', applyChanges));
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges.merge', applyChanges));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply', applyChanges));
 	return disposableStore;
 }

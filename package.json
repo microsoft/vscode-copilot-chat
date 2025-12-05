@@ -2370,8 +2370,8 @@
 				"category": "GitHub Copilot"
 			},
 			{
-				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.merge",
-				"title": "%github.copilot.chat.applyCopilotCLIAgentSessionChanges.merge%",
+				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
+				"title": "%github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply%",
 				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
 			}
@@ -4011,7 +4011,7 @@
 			],
 			"chat/input/editing/sessionToolbar": [
 				{
-					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.merge",
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 					"when": "chatSessionType == copilotcli",
 					"group": "navigation@0"
 				}
@@ -4248,7 +4248,7 @@
 					"when": "false"
 				},
 				{
-					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.merge",
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 					"when": "false"
 				},
 				{
