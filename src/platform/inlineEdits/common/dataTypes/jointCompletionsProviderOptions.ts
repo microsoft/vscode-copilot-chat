@@ -6,3 +6,9 @@
 export enum JointCompletionsProviderStrategy {
 	Regular = 'regular',
 }
+
+export enum JointCompletionsProviderTriggerChangeStrategy {
+	NoTriggerOnRequestInFlight = 'noTriggerOnRequestInFlight',
+	NoTriggerOnCompletionsRequestInFlight = 'noTriggerOnCompletionsRequestInFlight',
+	AlwaysTrigger = 'alwaysTrigger',
+}

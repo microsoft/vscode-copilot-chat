@@ -10,7 +10,7 @@ import { IAuthenticationService, IExperimentationService } from '../../../lib/no
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { JointCompletionsProviderStrategy } from '../../../platform/inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
+import { JointCompletionsProviderStrategy, JointCompletionsProviderTriggerChangeStrategy } from '../../../platform/inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../platform/inlineEdits/common/observableGit';
 import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
@@ -243,7 +243,21 @@ type LastNesSuggestion = {
 
 class JointCompletionsProvider extends Disposable implements vscode.InlineCompletionItemProvider {
 
-	public onDidChange?: vscode.Event<void> | undefined;
+	private readonly _onDidChangeEmitter = this._register(new vscode.EventEmitter<void>());
+	public readonly onDidChange?: vscode.Event<void> | undefined = this._onDidChangeEmitter.event;
+
+	private _requestsInFlightCount = 0;
+	private _completionsRequestsInFlightCount = 0;
+
+	private get _isRequestInFlight(): boolean {
+		return this._requestsInFlightCount > 0;
+	}
+
+	private get _isCompletionsRequestInFlight(): boolean {
+		return this._completionsRequestsInFlightCount > 0;
+	}
+
+	private _tracer = createTracer(['NES', 'JointCompletionsProvider'], (msg) => this._logService.trace(msg));
 
 	//#region Model picker
 	public readonly onDidChangeModelInfo = this._inlineEditProvider?.onDidChangeModelInfo;
@@ -261,7 +275,34 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
-		this.onDidChange = _inlineEditProvider?.onDidChange;
+
+		const disp = this._inlineEditProvider?.onDidChange?.(() => {
+			const strategy = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderTriggerChangeStrategy, this._expService);
+			switch (strategy) {
+				case JointCompletionsProviderTriggerChangeStrategy.AlwaysTrigger:
+					break;
+				case JointCompletionsProviderTriggerChangeStrategy.NoTriggerOnRequestInFlight:
+					if (this._isRequestInFlight) {
+						this._tracer.trace('Skipping onDidChange event firing because request is in flight');
+						return;
+					}
+					break;
+				case JointCompletionsProviderTriggerChangeStrategy.NoTriggerOnCompletionsRequestInFlight:
+					if (this._isCompletionsRequestInFlight) {
+						this._tracer.trace('Skipping onDidChange event firing because completions request is in flight');
+						return;
+					}
+					break;
+				default:
+					assertNever(strategy);
+			}
+			this._tracer.trace('Firing onDidChange event');
+			this._onDidChangeEmitter.fire();
+		});
+		if (disp) {
+			this._register(disp);
+		}
+
 		softAssert(
 			_completionsProvider?.onDidChange === undefined,
 			'CompletionsProvider does not implement onDidChange'
@@ -269,7 +310,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	public async provideInlineCompletionItems(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken): Promise<SingularCompletionList | undefined> {
-		const tracer = createTracer(['JointCompletionsProvider', shortenOpportunityId(context.requestUuid), 'provideInlineCompletionItems'], (msg) => this._logService.trace(msg));
+		const tracer = this._tracer.sub([shortenOpportunityId(context.requestUuid), 'provideInlineCompletionItems']);
 
 		const strategy = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderStrategy, this._expService);
 
@@ -289,6 +330,9 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		const invocationId = ++this.provideInlineCompletionItemsInvocationCount;
 		const completionsCts = new CancellationTokenSource(token);
 		const nesCts = new CancellationTokenSource(token);
+
+		this._requestsInFlightCount++;
+		tracer.trace(`invocation #${invocationId} started; request in flight: true`);
 
 		let saveLastNesSuggestion: null | LastNesSuggestion = null;
 		try {
@@ -329,6 +373,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 
 			return list;
 		} finally {
+			this._requestsInFlightCount--;
 
 			// Only save the last NES suggestion if this is the latest invocation
 			if (invocationId === this.provideInlineCompletionItemsInvocationCount) {
@@ -465,13 +510,22 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	private _invokeCompletionsProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
 		let completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined;
 		if (this._completionsProvider) {
-			tracer.trace(`- requesting completions provideInlineCompletionItems`);
-			completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, tokens.completionsCts.token);
-			completionsP.then((completionsR) => {
-				tracer.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
-			}).catch((e) => {
-				tracer.trace(`completions provider errored after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
-			});
+			this._completionsRequestsInFlightCount++;
+			try {
+				tracer.trace(`- requesting completions provideInlineCompletionItems`);
+				completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, tokens.completionsCts.token);
+				completionsP.then((completionsR) => {
+					tracer.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
+				}).catch((e) => {
+					tracer.trace(`completions provider errored after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+				}).finally(() => {
+					this._completionsRequestsInFlightCount--;
+				});
+			} catch (e) {
+				this._completionsRequestsInFlightCount--;
+				tracer.trace(`completions provider threw synchronously after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+				throw e;
+			}
 		} else {
 			tracer.trace(`- no completions provider`);
 			completionsP = undefined;
