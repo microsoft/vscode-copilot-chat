@@ -111,6 +111,9 @@ export interface IEndpointBody {
 		type: 'enabled' | 'disabled';
 		budget_tokens?: number;
 	};
+
+	/** ChatCompletions API for Anthropic models */
+	thinking_budget?: number;
 }
 
 export interface IEndpointFetchOptions {

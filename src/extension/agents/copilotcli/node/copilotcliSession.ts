@@ -18,6 +18,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
+import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
 
@@ -37,6 +38,7 @@ export interface ICopilotCLISession extends IDisposable {
 		readonly isolationEnabled: boolean;
 		readonly workingDirectory?: Uri;
 	};
+	readonly pendingPrompt: string | undefined;
 	attachPermissionHandler(handler: PermissionHandler): IDisposable;
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
 	handleRequest(
@@ -81,7 +83,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		};
 	}
 	private _lastUsedModel: string | undefined;
-
+	private _pendingPrompt: string | undefined;
+	public get pendingPrompt(): string | undefined {
+		return this._pendingPrompt;
+	}
 	constructor(
 		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
@@ -90,6 +95,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
+
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -124,6 +131,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
+		this._pendingPrompt = prompt;
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
 
@@ -256,6 +264,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this.logService.error(`[CopilotCLISession] Invoking session (error) ${this.sessionId}`, error);
 			this._stream?.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 		} finally {
+			this._pendingPrompt = undefined;
 			disposables.dispose();
 		}
 	}
@@ -280,7 +289,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const getVSCodeRequestId = (sdkRequestId: string) => {
 			return this.copilotCLISDK.getRequestId(sdkRequestId);
 		};
-		return buildChatHistoryFromEvents(events, getVSCodeRequestId);
+		return buildChatHistoryFromEvents(this.sessionId, events, getVSCodeRequestId, this._delegationSummaryService);
 	}
 
 	private async requestPermission(

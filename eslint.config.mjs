@@ -277,6 +277,7 @@ export default tseslint.config(
 					string: 'Generate with Copilot'
 				}
 			],
+			'local/no-nls-localize': ['error'],
 		}
 	},
 	{

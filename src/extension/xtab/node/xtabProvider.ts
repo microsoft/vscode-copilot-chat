@@ -6,7 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { ConfigKey, ExperimentBasedConfig, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { createProxyXtabEndpoint } from '../../../platform/endpoint/node/proxyXtabEndpoint';
@@ -16,8 +16,9 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { LanguageContextLanguages, LanguageContextOptions, PromptingStrategy } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
+import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
 import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
@@ -28,7 +29,6 @@ import { OptionalChatRequestParams, Prediction } from '../../../platform/network
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ISimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceFilter } from '../../../util/common/async';
 import * as errors from '../../../util/common/errors';
@@ -45,8 +45,9 @@ import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange'
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Position as VscodePosition } from '../../../vscodeTypes';
-import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
+import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
+import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
@@ -76,13 +77,14 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
 
-	private readonly delayer: Delayer;
+	private readonly userInteractionMonitor: UserInteractionMonitor;
 
 	private forceUseDefaultModel: boolean = false;
 
 	private nextCursorPredictor: XtabNextCursorPredictor;
 
 	constructor(
+		@IInlineEditsModelService private readonly modelService: IInlineEditsModelService,
 		@ISimulationTestContext private readonly simulationCtx: ISimulationTestContext,
 		@IInstantiationService private readonly instaService: IInstantiationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -92,18 +94,17 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
-		@ITelemetryService private readonly telemetryService: ITelemetryService
 	) {
-		this.delayer = new Delayer(this.configService, this.expService);
+		this.userInteractionMonitor = new UserInteractionMonitor(this.configService, this.expService);
 		this.nextCursorPredictor = this.instaService.createInstance(XtabNextCursorPredictor, XtabProvider.computeTokens);
 	}
 
 	public handleAcceptance(): void {
-		this.delayer.handleAcceptance();
+		this.userInteractionMonitor.handleAcceptance();
 	}
 
 	public handleRejection(): void {
-		this.delayer.handleRejection();
+		this.userInteractionMonitor.handleRejection();
 	}
 
 	public provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
@@ -163,7 +164,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return StatelessNextEditResult.noEdit(new NoNextEditReason.ActiveDocumentHasNoEdits(), telemetry);
 			}
 
-			const delaySession = this.delayer.createDelaySession(request.providerRequestStartDateTime);
+			const delaySession = this.userInteractionMonitor.createDelaySession(request.providerRequestStartDateTime);
 
 			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetry, RetryState.NotRetrying);
 
@@ -269,7 +270,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			promptOptions,
 			XtabProvider.computeTokens,
-			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: false } }
+			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness } }
 		);
 
 		if (taggedCurrentFileContentResult.isError()) {
@@ -279,6 +280,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const { taggedCurrentDocLines, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
+
+		const aggressivenessLevel = this.userInteractionMonitor.getAggressivenessLevel();
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
@@ -304,6 +307,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			langCtx,
+			aggressivenessLevel,
 			XtabProvider.computeTokens,
 			promptOptions
 		);
@@ -527,7 +531,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					if (!firstTokenReceived.isSettled) {
 						firstTokenReceived.complete();
 					}
-					if (ttft === undefined) {
+					if (ttft === undefined && text !== '') {
 						ttft = fetchRequestStopWatch.elapsed();
 						logContext.addLog(`TTFT ${ttft} ms`);
 					}
@@ -972,10 +976,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private determineModelConfiguration(activeDocument: StatelessNextEditDocument): ModelConfig {
 		if (this.forceUseDefaultModel) {
-			return {
+			const defaultOptions = {
 				modelName: undefined,
 				...xtabPromptOptions.DEFAULT_OPTIONS,
 			};
+			const defaultModelConfig = this.modelService.defaultModelConfiguration();
+			return XtabProvider.overrideModelConfig(defaultOptions, defaultModelConfig);
 		}
 
 		const sourcedModelConfig = {
@@ -999,6 +1005,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				enabledLanguages: this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabledLanguages),
 				enabledDiagnostics: this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.DiagnosticsContextProvider, this.expService),
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
+				traitPosition: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextTraitsPosition, this.expService),
 			}),
 			diffHistory: {
 				nEntries: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this.expService),
@@ -1009,51 +1016,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			includePostScript: true,
 		};
 
-		const localOverridingModelConfig = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration);
-		if (localOverridingModelConfig) {
-			return XtabProvider.overrideModelConfig(sourcedModelConfig, localOverridingModelConfig);
-		}
-
-		const expBasedModelConfig = this.overrideByStringModelConfig(sourcedModelConfig, ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString);
-		if (expBasedModelConfig) {
-			return expBasedModelConfig;
-		}
-
-		const defaultModelConfig = this.overrideByStringModelConfig(sourcedModelConfig, ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString);
-		if (defaultModelConfig) {
-			return defaultModelConfig;
-		}
-
-		return sourcedModelConfig;
-	}
-
-	private overrideByStringModelConfig(originalModelConfig: ModelConfig, configKey: ExperimentBasedConfig<string | undefined>): ModelConfig | undefined {
-		const configString = this.configService.getExperimentBasedConfig(configKey, this.expService);
-		if (configString === undefined) {
-			return undefined;
-		}
-
-		let parsedConfig: xtabPromptOptions.ModelConfiguration | undefined;
-		try {
-			parsedConfig = JSON.parse(configString);
-		} catch (e: unknown) {
-			/* __GDPR__
-				"incorrectNesModelConfig" : {
-					"owner": "ulugbekna",
-					"comment": "Capture if model configuration string is invalid JSON.",
-					"configName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the configuration that failed to parse." },
-					"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error message from JSON.parse." },
-					"configValue": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The invalid JSON string." }
-				}
-			*/
-			this.telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)), configValue: configString });
-		}
-
-		if (parsedConfig) {
-			return XtabProvider.overrideModelConfig(originalModelConfig, parsedConfig);
-		}
-
-		return undefined;
+		const selectedModelConfig = this.modelService.selectedModelConfiguration();
+		// proxy /models doesn't know about includeTagsInCurrentFile field as of now, so hard code it to true for CopilotNesXtab strategy
+		const modelConfig: xtabPromptOptions.ModelConfiguration = selectedModelConfig.promptingStrategy === xtabPromptOptions.PromptingStrategy.CopilotNesXtab
+			? { ...selectedModelConfig, includeTagsInCurrentFile: true }
+			: selectedModelConfig;
+		return XtabProvider.overrideModelConfig(sourcedModelConfig, modelConfig);
 	}
 
 	private static overrideModelConfig(modelConfig: ModelConfig, overridingConfig: xtabPromptOptions.ModelConfiguration): ModelConfig {
@@ -1076,24 +1044,28 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt:
 				return simplifiedPrompt;
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
+			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
-			default:
+			case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:
+			case undefined:
 				return systemPromptTemplate;
+			default:
+				assertNever(promptingStrategy);
 		}
 	}
 
-	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enabledDiagnostics: diagnosticsEnabled }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enabledDiagnostics: boolean }): LanguageContextOptions {
+	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enabledDiagnostics: diagnosticsEnabled, traitPosition }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enabledDiagnostics: boolean; traitPosition: 'before' | 'after' }): LanguageContextOptions {
 		if (languageId in enabledLanguages) {
-			return { enabled: enabledLanguages[languageId], maxTokens };
+			return { enabled: enabledLanguages[languageId], maxTokens, traitPosition };
 		}
 
 		if (diagnosticsEnabled) {
-			return { enabled: true, maxTokens };
+			return { enabled: true, maxTokens, traitPosition };
 		}
 
-		return { enabled, maxTokens };
+		return { enabled, maxTokens, traitPosition };
 	}
 
 	private getEndpoint(configuredModelName: string | undefined): ChatEndpoint {

@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import { outdent } from 'outdent';
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest';
-import type { InlineCompletionContext } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
@@ -20,20 +19,20 @@ import { ILogService, LogServiceImpl } from '../../../../platform/log/common/log
 import { ISnippyService, NullSnippyService } from '../../../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { mockNotebookService } from '../../../../platform/test/common/testNotebookService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { Result } from '../../../../util/common/result';
+import { ITracer } from '../../../../util/common/tracing';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
-import { NextEditProvider } from '../../node/nextEditProvider';
+import { NESInlineCompletionContext, NextEditProvider } from '../../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
-import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
-import { ITracer } from '../../../../util/common/tracing';
 
 describe('NextEditProvider Caching', () => {
 
@@ -110,7 +109,7 @@ describe('NextEditProvider Caching', () => {
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));
 
-		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now(), earliestShownDateTime: Date.now() + 200 };
+		const context: NESInlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now(), earliestShownDateTime: Date.now() + 200, enforceCacheDelay: false };
 		const logContext = new InlineEditRequestLogContext(doc.id.toString(), 1, context);
 		const cancellationToken = CancellationToken.None;
 		const tb1 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, doc);

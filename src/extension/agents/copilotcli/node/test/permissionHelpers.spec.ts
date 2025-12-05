@@ -135,7 +135,7 @@ describe('CopilotCLI permissionHelpers', () => {
 			if (result.tool !== ToolName.CoreConfirmationTool) {
 				expect.fail('Expected CoreConfirmationTool');
 			}
-			expect(result.input.title).toBe('Copilot CLI Permission Request');
+			expect(result.input.title).toBe('Background Agent Permission Request');
 			expect(result.input.message).toMatch(/"kind": "read"/);
 		});
 
@@ -147,7 +147,7 @@ describe('CopilotCLI permissionHelpers', () => {
 				expect.fail('Expected CoreConfirmationTool');
 			}
 			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
-			expect(result.input.title).toBe('Copilot CLI Permission Request');
+			expect(result.input.title).toBe('Background Agent Permission Request');
 			expect(result.input.message).toMatch(/^\n\n```/);
 			expect(result.input.message).toContain('"some_new_kind"');
 		});

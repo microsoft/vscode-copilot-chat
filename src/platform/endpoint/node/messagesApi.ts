@@ -74,8 +74,11 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const experimentationService = accessor.get(IExperimentationService);
 	const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
 	const maxTokens = options.postOptions.max_tokens ?? 1024;
-	const thinkingBudget = configuredBudget
-		? Math.min(32000, maxTokens - 1, configuredBudget)
+	const normalizedBudget = (configuredBudget && configuredBudget > 0)
+		? (configuredBudget < 1024 ? 1024 : configuredBudget)
+		: undefined;
+	const thinkingBudget = normalizedBudget
+		? Math.min(32000, maxTokens - 1, normalizedBudget)
 		: undefined;
 
 	return {

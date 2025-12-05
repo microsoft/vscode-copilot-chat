@@ -19,9 +19,9 @@ import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { toErrorMessage } from '../../../../util/common/errorMessage';
 import { ITokenizer } from '../../../../util/common/tokenizer';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { toErrorMessage } from '../../../../util/vs/base/common/errorMessage';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { URI, UriComponents } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -529,7 +529,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 			: false;
 
 		// Anthropic (from CAPI) currently does not support image uploads from tool calls.
-		const uploadToken = uploadsEnabled && await modelCanUseMcpResultImageURL(this.endpoint) ? githubToken : undefined;
+		const uploadToken = uploadsEnabled && modelCanUseMcpResultImageURL(this.endpoint) ? githubToken : undefined;
 
 		if (!uploadToken) {
 			if (this.imageSizeBudgetLeft < 0) {

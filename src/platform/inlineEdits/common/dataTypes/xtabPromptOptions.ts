@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { assertNever } from '../../../../util/vs/base/common/assert';
-import { vBoolean, vEnum, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
+import { IValidator, vBoolean, vEnum, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
 
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
@@ -17,6 +17,7 @@ export type LanguageContextLanguages = { [languageId: string]: boolean };
 export type LanguageContextOptions = {
 	readonly enabled: boolean;
 	readonly maxTokens: number;
+	readonly traitPosition: 'before' | 'after';
 }
 
 export type DiffHistoryOptions = {
@@ -32,6 +33,12 @@ export type CurrentFileOptions = {
 	readonly maxTokens: number;
 	readonly includeTags: boolean;
 	readonly prioritizeAboveCursor: boolean;
+}
+
+export enum AggressivenessLevel {
+	Low = 'low',
+	Medium = 'medium',
+	High = 'high',
 }
 
 export type PromptOptions = {
@@ -51,11 +58,17 @@ export enum PromptingStrategy {
 	/**
 	 * Original Xtab unified model prompting strategy.
 	 */
+	CopilotNesXtab = 'copilotNesXtab',
 	UnifiedModel = 'xtabUnifiedModel',
 	Codexv21NesUnified = 'codexv21nesUnified',
 	Nes41Miniv3 = 'nes41miniv3',
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
+	XtabAggressiveness = 'xtabAggressiveness',
+}
+
+export function isPromptingStrategy(value: string): value is PromptingStrategy {
+	return (Object.values(PromptingStrategy) as string[]).includes(value);
 }
 
 export enum ResponseFormat {
@@ -72,8 +85,10 @@ export namespace ResponseFormat {
 			case PromptingStrategy.Nes41Miniv3:
 				return ResponseFormat.UnifiedWithXml;
 			case PromptingStrategy.Xtab275:
+			case PromptingStrategy.XtabAggressiveness:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.SimplifiedSystemPrompt:
+			case PromptingStrategy.CopilotNesXtab:
 			case undefined:
 				return ResponseFormat.CodeBlock;
 			default:
@@ -100,6 +115,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 	languageContext: {
 		enabled: false,
 		maxTokens: 2000,
+		traitPosition: 'after',
 	},
 	diffHistory: {
 		nEntries: 25,
@@ -123,7 +139,7 @@ export interface ModelConfiguration {
 	includeTagsInCurrentFile: boolean;
 }
 
-export const MODEL_CONFIGURATION_VALIDATOR = vObj({
+export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vObj({
 	'modelName': vRequired(vString()),
 	'promptingStrategy': vUnion(vEnum(...Object.values(PromptingStrategy)), vUndefined()),
 	'includeTagsInCurrentFile': vRequired(vBoolean()),

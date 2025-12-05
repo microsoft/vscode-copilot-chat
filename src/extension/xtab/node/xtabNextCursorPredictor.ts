@@ -100,6 +100,7 @@ export class XtabNextCursorPredictor {
 			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			promptPieces.langCtx,
+			promptPieces.aggressivenessLevel,
 			this.computeTokens,
 			{
 				...promptPieces.opts,

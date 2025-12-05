@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
+import type { ChatPromptReference } from 'vscode';
+import { mock } from '../../../../../util/common/test/simpleMock';
 import {
 	ChatRequestTurn2,
 	ChatResponseMarkdownPart,
@@ -23,6 +25,7 @@ import {
 	stripReminders,
 	ToolCall
 } from '../copilotCLITools';
+import { IChatDelegationSummaryService } from '../delegationSummaryService';
 
 // Helper to extract invocation message text independent of MarkdownString vs string
 function getInvocationMessageText(part: ChatToolInvocationPart | undefined): string {
@@ -33,6 +36,13 @@ function getInvocationMessageText(part: ChatToolInvocationPart | undefined): str
 	if (msg instanceof MarkdownString) { return (msg as any).value ?? ''; }
 	return msg.value ?? '';
 }
+
+const getVSCodeRequestId = () => undefined;
+const delegationSummary = new class extends mock<IChatDelegationSummaryService>() {
+	override extractPrompt(sessionId: string, message: string): { prompt: string; reference: ChatPromptReference } | undefined {
+		return undefined;
+	}
+};
 
 describe('CopilotCLITools', () => {
 	describe('isCopilotCliEditToolCall', () => {
@@ -86,7 +96,7 @@ describe('CopilotCLITools', () => {
 				{ type: 'user.message', data: { content: 'Hello', attachments: [] } },
 				{ type: 'assistant.message', data: { content: '<pr_metadata uri="https://example.com/pr/1" title="Fix&amp;Improve" description="Desc" author="Alice" linkTag="PR#1"/>This is the PR body.' } }
 			];
-			const turns = buildChatHistoryFromEvents(events);
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary);
 			expect(turns).toHaveLength(2); // request + response
 			expect(turns[0]).toBeInstanceOf(ChatRequestTurn2);
 			expect(turns[1]).toBeInstanceOf(ChatResponseTurn2);
@@ -124,7 +134,7 @@ describe('CopilotCLITools', () => {
 				{ type: 'tool.execution_start', data: { toolName: 'bash', toolCallId: 'bash-1', arguments: { command: 'echo hi', description: 'Echo' } } },
 				{ type: 'tool.execution_complete', data: { toolName: 'bash', toolCallId: 'bash-1', success: true } }
 			];
-			const turns = buildChatHistoryFromEvents(events);
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary);
 			expect(turns).toHaveLength(2); // request + response
 			const responseTurn = turns[1] as ChatResponseTurn2;
 			const responseParts: any = (responseTurn as any).response;
@@ -190,7 +200,7 @@ describe('CopilotCLITools', () => {
 				{ type: 'tool.execution_start', data: { toolName: 'report_intent', toolCallId: 'ri-1', arguments: {} } },
 				{ type: 'tool.execution_complete', data: { toolName: 'report_intent', toolCallId: 'ri-1', success: true } }
 			];
-			const turns = buildChatHistoryFromEvents(events);
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary);
 			expect(turns).toHaveLength(1); // Only user turn, no response parts because no assistant/tool parts were added
 		});
 
@@ -200,7 +210,7 @@ describe('CopilotCLITools', () => {
 				{ type: 'user.message', data: { content: 'Follow up', attachments: [] } },
 				{ type: 'assistant.message', data: { content: 'Response 2' } }
 			];
-			const turns = buildChatHistoryFromEvents(events);
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary);
 			// Expect: first assistant message buffered until user msg -> becomes response turn, then user request, then second assistant -> another response
 			expect(turns.filter(t => t instanceof ChatResponseTurn2)).toHaveLength(2);
 			expect(turns.filter(t => t instanceof ChatRequestTurn2)).toHaveLength(1);
@@ -210,7 +220,7 @@ describe('CopilotCLITools', () => {
 			const events: any[] = [
 				{ type: 'assistant.message', data: { content: '<pr_metadata uri="u" title="t" description="d" author="a" linkTag="l"/>' } }
 			];
-			const turns = buildChatHistoryFromEvents(events);
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary);
 			// Single response turn with ONLY PR part (no markdown text)
 			const responseTurns = turns.filter(t => t instanceof ChatResponseTurn2) as ChatResponseTurn2[];
 			expect(responseTurns).toHaveLength(1);

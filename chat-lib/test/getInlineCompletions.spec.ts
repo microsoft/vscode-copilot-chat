@@ -209,7 +209,7 @@ class NullLogTarget implements ILogTarget {
 describe('getInlineCompletions', () => {
 	it('should return completions for a document and position', async () => {
 		const provider = createInlineCompletionsProvider({
-			fetcher: new TestFetcher({ '/v1/engines/gpt-4o-copilot/completions': await readFile(join(__dirname, 'getInlineCompletions.reply.txt'), 'utf8') }),
+			fetcher: new TestFetcher({ '/v1/engines/gpt-41-copilot/completions': await readFile(join(__dirname, 'getInlineCompletions.reply.txt'), 'utf8') }),
 			authService: new TestAuthService(),
 			telemetrySender: new TestTelemetrySender(),
 			logTarget: new NullLogTarget(),
