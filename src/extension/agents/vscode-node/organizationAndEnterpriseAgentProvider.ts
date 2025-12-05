@@ -5,7 +5,6 @@
 
 import * as vscode from 'vscode';
 import YAML from 'yaml';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
@@ -27,20 +26,15 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
 
 	private isFetching = false;
-	private memoryCache: vscode.CustomAgentResource[] | undefined = undefined;
+	private memoryCache = new Map<string, vscode.CustomAgentResource[]>();
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
-		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
 		super();
-		this._register(this.authenticationService.onDidAuthenticationChange(() => {
-			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Authentication changed, firing onDidChangeCustomAgents');
-			this._onDidChangeCustomAgents.fire();
-		}));
 	}
 
 	private getCacheDir(): vscode.Uri {
@@ -52,9 +46,14 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		_token: vscode.CancellationToken
 	): Promise<vscode.CustomAgentResource[]> {
 		try {
+			const user = await this.octoKitService.getCurrentAuthedUser();
+			if (!user) {
+				return [];
+			}
+
 			// If we have successfully fetched and cached in memory, return from memory
-			if (this.memoryCache !== undefined) {
-				return this.memoryCache;
+			if (this.memoryCache.has(user.login)) {
+				return this.memoryCache.get(user.login)!;
 			}
 
 			// Read from file cache first
@@ -321,8 +320,8 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Updated cache with ${totalAgents} agents from ${organizations.length} organizations`);
 
 			// If all fetch operations succeeded, populate memory cache
-			if (!hadAnyFetchErrors && this.memoryCache === undefined) {
-				this.memoryCache = await this.readFromCache();
+			if (!hadAnyFetchErrors && !this.memoryCache.has(user.login)) {
+				this.memoryCache.set(user.login, await this.readFromCache());
 				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Successfully populated memory cache');
 			}
 
