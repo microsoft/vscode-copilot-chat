@@ -4536,6 +4536,11 @@
 			],
 			"chat/chatSessions": [
 				{
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+					"when": "chatSessionType == copilotcli",
+					"group": "inline@0"
+				},
+				{
 					"command": "github.copilot.cli.sessions.resumeInTerminal",
 					"when": "chatSessionType == copilotcli",
 					"group": "inline@1"

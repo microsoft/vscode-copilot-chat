@@ -1079,12 +1079,16 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		await vscode.commands.executeCommand('_workbench.openMultiDiffEditor', { multiDiffSourceUri, title, resources });
 	}));
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', async (sessionItemResource?: vscode.Uri) => {
-		if (!sessionItemResource) {
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		const resource = sessionItemOrResource instanceof vscode.Uri
+			? sessionItemOrResource
+			: sessionItemOrResource?.resource;
+
+		if (!resource) {
 			return;
 		}
 
-		const sessionId = SessionIdForCLI.parse(sessionItemResource);
+		const sessionId = SessionIdForCLI.parse(resource);
 		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
 
 		if (!sessionWorktree) {
