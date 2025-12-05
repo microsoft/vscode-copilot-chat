@@ -5,6 +5,7 @@
 
 import { join } from 'path';
 import * as vscode from 'vscode';
+import { InlineCompletionModelInfo } from 'vscode';
 import { IAuthenticationService, IExperimentationService } from '../../../lib/node/chatLibMain';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
@@ -243,6 +244,14 @@ type LastNesSuggestion = {
 class JointCompletionsProvider extends Disposable implements vscode.InlineCompletionItemProvider {
 
 	public onDidChange?: vscode.Event<void> | undefined;
+
+	//#region Model picker
+	public readonly onDidChangeModelInfo = this._inlineEditProvider?.onDidChangeModelInfo;
+	public readonly setCurrentModelId = this._inlineEditProvider?.setCurrentModelId?.bind(this._inlineEditProvider);
+	public get modelInfo(): InlineCompletionModelInfo | undefined {
+		return this._inlineEditProvider?.modelInfo;
+	}
+	//#endregion
 
 	constructor(
 		private readonly _completionsProvider: CopilotInlineCompletionItemProvider | undefined,
