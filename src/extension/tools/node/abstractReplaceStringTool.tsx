@@ -307,13 +307,16 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 								"survivalRateFourGram": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The rate between 0 and 1 of how much of the AI edit is still present in the document." },
 								"survivalRateNoRevert": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The rate between 0 and 1 of how much of the ranges the AI touched ended up being reverted." },
 								"didBranchChange": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Indicates if the branch changed in the meantime. If the branch changed (value is 1), this event should probably be ignored." },
-								"timeDelayMs": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The time delay between the user accepting the edit and measuring the survival rate." },
-								"textBeforeAiEdits": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Array of text strings before AI edits were applied for each edit region." },
-								"textAfterAiEdits": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Array of text strings after AI edits were applied for each edit region." },
-								"textAfterUserEdits": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Array of text strings after user modifications for each edit region." }
+								"timeDelayMs": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The time delay between the user accepting the edit and measuring the survival rate." }
 							}
 						*/
-						res.telemetryService.sendMSFTTelemetryEvent('codeMapper.trackEditSurvival', {
+						res.telemetryService.sendMSFTTelemetryEvent('codeMapper.trackEditSurvival', { requestId: this._promptContext?.requestId, requestSource: 'agent', mapper: 'stringReplaceTool' }, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
+						res.telemetryService.sendInternalMSFTTelemetryEvent('codeMapper.trackEditSurvival', {
 							requestId: this._promptContext?.requestId,
 							requestSource: 'agent',
 							mapper: 'stringReplaceTool',
@@ -329,10 +332,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 						res.telemetryService.sendGHTelemetryEvent('replaceString/trackEditSurvival', {
 							headerRequestId: this._promptContext?.requestId,
 							requestSource: 'agent',
-							mapper: 'stringReplaceTool',
-							textBeforeAiEdits: res.textBeforeAiEdits ? JSON.stringify(res.textBeforeAiEdits) : undefined,
-							textAfterAiEdits: res.textAfterAiEdits ? JSON.stringify(res.textAfterAiEdits) : undefined,
-							textAfterUserEdits: res.textAfterUserEdits ? JSON.stringify(res.textAfterUserEdits) : undefined,
+							mapper: 'stringReplaceTool'
 						}, {
 							survivalRateFourGram: res.fourGram,
 							survivalRateNoRevert: res.noRevert,
