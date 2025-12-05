@@ -281,9 +281,10 @@ export class ChatEndpoint implements IChatEndpoint {
 	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (isAnthropicFamily(this) && !options.disableThinking) {
 			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
-			if (configuredBudget) {
+			if (configuredBudget && configuredBudget > 0) {
+				const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
 				// Cap thinking budget to Anthropic's recommended max (32000), and ensure it's less than max output tokens
-				body.thinking_budget = Math.min(32000, this._maxOutputTokens - 1, configuredBudget);
+				body.thinking_budget = Math.min(32000, this._maxOutputTokens - 1, normalizedBudget);
 			}
 		}
 		return body;

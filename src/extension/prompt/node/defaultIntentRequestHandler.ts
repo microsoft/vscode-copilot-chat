@@ -266,7 +266,6 @@ export class DefaultIntentRequestHandler {
 
 		if (this.documentContext) {
 			this.turn.setMetadata(new CopilotInteractiveEditorResponse(
-				'ok',
 				interactionOutcome.store,
 				{ ...this.documentContext, intent: this.intent, query: this.request.prompt },
 				this.chatTelemetryBuilder.telemetryMessageId,

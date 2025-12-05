@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version-file: .nvmrc
 
       - name: Restore build cache
         uses: actions/cache/restore@v4
@@ -64,7 +64,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version: '22.20.x'
 
       - name: Validate telemetry events
         run: npx --package=@vscode/telemetry-extractor --yes vscode-telemetry-extractor -s . > /dev/null
@@ -81,7 +81,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version: '22.20.x'
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -171,7 +171,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version: '22.20.x'
 
       - name: Setup Python
         uses: actions/setup-python@v6

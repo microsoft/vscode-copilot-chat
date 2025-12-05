@@ -502,6 +502,106 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			expect(body.thinking_budget).toBe(5000);
 		});
 
+		it('should disable thinking when configuredBudget is 0', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 0);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = createTestOptions([createUserMessage('Hello')]);
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBeUndefined();
+		});
+
+		it('should normalize values between 1-1023 to 1024 (Anthropic minimum)', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 500);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = createTestOptions([createUserMessage('Hello')]);
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBe(1024);
+		});
+
+		it('should normalize value of 1 to 1024', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 1);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = createTestOptions([createUserMessage('Hello')]);
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBe(1024);
+		});
+
+		it('should use exactly 1024 when configured to 1024', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 1024);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = createTestOptions([createUserMessage('Hello')]);
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBe(1024);
+		});
+
 		it('should not set thinking_budget when disableThinking is true', () => {
 			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
 			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);

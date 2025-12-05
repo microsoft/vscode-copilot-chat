@@ -110,6 +110,14 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		}
 	}
 
+	private async runWithAuthCheck<T>(operation: () => Promise<T>): Promise<T> {
+		const user = await this.octoKitService.getCurrentAuthedUser();
+		if (!user) {
+			throw new Error('User is not signed in');
+		}
+		return operation();
+	}
+
 	private async fetchAndUpdateCache(
 		options: vscode.CustomAgentQueryOptions
 	): Promise<void> {
@@ -121,10 +129,16 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 		this.isFetching = true;
 		try {
+			const user = await this.octoKitService.getCurrentAuthedUser();
+			if (!user) {
+				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User not signed in, skipping fetch');
+				return;
+			}
+
 			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Fetching custom agents from all user organizations');
 
 			// Get all organizations the user belongs to
-			const organizations = await this.octoKitService.getUserOrganizations();
+			const organizations = await this.runWithAuthCheck(() => this.octoKitService.getUserOrganizations());
 			if (organizations.length === 0) {
 				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User does not belong to any organizations');
 				return;
@@ -148,19 +162,23 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 					// Get the first repository for this organization to use in the API call
 					// We can't just use .github-private because user may not have access to it
-					const repos = await this.octoKitService.getOrganizationRepositories(org);
+					const repos = await this.runWithAuthCheck(() => this.octoKitService.getOrganizationRepositories(org));
 					if (repos.length === 0) {
 						this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] No repositories found for ${org}, skipping`);
 						continue;
 					}
 
 					const repoName = repos[0];
-					const agents = await this.octoKitService.getCustomAgents(org, repoName, internalOptions);
+					const agents = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgents(org, repoName, internalOptions));
 					for (const agent of agents) {
 						agentsForOrg.set(agent.name, agent);
 					}
 					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName}`);
 				} catch (error) {
+					if (error instanceof Error && error.message === 'User is not signed in') {
+						this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
+						return;
+					}
 					this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error fetching agents from ${org}: ${error}`);
 					hadAnyFetchErrors = true;
 				}
@@ -222,12 +240,12 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 						const filename = this.sanitizeFilename(agent.name) + AgentFileExtension;
 
 						// Fetch full agent details including prompt content
-						const agentDetails = await this.octoKitService.getCustomAgentDetails(
+						const agentDetails = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgentDetails(
 							agent.repo_owner,
 							agent.repo_name,
 							agent.name,
 							agent.version
-						);
+						));
 
 						// Generate agent markdown file content
 						if (agentDetails) {
@@ -236,6 +254,10 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 							totalAgents++;
 						}
 					} catch (error) {
+						if (error instanceof Error && error.message === 'User is not signed in') {
+							this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
+							return;
+						}
 						this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error fetching details for agent ${agent.name} from ${org}: ${error}`);
 						hadFetchError = true;
 					}
