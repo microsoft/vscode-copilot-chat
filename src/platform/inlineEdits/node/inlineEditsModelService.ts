@@ -362,7 +362,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			return model;
 		}
 
-		return this.determineDefaultModel(undefined, undefined);
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
 	}
 
 	private parseModelConfigStringSetting(configKey: ExperimentBasedConfig<string | undefined>): ModelConfiguration | undefined {
