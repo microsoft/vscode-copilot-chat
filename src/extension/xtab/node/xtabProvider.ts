@@ -976,10 +976,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private determineModelConfiguration(activeDocument: StatelessNextEditDocument): ModelConfig {
 		if (this.forceUseDefaultModel) {
-			return {
+			const defaultOptions = {
 				modelName: undefined,
 				...xtabPromptOptions.DEFAULT_OPTIONS,
 			};
+			const defaultModelConfig = this.modelService.defaultModelConfiguration();
+			return XtabProvider.overrideModelConfig(defaultOptions, defaultModelConfig);
 		}
 
 		const sourcedModelConfig = {

@@ -8,7 +8,7 @@ import { filterMap } from '../../../util/common/arrays';
 import * as errors from '../../../util/common/errors';
 import { createTracer } from '../../../util/common/tracing';
 import { pushMany } from '../../../util/vs/base/common/arrays';
-import { softAssert } from '../../../util/vs/base/common/assert';
+import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
@@ -280,6 +280,31 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}
 		tracer.trace('No selected model found, using default model.');
 		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+	}
+
+	public defaultModelConfiguration(): ModelConfiguration {
+		const models = this._modelsObs.get();
+		if (models && models.length > 0) {
+			const defaultModels = models.filter(m => !this.isConfiguredModel(m));
+			if (defaultModels.length > 0) {
+				return defaultModels[0];
+			}
+		}
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+	}
+
+	private isConfiguredModel(model: Model): boolean {
+		switch (model.source) {
+			case ModelSource.LocalConfig:
+			case ModelSource.ExpConfig:
+			case ModelSource.ExpDefaultConfig:
+				return true;
+			case ModelSource.Fetched:
+			case ModelSource.HardCodedDefault:
+				return false;
+			default:
+				assertNever(model.source);
+		}
 	}
 
 	private determineDefaultModel(copilotToken: CopilotToken | undefined, defaultModelConfigString: string | undefined): Model {
