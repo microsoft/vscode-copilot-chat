@@ -6,15 +6,39 @@
 import { assert } from 'chai';
 import { afterEach, beforeEach, suite, test } from 'vitest';
 import * as vscode from 'vscode';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { Emitter } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { OrganizationAndEnterpriseAgentProvider } from '../organizationAndEnterpriseAgentProvider';
+
+class MockAuthenticationService implements IAuthenticationService {
+	_serviceBrand: undefined;
+	private readonly _onDidAuthenticationChange = new Emitter<void>();
+	readonly onDidAuthenticationChange = this._onDidAuthenticationChange.event;
+	readonly onDidAccessTokenChange = new Emitter<void>().event;
+	readonly anyGitHubSession: vscode.AuthenticationSession | undefined;
+	async getAnyGitHubSession(options?: vscode.AuthenticationGetSessionOptions): Promise<vscode.AuthenticationSession | undefined> {
+		return undefined;
+	}
+	async getPermissiveGitHubSession(options: vscode.AuthenticationGetSessionOptions): Promise<vscode.AuthenticationSession | undefined> {
+		return undefined;
+	}
+	readonly copilotToken = undefined;
+	async getCopilotToken(forceRefresh?: boolean): Promise<any> {
+		return undefined;
+	}
+
+	fireOnDidAuthenticationChange() {
+		this._onDidAuthenticationChange.fire();
+	}
+}
 
 /**
  * Mock implementation of IOctoKitService for testing
@@ -86,6 +110,7 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 	let mockOctoKitService: MockOctoKitService;
 	let mockFileSystem: MockFileSystemService;
 	let mockExtensionContext: MockExtensionContext;
+	let mockAuthenticationService: MockAuthenticationService;
 	let accessor: any;
 	let provider: OrganizationAndEnterpriseAgentProvider;
 
@@ -94,6 +119,7 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 
 		// Create mocks first
 		mockOctoKitService = new MockOctoKitService();
+		mockAuthenticationService = new MockAuthenticationService();
 		const storageUri = URI.file('/test/storage');
 		mockExtensionContext = new MockExtensionContext(storageUri);
 
@@ -115,7 +141,8 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 			mockOctoKitService,
 			accessor.get(ILogService),
 			mockExtensionContext as any,
-			mockFileSystem
+			mockFileSystem,
+			mockAuthenticationService
 		);
 		disposables.add(provider);
 		return provider;
@@ -898,5 +925,17 @@ Test prompt
 
 		// Should have aborted after first org, so second org shouldn't be processed
 		assert.equal(callCount, 1);
+	});
+
+	test('fires change event when authentication state changes', async () => {
+		const provider = createProvider();
+		let eventFired = false;
+		provider.onDidChangeCustomAgents(() => {
+			eventFired = true;
+		});
+
+		mockAuthenticationService.fireOnDidAuthenticationChange();
+
+		assert.equal(eventFired, true);
 	});
 });

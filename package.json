@@ -2505,7 +2505,7 @@
 					},
 					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%"
 					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {

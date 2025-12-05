@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import YAML from 'yaml';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
@@ -13,6 +14,12 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 const AgentFileExtension = '.agent.md';
+
+class UserNotSignedInError extends Error {
+	constructor() {
+		super('User is not signed in');
+	}
+}
 
 export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentsProvider {
 
@@ -27,8 +34,13 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
 		super();
+		this._register(this.authenticationService.onDidAuthenticationChange(() => {
+			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Authentication changed, firing onDidChangeCustomAgents');
+			this._onDidChangeCustomAgents.fire();
+		}));
 	}
 
 	private getCacheDir(): vscode.Uri {
@@ -113,7 +125,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	private async runWithAuthCheck<T>(operation: () => Promise<T>): Promise<T> {
 		const user = await this.octoKitService.getCurrentAuthedUser();
 		if (!user) {
-			throw new Error('User is not signed in');
+			throw new UserNotSignedInError();
 		}
 		return operation();
 	}
@@ -175,7 +187,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 					}
 					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName}`);
 				} catch (error) {
-					if (error instanceof Error && error.message === 'User is not signed in') {
+					if (error instanceof UserNotSignedInError) {
 						this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
 						return;
 					}
@@ -254,7 +266,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 							totalAgents++;
 						}
 					} catch (error) {
-						if (error instanceof Error && error.message === 'User is not signed in') {
+						if (error instanceof UserNotSignedInError) {
 							this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
 							return;
 						}
