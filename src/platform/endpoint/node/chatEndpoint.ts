@@ -32,6 +32,7 @@ import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
+import { isAnthropicFamily } from '../common/chatModelCapabilities';
 
 /**
  * The default processor for the stream format from CAPI
@@ -261,7 +262,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			return this.customizeMessagesBody(body);
 		} else {
 			const body = createCapiRequestBody(options, this.model, this.getCompletionsCallback());
-			return this.customizeCapiBody(body);
+			return this.customizeCapiBody(body, options);
 		}
 	}
 
@@ -277,9 +278,8 @@ export class ChatEndpoint implements IChatEndpoint {
 		return body;
 	}
 
-	protected customizeCapiBody(body: IEndpointBody): IEndpointBody {
-		const isAnthropicModel = this.family.startsWith('claude') || this.family.startsWith('Anthropic');
-		if (isAnthropicModel) {
+	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
+		if (isAnthropicFamily(this) && !options.disableThinking) {
 			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
 			if (configuredBudget && configuredBudget > 0) {
 				const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;

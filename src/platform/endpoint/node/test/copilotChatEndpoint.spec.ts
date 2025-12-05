@@ -601,5 +601,33 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 
 			expect(body.thinking_budget).toBe(1024);
 		});
+
+		it('should not set thinking_budget when disableThinking is true', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = {
+				...createTestOptions([createUserMessage('Hello')]),
+				disableThinking: true
+			};
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBeUndefined();
+		});
 	});
 });
