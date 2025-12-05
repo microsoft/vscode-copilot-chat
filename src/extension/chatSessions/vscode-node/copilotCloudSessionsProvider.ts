@@ -381,17 +381,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const prResults = await Promise.all(prFetches);
 			const prMap = new Map(prResults.filter(r => r.pr).map(r => [r.globalId, r.pr!]));
 
-			const beginningOfTime = '0001-01-01T00:00:00Z';
 			const validateISOTimestamp = (date: string | undefined): number | undefined => {
 				try {
-					if (!date || date === beginningOfTime) {
+					if (!date) {
 						return;
 					}
 					const time = new Date(date)?.getTime();
-					if (!time || isNaN(time)) {
-						return;
+					if (time > 0) {
+						return time;
 					}
-					return time;
 				} catch { }
 			};
 
