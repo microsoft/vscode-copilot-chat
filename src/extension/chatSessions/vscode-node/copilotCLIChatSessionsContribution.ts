@@ -347,8 +347,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(copilotcliSessionId);
 			if (worktreeRelativePath) {
 				options[ISOLATION_OPTION_ID] = getLockedIsolationOption(worktreeRelativePath);
+			} else {
+				options[ISOLATION_OPTION_ID] = disabledIsolationLocked;
 			}
+		} else if (existingSession) {
+			options[ISOLATION_OPTION_ID] = disabledIsolationLocked;
 		}
+
 		const history = existingSession?.object?.getChatHistory() || [];
 		existingSession?.dispose();
 		// Always keep track of this in memory.
