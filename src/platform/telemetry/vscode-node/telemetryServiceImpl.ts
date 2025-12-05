@@ -58,7 +58,7 @@ export class TelemetryService extends BaseTelemetryService {
 			estrictedGHAIKey,
 			tokenStore
 		);
-		super(tokenStore, microsoftTelemetrySender, ghTelemetrySender);
+		super(tokenStore, capiClientService, microsoftTelemetrySender, ghTelemetrySender);
 
 		if (fetcherService instanceof FetcherService) {
 			fetcherService.setTelemetryService(this);
