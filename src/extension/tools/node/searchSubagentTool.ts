@@ -22,10 +22,29 @@ import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegi
 
 // Local function to render PromptTsx parts to strings (simplified to avoid vscode-node import restrictions)
 function renderToolResultToStringNoBudget(part: LanguageModelPromptTsxPart): string {
-	// Simple JSON serialization of the prompt-tsx element
-	// This is a simplified version that doesn't require the full rendering pipeline
+	// Extract text content from the prompt-tsx tree structure
 	const json = part.value as JSONTree.PromptElementJSON;
-	return JSON.stringify(json, null, 2);
+	return extractTextFromPromptTree(json.node);
+}
+
+function extractTextFromPromptTree(node: unknown): string {
+	if (!node || typeof node !== 'object') {
+		return '';
+	}
+
+	const nodeObj = node as { type?: number; text?: string; children?: unknown[] };
+
+	// If this is a text node, return its text
+	if (nodeObj.type === 2 && typeof nodeObj.text === 'string') {
+		return nodeObj.text;
+	}
+
+	// If this is an element node with children, recursively extract text from children
+	if (Array.isArray(nodeObj.children)) {
+		return nodeObj.children.map(child => extractTextFromPromptTree(child)).join('');
+	}
+
+	return '';
 }
 
 export interface ISearchSubagentParams {
