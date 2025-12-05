@@ -267,9 +267,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	public selectedModelConfiguration(): ModelConfiguration {
 		const tracer = this._tracer.sub('selectedModelConfiguration');
-		const currentModel = this._currentModelObs.get();
-		tracer.trace(`Current model id: ${currentModel.modelName}`);
-		const model = this._modelsObs.get().find(m => m.modelName === currentModel.modelName);
+		const model = this._currentModelObs.get();
 		if (model) {
 			tracer.trace(`Selected model found: ${model.modelName}`);
 			return {
