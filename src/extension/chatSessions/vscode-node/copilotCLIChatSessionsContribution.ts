@@ -241,7 +241,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const label = session.label;
 		const tooltipLines = [vscode.l10n.t(`Background agent session: {0}`, label)];
 		let description: vscode.MarkdownString | undefined;
-		let statistics: vscode.ChatSessionItem['statistics'] | undefined;
+		let changes: vscode.ChatSessionItem['changes'] | undefined;
 
 		if (worktreePath && worktreeRelativePath) {
 			const worktreeUri = Uri.file(worktreePath);
@@ -254,7 +254,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 			// Statistics
 			// Make sure the repository is opened
-			statistics = await this.getStatisticsForWorktree(worktreeUri);
+			changes = await this.getStatisticsForWorktree(worktreeUri);
 		}
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
@@ -264,14 +264,13 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			description,
 			tooltip: tooltipLines.join('\n'),
 			timing: session.timing,
-			statistics,
+			changes,
 			status
 		} satisfies vscode.ChatSessionItem;
 	}
 
 	private async getStatisticsForWorktree(worktreeUri: Uri) {
 		const repository = await this.gitService.getRepository(worktreeUri);
-		const statistics = await this.gitService.diffIndexWithHEADShortStats(worktreeUri);
 		const details: vscode.ChatSessionChangedFile[] = [];
 		if (repository?.changes) {
 			const allChanges = [...repository.changes.indexChanges, ...repository.changes.workingTree];
@@ -296,15 +295,11 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 					change.uri,
 					insertions,
 					deletions,
+					change.originalUri,
 				));
 			}
 		}
-		return {
-			files: statistics?.files || 0,
-			insertions: statistics?.insertions || 0,
-			deletions: statistics?.deletions || 0,
-			details
-		};
+		return details;
 	}
 
 	public async createCopilotCLITerminal(): Promise<void> {
@@ -1111,7 +1106,8 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		await vscode.commands.executeCommand('_workbench.openMultiDiffEditor', { multiDiffSourceUri, title, resources });
 	}));
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', async (sessionItemResource?: vscode.Uri) => {
+
+	const applyChanges = async (sessionItemResource?: vscode.Uri) => {
 		if (!sessionItemResource) {
 			return;
 		}
@@ -1135,6 +1131,11 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			deleteFromSource: false,
 			untracked: true
 		});
-	}));
+
+		copilotcliSessionItemProvider.notifySessionsChange(); // pick up new git state
+	};
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', applyChanges));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges.merge', applyChanges));
 	return disposableStore;
 }

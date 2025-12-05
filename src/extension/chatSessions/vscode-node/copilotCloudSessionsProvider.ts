@@ -398,7 +398,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						startTime: new Date(sessionItem.created_at).getTime(),
 						endTime: sessionItem.completed_at ? new Date(sessionItem.completed_at).getTime() : undefined
 					},
-					statistics: {
+					changes: {
 						files: pr.files.totalCount,
 						insertions: pr.additions,
 						deletions: pr.deletions
