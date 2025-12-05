@@ -154,7 +154,7 @@ export class InlineEditProviderFeature {
 				diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, git));
 			}
 
-			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, git, historyContextProvider, diagnosticsProvider));
+			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider));
 
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
 
