@@ -3,15 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { JSONTree } from '@vscode/prompt-tsx';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart } from '../../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelTextPart } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { SubagentToolCallingLoop } from '../../prompt/node/subagentLoop';
@@ -19,33 +17,6 @@ import { SearchSubagentPrompt } from '../../prompts/node/agent/searchSubagentPro
 import { PromptElementCtor } from '../../prompts/node/base/promptElement';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-
-// Local function to render PromptTsx parts to strings (simplified to avoid vscode-node import restrictions)
-function renderToolResultToStringNoBudget(part: LanguageModelPromptTsxPart): string {
-	// Extract text content from the prompt-tsx tree structure
-	const json = part.value as JSONTree.PromptElementJSON;
-	return extractTextFromPromptTree(json.node);
-}
-
-function extractTextFromPromptTree(node: unknown): string {
-	if (!node || typeof node !== 'object') {
-		return '';
-	}
-
-	const nodeObj = node as { type?: number; text?: string; children?: unknown[] };
-
-	// If this is a text node, return its text
-	if (nodeObj.type === 2 && typeof nodeObj.text === 'string') {
-		return nodeObj.text;
-	}
-
-	// If this is an element node with children, recursively extract text from children
-	if (Array.isArray(nodeObj.children)) {
-		return nodeObj.children.map(child => extractTextFromPromptTree(child)).join('');
-	}
-
-	return '';
-}
 
 export interface ISearchSubagentParams {
 
@@ -61,6 +32,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
 	) { }
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISearchSubagentParams>, token: vscode.CancellationToken) {
 		const searchInstruction = [
@@ -107,90 +79,24 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			part => part instanceof ChatPrepareToolInvocationPart || part instanceof ChatResponseTextEditPart || part instanceof ChatResponseNotebookEditPart
 		);
 
-		const loopResult = await loop.run(stream, token);
+		// Create a new capturing token to group this search subagent and all its nested tool calls
+		// Similar to how DefaultIntentRequestHandler does it
+		const searchSubagentToken = new CapturingToken(
+			`Search: ${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}`,
+			'search',
+			false
+		);
 
-		// Write trajectory to file in same format as logToolCall
-		const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-		const trajectoryFile = path.join(os.homedir(), `search_trajectory-${timestamp}.json`);
+		// Wrap the loop execution in captureInvocation with the new token
+		// All nested tool calls will now be logged under this same CapturingToken
+		const loopResult = await this.requestLogger.captureInvocation(searchSubagentToken, () => loop.run(stream, token));
 
-		try {
-			// Build a structured trajectory similar to chat-export-logs format
-			const rounds: Array<{
-				role: 'assistant' | 'tool';
-				content: Array<{ type: 'text' | 'data'; text?: string; data?: unknown }>;
-				toolCalls?: Array<{ id: string; name: string; arguments: unknown }>;
-				toolCallId?: string;
-				thinking?: unknown;
-			}> = [];
-
-			for (const round of loopResult.toolCallRounds) {
-				// Assistant message with tool calls
-				if (round.toolCalls.length > 0) {
-					rounds.push({
-						role: 'assistant',
-						content: round.response ? [{ type: 'text', text: round.response }] : [],
-						toolCalls: round.toolCalls.map(tc => ({
-							id: tc.id,
-							name: tc.name,
-							arguments: JSON.parse(tc.arguments)
-						})),
-						thinking: round.thinking
-					});
-
-					// Tool results - render them properly
-					for (const toolCall of round.toolCalls) {
-						const result = loopResult.toolCallResults[toolCall.id];
-						if (result) {
-							const content: Array<{ type: 'text' | 'data'; text?: string; data?: unknown }> = [];
-							for (const part of result.content) {
-								if (part instanceof LanguageModelTextPart) {
-									content.push({ type: 'text', text: part.value });
-								} else if (part instanceof LanguageModelDataPart) {
-									content.push({ type: 'data', data: part.data });
-								} else if (part instanceof LanguageModelPromptTsxPart) {
-									// Render prompt-tsx parts to readable text
-									const rendered = renderToolResultToStringNoBudget(part);
-									content.push({ type: 'text', text: rendered });
-								} else {
-									content.push({ type: 'text', text: String(part) });
-								}
-							}
-							rounds.push({
-								role: 'tool',
-								content: content,
-								toolCallId: toolCall.id
-							});
-						}
-					}
-				} else {
-					// Final assistant message without tool calls
-					rounds.push({
-						role: 'assistant',
-						content: [{ type: 'text', text: round.response }]
-					});
-				}
-			}
-
-			const trajectory = {
-				id: `search-subagent-${timestamp}`,
-				kind: 'toolCall',
-				tool: ToolName.SearchSubagent,
-				metadata: {
-					query: options.input.query,
-					description: options.input.description,
-					time: new Date().toISOString(),
-					responseType: loopResult.response.type,
-					success: loopResult.response.type === ChatFetchResponseType.Success
-				},
-				conversation: rounds,
-				finalResponse: loopResult.round.response
-			};
-
-			fs.writeFileSync(trajectoryFile, JSON.stringify(trajectory, null, 2), 'utf-8');
-			console.log('[SearchSubagent] Wrote trajectory to:', trajectoryFile);
-		} catch (error) {
-			console.error('[SearchSubagent] FAILED to write trajectory to:', trajectoryFile, error);
-		}
+		// Build subagent trajectory metadata that will be logged via toolMetadata
+		// All nested tool calls are already logged by ToolCallingLoop.logToolResult()
+		const toolMetadata = {
+			query: options.input.query,
+			description: options.input.description
+		};
 
 		let subagentResponse = '';
 		if (loopResult.response.type === ChatFetchResponseType.Success) {
@@ -199,7 +105,9 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			subagentResponse = `The search subagent request failed with this message:\n${loopResult.response.type}: ${loopResult.response.reason}`;
 		}
 
+		// toolMetadata will be automatically included in exportAllPromptLogsAsJsonCommand
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(subagentResponse)]);
+		result.toolMetadata = toolMetadata;
 		return result;
 	}
 
