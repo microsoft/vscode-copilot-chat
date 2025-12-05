@@ -501,6 +501,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
 		const disposables = new DisposableStore();
+		let sessionResource: vscode.Uri | undefined;
 		try {
 
 			/* __GDPR__
@@ -528,8 +529,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			const isUntitled = chatSessionContext.isUntitled;
 			const { resource } = chatSessionContext.chatSessionItem;
-			// Clean cached references for this session
-			CachedSessionStats.delete(resource);
+			sessionResource = resource;
 			const id = SessionIdForCLI.parse(resource);
 			const additionalReferences = this.previousReferences.get(id) || [];
 			this.previousReferences.delete(id);
@@ -621,6 +621,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			throw ex;
 		}
 		finally {
+			// Clean cached references for this session
+			if (sessionResource) {
+				CachedSessionStats.delete(sessionResource);
+				this.sessionItemProvider.notifySessionsChange();
+			}
 			disposables.dispose();
 		}
 	}
