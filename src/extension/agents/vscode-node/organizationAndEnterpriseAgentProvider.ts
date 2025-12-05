@@ -26,7 +26,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
 
 	private isFetching = false;
-	private memoryCache = new Map<string, vscode.CustomAgentResource[]>();
+	private memoryCache: vscode.CustomAgentResource[] | undefined;
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
@@ -35,6 +35,12 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 	) {
 		super();
+
+		// Trigger async fetch to update cache. Note: this provider is re-created each time
+		// the user signs in, so this will re-fetch on sign-in. See logic in conversationFeature.ts.
+		this.fetchAndUpdateCache().catch(error => {
+			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in background fetch: ${error}`);
+		});
 	}
 
 	private getCacheDir(): vscode.Uri {
@@ -42,29 +48,16 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	}
 
 	async provideCustomAgents(
-		options: vscode.CustomAgentQueryOptions,
+		_options: vscode.CustomAgentQueryOptions,
 		_token: vscode.CancellationToken
 	): Promise<vscode.CustomAgentResource[]> {
 		try {
-			const user = await this.octoKitService.getCurrentAuthedUser();
-			if (!user) {
-				return [];
+			if (this.memoryCache !== undefined) {
+				return this.memoryCache;
 			}
 
-			// If we have successfully fetched and cached in memory, return from memory
-			if (this.memoryCache.has(user.login)) {
-				return this.memoryCache.get(user.login)!;
-			}
-
-			// Read from file cache first
-			const fileCachedAgents = await this.readFromCache();
-
-			// Trigger async fetch to update cache
-			this.fetchAndUpdateCache(options).catch(error => {
-				this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in background fetch: ${error}`);
-			});
-
-			return fileCachedAgents;
+			// Return results from file cache
+			return await this.readFromCache();
 		} catch (error) {
 			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in provideCustomAgents: ${error}`);
 			return [];
@@ -129,9 +122,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		return operation();
 	}
 
-	private async fetchAndUpdateCache(
-		options: vscode.CustomAgentQueryOptions
-	): Promise<void> {
+	private async fetchAndUpdateCache(): Promise<void> {
 		// Prevent concurrent fetches
 		if (this.isFetching) {
 			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Fetch already in progress, skipping');
@@ -158,9 +149,9 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Found ${organizations.length} organizations: ${organizations.join(', ')}`);
 
 			// Convert VS Code API options to internal options
-			const internalOptions = options ? {
+			const internalOptions = {
 				includeSources: ['org', 'enterprise'] // don't include 'repo'
-			} satisfies CustomAgentListOptions : undefined;
+			} satisfies CustomAgentListOptions;
 
 			// Fetch agents from all organizations
 			const agentsByOrg = new Map<string, Map<string, CustomAgentListItem>>();
@@ -320,8 +311,8 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Updated cache with ${totalAgents} agents from ${organizations.length} organizations`);
 
 			// If all fetch operations succeeded, populate memory cache
-			if (!hadAnyFetchErrors && !this.memoryCache.has(user.login)) {
-				this.memoryCache.set(user.login, await this.readFromCache());
+			if (!hadAnyFetchErrors && this.memoryCache === undefined) {
+				this.memoryCache = await this.readFromCache();
 				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Successfully populated memory cache');
 			}
 
