@@ -234,6 +234,10 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				if (!isPromptingStrategy(m.capabilities.promptStrategy)) {
 					return undefined;
 				}
+				if (models.some(knownModel => knownModel.modelName === m.name)) {
+					tracer.trace(`Fetched model ${m.name} already exists in the model list, skipping.`);
+					return undefined;
+				}
 				return {
 					modelName: m.name,
 					promptingStrategy: m.capabilities.promptStrategy,
