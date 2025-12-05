@@ -294,6 +294,15 @@ suite('EditSurvivalTracker', () => {
 			{
 				"fourGram": 0.75,
 				"noRevert": 1,
+				textAfterAiEdits: [
+					'\r\n\r\n\t\tif (!args) {\r\n\t\t\tthrow new Error("invalid json document!");\r\n\t\t}'
+				],
+				textAfterUserEdits: [
+					'\r\n\r\n\t\tif (!args) {\r\n\t\t\tthrow new Error("");\r\n\t\t}'
+				],
+				textBeforeAiEdits: [
+					'\r\n'
+				]
 			}
 		);
 	});
