@@ -42,6 +42,7 @@ import { NesChangeHint } from '../common/nesTriggerHint';
 import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
+import { ExpectedEditCaptureController } from './components/expectedEditCaptureController';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
@@ -137,6 +138,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		private readonly logContextRecorder: LogContextRecorder | undefined,
 		private readonly inlineEditDebugComponent: InlineEditDebugComponent | undefined,
 		private readonly telemetrySender: TelemetrySender,
+		private readonly expectedEditCaptureController: ExpectedEditCaptureController | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IDiffService private readonly _diffService: IDiffService,
@@ -199,6 +201,12 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
 		const logger = this._logger.createSubLogger(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
+
+		// Disable NES while capture mode is active to avoid interference
+		if (this.expectedEditCaptureController?.isCaptureActive) {
+			tracer.returns('capture mode active');
+			return undefined;
+		}
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
@@ -522,6 +530,25 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			}
 			case InlineCompletionEndOfLifeReasonKind.Rejected: {
 				this._handleDidRejectCompletionItem(item);
+				// Trigger expected edit capture if enabled
+				if (this.expectedEditCaptureController?.isEnabled && this.expectedEditCaptureController?.captureOnReject) {
+					// Get endpoint info from the log context if available (LLM suggestions only)
+					const endpointInfo = isLlmCompletionInfo(item.info) ? item.info.suggestion.source.log.endpointInfo : undefined;
+					const metadata = {
+						requestUuid: item.info.requestUuid,
+						providerInfo: item.info.source,
+						modelName: endpointInfo?.modelName,
+						endpointUrl: endpointInfo?.url,
+						suggestionText: item.insertText?.toString(),
+						suggestionRange: item.range ? [
+							item.range.start.line,
+							item.range.start.character,
+							item.range.end.line,
+							item.range.end.character
+						] as [number, number, number, number] : undefined
+					};
+					void this.expectedEditCaptureController.startCapture('rejection', metadata);
+				}
 				break;
 			}
 			case InlineCompletionEndOfLifeReasonKind.Ignored: {
