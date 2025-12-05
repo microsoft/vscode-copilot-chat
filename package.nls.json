@@ -331,6 +331,8 @@
 	"copilot.tools.insertEdit.name": "Edit File",
 	"copilot.tools.replaceString.name": "Replace String in File",
 	"copilot.tools.multiReplaceString.name": "Multi-Replace String in Files",
+	"copilot.tools.replaceFileContents.name": "Replace File Contents",
+	"copilot.tools.replaceFileContents.description": "Replace the entire contents of a file",
 	"copilot.tools.editNotebook.name": "Edit Notebook",
 	"copilot.tools.editNotebook.userDescription": "Edit a notebook file in the workspace",
 	"copilot.tools.runNotebookCell.name": "Run Notebook Cell",
