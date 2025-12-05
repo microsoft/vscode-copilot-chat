@@ -279,7 +279,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			};
 		}
 		tracer.trace('No selected model found, using default model.');
-		return this.determineDefaultModel(undefined, undefined);
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
 	}
 
 	private determineDefaultModel(copilotToken: CopilotToken | undefined, defaultModelConfigString: string | undefined): Model {
@@ -337,7 +337,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			return model;
 		}
 
-		return this.determineDefaultModel(undefined, undefined);
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
 	}
 
 	private parseModelConfigStringSetting(configKey: ExperimentBasedConfig<string | undefined>): ModelConfiguration | undefined {
