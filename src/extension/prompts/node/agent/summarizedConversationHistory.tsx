@@ -842,7 +842,9 @@ private findLastThinking(props: SummarizedAgentHistoryProps): ThinkingData | und
 			const turnIndex = lastRound.turnIndex === -1 ? props.promptContext.history.length : lastRound.turnIndex;
 			const turn = turnIndex >= 0 ? props.promptContext.history[turnIndex] : undefined;
 			const turnMetadata = turn?.responseChatResult?.metadata as IResultMetadata | undefined;
-			const isLastRoundOfTurn = turn ? turn.rounds.at(-1) === lastRound.round : lastRound.turnIndex === -1 && (props.promptContext.toolCallRounds?.at(-1) === lastRound.round);
+			const isLastOfHistoricalTurn = turn && turn.rounds.at(-1) === lastRound.round;
+			const isLastOfCurrentTurn = !turn && lastRound.turnIndex === -1 && props.promptContext.toolCallRounds?.at(-1) === lastRound.round;
+			const isLastRoundOfTurn = isLastOfHistoricalTurn || isLastOfCurrentTurn;
 			if (turnMetadata?.maxToolCallsExceeded && isLastRoundOfTurn) {
 				toSummarize.pop();
 				if (!toSummarize.length) {
