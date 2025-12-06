@@ -79,7 +79,7 @@ interface ISelectionReference {
 interface IGitHubRepositoryReference {
 	type: 'github.repository';
 	data: {
-		type: "repository";
+		type: 'repository';
 		name: string; // name of the repository
 		ownerLogin: string; // owner of the repository
 		id: number;
@@ -488,7 +488,7 @@ export class RemoteAgentContribution implements IDisposable {
 							l10n.t({
 								message: 'Please authorize usage of **@{0}** on {1} and resend your question. [Learn more]({2}).',
 								args: [slug, url.hostname, 'https://aka.ms/vscode-github-chat-extension-editor-context'],
-								comment: ["{Locked=']({'}"]
+								comment: [`{Locked=']({'}`]
 							}),
 							{ url: response.authorizationUrl },
 							[l10n.t("Authorize"), l10n.t('Authorize for All Workspaces')]
@@ -514,7 +514,7 @@ export class RemoteAgentContribution implements IDisposable {
 						l10n.t({
 							message: '**@{0}** would like to read your active file and selection. [Learn More]({1})',
 							args: [slug, 'https://aka.ms/vscode-github-chat-extension-editor-context'],
-							comment: ["{Locked=']({'}"]
+							comment: [`{Locked=']({'}`]
 						}),
 						{ hasAcknowledgedImplicitReferences: true },
 						[l10n.t("Allow"), l10n.t("Allow for All Workspaces")]
@@ -642,7 +642,7 @@ export class RemoteAgentContribution implements IDisposable {
 			} else if (variable.name === 'selection') {
 				const { activeTextEditor } = this.tabsAndEditorsService;
 				if (!activeTextEditor) {
-					throw new Error(l10n.t({ message: 'Please open a text editor to use the `#selection` variable.', comment: "{Locked='`#selection`'}" }));
+					throw new Error(l10n.t({ message: 'Please open a text editor to use the `#selection` variable.', comment: '{Locked=\'`#selection`\'}' }));
 				}
 				if (!hasSentImplicitSelectionReference) {
 					await addSelectionReference(activeTextEditor, variable.name, true);
@@ -669,7 +669,7 @@ export class RemoteAgentContribution implements IDisposable {
 					type: 'github.repository',
 					id: toGithubNwo(repoId),
 					data: {
-						type: "repository",
+						type: 'repository',
 						name: repoId.repo,
 						ownerLogin: repoId.org,
 						id: repo.id

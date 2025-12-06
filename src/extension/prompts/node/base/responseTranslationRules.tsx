@@ -8,21 +8,21 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { IEnvService } from '../../../../platform/env/common/envService';
 
 export const validLocales = [
-	"auto",
-	"en",
-	"fr",
-	"it",
-	"de",
-	"es",
-	"ru",
-	"zh-CN",
-	"zh-TW",
-	"ja",
-	"ko",
-	"cs",
-	"pt-br",
-	"tr",
-	"pl"
+	'auto',
+	'en',
+	'fr',
+	'it',
+	'de',
+	'es',
+	'ru',
+	'zh-CN',
+	'zh-TW',
+	'ja',
+	'ko',
+	'cs',
+	'pt-br',
+	'tr',
+	'pl'
 ];
 
 export class ResponseTranslationRules extends PromptElement {

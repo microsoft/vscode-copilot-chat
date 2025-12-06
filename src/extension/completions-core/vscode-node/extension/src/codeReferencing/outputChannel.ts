@@ -59,7 +59,7 @@ export class GitHubCopilotLogger extends Disposable implements GitHubLogger {
 		this.createChannel();
 	}
 
-	private checkCopilotToken = (token: Omit<CopilotToken, "token">) => {
+	private checkCopilotToken = (token: Omit<CopilotToken, 'token'>) => {
 		if (token.codeQuoteEnabled) {
 			this.createChannel();
 		} else {

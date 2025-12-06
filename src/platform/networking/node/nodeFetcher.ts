@@ -142,7 +142,7 @@ function makeAbortError(signal: AbortSignal): Error {
 }
 function isAbortError(e: any): boolean {
 	// see https://github.com/nodejs/node/issues/38361#issuecomment-1683839467
-	return e && e.name === "AbortError";
+	return e && e.name === 'AbortError';
 }
 
 class NodeFetcherResponse {

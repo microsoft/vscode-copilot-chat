@@ -530,8 +530,8 @@ export function _unescapeStringForGeminiBug(inputString: string): string {
 					return '\t'; // Correctly escaped: \t (tab character)
 				case 'r':
 					return '\r'; // Correctly escaped: \r (carriage return character)
-				case "'":
-					return "'"; // Correctly escaped: ' (apostrophe character)
+				case `'`:
+					return `'`; // Correctly escaped: ' (apostrophe character)
 				case '"':
 					return '"'; // Correctly escaped: " (quotation mark character)
 				case '`':

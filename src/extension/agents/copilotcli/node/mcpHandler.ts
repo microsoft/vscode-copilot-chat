@@ -27,7 +27,7 @@ interface MCPServerConfigBase {
 }
 
 interface MCPLocalServerConfig extends MCPServerConfigBase {
-	type?: "local" | "stdio";
+	type?: 'local' | 'stdio';
 	command: string;
 	args: string[];
 	env?: Record<string, string>;
@@ -35,7 +35,7 @@ interface MCPLocalServerConfig extends MCPServerConfigBase {
 }
 
 interface MCPRemoteServerConfig extends MCPServerConfigBase {
-	type: "http" | "sse";
+	type: 'http' | 'sse';
 	url: string;
 	headers?: Record<string, string>;
 }

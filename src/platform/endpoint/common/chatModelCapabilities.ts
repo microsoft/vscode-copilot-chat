@@ -124,7 +124,7 @@ export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpo
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || isHiddenModelE(model) || isVSCModelC(model);
+	return isAnthropicFamily(model) || isHiddenModelE(model) || isVSCModelC(model);
 }
 
 /**
@@ -132,7 +132,7 @@ export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChat
  * without needing insert_edit_into_file.
  */
 export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.includes('gemini-3') || isVSCModelC(model);
+	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.includes('gemini-3') || isVSCModelC(model);
 }
 
 /**
@@ -147,7 +147,7 @@ export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IC
  * The model can accept image urls as the `image_url` parameter in mcp tool results.
  */
 export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic') && !model.family.startsWith('gemini') && !isHiddenModelE(model);
+	return !isAnthropicFamily(model) && !model.family.startsWith('gemini') && !isHiddenModelE(model);
 }
 
 /**
@@ -179,6 +179,10 @@ export function modelNeedsStrongReplaceStringHint(model: LanguageModelChat | ICh
  */
 export function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): boolean {
 	return isGpt5PlusFamily(model) || isVSCModelA(model) || isVSCModelB(model);
+}
+
+export function isAnthropicFamily(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
 }
 
 export function isGpt5PlusFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {

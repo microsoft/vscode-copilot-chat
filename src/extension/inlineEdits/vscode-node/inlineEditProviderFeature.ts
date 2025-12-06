@@ -104,18 +104,22 @@ export class InlineEditProviderFeature {
 	public rolloutFeature(): IDisposable {
 		const hasUpdatedNesSettingKey = 'copilot.chat.nextEdits.hasEnabledNesInSettings';
 
-		return autorun((reader) => {
-			const copilotToken = this._copilotToken.read(reader);
+		return autorun(async (reader) => {
+			if (this._vscodeExtensionContext.globalState.get<boolean | undefined>(hasUpdatedNesSettingKey)) {
+				return; // We already updated the setting for the user once. No need to run this logic again.
+			}
 
+			const copilotToken = this._copilotToken.read(reader);
 			if (copilotToken === undefined) {
 				return;
 			}
 
-			if (
-				this._expService.getTreatmentVariable<boolean>('copilotchat.enableNesInSettings') &&
-				this._vscodeExtensionContext.globalState.get<boolean | undefined>(hasUpdatedNesSettingKey) !== true &&
-				!copilotToken.isFreeUser
-			) {
+			if (copilotToken.isFreeUser || copilotToken.isNoAuthUser) {
+				return;
+			}
+
+			await this._expService.hasTreatments();
+			if (!this._expService.getTreatmentVariable<boolean>('copilotchat.avoidEnablingNesInSettings')) {
 				this._vscodeExtensionContext.globalState.update(hasUpdatedNesSettingKey, true);
 				if (!this._configurationService.isConfigured(ConfigKey.InlineEditsEnabled)) {
 					this._configurationService.setConfig(ConfigKey.InlineEditsEnabled, true);

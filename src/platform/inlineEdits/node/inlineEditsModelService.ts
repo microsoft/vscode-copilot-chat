@@ -8,7 +8,7 @@ import { filterMap } from '../../../util/common/arrays';
 import * as errors from '../../../util/common/errors';
 import { createTracer } from '../../../util/common/tracing';
 import { pushMany } from '../../../util/vs/base/common/arrays';
-import { softAssert } from '../../../util/vs/base/common/assert';
+import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
@@ -95,6 +95,8 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const tracer = this._tracer.sub('constructor');
 
+		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
+
 		this._modelsObs = derived((reader) => {
 			tracer.trace('computing models');
 			return this.aggregateModels({
@@ -123,8 +125,6 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}).recomputeInitiallyAndOnChange(this._store);
 
 		this.onModelListUpdated = Event.fromObservableLight(this._modelInfoObs);
-
-		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
 	}
 
 	get modelInfo(): vscode.InlineCompletionModelInfo | undefined {
@@ -162,17 +162,6 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			return;
 		}
 
-		// if user picks same as the default model, we should reset the user setting
-		// otherwise, update the model
-		const expectedDefaultModel = this._pickModel({ preferredModelName: 'none', models });
-		if (newPreferredModelId === expectedDefaultModel.modelName) {
-			this._tracer.trace(`New preferred model id ${newPreferredModelId} is the same as the default model, resetting user setting.`);
-			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, 'none');
-		} else {
-			this._tracer.trace(`New preferred model id ${newPreferredModelId} is different from the default model, updating user setting to ${newPreferredModelId}.`);
-			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, newPreferredModelId);
-		}
-
 		// if currently selected model is from exp config, then mark that model as undesired
 		if (currentPreferredModel.source === ModelSource.ExpConfig) {
 			await this._undesiredModelsManager.addUndesiredModelId(currentPreferredModel.modelName);
@@ -180,6 +169,19 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		if (this._undesiredModelsManager.isUndesiredModelId(newPreferredModelId)) {
 			await this._undesiredModelsManager.removeUndesiredModelId(newPreferredModelId);
+		}
+
+		// if user picks same as the default model, we should reset the user setting
+		// otherwise, update the model
+		const expectedDefaultModel = this._pickModel({ preferredModelName: 'none', models });
+		if (newPreferredModel.source === ModelSource.ExpConfig || // because exp-configured model already takes highest priority
+			(newPreferredModelId === expectedDefaultModel.modelName && !models.some(m => m.source === ModelSource.ExpConfig))
+		) {
+			this._tracer.trace(`New preferred model id ${newPreferredModelId} is the same as the default model, resetting user setting.`);
+			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, 'none');
+		} else {
+			this._tracer.trace(`New preferred model id ${newPreferredModelId} is different from the default model, updating user setting to ${newPreferredModelId}.`);
+			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, newPreferredModelId);
 		}
 	}
 
@@ -234,6 +236,10 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				if (!isPromptingStrategy(m.capabilities.promptStrategy)) {
 					return undefined;
 				}
+				if (models.some(knownModel => knownModel.modelName === m.name)) {
+					tracer.trace(`Fetched model ${m.name} already exists in the model list, skipping.`);
+					return undefined;
+				}
 				return {
 					modelName: m.name,
 					promptingStrategy: m.capabilities.promptStrategy,
@@ -263,9 +269,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	public selectedModelConfiguration(): ModelConfiguration {
 		const tracer = this._tracer.sub('selectedModelConfiguration');
-		const currentModel = this._currentModelObs.get();
-		tracer.trace(`Current model id: ${currentModel.modelName}`);
-		const model = this._modelsObs.get().find(m => m.modelName === currentModel.modelName);
+		const model = this._currentModelObs.get();
 		if (model) {
 			tracer.trace(`Selected model found: ${model.modelName}`);
 			return {
@@ -275,7 +279,32 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			};
 		}
 		tracer.trace('No selected model found, using default model.');
-		return this.determineDefaultModel(undefined, undefined);
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+	}
+
+	public defaultModelConfiguration(): ModelConfiguration {
+		const models = this._modelsObs.get();
+		if (models && models.length > 0) {
+			const defaultModels = models.filter(m => !this.isConfiguredModel(m));
+			if (defaultModels.length > 0) {
+				return defaultModels[0];
+			}
+		}
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+	}
+
+	private isConfiguredModel(model: Model): boolean {
+		switch (model.source) {
+			case ModelSource.LocalConfig:
+			case ModelSource.ExpConfig:
+			case ModelSource.ExpDefaultConfig:
+				return true;
+			case ModelSource.Fetched:
+			case ModelSource.HardCodedDefault:
+				return false;
+			default:
+				assertNever(model.source);
+		}
 	}
 
 	private determineDefaultModel(copilotToken: CopilotToken | undefined, defaultModelConfigString: string | undefined): Model {
@@ -333,7 +362,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			return model;
 		}
 
-		return this.determineDefaultModel(undefined, undefined);
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
 	}
 
 	private parseModelConfigStringSetting(configKey: ExperimentBasedConfig<string | undefined>): ModelConfiguration | undefined {

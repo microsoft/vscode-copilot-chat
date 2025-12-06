@@ -99,7 +99,7 @@ export class CompletionsProvider extends Disposable {
 				top_p: 1,
 				n: 1,
 				stop: [
-					"\n" // TODO@ulugbekna
+					'\n' // TODO@ulugbekna
 				],
 				stream: true,
 				extra: {

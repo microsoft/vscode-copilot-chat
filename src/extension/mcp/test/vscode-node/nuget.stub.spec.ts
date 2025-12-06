@@ -34,72 +34,72 @@ describe('get nuget MCP server info using fake CLI', { timeout: 30_000 }, () => 
 
 	it('converts legacy schema version', async () => {
 		const manifest = {
-			"$schema": "https://modelcontextprotocol.io/schemas/draft/2025-07-09/server.json",
+			'$schema': 'https://modelcontextprotocol.io/schemas/draft/2025-07-09/server.json',
 			packages: [{ registry_name: 'nuget', name: 'MismatchId', version: '0.1.0' }]
 		};
 		const expected = {
 			name: 'CorrectId',
 			version: '0.2.0',
 			description: 'CorrectId',
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json',
 			packages: [{ registry_name: 'nuget', name: 'CorrectId', version: '0.2.0' }]
 		};
 
-		const actual = nuget.prepareServerJson(manifest, "CorrectId", "0.2.0");
+		const actual = nuget.prepareServerJson(manifest, 'CorrectId', '0.2.0');
 
 		expect(actual).toEqual(expected);
 	});
 
 	it('handles original 2025-07-09 schema version', async () => {
 		const manifest = {
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json',
 			packages: [{ registry_name: 'nuget', name: 'MismatchId', version: '0.1.0' }]
 		};
 		const expected = {
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json',
 			name: 'CorrectId',
 			version: '0.2.0',
 			description: 'CorrectId',
 			packages: [{ registry_name: 'nuget', name: 'CorrectId', version: '0.2.0' }],
 		};
 
-		const actual = nuget.prepareServerJson(manifest, "CorrectId", "0.2.0");
+		const actual = nuget.prepareServerJson(manifest, 'CorrectId', '0.2.0');
 
 		expect(actual).toEqual(expected);
 	});
 
 	it('handles latest 2025-07-09 schema version', async () => {
 		const manifest = {
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json',
 			packages: [{ registry_type: 'nuget', name: 'MismatchId', version: '0.1.0' }]
 		};
 		const expected = {
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json',
 			name: 'CorrectId',
 			version: '0.2.0',
 			description: 'CorrectId',
 			packages: [{ registry_type: 'nuget', name: 'CorrectId', version: '0.2.0' }],
 		};
 
-		const actual = nuget.prepareServerJson(manifest, "CorrectId", "0.2.0");
+		const actual = nuget.prepareServerJson(manifest, 'CorrectId', '0.2.0');
 
 		expect(actual).toEqual(expected);
 	});
 
 	it('handles latest 2025-09-29 schema version', async () => {
 		const manifest = {
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json',
 			packages: [{ registryType: 'nuget', name: 'MismatchId', version: '0.1.0' }]
 		};
 		const expected = {
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json',
 			name: 'CorrectId',
 			version: '0.2.0',
 			description: 'CorrectId',
 			packages: [{ registryType: 'nuget', name: 'CorrectId', version: '0.2.0' }],
 		};
 
-		const actual = nuget.prepareServerJson(manifest, "CorrectId", "0.2.0");
+		const actual = nuget.prepareServerJson(manifest, 'CorrectId', '0.2.0');
 
 		expect(actual).toEqual(expected);
 	});
@@ -138,17 +138,17 @@ describe('get nuget MCP server info using fake CLI', { timeout: 30_000 }, () => 
 describe('mapServerJsonToMcpServer', () => {
 	it('handles 2025-07-09 schema version', async () => {
 		const manifest = {
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
-			name: "test",
-			description: "test",
-			version: "1.0.0",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json',
+			name: 'test',
+			description: 'test',
+			version: '1.0.0',
 			packages: [{ registry_type: 'nuget', name: 'SomeId', version: '0.1.0' }]
 		};
-		const expected: Omit<IInstallableMcpServer, "name"> = {
+		const expected: Omit<IInstallableMcpServer, 'name'> = {
 			config: {
 				type: McpServerType.LOCAL,
-				command: "dnx",
-				args: ["SomeId@0.1.0", "--yes"]
+				command: 'dnx',
+				args: ['SomeId@0.1.0', '--yes']
 			}
 		};
 
@@ -159,17 +159,17 @@ describe('mapServerJsonToMcpServer', () => {
 
 	it('handles 2025-09-29 schema version', async () => {
 		const manifest = {
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
-			name: "test",
-			description: "test",
-			version: "1.0.0",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json',
+			name: 'test',
+			description: 'test',
+			version: '1.0.0',
 			packages: [{ registryType: 'nuget', identifier: 'SomeId', version: '0.1.0' }]
 		};
-		const expected: Omit<IInstallableMcpServer, "name"> = {
+		const expected: Omit<IInstallableMcpServer, 'name'> = {
 			config: {
 				type: McpServerType.LOCAL,
-				command: "dnx",
-				args: ["SomeId@0.1.0", "--yes"]
+				command: 'dnx',
+				args: ['SomeId@0.1.0', '--yes']
 			}
 		};
 
@@ -180,17 +180,17 @@ describe('mapServerJsonToMcpServer', () => {
 
 	it('defaults to first package without matching type', async () => {
 		const manifest = {
-			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
-			name: "test",
-			description: "test",
-			version: "1.0.0",
+			'$schema': 'https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json',
+			name: 'test',
+			description: 'test',
+			version: '1.0.0',
 			packages: [{ registryType: 'npm', identifier: 'SomeId', version: '0.1.0' }]
 		};
-		const expected: Omit<IInstallableMcpServer, "name"> = {
+		const expected: Omit<IInstallableMcpServer, 'name'> = {
 			config: {
 				type: McpServerType.LOCAL,
-				command: "npx",
-				args: ["SomeId@0.1.0"]
+				command: 'npx',
+				args: ['SomeId@0.1.0']
 			}
 		};
 

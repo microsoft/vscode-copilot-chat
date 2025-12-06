@@ -212,7 +212,7 @@ function getEditDiffHistory(
 
 	const diffsFromOldestToNewest = allDiffs.reverse();
 
-	let promptPiece = diffsFromOldestToNewest.join("\n\n");
+	let promptPiece = diffsFromOldestToNewest.join('\n\n');
 
 	// to preserve old behavior where we always had trailing whitespace
 	if (diffsFromOldestToNewest.length > 0) {

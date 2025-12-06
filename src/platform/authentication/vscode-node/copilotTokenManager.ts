@@ -123,7 +123,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		}
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'RateLimited') {
-			throw Error("Your account has exceeded GitHub's API rate limit. Please try again later.");
+			throw Error(`Your account has exceeded GitHub's API rate limit. Please try again later.`);
 		}
 
 		if (tokenResult.kind === 'failure') {

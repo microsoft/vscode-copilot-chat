@@ -66,18 +66,18 @@ describe('NextEditProvider Caching', () => {
 					[
 						new LineReplacement(
 							new LineRange(11, 12),
-							["const myPoint = new Point3D(0, 1, 2);"]
+							['const myPoint = new Point3D(0, 1, 2);']
 						),
 						new LineReplacement(
 							new LineRange(5, 5),
-							["\t\tprivate readonly z: number,"]
+							['\t\tprivate readonly z: number,']
 						),
 						new LineReplacement(
 							new LineRange(6, 9),
 							[
-								"\tgetDistance() {",
-								"\t\treturn Math.sqrt(this.x ** 2 + this.y ** 2 + this.z ** 2);",
-								"\t}"
+								'\tgetDistance() {',
+								'\t\treturn Math.sqrt(this.x ** 2 + this.y ** 2 + this.z ** 2);',
+								'\t}'
 							]
 						)
 					]

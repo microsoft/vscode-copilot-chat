@@ -49,7 +49,7 @@ export class CopilotCLISessionOptions {
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
 			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
 			return {
-				kind: "denied-interactively-by-user"
+				kind: 'denied-interactively-by-user'
 			};
 		};
 		this.requestPermissionHandler = this.requestPermissionRejected;

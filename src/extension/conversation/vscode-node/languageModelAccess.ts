@@ -125,7 +125,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 		if (!defaultChatEndpoint) {
 			// Find a default set by CAPI
-			defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
+			defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? chatEndpoints.find(e => e.showInModelPicker) ?? chatEndpoints[0];
 		}
 		const seenFamilies = new Set<string>();
 

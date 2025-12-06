@@ -43,11 +43,11 @@ class UserPreferenceUpdatePrompt extends PromptElement<IUserPreferenceUpdateProm
 				<SystemMessage priority={1000}>
 					You are an AI programming assistant. The user has provided new preferences to be added to their existing preferences file.<br />
 					Please incorporate the following new preferences into the existing file content:<br />
-					<CodeBlock uri={userPreferenceFile} code={facts.join('\n')} languageId="markdown" shouldTrim={false} includeFilepath={false} /><br />
+					<CodeBlock uri={userPreferenceFile} code={facts.join('\n')} languageId='markdown' shouldTrim={false} includeFilepath={false} /><br />
 					Ensure the final content is well-formatted and correctly indented.<br />
 				</SystemMessage>
 				<UserMessage priority={700}>
-					<CodeBlock uri={userPreferenceFile} code={currentContent} languageId="markdown" shouldTrim={false} includeFilepath={false} /><br />
+					<CodeBlock uri={userPreferenceFile} code={currentContent} languageId='markdown' shouldTrim={false} includeFilepath={false} /><br />
 				</UserMessage>
 			</>
 		);

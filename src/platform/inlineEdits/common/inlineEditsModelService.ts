@@ -18,6 +18,8 @@ export interface IInlineEditsModelService {
 	setCurrentModelId(modelId: string): Promise<void>;
 
 	selectedModelConfiguration(): ModelConfiguration;
+
+	defaultModelConfiguration(): ModelConfiguration;
 }
 
 export const IInlineEditsModelService = createServiceIdentifier<IInlineEditsModelService>('IInlineEditsModelService');
