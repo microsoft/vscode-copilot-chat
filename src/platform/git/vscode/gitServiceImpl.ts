@@ -229,6 +229,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return repository?.getMergeBase(ref1, ref2);
 	}
 
+	async getWorktrees(uri: URI): Promise<{ name: string; path: string; ref: string }[]> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.getWorktrees() || [];
+	}
+
 	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);

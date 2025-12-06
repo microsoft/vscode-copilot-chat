@@ -286,6 +286,7 @@ export interface Repository {
 	popStash(index?: number): Promise<void>;
 	dropStash(index?: number): Promise<void>;
 
+	getWorktrees(): Promise<{ name: string; path: string; ref: string }[]>;
 	createWorktree(options?: { path?: string; commitish?: string; branch?: string }): Promise<string>;
 	deleteWorktree(path: string, options?: { force?: boolean }): Promise<void>;
 
