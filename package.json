@@ -815,6 +815,35 @@
 				}
 			},
 			{
+				"name": "copilot_replaceFileContents",
+				"toolReferenceName": "replaceFileContents",
+				"displayName": "%copilot.tools.replaceFileContents.name%",
+				"userDescription": "%copilot.tools.replaceFileContents.description%",
+				"modelDescription": "Replace the entire contents of an existing file. Use this tool for complete file rewrites such as converting documentation formats, major refactoring that changes most lines, or restructuring entire files. For surgical edits that change only specific sections, prefer replace_string_in_file. This tool integrates with VS Code's undo stack and shows a diff preview for user confirmation.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "The absolute path to the file to replace."
+						},
+						"newContent": {
+							"type": "string",
+							"description": "The complete new content for the file. This will replace the entire file contents."
+						},
+						"explanation": {
+							"type": "string",
+							"description": "A brief explanation of why the file is being rewritten."
+						}
+					},
+					"required": [
+						"filePath",
+						"newContent",
+						"explanation"
+					]
+				}
+			},
+			{
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"icon": "$(pencil)",

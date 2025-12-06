@@ -28,6 +28,7 @@ import './newWorkspace/projectSetupInfoTool';
 import './notebookSummaryTool';
 import './readFileTool';
 import './readProjectStructureTool';
+import './replaceFileContentsTool';
 import './replaceStringTool';
 import './runNotebookCellTool';
 import './scmChangesTool';
@@ -39,3 +40,4 @@ import './usagesTool';
 import './userPreferencesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
+
