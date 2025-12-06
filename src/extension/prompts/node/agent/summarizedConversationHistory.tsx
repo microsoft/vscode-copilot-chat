@@ -901,13 +901,27 @@ export class SummarizedConversationHistoryPropsBuilder {
 			isContinuation,
 		};
 
+		// For Anthropic models with thinking enabled, find the last thinking block
+		// from the rounds being summarized (toSummarize), not from the full promptContext.
+		// This ensures we capture thinking from the summarized span, including historical rounds.
+		let summarizedThinking: ThinkingData | undefined;
+		if (isAnthropicFamily(props.endpoint)) {
+			for (let i = toSummarize.length - 1; i >= 0; i--) {
+				if (toSummarize[i].round.thinking) {
+					summarizedThinking = toSummarize[i].round.thinking;
+					break;
+				}
+			}
+		}
+
 		return {
 			props: {
 				...props,
 				workingNotebook: this.getWorkingNotebook(props),
 				promptContext
 			},
-			summarizedToolCallRoundId
+			summarizedToolCallRoundId,
+			summarizedThinking
 		};
 	}
 

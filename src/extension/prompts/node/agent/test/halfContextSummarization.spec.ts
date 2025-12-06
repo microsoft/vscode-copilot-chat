@@ -708,4 +708,186 @@ describe('Half-Context Summarization', () => {
 			// Half-context keeps 3 rounds after the summary point
 		});
 	});
+
+	describe('Anthropic Thinking Support', () => {
+		function createRoundWithThinking(message: string, toolIdx: number, thinking?: { thinking: string; signature?: string }): ToolCallRound {
+			return new ToolCallRound(
+				message,
+				[createToolCall(toolIdx)],
+				undefined,
+				`round_${toolIdx}`,
+				undefined,
+				thinking
+			);
+		}
+
+		function createAnthropicBaseProps(promptContext: IBuildPromptContext): SummarizedAgentHistoryProps {
+			// Create endpoint with claude family to trigger Anthropic-specific behavior
+			const endpoint = instaService.createInstance(MockEndpoint, 'claude-sonnet-4');
+			return {
+				priority: 1,
+				endpoint,
+				location: ChatLocation.Panel,
+				promptContext: { ...promptContext, conversation },
+				maxToolResultLength: Infinity,
+			};
+		}
+
+		function createNonAnthropicBaseProps(promptContext: IBuildPromptContext): SummarizedAgentHistoryProps {
+			// Create endpoint with non-claude family
+			const endpoint = instaService.createInstance(MockEndpoint, 'gpt-4');
+			return {
+				priority: 1,
+				endpoint,
+				location: ChatLocation.Panel,
+				promptContext: { ...promptContext, conversation },
+				maxToolResultLength: Infinity,
+			};
+		}
+
+		test('half-context returns summarizedThinking for Anthropic endpoints', () => {
+			const thinkingData = { thinking: 'I am thinking about this problem...', signature: 'sig123' };
+			const rounds = [
+				createRoundWithThinking('round 1', 1, thinkingData),
+				createRoundWithThinking('round 2', 2),
+				createRoundWithThinking('round 3', 3),
+			];
+
+			const promptContext: IBuildPromptContext = {
+				chatVariables: new ChatVariablesCollection([]),
+				history: [],
+				query: 'test',
+				toolCallRounds: rounds,
+				toolCallResults: createToolResult(1, 2, 3),
+				tools,
+			};
+
+			configService.setConfig(ConfigKey.Advanced.HalfContextSummarization, true);
+			const result = getPropsBuilder().getProps(createAnthropicBaseProps(promptContext));
+
+			expect(result.summarizedThinking).toBeDefined();
+			expect(result.summarizedThinking?.thinking).toBe('I am thinking about this problem...');
+		});
+
+		test('half-context returns undefined summarizedThinking for non-Anthropic endpoints', () => {
+			const thinkingData = { thinking: 'I am thinking...', signature: 'sig123' };
+			const rounds = [
+				createRoundWithThinking('round 1', 1, thinkingData),
+				createRoundWithThinking('round 2', 2),
+				createRoundWithThinking('round 3', 3),
+			];
+
+			const promptContext: IBuildPromptContext = {
+				chatVariables: new ChatVariablesCollection([]),
+				history: [],
+				query: 'test',
+				toolCallRounds: rounds,
+				toolCallResults: createToolResult(1, 2, 3),
+				tools,
+			};
+
+			configService.setConfig(ConfigKey.Advanced.HalfContextSummarization, true);
+			const result = getPropsBuilder().getProps(createNonAnthropicBaseProps(promptContext));
+
+			expect(result.summarizedThinking).toBeUndefined();
+		});
+
+		test('half-context finds last thinking from summarized rounds only', () => {
+			// 4 rounds: round1(thinking1), round2(thinking2), round3, round4
+			// Split: summarize first 2, keep last 2
+			// toSummarize = [round1, round2] -> should find thinking2 (last in summarized span)
+			const thinking1 = { thinking: 'First thinking', signature: 'sig1' };
+			const thinking2 = { thinking: 'Second thinking in summarized span', signature: 'sig2' };
+			const rounds = [
+				createRoundWithThinking('round 1', 1, thinking1),
+				createRoundWithThinking('round 2', 2, thinking2),
+				createRoundWithThinking('round 3', 3), // no thinking, in kept span
+				createRoundWithThinking('round 4', 4), // no thinking, in kept span
+			];
+
+			const promptContext: IBuildPromptContext = {
+				chatVariables: new ChatVariablesCollection([]),
+				history: [],
+				query: 'test',
+				toolCallRounds: rounds,
+				toolCallResults: createToolResult(1, 2, 3, 4),
+				tools,
+			};
+
+			configService.setConfig(ConfigKey.Advanced.HalfContextSummarization, true);
+			const result = getPropsBuilder().getProps(createAnthropicBaseProps(promptContext));
+
+			// Should find thinking2 (last thinking in summarized rounds), not thinking1
+			expect(result.summarizedThinking?.thinking).toBe('Second thinking in summarized span');
+		});
+
+		test('legacy finds thinking from current toolCallRounds, half-context from summarized span', () => {
+			// This test verifies the semantic difference:
+			// - Legacy: findLastThinking scans current toolCallRounds
+			// - Half-context: finds thinking only within the summarized rounds
+			const thinking1 = { thinking: 'Thinking in summarized span', signature: 'sig1' };
+			const thinking3 = { thinking: 'Thinking in kept span', signature: 'sig3' };
+			const rounds = [
+				createRoundWithThinking('round 1', 1, thinking1),
+				createRoundWithThinking('round 2', 2),
+				createRoundWithThinking('round 3', 3, thinking3),
+				createRoundWithThinking('round 4', 4),
+			];
+
+			const promptContext: IBuildPromptContext = {
+				chatVariables: new ChatVariablesCollection([]),
+				history: [],
+				query: 'test',
+				toolCallRounds: rounds,
+				toolCallResults: createToolResult(1, 2, 3, 4),
+				tools,
+			};
+
+			// Test legacy - finds last thinking from ALL toolCallRounds
+			configService.setConfig(ConfigKey.Advanced.HalfContextSummarization, false);
+			const legacyResult = getPropsBuilder().getProps(createAnthropicBaseProps(promptContext));
+			expect(legacyResult.summarizedThinking?.thinking).toBe('Thinking in kept span');
+
+			// Test half-context - finds last thinking from summarized rounds only
+			configService.setConfig(ConfigKey.Advanced.HalfContextSummarization, true);
+			const halfContextResult = getPropsBuilder().getProps(createAnthropicBaseProps(promptContext));
+			expect(halfContextResult.summarizedThinking?.thinking).toBe('Thinking in summarized span');
+		});
+
+		test('half-context finds thinking from historical rounds when split is in history', () => {
+			// Scenario: split point is in history, not current toolCallRounds
+			// The thinking on the historical round should be found
+			const historyThinking = { thinking: 'Thinking from historical round', signature: 'hist_sig' };
+
+			// Create a turn with 2 rounds, one with thinking
+			const historyRoundWithThinking = createRoundWithThinking('history round 1', 1, historyThinking);
+			const historyRound2 = createRoundWithThinking('history round 2', 2);
+			const historyTurn = createTurnWithRounds('turn1', 'first question', [historyRoundWithThinking, historyRound2]);
+
+			// Current turn has 2 more rounds
+			const currentRounds = [
+				createRoundWithThinking('current round 1', 3),
+				createRoundWithThinking('current round 2', 4),
+			];
+
+			const promptContext: IBuildPromptContext = {
+				chatVariables: new ChatVariablesCollection([]),
+				history: [historyTurn],
+				query: 'follow-up question',
+				toolCallRounds: currentRounds,
+				toolCallResults: createToolResult(1, 2, 3, 4),
+				tools,
+			};
+
+			configService.setConfig(ConfigKey.Advanced.HalfContextSummarization, true);
+			const result = getPropsBuilder().getProps(createAnthropicBaseProps(promptContext));
+
+			// Total 4 rounds: 2 history + 2 current
+			// Split: summarize 2, keep 2
+			// toSummarize = [historyRound1, historyRound2]
+			// Should find historyThinking (on historyRound1)
+			expect(result.summarizedThinking).toBeDefined();
+			expect(result.summarizedThinking?.thinking).toBe('Thinking from historical round');
+		});
+	});
 });
