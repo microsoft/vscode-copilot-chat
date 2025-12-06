@@ -49,7 +49,7 @@ export interface IGitService extends IDisposable {
 	readonly repositories: Array<RepoContext>;
 	readonly isInitialized: boolean;
 
-	getRepository(uri: URI): Promise<RepoContext | undefined>;
+	getRepository(uri: URI, forceOpen?: boolean): Promise<RepoContext | undefined>;
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined>;
 	initialize(): Promise<void>;
 	add(uri: URI, paths: string[]): Promise<void>;
