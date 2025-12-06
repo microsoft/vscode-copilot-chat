@@ -844,6 +844,69 @@
 				}
 			},
 			{
+				"name": "copilot_insertAtLine",
+				"toolReferenceName": "insertAtLine",
+				"displayName": "%copilot.tools.insertAtLine.name%",
+				"userDescription": "%copilot.tools.insertAtLine.description%",
+				"modelDescription": "Insert content at a specific line number in a file. Use this tool when you need to add new content at a known location without matching existing text. This is ideal for adding imports, inserting methods into a class, or adding entries to a list. Line numbers are 1-indexed. By default, content is inserted before the specified line.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "The absolute path to the file to edit."
+						},
+						"line": {
+							"type": "number",
+							"description": "The 1-indexed line number where content should be inserted."
+						},
+						"content": {
+							"type": "string",
+							"description": "The content to insert."
+						},
+						"position": {
+							"type": "string",
+							"enum": ["before", "after"],
+							"description": "Whether to insert before or after the specified line. Defaults to 'before'."
+						}
+					},
+					"required": [
+						"filePath",
+						"line",
+						"content"
+					]
+				}
+			},
+			{
+				"name": "copilot_deleteLines",
+				"toolReferenceName": "deleteLines",
+				"displayName": "%copilot.tools.deleteLines.name%",
+				"userDescription": "%copilot.tools.deleteLines.description%",
+				"modelDescription": "Delete lines from a file by line number range. Use this tool when you need to remove content by position rather than by matching text. This is useful for removing deprecated code, cleaning up comments, or deleting generated sections. Line numbers are 1-indexed and inclusive.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "The absolute path to the file to edit."
+						},
+						"startLine": {
+							"type": "number",
+							"description": "The 1-indexed line number to start deleting from (inclusive)."
+						},
+						"endLine": {
+							"type": "number",
+							"description": "The 1-indexed line number to stop deleting at (inclusive)."
+						}
+					},
+					"required": [
+						"filePath",
+						"startLine",
+						"endLine"
+					]
+				}
+			},
+			{
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"icon": "$(pencil)",
