@@ -770,7 +770,7 @@ export class SummarizedConversationHistoryPropsBuilder {
 		};
 	}
 
-private findLastThinking(props: SummarizedAgentHistoryProps): ThinkingData | undefined {
+	private findLastThinking(props: SummarizedAgentHistoryProps): ThinkingData | undefined {
 		if (props.promptContext.toolCallRounds) {
 			for (let i = props.promptContext.toolCallRounds.length - 1; i >= 0; i--) {
 				const round = props.promptContext.toolCallRounds[i];
