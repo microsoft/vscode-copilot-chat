@@ -9,7 +9,6 @@ import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -229,7 +228,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
 		@ICopilotCLITerminalIntegration private readonly terminalIntegration: ICopilotCLITerminalIntegration,
 		@IGitService private readonly gitService: IGitService,
-		@IGitExtensionService private readonly gitExtensionService: IGitExtensionService,
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 	) {
 		super();
@@ -278,7 +276,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			tooltipLines.push(vscode.l10n.t(`Worktree: {0}`, worktreeRelativePath));
 
 			// Statistics
-			// Make sure the repository is opened
 			const stats = await this.getStatisticsForWorktree(worktreeUri);
 			if (stats && stats.length > 0) {
 				CachedSessionStats.set(resource, stats);
@@ -298,35 +295,23 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		} satisfies vscode.ChatSessionItem;
 	}
 
-	private async getStatisticsForWorktree(worktreeUri: Uri) {
-		const repository = await this.gitService.getRepository(worktreeUri);
+	private async getStatisticsForWorktree(worktreeUri: Uri): Promise<vscode.ChatSessionChangedFile[]> {
+		const repository = await this.gitService.getRepository(worktreeUri, false);
+		if (!repository?.changes) {
+			return [];
+		}
+
 		const details: vscode.ChatSessionChangedFile[] = [];
-		if (repository?.changes) {
-			const allChanges = [...repository.changes.indexChanges, ...repository.changes.workingTree];
-			const gitAPI = this.gitExtensionService.getExtensionApi();
-			const gitRepository = gitAPI?.getRepository(worktreeUri);
-
-			for (const change of allChanges) {
-				let insertions = 0;
-				let deletions = 0;
-
-				if (gitRepository && gitRepository.diffIndexWithHEADShortStats) {
-					try {
-						const fileStats = await gitRepository.diffIndexWithHEADShortStats(change.uri.fsPath);
-						if (fileStats) {
-							insertions = fileStats.insertions;
-							deletions = fileStats.deletions;
-						}
-					} catch (error) { }
-				}
-
+		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
+			try {
+				const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
 				details.push(new vscode.ChatSessionChangedFile(
 					change.uri,
-					insertions,
-					deletions,
-					change.originalUri,
+					fileStats?.insertions ?? 0,
+					fileStats?.deletions ?? 0,
+					change.originalUri
 				));
-			}
+			} catch (error) { }
 		}
 		return details;
 	}

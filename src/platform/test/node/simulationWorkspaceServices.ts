@@ -674,7 +674,7 @@ export class TestingGitService implements IGitService {
 	}
 
 	// TODO implement later if tests use this, only used by ignore service
-	getRepository(uri: URI): Promise<RepoContext | undefined> {
+	getRepository(uri: URI, forceOpen?: boolean): Promise<RepoContext | undefined> {
 		return Promise.resolve(undefined);
 	}
 
