@@ -4595,11 +4595,6 @@
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 					"when": "chatSessionType == copilot-cloud-agent",
 					"group": "context"
-				},
-				{
-					"command": "github.copilot.cli.sessions.delete",
-					"when": "chatSessionType == copilotcli && config.chat.agentSessionsViewLocation == 'single-view'",
-					"group": "context"
 				}
 			]
 		},
