@@ -115,6 +115,19 @@ module.exports = Sharp;
 
 }
 
+/**
+ * @github/copilot/sdk/index.js depends on @github/copilot/worker/*.js files.
+ * We need to copy these files into the sdk directory to ensure they are available at runtime.
+ */
+async function copyCopilotCliWorkerFiles() {
+	const sourceDir = path.join(REPO_ROOT, 'node_modules', '@github', 'copilot', 'worker');
+	const targetDir = path.join(REPO_ROOT, 'node_modules', '@github', 'copilot', 'sdk', 'worker');
+
+	await fs.promises.rm(targetDir, { recursive: true, force: true });
+	await fs.promises.mkdir(targetDir, { recursive: true });
+	await fs.promises.cp(sourceDir, targetDir, { recursive: true, force: true });
+}
+
 async function main() {
 	await fs.promises.mkdir(path.join(REPO_ROOT, '.build'), { recursive: true });
 
@@ -131,6 +144,7 @@ async function main() {
 	], 'dist');
 
 	await createCopilotCliSharpShim();
+	await copyCopilotCliWorkerFiles();
 
 	// Check if the base cache file exists
 	const baseCachePath = path.join('test', 'simulation', 'cache', 'base.sqlite');
