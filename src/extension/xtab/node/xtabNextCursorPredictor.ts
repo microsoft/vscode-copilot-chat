@@ -148,15 +148,17 @@ export class XtabNextCursorPredictor {
 			},
 		});
 
+		const requestOptions = {
+			secretKey,
+		};
+
 		const response = await endpoint.makeChatRequest2(
 			{
 				messages,
 				debugName: 'nes.nextCursorPosition',
 				finishedCb: undefined,
 				location: ChatLocation.Other,
-				requestOptions: secretKey ? {
-					secretKey,
-				} : undefined,
+				requestOptions,
 			},
 			CancellationToken.None,
 		);
