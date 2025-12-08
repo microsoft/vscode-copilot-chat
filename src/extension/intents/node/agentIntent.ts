@@ -52,6 +52,7 @@ import { IToolGroupingService } from '../../tools/common/virtualTools/virtualToo
 import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
+import { getAgentMaxRequests } from '../common/agentConfig';
 
 export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.ChatRequest) => {
 	const toolsService = accessor.get<IToolsService>(IToolsService);
@@ -188,8 +189,7 @@ export class AgentIntent extends EditCodeIntent {
 	protected override getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
 		return {
 			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ??
-				this.configurationService.getNonExtensionConfig('chat.agent.maxRequests') ??
-				200, // Fallback for simulation tests
+				this.instantiationService.invokeFunction(getAgentMaxRequests),
 			temperature: this.configurationService.getConfig(ConfigKey.Advanced.AgentTemperature) ?? 0,
 			overrideRequestLocation: ChatLocation.Agent,
 			hideRateLimitTimeEstimate: true
