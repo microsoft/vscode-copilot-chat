@@ -223,7 +223,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		if (!repository?.diffIndexWithHEADShortStats) {
 			return undefined;
 		}
-		return await repository?.diffIndexWithHEADShortStats();
+		return await repository?.diffIndexWithHEADShortStats(uri.fsPath);
 	}
 
 	async fetch(uri: vscode.Uri, remote?: string, ref?: string, depth?: number): Promise<void> {
