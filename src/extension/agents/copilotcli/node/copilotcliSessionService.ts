@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as fs from 'fs/promises';
 import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { CancellationToken, ChatRequest, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
@@ -338,7 +339,7 @@ export class CopilotCLISessionWorkspaceTracker {
 			}
 
 			await Promise.all([
-				this.fileSystem.createDirectory(this.context.globalStorageUri),
+				fs.mkdir(this.context.globalStorageUri.fsPath, { recursive: true }),
 				// Load old sessions
 				(async () => {
 					const oldSessions = await this.fileSystem.readFile(globalFile).then(c => new TextDecoder().decode(c).split(',')).catch(() => undefined);
