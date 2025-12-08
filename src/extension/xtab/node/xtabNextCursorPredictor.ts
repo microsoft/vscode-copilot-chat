@@ -149,8 +149,10 @@ export class XtabNextCursorPredictor {
 			},
 		});
 
+		const maxResponseTokens = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsNextCursorPredictionCurrentFileMaxTokens, this.expService);
+
 		const requestOptions = {
-			max_tokens: 4,
+			max_tokens: maxResponseTokens,
 			secretKey,
 		} satisfies OptionalChatRequestParams;
 
