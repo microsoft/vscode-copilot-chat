@@ -69,7 +69,7 @@ export class CopilotCloudGitOperationsManager {
 		}
 	}
 
-	async checkIfRemoteHasRef(repository: Repository, remoteName: string, baseRef: string): Promise<boolean> {
+	async checkIfRemoteHasUpToDateRef(repository: Repository, remoteName: string, baseRef: string): Promise<boolean> {
 		const remoteBranches =
 			(await repository.getBranches({ remote: true }))
 				.filter(b => b.remote); // Has an associated remote
@@ -92,6 +92,15 @@ export class CopilotCloudGitOperationsManager {
 					: `${branch.remote}/${branch.name}`;
 			return alternateNames.has(candidateName);
 		});
+		// Check if remote branch and local change are on the same commit
+		if (hasRemoteBranch) {
+			const remoteCommit = await repository.getCommit(expectedRemoteBranch);
+			const localCommit = await repository.getCommit(baseRef);
+			if (remoteCommit && localCommit && remoteCommit.hash !== localCommit.hash) {
+				return false;
+			}
+		}
+
 		return hasRemoteBranch;
 	}
 

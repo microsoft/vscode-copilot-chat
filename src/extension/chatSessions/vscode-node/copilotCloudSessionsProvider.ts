@@ -151,12 +151,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly PUSH_BRANCH = vscode.l10n.t('Push Branch');
 	private readonly DELEGATE = vscode.l10n.t('Delegate');
 	private readonly CANCEL = vscode.l10n.t('Cancel');
+	private readonly USE_CURRENT_BRANCH = vscode.l10n.t('Use Current Branch');
 
 	// Messages
 	private readonly BASE_MESSAGE = vscode.l10n.t('Cloud agent works asynchronously to create a pull request with your requested changes. This chat\'s history will be summarized and appended to the pull request as context.');
 	private readonly AUTHORIZE_MESSAGE = vscode.l10n.t('Cloud agent requires elevated GitHub access to proceed.');
 	private readonly COMMIT_MESSAGE = vscode.l10n.t('This workspace has uncommitted changes. Should these changes be pushed and included in cloud agent\'s work?');
 	private readonly PUSH_BRANCH_MESSAGE = (baseRef: string, defaultBranch: string) => vscode.l10n.t('Push your currently checked out branch `{0}`, or start from the default branch `{1}`?', baseRef, defaultBranch);
+	private readonly USE_CURRENT_BRANCH_MESSAGE = (baseRef: string, defaultBranch: string) => vscode.l10n.t('Continue on your currently checked out branch `{0}`, or start from the default branch `{1}`?', baseRef, defaultBranch);
 
 	// Workspace storage keys
 	private readonly WORKSPACE_CONTEXT_PREFIX = 'copilot.cloudAgent';
@@ -779,6 +781,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			base_ref = default_branch;
 		}
 
+		stream.progress(vscode.l10n.t('Base branch `{0}` on remote', base_ref));
+
 		const { number, sessionId } = await this.invokeRemoteAgent(
 			metadata.prompt,
 			[result, history].filter(Boolean).join('\n\n').trim(),
@@ -892,15 +896,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
+		// User chose to use the current checked-out branch, INSTEAD of the default
+		const useCurrentBranch = selection.includes(this.USE_CURRENT_BRANCH.toUpperCase());
+
 		const base_ref: string = await (async () => {
 			const res = await this.checkBaseBranchPresentOnRemote();
 			if (!res) {
 				// Unexpected
 				throw new Error(vscode.l10n.t('Repo base branch is not detected on remote. Push your branch and try again.'));
 			}
-			return (res?.missingOnRemote || !res?.baseRef) ? res.repoDefaultBranch : res?.baseRef;
+
+			return (res.missingOnRemote || !res.baseRef || !useCurrentBranch) ? res.repoDefaultBranch : res.baseRef;
 		})();
-		stream.progress(vscode.l10n.t('Validating branch `{0}` exists on remote', base_ref));
 
 		// Now trigger delegation
 		try {
@@ -946,7 +953,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	 * Checks if the current base branch exists on the remote repository.
 	 * Returns branch information including whether it's missing from remote, the base ref name, and the repository's default branch.
 	 */
-	private async checkBaseBranchPresentOnRemote(): Promise<{ missingOnRemote: boolean; baseRef: string; repoDefaultBranch: string } | undefined> {
+	private async checkBaseBranchPresentOnRemote(): Promise<{ missingOnRemote: boolean; isNonDefaultBranch: boolean; baseRef: string; repoDefaultBranch: string } | undefined> {
 		try {
 			const repoId = await getRepoId(this._gitService);
 			if (!repoId) {
@@ -954,13 +961,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 			const { baseRef, repository, remoteName } = await this.gitOperationsManager.repoInfo();
 			const remoteRepoInfo = await this._githubRepositoryService.getRepositoryInfo(repoId.org, repoId.repo);
-			const remoteHasRef = await this.gitOperationsManager.checkIfRemoteHasRef(repository, remoteName, baseRef);
-			if (remoteHasRef) {
-				// Remote HAS the base branch, no action needed.
-				return { missingOnRemote: false, baseRef, repoDefaultBranch: remoteRepoInfo.default_branch };
+			const remoteHasUpToDateRef = await this.gitOperationsManager.checkIfRemoteHasUpToDateRef(repository, remoteName, baseRef);
+			const isNonDefaultBranch = baseRef !== remoteRepoInfo.default_branch;
+			if (remoteHasUpToDateRef) {
+				// Remote HAS the base branch (at the right commit), no action needed.
+				return { missingOnRemote: false, isNonDefaultBranch, baseRef, repoDefaultBranch: remoteRepoInfo.default_branch };
 			}
-			// Remote is MISSING the base branch
-			return { missingOnRemote: true, baseRef, repoDefaultBranch: remoteRepoInfo.default_branch };
+			// Remote is MISSING the base branch (or is out of sync), so we'd need to push it
+			return { missingOnRemote: true, isNonDefaultBranch, baseRef, repoDefaultBranch: remoteRepoInfo.default_branch };
 		} catch (error) {
 			this.logService.debug(`Failed to check default branch: ${error}`);
 			return undefined;
@@ -994,6 +1002,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				vscode.l10n.t('{0} and {1}', this.AUTHORIZE, this.PUSH_BRANCH),
 				this.AUTHORIZE,
 			);
+		} else if (needsPermissiveAuth && baseBranchInfo?.isNonDefaultBranch) {
+			message += '\n\n' + this.AUTHORIZE_MESSAGE;
+			message += '\n\n' + this.USE_CURRENT_BRANCH_MESSAGE(baseBranchInfo.baseRef, baseBranchInfo.repoDefaultBranch);
+			buttons.unshift(
+				vscode.l10n.t('{0} and {1}', this.AUTHORIZE, this.USE_CURRENT_BRANCH),
+				this.AUTHORIZE,
+			);
 		} else if (needsPermissiveAuth) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
 			buttons.unshift(
@@ -1010,6 +1025,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			message += '\n\n' + this.PUSH_BRANCH_MESSAGE(baseRef, repoDefaultBranch);
 			buttons.unshift(
 				vscode.l10n.t('{0} and {1}', this.PUSH_BRANCH, this.DELEGATE),
+				this.DELEGATE,
+			);
+		} else if (baseBranchInfo?.isNonDefaultBranch) {
+			message += '\n\n' + this.USE_CURRENT_BRANCH_MESSAGE(baseBranchInfo.baseRef, baseBranchInfo.repoDefaultBranch);
+			buttons.unshift(
+				vscode.l10n.t('{0} and {1}', this.USE_CURRENT_BRANCH, this.DELEGATE),
 				this.DELEGATE,
 			);
 		}
