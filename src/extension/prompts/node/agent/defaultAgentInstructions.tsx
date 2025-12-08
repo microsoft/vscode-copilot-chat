@@ -6,7 +6,7 @@
 import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isHiddenModelB, isHiddenModelC, isHiddenModelD } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelB, isHiddenModelC, isHiddenModelD, isHiddenModelE } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -402,11 +402,11 @@ export class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProp
 
 	async render(state: void, sizing: PromptSizing) {
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
-		const useSimpleInstructions = (isGpt5 || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily) || this.props.modelFamily?.startsWith('arctic-fox')) && this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, this._experimentationService);
+		const useSimpleInstructions = (isGpt5 || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelE(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily) || this.props.modelFamily?.startsWith('arctic-fox')) && this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, this._experimentationService);
 
 		return <Tag name='applyPatchInstructions'>
 			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. {this.props.tools[ToolName.EditFile] && <>If you are stuck, you can fall back on the {ToolName.EditFile} tool, but {ToolName.ApplyPatch} is much faster and is the preferred tool.</>}<br />
-			{(isGpt5 || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily) || this.props.modelFamily?.startsWith('arctic-fox')) && <>Prefer the smallest set of changes needed to satisfy the task. Avoid reformatting unrelated code; preserve existing style and public APIs unless the task requires changes. When practical, complete all edits for a file within a single message.<br /></>}
+			{(isGpt5 || await isHiddenModelB(this.props.modelFamily) || await isHiddenModelE(this.props.modelFamily) || await isHiddenModelC(this.props.modelFamily) || await isHiddenModelD(this.props.modelFamily) || this.props.modelFamily?.startsWith('arctic-fox')) && <>Prefer the smallest set of changes needed to satisfy the task. Avoid reformatting unrelated code; preserve existing style and public APIs unless the task requires changes. When practical, complete all edits for a file within a single message.<br /></>}
 			{!useSimpleInstructions && <>
 				The input for this tool is a string representing the patch to apply, following a special format. For each snippet of code that needs to be changed, repeat the following:<br />
 				<ApplyPatchFormatInstructions /><br />
