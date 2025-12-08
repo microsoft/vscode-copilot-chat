@@ -28,7 +28,8 @@ const VSC_MODEL_HASHES_A = [
 
 const HIDDEN_MODEL_B_HASHES = [
 	'31a2d5282683edb3a22c565f199aa96fb9ffb3107af35aad92ee1cd567cfc25d',
-	'dd832404e8eeb90793f0369b96ed1702e0e22487a58eb4c1f285a4af5c4f6f21'
+	'dd832404e8eeb90793f0369b96ed1702e0e22487a58eb4c1f285a4af5c4f6f21',
+	'131e2083b68bde4fe879efc38ed9651b1623f8735eeb42157fa3b63ef943fdc6'
 ];
 
 // Currently empty, will be used in future for a different set of VSC models
