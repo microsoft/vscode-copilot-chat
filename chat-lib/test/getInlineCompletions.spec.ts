@@ -7,7 +7,6 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '../.env' });
 
-import { CAPIClient } from '@vscode/copilot-api';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import * as stream from 'stream';
@@ -26,7 +25,7 @@ import { Emitter, Event } from '../src/_internal/util/vs/base/common/event';
 import { Disposable } from '../src/_internal/util/vs/base/common/lifecycle';
 import { URI } from '../src/_internal/util/vs/base/common/uri';
 import { ChatRequest } from '../src/_internal/vscodeTypes';
-import { createInlineCompletionsProvider, IActionItem, IAuthenticationService, ICAPIClientService, ICompletionsStatusChangedEvent, ICompletionsTextDocumentManager, IEndpointProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
+import { createInlineCompletionsProvider, IActionItem, IAuthenticationService, ICompletionsStatusChangedEvent, ICompletionsTextDocumentManager, IEndpointProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
 
 class TestFetcher implements IFetcher {
 	constructor(private readonly responses: Record<string, string>) { }
@@ -166,13 +165,6 @@ class TestEndpointProvider implements IEndpointProvider {
 	}
 }
 
-class TestCAPIClientService extends CAPIClient implements ICAPIClientService {
-	readonly _serviceBrand: undefined;
-	constructor() {
-		super({} as any, undefined, undefined as any /* IFetcherService */, '-');
-	}
-}
-
 class TestDocumentManager extends Disposable implements ICompletionsTextDocumentManager {
 	private readonly _onDidChangeTextDocument = this._register(new Emitter<TextDocumentChangeEvent>());
 	readonly onDidChangeTextDocument = this._onDidChangeTextDocument.event;
@@ -232,7 +224,6 @@ describe('getInlineCompletions', () => {
 				async showWarningMessage(_message: string, ..._items: IActionItem[]) { return undefined; }
 			},
 			endpointProvider: new TestEndpointProvider(),
-			capiClientService: new TestCAPIClientService(),
 		});
 		const doc = createTextDocument('file:///test.txt', 'javascript', 1, 'function main() {\n\n}\n');
 
