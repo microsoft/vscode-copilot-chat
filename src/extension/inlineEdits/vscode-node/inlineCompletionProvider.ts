@@ -58,6 +58,7 @@ const learnMoreAction: Command = {
 export interface NesCompletionItem extends InlineCompletionItem {
 	readonly telemetryBuilder: NextEditProviderTelemetryBuilder;
 	readonly info: NesCompletionInfo;
+	readonly isSubsequentNes?: boolean;
 	wasShown: boolean;
 	isEditInAnotherDocument?: boolean;
 }
@@ -323,7 +324,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 					this.createNextEditorEditCompletionItem(position, {
 						document: targetDocument,
 						insertText: result.edit.newText,
-						range
+						range,
+						isSubsequentNes: result.isSubsequentNes,
 					});
 			}
 
@@ -384,7 +386,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	}
 
 	private createNextEditorEditCompletionItem(requestingPosition: Position,
-		nextEdit: { document: TextDocument; range: Range; insertText: string }
+		nextEdit: { document: TextDocument; range: Range; insertText: string; isSubsequentNes?: boolean }
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> {
 		// Display the next edit in the current document, but with a command to open the next edit in the other document.
 		// & range of this completion item will be the same as the current documents cursor position.
@@ -410,6 +412,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			showRange: range,
 			command,
 			displayLocation,
+			isSubsequentNes: nextEdit.isSubsequentNes,
 			isEditInAnotherDocument: true
 		};
 	}

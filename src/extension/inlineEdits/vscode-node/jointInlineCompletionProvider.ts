@@ -449,11 +449,16 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			);
 
 			// got nes quickly
-			if (fastNesResult && this.doesNesSuggestionAgree(docSnapshot, lastNesSuggestion.docWithNesEditApplied, (fastNesResult.items as NesCompletionItem[]).at(0))) {
+			if (fastNesResult && fastNesResult.items.length > 0 && (
+				this.doesNesSuggestionAgree(docSnapshot, lastNesSuggestion.docWithNesEditApplied, (fastNesResult.items as NesCompletionItem[]).at(0)) ||
+				(fastNesResult.items[0] as NesCompletionItem).isSubsequentNes
+			)) {
 				tracer.trace('last NES suggestion agrees with the current suggestion, using NES');
 				const list: SingularCompletionList = toInlineEditsList(fastNesResult);
 				tracer.returns(`returning NES result in ${sw.elapsed()}ms`);
 				return list;
+			} else {
+				tracer.trace(`fast NES result: ${fastNesResult === undefined ? 'undefined' : `defined`}, `);
 			}
 
 			if (tokens.coreToken.isCancellationRequested) {

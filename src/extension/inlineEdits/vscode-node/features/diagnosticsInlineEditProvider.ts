@@ -31,6 +31,7 @@ export class DiagnosticsNextEditResult implements INextEditResult {
 		public readonly result: {
 			edit: StringReplacement;
 			displayLocation?: INextEditDisplayLocation;
+			isSubsequentNes?: boolean;
 			item: DiagnosticCompletionItem;
 			showRangePreference?: ShowNextEditPreference;
 			action?: Command;

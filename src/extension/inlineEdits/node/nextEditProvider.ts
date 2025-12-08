@@ -270,7 +270,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				logContext.markAsNoSuggestions();
 			} else {
 				telemetryBuilder.setStatus('emptyEditsButHasNextCursorPosition');
-				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime });
+				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime, isSubsequentNes: false });
 			}
 		}
 
@@ -303,7 +303,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const showRangePreference = this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit;
 
-		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
+		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId, isSubsequentNes: isSubsequentCachedEdit });
 
 		telemetryBuilder.setHasNextEdit(true);
 

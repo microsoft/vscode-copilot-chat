@@ -34,6 +34,7 @@ export class NextEditResult implements INextEditResult {
 		public readonly result: {
 			edit?: StringReplacement;
 			showRangePreference?: ShowNextEditPreference;
+			isSubsequentNes: boolean;
 			documentBeforeEdits: StringText;
 			displayLocation?: INextEditDisplayLocation;
 			targetDocumentId?: DocumentId;
