@@ -8,6 +8,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
+import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { fromUnknown } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
@@ -149,8 +150,9 @@ export class XtabNextCursorPredictor {
 		});
 
 		const requestOptions = {
+			max_tokens: 4,
 			secretKey,
-		};
+		} satisfies OptionalChatRequestParams;
 
 		const response = await endpoint.makeChatRequest2(
 			{
