@@ -39,6 +39,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatMLFetcherTelemetrySender as Telemetry } from './chatMLFetcherTelemetry';
+import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 
 export interface IMadeChatRequestEvent {
 	readonly messages: Raw.ChatMessage[];
@@ -294,7 +295,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			if (err.fetcherId) {
 				actualFetcher = err.fetcherId;
 			}
-			const processed = this.processError(err, ourRequestId, usernameToScrub);
+			const processed = this.processError(err, ourRequestId, err.gitHubRequestId, usernameToScrub);
 			let connectivityTestError = telemetryProperties.connectivityTestError;
 			if (processed.type === ChatFetchResponseType.NetworkError && enableRetryOnError) {
 				// Keep existing handling of net::ERR_NETWORK_CHANGED: https://github.com/microsoft/vscode/issues/260297
@@ -506,15 +507,34 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		// Extend baseTelemetryData with modelCallId for output messages
 		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
 
-		const chatCompletions = await chatEndpointInfo.processResponseFromChatEndpoint(
-			this._telemetryService,
-			this._logService,
-			response,
-			nChoices ?? /* OpenAI's default */ 1,
-			finishedCb,
-			extendedBaseTelemetryData,
-			cancellationToken
-		);
+		let chatCompletions;
+		const gitHubRequestId = response.headers.get('x-github-request-id') ?? '';
+		try {
+			const completions = await chatEndpointInfo.processResponseFromChatEndpoint(
+				this._telemetryService,
+				this._logService,
+				response,
+				nChoices ?? /* OpenAI's default */ 1,
+				finishedCb,
+				extendedBaseTelemetryData,
+				cancellationToken
+			);
+			chatCompletions = new AsyncIterableObject<ChatCompletion>(async emitter => {
+				try {
+					for await (const completion of completions) {
+						emitter.emitOne(completion);
+					}
+				} catch (err) {
+					err.fetcherId = response.fetcher;
+					err.gitHubRequestId = gitHubRequestId;
+					throw err;
+				}
+			});
+		} catch (err) {
+			err.fetcherId = response.fetcher;
+			err.gitHubRequestId = gitHubRequestId;
+			throw err;
+		}
 
 		// CAPI will return us a Copilot Edits Session Header which is our token to using the speculative decoding endpoint
 		// We should store this in the auth service for easy use later
@@ -1055,7 +1075,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		return { type: ChatFetchResponseType.Failed, reason, requestId, serverRequestId };
 	}
 
-	private processError(err: unknown, requestId: string, usernameToScrub: string | undefined): ChatFetchError {
+	private processError(err: unknown, requestId: string, gitHubRequestId: string | undefined, usernameToScrub: string | undefined): ChatFetchError {
 		const fetcher = this._fetcherService;
 		// If we cancelled a network request, we don't want to log an error
 		if (fetcher.isAbortError(err)) {
@@ -1063,7 +1083,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				type: ChatFetchResponseType.Canceled,
 				reason: 'network request aborted',
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		}
 		if (isCancellationError(err)) {
@@ -1071,7 +1091,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				type: ChatFetchResponseType.Canceled,
 				reason: 'Got a cancellation error',
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		}
 		if (err && (
@@ -1082,7 +1102,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				type: ChatFetchResponseType.Canceled,
 				reason: 'Stream closed prematurely',
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		}
 		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
@@ -1096,7 +1116,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
 				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		} else if (fetcher.isFetcherError(err)) {
 			return {
@@ -1104,7 +1124,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				reason: userMessage,
 				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		} else {
 			return {
@@ -1112,7 +1132,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				reason: 'Error on conversation request. Check the log for more details.',
 				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		}
 	}
