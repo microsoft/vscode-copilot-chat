@@ -71,8 +71,8 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			}
 		} else {
 			const hasCustomDefaultValue = (
-				ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(key.defaultValue)
-				|| ConfigValueValidators.isDefaultValueWithTeamValue(key.defaultValue)
+				ConfigValueValidators.isCustomInternalDefaultValue(key.defaultValue)
+				|| ConfigValueValidators.isCustomTeamDefaultValue(key.defaultValue)
 			);
 			const userIsInternalOrTeamMember = (this._isInternal || this._isTeamMember);
 			if (key.isPublic && hasCustomDefaultValue && userIsInternalOrTeamMember) {

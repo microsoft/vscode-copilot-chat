@@ -210,15 +210,15 @@ export abstract class AbstractConfigurationService extends Disposable implements
 	}
 
 	public getDefaultValue<T>(key: BaseConfig<T>): T {
-		if (ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(key.defaultValue)) {
-			return this._isUsingTeamDefault(key)
+		if (ConfigValueValidators.isCustomInternalDefaultValue(key.defaultValue)) {
+			return this._isTeamMember
 				? key.defaultValue.teamDefaultValue
 				: this._isInternal
 					? key.defaultValue.internalDefaultValue
 					: key.defaultValue.defaultValue;
 		}
-		if (ConfigValueValidators.isDefaultValueWithTeamValue(key.defaultValue)) {
-			return this._isUsingTeamDefault(key) ? key.defaultValue.teamDefaultValue : key.defaultValue.defaultValue;
+		if (ConfigValueValidators.isCustomTeamDefaultValue(key.defaultValue)) {
+			return this._isTeamMember ? key.defaultValue.teamDefaultValue : key.defaultValue.defaultValue;
 		}
 		return key.defaultValue;
 	}
@@ -238,9 +238,9 @@ export abstract class AbstractConfigurationService extends Disposable implements
 		// collect potential affected settings
 		const potentialAffectedKeys = new Set<string>();
 		for (const config of globalConfigRegistry.configs.values()) {
-			if (internalChanged && (config.options?.valueIgnoredForExternals || ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(config.defaultValue))) {
+			if (internalChanged && (config.options?.valueIgnoredForExternals || ConfigValueValidators.isCustomInternalDefaultValue(config.defaultValue))) {
 				potentialAffectedKeys.add(config.fullyQualifiedId);
-			} else if (teamMemberChanged && ConfigValueValidators.isDefaultValueWithTeamValue(config.defaultValue)) {
+			} else if (teamMemberChanged && ConfigValueValidators.isCustomTeamDefaultValue(config.defaultValue)) {
 				potentialAffectedKeys.add(config.fullyQualifiedId);
 			}
 		}
@@ -301,19 +301,6 @@ export abstract class AbstractConfigurationService extends Disposable implements
 		return observable;
 	}
 
-	protected _isUsingTeamDefault(key: BaseConfig<any>): boolean {
-		if (!this._isTeamMember) {
-			return false;
-		}
-		if (
-			!ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(key.defaultValue)
-			&& !ConfigValueValidators.isDefaultValueWithTeamValue(key.defaultValue)
-		) {
-			return false;
-		}
-		return true;
-	}
-
 	/**
 	 * Checks if the key is configured by the user in any of the configuration scopes.
 	 */
@@ -332,19 +319,33 @@ export abstract class AbstractConfigurationService extends Disposable implements
 
 }
 
-export type DefaultValueWithTeamValue<T> = {
+export interface CustomTeamDefaultValue<T> {
+	/**
+	 * The default value for the setting, which must be the same as the default value in package.json.
+	 */
 	defaultValue: T;
+	/**
+	 * A temporary custom default value for the team.
+	 */
 	teamDefaultValue: T;
-};
-export type DefaultValueWithTeamAndInternalValue<T> = DefaultValueWithTeamValue<T> & { internalDefaultValue: T };
+}
+
+export interface CustomInternalDefaultValue<T> extends CustomTeamDefaultValue<T> {
+	/**
+	 * A temporary custom default value for internal users.
+	 */
+	internalDefaultValue: T;
+}
+
+export type ConfigDefaultValue<T> = T | CustomTeamDefaultValue<T> | CustomInternalDefaultValue<T>;
 
 export namespace ConfigValueValidators {
-	export function isDefaultValueWithTeamValue<T>(value: T | DefaultValueWithTeamValue<T>): value is DefaultValueWithTeamValue<T> {
-		return types.isObject(value) && 'defaultValue' in value && 'teamDefaultValue' in value;
+	export function isCustomTeamDefaultValue<T>(value: ConfigDefaultValue<T>): value is CustomTeamDefaultValue<T> {
+		return typeof value === 'object' && !!value && types.hasKey(value, { defaultValue: true, teamDefaultValue: true });
 	}
 
-	export function isDefaultValueWithTeamAndInternalValue<T>(value: T | DefaultValueWithTeamAndInternalValue<T>): value is DefaultValueWithTeamAndInternalValue<T> {
-		return ConfigValueValidators.isDefaultValueWithTeamValue(value) && 'internalDefaultValue' in value;
+	export function isCustomInternalDefaultValue<T>(value: ConfigDefaultValue<T>): value is CustomInternalDefaultValue<T> {
+		return ConfigValueValidators.isCustomTeamDefaultValue(value) && types.hasKey(value, { internalDefaultValue: true });
 	}
 }
 
@@ -384,7 +385,7 @@ export interface BaseConfig<T> {
 	/**
 	 * The default value (defined either in code for hidden settings, or in package.json for non-hidden settings)
 	 */
-	readonly defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>;
+	readonly defaultValue: ConfigDefaultValue<T>;
 
 	/**
 	 * Setting options
@@ -429,7 +430,7 @@ function getPackageJsonDefaults(): Map<string, any> {
 	return packageJsonDefaults;
 }
 
-function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, options: ConfigOptions | undefined): BaseConfig<T> {
+function toBaseConfig<T>(key: string, defaultValue: ConfigDefaultValue<T>, options: ConfigOptions | undefined): BaseConfig<T> {
 	const fullyQualifiedId = `${CopilotConfigPrefix}.${key}`;
 	const fullyQualifiedOldId = options?.oldKey ? `${CopilotConfigPrefix}.${options.oldKey}` : undefined;
 	const packageJsonDefaults = getPackageJsonDefaults();
@@ -438,9 +439,9 @@ function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValu
 	if (isPublic) {
 		// make sure the default in the code matches the default in packageJson
 		const publicDefaultValue = (
-			ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(defaultValue)
+			ConfigValueValidators.isCustomInternalDefaultValue(defaultValue)
 				? defaultValue.defaultValue
-				: ConfigValueValidators.isDefaultValueWithTeamValue(defaultValue)
+				: ConfigValueValidators.isCustomTeamDefaultValue(defaultValue)
 					? defaultValue.defaultValue
 					: defaultValue
 		);
@@ -492,9 +493,9 @@ class ConfigurationMigrationRegistryImpl implements IConfigurationMigrationRegis
 
 export const ConfigurationMigrationRegistry = new ConfigurationMigrationRegistryImpl();
 
-function defineSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
-function defineSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
-function defineSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
+function defineSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
+function defineSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
+function defineSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
 	if (configType === ConfigType.ExperimentBased) {
 		const value: ExperimentBasedConfig<T> = { ...toBaseConfig(key, defaultValue, options), configType: ConfigType.ExperimentBased, experimentName: expOptions?.experimentName, validator };
 		if (value.advancedSubKey) {
@@ -510,9 +511,9 @@ function defineSetting<T extends ExperimentBasedConfigType>(key: string, configT
 	return value;
 }
 
-function defineTeamInternalSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
-function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
-function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
+function defineTeamInternalSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
+function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
+function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
 	options = { ...options, valueIgnoredForExternals: true };
 	return configType === ConfigType.Simple ? defineSetting(key, configType, defaultValue, validator, options) : defineSetting(key, configType, defaultValue, validator, options, expOptions);
 }
@@ -529,12 +530,12 @@ function migrateSetting(newKey: string, oldKey: string): void {
 	}]);
 }
 
-function defineAndMigrateSetting<T>(oldKey: string, newKey: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, options?: ConfigOptions): Config<T> {
+function defineAndMigrateSetting<T>(oldKey: string, newKey: string, defaultValue: ConfigDefaultValue<T>, options?: ConfigOptions): Config<T> {
 	migrateSetting(newKey, oldKey);
 	return defineSetting(newKey, ConfigType.Simple, defaultValue, undefined, { ...options, oldKey });
 }
 
-function defineAndMigrateExpSetting<T extends ExperimentBasedConfigType>(oldKey: string, newKey: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T> {
+function defineAndMigrateExpSetting<T extends ExperimentBasedConfigType>(oldKey: string, newKey: string, defaultValue: ConfigDefaultValue<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T> {
 	migrateSetting(newKey, oldKey);
 	return defineSetting(newKey, ConfigType.ExperimentBased, defaultValue, undefined, { ...options, oldKey }, expOptions);
 }
