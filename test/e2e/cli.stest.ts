@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import { platform, tmpdir } from 'os';
 import * as path from 'path';
 import type { ChatPromptReference } from 'vscode';
+import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/agents/copilotcli/common/delegationSummaryService';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/agents/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport } from '../../src/extension/agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/agents/copilotcli/node/copilotcliPromptResolver';
@@ -18,6 +19,7 @@ import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension
 import { PermissionRequest } from '../../src/extension/agents/copilotcli/node/permissionHelpers';
 import { OpenAIAdapterFactoryForSTests } from '../../src/extension/agents/node/adapters/openaiAdapterForSTests';
 import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer } from '../../src/extension/agents/node/langModelServer';
+import { ChatSummarizerProvider } from '../../src/extension/prompt/node/summarizer';
 import { MockChatResponseStream, TestChatRequest } from '../../src/extension/test/node/testHelpers';
 import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../src/platform/filesystem/common/fileSystemService';
@@ -144,6 +146,10 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 		}
 	}
 
+	let accessor = testingServiceCollection.clone().createTestingAccessor();
+	let instaService = accessor.get(IInstantiationService);
+	const summarizer = instaService.createInstance(ChatSummarizerProvider);
+	const delegatingSummarizerProvider = instaService.createInstance(ChatDelegationSummaryService, summarizer);
 	testingServiceCollection.define(ICopilotCLISessionService, new SyncDescriptor(TestCopilotCLISessionService));
 	testingServiceCollection.define(ITestSessionOptionsProvider, new SyncDescriptor(TestSessionOptionsProvider));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(TestLanguageModelServer));
@@ -152,13 +158,14 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	testingServiceCollection.define(ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents));
 	testingServiceCollection.define(ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
+	testingServiceCollection.define(IChatDelegationSummaryService, delegatingSummarizerProvider);
 	const simulationWorkspace = new SimulationWorkspace();
 	simulationWorkspace.setupServices(testingServiceCollection);
 
-	const accessor = testingServiceCollection.createTestingAccessor();
+	accessor = testingServiceCollection.createTestingAccessor();
 	const copilotCLISessionService = accessor.get(ICopilotCLISessionService);
 	const sdk = accessor.get(ICopilotCLISDK);
-	const instaService = accessor.get(IInstantiationService);
+	instaService = accessor.get(IInstantiationService);
 	const imageSupport = instaService.createInstance(CopilotCLIImageSupport);
 	const promptResolver = instaService.createInstance(CopilotCLIPromptResolver, imageSupport);
 
@@ -614,24 +621,24 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 		})
 	);
 
-	(platform() === 'win32' ? stest.skip : stest)({ description: 'can run terminal commands' },
+	stest({ description: 'can run terminal commands' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
 			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
 
+			const command = platform() === 'win32' ? 'Get-Location' : 'pwd';
 			const { prompt, attachments } = await resolvePromptWithFileReferences(
-				`Use terminal commands to determine my current directory`,
+				`Use terminal command '${command}' to determine my current directory`,
 				[],
 				promptResolver
 			);
 			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
-
 			disposables.add(session.object.attachPermissionHandler(async (permission: PermissionRequest) => {
 				if (permission.kind === 'read') {
 					return true;
-				} else if (permission.kind === 'shell' && permission.fullCommandText === 'pwd') {
+				} else if (permission.kind === 'shell' && permission.fullCommandText.toLowerCase().includes(command.toLowerCase())) {
 					return true;
 				} else {
 					return false;
@@ -640,6 +647,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 
 			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
+			assertNoErrorsInStream(stream);
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertStreamContains(stream, 'wkspc1');
 		})
