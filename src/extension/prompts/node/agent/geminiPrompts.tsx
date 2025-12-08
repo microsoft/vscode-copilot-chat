@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
+import { isHiddenModelF } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
@@ -113,6 +114,9 @@ class GeminiPromptResolver implements IAgentPrompt {
 	constructor() { }
 
 	static readonly familyPrefixes = ['gemini'];
+	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
+		return isHiddenModelF(endpoint);
+	}
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		return DefaultGeminiAgentPrompt;
