@@ -246,15 +246,15 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	private readonly _onDidChangeEmitter = this._register(new vscode.EventEmitter<void>());
 	public readonly onDidChange?: vscode.Event<void> | undefined = this._onDidChangeEmitter.event;
 
-	private _requestsInFlightCount = 0;
-	private _completionsRequestsInFlightCount = 0;
+	private _requestsInFlight = new Set<CancellationToken>();
+	private _completionsRequestsInFlight = new Set<CancellationToken>();
 
 	private get _isRequestInFlight(): boolean {
-		return this._requestsInFlightCount > 0;
+		return this._requestsInFlight.size > 0;
 	}
 
 	private get _isCompletionsRequestInFlight(): boolean {
-		return this._completionsRequestsInFlightCount > 0;
+		return this._completionsRequestsInFlight.size > 0;
 	}
 
 	private _tracer = createTracer(['NES', 'JointCompletionsProvider'], (msg) => this._logService.trace(msg));
@@ -331,7 +331,11 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		const completionsCts = new CancellationTokenSource(token);
 		const nesCts = new CancellationTokenSource(token);
 
-		this._requestsInFlightCount++;
+		this._requestsInFlight.add(token);
+		const disp1 = token.onCancellationRequested(() => {
+			tracer.trace(`invocation #${invocationId}: request in flight: false -- due to cancellation`);
+			this._requestsInFlight.delete(token);
+		});
 		tracer.trace(`invocation #${invocationId} started; request in flight: true`);
 
 		let saveLastNesSuggestion: null | LastNesSuggestion = null;
@@ -373,7 +377,11 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 
 			return list;
 		} finally {
-			this._requestsInFlightCount--;
+			if (!token.isCancellationRequested) {
+				tracer.trace(`invocation #${invocationId}: request in flight: false -- due to provider finishing`);
+				this._requestsInFlight.delete(token);
+			}
+			disp1.dispose();
 
 			// Only save the last NES suggestion if this is the latest invocation
 			if (invocationId === this.provideInlineCompletionItemsInvocationCount) {
@@ -510,8 +518,13 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	private _invokeCompletionsProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
 		let completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined;
 		if (this._completionsProvider) {
-			this._completionsRequestsInFlightCount++;
-			try {
+			this._completionsRequestsInFlight.add(tokens.completionsCts.token);
+			const disp = tokens.completionsCts.token.onCancellationRequested(() => this._completionsRequestsInFlight.delete(tokens.completionsCts.token));
+			const cleanup = () => {
+				this._completionsRequestsInFlight.delete(tokens.completionsCts.token);
+				disp.dispose();
+			};
+			try { // in case the provider throws synchronously
 				tracer.trace(`- requesting completions provideInlineCompletionItems`);
 				completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, tokens.completionsCts.token);
 				completionsP.then((completionsR) => {
@@ -519,10 +532,10 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				}).catch((e) => {
 					tracer.trace(`completions provider errored after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
 				}).finally(() => {
-					this._completionsRequestsInFlightCount--;
+					cleanup();
 				});
 			} catch (e) {
-				this._completionsRequestsInFlightCount--;
+				cleanup();
 				tracer.trace(`completions provider threw synchronously after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
 				throw e;
 			}
