@@ -326,7 +326,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		// otherwise, use built-in defaults
 		if (copilotToken?.isFcv1()) {
 			return InlineEditsModelService.COPILOT_NES_XTAB_MODEL;
-		} if (copilotToken?.isFreeUser || copilotToken?.isNoAuthUser) {
+		} else if (copilotToken?.isFreeUser || copilotToken?.isNoAuthUser) {
 			return InlineEditsModelService.COPILOT_NES_CALLISTO;
 		} else {
 			return InlineEditsModelService.COPILOT_NES_OCT;
