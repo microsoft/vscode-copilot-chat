@@ -569,29 +569,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	/**
-	 * Determine if thinking should be disabled for Anthropic models on continuation.
-	 * Thinking should only be disabled if:
-	 * 1. This is a continuation (retry/follow-up)
-	 * 2. The endpoint is an Anthropic/Claude model
-	 * 3. Previous messages do NOT contain thinking
-	 *
-	 * If previous messages already have thinking, we must keep it enabled to avoid
-	 * Claude API error: "an assistant message in the final position cannot contain thinking"
-	 *
-	 * @param isContinuation - Whether this is a continuation request
-	 * @param isAnthropicEndpoint - Whether the endpoint is an Anthropic/Claude model
-	 * @param messages - The messages to check for thinking content
-	 * @returns true if thinking should be disabled, false otherwise
-	 */
-	public static shouldDisableThinking(
-		isContinuation: boolean,
-		isAnthropicEndpoint: boolean,
-		messages: Raw.ChatMessage[]
-	): boolean {
-		return isContinuation && isAnthropicEndpoint && !ToolCallingLoop.messagesContainThinking(messages);
-	}
-
-	/**
 	 * Apparently we can render prompts which have a tool message which is out of place. Don't know why this is happening, but try to detect this and fix it up.
 	 */
 	private validateToolMessages(messages: Raw.ChatMessage[]): Raw.ChatMessage[] {
