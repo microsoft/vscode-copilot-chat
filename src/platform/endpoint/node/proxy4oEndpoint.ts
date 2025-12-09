@@ -12,6 +12,7 @@ import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
+import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
@@ -35,8 +36,14 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
 		@ILogService logService: ILogService,
+		@IProxyModelsService proxyModelsService: IProxyModelsService,
 	) {
-		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.TeamInternal.InstantApplyModelName, experimentationService) ?? CHAT_MODEL.GPT4OPROXY;
+		// Check experimental flag to determine if we should use proxy models service
+		const useProxyModelsService = configurationService.getExperimentBasedConfig<boolean>(ConfigKey.TeamInternal.UseProxyModelsServiceForInstantApply, experimentationService);
+		const instantApplyModels = useProxyModelsService ? proxyModelsService.instantApplyModels : undefined;
+		const model = (instantApplyModels && instantApplyModels.length > 0)
+			? instantApplyModels[0].name
+			: configurationService.getExperimentBasedConfig<string>(ConfigKey.TeamInternal.InstantApplyModelName, experimentationService) ?? CHAT_MODEL.GPT4OPROXY;
 
 		const modelInfo: IChatModelInformation = {
 			id: model,
