@@ -9,7 +9,9 @@ import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResp
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
@@ -28,6 +30,7 @@ import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCrafting
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext, InternalToolReference, IToolCall, IToolCallRound } from '../../prompt/common/intents';
+import { cancelText, IToolCallIterationIncrease } from '../../prompt/common/specialRequestTypes';
 import { ThinkingDataItem, ToolCallRound } from '../../prompt/common/toolCallRound';
 import { IBuildPromptResult, IResponseProcessor } from '../../prompt/node/intents';
 import { PseudoStopStartResponseProcessor } from '../../prompt/node/pseudoStartStopConversationCallback';
@@ -38,8 +41,6 @@ import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { PauseController } from './pauseController';
-import { cancelText, IToolCallIterationIncrease } from '../../prompt/common/specialRequestTypes';
-import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 
 
 export const enum ToolCallLimitBehavior {
@@ -434,11 +435,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
-		// When continuing from a tool call error, disable thinking because we don't have
-		// the original thinking blocks to include in the resumed assistant message.
-		// Anthropic requires thinking blocks to precede tool_use blocks when thinking is enabled.
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
-		const disableThinking = isContinuation && isAnthropicFamily(endpoint);
+		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {
@@ -551,6 +549,46 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 			return m;
 		});
+	}
+
+	public static messagesContainThinking(messages: Raw.ChatMessage[]): boolean {
+		return messages.some(m => {
+			if (m.role !== Raw.ChatRole.Assistant) {
+				return false;
+			}
+			if (Array.isArray(m.content)) {
+				return m.content.some(part => {
+					if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+						return rawPartAsThinkingData(part) !== undefined;
+					}
+					return false;
+				});
+			}
+			return false;
+		});
+	}
+
+	/**
+	 * Determine if thinking should be disabled for Anthropic models on continuation.
+	 * Thinking should only be disabled if:
+	 * 1. This is a continuation (retry/follow-up)
+	 * 2. The endpoint is an Anthropic/Claude model
+	 * 3. Previous messages do NOT contain thinking
+	 *
+	 * If previous messages already have thinking, we must keep it enabled to avoid
+	 * Claude API error: "an assistant message in the final position cannot contain thinking"
+	 *
+	 * @param isContinuation - Whether this is a continuation request
+	 * @param isAnthropicEndpoint - Whether the endpoint is an Anthropic/Claude model
+	 * @param messages - The messages to check for thinking content
+	 * @returns true if thinking should be disabled, false otherwise
+	 */
+	public static shouldDisableThinking(
+		isContinuation: boolean,
+		isAnthropicEndpoint: boolean,
+		messages: Raw.ChatMessage[]
+	): boolean {
+		return isContinuation && isAnthropicEndpoint && !ToolCallingLoop.messagesContainThinking(messages);
 	}
 
 	/**
