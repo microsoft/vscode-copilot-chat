@@ -381,6 +381,20 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const prResults = await Promise.all(prFetches);
 			const prMap = new Map(prResults.filter(r => r.pr).map(r => [r.globalId, r.pr!]));
 
+			const validateISOTimestamp = (date: string | undefined): number | undefined => {
+				try {
+					if (!date) {
+						return;
+					}
+					const time = new Date(date)?.getTime();
+					if (time > 0) {
+						return time;
+					}
+				} catch { }
+			};
+
+			const createdAt = validateISOTimestamp(sessions[0].created_at);
+
 			// Create session items from latest sessions
 			const sessionItems = await Promise.all(Array.from(latestSessionsMap.values()).map(async sessionItem => {
 				const pr = prMap.get(sessionItem.resource_global_id);
@@ -394,10 +408,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					status: this.getSessionStatusFromSession(sessionItem),
 					description: this.getPullRequestDescription(pr),
 					tooltip: this.createPullRequestTooltip(pr),
-					timing: {
-						startTime: new Date(sessionItem.created_at).getTime(),
-						endTime: sessionItem.completed_at ? new Date(sessionItem.completed_at).getTime() : undefined
-					},
+					...(createdAt ? {
+						timing: {
+							startTime: createdAt,
+							endTime: validateISOTimestamp(sessionItem.completed_at),
+						}
+					} : {}),
 					changes: {
 						files: pr.files.totalCount,
 						insertions: pr.additions,

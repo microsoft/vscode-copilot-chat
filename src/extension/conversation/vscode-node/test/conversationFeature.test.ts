@@ -9,7 +9,7 @@ import * as sinon from 'sinon';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
-import { setCopilotToken } from '../../../../platform/authentication/common/staticGitHubAuthenticationService';
+import { setCopilotToken, StaticGitHubAuthenticationService } from '../../../../platform/authentication/common/staticGitHubAuthenticationService';
 import { FailingDevContainerConfigurationService, IDevContainerConfigurationService } from '../../../../platform/devcontainer/common/devContainerConfigurationService';
 import { ICombinedEmbeddingIndex, VSCodeCombinedIndexImpl } from '../../../../platform/embeddings/common/vscodeIndex';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
@@ -39,6 +39,8 @@ suite('Conversation feature test suite', function () {
 		testingServiceCollection.define(IIntentService, new SyncDescriptor(IntentService));
 		testingServiceCollection.define(ISettingsEditorSearchService, new SyncDescriptor(NoopSettingsEditorSearchService));
 		testingServiceCollection.define(IMergeConflictService, new SyncDescriptor(TestMergeConflictServiceImpl));
+		// We don't need auth in these tests
+		testingServiceCollection.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [() => undefined]));
 
 		accessor = testingServiceCollection.createTestingAccessor();
 		instaService = accessor.get(IInstantiationService);

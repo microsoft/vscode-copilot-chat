@@ -180,7 +180,9 @@ export type IChatRequestTelemetryProperties = {
 	associatedRequestId?: string;
 	retryAfterErrorCategory?: string;
 	retryAfterError?: string;
+	retryAfterErrorGitHubRequestId?: string;
 	connectivityTestError?: string;
+	connectivityTestErrorGitHubRequestId?: string;
 	retryAfterFilterCategory?: string;
 }
 
