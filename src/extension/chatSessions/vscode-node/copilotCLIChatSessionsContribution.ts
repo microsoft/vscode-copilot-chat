@@ -249,7 +249,29 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
-		const sessions = await this.copilotcliSessionService.getAllSessions(token);
+		let sessions = await this.copilotcliSessionService.getAllSessions(token);
+		// additional filtering based on worktree matching workspace's git repo worktrees
+		const currentWorkspaceGitWorktrees: string[] = [];
+		const repository = this.gitService.activeRepository.get();
+		if (repository) {
+			const worktrees = await this.gitService.getWorktrees(repository.rootUri);
+			for (const worktree of worktrees) {
+				currentWorkspaceGitWorktrees.push(worktree.path);
+			}
+		}
+
+		if (currentWorkspaceGitWorktrees.length > 0) {
+			// we know the current workspace git worktrees, filter sessions based on that
+			sessions = sessions.filter(session => {
+				const worktreePath = this.worktreeManager.getWorktreePath(session.id);
+				if (worktreePath) {
+					// only include sessions whose worktree belongs to current workspace
+					return currentWorkspaceGitWorktrees.some(wsWorktree => isEqual(URI.file(wsWorktree), URI.file(worktreePath)));
+				}
+				// include sessions without worktree as well
+				return true;
+			});
+		}
 		const diskSessions = await Promise.all(sessions.map(async session => this._toChatSessionItem(session)));
 
 		const count = diskSessions.length;
@@ -261,6 +283,16 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(_untitledSessionIdMap.get(session.id) ?? session.id);
 		const worktreePath = this.worktreeManager.getWorktreePath(session.id);
+		if (worktreePath) {
+			console.log('[CopilotCLIChatSessionItemProvider]_toChatSessionItem', session.id, session.label, worktreePath);
+			// now let's check if the worktree belongs to the workspace
+			this.gitService.repositories.forEach(repo => {
+				this.gitService.getWorktrees(repo.rootUri).then(worktrees => {
+					console.log('[CopilotCLIChatSessionItemProvider]_toChatSessionItem', 'worktrees', worktrees);
+				});
+			});
+		}
+
 		const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.id);
 
 		const label = session.label;
