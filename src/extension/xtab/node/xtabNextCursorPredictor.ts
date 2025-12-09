@@ -8,6 +8,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
+import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { fromUnknown } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
@@ -148,15 +149,23 @@ export class XtabNextCursorPredictor {
 			},
 		});
 
+		const maxResponseTokens = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionMaxResponseTokens, this.expService);
+
+		let requestOptions: OptionalChatRequestParams = {
+			max_tokens: maxResponseTokens,
+		};
+
+		if (secretKey) {
+			requestOptions = { ...requestOptions, secretKey };
+		}
+
 		const response = await endpoint.makeChatRequest2(
 			{
 				messages,
 				debugName: 'nes.nextCursorPosition',
 				finishedCb: undefined,
 				location: ChatLocation.Other,
-				requestOptions: secretKey ? {
-					secretKey,
-				} : undefined,
+				requestOptions,
 			},
 			CancellationToken.None,
 		);
