@@ -349,8 +349,15 @@ export function getFolderAttachmentPath(folderPath: string): string {
 }
 
 function pathToUri(pathStr: string): URI {
-	if (process.platform === 'win32' && pathStr.includes('\\\\')) {
-		return URI.file(pathStr.replaceAll('\\\\', '\\'));
+	if (process.platform === 'win32') {
+		// Don't normalize valid UNC paths (starting with \\ but not with \\\\)
+		if (pathStr.startsWith('\\\\') && !pathStr.startsWith('\\\\\\\\')) {
+			return URI.file(pathStr);
+		}
+		// Normalize over-escaped paths
+		if (pathStr.includes('\\\\')) {
+			return URI.file(pathStr.replaceAll('\\\\', '\\'));
+		}
 	}
 	return URI.file(pathStr);
 }
