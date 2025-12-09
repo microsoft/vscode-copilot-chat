@@ -552,20 +552,29 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	public static messagesContainThinking(messages: Raw.ChatMessage[]): boolean {
-		return messages.some(m => {
-			if (m.role !== Raw.ChatRole.Assistant) {
-				return false;
+		let lastUserMessageIndex = -1;
+		for (let i = messages.length - 1; i >= 0; i--) {
+			if (messages[i].role === Raw.ChatRole.User) {
+				lastUserMessageIndex = i;
+				break;
 			}
-			if (Array.isArray(m.content)) {
-				return m.content.some(part => {
-					if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
-						return rawPartAsThinkingData(part) !== undefined;
-					}
-					return false;
-				});
-			}
+		}
+
+		// If no user message found, return false to disable thinking
+		if (lastUserMessageIndex === -1) {
 			return false;
-		});
+		}
+
+		for (let i = lastUserMessageIndex + 1; i < messages.length; i++) {
+			const m = messages[i];
+			if (m.role !== Raw.ChatRole.Assistant) {
+				continue;
+			}
+			return Array.isArray(m.content) && m.content.some(part =>
+				part.type === Raw.ChatCompletionContentPartKind.Opaque && rawPartAsThinkingData(part) !== undefined
+			);
+		}
+		return false;
 	}
 
 	/**
