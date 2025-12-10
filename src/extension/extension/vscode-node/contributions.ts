@@ -14,6 +14,7 @@ import { CompletionsUnificationContribution } from '../../completions/vscode-nod
 import { ConfigurationMigrationContribution } from '../../configuration/vscode-node/configurationMigration';
 import { ContextKeysContribution } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { PlaceholderViewContribution } from '../../contextKeys/vscode-node/placeholderView.contribution';
+import { AgentModeStatusTelemetryContribution } from '../../conversation/vscode-node/agentModeStatusTelemetry.contribution';
 import { AiMappedEditsContrib } from '../../conversation/vscode-node/aiMappedEditsContrib';
 import { ConversationFeature } from '../../conversation/vscode-node/conversationFeature';
 import { FeedbackCommandContribution } from '../../conversation/vscode-node/feedbackContribution';
@@ -62,6 +63,7 @@ import vscodeContributions from '../vscode/contributions';
 
 export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	...vscodeContributions,
+	asContributionFactory(AgentModeStatusTelemetryContribution),
 	asContributionFactory(ConversationFeature),
 	workspaceChunkSearchContribution,
 	asContributionFactory(AuthenticationContrib),
