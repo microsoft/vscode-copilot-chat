@@ -3,6 +3,7 @@
 .vscode-test-web/
 node_modules/
 dist/
+dist-sourcemaps/
 
 # created by simulation
 .simulation
