@@ -168,7 +168,14 @@ export class NesRenameContribution implements vscode.Disposable {
 				if (protocol.PrepareNesRenameResponse.isError(result)) {
 					vscode.window.showErrorMessage(`Prepare NES Rename error: ${result.message}`);
 				} else if (protocol.PrepareNesRenameResponse.isOk(result)) {
-					vscode.window.showInformationMessage(`Prepare NES Rename result for '${oldName}' to '${newName}': ${result.body.canRename}`);
+					const body = result.body;
+					if (body.canRename === protocol.RenameKind.yes) {
+						vscode.window.showInformationMessage(`Prepare NES Rename: Can rename '${oldName}' to '${newName}'.`);
+					} else if (body.canRename === protocol.RenameKind.maybe) {
+						vscode.window.showWarningMessage(`Prepare NES Rename: Maybe can rename '${oldName}' to '${newName}'.`);
+					} else {
+						vscode.window.showErrorMessage(`Prepare NES Rename: Cannot rename '${oldName}' to '${newName}'. Reason: ${body.reason ?? 'Not provided'}`);
+					}
 				}
 			} finally {
 				tokenSource.dispose();

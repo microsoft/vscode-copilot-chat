@@ -2,13 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import * as l10n from '@vscode/l10n';
 import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvider, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { EndpointEditToolName, IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { TokenizerType } from '../../../util/common/tokenizer';
-import { localize } from '../../../util/vs/nls';
 
 export const enum BYOKAuthType {
 	/**
@@ -106,7 +106,7 @@ export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInforma
 	return {
 		id: chatModelInfo.id,
 		family: chatModelInfo.capabilities.family,
-		tooltip: localize('byok.model.description', '{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
+		tooltip: l10n.t('{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
 		version: '1.0.0',
 		maxOutputTokens: outputTokens,
 		maxInputTokens: inputTokens,
@@ -182,7 +182,7 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 	});
 }
 
-export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {
+export function isBYOKEnabled(copilotToken: Omit<CopilotToken, 'token'>, capiClientService: ICAPIClientService): boolean {
 	if (isScenarioAutomation) {
 		return true;
 	}

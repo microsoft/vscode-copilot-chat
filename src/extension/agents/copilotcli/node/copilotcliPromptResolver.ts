@@ -30,24 +30,21 @@ export class CopilotCLIPromptResolver {
 
 	/**
 	 * Generates the final prompt for the Copilot CLI agent, resolving variables and preparing attachments.
-	 * @param request
 	 * @param prompt Provide a prompt to override the request prompt
-	 * @param additionalReferences
-	 * @param token
-	 * @returns
 	 */
-	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], isIsolationEnabled: boolean, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[] }> {
-		const references = request.references.concat(additionalReferences.filter(ref => !request.references.includes(ref)));
+	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], isIsolationEnabled: boolean, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[]; references: vscode.ChatPromptReference[] }> {
+		const allReferences = request.references.concat(additionalReferences.filter(ref => !request.references.includes(ref)));
 		prompt = prompt ?? request.prompt;
 		if (prompt.startsWith('/')) {
-			return { prompt, attachments: [] }; // likely a slash command, don't modify
+			return { prompt, attachments: [], references: [] }; // likely a slash command, don't modify
 		}
-		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(references), isIsolationEnabled, token);
+		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(allReferences), isIsolationEnabled, token);
 		if (token.isCancellationRequested) {
-			return { prompt, attachments: [] };
+			return { prompt, attachments: [], references: [] };
 		}
 		prompt = await raceCancellation(generateUserPrompt(request, prompt, variables, this.instantiationService), token);
-		return { prompt: prompt ?? '', attachments };
+		const references = Array.from(variables).map(v => v.reference);
+		return { prompt: prompt ?? '', attachments, references };
 	}
 
 	private async constructChatVariablesAndAttachments(variables: ChatVariablesCollection, isIsolationEnabled: boolean, token: vscode.CancellationToken): Promise<[variables: ChatVariablesCollection, Attachment[]]> {

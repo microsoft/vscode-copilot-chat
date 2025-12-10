@@ -30,7 +30,6 @@ import { Iterable } from '../../../util/vs/base/common/iterator';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { mixin } from '../../../util/vs/base/common/objects';
 import { assertType, Mutable } from '../../../util/vs/base/common/types';
-import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
@@ -267,7 +266,6 @@ export class DefaultIntentRequestHandler {
 
 		if (this.documentContext) {
 			this.turn.setMetadata(new CopilotInteractiveEditorResponse(
-				'ok',
 				interactionOutcome.store,
 				{ ...this.documentContext, intent: this.intent, query: this.request.prompt },
 				this.chatTelemetryBuilder.telemetryMessageId,
@@ -725,7 +723,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 		const computePromise = this.toolGrouping.compute(this.options.request.prompt, token);		// Show progress if this takes a moment...
 		const timeout = setTimeout(() => {
-			outputStream?.progress(localize('computingTools', 'Optimizing tool selection...'), async () => {
+			outputStream?.progress(l10n.t('Optimizing tool selection...'), async () => {
 				await computePromise;
 			});
 		}, 1000);

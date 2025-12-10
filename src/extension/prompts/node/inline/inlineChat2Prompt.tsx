@@ -61,7 +61,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					<CopilotIdentityRules />
 					<SafetyRules />
 					<Tag name='instructions'>
-						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. The filepath is `{filepath}` and that is the ONLY file you are editing. There is a tool to make these code changes.<br />
+						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. You ONLY edit that file and use a tool to make these edits.<br />
 						The user is interested in code changes grounded in the user's prompt. So, focus on replying with tool calls, avoid wordy explanations, and do not ask back for clarifications.<br />
 						Do not make code changes that are not directly and logically related to the user's prompt, instead invoke the {this.props.exitToolName} tool which can handle this.<br />
 					</Tag>
@@ -69,7 +69,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 				</SystemMessage>
 				<UserMessage>
 					<>
-						This is the file you are editing:
+						The filepath is `{filepath}` and this is its content:<br />
 					</>
 					<Tag name='file'>
 						<CodeBlock includeFilepath={false} languageId={snapshotAtRequest.languageId} uri={snapshotAtRequest.uri} references={[new PromptReference(snapshotAtRequest.uri, undefined, undefined)]} code={snapshotAtRequest.getText()} />

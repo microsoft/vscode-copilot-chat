@@ -7,9 +7,9 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import * as vscode from 'vscode';
 import { FetchStreamRecorder } from '../../../platform/chat/common/chatMLFetcher';
+import { toErrorMessage } from '../../../util/common/errorMessage';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
-import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
@@ -168,7 +168,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		const ourRequestId = generateUuid();
 
 		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
-		const currentEndpoint = allEndpoints.find(endpoint => endpoint.model === this.model);
+		const currentEndpoint = allEndpoints.find(endpoint => endpoint.model === this.model && endpoint.family === this.family);
 		const isExternalModel = !currentEndpoint;
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {

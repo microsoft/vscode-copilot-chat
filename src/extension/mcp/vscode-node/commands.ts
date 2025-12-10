@@ -18,7 +18,6 @@ import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle
 import { cloneAndChange } from '../../../util/vs/base/common/objects';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation as VsCodeChatLocation } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
@@ -130,7 +129,7 @@ export class McpSetupCommands extends Disposable {
 				// allow case-insensitive comparison
 				if (this.pendingSetup?.pendingArgs.name.toUpperCase() !== args.name.toUpperCase()) {
 					finalState = FlowFinalState.NameMismatch;
-					vscode.window.showErrorMessage(localize("mcp.setup.nameMismatch", "Failed to generate MCP server configuration with a matching package name. Expected '{0}' but got '{1}' from generated configuration.", args.name, this.pendingSetup?.pendingArgs.name));
+					vscode.window.showErrorMessage(vscode.l10n.t("Failed to generate MCP server configuration with a matching package name. Expected '{0}' but got '{1}' from generated configuration.", args.name, this.pendingSetup?.pendingArgs.name ?? ''));
 					return undefined;
 				}
 
@@ -233,7 +232,7 @@ Error: ${error}`);
 
 				if (mcpServer) {
 					return {
-						type: "mapped" as const,
+						type: 'mapped' as const,
 						name: pendingArgs.name,
 						server: mcpServer.config as Omit<IMcpStdioServerConfiguration, 'type'>,
 						inputs: mcpServer.inputs
@@ -274,7 +273,7 @@ Error: ${error}`);
 
 			const toolCallLoopResult = await mcpLoop.run(undefined, cts.token);
 			if (toolCallLoopResult.response.type !== ChatFetchResponseType.Success) {
-				vscode.window.showErrorMessage(localize("mcp.setup.failed", "Failed to generate MCP configuration for {0}: {1}", validateArgs.name, toolCallLoopResult.response.reason));
+				vscode.window.showErrorMessage(vscode.l10n.t("Failed to generate MCP configuration for {0}: {1}", validateArgs.name, toolCallLoopResult.response.reason));
 				return undefined;
 			}
 
@@ -309,7 +308,7 @@ Error: ${error}`);
 				}
 			});
 
-			return { type: "assisted" as const, name, server: extracted, inputs, inputValues };
+			return { type: 'assisted' as const, name, server: extracted, inputs, inputValues };
 		})().finally(() => {
 			cts.dispose();
 			pickRef.dispose();
@@ -324,7 +323,7 @@ Error: ${error}`);
 			if (args.type === 'npm') {
 				const response = await fetcherService.fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`, { method: 'GET' });
 				if (!response.ok) {
-					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.npmPackageNotFound", "Package {0} not found in npm registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: vscode.l10n.t("Package {0} not found in npm registry", args.name) };
 				}
 				const data = await response.json() as NpmPackageResponse;
 				const version = data['dist-tags']?.latest;
@@ -338,7 +337,7 @@ Error: ${error}`);
 			} else if (args.type === 'pip') {
 				const response = await fetcherService.fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`, { method: 'GET' });
 				if (!response.ok) {
-					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.pythonPackageNotFound", "Package {0} not found in PyPI registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: vscode.l10n.t("Package {0} not found in PyPI registry", args.name) };
 				}
 				const data = await response.json() as PyPiPackageResponse;
 				const publisher = data.info?.author || data.info?.author_email || 'unknown';
@@ -363,7 +362,7 @@ Error: ${error}`);
 
 				const response = await fetcherService.fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`, { method: 'GET' });
 				if (!response.ok) {
-					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.dockerRepositoryNotFound", "Docker image {0} not found in Docker Hub registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: vscode.l10n.t("Docker image {0} not found in Docker Hub registry", args.name) };
 				}
 				const data = await response.json() as DockerHubResponse;
 				return {
@@ -373,9 +372,9 @@ Error: ${error}`);
 					readme: data.full_description || data.description,
 				};
 			}
-			return { state: 'error', error: localize("mcp.setup.unknownPackageType", "Unsupported package type: {0}", args.type), errorType: ValidatePackageErrorType.UnknownPackageType };
+			return { state: 'error', error: vscode.l10n.t("Unsupported package type: {0}", args.type), errorType: ValidatePackageErrorType.UnknownPackageType };
 		} catch (error) {
-			return { state: 'error', error: localize("mcp.setup.errorQueryingPackage", "Error querying package: {0}", (error as Error).message), errorType: ValidatePackageErrorType.UnhandledError };
+			return { state: 'error', error: vscode.l10n.t("Error querying package: {0}", (error as Error).message), errorType: ValidatePackageErrorType.UnhandledError };
 		}
 	}
 }

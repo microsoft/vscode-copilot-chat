@@ -9,90 +9,12 @@ import * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { GithubRepoId, IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { constObservable, observableValue } from '../../../../util/vs/base/common/observable';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { OrganizationAndEnterpriseAgentProvider } from '../organizationAndEnterpriseAgentProvider';
-
-/**
- * Mock implementation of IGitService for testing
- */
-class MockGitService implements IGitService {
-	_serviceBrand: undefined;
-	isInitialized = true;
-	activeRepository = observableValue<RepoContext | undefined>(this, undefined);
-	onDidOpenRepository = Event.None;
-	onDidCloseRepository = Event.None;
-	onDidFinishInitialization = Event.None;
-
-	get repositories(): RepoContext[] {
-		const repo = this.activeRepository.get();
-		return repo ? [repo] : [];
-	}
-
-	setActiveRepository(repoId: GithubRepoId | undefined) {
-		if (repoId) {
-			this.activeRepository.set({
-				rootUri: URI.file('/test/repo'),
-				headBranchName: undefined,
-				headCommitHash: undefined,
-				upstreamBranchName: undefined,
-				upstreamRemote: undefined,
-				isRebasing: false,
-				remoteFetchUrls: [`https://github.com/${repoId.org}/${repoId.repo}.git`],
-				remotes: [],
-				changes: undefined,
-				headBranchNameObs: constObservable(undefined),
-				headCommitHashObs: constObservable(undefined),
-				upstreamBranchNameObs: constObservable(undefined),
-				upstreamRemoteObs: constObservable(undefined),
-				isRebasingObs: constObservable(false),
-				isIgnored: async () => false,
-			}, undefined);
-		} else {
-			this.activeRepository.set(undefined, undefined);
-		}
-	}
-
-	async getRepository(uri: URI): Promise<RepoContext | undefined> {
-		return undefined;
-	}
-
-	async getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> {
-		return undefined;
-	}
-
-	async initialize(): Promise<void> { }
-	async add(uri: URI, paths: string[]): Promise<void> { }
-	async log(uri: URI, options?: any): Promise<any[] | undefined> {
-		return [];
-	}
-	async diffBetween(uri: URI, ref1: string, ref2: string): Promise<any[] | undefined> {
-		return [];
-	}
-	async diffWith(uri: URI, ref: string): Promise<any[] | undefined> {
-		return [];
-	}
-	async diffIndexWithHEADShortStats(uri: URI): Promise<any | undefined> {
-		return undefined;
-	}
-	async fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void> { }
-	async getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined> {
-		return undefined;
-	}
-	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
-		return undefined;
-	}
-	async deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void> { }
-	async migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void> { }
-
-	dispose() { }
-}
 
 /**
  * Mock implementation of IOctoKitService for testing
@@ -102,6 +24,8 @@ class MockOctoKitService implements IOctoKitService {
 
 	private customAgents: CustomAgentListItem[] = [];
 	private agentDetails: Map<string, CustomAgentDetails> = new Map();
+
+	private userOrganizations: string[] = ['testorg'];
 
 	getCurrentAuthedUser = async () => ({ login: 'testuser', name: 'Test User', avatar_url: '' });
 	getCopilotPullRequestsForUser = async () => [];
@@ -117,6 +41,8 @@ class MockOctoKitService implements IOctoKitService {
 	getPullRequestFiles = async () => [];
 	closePullRequest = async () => false;
 	getFileContent = async () => '';
+	getUserOrganizations = async () => this.userOrganizations;
+	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];
 
 	async getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]> {
 		return this.customAgents;
@@ -134,6 +60,10 @@ class MockOctoKitService implements IOctoKitService {
 		this.agentDetails.set(name, details);
 	}
 
+	setUserOrganizations(orgs: string[]) {
+		this.userOrganizations = orgs;
+	}
+
 	clearAgents() {
 		this.customAgents = [];
 		this.agentDetails.clear();
@@ -144,16 +74,15 @@ class MockOctoKitService implements IOctoKitService {
  * Mock implementation of extension context for testing
  */
 class MockExtensionContext {
-	storageUri: vscode.Uri | undefined;
+	globalStorageUri: vscode.Uri | undefined;
 
-	constructor(storageUri?: vscode.Uri) {
-		this.storageUri = storageUri;
+	constructor(globalStorageUri?: vscode.Uri) {
+		this.globalStorageUri = globalStorageUri;
 	}
 }
 
 suite('OrganizationAndEnterpriseAgentProvider', () => {
 	let disposables: DisposableStore;
-	let mockGitService: MockGitService;
 	let mockOctoKitService: MockOctoKitService;
 	let mockFileSystem: MockFileSystemService;
 	let mockExtensionContext: MockExtensionContext;
@@ -164,7 +93,6 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		disposables = new DisposableStore();
 
 		// Create mocks first
-		mockGitService = new MockGitService();
 		mockOctoKitService = new MockOctoKitService();
 		const storageUri = URI.file('/test/storage');
 		mockExtensionContext = new MockExtensionContext(storageUri);
@@ -186,16 +114,15 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		provider = new OrganizationAndEnterpriseAgentProvider(
 			mockOctoKitService,
 			accessor.get(ILogService),
-			mockGitService,
 			mockExtensionContext as any,
-			mockFileSystem
+			mockFileSystem,
 		);
 		disposables.add(provider);
 		return provider;
 	}
 
-	test('returns empty array when no active repository', async () => {
-		mockGitService.setActiveRepository(undefined);
+	test('returns empty array when user has no organizations', async () => {
+		mockOctoKitService.setUserOrganizations([]);
 		const provider = createProvider();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -204,8 +131,7 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 	});
 
 	test('returns empty array when no storage URI available', async () => {
-		mockExtensionContext.storageUri = undefined;
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
+		mockExtensionContext.globalStorageUri = undefined;
 		const provider = createProvider();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -214,13 +140,14 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 	});
 
 	test('returns cached agents on first call', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
-		// Pre-populate cache
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		mockFileSystem.mockDirectory(cacheDir, [['test_agent.agent.md', FileType.File]]);
-		const agentFile = URI.joinPath(cacheDir, 'test_agent.agent.md');
+		// Pre-populate cache with org folder
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
+		mockFileSystem.mockDirectory(orgDir, [['test_agent.agent.md', FileType.File]]);
+		const agentFile = URI.joinPath(orgDir, 'test_agent.agent.md');
 		const agentContent = `---
 name: Test Agent
 description: A test agent
@@ -236,7 +163,6 @@ Test prompt content`;
 	});
 
 	test('fetches and caches agents from API', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Mock API response
@@ -259,22 +185,26 @@ Test prompt content`;
 		};
 		mockOctoKitService.setAgentDetails('api_agent', mockDetails);
 
-		// First call returns cached (empty) results
+		// First call returns cached (empty) results and triggers background fetch
 		const agents1 = await provider.provideCustomAgents({}, {} as any);
 		assert.deepEqual(agents1, []);
 
 		// Wait for background fetch to complete
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		// Second call should return newly cached agents
+		// Second call should return newly cached agents from memory
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
 		assert.equal(agents2[0].name, 'api_agent');
 		assert.equal(agents2[0].description, 'An agent from API');
+
+		// Third call should also return from memory cache without file I/O
+		const agents3 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents3.length, 1);
+		assert.equal(agents3[0].name, 'api_agent');
 	});
 
 	test('generates correct markdown format for agents', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -302,8 +232,9 @@ Test prompt content`;
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check cached file content
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'full_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'full_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -323,7 +254,6 @@ Detailed prompt content
 	});
 
 	test('sanitizes filenames correctly', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -349,8 +279,9 @@ Detailed prompt content
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check that file was created with sanitized name
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'agent_with_spaces___.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'agent_with_spaces___.agent.md');
 		try {
 			const contentBytes = await mockFileSystem.readFile(agentFile);
 			const content = new TextDecoder().decode(contentBytes);
@@ -360,8 +291,7 @@ Detailed prompt content
 		}
 	});
 
-	test('fires change event when cache is updated', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
+	test('fires change event when cache is updated on first fetch', async () => {
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -383,26 +313,20 @@ Detailed prompt content
 		};
 		mockOctoKitService.setAgentDetails('changing_agent', mockDetails);
 
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
-
 		let eventFired = false;
 		provider.onDidChangeCustomAgents(() => {
 			eventFired = true;
 		});
 
-		// Update the agent details
-		mockDetails.prompt = 'Updated prompt';
-		mockOctoKitService.setAgentDetails('changing_agent', mockDetails);
-
+		// First call triggers background fetch
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
 
+		// Event should fire after initial successful fetch
 		assert.equal(eventFired, true);
 	});
 
 	test('handles API errors gracefully', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Make the API throw an error
@@ -416,7 +340,6 @@ Detailed prompt content
 	});
 
 	test('passes query options to API correctly', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		let capturedOptions: CustomAgentListOptions | undefined;
@@ -435,7 +358,6 @@ Detailed prompt content
 	});
 
 	test('prevents concurrent fetches when called multiple times rapidly', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		let apiCallCount = 0;
@@ -459,7 +381,6 @@ Detailed prompt content
 	});
 
 	test('handles partial agent detail fetch failures gracefully', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const agents: CustomAgentListItem[] = [
@@ -494,17 +415,29 @@ Detailed prompt content
 			prompt: 'Agent 1 prompt',
 		});
 
+		// Pre-populate file cache with the first agent to simulate previous successful state
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
+		mockFileSystem.mockDirectory(orgDir, [['agent1.agent.md', FileType.File]]);
+		const agentContent = `---
+name: Agent 1
+description: First agent
+---
+Agent 1 prompt`;
+		mockFileSystem.mockFile(URI.joinPath(orgDir, 'agent1.agent.md'), agentContent);
+
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		// Should cache only the successful agent
+		// With error handling, partial failures skip cache update for that org
+		// So the existing file cache is returned with the one successful agent
 		const cachedAgents = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents.length, 1);
 		assert.equal(cachedAgents[0].name, 'agent1');
 	});
 
-	test('detects when new agents are added to API', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
+	test('caches agents in memory after first successful fetch', async () => {
 		const provider = createProvider();
 
 		// Initial setup with one agent
@@ -528,12 +461,12 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		let changeEventFired = false;
-		provider.onDidChangeCustomAgents(() => {
-			changeEventFired = true;
-		});
+		// After successful fetch, subsequent calls return from memory
+		const agents1 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents1.length, 1);
+		assert.equal(agents1[0].name, 'initial_agent');
 
-		// Add a new agent
+		// Even if API is updated, memory cache is used
 		const newAgent: CustomAgentListItem = {
 			name: 'new_agent',
 			repo_owner_id: 1,
@@ -551,16 +484,13 @@ Detailed prompt content
 			prompt: 'New prompt',
 		});
 
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 150));
-
-		assert.equal(changeEventFired, true);
-		const agents = await provider.provideCustomAgents({}, {} as any);
-		assert.equal(agents.length, 2);
+		// Memory cache returns old results without refetching
+		const agents2 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents2.length, 1);
+		assert.equal(agents2[0].name, 'initial_agent');
 	});
 
-	test('detects when agents are removed from API', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
+	test('memory cache persists after first successful fetch', async () => {
 		const provider = createProvider();
 
 		// Initial setup with two agents
@@ -595,25 +525,21 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		let changeEventFired = false;
-		provider.onDidChangeCustomAgents(() => {
-			changeEventFired = true;
-		});
+		// Verify both agents are cached
+		const cachedAgents1 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(cachedAgents1.length, 2);
 
-		// Remove one agent
+		// Remove one agent from API
 		mockOctoKitService.setCustomAgents([agents[0]]);
 
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 150));
-
-		assert.equal(changeEventFired, true);
-		const cachedAgents = await provider.provideCustomAgents({}, {} as any);
-		assert.equal(cachedAgents.length, 1);
-		assert.equal(cachedAgents[0].name, 'agent1');
+		// Memory cache still returns both agents (no refetch)
+		const cachedAgents2 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(cachedAgents2.length, 2);
+		assert.equal(cachedAgents2[0].name, 'agent1');
+		assert.equal(cachedAgents2[1].name, 'agent2');
 	});
 
 	test('does not fire change event when content is identical', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -649,8 +575,7 @@ Detailed prompt content
 		assert.equal(changeEventCount, 0);
 	});
 
-	test('handles empty agent list from API', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
+	test('memory cache persists even when API returns empty list', async () => {
 		const provider = createProvider();
 
 		// Setup with initial agents
@@ -674,24 +599,20 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		let changeEventFired = false;
-		provider.onDidChangeCustomAgents(() => {
-			changeEventFired = true;
-		});
+		// Verify agent is cached
+		const agents1 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents1.length, 1);
 
 		// API now returns empty array
 		mockOctoKitService.setCustomAgents([]);
 
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 150));
-
-		assert.equal(changeEventFired, true);
-		const agents = await provider.provideCustomAgents({}, {} as any);
-		assert.equal(agents.length, 0);
+		// Memory cache still returns the agent (no refetch)
+		const agents2 = await provider.provideCustomAgents({}, {} as any);
+		assert.equal(agents2.length, 1);
+		assert.equal(agents2[0].name, 'temporary_agent');
 	});
 
 	test('generates markdown with only required fields', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Agent with minimal fields (no optional fields)
@@ -717,8 +638,9 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'minimal_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'minimal_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -731,7 +653,6 @@ Detailed prompt content
 	});
 
 	test('excludes tools field when array contains only wildcard', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
@@ -756,8 +677,9 @@ Detailed prompt content
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'wildcard_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'wildcard_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -766,12 +688,13 @@ Detailed prompt content
 	});
 
 	test('handles malformed frontmatter in cached files', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Pre-populate cache with mixed valid and malformed content
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		mockFileSystem.mockDirectory(cacheDir, [
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
+		mockFileSystem.mockDirectory(orgDir, [
 			['valid_agent.agent.md', FileType.File],
 			['no_frontmatter.agent.md', FileType.File],
 		]);
@@ -781,11 +704,11 @@ name: Valid Agent
 description: A valid agent
 ---
 Valid prompt`;
-		mockFileSystem.mockFile(URI.joinPath(cacheDir, 'valid_agent.agent.md'), validContent);
+		mockFileSystem.mockFile(URI.joinPath(orgDir, 'valid_agent.agent.md'), validContent);
 
 		// File without frontmatter - parser extracts name from filename, description is empty
 		const noFrontmatterContent = `Just some content without any frontmatter`;
-		mockFileSystem.mockFile(URI.joinPath(cacheDir, 'no_frontmatter.agent.md'), noFrontmatterContent);
+		mockFileSystem.mockFile(URI.joinPath(orgDir, 'no_frontmatter.agent.md'), noFrontmatterContent);
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
@@ -797,39 +720,29 @@ Valid prompt`;
 		assert.equal(agents[1].description, '');
 	});
 
-	test('handles repository context changes between calls', async () => {
+	test('fetches agents from all user organizations', async () => {
 		const provider = createProvider();
 
-		// First call with repo A
-		mockGitService.setActiveRepository(new GithubRepoId('orgA', 'repoA'));
+		// Set up multiple organizations
+		mockOctoKitService.setUserOrganizations(['orgA', 'orgB', 'orgC']);
 
-		let capturedOwner: string | undefined;
-		let capturedRepo: string | undefined;
+		const capturedOrgs: string[] = [];
 		mockOctoKitService.getCustomAgents = async (owner: string, repo: string) => {
-			capturedOwner = owner;
-			capturedRepo = repo;
+			capturedOrgs.push(owner);
 			return [];
 		};
 
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		assert.equal(capturedOwner, 'orgA');
-		assert.equal(capturedRepo, 'repoA');
-
-		// Change to repo B
-		mockGitService.setActiveRepository(new GithubRepoId('orgB', 'repoB'));
-
-		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
-
-		// Should fetch from new repository
-		assert.equal(capturedOwner, 'orgB');
-		assert.equal(capturedRepo, 'repoB');
+		// Should have fetched from all three organizations
+		assert.equal(capturedOrgs.length, 3);
+		assert.ok(capturedOrgs.includes('orgA'));
+		assert.ok(capturedOrgs.includes('orgB'));
+		assert.ok(capturedOrgs.includes('orgC'));
 	});
 
 	test('generates markdown with long description on single line', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Agent with a very long description that would normally be wrapped at 80 characters
@@ -856,8 +769,9 @@ Valid prompt`;
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'world_domination.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'world_domination.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -874,11 +788,10 @@ You are a world-class computer scientist.
 	});
 
 	test('generates markdown with special characters properly escaped in description', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Agent with description containing YAML special characters that need proper handling
-		const descriptionWithSpecialChars = "Agent with \"double quotes\", 'single quotes', colons:, and #comments in the description";
+		const descriptionWithSpecialChars = `Agent with "double quotes", 'single quotes', colons:, and #comments in the description`;
 		const mockAgent: CustomAgentListItem = {
 			name: 'special_chars_agent',
 			repo_owner_id: 1,
@@ -901,8 +814,9 @@ You are a world-class computer scientist.
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'special_chars_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'special_chars_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -917,7 +831,6 @@ Test prompt with special characters
 	});
 
 	test('generates markdown with multiline description containing newlines', async () => {
-		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
 		// Agent with description containing actual newline characters
@@ -944,8 +857,9 @@ Test prompt with special characters
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubAgentsCache');
-		const agentFile = URI.joinPath(cacheDir, 'multiline_agent.agent.md');
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgDir = URI.joinPath(cacheDir, 'testorg');
+		const agentFile = URI.joinPath(orgDir, 'multiline_agent.agent.md');
 		const contentBytes = await mockFileSystem.readFile(agentFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -958,5 +872,31 @@ Test prompt
 `;
 
 		assert.equal(content, expectedContent);
+	});
+
+	test('aborts fetch if user signs out during process', async () => {
+		const provider = createProvider();
+
+		// Setup multiple organizations to ensure we have multiple steps
+		mockOctoKitService.setUserOrganizations(['org1', 'org2']);
+		mockOctoKitService.getOrganizationRepositories = async (org) => ['repo'];
+
+		// Mock getCustomAgents to simulate sign out after first org
+		let callCount = 0;
+		const originalGetCustomAgents = mockOctoKitService.getCustomAgents;
+		mockOctoKitService.getCustomAgents = async (owner, repo, options) => {
+			callCount++;
+			if (callCount === 1) {
+				// Sign out user after first call
+				mockOctoKitService.getCurrentAuthedUser = async () => undefined as any;
+			}
+			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options);
+		};
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		// Should have aborted after first org, so second org shouldn't be processed
+		assert.equal(callCount, 1);
 	});
 });

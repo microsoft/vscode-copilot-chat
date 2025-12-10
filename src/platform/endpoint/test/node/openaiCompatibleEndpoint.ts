@@ -146,7 +146,7 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 
 	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {
-			"Content-Type": "application/json"
+			'Content-Type': 'application/json'
 		};
 
 		if (this.modelConfig.auth.useBearerHeader || this.modelConfig.auth.useApiKeyHeader) {
@@ -159,11 +159,11 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			}
 
 			if (this.modelConfig.auth.useBearerHeader) {
-				headers["Authorization"] = `Bearer ${apiKey}`;
+				headers['Authorization'] = `Bearer ${apiKey}`;
 			}
 
 			if (this.modelConfig.auth.useApiKeyHeader) {
-				headers["api-key"] = apiKey;
+				headers['api-key'] = apiKey;
 			}
 		}
 
@@ -243,7 +243,7 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		if (body?.tools) {
 			body.tools = body.tools.map(tool => {
 				if (isOpenAiFunctionTool(tool) && tool.function.parameters === undefined) {
-					tool.function.parameters = { type: "object", properties: {} };
+					tool.function.parameters = { type: 'object', properties: {} };
 				}
 				return tool;
 			});

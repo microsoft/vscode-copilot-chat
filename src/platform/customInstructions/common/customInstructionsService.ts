@@ -9,13 +9,14 @@ import { match } from '../../../util/vs/base/common/glob';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
+import { IObservable, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { dirname, isAbsolute } from '../../../util/vs/base/common/path';
-import { joinPath } from '../../../util/vs/base/common/resources';
+import { isEqualOrParent, joinPath, dirname as uriDirname } from '../../../util/vs/base/common/resources';
 import { isObject } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { FileType, Uri } from '../../../vscodeTypes';
 import { CodeGenerationImportInstruction, CodeGenerationTextInstruction, Config, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
-import { IEnvService } from '../../env/common/envService';
+import { INativeEnvService } from '../../env/common/envService';
 import { IExtensionsService } from '../../extensions/common/extensionsService';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
@@ -53,6 +54,7 @@ export interface ICustomInstructionsService {
 	getAgentInstructions(): Promise<URI[]>;
 
 	isExternalInstructionsFile(uri: URI): boolean;
+	isExternalInstructionsFolder(uri: URI): boolean;
 }
 
 export type CodeGenerationInstruction = { languagee?: string; text: string } | { languagee?: string; file: string };
@@ -74,6 +76,9 @@ function isCodeGenerationTextInstruction(instruction: any): instruction is CodeG
 const INSTRUCTION_FILE_EXTENSION = '.instructions.md';
 const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
 
+const SKILL_FOLDER = '.claude/skills';
+const USE_CLAUDE_SKILLS_SETTING = 'chat.useClaudeSkills';
+
 const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
 
 
@@ -81,11 +86,13 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 
 	readonly _serviceBrand: undefined;
 
-	private _contributedInstructions: ResourceSet | undefined;
+	readonly _matchInstructionLocationsFromConfig: IObservable<(uri: URI) => boolean>;
+	readonly _matchInstructionLocationsFromExtensions: IObservable<(uri: URI) => boolean>;
+	readonly _matchInstructionLocationsFromSkills: IObservable<(uri: URI) => boolean>;
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IEnvService private readonly envService: IEnvService,
+		@INativeEnvService private readonly envService: INativeEnvService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
@@ -93,9 +100,84 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		@IExtensionsService private readonly extensionService: IExtensionsService,
 	) {
 		super();
-		this._register(this.extensionService.onDidChange(() => {
-			this._contributedInstructions = undefined;
-		}));
+
+		this._matchInstructionLocationsFromConfig = observableFromEvent(
+			(handleChange) => this._register(configurationService.onDidChangeConfiguration(e => {
+				if (e.affectsConfiguration(INSTRUCTIONS_LOCATION_KEY)) {
+					handleChange(e);
+				}
+			})),
+			() => {
+				const sanitizedLocations: string[] = [];
+				const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(INSTRUCTIONS_LOCATION_KEY);
+				if (isObject(locations)) {
+					for (const key in locations) {
+						const location = key.trim();
+						const value = locations[key];
+						if (value === true && isAbsolute(location)) {
+							sanitizedLocations.push(location);
+						}
+					}
+				}
+				return ((uri: URI) => {
+					if (uri.scheme !== Schemas.file || !uri.path.endsWith(INSTRUCTION_FILE_EXTENSION) || sanitizedLocations.length === 0) {
+						return false;
+					}
+					const instructionFilePath = this.promptPathRepresentationService.getFilePath(uri);
+					const instructionFolderPath = dirname(instructionFilePath);
+					for (const location of sanitizedLocations) {
+						if (match(location, instructionFolderPath) || match(location, instructionFilePath)) {
+							return true;
+						}
+					}
+					return false;
+				});
+			}
+		);
+
+		this._matchInstructionLocationsFromExtensions = observableFromEvent(
+			(handleChange) => this._register(this.extensionService.onDidChange(handleChange)),
+			() => {
+				const locations = new ResourceSet();
+				for (const extension of this.extensionService.all) {
+
+					const chatInstructions = extension.packageJSON['contributes']?.['chatInstructions'];
+					if (Array.isArray(chatInstructions)) {
+						for (const contribution of chatInstructions) {
+							if (contribution.path) {
+								const folderUri = uriDirname(joinPath(extension.extensionUri, contribution.path));
+								locations.add(folderUri);
+							}
+						}
+					}
+				}
+				return ((uri: URI) => {
+					for (const location of locations) {
+						if (isEqualOrParent(uri, location)) {
+							return true;
+						}
+					}
+					return false;
+				});
+			}
+		);
+
+		this._matchInstructionLocationsFromSkills = observableFromEvent(
+			(handleChange) => this._register(configurationService.onDidChangeConfiguration(e => {
+				if (e.affectsConfiguration(USE_CLAUDE_SKILLS_SETTING)) {
+					handleChange(e);
+				}
+			})),
+			() => {
+				if (this.configurationService.getNonExtensionConfig<boolean>(USE_CLAUDE_SKILLS_SETTING)) {
+					const skillFolderUri = joinPath(this.envService.userHome, SKILL_FOLDER);
+					return ((uri: URI) => {
+						return isEqualOrParent(uri, skillFolderUri);
+					});
+				}
+				return (() => false);
+			}
+		);
 	}
 
 	public async fetchInstructionsFromFile(fileUri: Uri): Promise<ICustomInstructions | undefined> {
@@ -163,7 +245,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		this.logService.debug(`Collect instructions from file: ${customInstructionsFile}`);
 		const promises = this.workspaceService.getWorkspaceFolders().map(async folderUri => {
 			const fileUri = Uri.joinPath(folderUri, customInstructionsFile);
-			const instruction = await this.readInstructionsFromFile(fileUri);
+			const instruction = await this.readInstructionsFromFile(fileUri, language);
 			if (instruction) {
 				result.push(instruction);
 			}
@@ -192,55 +274,16 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	}
 
 	public isExternalInstructionsFile(uri: URI): boolean {
-		if (!uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
-			return false;
-		}
-		if (uri.scheme === Schemas.vscodeUserData) {
+		if (uri.scheme === Schemas.vscodeUserData && uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
 			return true;
 		}
-		if (this.getInstructionURLFromExtensionPoint().has(uri)) {
-			return true;
-		}
-
-		if (uri.scheme !== Schemas.file) {
-			return false;
-		}
-		const instructionFilePath = this.promptPathRepresentationService.getFilePath(uri);
-		const instructionFolderPath = dirname(instructionFilePath);
-
-		const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(INSTRUCTIONS_LOCATION_KEY);
-		if (isObject(locations)) {
-			for (const key in locations) {
-				const location = key.trim();
-				const value = locations[key];
-				if (value === true && isAbsolute(location)) {
-					const pathToMatch = location.endsWith('/') || location.endsWith('*') ? instructionFolderPath : location;
-					if (match(pathToMatch, location)) {
-						return true;
-					}
-				}
-			}
-		}
-		return true;
+		return this._matchInstructionLocationsFromConfig.get()(uri)
+			|| this._matchInstructionLocationsFromExtensions.get()(uri)
+			|| this._matchInstructionLocationsFromSkills.get()(uri);
 	}
 
-	private getInstructionURLFromExtensionPoint(): ResourceSet {
-		if (!this._contributedInstructions) {
-			const result = new ResourceSet();
-			for (const extension of this.extensionService.all) {
-
-				const chatInstructions = extension.packageJSON['contributes']?.['chatInstructions'];
-				if (Array.isArray(chatInstructions)) {
-					for (const contribution of chatInstructions) {
-						if (contribution.path) {
-							const fileUri = joinPath(extension.extensionUri, contribution.path);
-							result.add(fileUri);
-						}
-					}
-				}
-			}
-			this._contributedInstructions = result;
-		}
-		return this._contributedInstructions;
+	public isExternalInstructionsFolder(uri: URI): boolean {
+		return this._matchInstructionLocationsFromExtensions.get()(uri)
+			|| this._matchInstructionLocationsFromSkills.get()(uri);
 	}
 }

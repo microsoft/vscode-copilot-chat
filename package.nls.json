@@ -87,14 +87,14 @@
 		]
 	},
 	"github.copilot.viewsWelcome.agentsPlaceholder": {
-		"message": "Sign in to access GitHub Copilot CLI and Cloud Agents.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
+		"message": "Sign in to access Background Agent and Cloud Agents.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}"
 		]
 	},
 	"github.copilot.viewsWelcome.noPermissiveToken.contents": {
-		"message": "Additional GitHub permissions required to use GitHub Copilot Cloud Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
+		"message": "Additional GitHub permissions required to use Cloud Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:github.copilot.chat.triggerPermissiveSignIn)'}"
@@ -108,7 +108,7 @@
 		]
 	},
 	"github.copilot.viewsWelcome.cliSessionsEmpty.contents": {
-		"message": "[Start CLI Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcli)",
+		"message": "[Start Background Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcli)",
 		"comment": [
 			"Do not translate what's inside of (...). It is link syntax.",
 			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilotcli)'}"
@@ -232,7 +232,6 @@
 	"github.copilot.submenu.reviewComment.discardAndNext.label": "Discard and Go to Next",
 	"github.copilot.submenu.reviewComment.discard.label": "Discard",
 	"github.copilot.config.useProjectTemplates": "Use relevant GitHub projects as starter projects when using `/new`",
-	"github.copilot.config.agent.delegate.autoCommitAndPush": "When enabled, Copilot will automatically commit and push your pending changes before delegating work to the cloud agent.",
 	"github.copilot.chat.attachFile": "Add File to Chat",
 	"github.copilot.chat.attachSelection": "Add Selection to Chat",
 	"github.copilot.command.collectDiagnostics": "Chat Diagnostics",
@@ -381,8 +380,6 @@
 	"github.copilot.config.localWorkspaceRecording.enabled": "Enable local workspace recording for analysis.",
 	"github.copilot.config.editRecording.enabled": "Enable edit recording for analysis.",
 	"github.copilot.config.inlineChat.selectionRatioThreshold": "Threshold at which to switch editing strategies for inline chat. When a selection porition of code matches a parse tree node, only that is presented to the language model. This speeds up response times but might have lower quality results. Requires having a parse tree for the document and the `inlineChat.enableV2` setting. Values must be between 0 and 1, where 0 means off and 1 means the selection perfectly matches a parse tree node.",
-	"github.copilot.config.temporalContext.maxAge": "Maximum age (in editor changes) for temporal context.",
-	"github.copilot.config.temporalContext.preferSameLang": "Prefer same language files in temporal context.",
 	"github.copilot.config.debug.requestLogger.maxEntries": "Maximum number of entries to keep in the request logger for debugging purposes.",
 	"github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled": "Enable diagnostics context provider for next edit suggestions.",
 	"github.copilot.config.codesearch.agent.enabled": "Enable code search capabilities in agent mode.",
@@ -401,23 +398,24 @@
 	"github.copilot.config.tools.defaultToolsGrouped": "Group default tools in prompts.",
 	"github.copilot.config.claudeCode.enabled": "Enable Claude Code agent.",
 	"github.copilot.config.claudeCode.debug": "Enable debug mode for Claude Code agent.",
-	"github.copilot.config.copilotCLI.enabled": "Enable Copilot CLI integration.",
-	"github.copilot.config.cli.isolation.enabled": "Enable CLI isolation for agent sessions.",
-	"github.copilot.config.cli.customAgents.enabled": "Enable Custom Agents for CLI.",
-	"github.copilot.config.cli.mcp.enabled": "Enable Model Context Protocol (MCP) server for CLI.",
-	"github.copilot.config.copilotCodingAgent.enabled": "Enable Copilot Coding Agent (cloud).",
+	"github.copilot.config.cli.customAgents.enabled": "Enable Custom Agents for Background Agents.",
+	"github.copilot.config.cli.mcp.enabled": "Enable Model Context Protocol (MCP) server for Background Agents.",
+	"github.copilot.config.backgroundAgent.enabled": "Enable the Background Agent. When disabled, the Background Agent will not be available in 'Continue In' context menus.",
+	"github.copilot.config.cloudAgent.enabled": "Enable the Cloud Agent. When disabled, the Cloud Agent will not be available in 'Continue In' context menus.",
 	"github.copilot.config.gpt5AlternativePatch": "Enable GPT-5 alternative patch format.",
 	"github.copilot.config.inlineEdits.triggerOnEditorChangeAfterSeconds": "Trigger inline edits after editor has been idle for this many seconds.",
 	"github.copilot.config.inlineEdits.nextCursorPrediction.displayLine": "Display predicted cursor line for next edit suggestions.",
 	"github.copilot.config.inlineEdits.nextCursorPrediction.currentFileMaxTokens": "Maximum tokens for current file in next cursor prediction.",
 	"github.copilot.config.inlineEdits.renameSymbolSuggestions": "Enable rename symbol suggestions in inline edits.",
+	"github.copilot.config.nextEditSuggestions.preferredModel": "Preferred model for next edit suggestions.",
 	"github.copilot.command.refreshAgentSessions": "Refresh Agent Sessions",
 	"github.copilot.command.deleteAgentSession": "Delete Agent Session",
 	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume Agent Session in Terminal",
 	"github.copilot.cli.sessions.newTerminalSession": "New Agent Session in Terminal",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
-	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes",
+	"github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply": "Apply",
+	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes to Workspace",
 	"github.copilot.config.githubMcpServer.enabled": "Enable built-in support for the GitHub MCP Server.",
 	"github.copilot.config.githubMcpServer.toolsets": "Specify toolsets to use from the GitHub MCP Server.",
 	"github.copilot.config.githubMcpServer.readonly": "Enable read-only mode for the GitHub MCP Server. When enabled, only read tools are available.",

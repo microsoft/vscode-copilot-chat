@@ -40,7 +40,7 @@ function getPluginRelease(accessor: ServicesAccessor): Release {
 	return Release.Stable;
 }
 
-function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, "token"> | undefined) {
+function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, 'token'> | undefined) {
 	const exp = accessor.get(IExperimentationService);
 
 	const filters = createCompletionsFilters(accessor, token);
@@ -48,7 +48,7 @@ function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<Copilo
 	exp.setCompletionsFilters(filters);
 }
 
-export function createCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, "token"> | undefined) {
+export function createCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, 'token'> | undefined) {
 	const filters = new Map<Filter, string>();
 
 	filters.set(Filter.ExtensionRelease, getPluginRelease(accessor));

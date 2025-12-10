@@ -263,7 +263,7 @@ export class SimulationReviewService implements IReviewService {
 	}
 
 	isCodeFeedbackEnabled(): boolean {
-		if (ConfigValueValidators.isDefaultValueWithTeamValue(ConfigKey.CodeFeedback.defaultValue)) {
+		if (ConfigValueValidators.isCustomTeamDefaultValue(ConfigKey.CodeFeedback.defaultValue)) {
 			return ConfigKey.CodeFeedback.defaultValue.defaultValue;
 		}
 		return ConfigKey.CodeFeedback.defaultValue;
@@ -274,7 +274,7 @@ export class SimulationReviewService implements IReviewService {
 	}
 
 	isIntentEnabled(): boolean {
-		if (ConfigValueValidators.isDefaultValueWithTeamValue(ConfigKey.Advanced.ReviewIntent.defaultValue)) {
+		if (ConfigValueValidators.isCustomTeamDefaultValue(ConfigKey.Advanced.ReviewIntent.defaultValue)) {
 			return ConfigKey.Advanced.ReviewIntent.defaultValue.defaultValue;
 		}
 		return ConfigKey.Advanced.ReviewIntent.defaultValue;
@@ -674,7 +674,7 @@ export class TestingGitService implements IGitService {
 	}
 
 	// TODO implement later if tests use this, only used by ignore service
-	getRepository(uri: URI): Promise<RepoContext | undefined> {
+	getRepository(uri: URI, forceOpen?: boolean): Promise<RepoContext | undefined> {
 		return Promise.resolve(undefined);
 	}
 

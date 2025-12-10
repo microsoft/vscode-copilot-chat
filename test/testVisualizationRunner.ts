@@ -166,7 +166,7 @@ class TestContainer {
 
 	findTest(path: string[]): Test | undefined {
 		if (path.length === 0) {
-			throw new Error("Invalid path");
+			throw new Error('Invalid path');
 		}
 		let cur: TestContainer = this;
 		for (let i = 0; i < path.length - 1; i++) {

@@ -141,7 +141,10 @@ describe('NESProvider Facade', () => {
 		doc.setSelection([new OffsetRange(1, 1)], undefined);
 		const telemetrySender = new TestTelemetrySender();
 		const logTarget = new TestLogTarget();
-		const fetcher = new TestFetcher({ '/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8') });
+		const fetcher = new TestFetcher({
+			'/models': JSON.stringify({ models: [] }),
+			'/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8'),
+		});
 		const nextEditProvider = createNESProvider({
 			workspace,
 			fetcher,
@@ -157,8 +160,10 @@ describe('NESProvider Facade', () => {
 
 		const result = await nextEditProvider.getNextEdit(doc.id.toUri(), CancellationToken.None);
 
-		assert.strictEqual(fetcher.requests.length, 1);
-		assert.strictEqual(fetcher.requests[0].options.json?.model, 'xtab-test');
+		assert.strictEqual(fetcher.requests.length, 2, `Unexpected requests: ${JSON.stringify(fetcher.requests, null, 2)}`);
+		assert.ok(fetcher.requests[0].url.endsWith('/models'), `Unexpected URL: ${fetcher.requests[0].url}`);
+		assert.ok(fetcher.requests[1].url.endsWith('/chat/completions'), `Unexpected URL: ${fetcher.requests[1].url}`);
+		assert.strictEqual(fetcher.requests[1].options.json?.model, 'xtab-test');
 
 		assert(result.result);
 
@@ -191,6 +196,7 @@ describe('NESProvider Facade', () => {
 		nextEditProvider.dispose();
 
 		expect(logTarget.logs.length).toBeGreaterThan(0);
-		expect(logTarget.logs.filter(l => l.level === LogLevel.Error)).toHaveLength(0);
+		const errorLogs = logTarget.logs.filter(l => l.level === LogLevel.Error);
+		assert.strictEqual(errorLogs.length, 0, `Unexpected error logs: ${JSON.stringify(errorLogs, null, 2)}`);
 	});
 });

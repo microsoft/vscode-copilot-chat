@@ -31,7 +31,7 @@ export class FakeCopilotTokenManager implements ICompletionsCopilotTokenManager 
 	resetToken(httpError?: number): void {
 	}
 
-	getLastToken(): Omit<CopilotToken, "token"> | undefined {
+	getLastToken(): Omit<CopilotToken, 'token'> | undefined {
 		return this._token;
 	}
 

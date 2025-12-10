@@ -9,10 +9,9 @@
  */
 
 
-import { ConfigurationTarget, Uri, window, workspace, WorkspaceFolder } from 'vscode';
+import { ConfigurationTarget, l10n, Uri, window, workspace, WorkspaceFolder } from 'vscode';
 import { ConfigurationKeyValuePairs, ConfigurationMigration, ConfigurationMigrationRegistry, ConfigurationValue } from '../../../platform/configuration/common/configurationService';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
-import { localize } from '../../../util/vs/nls';
 import { IExtensionContribution } from '../../common/contributions';
 
 
@@ -27,7 +26,7 @@ interface IConfigurationNode {
 export const applicationConfigurationNodeBase = Object.freeze<IConfigurationNode>({
 	'id': 'application',
 	'order': 100,
-	'title': localize('applicationConfigurationTitle', "Application"),
+	'title': l10n.t("Application"),
 	'type': 'object'
 });
 

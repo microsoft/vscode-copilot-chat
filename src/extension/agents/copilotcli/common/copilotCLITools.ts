@@ -245,6 +245,7 @@ export function stripReminders(text: string): string {
 		.replace(/<context>[\s\S]*?<\/context>\s*/g, '')
 		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
 		.replace(/<pr_metadata[^>]*\/?>\s*/g, '')
+		.replace(/<user_query[^>]*\/?>\s*/g, '')
 		.trim();
 }
 
@@ -259,7 +260,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 		const [fullMatch, uri, title, description, author, linkTag] = match;
 		// Unescape XML entities
 		const unescapeXml = (text: string) => text
-			.replace(/&apos;/g, "'")
+			.replace(/&apos;/g, `'`)
 			.replace(/&quot;/g, '"')
 			.replace(/&gt;/g, '>')
 			.replace(/&lt;/g, '<')
@@ -303,7 +304,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				// TODO @DonJayamanne Temporary work around until we get the zod types.
 				type Attachment = {
 					path: string;
-					type: "file" | "directory";
+					type: 'file' | 'directory';
 					displayName: string;
 				};
 				// Filter out vscode instruction files from references when building session history
@@ -383,12 +384,14 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
 					const editedUris = getAffectedUrisForEditTool(toolCall);
 					if (isCopilotCliEditToolCall(toolCall) && editId && editedUris.length > 0) {
+						responsePart.presentation = 'hidden';
+						currentResponseParts.push(responsePart);
 						for (const uri of editedUris) {
 							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
 							currentResponseParts.push(new ChatResponseCodeblockUriPart(uri, true, editId));
-							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
 							currentResponseParts.push(new ChatResponseTextEditPart(uri, []));
 							currentResponseParts.push(new ChatResponseTextEditPart(uri, true));
+							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
 						}
 					} else {
 						currentResponseParts.push(responsePart);

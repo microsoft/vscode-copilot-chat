@@ -282,7 +282,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		if (body?.tools) {
 			body.tools = body.tools.map(tool => {
 				if (isOpenAiFunctionTool(tool) && tool.function.parameters === undefined) {
-					tool.function.parameters = { type: "object", properties: {} };
+					tool.function.parameters = { type: 'object', properties: {} };
 				}
 				return tool;
 			});
@@ -308,7 +308,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {
-			"Content-Type": "application/json"
+			'Content-Type': 'application/json'
 		};
 		if (this._modelUrl.includes('openai.azure')) {
 			headers['api-key'] = this._apiKey;

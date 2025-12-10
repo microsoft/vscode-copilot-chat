@@ -107,10 +107,12 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 
 	await assertFileNotContentExcluded(accessor, uri);
 
-	if (!workspaceService.getWorkspaceFolder(normalizePath(uri)) && !customInstructionsService.isExternalInstructionsFile(uri) && uri.scheme !== Schemas.untitled) {
+	const normalizedUri = normalizePath(uri);
+
+	if (!workspaceService.getWorkspaceFolder(normalizedUri) && uri.scheme !== Schemas.untitled && !customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
 		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
 		if (!fileOpenInSomeTab) {
-			throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is outside of the workspace, and not open in an editor, and can't be read`);
+			throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
 		}
 	}
 }

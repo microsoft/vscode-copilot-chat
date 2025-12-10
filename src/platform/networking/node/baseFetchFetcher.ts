@@ -107,7 +107,7 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	}
 	isAbortError(e: any): boolean {
 		// see https://github.com/nodejs/node/issues/38361#issuecomment-1683839467
-		return e && e.name === "AbortError";
+		return e && e.name === 'AbortError';
 	}
 	abstract isInternetDisconnectedError(e: any): boolean;
 	abstract isFetcherError(e: any): boolean;

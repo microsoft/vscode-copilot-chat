@@ -7,12 +7,13 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import { Result } from '../../../util/common/result';
 import { pushMany, range } from '../../../util/vs/base/common/arrays';
+import { assertNever } from '../../../util/vs/base/common/assert';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -31,6 +32,7 @@ export class PromptPieces {
 		public readonly taggedCurrentDocLines: readonly string[],
 		public readonly areaAroundCodeToEdit: string,
 		public readonly langCtx: LanguageContextResponse | undefined,
+		public readonly aggressivenessLevel: AggressivenessLevel,
 		public readonly computeTokens: (s: string) => number,
 		public readonly opts: PromptOptions,
 	) {
@@ -39,7 +41,7 @@ export class PromptPieces {
 
 export function getUserPrompt(promptPieces: PromptPieces): string {
 
-	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, computeTokens, opts } = promptPieces;
+	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, computeTokens, opts } = promptPieces;
 	const currentFileContent = taggedCurrentDocLines.join('\n');
 
 	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
@@ -52,7 +54,7 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const currentFilePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
 
-	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath) : '';
+	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath, aggressivenessLevel) : '';
 
 	const mainPrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}
@@ -71,7 +73,9 @@ ${areaAroundCodeToEdit}`;
 
 	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 && opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified;
 
-	const prompt = relatedInformation + (includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt) + postScript;
+	const packagedPrompt = includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt;
+	const packagedPromptWithRelatedInfo = addRelatedInformation(relatedInformation, packagedPrompt, opts.languageContext.traitPosition);
+	const prompt = packagedPromptWithRelatedInfo + postScript;
 
 	const trimmedPrompt = prompt.trim();
 
@@ -82,7 +86,29 @@ function wrapInBackticks(content: string) {
 	return `\`\`\`\n${content}\n\`\`\``;
 }
 
-function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
+function addRelatedInformation(relatedInformation: string, prompt: string, position: 'before' | 'after'): string {
+	if (position === 'before') {
+		return appendWithNewLineIfNeeded(relatedInformation, prompt, 2);
+	}
+	return appendWithNewLineIfNeeded(prompt, relatedInformation, 2);
+}
+
+function appendWithNewLineIfNeeded(base: string, toAppend: string, minNewLines: number): string {
+	// Count existing newlines at the end of base and start of toAppend
+	let existingNewLines = 0;
+	for (let i = base.length - 1; i >= 0 && base[i] === '\n'; i--) {
+		existingNewLines++;
+	}
+	for (let i = 0; i < toAppend.length && toAppend[i] === '\n'; i++) {
+		existingNewLines++;
+	}
+
+	// Add newlines to reach the minimum required
+	const newLinesToAdd = Math.max(0, minNewLines - existingNewLines);
+	return (base + '\n'.repeat(newLinesToAdd) + toAppend).trim();
+}
+
+function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string, aggressivenessLevel: AggressivenessLevel) {
 	let postScript: string | undefined;
 	switch (strategy) {
 		case PromptingStrategy.Codexv21NesUnified:
@@ -96,8 +122,12 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 		case PromptingStrategy.Xtab275:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Provide the revised code that was between the \`${PromptTags.EDIT_WINDOW.start}\` and \`${PromptTags.EDIT_WINDOW.end}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.`;
 			break;
+		case PromptingStrategy.XtabAggressiveness:
+			postScript = `<|aggressive|>${aggressivenessLevel}<|/aggressive|>`;
+			break;
 		case PromptingStrategy.SimplifiedSystemPrompt:
-		default:
+		case PromptingStrategy.CopilotNesXtab:
+		case undefined:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
 Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
 position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
@@ -106,6 +136,8 @@ they would have made next. Provide the revised code that was between the \`${Pro
 // Your revised code goes here
 \`\`\``;
 			break;
+		default:
+			assertNever(strategy);
 	}
 
 	const formattedPostScript = postScript === undefined ? '' : `\n\n${postScript}`;
@@ -130,7 +162,7 @@ function getRelatedInformation(langCtx: LanguageContextResponse | undefined): st
 		relatedInformation.push(`${trait.name}: ${trait.value}`);
 	}
 
-	return `Consider this related information:\n${relatedInformation.join('\n')}\n\n`;
+	return `Consider this related information:\n${relatedInformation.join('\n')}`;
 }
 
 function getEditDiffHistory(
@@ -180,7 +212,7 @@ function getEditDiffHistory(
 
 	const diffsFromOldestToNewest = allDiffs.reverse();
 
-	let promptPiece = diffsFromOldestToNewest.join("\n\n");
+	let promptPiece = diffsFromOldestToNewest.join('\n\n');
 
 	// to preserve old behavior where we always had trailing whitespace
 	if (diffsFromOldestToNewest.length > 0) {

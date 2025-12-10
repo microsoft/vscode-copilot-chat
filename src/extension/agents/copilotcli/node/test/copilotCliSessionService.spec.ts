@@ -5,12 +5,11 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatContext, Memento } from 'vscode';
+import type { ChatContext } from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
-import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
@@ -24,7 +23,7 @@ import { createExtensionUnitTestingServices } from '../../../../test/node/servic
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
-import { CopilotCLISessionService } from '../copilotcliSessionService';
+import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
@@ -117,29 +116,23 @@ describe('CopilotCLISessionService', () => {
 			invokeFunction(fn: (accessor: unknown, ...args: any[]) => any, ...args: any[]): any {
 				return fn(accessor, ...args);
 			},
-			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
+			createInstance: (ctor: unknown, options: any, sdkSession: any) => {
+				if (ctor === CopilotCLISessionWorkspaceTracker) {
+					return new class extends mock<CopilotCLISessionWorkspaceTracker>() {
+						override async initialize(_oldSessions: string[]): Promise<void> { return; }
+						override async trackSession(_sessionId: string, _operation: 'add' | 'delete'): Promise<void> {
+							return;
+						}
+						override shouldShowSession(_sessionId: string): boolean {
+							return true;
+						}
+					}();
+				}
 				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService, delegationService));
 			}
 		} as unknown as IInstantiationService;
-		const state: Record<string, unknown> = {};
-		const workspaceState: Memento = {
-			keys: () => Object.keys(state),
-			get: <T>(key: string, defaultValue?: T): T => {
-				if (key in state) {
-					return state[key] as T;
-				}
-				state[key] = defaultValue;
-				return defaultValue as T;
-			},
-			update: async (key: string, value: unknown) => {
-				state[key] = value;
-			}
-		};
-		const context: IVSCodeExtensionContext = new class extends mock<IVSCodeExtensionContext>() {
-			override workspaceState: Memento = workspaceState;
-		}();
 		const configurationService = accessor.get(IConfigurationService);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService), cliAgents, context, new TestWorkspaceService()));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService), cliAgents));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 

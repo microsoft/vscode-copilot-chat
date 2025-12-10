@@ -241,7 +241,7 @@ export class LanguageServicesSession extends ComputeContextSession {
 	}
 
 	public override getScriptVersion(_sourceFile: tt.SourceFile): string | undefined {
-		return "1";
+		return '1';
 	}
 
 	public *getLanguageServices(sourceFile?: tt.SourceFile): IterableIterator<tt.LanguageService> {

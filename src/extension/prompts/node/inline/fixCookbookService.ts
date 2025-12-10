@@ -117,23 +117,23 @@ type CookbookInternal = Record<Provider, Record<string, Prompt>>;
 
 
 const errorPrompts: CookbookInternal = {
-	"Ruff": {},  // default to empty during experimentation
+	'Ruff': {},  // default to empty during experimentation
 
-	"pylint": {
+	'pylint': {
 		'C0301': [
-			"Split into many short lines to make sure each line is less than 20 tokens; split into many more lines than you normally would. Make sure to do the following: You must split all long strings, comments, and dictionary arguments and lists into shorter lines.",
+			'Split into many short lines to make sure each line is less than 20 tokens; split into many more lines than you normally would. Make sure to do the following: You must split all long strings, comments, and dictionary arguments and lists into shorter lines.',
 		]
 	},
-	"Pylint": {
+	'Pylint': {
 		'C0301:line-too-long': [
-			"Split into many short lines to make sure each line is less than 20 tokens; split into many more lines than you normally would. Make sure to do the following: You must split all long strings, comments, and dictionary arguments and lists into shorter lines.",
+			'Split into many short lines to make sure each line is less than 20 tokens; split into many more lines than you normally would. Make sure to do the following: You must split all long strings, comments, and dictionary arguments and lists into shorter lines.',
 		]
 	},
-	"ts": {
-		2345: { title: "Use this declaration and other usages as examples.", message: "", additionalContext: ContextLocation.ParentCallDefinition },
-		2554: { title: "Use this declaration and other usages as examples.", message: "", additionalContext: ContextLocation.ParentCallDefinition },
+	'ts': {
+		2345: { title: 'Use this declaration and other usages as examples.', message: '', additionalContext: ContextLocation.ParentCallDefinition },
+		2554: { title: 'Use this declaration and other usages as examples.', message: '', additionalContext: ContextLocation.ParentCallDefinition },
 	},
-	"eslint": {
+	'eslint': {
 		'class-methods-use-this': [
 			'Make the method static.',
 			'Move the method outside of the class.',

@@ -413,7 +413,7 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 		const pathAsInTitle = codeAction.title.substring(importTitlePrefix.length).trim();
 		let importPath = pathAsInTitle;
 		if ((importPath.startsWith('"') && importPath.endsWith('"')) ||
-			(importPath.startsWith("'") && importPath.endsWith("'")) ||
+			(importPath.startsWith(`'`) && importPath.endsWith(`'`)) ||
 			(importPath.startsWith('`') && importPath.endsWith('`'))) {
 			importPath = importPath.slice(1, -1);
 		}

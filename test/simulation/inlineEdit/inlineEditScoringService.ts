@@ -196,8 +196,8 @@ class ScoredEdits {
 	serialize(): IScoredEdits {
 		return {
 			...{
-				"$web-editor.format-json": true,
-				"$web-editor.default-url": "https://microsoft.github.io/vscode-workbench-recorder-viewer/?editRating",
+				'$web-editor.format-json': true,
+				'$web-editor.default-url': 'https://microsoft.github.io/vscode-workbench-recorder-viewer/?editRating',
 			},
 			edits: this._edits,
 			// Last, so that it is easier to review the file
@@ -243,7 +243,7 @@ interface IScoredEdits {
 }
 
 /** JSON Serializable */
-interface IScoredEdit<TUnscored = "unscored"> {
+interface IScoredEdit<TUnscored = 'unscored'> {
 	documentUri: string;
 	edit: ISerializedEdit | null;
 	scoreCategory: EditScoreResultCategory | TUnscored;
