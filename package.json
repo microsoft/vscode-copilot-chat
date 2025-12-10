@@ -2381,6 +2381,16 @@
 				"title": "GitHub Copilot Chat",
 				"id": "stable",
 				"properties": {
+					"github.copilot.chat.backgroundAgent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.backgroundAgent.enabled%"
+					},
+					"github.copilot.chat.cloudAgent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.cloudAgent.enabled%"
+					},
 					"github.copilot.chat.codeGeneration.useInstructionFiles": {
 						"type": "boolean",
 						"default": true,
@@ -3880,7 +3890,7 @@
 					},
 					"github.copilot.chat.inlineEdits.renameSymbolSuggestions": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.inlineEdits.renameSymbolSuggestions%",
 						"tags": [
 							"advanced",
@@ -4944,11 +4954,11 @@
 				"icon": "$(sparkle)",
 				"welcomeTitle": "Claude Code Agent",
 				"welcomeMessage": "Run local background tasks",
-				"inputPlaceholder": "Describe your task, type `#` for adding context",
+				"inputPlaceholder": "Run local tasks with Claude Code, type `#` for adding context",
 				"order": 3,
 				"description": "The Claude Code Agent works on your local machine",
 				"when": "config.github.copilot.chat.claudeCode.enabled",
-				"canDelegate": false,
+				"canDelegate": true,
 				"capabilities": {
 					"supportsFileAttachments": true
 				},
@@ -4986,6 +4996,7 @@
 				"order": 2,
 				"canDelegate": true,
 				"description": "Delegate tasks to a background agent.",
+				"when": "config.github.copilot.chat.backgroundAgent.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
@@ -4997,7 +5008,8 @@
 				"commands": [
 					{
 						"name": "delegate",
-						"description": "Delegate chat session to cloud agent and create associated PR"
+						"description": "Delegate chat session to cloud agent and create associated PR",
+						"when": "config.github.copilot.chat.cloudAgent.enabled"
 					}
 				]
 			},
@@ -5015,6 +5027,7 @@
 				"order": 1,
 				"canDelegate": true,
 				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
+				"when": "config.github.copilot.chat.cloudAgent.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true
 				}

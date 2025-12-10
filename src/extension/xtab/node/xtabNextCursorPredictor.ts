@@ -149,10 +149,15 @@ export class XtabNextCursorPredictor {
 			},
 		});
 
-		const requestOptions = {
-			max_tokens: 4,
-			secretKey,
-		} satisfies OptionalChatRequestParams;
+		const maxResponseTokens = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionMaxResponseTokens, this.expService);
+
+		let requestOptions: OptionalChatRequestParams = {
+			max_tokens: maxResponseTokens,
+		};
+
+		if (secretKey) {
+			requestOptions = { ...requestOptions, secretKey };
+		}
 
 		const response = await endpoint.makeChatRequest2(
 			{

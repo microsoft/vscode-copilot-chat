@@ -146,7 +146,7 @@ function extractResourcesFromTag(prompt: string, tagText: string): ChatPromptRef
 		if (!fileOrFolderpath) {
 			return undefined;
 		}
-		const uri = URI.file(isFolder ? getFolderAttachmentPath(fileOrFolderpath) : fileOrFolderpath);
+		const uri = pathToUri(isFolder ? getFolderAttachmentPath(fileOrFolderpath) : fileOrFolderpath);
 		const providedId = attrs['id'];
 		const locName = providedId ?? uri.toString();
 		let id = providedId ?? uri.toString();
@@ -234,7 +234,7 @@ function extractResourcesFromTag(prompt: string, tagText: string): ChatPromptRef
 	}
 	const startLine = linesMatch ? parseInt(linesMatch[1], 10) : undefined;
 	const endLine = linesMatch ? parseInt(linesMatch[2], 10) : undefined;
-	const uri = isUntitledFile && filePath.startsWith('untitled:') ? URI.from({ scheme: Schemas.untitled, path: filePath.substring('untitled:'.length) }) : URI.file(filePath);
+	const uri = isUntitledFile && filePath.startsWith('untitled:') ? URI.from({ scheme: Schemas.untitled, path: filePath.substring('untitled:'.length) }) : pathToUri(filePath);
 	const location = (typeof startLine === 'undefined' || typeof endLine === 'undefined' || isNaN(startLine) || isNaN(endLine)) ? undefined : new Location(uri, new Range(startLine - 1, 0, endLine - 1, 0));
 	const locName = providedId ?? (location ? JSON.stringify(location) : uri.toString());
 	let range: [number, number] | undefined = undefined;
@@ -263,7 +263,7 @@ function extractPromptReferencesFromTag(prompt: string, tagText: string): ChatPr
 	}
 	if (!filePath) { return undefined; }
 	let uri: URI;
-	if (filePath.startsWith('untitled:')) { uri = URI.parse(filePath); } else { uri = URI.file(filePath); }
+	if (filePath.startsWith('untitled:')) { uri = URI.parse(filePath); } else { uri = pathToUri(filePath); }
 	const id = `${PromptFileIdPrefix}__${uri.toString()}`;
 	const name = idAttr;
 	return { id, name, value: uri, modelDescription: 'Prompt instruction file' };
@@ -285,7 +285,7 @@ function extractDiagnosticsFromTag(tagText: string): ChatPromptReference | undef
 	const code = attrs['code'] && attrs['code'] !== 'undefined' ? attrs['code'] : undefined;
 	const severityStr = (attrs['severity'] || 'error').toLowerCase();
 	const severityMap: Record<string, number> = { error: DiagnosticSeverity.Error, warning: DiagnosticSeverity.Warning, info: DiagnosticSeverity.Information, hint: DiagnosticSeverity.Hint };
-	const uri = URI.file(filePath);
+	const uri = pathToUri(filePath);
 	const range = new Range(lineNum - 1, 0, lineNum - 1, 0);
 	const diagnostic = new Diagnostic(range, message, severityMap[severityStr]);
 	diagnostic.code = code;
@@ -348,3 +348,16 @@ export function getFolderAttachmentPath(folderPath: string): string {
 	return folderPath + path.sep;
 }
 
+function pathToUri(pathStr: string): URI {
+	if (process.platform === 'win32') {
+		// Don't normalize valid UNC paths (starting with \\ but not with \\\\)
+		if (pathStr.startsWith('\\\\') && !pathStr.startsWith('\\\\\\\\')) {
+			return URI.file(pathStr);
+		}
+		// Normalize over-escaped paths
+		if (pathStr.includes('\\\\')) {
+			return URI.file(pathStr.replaceAll('\\\\', '\\'));
+		}
+	}
+	return URI.file(pathStr);
+}
