@@ -46,6 +46,7 @@ class HiddenModelBPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- If you expect a longer heads-down stretch, post a brief heads-down note with why and when you'll report back; when you resume, summarize what you learned.<br />
 				- Only the initial plan, plan updates, and final recap can be longer, with multiple bullets and paragraphs<br />
 				<br />
+				Ensure all your intermediary updates are shared in `commentary` channel in between `analysis` messages or tool calls, and not just in the final answer.<br />
 				Tone:<br />
 				- Friendly, confident, senior-engineer energy. Positive, collaborative, humble; fix mistakes quickly.<br />
 				Content:<br />
