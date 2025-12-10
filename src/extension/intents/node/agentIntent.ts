@@ -23,19 +23,15 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { Conversation, RenderedUserMessageMetadata } from '../../prompt/common/conversation';
+import { RenderedUserMessageMetadata } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from '../../prompt/common/specialRequestTypes';
-import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
-import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
 import { AgentPromptCustomizations, PromptRegistry } from '../../prompts/node/agent/promptRegistry';
@@ -47,12 +43,10 @@ import { ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
 import { IEditToolLearningService } from '../../tools/common/editToolLearningService';
 import { ContributedToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
-import { VirtualTool } from '../../tools/common/virtualTools/virtualTool';
-import { IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
 import { applyPatch5Description } from '../../tools/node/applyPatchTool';
+import { getAgentMaxRequests } from '../common/agentConfig';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
-import { getAgentMaxRequests } from '../common/agentConfig';
 
 export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.ChatRequest) => {
 	const toolsService = accessor.get<IToolsService>(IToolsService);
@@ -142,48 +136,8 @@ export class AgentIntent extends EditCodeIntent {
 		@IExperimentationService expService: IExperimentationService,
 		@ICodeMapperService codeMapperService: ICodeMapperService,
 		@IWorkspaceService workspaceService: IWorkspaceService,
-		@IToolGroupingService private readonly _toolGroupingService: IToolGroupingService,
 	) {
 		super(instantiationService, endpointProvider, configurationService, expService, codeMapperService, workspaceService, { intentInvocation: AgentIntentInvocation, processCodeblocks: false });
-	}
-
-	override async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
-		if (request.command === 'list') {
-			await this.listTools(conversation, request, stream, token);
-			return {};
-		}
-
-		return super.handleRequest(conversation, request, stream, token, documentContext, agentName, location, chatTelemetry, onPaused);
-	}
-
-	private async listTools(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
-		const editingTools = await this.instantiationService.invokeFunction(getAgentTools, request);
-		const grouping = this._toolGroupingService.create(conversation.sessionId, editingTools);
-
-		let str = 'Available tools:\n';
-		function printTool(tool: vscode.LanguageModelToolInformation | VirtualTool, indent = 0) {
-			const prefix = '  '.repeat(indent * 2);
-			str += `${prefix}- ${tool.name}`;
-			if (tool instanceof VirtualTool) {
-				if (tool.isExpanded) {
-					str += ` (expanded):`;
-				} else {
-					str += ': ' + tool.description.split('\n\n').map((chunk, i) => i > 0 ? prefix + '  ' + chunk : chunk).join('\n\n');
-				}
-			}
-			str += '\n';
-			if (tool instanceof VirtualTool && tool.contents.length > 0) {
-				for (const child of tool.contents) {
-					printTool(child, indent + 1);
-				}
-			}
-		}
-
-		const tools = await grouping.computeAll(request.prompt, token);
-		tools.forEach(t => printTool(t));
-		stream.markdown(str);
-
-		return {};
 	}
 
 	protected override getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {

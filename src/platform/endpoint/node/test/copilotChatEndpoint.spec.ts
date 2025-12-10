@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
+import { ChatLocation } from '../../../chat/common/commonTypes';
 import { ConfigKey } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
@@ -624,6 +625,34 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const options = {
 				...createTestOptions([createUserMessage('Hello')]),
 				disableThinking: true
+			};
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBeUndefined();
+		});
+
+		it('should not set thinking_budget when location is ChatLocation.Other', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = {
+				...createTestOptions([createUserMessage('Hello')]),
+				location: ChatLocation.Other
 			};
 			const body = endpoint.createRequestBody(options);
 

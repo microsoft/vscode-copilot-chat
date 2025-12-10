@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.107.0-20251119",
+		"vscode": "^1.108.0",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -1419,9 +1419,6 @@
 				"isAgent": true,
 				"when": "config.chat.agent.enabled",
 				"commands": [
-					{
-						"name": "list"
-					},
 					{
 						"name": "error",
 						"description": "Make a model request which will result in an error",
@@ -4946,11 +4943,11 @@
 				"icon": "$(sparkle)",
 				"welcomeTitle": "Claude Code Agent",
 				"welcomeMessage": "Run local background tasks",
-				"inputPlaceholder": "Describe your task, type `#` for adding context",
+				"inputPlaceholder": "Run local tasks with Claude Code, type `#` for adding context",
 				"order": 3,
 				"description": "The Claude Code Agent works on your local machine",
 				"when": "config.github.copilot.chat.claudeCode.enabled",
-				"canDelegate": false,
+				"canDelegate": true,
 				"capabilities": {
 					"supportsFileAttachments": true
 				},

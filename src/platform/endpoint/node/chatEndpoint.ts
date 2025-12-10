@@ -28,11 +28,11 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
+import { isAnthropicFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
-import { isAnthropicFamily } from '../common/chatModelCapabilities';
 
 /**
  * The default processor for the stream format from CAPI
@@ -279,7 +279,8 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
-		if (isAnthropicFamily(this) && !options.disableThinking) {
+		const isConversationOther = options.location === ChatLocation.Other;
+		if (isAnthropicFamily(this) && !options.disableThinking && !isConversationOther) {
 			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
 			if (configuredBudget && configuredBudget > 0) {
 				const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
