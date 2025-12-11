@@ -1034,9 +1034,6 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.copilotcli.sessions.refresh', () => {
 		copilotcliSessionItemProvider.notifySessionsChange();
 	}));
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.refresh', () => {
-		copilotcliSessionItemProvider.notifySessionsChange();
-	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
 			const id = SessionIdForCLI.parse(sessionItem.resource);

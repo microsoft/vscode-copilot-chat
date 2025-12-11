@@ -71,43 +71,6 @@
 			"{Locked='](command:workbench.action.chat.open?%7B%22query%22%3A%22%40vscode%20%2FstartDebugging%20%22%2C%22isPartialQuery%22%3Atrue%7D)'}"
 		]
 	},
-	"github.copilot.viewsWelcome.codexWelcomeView": {
-		"message": "[Start OpenAI Codex Session](command:chatgpt.newCodexPanel)",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:chatgpt.newCodexPanel)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.noPermissiveToken.contents": {
-		"message": "Additional GitHub permissions required to use Cloud Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:github.copilot.chat.triggerPermissiveSignIn)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.noFolder.contents": {
-		"message": "You have not yet opened a folder.\n[Open Folder](command:workbench.action.files.openFolder)",
-		"comment": [
-			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.files.openFolder)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.cliSessionsEmpty.contents": {
-		"message": "[Start Background Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcli)",
-		"comment": [
-			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilotcli)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.cloudSessionsEmpty.contents": {
-		"message": "[Start Cloud Agent Session](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)",
-		"comment": [
-			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.noGitHub.contents": "Clone or open a GitHub repository to get started",
-	"github.copilot.viewsWelcome.noRepo.contents": "No git repositories found",
 	"github.copilot.command.logWorkbenchState": "Log Workbench State",
 	"github.copilot.command.showChatLogView": "Show Chat Debug View",
 	"github.copilot.command.showOutputChannel": "Show Output Channel",
