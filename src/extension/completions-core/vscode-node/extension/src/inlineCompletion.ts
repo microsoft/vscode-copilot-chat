@@ -23,7 +23,6 @@ import { BuildInfo } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
-import { Deferred } from '../../lib/src/util/async';
 import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
 import { ICompletionsExtensionStatus } from './extensionStatus';
@@ -54,7 +53,6 @@ export function exception(accessor: ServicesAccessor, error: unknown, origin: st
 export class CopilotInlineCompletionItemProvider extends Disposable implements InlineCompletionItemProvider {
 	private readonly copilotCompletionFeedbackTracker: CopilotCompletionFeedbackTracker;
 	private readonly ghostTextProvider: InlineCompletionItemProvider;
-	private readonly pendingRequests: Set<Promise<unknown>> = new Set();
 
 	public onDidChange = undefined;
 	public handleListEndOfLifetime: InlineCompletionItemProvider['handleListEndOfLifetime'] = undefined;
@@ -67,12 +65,6 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		super();
 		this.copilotCompletionFeedbackTracker = this._register(this.instantiationService.createInstance(CopilotCompletionFeedbackTracker));
 		this.ghostTextProvider = this.instantiationService.createInstance(GhostTextProvider);
-	}
-
-	async waitForPendingRequests(): Promise<void> {
-		while (this.pendingRequests.size > 0) {
-			await Promise.all(this.pendingRequests);
-		}
 	}
 
 	async provideInlineCompletionItems(
@@ -94,9 +86,6 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<InlineCompletionList | undefined> {
-		const pendingRequestDeferred = new Deferred();
-		this.pendingRequests.add(pendingRequestDeferred.promise);
-
 		if (context.triggerKind === InlineCompletionTriggerKind.Automatic) {
 			if (!this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {
 				return;
@@ -116,12 +105,6 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		}
 		try {
 			let items = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, token);
-
-			// Release CompletionItemProvider after returning
-			setTimeout(() => {
-				this.pendingRequests.delete(pendingRequestDeferred.promise);
-				pendingRequestDeferred.resolve(undefined);
-			});
 
 			if (!items) {
 				return undefined;
