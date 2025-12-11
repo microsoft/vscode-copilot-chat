@@ -239,6 +239,7 @@ type LastNesSuggestion = {
 	docUri: vscode.Uri;
 	docVersionId: number;
 	docWithNesEditApplied: StringText;
+	completionItem: NesCompletionItem;
 };
 
 class JointCompletionsProvider extends Disposable implements vscode.InlineCompletionItemProvider {
@@ -404,7 +405,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				return list;
 			}
 
-			const firstItem = list.items[0];
+			const firstItem = (list.items as NesCompletionItem[])[0];
 			if (!firstItem.range || typeof firstItem.insertText !== 'string') {
 				return list;
 			}
@@ -419,6 +420,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				docUri: document.uri,
 				docVersionId,
 				docWithNesEditApplied: new StringText(applied),
+				completionItem: firstItem,
 			};
 
 			return list;
@@ -464,9 +466,9 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 
 		tracer.trace('requesting completions and/or NES');
 
-		if (!lastNesSuggestion) {
+		if (!lastNesSuggestion || !lastNesSuggestion.completionItem.wasShown) {
 			// prefer completions unless there are none
-			tracer.trace(`no last NES suggestion to consider`);
+			tracer.trace(`defaulting to yielding to completions; last NES suggestion is ${lastNesSuggestion ? 'not shown' : 'not available'}`);
 			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
 			const nesP = this._invokeNESProvider(tracer, document, position, true, context, tokens.nesCts.token, sw);
 			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, docSnapshot, sw, tracer, tokens);
