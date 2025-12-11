@@ -196,8 +196,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			const session = this._authenticationService.anyGitHubSession;
 
 			const model: vscode.LanguageModelChatInformation = {
-				id: endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model,
-				name: endpoint instanceof AutoChatEndpoint ? (modelNameOverrides[AutoChatEndpoint.pseudoModelId] ?? 'Auto') : displayName,
+				id: modelId,
+				name: endpoint instanceof AutoChatEndpoint ? (modelNameOverrides[modelId] ?? 'Auto') : displayName,
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,
