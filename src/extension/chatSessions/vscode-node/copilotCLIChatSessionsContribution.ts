@@ -1031,9 +1031,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService, gitService: IGitService): IDisposable {
 	const disposableStore = new DisposableStore();
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.copilotcli.sessions.refresh', () => {
-		copilotcliSessionItemProvider.notifySessionsChange();
-	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
 			const id = SessionIdForCLI.parse(sessionItem.resource);
@@ -1073,9 +1070,6 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		if (sessionItem?.resource) {
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
 		}
-	}));
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.newTerminalSession', async () => {
-		await copilotcliSessionItemProvider.createCopilotCLITerminal();
 	}));
 	disposableStore.add(vscode.commands.registerCommand('agentSession.copilotcli.openChanges', async (sessionItemResource?: vscode.Uri) => {
 		if (!sessionItemResource) {

@@ -1804,12 +1804,6 @@
 				"category": "Copilot CLI"
 			},
 			{
-				"command": "github.copilot.cli.sessions.newTerminalSession",
-				"title": "%github.copilot.cli.sessions.newTerminalSession%",
-				"icon": "$(terminal)",
-				"category": "Copilot CLI"
-			},
-			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
@@ -4170,10 +4164,6 @@
 				},
 				{
 					"command": "github.copilot.cli.sessions.resumeInTerminal",
-					"when": "false"
-				},
-				{
-					"command": "github.copilot.cli.sessions.newTerminalSession",
 					"when": "false"
 				},
 				{
