@@ -32,7 +32,8 @@ export class SearchSubagentPrompt extends PromptElement<GenericBasePromptElement
 					another_file.cc:100-120<br />
 					&lt;final_answer&gt;
 				</SystemMessage>
-				<UserMessage priority={900}>{searchInstruction}</UserMessage>				<ChatToolCalls
+				<UserMessage priority={900}>{searchInstruction}</UserMessage>
+				<ChatToolCalls
 					priority={899}
 					flexGrow={2}
 					promptContext={this.props.promptContext}
