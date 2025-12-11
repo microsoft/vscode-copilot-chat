@@ -674,11 +674,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, model: string | undefined, agent: SweCustomAgent | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
 		const { resource } = chatSessionContext.chatSessionItem;
-		const existingUntitledSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(resource));
-		const id = existingUntitledSessionId ?? SessionIdForCLI.parse(resource);
-		const isNewSession = chatSessionContext.isUntitled && !existingUntitledSessionId;
+		const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(resource));
+		const id = existingSessionId ?? SessionIdForCLI.parse(resource);
+		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
-		const workingDirectoryValue = isNewSession ?
+		const workingDirectoryValue = isNewSession || !isolationEnabled ?
 			(isolationEnabled ? await this.worktreeManager.createWorktree(stream) : await this.copilotCLISDK.getDefaultWorkingDirectory().then(dir => dir?.fsPath)) :
 			this.worktreeManager.getWorktreePath(id);
 		const workingDirectory = workingDirectoryValue ? Uri.file(workingDirectoryValue) : undefined;
