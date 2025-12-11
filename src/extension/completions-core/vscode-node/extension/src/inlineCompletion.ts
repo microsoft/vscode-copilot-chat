@@ -75,10 +75,6 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		}
 	}
 
-	get delegate(): InlineCompletionItemProvider {
-		return this.ghostTextProvider;
-	}
-
 	async provideInlineCompletionItems(
 		doc: TextDocument,
 		position: Position,
@@ -119,7 +115,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 			context = { ...context, selectedCompletionInfo: undefined };
 		}
 		try {
-			let items = await this.delegate.provideInlineCompletionItems(doc, position, context, token);
+			let items = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, token);
 
 			// Release CompletionItemProvider after returning
 			setTimeout(() => {
@@ -147,7 +143,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 	handleDidShowCompletionItem(item: InlineCompletionItem, updatedInsertText: string) {
 		try {
 			this.copilotCompletionFeedbackTracker.trackItem(item);
-			return this.delegate.handleDidShowCompletionItem?.(item, updatedInsertText);
+			return this.ghostTextProvider.handleDidShowCompletionItem?.(item, updatedInsertText);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
@@ -158,7 +154,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		acceptedLengthOrInfo: number & PartialAcceptInfo
 	) {
 		try {
-			return this.delegate.handleDidPartiallyAcceptCompletionItem?.(item, acceptedLengthOrInfo);
+			return this.ghostTextProvider.handleDidPartiallyAcceptCompletionItem?.(item, acceptedLengthOrInfo);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
@@ -166,7 +162,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 
 	handleEndOfLifetime(completionItem: InlineCompletionItem, reason: InlineCompletionEndOfLifeReason) {
 		try {
-			return this.delegate.handleEndOfLifetime?.(completionItem, reason);
+			return this.ghostTextProvider.handleEndOfLifetime?.(completionItem, reason);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.handleEndOfLifetime', logger);
 		}
