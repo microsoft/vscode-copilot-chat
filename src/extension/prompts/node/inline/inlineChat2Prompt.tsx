@@ -93,12 +93,12 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 }
 
 
-type FileContextElementProps = PromptElementProps<{
+export type FileContextElementProps = PromptElementProps<{
 	snapshot: TextDocumentSnapshot;
 	position: Position;
 }>;
 
-class FileContextElement extends PromptElement<FileContextElementProps> {
+export class FileContextElement extends PromptElement<FileContextElementProps> {
 
 	override render(state: void, sizing: PromptSizing, progress?: Progress<ChatResponsePart>, token?: CancellationToken) {
 
@@ -139,20 +139,18 @@ class FileContextElement extends PromptElement<FileContextElementProps> {
 }
 
 
-type FileSelectionElementProps = PromptElementProps<{
+export type FileSelectionElementProps = PromptElementProps<{
 	snapshot: TextDocumentSnapshot;
 	selection: Range;
 }>;
 
-class FileSelectionElement extends PromptElement<FileSelectionElementProps> {
+export class FileSelectionElement extends PromptElement<FileSelectionElementProps> {
 
 	override render(state: void, sizing: PromptSizing, progress?: Progress<ChatResponsePart>, token?: CancellationToken) {
 
 
 		// the full lines of the selection
 		// TODO@jrieken
-		// * if the selection is empty and if the line with the selection is empty we could hint to add code and
-		//   generally with empty selections we could allow the model to be a bit more creative
 		// * use the true selected text (now we extend to full lines)
 
 		const selectedLines = this.props.snapshot.getText(this.props.selection.with({
