@@ -52,10 +52,9 @@ export function exception(accessor: ServicesAccessor, error: unknown, origin: st
 
 /** @public */
 export class CopilotInlineCompletionItemProvider extends Disposable implements InlineCompletionItemProvider {
-	copilotCompletionFeedbackTracker: CopilotCompletionFeedbackTracker;
-	ghostTextProvider: InlineCompletionItemProvider;
-	initFallbackContext?: Promise<void>;
-	pendingRequests: Set<Promise<unknown>> = new Set();
+	private readonly copilotCompletionFeedbackTracker: CopilotCompletionFeedbackTracker;
+	private readonly ghostTextProvider: InlineCompletionItemProvider;
+	private readonly pendingRequests: Set<Promise<unknown>> = new Set();
 
 	public onDidChange = undefined;
 	public handleListEndOfLifetime: InlineCompletionItemProvider['handleListEndOfLifetime'] = undefined;
