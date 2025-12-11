@@ -100,7 +100,7 @@ export type FileContextElementProps = PromptElementProps<{
 
 export class FileContextElement extends PromptElement<FileContextElementProps> {
 
-	override render(state: void, sizing: PromptSizing, progress?: Progress<ChatResponsePart>, token?: CancellationToken) {
+	override render(state: void, sizing: PromptSizing, _progress?: Progress<ChatResponsePart>, _token?: CancellationToken) {
 
 		let startLine = this.props.position.line;
 		let endLine = this.props.position.line;
