@@ -449,7 +449,11 @@ suite('CopilotCLI Generate & parse prompts', () => {
 				if (uri.scheme !== Schemas.untitled) {
 					fileSystem.mockFile(uri, text);
 					if (workspaceType === 'worktree') {
-						fileSystem.mockFile(URI.file(uri.fsPath.replace('/workspace', '/worktree')), text);
+						if (uri.fsPath.startsWith('/workspace')) {
+							fileSystem.mockFile(URI.file(uri.fsPath.replace('/workspace', '/worktree')), text);
+						} else if (uri.fsPath.startsWith('\\workspace')) {
+							fileSystem.mockFile(URI.file(uri.fsPath.replace('\\workspace', '\\worktree')), text);
+						}
 					}
 				}
 			}
