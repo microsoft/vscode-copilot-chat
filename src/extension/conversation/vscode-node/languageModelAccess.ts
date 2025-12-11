@@ -11,7 +11,6 @@ import { CopilotToken } from '../../../platform/authentication/common/copilotTok
 import { IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
@@ -61,7 +60,6 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
 		@IAutomodeService private readonly _automodeService: IAutomodeService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
 
@@ -131,19 +129,13 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 		const seenFamilies = new Set<string>();
 
-		// Get model name overrides from settings (team internal setting)
-		const modelNameOverrides = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelNameOverrides);
-
 		for (const endpoint of chatEndpoints) {
 			if (seenFamilies.has(endpoint.family) && !endpoint.showInModelPicker) {
 				continue;
 			}
 			seenFamilies.add(endpoint.family);
 
-			// Apply model name override if configured, otherwise use the endpoint name
-			const modelId = endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model;
-			const displayName = modelNameOverrides[modelId] ?? endpoint.name;
-			const sanitizedModelName = displayName.replace(/\(Preview\)/g, '').trim();
+			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
 			let modelDescription: string | undefined;
 			if (endpoint.degradationReason) {
 				modelDescription = endpoint.degradationReason;
@@ -189,15 +181,15 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			if (endpoint.customModel) {
 				const customModel = endpoint.customModel;
 				modelDetail = customModel.owner_name;
-				modelDescription = `${displayName} is contributed by ${customModel.owner_name} using ${customModel.key_name}`;
+				modelDescription = `${endpoint.name} is contributed by ${customModel.owner_name} using ${customModel.key_name}`;
 				modelCategory = { label: vscode.l10n.t("Custom Models"), order: 2 };
 			}
 
 			const session = this._authenticationService.anyGitHubSession;
 
 			const model: vscode.LanguageModelChatInformation = {
-				id: modelId,
-				name: endpoint instanceof AutoChatEndpoint ? (modelNameOverrides[modelId] ?? 'Auto') : displayName,
+				id: endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model,
+				name: endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,
