@@ -731,6 +731,11 @@ export namespace ConfigKey {
 		export const InlineEditsDiagnosticsExplorationEnabled = defineTeamInternalSetting<boolean | undefined>('chat.advanced.inlineEdits.inlineEditsDiagnosticsExplorationEnabled', ConfigType.Simple, false);
 		export const InternalWelcomeHintEnabled = defineTeamInternalSetting<boolean>('chat.advanced.welcomePageHint.enabled', ConfigType.Simple, { defaultValue: false, internalDefaultValue: true, teamDefaultValue: true, owner: 'lramos15', expirationDate: '2025-12-10' });
 		export const InlineChatUseCodeMapper = defineTeamInternalSetting<boolean>('chat.advanced.inlineChat.useCodeMapper', ConfigType.Simple, false);
+		/** Allows staff to override model display names in the model picker dropdown.
+		 * This is useful for creating demo videos before official model name announcements.
+		 * The setting is a map from model ID to the desired display name.
+		 */
+		export const ModelNameOverrides = defineTeamInternalSetting<Record<string, string>>('chat.advanced.debug.modelNameOverrides', ConfigType.Simple, {});
 
 		// Backed by Experiments
 		export const DebugCollectFetcherTelemetry = defineTeamInternalSetting<boolean>('chat.advanced.debug.collectFetcherTelemetry', ConfigType.ExperimentBased, true);
