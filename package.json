@@ -1748,18 +1748,8 @@
 				"contents": "%github.copilot.viewsWelcome.debug%"
 			},
 			{
-				"view": "codex-placeholder",
-				"when": "true",
-				"contents": "%github.copilot.viewsWelcome.codexPlaceholder%"
-			},
-			{
 				"view": "workbench.view.chat.sessions.openai-codex",
 				"contents": "%github.copilot.viewsWelcome.codexWelcomeView%"
-			},
-			{
-				"view": "copilot-agents-placeholder",
-				"when": "true",
-				"contents": "%github.copilot.viewsWelcome.agentsPlaceholder%"
 			},
 			{
 				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
@@ -4719,20 +4709,6 @@
 					"name": "Language Context Inspector",
 					"icon": "$(inspect)",
 					"when": "github.copilot.chat.showContextInspectorView"
-				}
-			],
-			"agentSessions": [
-				{
-					"id": "codex-placeholder",
-					"name": "OpenAI Codex",
-					"when": "github.copilot.chat.codex.showPlaceholder",
-					"icon": "$(file)"
-				},
-				{
-					"id": "copilot-agents-placeholder",
-					"name": "GitHub Copilot Agents",
-					"when": "chatEntitlementSignedOut || !chatIsEnabled",
-					"icon": "$(copilot)"
 				}
 			]
 		},
