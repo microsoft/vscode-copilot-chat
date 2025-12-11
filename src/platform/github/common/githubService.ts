@@ -134,6 +134,8 @@ export interface CustomAgentListItem {
 	metadata?: Record<string, string>;
 	target?: string;
 	config_error?: string;
+	model?: string;
+	infer?: boolean;
 	'mcp-servers'?: {
 		[serverName: string]: {
 			type: string;
