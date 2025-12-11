@@ -44,7 +44,7 @@ export class DiagnosticsContextContribution extends Disposable {
 			const resolver = new ContextResolver(this.diagnosticsService, this.configurationService, this.experimentationService);
 			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'diagnostics-context-provider',
-				selector: "*",
+				selector: '*',
 				resolver: resolver
 			};
 			disposables.add(this.languageContextProviderService.registerContextProvider(provider, [ProviderTarget.NES]));
@@ -75,6 +75,12 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 
 	resolveOnTimeout(request: Copilot.ResolveRequest): Copilot.SupportedContextItem[] {
 		if (!request.documentContext.position) {
+			return [];
+		}
+
+		const languageId = request.documentContext.languageId;
+		const languageEnablement = this.experimentationService.getTreatmentVariable<boolean>(`config.github.copilot.chat.inlineEdits.diagnosticsContextProvider.${languageId}`);
+		if (!languageEnablement) {
 			return [];
 		}
 
@@ -117,7 +123,7 @@ function diagnosticsToTraits(diagnostics: Diagnostic[]): Copilot.Trait[] {
 	const traits: Copilot.Trait[] = [];
 	if (diagnostics.length > 0) {
 		traits.push({
-			name: "Problems near the user's cursor",
+			name: `Problems near the user's cursor`,
 			value: diagnostics.map(d => `\n\t${diagnosticsToString(d)}`).join(''),
 		});
 	}

@@ -79,7 +79,7 @@ suite('Microsoft Telemetry Sender', function () {
 		expect(mockExternalReporter.sendTelemetryEvent).toHaveBeenCalledOnce();
 		expect(mockExternalReporter.sendTelemetryEvent).toHaveBeenCalledWith(
 			'testEvent',
-			{ foo: 'bar', 'common.tid': 'testTid', 'common.sku': "testSku" },
+			{ foo: 'bar', 'common.tid': 'testTid', 'common.sku': 'testSku' },
 			{ 'common.internal': 1 },
 		);
 	});
@@ -90,7 +90,7 @@ suite('Microsoft Telemetry Sender', function () {
 		expect(mockExternalReporter.sendTelemetryErrorEvent).toHaveBeenCalledOnce();
 		expect(mockExternalReporter.sendTelemetryErrorEvent).toHaveBeenCalledWith(
 			'testErrorEvent',
-			{ stack: 'testStack', 'common.tid': 'testTid', 'common.sku': "testSku" },
+			{ stack: 'testStack', 'common.tid': 'testTid', 'common.sku': 'testSku' },
 			{ statusCode: 502, 'common.internal': 1 },
 		);
 	});
@@ -126,14 +126,14 @@ suite('GitHub Telemetry Sender', function () {
 	// These are all common properties & measurements that the telemetry sender will add to every event
 	const commonTelemetryData = {
 		properties: {
-			copilot_build: new TelemetryTrustedValue("1"),
-			copilot_buildType: new TelemetryTrustedValue("dev"),
-			copilot_trackingId: new TelemetryTrustedValue("testId"),
-			editor_plugin_version: new TelemetryTrustedValue("simulation-tests-plugin/2"),
-			client_machineid: new TelemetryTrustedValue("test-machine"),
-			client_sessionid: new TelemetryTrustedValue("test-session"),
-			common_extname: new TelemetryTrustedValue("simulation-tests-plugin"),
-			common_extversion: new TelemetryTrustedValue("2"),
+			copilot_build: new TelemetryTrustedValue('1'),
+			copilot_buildType: new TelemetryTrustedValue('dev'),
+			copilot_trackingId: new TelemetryTrustedValue('testId'),
+			editor_plugin_version: new TelemetryTrustedValue('simulation-tests-plugin/2'),
+			client_machineid: new TelemetryTrustedValue('test-machine'),
+			client_sessionid: new TelemetryTrustedValue('test-session'),
+			common_extname: new TelemetryTrustedValue('simulation-tests-plugin'),
+			common_extversion: new TelemetryTrustedValue('2'),
 		},
 		measurements: {},
 	};

@@ -168,7 +168,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		const ourRequestId = generateUuid();
 
 		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
-		const currentEndpoint = allEndpoints.find(endpoint => endpoint.model === this.model);
+		const currentEndpoint = allEndpoints.find(endpoint => endpoint.model === this.model && endpoint.family === this.family);
 		const isExternalModel = !currentEndpoint;
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {

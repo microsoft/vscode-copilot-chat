@@ -111,6 +111,8 @@ import { LanguageContextServiceImpl } from '../../typescriptContext/vscode-node/
 import { IWorkspaceListenerService } from '../../workspaceRecorder/common/workspaceListenerService';
 import { WorkspacListenerService } from '../../workspaceRecorder/vscode-node/workspaceListenerService';
 import { registerServices as registerCommonServices } from '../vscode/services';
+import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
+import { CopilotInlineCompletionItemProviderService } from '../../completions/vscode-node/copilotInlineCompletionItemProviderService';
 
 // ###########################################################################################
 // ###                                                                                     ###
@@ -210,6 +212,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IRerankerService, new SyncDescriptor(RerankerService));
 	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
+	builder.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(CopilotInlineCompletionItemProviderService));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {

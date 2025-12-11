@@ -12,7 +12,7 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { Edits } from '../../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
-import { DEFAULT_OPTIONS, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, DEFAULT_OPTIONS, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { createTracer, ITracer } from '../../../../util/common/tracing';
@@ -75,6 +75,7 @@ function createTestPromptPieces(): PromptPieces {
 		currentDocLines, // taggedCurrentDocLines as string[]
 		'<area_around_code_to_edit>\nline 2\nline 3\n</area_around_code_to_edit>', // areaAroundCodeToEdit
 		undefined, // langCtx - can be undefined
+		AggressivenessLevel.Medium,
 		computeTokens,
 		opts
 	);

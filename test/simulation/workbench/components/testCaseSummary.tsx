@@ -17,7 +17,7 @@ export const TestCaseSummary = mobxlite.observer(
 	({ currentRun, baselineRun }: TestCaseSummaryProps) => {
 		return (
 			<div>
-				<div className="test-case-count">
+				<div className='test-case-count'>
 					<span>Total generated test case numbers: </span>
 					{baselineRun
 						? <>
@@ -29,7 +29,7 @@ export const TestCaseSummary = mobxlite.observer(
 
 					<span>{currentRun.generatedTestCaseCount}</span>
 				</div>
-				<div className="test-assertion-count">
+				<div className='test-assertion-count'>
 					<span>Total generated assertions numbers: </span>
 					{baselineRun
 						? <>

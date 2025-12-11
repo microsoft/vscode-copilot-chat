@@ -131,9 +131,9 @@ export class DiagnosticInlineEditRequestLogContext {
 
 		if (this._error) {
 			lines.push(`## Diagnostics Error`);
-			lines.push("```");
+			lines.push('```');
 			lines.push(errors.toString(errors.fromUnknown(this._error)));
-			lines.push("```");
+			lines.push('```');
 		}
 
 		if (this._logs.length > 0) {

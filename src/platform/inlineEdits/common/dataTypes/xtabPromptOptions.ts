@@ -35,6 +35,12 @@ export type CurrentFileOptions = {
 	readonly prioritizeAboveCursor: boolean;
 }
 
+export enum AggressivenessLevel {
+	Low = 'low',
+	Medium = 'medium',
+	High = 'high',
+}
+
 export type PromptOptions = {
 	readonly promptingStrategy: PromptingStrategy | undefined /* default */;
 	readonly currentFile: CurrentFileOptions;
@@ -58,6 +64,7 @@ export enum PromptingStrategy {
 	Nes41Miniv3 = 'nes41miniv3',
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
+	XtabAggressiveness = 'xtabAggressiveness',
 }
 
 export function isPromptingStrategy(value: string): value is PromptingStrategy {
@@ -78,6 +85,7 @@ export namespace ResponseFormat {
 			case PromptingStrategy.Nes41Miniv3:
 				return ResponseFormat.UnifiedWithXml;
 			case PromptingStrategy.Xtab275:
+			case PromptingStrategy.XtabAggressiveness:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.SimplifiedSystemPrompt:
 			case PromptingStrategy.CopilotNesXtab:

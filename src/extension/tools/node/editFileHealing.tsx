@@ -22,6 +22,7 @@ import * as JSONC from 'jsonc-parser';
 import type { LanguageModelChat } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes.js';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema.js';
+import { isHiddenModelF } from '../../../platform/endpoint/common/chatModelCapabilities.js';
 import { IChatEndpoint } from '../../../platform/networking/common/networking.js';
 import { extractCodeBlocks } from '../../../util/common/markdown.js';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation.js';
@@ -71,7 +72,7 @@ export async function healReplaceStringParams(
 	token: CancellationToken,
 ): Promise<CorrectedEditResult> {
 	let finalNewString = originalParams.newString!;
-	const unescapeStringForGeminiBug = model?.family.includes('gemini') ? _unescapeStringForGeminiBug : (s: string) => s;
+	const unescapeStringForGeminiBug = model?.family.toLowerCase().includes('gemini') || (model && isHiddenModelF(model)) ? _unescapeStringForGeminiBug : (s: string) => s;
 	const newStringPotentiallyEscaped =
 		unescapeStringForGeminiBug(originalParams.newString!) !==
 		originalParams.newString;
@@ -530,8 +531,8 @@ export function _unescapeStringForGeminiBug(inputString: string): string {
 					return '\t'; // Correctly escaped: \t (tab character)
 				case 'r':
 					return '\r'; // Correctly escaped: \r (carriage return character)
-				case "'":
-					return "'"; // Correctly escaped: ' (apostrophe character)
+				case `'`:
+					return `'`; // Correctly escaped: ' (apostrophe character)
 				case '"':
 					return '"'; // Correctly escaped: " (quotation mark character)
 				case '`':

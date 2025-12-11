@@ -71,8 +71,8 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 
 			const url = `http://localhost:${serverConfig.port}`;
 			const ghToken = serverConfig.nonce;
-			process.env.COPILOT_ENABLE_ALT_PROVIDERS = "true";
-			process.env.COPILOT_AGENT_MODEL = "sweagent-capi:gpt-5";
+			process.env.COPILOT_ENABLE_ALT_PROVIDERS = 'true';
+			process.env.COPILOT_AGENT_MODEL = 'sweagent-capi:gpt-5';
 			process.env.GH_TOKEN = ghToken;
 			process.env.COPILOT_API_URL = url;
 			process.env.GITHUB_COPILOT_API_TOKEN = ghToken;

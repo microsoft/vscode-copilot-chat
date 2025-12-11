@@ -33,9 +33,9 @@ type TestRunViewProps = {
 export const TestRunView = mobxlite.observer(
 	({ test, run, baseline, displayOptions, closeTestRunView }: TestRunViewProps) => {
 		return (
-			<div className="testRun">
-				<div className="foldingBar" onClick={closeTestRunView}><ChevronUp20Regular /></div>
-				<div className="content">
+			<div className='testRun'>
+				<div className='foldingBar' onClick={closeTestRunView}><ChevronUp20Regular /></div>
+				<div className='content'>
 					<TestRunVisualization test={test} run={run} baseline={baseline} displayOptions={displayOptions} />
 					{run.error !== undefined && <ErrorMessageBar error={run.error} />}
 				</div>
@@ -331,7 +331,7 @@ const ChangedFile = mobxlite.observer(
 					typeof prevFile !== 'undefined'
 						? (
 							<div>
-								<div className="step-title">
+								<div className='step-title'>
 									Modified of Current run [{changedFile.workspacePath}]
 								</div>
 								<Text size={300}>Left editor - the existing code before applying the change, Right editor - the new code after applying the change</Text>
@@ -346,7 +346,7 @@ const ChangedFile = mobxlite.observer(
 						)
 						: (
 							<div>
-								<div className="step-title">
+								<div className='step-title'>
 									Created of Current run [{changedFile.workspacePath}]
 								</div>
 								<Editor
@@ -360,7 +360,7 @@ const ChangedFile = mobxlite.observer(
 						)
 				}
 				{fileDiagnostics &&
-					<div className="diagnostics-comparison">
+					<div className='diagnostics-comparison'>
 						Diagnostics before: {fileDiagnostics.before.length},
 						after: {fileDiagnostics.after.length}
 					</div>
@@ -378,7 +378,7 @@ const InitialState = mobxlite.observer(
 
 		return (
 			<div>
-				<div className="step-title">
+				<div className='step-title'>
 					Initial State of Current run [{state.file.value.workspacePath}]
 				</div>
 				<Editor
@@ -400,7 +400,7 @@ const NesUserEditHistory = mobxlite.observer(
 				<div>User edits</div>
 				{(edits).map((edit, idx) => {
 					return <div key={idx}>
-						<div className="step-title">
+						<div className='step-title'>
 							{currentDocumentIndex === idx ? 'Active' : ''} File {edit.id ?? 'No file name'}
 						</div>
 						<DiffEditor
@@ -433,7 +433,7 @@ const NextEditSuggestion = mobxlite.observer(
 	}) => {
 		return (
 			<div>
-				<div className="step-title">
+				<div className='step-title'>
 					Next Edit ({runKind === 'current' ? 'current run' : 'reference run'})
 				</div>
 				<DiffEditor
@@ -448,22 +448,22 @@ const NextEditSuggestion = mobxlite.observer(
 
 const UserIcon = () => {
 	return (
-		<svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 256 256" height="100%" width="100%" xmlns="http://www.w3.org/2000/svg"><path d="M224,128a95.76,95.76,0,0,1-31.8,71.37A72,72,0,0,0,128,160a40,40,0,1,0-40-40,40,40,0,0,0,40,40,72,72,0,0,0-64.2,39.37h0A96,96,0,1,1,224,128Z" opacity="0.2"></path><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM74.08,197.5a64,64,0,0,1,107.84,0,87.83,87.83,0,0,1-107.84,0ZM96,120a32,32,0,1,1,32,32A32,32,0,0,1,96,120Zm97.76,66.41a79.66,79.66,0,0,0-36.06-28.75,48,48,0,1,0-59.4,0,79.66,79.66,0,0,0-36.06,28.75,88,88,0,1,1,131.52,0Z"></path></svg>
+		<svg stroke='currentColor' fill='currentColor' strokeWidth='0' viewBox='0 0 256 256' height='100%' width='100%' xmlns='http://www.w3.org/2000/svg'><path d='M224,128a95.76,95.76,0,0,1-31.8,71.37A72,72,0,0,0,128,160a40,40,0,1,0-40-40,40,40,0,0,0,40,40,72,72,0,0,0-64.2,39.37h0A96,96,0,1,1,224,128Z' opacity='0.2'></path><path d='M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM74.08,197.5a64,64,0,0,1,107.84,0,87.83,87.83,0,0,1-107.84,0ZM96,120a32,32,0,1,1,32,32A32,32,0,0,1,96,120Zm97.76,66.41a79.66,79.66,0,0,0-36.06-28.75,48,48,0,1,0-59.4,0,79.66,79.66,0,0,0-36.06,28.75,88,88,0,1,1,131.52,0Z'></path></svg>
 	);
 };
 
 const IntentIcon = () => {
 	return (
-		<svg fill="#000000" width="100%" height="100%" viewBox="0 0 32 32" id="icon" xmlns="http://www.w3.org/2000/svg">
-			<polygon points="22 4 22 6 24.586 6 19.586 11 21 12.414 26 7.414 26 10 28 10 28 4 22 4" />
-			<polygon points="10 4 10 6 7.414 6 12.414 11 11 12.414 6 7.414 6 10 4 10 4 4 10 4" />
-			<polygon points="20 5 16 1 12 5 13.414 6.414 15 4.829 15 11 17 11 17 4.829 18.586 6.414 20 5" />
-			<polygon points="22 28 22 26 24.586 26 19.586 21 21 19.586 26 24.586 26 22 28 22 28 28 22 28" />
-			<polygon points="10 28 10 26 7.414 26 12.414 21 11 19.586 6 24.586 6 22 4 22 4 28 10 28" />
-			<polygon points="20 27 16 31 12 27 13.414 25.586 15 27.171 15 21 17 21 17 27.171 18.586 25.586 20 27" />
-			<polygon points="5 12 1 16 5 20 6.414 18.586 4.829 17 11 17 11 15 4.829 15 6.414 13.414 5 12" />
-			<polygon points="27 12 31 16 27 20 25.586 18.586 27.171 17 21 17 21 15 27.171 15 25.586 13.414 27 12" />
-			<rect id="_Transparent_Rectangle_" data-name="&lt;Transparent Rectangle&gt;" style={{ fill: 'none' }} width="32" height="32" />
+		<svg fill='#000000' width='100%' height='100%' viewBox='0 0 32 32' id='icon' xmlns='http://www.w3.org/2000/svg'>
+			<polygon points='22 4 22 6 24.586 6 19.586 11 21 12.414 26 7.414 26 10 28 10 28 4 22 4' />
+			<polygon points='10 4 10 6 7.414 6 12.414 11 11 12.414 6 7.414 6 10 4 10 4 4 10 4' />
+			<polygon points='20 5 16 1 12 5 13.414 6.414 15 4.829 15 11 17 11 17 4.829 18.586 6.414 20 5' />
+			<polygon points='22 28 22 26 24.586 26 19.586 21 21 19.586 26 24.586 26 22 28 22 28 28 22 28' />
+			<polygon points='10 28 10 26 7.414 26 12.414 21 11 19.586 6 24.586 6 22 4 22 4 28 10 28' />
+			<polygon points='20 27 16 31 12 27 13.414 25.586 15 27.171 15 21 17 21 17 27.171 18.586 25.586 20 27' />
+			<polygon points='5 12 1 16 5 20 6.414 18.586 4.829 17 11 17 11 15 4.829 15 6.414 13.414 5 12' />
+			<polygon points='27 12 31 16 27 20 25.586 18.586 27.171 17 21 17 21 15 27.171 15 25.586 13.414 27 12' />
+			<rect id='_Transparent_Rectangle_' data-name='&lt;Transparent Rectangle&gt;' style={{ fill: 'none' }} width='32' height='32' />
 		</svg>
 	);
 };
@@ -480,7 +480,7 @@ const UserQuery = ({ text }: { text: string }) => {
 				float: 'left',
 				marginLeft: '5px',
 				maxWidth: '1000px',
-			}} className="step-query">{text}</span>
+			}} className='step-query'>{text}</span>
 			<div style={{ clear: 'left' }}></div>
 		</div>
 	);
@@ -492,7 +492,7 @@ const ChosenIntent = ({ detectedIntent, actualIntent }: { detectedIntent: string
 			<span style={{ width: '1.50em', height: '1.50em', paddingLeft: '0.12em', paddingRight: '0.12em', display: 'inline-block', float: 'left' }}>
 				<IntentIcon />
 			</span>
-			<span style={{ lineHeight: '1.50em', display: 'inline-block', float: 'left', marginLeft: '5px' }} className="step-query">/{detectedIntent} (EXPECTED: /{actualIntent})</span>
+			<span style={{ lineHeight: '1.50em', display: 'inline-block', float: 'left', marginLeft: '5px' }} className='step-query'>/{detectedIntent} (EXPECTED: /{actualIntent})</span>
 			<div style={{ clear: 'left' }}></div>
 		</div>
 	);
@@ -531,7 +531,7 @@ const ExpectedDiff = mobxlite.observer(
 		return <div className='expected-diffs'>
 			{dumbDiffParser(expectedDiff).map(details => {
 				return <div className='expected-diffs'>
-					<div className="step-title">
+					<div className='step-title'>
 						Expected diff [{details.path}]
 					</div>
 					<DiffEditor

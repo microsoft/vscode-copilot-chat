@@ -51,6 +51,7 @@
 	"search.exclude": {
 		"src/base/util/tokenizer_*.json": true,
 		"src/base/util/*.bpe": true,
+		"src/extension/chatSessions/vscode-node/test/fixtures/**": true,
 		"src/extension/prompts/node/test/fixtures/**/*": true,
 		"src/extension/test/node/fixtures/**/*": true,
 		"src/platform/parser/test/node/fixtures/**/*": true,

@@ -40,7 +40,6 @@ import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IToolCall } from '../../prompt/common/intents';
 import { ToolCallRound } from '../../prompt/common/toolCallRound';
 import { ChatTelemetryBuilder, InlineChatTelemetry } from '../../prompt/node/chatParticipantTelemetry';
-import { IntentInvocationMetadata } from '../../prompt/node/conversation';
 import { DefaultIntentRequestHandler } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent, NoopReplyInterpreter, ReplyInterpreterMetaData, TelemetryData } from '../../prompt/node/intents';
@@ -57,16 +56,21 @@ import { CopilotInteractiveEditorResponse, InteractionOutcome, InteractionOutcom
 
 const INLINE_CHAT_EXIT_TOOL_NAME = 'inline_chat_exit';
 
-interface Result {
+interface IInlineChatEditResult {
 	telemetry: InlineChatTelemetry;
 	lastResponse: ChatResponse;
+	needsExitTool: boolean;
+}
+
+interface IInlineChatEditStrategy {
+	executeEdit(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<IInlineChatEditResult>;
 }
 
 export class InlineChatIntent implements IIntent {
 
 	static readonly ID = Intent.InlineChat;
 
-	private static readonly _EDIT_TOOLS = new Set<string>([
+	static readonly _EDIT_TOOLS = new Set<string>([
 		ToolName.ApplyPatch,
 		ToolName.EditFile,
 		ToolName.ReplaceString,
@@ -101,7 +105,7 @@ export class InlineChatIntent implements IIntent {
 		if (await this._ignoreService.isCopilotIgnored(request.location2.document.uri, token)) {
 			return {
 				errorDetails: {
-					message: l10n.t('inlineChat.ignored', "Copilot is disabled for this file."),
+					message: l10n.t('inlineChat.ignored', 'Copilot is disabled for this file.'),
 				}
 			};
 		}
@@ -111,7 +115,7 @@ export class InlineChatIntent implements IIntent {
 		if (!endpoint.supportsToolCalls) {
 			return {
 				errorDetails: {
-					message: l10n.t('inlineChat.model', "{0} cannot be used for inline chat", endpoint.name),
+					message: l10n.t('inlineChat.model', '{0} cannot be used for inline chat', endpoint.name),
 				}
 			};
 		}
@@ -183,11 +187,9 @@ export class InlineChatIntent implements IIntent {
 		assertType(documentContext);
 
 		const editSurvivalTracker = this._editSurvivalTrackerService.initialize(request.location2.document);
-		let didSeeAnyEdit = false;
 
 		stream = ChatResponseStreamImpl.spy(stream, part => {
 			if (part instanceof ChatResponseTextEditPart) {
-				didSeeAnyEdit = true;
 				editSurvivalTracker.collectAIEdits(part.edits);
 			}
 		});
@@ -208,11 +210,13 @@ export class InlineChatIntent implements IIntent {
 			}
 		}
 
-		let result: Result;
+		let result: IInlineChatEditResult;
 		try {
-			result = useToolsForEdit
-				? await this._handleRequestWithEditTools(endpoint, conversation, request, stream, token, documentContext, chatTelemetry)
-				: await this._handleRequestWithEditHeuristic(endpoint, conversation, request, stream, token, documentContext, chatTelemetry);
+			const strategy: IInlineChatEditStrategy = useToolsForEdit
+				? this._instantiationService.createInstance(InlineChatEditToolsStrategy, this)
+				: this._instantiationService.createInstance(InlineChatEditHeuristicStrategy, this);
+
+			result = await strategy.executeEdit(endpoint, conversation, request, stream, token, documentContext, chatTelemetry);
 		} catch (err) {
 			this._logService.error(err, 'InlineChatIntent: prompt rendering failed');
 			return {
@@ -228,24 +232,18 @@ export class InlineChatIntent implements IIntent {
 			return CanceledResult;
 		}
 
+		if (result.needsExitTool) {
+			// BAILOUT: when no edits were emitted, invoke the exit tool manually
+			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+		}
+
 		// store metadata for telemetry sending
 		const turn = conversation.getLatestTurn();
-		turn.setMetadata(new InteractionOutcome(didSeeAnyEdit ? 'inlineEdit' : 'none', []));
 		turn.setMetadata(new CopilotInteractiveEditorResponse(
-			'ok', undefined,
+			undefined,
 			{ ...documentContext, query: request.prompt, intent: this },
 			result.telemetry.telemetryMessageId, result.telemetry, editSurvivalTracker
 		));
-		turn.setMetadata(new IntentInvocationMetadata({ // UGLY fake intent invocation
-			location: ChatLocation.Editor,
-			intent: this,
-			endpoint,
-			buildPrompt: () => { throw new Error(); },
-		}));
-
-		if (token.isCancellationRequested) {
-			return CanceledResult;
-		}
 
 		if (result.lastResponse.type !== ChatFetchResponseType.Success) {
 			const details = getErrorDetailsFromChatFetchError(result.lastResponse, await this._endpointProvider.getChatEndpoint('copilot-base'), (await this._authenticationService.getCopilotToken()).copilotPlan);
@@ -260,9 +258,25 @@ export class InlineChatIntent implements IIntent {
 		return {};
 	}
 
-	// --- NEW world: edit tools
+	invoke(): Promise<never> {
+		throw new TypeError();
+	}
+}
 
-	private async _handleRequestWithEditTools(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<Result> {
+class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
+
+	readonly id = InlineChatIntent.ID;
+	readonly locations = [ChatLocation.Editor];
+	readonly description = '';
+
+	constructor(
+		private readonly _intent: InlineChatIntent,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ILogService private readonly _logService: ILogService,
+		@IToolsService private readonly _toolsService: IToolsService,
+	) { }
+
+	async executeEdit(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<IInlineChatEditResult> {
 		assertType(request.location2 instanceof ChatRequestEditorData);
 		assertType(documentContext);
 
@@ -286,7 +300,7 @@ export class InlineChatIntent implements IIntent {
 
 			const renderResult = await renderer.render(undefined, token, { trace: true });
 
-			telemetry = chatTelemetry.makeRequest(this, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, [], availableTools.length);
+			telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, [], availableTools.length);
 
 			stream = ChatResponseStreamImpl.spy(stream, part => {
 				if (part instanceof ChatResponseTextEditPart) {
@@ -317,8 +331,7 @@ export class InlineChatIntent implements IIntent {
 			}
 
 			if (result.toolCalls.length === 0) {
-				// BAILOUT: when no tools have been used, invoke the exit tool manually
-				await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+				// BAILOUT: when no tools have been used
 				break;
 			}
 
@@ -329,15 +342,15 @@ export class InlineChatIntent implements IIntent {
 
 			if (editAttempts.push(...result.failedEdits) > 5) {
 				// TOO MANY FAILED ATTEMPTS
-				this._logService.warn(`Aborting inline chat edit: too many failed edit attempts`);
+				this._logService.error(`Aborting inline chat edit: too many failed edit attempts`);
 				break;
 			}
 		}
 
 		telemetry.sendToolCallingTelemetry(toolCallRounds, availableTools, token.isCancellationRequested ? 'cancelled' : lastResponse.type);
 
-
-		return { lastResponse, telemetry };
+		const needsExitTool = toolCallRounds.length === 0 || (toolCallRounds.length > 0 && toolCallRounds[toolCallRounds.length - 1].toolCalls.length === 0);
+		return { lastResponse, telemetry, needsExitTool };
 	}
 
 	private async _makeRequestAndRunTools(endpoint: IChatEndpoint, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, messages: Raw.ChatMessage[], inlineChatTools: vscode.LanguageModelToolInformation[], telemetry: InlineChatTelemetry, token: CancellationToken) {
@@ -372,9 +385,9 @@ export class InlineChatIntent implements IIntent {
 			telemetryProperties: {
 				messageId: telemetry.telemetryMessageId,
 				conversationId: telemetry.sessionId,
-				messageSource: this.id
+				messageSource: this._intent.id
 			},
-			finishedCb: async (text, index, delta) => {
+			finishedCb: async (_text, _index, delta) => {
 
 				telemetry.markReceivedToken();
 
@@ -471,10 +484,20 @@ export class InlineChatIntent implements IIntent {
 
 		return [exitTool, ...editTools];
 	}
+}
 
-	// ---- NEW world: edit prompt
+class InlineChatEditHeuristicStrategy implements IInlineChatEditStrategy {
 
-	private async _handleRequestWithEditHeuristic(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<Result> {
+	readonly id = InlineChatIntent.ID;
+	readonly locations = [ChatLocation.Editor];
+	readonly description = '';
+
+	constructor(
+		private readonly _intent: InlineChatIntent,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+	) { }
+
+	async executeEdit(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<IInlineChatEditResult> {
 
 		assertType(request.location2 instanceof ChatRequestEditorData);
 
@@ -494,7 +517,7 @@ export class InlineChatIntent implements IIntent {
 		const replyInterpreter = renderResult.metadata.get(ReplyInterpreterMetaData)?.replyInterpreter ?? new NoopReplyInterpreter();
 		const telemetryData = renderResult.metadata.getAll(TelemetryData);
 
-		const telemetry = chatTelemetry.makeRequest(this, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, telemetryData, 0);
+		const telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, telemetryData, 0);
 
 		stream = ChatResponseStreamImpl.spy(stream, part => {
 			if (part instanceof ChatResponseTextEditPart) {
@@ -523,7 +546,7 @@ export class InlineChatIntent implements IIntent {
 			telemetryProperties: {
 				messageId: telemetry.telemetryMessageId,
 				conversationId: telemetry.sessionId,
-				messageSource: this.id
+				messageSource: this._intent.id
 			},
 			requestOptions: {
 				stream: true,
@@ -543,19 +566,10 @@ export class InlineChatIntent implements IIntent {
 		const responseText = fetchResult.type === ChatFetchResponseType.Success ? fetchResult.value : '';
 		telemetry.sendTelemetry(
 			fetchResult.requestId, fetchResult.type, responseText,
-			new InteractionOutcome('inlineEdit', []),
+			new InteractionOutcome(telemetry.editCount > 0 ? 'inlineEdit' : 'none', []),
 			[]
 		);
 
-		if (telemetry.editCount === 0) {
-			// BAILOUT: when no edits were emitted, invoke the exit tool manually
-			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
-		}
-
-		return { lastResponse: fetchResult, telemetry };
-	}
-
-	invoke(): Promise<never> {
-		throw new TypeError();
+		return { lastResponse: fetchResult, telemetry, needsExitTool: telemetry.editCount === 0 };
 	}
 }

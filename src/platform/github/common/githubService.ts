@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Endpoints } from "@octokit/types";
+import type { Endpoints } from '@octokit/types';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { decodeBase64 } from '../../../util/vs/base/common/buffer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
@@ -12,7 +12,7 @@ import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { addPullRequestCommentGraphQLRequest, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 
-export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
+export type IGetRepositoryInfoResponseData = Endpoints['GET /repos/{owner}/{repo}']['response']['data'];
 
 export const IGithubRepositoryService = createServiceIdentifier<IGithubRepositoryService>('IGithubRepositoryService');
 export const IOctoKitService = createServiceIdentifier<IOctoKitService>('IOctoKitService');
@@ -134,6 +134,8 @@ export interface CustomAgentListItem {
 	metadata?: Record<string, string>;
 	target?: string;
 	config_error?: string;
+	model?: string;
+	infer?: boolean;
 	'mcp-servers'?: {
 		[serverName: string]: {
 			type: string;
@@ -301,6 +303,19 @@ export interface IOctoKitService {
 	 * @returns The file content as a string
 	 */
 	getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string>;
+
+	/**
+	 * Gets the list of organizations that the authenticated user belongs to.
+	 * @returns An array of organization logins
+	 */
+	getUserOrganizations(): Promise<string[]>;
+
+	/**
+	 * Gets the list of repositories for an organization.
+	 * @param org The organization name
+	 * @returns An array of repository names
+	 */
+	getOrganizationRepositories(org: string): Promise<string[]>;
 }
 
 /**
@@ -374,6 +389,22 @@ export class BaseOctoKitService {
 
 		this._logService.error(`Failed to get file content for ${owner}/${repo}/${path} at ref ${ref}`);
 		return '';
+	}
+
+	protected async getUserOrganizationsWithToken(token: string): Promise<string[]> {
+		const result = await this._makeGHAPIRequest('user/orgs', 'GET', token);
+		if (!result || !Array.isArray(result)) {
+			return [];
+		}
+		return result.map((org: { login: string }) => org.login);
+	}
+
+	protected async getOrganizationRepositoriesWithToken(org: string, token: string): Promise<string[]> {
+		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=5&sort=updated`, 'GET', token);
+		if (!result || !Array.isArray(result) || result.length === 0) {
+			return [];
+		}
+		return result.map((repo: { name: string }) => repo.name);
 	}
 
 	private async getBlobContentWithToken(owner: string, repo: string, sha: string, token: string): Promise<string | undefined> {

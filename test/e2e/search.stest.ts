@@ -156,7 +156,7 @@ function generateEvaluate(testInfo: ISearchTestConfig) {
 			}
 
 			const actualTargets = getTargetFiles(args.filesToInclude, args.filesToExclude);
-			const expectedTargets = getTargetFiles(testInfo.exampleIncludeGlobs ?? ["*"], testInfo.exampleExcludeGlobs ?? []);
+			const expectedTargets = getTargetFiles(testInfo.exampleIncludeGlobs ?? ['*'], testInfo.exampleExcludeGlobs ?? []);
 
 			assert.deepEqual(actualTargets, expectedTargets);
 
@@ -192,7 +192,7 @@ function generateEvaluate(testInfo: ISearchTestConfig) {
 
 function getTargetFiles(fileGlobs: string | string[], ignoreGlobs: string | string[]): string[] {
 	if (!Array.isArray(fileGlobs)) {
-		fileGlobs = (fileGlobs.length === 0) ? ["*"] : fileGlobs.split(',');
+		fileGlobs = (fileGlobs.length === 0) ? ['*'] : fileGlobs.split(',');
 	}
 
 	if (!Array.isArray(ignoreGlobs)) {
@@ -225,7 +225,7 @@ function createSimplifiedSearchArgs(args: ISearchArg): ISimplifiedSearchArg {
 async function testArgs(commands: Command[]): Promise<ISearchArg> {
 	for (const c of commands) {
 		if (c.command === 'github.copilot.executeSearch') {
-			assert(c.title === "Search");
+			assert(c.title === 'Search');
 			return c.arguments?.[0];
 		}
 	}

@@ -371,11 +371,11 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		}
 
 		if (completionItem.documentId !== docId) {
-			logContext.addLog("Dropped: wrong-document");
+			logContext.addLog('Dropped: wrong-document');
 			return { item: undefined, telemetry: telemetryBuilder.addDroppedReason('wrong-document').build(), logContext };
 		}
 
-		log("following known diagnostics:\n" + this._currentDiagnostics.toString(), undefined, this._tracer);
+		log('following known diagnostics:\n' + this._currentDiagnostics.toString(), undefined, this._tracer);
 
 		return { item: completionItem, telemetry: telemetryBuilder.build(), logContext };
 	}

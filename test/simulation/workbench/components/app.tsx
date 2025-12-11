@@ -80,7 +80,7 @@ export const App = mobxlite.observer(
 							</div>
 							<div style={{ textAlign: 'right' }}>
 								<Checkbox
-									label="Expand prompts"
+									label='Expand prompts'
 									defaultChecked={displayOptions.expandPrompts.value}
 									onChange={mobx.action(() => displayOptions.expandPrompts.value = !displayOptions.expandPrompts.value)}
 								/>
@@ -109,7 +109,7 @@ const TerminationMessageBar = mobxlite.observer(({ runner }: { runner: Simulatio
 );
 
 const DisplayToggle = mobxlite.observer(({ displayOptions }: { displayOptions: DisplayOptions }) => (
-	<Tooltip content="Show all tests or by suites" relationship="label">
+	<Tooltip content='Show all tests or by suites' relationship='label'>
 		<ToggleButton
 			icon={displayOptions.testsKind.value === 'suiteList' ? <ListBarTree20Filled /> : <ListBar20Filled />}
 			onClick={mobx.action(() => displayOptions.testsKind.value = displayOptions.testsKind.value === 'suiteList' ? 'testList' : 'suiteList')}

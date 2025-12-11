@@ -212,7 +212,7 @@ class ChatAgents implements IDisposable {
 You can also ask me questions about your editor selection by [starting an inline chat session](command:inlineChat.start).
 
 Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-copilot/getting-started-with-github-copilot?tool=vscode&utm_source=editor&utm_medium=chat-panel&utm_campaign=2024q3-em-MSFT-getstarted) in [Visual Studio Code](https://code.visualstudio.com/docs/copilot/overview). Or explore the [Copilot walkthrough](command:github.copilot.open.walkthrough).`,
-			comment: "{Locked='](command:inlineChat.start)'}"
+			comment: `{Locked='](command:inlineChat.start)'}`
 		});
 		const markdownString = new vscode.MarkdownString(helpPostfix);
 		markdownString.isTrusted = { enabledCommands: ['inlineChat.start', 'github.copilot.open.walkthrough'] };
@@ -313,7 +313,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				message: 'You have exceeded your premium request allowance. We have automatically switched you to {0} which is included with your plan. [Enable additional paid premium requests]({1}) to continue using premium models.',
 				args: [baseEndpoint.name, 'command:chat.enablePremiumOverages'],
 				// To make sure the translators don't break the link
-				comment: ["{Locked=']({'}"]
+				comment: [`{Locked=']({'}`]
 			}));
 			messageString.isTrusted = { enabledCommands: ['chat.enablePremiumOverages'] };
 		} else {

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
+import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
@@ -17,6 +18,7 @@ export class CopilotCLIImageSupport {
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		this.storageDir = URI.joinPath(this.context.globalStorageUri, 'copilot-cli-images');
 		this.initialized = new Lazy<Promise<void>>(() => this.initialize());
@@ -25,7 +27,7 @@ export class CopilotCLIImageSupport {
 
 	private async initialize(): Promise<void> {
 		try {
-			await this.workspaceService.fs.createDirectory(this.storageDir);
+			await createDirectoryIfNotExists(this.fileSystemService, this.storageDir);
 			void this.cleanupOldImages();
 		} catch (error) {
 			this.logService.error(`[CopilotCLISession] ImageStorage: Failed to initialize`, error);

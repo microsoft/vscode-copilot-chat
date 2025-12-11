@@ -16,7 +16,7 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { LanguageContextLanguages, LanguageContextOptions, PromptingStrategy } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
@@ -45,8 +45,9 @@ import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange'
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Position as VscodePosition } from '../../../vscodeTypes';
-import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
+import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
+import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
@@ -76,7 +77,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
 
-	private readonly delayer: Delayer;
+	private readonly userInteractionMonitor: UserInteractionMonitor;
 
 	private forceUseDefaultModel: boolean = false;
 
@@ -94,16 +95,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
-		this.delayer = new Delayer(this.configService, this.expService);
+		this.userInteractionMonitor = new UserInteractionMonitor(this.configService, this.expService);
 		this.nextCursorPredictor = this.instaService.createInstance(XtabNextCursorPredictor, XtabProvider.computeTokens);
 	}
 
 	public handleAcceptance(): void {
-		this.delayer.handleAcceptance();
+		this.userInteractionMonitor.handleAcceptance();
 	}
 
 	public handleRejection(): void {
-		this.delayer.handleRejection();
+		this.userInteractionMonitor.handleRejection();
 	}
 
 	public provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
@@ -163,7 +164,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return StatelessNextEditResult.noEdit(new NoNextEditReason.ActiveDocumentHasNoEdits(), telemetry);
 			}
 
-			const delaySession = this.delayer.createDelaySession(request.providerRequestStartDateTime);
+			const delaySession = this.userInteractionMonitor.createDelaySession(request.providerRequestStartDateTime);
 
 			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetry, RetryState.NotRetrying);
 
@@ -269,7 +270,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			promptOptions,
 			XtabProvider.computeTokens,
-			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: false } }
+			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness } }
 		);
 
 		if (taggedCurrentFileContentResult.isError()) {
@@ -279,6 +280,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const { taggedCurrentDocLines, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
+
+		const aggressivenessLevel = this.userInteractionMonitor.getAggressivenessLevel();
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
@@ -304,6 +307,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			taggedCurrentDocLines,
 			areaAroundCodeToEdit,
 			langCtx,
+			aggressivenessLevel,
 			XtabProvider.computeTokens,
 			promptOptions
 		);
@@ -972,10 +976,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private determineModelConfiguration(activeDocument: StatelessNextEditDocument): ModelConfig {
 		if (this.forceUseDefaultModel) {
-			return {
+			const defaultOptions = {
 				modelName: undefined,
 				...xtabPromptOptions.DEFAULT_OPTIONS,
 			};
+			const defaultModelConfig = this.modelService.defaultModelConfiguration();
+			return XtabProvider.overrideModelConfig(defaultOptions, defaultModelConfig);
 		}
 
 		const sourcedModelConfig = {
@@ -1038,6 +1044,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt:
 				return simplifiedPrompt;
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
+			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;

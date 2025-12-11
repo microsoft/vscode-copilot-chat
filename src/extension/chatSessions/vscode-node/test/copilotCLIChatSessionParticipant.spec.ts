@@ -134,7 +134,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const accessor = services.createTestingAccessor();
 		promptResolver = new class extends mock<CopilotCLIPromptResolver>() {
 			override resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined) {
-				return Promise.resolve({ prompt: prompt ?? request.prompt, attachments: [] });
+				return Promise.resolve({ prompt: prompt ?? request.prompt, attachments: [], references: [] });
 			}
 		}();
 		itemProvider = new class extends mock<CopilotCLIChatSessionItemProvider>() {

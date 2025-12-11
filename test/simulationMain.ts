@@ -79,7 +79,7 @@ async function main() {
 	}
 
 	if (errors.length > 0) {
-		console.error(`\n${red("⚠️⚠️⚠️  Command failed with:")}\n\n`);
+		console.error(`\n${red('⚠️⚠️⚠️  Command failed with:')}\n\n`);
 
 		for (let i = 0; i < errors.length; i++) {
 			const idx = `Error${errors.length === 1 ? '' : ` ${i + 1})`} `;
@@ -572,7 +572,7 @@ function createSimulationTestContext(
 
 	const customModelConfigMap: Map<string, IModelConfig> = new Map();
 	if (opts.modelConfigFile) {
-		console.log("Using model configuration file: " + opts.modelConfigFile);
+		console.log('Using model configuration file: ' + opts.modelConfigFile);
 		const customModelConfigs = parseModelConfigFile(opts.modelConfigFile);
 		customModelConfigs.forEach(config => {
 			customModelConfigMap.set(config.id, config);

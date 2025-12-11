@@ -18,7 +18,7 @@ import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { INextEditProvider } from '../../node/nextEditProvider';
+import { INextEditProvider, NESInlineCompletionContext } from '../../node/nextEditProvider';
 import { DiagnosticsTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
 import { INextEditDisplayLocation, INextEditResult } from '../../node/nextEditResult';
 import { VSCodeWorkspace } from '../parts/vscodeWorkspace';
@@ -66,7 +66,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		this._diagnosticsCompletionHandler = this._register(instantiationService.createInstance(DiagnosticsCompletionProcessor, workspace, git));
 	}
 
-	async getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
+	async getNextEdit(docId: DocumentId, context: NESInlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
 		this._lastTriggerTime = Date.now();
 
 		if (cancellationToken.isCancellationRequested) {
@@ -82,7 +82,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		return this._createNextEditResult(diagnosticEditResult, logContext, tb);
 	}
 
-	async runUntilNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, delayStart: number, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
+	async runUntilNextEdit(docId: DocumentId, context: NESInlineCompletionContext, logContext: InlineEditRequestLogContext, delayStart: number, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
 		try {
 			await timeout(delayStart);
 			if (cancellationToken.isCancellationRequested) {

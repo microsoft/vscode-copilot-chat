@@ -3,19 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { isDeepStrictEqual } from 'util';
 import type * as vscode from 'vscode';
 import { filterMap } from '../../../util/common/arrays';
 import * as errors from '../../../util/common/errors';
 import { createTracer } from '../../../util/common/tracing';
 import { pushMany } from '../../../util/vs/base/common/arrays';
-import { softAssert } from '../../../util/vs/base/common/assert';
-import { Emitter } from '../../../util/vs/base/common/event';
+import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
+import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { autorun, observableFromEvent } from '../../../util/vs/base/common/observable';
+import { derived, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { CopilotToken } from '../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ConfigKey, ExperimentBasedConfig, IConfigurationService } from '../../configuration/common/configurationService';
+import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
 import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -24,10 +24,24 @@ import { WireTypes } from '../common/dataTypes/inlineEditsModelsTypes';
 import { isPromptingStrategy, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
 import { IInlineEditsModelService } from '../common/inlineEditsModelService';
 
+const enum ModelSource {
+	LocalConfig = 'localConfig',
+	ExpConfig = 'expConfig',
+	ExpDefaultConfig = 'expDefaultConfig',
+	Fetched = 'fetched',
+	HardCodedDefault = 'hardCodedDefault',
+}
+
 type Model = {
 	modelName: string;
 	promptingStrategy: PromptingStrategy | undefined;
 	includeTagsInCurrentFile: boolean;
+	source: ModelSource;
+}
+
+type ModelInfo = {
+	models: Model[];
+	currentModelId: string;
 }
 
 export class InlineEditsModelService extends Disposable implements IInlineEditsModelService {
@@ -38,12 +52,14 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		modelName: 'copilot-nes-xtab',
 		promptingStrategy: PromptingStrategy.CopilotNesXtab,
 		includeTagsInCurrentFile: true,
+		source: ModelSource.HardCodedDefault,
 	};
 
 	private static readonly COPILOT_NES_OCT: Model = {
 		modelName: 'copilot-nes-oct',
 		promptingStrategy: PromptingStrategy.Xtab275,
 		includeTagsInCurrentFile: false,
+		source: ModelSource.HardCodedDefault,
 	};
 
 	private _copilotTokenObs = observableFromEvent(this, this._tokenStore.onDidStoreUpdate, () => this._tokenStore.copilotToken);
@@ -56,16 +72,20 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	private _expBasedModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString, this._expService);
 	private _defaultModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString, this._expService);
 
-	private _modelInfo: { readonly modelList: readonly Model[]; readonly currentModelId: string };
+	private _modelsObs: IObservable<Model[]>;
+	private _currentModelObs: IObservable<Model>;
+	private _modelInfoObs: IObservable<ModelInfo>;
 
-	private readonly _onModelListUpdated = this._register(new Emitter<void>());
-	public readonly onModelListUpdated = this._onModelListUpdated.event;
+	public readonly onModelListUpdated: Event<void>;
 
 	private _tracer = createTracer(['NES', 'ModelsService'], (msg) => this._logService.trace(msg));
+
+	private _undesiredModelsManager: UndesiredModels.Manager;
 
 	constructor(
 		@ICopilotTokenStore private readonly _tokenStore: ICopilotTokenStore,
 		@IProxyModelsService private readonly _proxyModelsService: IProxyModelsService,
+		@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -75,77 +95,112 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const tracer = this._tracer.sub('constructor');
 
-		const defaultModel = this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
 
-		this._modelInfo = { modelList: [defaultModel], currentModelId: defaultModel.modelName };
-
-		tracer.trace('initial modelInfo', this._modelInfo);
-
-		this._register(autorun((reader) => {
-			this.refreshModelsInfo({
+		this._modelsObs = derived((reader) => {
+			tracer.trace('computing models');
+			return this.aggregateModels({
 				copilotToken: this._copilotTokenObs.read(reader),
 				fetchedNesModels: this._fetchedModelsObs.read(reader),
-				preferredModelName: this._preferredModelNameObs.read(reader),
 				localModelConfig: this._localModelConfigObs.read(reader),
 				modelConfigString: this._expBasedModelConfigObs.read(reader),
 				defaultModelConfigString: this._defaultModelConfigObs.read(reader),
 			});
-		}));
+		}).recomputeInitiallyAndOnChange(this._store);
 
-		tracer.trace('updated model info', this._modelInfo);
+		this._currentModelObs = derived<Model, void>((reader) => {
+			tracer.trace('computing current model');
+			return this._pickModel({
+				preferredModelName: this._preferredModelNameObs.read(reader),
+				models: this._modelsObs.read(reader),
+			});
+		}).recomputeInitiallyAndOnChange(this._store);
+
+		this._modelInfoObs = derived((reader) => {
+			tracer.trace('computing model info');
+			return {
+				models: this._modelsObs.read(reader),
+				currentModelId: this._currentModelObs.read(reader).modelName,
+			};
+		}).recomputeInitiallyAndOnChange(this._store);
+
+		this.onModelListUpdated = Event.fromObservableLight(this._modelInfoObs);
 	}
 
 	get modelInfo(): vscode.InlineCompletionModelInfo | undefined {
-		const tracer = this._tracer.sub('modelInfo.getter');
-
-		tracer.trace('model info', this._modelInfo);
-
-		const models: vscode.InlineCompletionModel[] = this._modelInfo.modelList.map(m => ({
+		const models: vscode.InlineCompletionModel[] = this._modelsObs.get().map(m => ({
 			id: m.modelName,
 			name: m.modelName,
 		}));
 
+		const currentModel = this._currentModelObs.get();
+
 		return {
 			models,
-			currentModelId: this._modelInfo.currentModelId,
+			currentModelId: currentModel.modelName,
 		};
 	}
 
 
-	async setCurrentModelId(modelId: string): Promise<void> {
-		if (this._modelInfo.currentModelId === modelId) {
+	// FIXME@ulugbekna: don't do async risking race condition; use a TaskQueue to serialize updates?
+	async setCurrentModelId(newPreferredModelId: string): Promise<void> {
+		const currentPreferredModelId = this._configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsPreferredModel, this._expService);
+
+		const isSameModel = currentPreferredModelId === newPreferredModelId;
+		if (isSameModel) {
 			return;
 		}
-		if (!this._modelInfo.modelList.some(m => m.modelName === modelId)) {
-			this._logService.warn(`Trying to set unknown model id: ${modelId}`);
+
+		// snapshot before async calls
+		const currentPreferredModel = this._currentModelObs.get();
+
+		const models = this._modelsObs.get();
+		const newPreferredModel = models.find(m => m.modelName === newPreferredModelId);
+
+		if (newPreferredModel === undefined) {
+			this._logService.error(`New preferred model id ${newPreferredModelId} not found in model list.`);
 			return;
 		}
-		this._modelInfo = { ...this._modelInfo, currentModelId: modelId };
-		await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, modelId);
-		this._onModelListUpdated.fire();
+
+		// if currently selected model is from exp config, then mark that model as undesired
+		if (currentPreferredModel.source === ModelSource.ExpConfig) {
+			await this._undesiredModelsManager.addUndesiredModelId(currentPreferredModel.modelName);
+		}
+
+		if (this._undesiredModelsManager.isUndesiredModelId(newPreferredModelId)) {
+			await this._undesiredModelsManager.removeUndesiredModelId(newPreferredModelId);
+		}
+
+		// if user picks same as the default model, we should reset the user setting
+		// otherwise, update the model
+		const expectedDefaultModel = this._pickModel({ preferredModelName: 'none', models });
+		if (newPreferredModel.source === ModelSource.ExpConfig || // because exp-configured model already takes highest priority
+			(newPreferredModelId === expectedDefaultModel.modelName && !models.some(m => m.source === ModelSource.ExpConfig))
+		) {
+			this._tracer.trace(`New preferred model id ${newPreferredModelId} is the same as the default model, resetting user setting.`);
+			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, 'none');
+		} else {
+			this._tracer.trace(`New preferred model id ${newPreferredModelId} is different from the default model, updating user setting to ${newPreferredModelId}.`);
+			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, newPreferredModelId);
+		}
 	}
 
-	async refreshModelsInfo(
+	private aggregateModels(
 		{
 			copilotToken,
 			fetchedNesModels,
-			preferredModelName,
 			localModelConfig,
 			modelConfigString,
 			defaultModelConfigString,
 		}: {
 			copilotToken: CopilotToken | undefined;
 			fetchedNesModels: WireTypes.Model.t[] | undefined;
-			preferredModelName: string;
 			localModelConfig: ModelConfiguration | undefined;
 			modelConfigString: string | undefined;
 			defaultModelConfigString: string | undefined;
 		},
-	): Promise<void> {
-
-		const tracer = this._tracer.sub('refreshModelsInfo');
-
-		tracer.trace('Fetching latest models...');
+	): Model[] {
+		const tracer = this._tracer.sub('aggregateModels');
 
 		const models: Model[] = [];
 
@@ -159,7 +214,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				tracer.trace('Local model configuration already exists in the model list, skipping.');
 			} else {
 				tracer.trace(`Adding local model configuration: ${localModelConfig.modelName}`);
-				models.push({ ...localModelConfig });
+				models.push({ ...localModelConfig, source: ModelSource.LocalConfig });
 			}
 		}
 
@@ -168,7 +223,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			const parsedConfig = this.parseModelConfigStringSetting(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString);
 			if (parsedConfig && !models.some(m => m.modelName === parsedConfig.modelName)) {
 				tracer.trace(`Adding model from modelConfigurationString: ${parsedConfig.modelName}`);
-				models.push({ ...parsedConfig });
+				models.push({ ...parsedConfig, source: ModelSource.ExpConfig });
 			} else {
 				tracer.trace('No valid model found in modelConfigurationString.');
 			}
@@ -181,10 +236,15 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				if (!isPromptingStrategy(m.capabilities.promptStrategy)) {
 					return undefined;
 				}
+				if (models.some(knownModel => knownModel.modelName === m.name)) {
+					tracer.trace(`Fetched model ${m.name} already exists in the model list, skipping.`);
+					return undefined;
+				}
 				return {
 					modelName: m.name,
 					promptingStrategy: m.capabilities.promptStrategy,
 					includeTagsInCurrentFile: false, // FIXME@ulugbekna: determine this based on model capabilities and config
+					source: ModelSource.Fetched,
 				} satisfies Model;
 			});
 			tracer.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
@@ -204,23 +264,12 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			}
 		}
 
-		const hasModelListChanged = !isDeepStrictEqual(this._modelInfo.modelList, models);
-
-		if (!hasModelListChanged) {
-			tracer.trace('Model list unchanged, not updating.');
-		} else {
-			this._modelInfo = {
-				modelList: models,
-				currentModelId: this._pickModel({ preferredModelName, models }),
-			};
-			tracer.trace('Model list updated, firing event.');
-			this._onModelListUpdated.fire();
-		}
+		return models;
 	}
 
 	public selectedModelConfiguration(): ModelConfiguration {
 		const tracer = this._tracer.sub('selectedModelConfiguration');
-		const model = this._modelInfo.modelList.find(m => m.modelName === this._modelInfo.currentModelId);
+		const model = this._currentModelObs.get();
 		if (model) {
 			tracer.trace(`Selected model found: ${model.modelName}`);
 			return {
@@ -230,7 +279,32 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			};
 		}
 		tracer.trace('No selected model found, using default model.');
-		return this.determineDefaultModel(undefined, undefined);
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+	}
+
+	public defaultModelConfiguration(): ModelConfiguration {
+		const models = this._modelsObs.get();
+		if (models && models.length > 0) {
+			const defaultModels = models.filter(m => !this.isConfiguredModel(m));
+			if (defaultModels.length > 0) {
+				return defaultModels[0];
+			}
+		}
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+	}
+
+	private isConfiguredModel(model: Model): boolean {
+		switch (model.source) {
+			case ModelSource.LocalConfig:
+			case ModelSource.ExpConfig:
+			case ModelSource.ExpDefaultConfig:
+				return true;
+			case ModelSource.Fetched:
+			case ModelSource.HardCodedDefault:
+				return false;
+			default:
+				assertNever(model.source);
+		}
 	}
 
 	private determineDefaultModel(copilotToken: CopilotToken | undefined, defaultModelConfigString: string | undefined): Model {
@@ -238,7 +312,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		if (defaultModelConfigString) {
 			const parsedConfig = this.parseModelConfigStringSetting(ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString);
 			if (parsedConfig) {
-				return { ...parsedConfig };
+				return { ...parsedConfig, source: ModelSource.ExpDefaultConfig };
 			}
 		}
 
@@ -256,22 +330,39 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}: {
 		preferredModelName: string;
 		models: Model[];
-	}): string {
+	}): Model {
+		// priority of picking a model:
+		// 0. model from modelConfigurationString setting from ExP, unless marked as undesired
+		// 1. user preferred model
+		// 2. first model in the list
+
+		const expConfiguredModel = models.find(m => m.source === ModelSource.ExpConfig);
+		if (expConfiguredModel) {
+			const isUndesiredModelId = this._undesiredModelsManager.isUndesiredModelId(expConfiguredModel.modelName);
+			if (isUndesiredModelId) {
+				this._tracer.trace(`Exp-configured model ${expConfiguredModel.modelName} is marked as undesired by the user. Skipping.`);
+			} else {
+				return expConfiguredModel;
+			}
+		}
+
 		const userHasPreferredModel = preferredModelName !== 'none';
 
-		// FIXME@ulugbekna: respect exp-set model name
-
-		if (userHasPreferredModel && models.some(m => m.modelName === preferredModelName)) {
-			return preferredModelName;
+		if (userHasPreferredModel) {
+			const preferredModel = models.find(m => m.modelName === preferredModelName);
+			if (preferredModel) {
+				return preferredModel;
+			}
 		}
 
 		softAssert(models.length > 0, 'InlineEdits model list should have at least one model');
 
-		if (models.length > 0) {
-			return models[0].modelName;
+		const model = models.at(0);
+		if (model) {
+			return model;
 		}
 
-		return this.determineDefaultModel(undefined, undefined).modelName;
+		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
 	}
 
 	private parseModelConfigStringSetting(configKey: ExperimentBasedConfig<string | undefined>): ModelConfiguration | undefined {
@@ -298,5 +389,53 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}
 
 		return parsedConfig;
+	}
+}
+
+namespace UndesiredModels {
+
+	const UNDESIRED_MODELS_KEY = 'copilot.chat.nextEdits.undesiredModelIds';
+	type UndesiredModelsValue = string[];
+
+	export class Manager {
+
+		constructor(
+			private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
+		) {
+		}
+
+		isUndesiredModelId(modelId: string) {
+			const models = this._getModels();
+			return models.includes(modelId);
+		}
+
+		addUndesiredModelId(modelId: string): Promise<void> {
+			const models = this._getModels();
+			if (!models.includes(modelId)) {
+				models.push(modelId);
+				return this._setModels(models);
+			}
+			return Promise.resolve();
+		}
+
+		removeUndesiredModelId(modelId: string): Promise<void> {
+			const models = this._getModels();
+			const index = models.indexOf(modelId);
+			if (index !== -1) {
+				models.splice(index, 1);
+				return this._setModels(models);
+			}
+			return Promise.resolve();
+		}
+
+		private _getModels(): string[] {
+			return this._vscodeExtensionContext.globalState.get<UndesiredModelsValue>(UNDESIRED_MODELS_KEY) ?? [];
+		}
+
+		private _setModels(models: string[]): Promise<void> {
+			return new Promise((resolve, reject) => {
+				this._vscodeExtensionContext.globalState.update(UNDESIRED_MODELS_KEY, models).then(resolve, reject);
+			});
+		}
 	}
 }
