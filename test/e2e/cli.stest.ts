@@ -685,5 +685,5 @@ function createDiagnosticReference(file: string, diag: Diagnostic[]): ChatPrompt
 
 
 function resolvePromptWithFileReferences(prompt: string, filesOrReferences: (string | ChatPromptReference)[], promptResolver: CopilotCLIPromptResolver): Promise<{ prompt: string; attachments: any[] }> {
-	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], false, CancellationToken.None);
+	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], false, undefined, CancellationToken.None);
 }
