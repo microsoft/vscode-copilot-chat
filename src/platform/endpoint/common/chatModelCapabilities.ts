@@ -127,7 +127,7 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
  * Model supports replace_string_in_file as an edit tool.
  */
 export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.includes('gemini') || model.family.includes('grok-code') || modelSupportsMultiReplaceString(model) || isHiddenModelF(model);
+	return model.family.toLowerCase().includes('gemini') || model.family.includes('grok-code') || modelSupportsMultiReplaceString(model) || isHiddenModelF(model);
 }
 
 /**
@@ -142,7 +142,7 @@ export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChat
  * without needing insert_edit_into_file.
  */
 export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.includes('gemini-3') || isVSCModelC(model) || isHiddenModelF(model);
+	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.toLowerCase().includes('gemini-3') || isVSCModelC(model) || isHiddenModelF(model);
 }
 
 /**
@@ -157,14 +157,14 @@ export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IC
  * The model can accept image urls as the `image_url` parameter in mcp tool results.
  */
 export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return !isAnthropicFamily(model) && !model.family.startsWith('gemini') && !isHiddenModelE(model) && !isHiddenModelF(model);
+	return !isAnthropicFamily(model) && !model.family.toLowerCase().startsWith('gemini') && !isHiddenModelE(model) && !isHiddenModelF(model);
 }
 
 /**
  * The model can accept image urls as the `image_url` parameter in requests.
  */
 export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return !model.family.startsWith('gemini') && !isHiddenModelF(model);
+	return !model.family.toLowerCase().startsWith('gemini') && !isHiddenModelF(model);
 }
 
 /**

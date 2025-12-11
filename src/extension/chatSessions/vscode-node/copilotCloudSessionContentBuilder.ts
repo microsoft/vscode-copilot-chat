@@ -133,7 +133,7 @@ export class ChatSessionContentBuilder {
 				));
 
 				// Create the PR card right after problem statement for first session
-				if (sessionIndex === 0 && pullRequest.author) {
+				if (sessionIndex === 0 && pullRequest.author && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 					const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
 					const plaintextBody = pullRequest.body;
 
