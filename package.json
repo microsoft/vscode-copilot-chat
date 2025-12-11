@@ -184,12 +184,17 @@
 						},
 						"description": {
 							"type": "string",
-							"description": "User-visible invocation message shown while the subagent runs."
+							"description": "A short (3-5 word) description of the task."
+						},
+						"details": {
+							"type": "string",
+							"description": "A more detailed description of the objective for the search subagent. This helps the sub-agent remain on task and understand its purpose. "
 						}
 					},
 					"required": [
 						"query",
-						"description"
+						"description",
+						"details"
 					]
 				}
 			},
