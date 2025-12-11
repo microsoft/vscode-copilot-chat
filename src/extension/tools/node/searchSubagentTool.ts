@@ -24,6 +24,8 @@ export interface ISearchSubagentParams {
 	query: string;
 	/** User-visible description shown while invoking */
 	description: string;
+	/** Detailed instructions regarding the search subagent's objective */
+	details: string;
 }
 
 class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
@@ -36,36 +38,15 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 	) { }
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISearchSubagentParams>, token: vscode.CancellationToken) {
 		const searchInstruction = [
-			`Search objective: ${options.input.query}`,
+			`Find relevant code snippets for: ${options.input.query}`,
 			'',
-			'You are a specialized search subagent. Use these tools to gather and refine relevant code context.',
-			'- semantic_search: Broad semantic retrieval. Use first for general or conceptual queries.',
-			'- file_search: Discover candidate files/directories via glob patterns.',
-			'- grep_search: Precise pattern or symbol matching; gather surrounding lines for verification.',
-			'- read_file: Read specific files to extract relevant information.',
+			'More detailed instructions: ',
+			`${options.input.details}`,
 			'',
-			'After completing your search, return the most relevant code contexts in this exact format:',
-			'',
-			'<final_answer>',
-			'/absolute/path/to/file1.txt:10-20',
-			'/absolute/path/to/file2.txt:1-30',
-			'</final_answer>',
-			'',
-			'Each line should contain:',
-			'- The absolute file path',
-			'- A colon (:)',
-			'- The starting line number',
-			'- A dash (-)',
-			'- The ending line number',
-			'',
-			'Use line range 1--1 to indicate an entire file.',
-			'Return an empty <final_answer></final_answer> block if no relevant contexts are found.',
-			'Do not include any explanation or additional text outside the <final_answer> tags.',
-			''
 		].join('\n');
 
 		const loop = this.instantiationService.createInstance(SubagentToolCallingLoop, {
-			toolCallLimit: 25,
+			toolCallLimit: 5,
 			conversation: new Conversation('', [new Turn('', { type: 'user', message: searchInstruction })]),
 			request: this._inputContext!.request!,
 			location: this._inputContext!.request!.location,
