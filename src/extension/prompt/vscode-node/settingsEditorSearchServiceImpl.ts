@@ -35,13 +35,17 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 			embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, new TelemetryCorrelationId('SettingsEditorSearchServiceImpl::provideSettingsSearchResults'), token);
 		} catch {
 			this.reportEmptyEmbeddingsResult(query, progress);
-			this.reportEmptyLLMRankedResult(query, progress);
+			if (!options.embeddingsOnly) {
+				this.reportEmptyLLMRankedResult(query, progress);
+			}
 			return;
 		}
 
 		if (token.isCancellationRequested || !embeddingResult || embeddingResult.values.length === 0) {
 			this.reportEmptyEmbeddingsResult(query, progress);
-			this.reportEmptyLLMRankedResult(query, progress);
+			if (!options.embeddingsOnly) {
+				this.reportEmptyLLMRankedResult(query, progress);
+			}
 			return;
 		}
 
@@ -49,7 +53,9 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 		const embeddingSettings: SettingListItem[] = this.embeddingIndex.settingsIndex.nClosestValues(embeddingResult.values[0], 25);
 		if (token.isCancellationRequested) {
 			this.reportEmptyEmbeddingsResult(query, progress);
-			this.reportEmptyLLMRankedResult(query, progress);
+			if (!options.embeddingsOnly) {
+				this.reportEmptyLLMRankedResult(query, progress);
+			}
 			return;
 		}
 
@@ -88,7 +94,7 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 		});
 	}
 
-	private async reportEmptyEmbeddingsResult(query: string, progress: Progress<SettingsSearchResult>) {
+	private reportEmptyEmbeddingsResult(query: string, progress: Progress<SettingsSearchResult>): void {
 		progress.report({
 			query,
 			kind: SettingsSearchResultKind.EMBEDDED,
@@ -96,7 +102,7 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 		});
 	}
 
-	private async reportEmptyLLMRankedResult(query: string, progress: Progress<SettingsSearchResult>) {
+	private reportEmptyLLMRankedResult(query: string, progress: Progress<SettingsSearchResult>): void {
 		progress.report({
 			query,
 			kind: SettingsSearchResultKind.LLM_RANKED,
