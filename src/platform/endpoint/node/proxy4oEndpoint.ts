@@ -19,6 +19,7 @@ import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
+import { getInstantApplyModel } from './proxyModelHelper';
 
 export class Proxy4oEndpoint extends ChatEndpoint {
 
@@ -38,12 +39,13 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@ILogService logService: ILogService,
 		@IProxyModelsService proxyModelsService: IProxyModelsService,
 	) {
-		// Check experimental flag to determine if we should use proxy models service
-		const useProxyModelsService = configurationService.getExperimentBasedConfig<boolean>(ConfigKey.TeamInternal.UseProxyModelsServiceForInstantApply, experimentationService);
-		const instantApplyModels = useProxyModelsService ? proxyModelsService.instantApplyModels : undefined;
-		const model = (instantApplyModels && instantApplyModels.length > 0)
-			? instantApplyModels[0].name
-			: configurationService.getExperimentBasedConfig<string>(ConfigKey.TeamInternal.InstantApplyModelName, experimentationService) ?? CHAT_MODEL.GPT4OPROXY;
+		const model = getInstantApplyModel(
+			configurationService,
+			experimentationService,
+			proxyModelsService,
+			ConfigKey.TeamInternal.InstantApplyModelName,
+			CHAT_MODEL.GPT4OPROXY
+		);
 
 		const modelInfo: IChatModelInformation = {
 			id: model,
