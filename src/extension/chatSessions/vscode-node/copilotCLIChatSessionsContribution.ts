@@ -471,7 +471,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private CLI_INCLUDE_CHANGES = vscode.l10n.t('Include Changes');
 	private CLI_SKIP_CHANGES = vscode.l10n.t('Skip Changes');
 	private CLI_CANCEL = vscode.l10n.t('Cancel');
-
+	private readonly untitledSessionIdMapping = new Map<string, string>();
 	constructor(
 		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
 		private readonly promptResolver: CopilotCLIPromptResolver,
@@ -607,6 +607,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// Delete old information stored for untitled session id.
 				_sessionModel.delete(id);
 				_sessionModel.set(session.object.sessionId, modelId);
+				this.untitledSessionIdMapping.delete(id);
 				_untitledSessionIdMap.delete(session.object.sessionId);
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt });
 			}
@@ -673,15 +674,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, model: string | undefined, agent: SweCustomAgent | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
 		const { resource } = chatSessionContext.chatSessionItem;
-		const id = SessionIdForCLI.parse(resource);
-
+		const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(resource));
+		const id = existingSessionId ?? SessionIdForCLI.parse(resource);
+		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
-		const workingDirectoryValue = chatSessionContext.isUntitled ?
+		const workingDirectoryValue = isNewSession || !isolationEnabled ?
 			(isolationEnabled ? await this.worktreeManager.createWorktree(stream) : await this.copilotCLISDK.getDefaultWorkingDirectory().then(dir => dir?.fsPath)) :
 			this.worktreeManager.getWorktreePath(id);
 		const workingDirectory = workingDirectoryValue ? Uri.file(workingDirectoryValue) : undefined;
 
-		const session = chatSessionContext.isUntitled ?
+		const session = isNewSession ?
 			await this.sessionService.createSession({ model, workingDirectory, isolationEnabled, agent }, token) :
 			await this.sessionService.getSession(id, { model, workingDirectory, isolationEnabled, readonly: false, agent }, token);
 		this.sessionItemProvider.notifySessionsChange();
@@ -691,7 +693,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return undefined;
 		}
 
-		if (chatSessionContext.isUntitled && workingDirectory && isolationEnabled) {
+		if (isNewSession) {
+			this.untitledSessionIdMapping.set(id, session.object.sessionId);
+		}
+		if (isNewSession && workingDirectory && isolationEnabled) {
 			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory.fsPath);
 		}
 		disposables.add(session.object.attachStream(stream));
