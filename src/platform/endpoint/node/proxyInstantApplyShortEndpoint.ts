@@ -8,7 +8,7 @@ import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
-import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
@@ -42,7 +42,6 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 			experimentationService,
 			proxyModelsService,
 			ConfigKey.Advanced.InstantApplyShortModelName,
-			CHAT_MODEL.SHORT_INSTANT_APPLY
 		);
 		const modelInfo: IChatModelInformation = {
 			id: model,
