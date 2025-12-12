@@ -866,8 +866,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return {};
 		}
 
-		const moveChanges = selection.includes(this.CLI_MOVE_CHANGES.toUpperCase());
-		const copyChanges = selection.includes(this.CLI_COPY_CHANGES.toUpperCase());
+		const moveChanges = selection === this.CLI_MOVE_CHANGES.toUpperCase();
+		const copyChanges = selection === this.CLI_COPY_CHANGES.toUpperCase();
 		const prompt = uncommittedChangesData.metadata.prompt;
 
 		if ((moveChanges || copyChanges) && this.worktreeManager.isSupported()) {
