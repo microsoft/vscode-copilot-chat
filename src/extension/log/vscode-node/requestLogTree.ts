@@ -419,7 +419,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				return;
 			}
 
-			const exportableItems = allTreeItems.filter(item => item instanceof ChatPromptItem || item instanceof ChatRequestItem);
+			const exportableItems = allTreeItems.filter(item => item instanceof ChatPromptItem || (item instanceof ChatRequestItem && item.label !== 'modelList'));
 
 			if (exportableItems.length === 0) {
 				vscode.window.showInformationMessage('No chat prompts found to export.');
