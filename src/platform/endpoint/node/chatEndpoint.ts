@@ -279,8 +279,8 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
-		const isConversationOther = options.location === ChatLocation.Other;
-		if (isAnthropicFamily(this) && !options.disableThinking && !isConversationOther) {
+		const isConversationAgent = options.location === ChatLocation.Agent;
+		if (isAnthropicFamily(this) && !options.disableThinking && isConversationAgent) {
 			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
 			if (configuredBudget && configuredBudget > 0) {
 				const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
