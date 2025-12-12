@@ -13,7 +13,7 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, handleAPIKeyUpdate, LMResponsePart } from '../common/byokProvider';
 import { toGeminiFunction as toGeminiFunctionDeclaration, ToolJsonSchema } from '../common/geminiFunctionDeclarationConverter';
 import { apiMessageToGeminiMessage, geminiMessagesToRawMessagesForLogging } from '../common/geminiMessageConverter';
 import { IBYOKStorageService } from './byokStorageService';
@@ -59,9 +59,10 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 	}
 
 	async updateAPIKey(): Promise<void> {
-		this._apiKey = await promptForAPIKey(GeminiNativeBYOKLMProvider.providerName, await this._byokStorageService.getAPIKey(GeminiNativeBYOKLMProvider.providerName) !== undefined);
-		if (this._apiKey) {
-			await this._byokStorageService.storeAPIKey(GeminiNativeBYOKLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+		const result = await handleAPIKeyUpdate(GeminiNativeBYOKLMProvider.providerName, this._byokStorageService, promptForAPIKey);
+		if (!result.cancelled) {
+			this._apiKey = result.apiKey;
+			this._genAIClient = undefined;
 		}
 	}
 
