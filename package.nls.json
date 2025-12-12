@@ -71,58 +71,6 @@
 			"{Locked='](command:workbench.action.chat.open?%7B%22query%22%3A%22%40vscode%20%2FstartDebugging%20%22%2C%22isPartialQuery%22%3Atrue%7D)'}"
 		]
 	},
-	"github.copilot.viewsWelcome.codexPlaceholder": {
-		"message": "[Start OpenAI Codex Session](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)\n\nThis will install [the OpenAI Codex extension](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D).",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)'}",
-			"{Locked='](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.codexWelcomeView": {
-		"message": "[Start OpenAI Codex Session](command:chatgpt.newCodexPanel)",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:chatgpt.newCodexPanel)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.agentsPlaceholder": {
-		"message": "Sign in to access Background Agent and Cloud Agents.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.noPermissiveToken.contents": {
-		"message": "Additional GitHub permissions required to use Cloud Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:github.copilot.chat.triggerPermissiveSignIn)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.noFolder.contents": {
-		"message": "You have not yet opened a folder.\n[Open Folder](command:workbench.action.files.openFolder)",
-		"comment": [
-			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.files.openFolder)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.cliSessionsEmpty.contents": {
-		"message": "[Start Background Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcli)",
-		"comment": [
-			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilotcli)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.cloudSessionsEmpty.contents": {
-		"message": "[Start Cloud Agent Session](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)",
-		"comment": [
-			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.noGitHub.contents": "Clone or open a GitHub repository to get started",
-	"github.copilot.viewsWelcome.noRepo.contents": "No git repositories found",
 	"github.copilot.command.logWorkbenchState": "Log Workbench State",
 	"github.copilot.command.showChatLogView": "Show Chat Debug View",
 	"github.copilot.command.showOutputChannel": "Show Output Channel",
@@ -244,7 +192,6 @@
 	"github.copilot.command.openWalkthrough": "Open Walkthrough",
 	"github.copilot.walkthrough.title": "GitHub Copilot",
 	"github.copilot.walkthrough.description": "Your AI pair programmer to write code faster and smarter",
-	"github.copilot.command.refreshClaudeCodeSessions": "Refresh Claude Code CLI Agent Sessions",
 	"github.copilot.walkthrough.signIn.title": "Sign in with GitHub",
 	"github.copilot.walkthrough.signIn.description": "To get started with Copilot, sign in with your GitHub account.\nMake sure you're using the correct GitHub account. You can also sign in later using the account menu.\n\n[Sign In](command:github.copilot.signIn)",
 	"github.copilot.walkthrough.signIn.media.altText": "Sign in to GitHub via this walkthrough or VS Code's account menu",
@@ -408,10 +355,8 @@
 	"github.copilot.config.inlineEdits.nextCursorPrediction.currentFileMaxTokens": "Maximum tokens for current file in next cursor prediction.",
 	"github.copilot.config.inlineEdits.renameSymbolSuggestions": "Enable rename symbol suggestions in inline edits.",
 	"github.copilot.config.nextEditSuggestions.preferredModel": "Preferred model for next edit suggestions.",
-	"github.copilot.command.refreshAgentSessions": "Refresh Agent Sessions",
 	"github.copilot.command.deleteAgentSession": "Delete",
 	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume in Terminal",
-	"github.copilot.cli.sessions.newTerminalSession": "New Agent Session in Terminal",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
 	"github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply": "Apply",

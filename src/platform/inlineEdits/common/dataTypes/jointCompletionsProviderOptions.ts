@@ -5,6 +5,7 @@
 
 export enum JointCompletionsProviderStrategy {
 	Regular = 'regular',
+	CursorEndOfLine = 'cursorEndOfLine',
 }
 
 export enum JointCompletionsProviderTriggerChangeStrategy {

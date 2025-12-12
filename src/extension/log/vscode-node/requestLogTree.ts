@@ -44,9 +44,14 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 		let server: RequestServer | undefined;
 
-		const getExportableLogEntries = (treeItem: ChatPromptItem): LoggedInfo[] => {
+		const getExportableLogEntries = (treeItem: ChatPromptItem, lastChatRequestItem?: ChatRequestItem): LoggedInfo[] => {
 			if (!treeItem || !treeItem.children) {
 				return [];
+			}
+
+			// lastChatRequestItem logs the actual request info, so use it if present
+			if (lastChatRequestItem && treeItem.children.length > 0 && treeItem.children[0] instanceof ChatRequestItem) {
+				treeItem.children[0] = lastChatRequestItem;
 			}
 
 			const logEntries = treeItem.children.map(child => {
@@ -60,8 +65,8 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 		};
 
 		// Helper method to process log entries for a single prompt
-		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem): Promise<any> => {
-			const logEntries = getExportableLogEntries(treeItem);
+		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem, lastChatRequestItem?: ChatRequestItem): Promise<any> => {
+			const logEntries = getExportableLogEntries(treeItem, lastChatRequestItem);
 
 			if (logEntries.length === 0) {
 				return;
@@ -414,10 +419,9 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				return;
 			}
 
-			// Filter to get only ChatPromptItem instances
-			const chatPromptItems = allTreeItems.filter((item): item is ChatPromptItem => item instanceof ChatPromptItem);
+			const exportableItems = allTreeItems.filter(item => item instanceof ChatPromptItem || item instanceof ChatRequestItem);
 
-			if (chatPromptItems.length === 0) {
+			if (exportableItems.length === 0) {
 				vscode.window.showInformationMessage('No chat prompts found to export.');
 				return;
 			}
@@ -452,13 +456,17 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				const allPromptsContent: any[] = [];
 				let totalLogEntries = 0;
 
-				// Process each chat prompt item using the shared function
-				for (const chatPromptItem of chatPromptItems) {
-					// Use the shared processing function
-					const promptObject = await preparePromptLogsAsJson(chatPromptItem);
-					if (promptObject) {
-						allPromptsContent.push(promptObject);
-						totalLogEntries += promptObject.logCount;
+				let lastChatRequestItem: ChatRequestItem | undefined;
+				for (const exportableItem of exportableItems) {
+					if (exportableItem instanceof ChatRequestItem) {
+						lastChatRequestItem = exportableItem;
+					} else if (exportableItem instanceof ChatPromptItem) {
+						const promptObject = await preparePromptLogsAsJson(exportableItem, lastChatRequestItem);
+						if (promptObject) {
+							allPromptsContent.push(promptObject);
+							totalLogEntries += promptObject.logCount;
+						}
+						lastChatRequestItem = undefined;
 					}
 				}
 

@@ -2,13 +2,14 @@
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-28) field is never used",
 		"requests": [
-			"275c2a7798f76f3f7a25d67099e0f677aba5a031c2fcc975262599e10d82f96a"
+			"b0b90f46612c9dd1141c0aa3cc42cd8725ed5c2880e721adced12a7bb0b0a968",
+			"fd6ddd6b3d9e4fa9a5f0666282014f0fb9a02248e5c641cd4e8ad770849eca54"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-57) call is not awaited, execution continues",
 		"requests": [
-			"01c92dbfc080c0b15d6e2947b472b685b75ce2b492b9211f24bb1811f9ae5764"
+			"3eca0bbabb619491b9a295a8f8f7e5cea2d227354735a537db3dcf9730285516"
 		]
 	},
 	{
@@ -51,7 +52,7 @@
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - semi-colon expected",
 		"requests": [
-			"3cdceb50265b923050e876b2d05c13795939d7615da43426cab6a7c42cff3c85"
+			"6825153f15cb70acd2ab2c9663b0963bc60eebb02628809a7ff29c2c70802339"
 		]
 	}
 ]

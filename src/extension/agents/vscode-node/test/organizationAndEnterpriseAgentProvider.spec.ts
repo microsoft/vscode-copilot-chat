@@ -225,6 +225,8 @@ Test prompt content`;
 		const mockDetails: CustomAgentDetails = {
 			...mockAgent,
 			prompt: 'Detailed prompt content',
+			model: 'gpt-4',
+			infer: true,
 		};
 		mockOctoKitService.setAgentDetails('full_agent', mockDetails);
 
@@ -246,6 +248,8 @@ tools:
   - tool2
 argument-hint: Provide context
 target: vscode
+model: gpt-4
+infer: true
 ---
 Detailed prompt content
 `;
@@ -650,6 +654,8 @@ Agent 1 prompt`;
 		assert.ok(!content.includes('tools:'));
 		assert.ok(!content.includes('argument-hint:'));
 		assert.ok(!content.includes('target:'));
+		assert.ok(!content.includes('model:'));
+		assert.ok(!content.includes('infer:'));
 	});
 
 	test('excludes tools field when array contains only wildcard', async () => {
