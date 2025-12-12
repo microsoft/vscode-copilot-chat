@@ -92,9 +92,10 @@ export class PromptPathRepresentationServiceNode extends PromptPathRepresentatio
 
 			// Build the current prefix path (with short segment)
 			const shortPrefix = resolvedSegments.join(separator);
+			const cacheKey = shortPrefix.toLowerCase();
 
 			// Check cache first
-			const cached = this._shortPrefixToLongPath.get(shortPrefix);
+			const cached = this._shortPrefixToLongPath.get(cacheKey);
 			if (cached !== undefined) {
 				// Replace resolvedSegments with the cached long path segments
 				resolvedSegments.length = 0;
@@ -105,7 +106,7 @@ export class PromptPathRepresentationServiceNode extends PromptPathRepresentatio
 			// Resolve via shell
 			try {
 				const longPrefix = this._resolveLongPathViaShell(shortPrefix);
-				this._shortPrefixToLongPath.set(shortPrefix, longPrefix);
+				this._shortPrefixToLongPath.set(cacheKey, longPrefix);
 				// Replace resolvedSegments with the resolved long path segments
 				resolvedSegments.length = 0;
 				resolvedSegments.push(...longPrefix.split(/[\\/]/));
@@ -113,7 +114,7 @@ export class PromptPathRepresentationServiceNode extends PromptPathRepresentatio
 				const errorMessage = error instanceof Error ? error.message : String(error);
 				this._logService.warn(`Failed to resolve 8.3 short path "${shortPrefix}": ${errorMessage}`);
 				// Cache the short prefix to avoid repeated failures
-				this._shortPrefixToLongPath.set(shortPrefix, shortPrefix);
+				this._shortPrefixToLongPath.set(cacheKey, shortPrefix);
 			}
 		}
 
@@ -131,7 +132,7 @@ export class PromptPathRepresentationServiceNode extends PromptPathRepresentatio
 			'-NonInteractive',
 			'-NoLogo',
 			'-Command',
-			'[System.IO.Path]::GetFullPath($env:VSCODE_SHORT_PATH)'
+			'(Get-Item $env:VSCODE_SHORT_PATH).FullName'
 		], {
 			encoding: 'utf8',
 			timeout: 5000,
