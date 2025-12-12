@@ -287,6 +287,17 @@ export class ChatSessionContentBuilder {
 						toolPart.isError = true;
 						responseParts.push(toolPart);
 					}
+				} else {
+					const trimmedContent = currentResponseContent.trim();
+					if (trimmedContent) {
+						// TODO@rebornix @osortega validate if this is the only finish_reason for session end.
+						if (choice.finish_reason === 'stop') {
+							responseParts.push(new ChatResponseMarkdownPart(trimmedContent));
+						} else {
+							responseParts.push(new ChatResponseThinkingProgressPart(trimmedContent, '', { vscodeReasoningDone: true }));
+						}
+						currentResponseContent = '';
+					}
 				}
 			}
 		}
