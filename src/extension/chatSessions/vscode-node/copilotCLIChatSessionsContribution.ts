@@ -725,7 +725,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		// Get model from request.
-		const preferredModelInRequest = preferModelInRequest && request?.model.id ? await this.copilotCLIModels.resolveModel(request.model.id) : undefined;
+		const preferredModelInRequest = preferModelInRequest && request?.model?.id ? await this.copilotCLIModels.resolveModel(request.model.id) : undefined;
 		if (preferredModelInRequest) {
 			return preferredModelInRequest;
 		}
