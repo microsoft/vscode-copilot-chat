@@ -23,7 +23,6 @@ import { BuildInfo } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
-import { Deferred } from '../../lib/src/util/async';
 import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
 import { ICompletionsExtensionStatus } from './extensionStatus';
@@ -52,10 +51,8 @@ export function exception(accessor: ServicesAccessor, error: unknown, origin: st
 
 /** @public */
 export class CopilotInlineCompletionItemProvider extends Disposable implements InlineCompletionItemProvider {
-	copilotCompletionFeedbackTracker: CopilotCompletionFeedbackTracker;
-	ghostTextProvider: InlineCompletionItemProvider;
-	initFallbackContext?: Promise<void>;
-	pendingRequests: Set<Promise<unknown>> = new Set();
+	private readonly copilotCompletionFeedbackTracker: CopilotCompletionFeedbackTracker;
+	private readonly ghostTextProvider: InlineCompletionItemProvider;
 
 	public onDidChange = undefined;
 	public handleListEndOfLifetime: InlineCompletionItemProvider['handleListEndOfLifetime'] = undefined;
@@ -68,16 +65,6 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		super();
 		this.copilotCompletionFeedbackTracker = this._register(this.instantiationService.createInstance(CopilotCompletionFeedbackTracker));
 		this.ghostTextProvider = this.instantiationService.createInstance(GhostTextProvider);
-	}
-
-	async waitForPendingRequests(): Promise<void> {
-		while (this.pendingRequests.size > 0) {
-			await Promise.all(this.pendingRequests);
-		}
-	}
-
-	get delegate(): InlineCompletionItemProvider {
-		return this.ghostTextProvider;
 	}
 
 	async provideInlineCompletionItems(
@@ -99,9 +86,6 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<InlineCompletionList | undefined> {
-		const pendingRequestDeferred = new Deferred();
-		this.pendingRequests.add(pendingRequestDeferred.promise);
-
 		if (context.triggerKind === InlineCompletionTriggerKind.Automatic) {
 			if (!this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {
 				return;
@@ -120,13 +104,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 			context = { ...context, selectedCompletionInfo: undefined };
 		}
 		try {
-			let items = await this.delegate.provideInlineCompletionItems(doc, position, context, token);
-
-			// Release CompletionItemProvider after returning
-			setTimeout(() => {
-				this.pendingRequests.delete(pendingRequestDeferred.promise);
-				pendingRequestDeferred.resolve(undefined);
-			});
+			let items = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, token);
 
 			if (!items) {
 				return undefined;
@@ -148,7 +126,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 	handleDidShowCompletionItem(item: InlineCompletionItem, updatedInsertText: string) {
 		try {
 			this.copilotCompletionFeedbackTracker.trackItem(item);
-			return this.delegate.handleDidShowCompletionItem?.(item, updatedInsertText);
+			return this.ghostTextProvider.handleDidShowCompletionItem?.(item, updatedInsertText);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
@@ -159,7 +137,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		acceptedLengthOrInfo: number & PartialAcceptInfo
 	) {
 		try {
-			return this.delegate.handleDidPartiallyAcceptCompletionItem?.(item, acceptedLengthOrInfo);
+			return this.ghostTextProvider.handleDidPartiallyAcceptCompletionItem?.(item, acceptedLengthOrInfo);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
@@ -167,7 +145,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 
 	handleEndOfLifetime(completionItem: InlineCompletionItem, reason: InlineCompletionEndOfLifeReason) {
 		try {
-			return this.delegate.handleEndOfLifetime?.(completionItem, reason);
+			return this.ghostTextProvider.handleEndOfLifetime?.(completionItem, reason);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.handleEndOfLifetime', logger);
 		}

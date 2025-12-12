@@ -263,14 +263,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		const label = session.label;
 		const tooltipLines = [vscode.l10n.t(`Background agent session: {0}`, label)];
-		let description: vscode.MarkdownString | undefined;
+		let badge: vscode.MarkdownString | undefined;
 		let changes: vscode.ChatSessionItem['changes'] | undefined;
 
 		if (worktreePath && worktreeRelativePath) {
 			const worktreeUri = Uri.file(worktreePath);
-			// Description
-			description = new vscode.MarkdownString(`$(git-branch) ${worktreeRelativePath}`);
-			description.supportThemeIcons = true;
+			// Badge
+			badge = new vscode.MarkdownString(`$(git-branch) ${worktreeRelativePath}`);
+			badge.supportThemeIcons = true;
 
 			// Tooltip
 			tooltipLines.push(vscode.l10n.t(`Worktree: {0}`, worktreeRelativePath));
@@ -287,7 +287,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		return {
 			resource,
 			label,
-			description,
+			badge,
 			tooltip: tooltipLines.join('\n'),
 			timing: session.timing,
 			changes,
