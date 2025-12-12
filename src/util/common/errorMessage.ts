@@ -30,7 +30,7 @@ function detectSystemErrorMessage(exception: any): string {
 
 	// Custom node.js error from us
 	if (exception.code === 'ERR_UNC_HOST_NOT_ALLOWED') {
-		return `${exception.message}. Please update the 'security.allowedUNCHosts' setting if you want to allow this host.`;
+		return l10n.t("{0}. Please update the '{1}' setting if you want to allow this host.", exception.message, 'security.allowedUNCHosts');
 	}
 
 	// See https://nodejs.org/api/errors.html#errors_class_system_error
