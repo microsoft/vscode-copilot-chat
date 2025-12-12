@@ -104,6 +104,10 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
  * Model supports apply_patch as an edit tool.
  */
 export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): boolean {
+	// only using replace string as edit tool, disable apply_patch for VSC Model C
+	if (isVSCModelC(model)) {
+		return false;
+	}
 	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || model.family === 'arctic-fox' || isVSCModelA(model) || isVSCModelB(model) || isHiddenModelB(model.family);
 }
 
@@ -163,6 +167,10 @@ export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): b
  * without needing insert_edit_into_file.
  */
 export function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
+	// only using replace string as edit tool, disable apply_patch for VSC Model C
+	if (isVSCModelC(model)) {
+		return false;
+	}
 	return isGpt5PlusFamily(model) || isVSCModelA(model) || isVSCModelB(model);
 }
 
