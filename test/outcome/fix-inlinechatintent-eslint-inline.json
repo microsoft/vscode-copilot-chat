@@ -2,37 +2,37 @@
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-10-1) do not access hasOwnProperty",
 		"requests": [
-			"d25776f30b061a9cf53600567ba879638a4bb90d7a73e29fbe443f0b6c96a164"
+			"37d596ab73fe31a161b677bbe15d66e4cf5d1609a1b040f6ed0174c6ccb56516"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-10-52) expected conditional expression",
 		"requests": [
-			"2018cd9697a1e6fd5327882485323f2c9ca653b5ba54f8e3ed06b900fa2b9bae"
+			"94f110769e74efc29ac16bea1fd5f130a5e1ab6e16161f9fa763bb6ff43089ef"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-10) unexpected constant condition 1",
 		"requests": [
-			"7c01bd41a7e4d9e008e0178fd65e0a9d0056b1e8266edf77c50da91ce1fd3b05"
+			"6173a64401ad20c4bb6c5fbbb9ac6cf2d70dcb4823665317392f4812f7bf0916"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-152) unreachable code",
 		"requests": [
-			"a155fe6d8d67c732444de49dc062494a0735155a6200a48a34072adfe4804020"
+			"4f67bcd70f8918d5ce20df98707a38aedda064ad4ae85b2f65b1f0672047a33c"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-166) unexpected control character",
 		"requests": [
-			"deac87485e9521c3846ba546f70bc9585858da6fc4c245fe1317ec524042e516"
+			"ce841a2c36bab2d0b655de1f8a17c0af6303ff882564c54893a73c6b707e4972"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-243) unexpected constant condition 2",
 		"requests": [
-			"c0e05fa08b96e86a5d93986ea0b3c9858934058bc0b9b5536f4489afedb4637a"
+			"257c998fee8f46de37ad82fe27bd23b3436cda8364c568f9d8a7a1d4e0b7deaf"
 		]
 	},
 	{
@@ -44,7 +44,7 @@
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - comma expected",
 		"requests": [
-			"d630e02974380a5324dab75e4b6bacce9f3e495582f8237b5ae4d4f2eb8823e2"
+			"8b07a83e4c92450c59fbfd4dec462e5aeb810f71ac339f6eb2bb5136caff05cb"
 		]
 	},
 	{
@@ -74,7 +74,7 @@
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - Issue #7544",
 		"requests": [
-			"af0efce526dca6263ede9496bc91b44e9286943ae30211d1bb87106ce7979da6"
+			"98f94101c5050a70188c121864d0295866e0765c3c1aa709d75bb3591f004fa8"
 		]
 	},
 	{
@@ -135,7 +135,7 @@
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-multi-assign with cookbook",
 		"requests": [
-			"e856cd19f3ab918118f6f034b9267924326a074f6b12386dae9931d8a8242af6"
+			"874cc96bca496290054b5fbceb030cc75f65e2dd2b01f12e4d85765220873ff6"
 		]
 	},
 	{
@@ -195,8 +195,7 @@
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - unexpected token",
 		"requests": [
-			"2ed3d58598d5d663f84366d9e503816a799a1a482ab8bdf232a97e7c582fdd78",
-			"8754b31ff5e0e9645427e03d63f00aaa4aad68f1118fed623488d4acadd6aa92"
+			"75d009fe5d8610128bc138a7d6646c34b530feba4d14b028d0057bab433c94db"
 		]
 	}
 ]

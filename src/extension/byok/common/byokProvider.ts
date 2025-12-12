@@ -191,3 +191,67 @@ export function isBYOKEnabled(copilotToken: Omit<CopilotToken, 'token'>, capiCli
 	const byokAllowed = (copilotToken.isInternal || copilotToken.isIndividual) && !isGHE;
 	return byokAllowed;
 }
+
+/**
+ * Result of handling an API key update operation.
+ */
+export interface HandleAPIKeyUpdateResult {
+	/**
+	 * The new API key value, or undefined if the key was deleted or operation was cancelled.
+	 */
+	apiKey: string | undefined;
+	/**
+	 * Whether the API key was deleted (user entered empty string during reconfigure).
+	 */
+	deleted: boolean;
+	/**
+	 * Whether the operation was cancelled (user dismissed the input).
+	 */
+	cancelled: boolean;
+}
+
+/**
+ * Storage service interface for BYOK API key operations.
+ * This is a minimal interface to avoid importing the full IBYOKStorageService in common code.
+ */
+export interface IBYOKStorageServiceLike {
+	getAPIKey(providerName: string, modelId?: string): Promise<string | undefined>;
+	storeAPIKey(providerName: string, apiKey: string, authType: BYOKAuthType, modelId?: string): Promise<void>;
+	deleteAPIKey(providerName: string, authType: BYOKAuthType, modelId?: string): Promise<void>;
+}
+
+/**
+ * Handles API key update flow for BYOK providers using a consistent pattern.
+ * This utility handles all three cases from promptForAPIKey:
+ * - undefined: user cancelled/dismissed the input
+ * - empty string: user wants to delete the saved key (only when reconfiguring)
+ * - non-empty string: user provided a new API key
+ *
+ * @param providerName - Name of the provider (e.g., 'Anthropic', 'Gemini')
+ * @param storageService - Storage service for API key operations
+ * @param promptForAPIKeyFn - Function to prompt user for API key
+ * @returns Result containing the new API key (if any) and status flags
+ */
+export async function handleAPIKeyUpdate(
+	providerName: string,
+	storageService: IBYOKStorageServiceLike,
+	promptForAPIKeyFn: (providerName: string, reconfigure: boolean) => Promise<string | undefined>
+): Promise<HandleAPIKeyUpdateResult> {
+	const existingKey = await storageService.getAPIKey(providerName);
+	const isReconfiguring = existingKey !== undefined;
+
+	const newAPIKey = await promptForAPIKeyFn(providerName, isReconfiguring);
+
+	if (newAPIKey === undefined) {
+		// User cancelled/dismissed the input
+		return { apiKey: undefined, deleted: false, cancelled: true };
+	} else if (newAPIKey === '') {
+		// User wants to delete the key (only valid when reconfiguring)
+		await storageService.deleteAPIKey(providerName, BYOKAuthType.GlobalApiKey);
+		return { apiKey: undefined, deleted: true, cancelled: false };
+	} else {
+		// User provided a new API key
+		await storageService.storeAPIKey(providerName, newAPIKey, BYOKAuthType.GlobalApiKey);
+		return { apiKey: newAPIKey, deleted: false, cancelled: false };
+	}
+}

@@ -406,7 +406,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status: this.getSessionStatusFromSession(sessionItem),
-					description: this.getPullRequestDescription(pr),
+					badge: this.getPullRequestBadge(pr),
 					tooltip: this.createPullRequestTooltip(pr),
 					...(createdAt ? {
 						timing: {
@@ -683,26 +683,26 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
-	private getPullRequestDescription(pr: PullRequestSearchItem): vscode.MarkdownString {
-		let descriptionText: string;
+	private getPullRequestBadge(pr: PullRequestSearchItem): vscode.MarkdownString {
+		let badgeText: string;
 		switch (pr.state) {
 			case 'failed':
-				descriptionText = vscode.l10n.t('$(git-pull-request) Failed in {0}', `#${pr.number}`);
+				badgeText = vscode.l10n.t('$(git-pull-request) Failed in {0}', `#${pr.number}`);
 				break;
 			case 'in_progress':
-				descriptionText = vscode.l10n.t('$(git-pull-request) In progress in {0}', `#${pr.number}`);
+				badgeText = vscode.l10n.t('$(git-pull-request) Running in {0}', `#${pr.number}`);
 				break;
 			case 'queued':
-				descriptionText = vscode.l10n.t('$(git-pull-request) Queued in {0}', `#${pr.number}`);
+				badgeText = vscode.l10n.t('$(git-pull-request) Queued in {0}', `#${pr.number}`);
 				break;
 			default:
-				descriptionText = vscode.l10n.t('$(git-pull-request) {0}', `#${pr.number}`);
+				badgeText = vscode.l10n.t('$(git-pull-request) {0}', `#${pr.number}`);
 				break;
 		}
 
-		const description = new vscode.MarkdownString(descriptionText);
-		description.supportThemeIcons = true;
-		return description;
+		const badge = new vscode.MarkdownString(badgeText);
+		badge.supportThemeIcons = true;
+		return badge;
 	}
 
 	private createPullRequestTooltip(pr: PullRequestSearchItem): vscode.MarkdownString {

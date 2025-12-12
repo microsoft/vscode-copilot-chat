@@ -1746,50 +1746,6 @@
 				"view": "debug",
 				"when": "github.copilot-chat.activated",
 				"contents": "%github.copilot.viewsWelcome.debug%"
-			},
-			{
-				"view": "codex-placeholder",
-				"when": "true",
-				"contents": "%github.copilot.viewsWelcome.codexPlaceholder%"
-			},
-			{
-				"view": "workbench.view.chat.sessions.openai-codex",
-				"contents": "%github.copilot.viewsWelcome.codexWelcomeView%"
-			},
-			{
-				"view": "copilot-agents-placeholder",
-				"when": "true",
-				"contents": "%github.copilot.viewsWelcome.agentsPlaceholder%"
-			},
-			{
-				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
-				"when": "github.copilot.auth.missingPermissiveSession",
-				"contents": "%github.copilot.viewsWelcome.noPermissiveToken.contents%"
-			},
-			{
-				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
-				"when": "workspaceFolderCount == 0",
-				"contents": "%github.copilot.viewsWelcome.noFolder.contents%"
-			},
-			{
-				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
-				"when": "git.state == initialized && gitOpenRepositoryCount == 0 && workspaceFolderCount > 0 && git.parentRepositoryCount == 0",
-				"contents": "%github.copilot.viewsWelcome.noRepo.contents%"
-			},
-			{
-				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
-				"when": "git.state == initialized && workspaceFolderCount > 0 && (git.parentRepositoryCount > 0 || gitOpenRepositoryCount > 0) && !github:hasGitHubRemotes",
-				"contents": "%github.copilot.viewsWelcome.noGitHub.contents%"
-			},
-			{
-				"view": "workbench.view.chat.sessions.copilot-cloud-agent",
-				"when": "github.copilot.chat.cloudSessionsEmpty",
-				"contents": "%github.copilot.viewsWelcome.cloudSessionsEmpty.contents%"
-			},
-			{
-				"view": "workbench.view.chat.sessions.copilotcli",
-				"when": "github.copilot.chat.cliSessionsEmpty",
-				"contents": "%github.copilot.viewsWelcome.cliSessionsEmpty.contents%"
 			}
 		],
 		"chatViewsWelcome": [
@@ -1836,18 +1792,6 @@
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
 			},
 			{
-				"command": "github.copilot.claude.sessions.refresh",
-				"title": "%github.copilot.command.refreshClaudeCodeSessions%",
-				"icon": "$(refresh)",
-				"category": "Claude Code"
-			},
-			{
-				"command": "github.copilot.cli.sessions.refresh",
-				"title": "%github.copilot.command.refreshAgentSessions%",
-				"icon": "$(refresh)",
-				"category": "Copilot CLI"
-			},
-			{
 				"command": "github.copilot.cli.sessions.delete",
 				"title": "%github.copilot.command.deleteAgentSession%",
 				"icon": "$(close)",
@@ -1856,12 +1800,6 @@
 			{
 				"command": "github.copilot.cli.sessions.resumeInTerminal",
 				"title": "%github.copilot.command.cli.sessions.resumeInTerminal%",
-				"icon": "$(terminal)",
-				"category": "Copilot CLI"
-			},
-			{
-				"command": "github.copilot.cli.sessions.newTerminalSession",
-				"title": "%github.copilot.cli.sessions.newTerminalSession%",
 				"icon": "$(terminal)",
 				"category": "Copilot CLI"
 			},
@@ -2305,11 +2243,6 @@
 				"command": "github.copilot.chat.manageBYOKAPIKey",
 				"title": "Manage Bring Your Own Key API Key",
 				"enablement": "false"
-			},
-			{
-				"command": "github.copilot.cloud.sessions.refresh",
-				"title": "%github.copilot.command.refreshAgentSessions%",
-				"icon": "$(refresh)"
 			},
 			{
 				"command": "github.copilot.cloud.resetWorkspaceConfirmations",
@@ -4230,19 +4163,7 @@
 					"when": "false"
 				},
 				{
-					"command": "github.copilot.cli.sessions.refresh",
-					"when": "false"
-				},
-				{
 					"command": "github.copilot.cli.sessions.resumeInTerminal",
-					"when": "false"
-				},
-				{
-					"command": "github.copilot.cli.sessions.newTerminalSession",
-					"when": "false"
-				},
-				{
-					"command": "github.copilot.cloud.sessions.refresh",
 					"when": "false"
 				},
 				{
@@ -4268,16 +4189,6 @@
 			],
 			"view/title": [
 				{
-					"command": "github.copilot.claude.sessions.refresh",
-					"when": "view == workbench.view.chat.sessions.claude-code",
-					"group": "navigation@1"
-				},
-				{
-					"command": "github.copilot.cli.sessions.refresh",
-					"when": "view == workbench.view.chat.sessions.copilotcli",
-					"group": "navigation@1"
-				},
-				{
 					"submenu": "github.copilot.chat.debug.filter",
 					"when": "view == copilot-chat",
 					"group": "navigation"
@@ -4296,11 +4207,6 @@
 					"command": "github.copilot.debug.showChatLogView",
 					"when": "view == workbench.panel.chat.view.copilot",
 					"group": "3_show"
-				},
-				{
-					"command": "github.copilot.cloud.sessions.refresh",
-					"when": "view == workbench.view.chat.sessions.copilot-cloud-agent",
-					"group": "navigation@1"
 				}
 			],
 			"view/item/context": [
@@ -4584,16 +4490,6 @@
 					"group": "inline@2"
 				},
 				{
-					"command": "github.copilot.cli.sessions.newTerminalSession",
-					"when": "view == workbench.view.chat.sessions.copilotcli",
-					"group": "submenu"
-				},
-				{
-					"command": "github.copilot.cli.sessions.refresh",
-					"when": "view == workbench.view.chat.sessions.copilotcli",
-					"group": "navigation@1"
-				},
-				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
 					"when": "chatSessionType == copilot-cloud-agent",
 					"group": "navigation@10"
@@ -4719,20 +4615,6 @@
 					"name": "Language Context Inspector",
 					"icon": "$(inspect)",
 					"when": "github.copilot.chat.showContextInspectorView"
-				}
-			],
-			"agentSessions": [
-				{
-					"id": "codex-placeholder",
-					"name": "OpenAI Codex",
-					"when": "github.copilot.chat.codex.showPlaceholder",
-					"icon": "$(file)"
-				},
-				{
-					"id": "copilot-agents-placeholder",
-					"name": "GitHub Copilot Agents",
-					"when": "chatEntitlementSignedOut || !chatIsEnabled",
-					"icon": "$(copilot)"
 				}
 			]
 		},

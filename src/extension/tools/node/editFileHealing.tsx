@@ -72,7 +72,7 @@ export async function healReplaceStringParams(
 	token: CancellationToken,
 ): Promise<CorrectedEditResult> {
 	let finalNewString = originalParams.newString!;
-	const unescapeStringForGeminiBug = model?.family.includes('gemini') || (model && isHiddenModelF(model)) ? _unescapeStringForGeminiBug : (s: string) => s;
+	const unescapeStringForGeminiBug = model?.family.toLowerCase().includes('gemini') || (model && isHiddenModelF(model)) ? _unescapeStringForGeminiBug : (s: string) => s;
 	const newStringPotentiallyEscaped =
 		unescapeStringForGeminiBug(originalParams.newString!) !==
 		originalParams.newString;

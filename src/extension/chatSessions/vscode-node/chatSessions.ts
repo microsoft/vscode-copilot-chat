@@ -73,9 +73,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
 		this._register(vscode.chat.registerChatSessionItemProvider(ClaudeChatSessionItemProvider.claudeSessionType, sessionItemProvider));
-		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.refresh', () => {
-			sessionItemProvider.refresh();
-		}));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider);
@@ -156,11 +153,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				cloudSessionsProvider.chatParticipant,
 				{ supportsInterruptions: true }
 			)
-		);
-		this.copilotCloudRegistrations.add(
-			vscode.commands.registerCommand('github.copilot.cloud.sessions.refresh', () => {
-				cloudSessionsProvider.refresh();
-			})
 		);
 		this.copilotCloudRegistrations.add(
 			vscode.commands.registerCommand('github.copilot.cloud.resetWorkspaceConfirmations', () => {
