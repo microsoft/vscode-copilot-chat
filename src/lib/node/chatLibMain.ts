@@ -80,7 +80,7 @@ import { NullGitExtensionService } from '../../platform/git/common/nullGitExtens
 import { IIgnoreService, NullIgnoreService } from '../../platform/ignore/common/ignoreService';
 import { DocumentId } from '../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../platform/inlineEdits/common/inlineEditLogContext';
-import { IInlineEditsModelService } from '../../platform/inlineEdits/common/inlineEditsModelService';
+import { IInlineEditsModelService, IUndesiredModelsManager, NullUndesiredModelsManager } from '../../platform/inlineEdits/common/inlineEditsModelService';
 import { ObservableGit } from '../../platform/inlineEdits/common/observableGit';
 import { IObservableDocument, ObservableWorkspace } from '../../platform/inlineEdits/common/observableWorkspace';
 import { NesHistoryContextProvider } from '../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
@@ -175,6 +175,7 @@ export interface INESProviderOptions {
 	 * INESProvider.updateTreatmentVariables() must be called to unblock.
 	 */
 	readonly waitForTreatmentVariables?: boolean;
+	readonly undesiredModelsManager?: IUndesiredModelsManager;
 }
 
 export interface INESResult {
@@ -373,6 +374,7 @@ function setupServices(options: INESProviderOptions) {
 	});
 	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
+	builder.define(IUndesiredModelsManager, options.undesiredModelsManager || new SyncDescriptor(NullUndesiredModelsManager));
 	return builder.seal();
 }
 

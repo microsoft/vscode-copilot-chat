@@ -41,6 +41,7 @@ import { GitServiceImpl } from '../../../platform/git/vscode/gitServiceImpl';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { NullBaseOctoKitService } from '../../../platform/github/common/nullOctokitServiceImpl';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
+import { IUndesiredModelsManager, UndesiredModels } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { IInteractiveSessionService } from '../../../platform/interactive/common/interactiveSessionService';
 import { InteractiveSessionServiceImpl } from '../../../platform/interactive/vscode/interactiveSessionServiceImpl';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -173,4 +174,5 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	builder.define(IMergeConflictService, new SyncDescriptor(MergeConflictServiceImpl));
 	builder.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
+	builder.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
 }
