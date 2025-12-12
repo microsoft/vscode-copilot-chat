@@ -393,7 +393,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				} catch { }
 			};
 
-			const createdAt = validateISOTimestamp(sessions[0].created_at);
+			const createdAt = sessions.length > 0 ? validateISOTimestamp(sessions[0].created_at) : undefined;
 
 			// Create session items from latest sessions
 			const sessionItems = await Promise.all(Array.from(latestSessionsMap.values()).map(async sessionItem => {
