@@ -81,6 +81,12 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 				}
 			}
 		} catch (e) {
+			// Likely bad API key so we will prompt user to update it one more time
+			if (!options.silent && e instanceof Error && e.message.includes('key')) {
+				await this.updateAPIKey();
+				// Silent as to not prompt the user again
+				return this.provideLanguageModelChatInformation({ silent: true }, token);
+			}
 			this._logService.error(e, `Error fetching available ${this._name} models`);
 			return [];
 		}
