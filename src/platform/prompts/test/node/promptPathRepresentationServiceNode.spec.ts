@@ -123,5 +123,9 @@ describe('PromptPathRepresentationServiceNode', () => {
 				expect(result).toBe('c:\\Program Files\\app\\file.txt');
 			});
 		});
+	} else {
+		test('nothing', () => {
+			// avoid failing on posix
+		});
 	}
 });
