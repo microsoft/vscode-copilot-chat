@@ -124,7 +124,7 @@ describe('PromptPathRepresentationServiceNode', () => {
 			});
 		});
 	} else {
-		test('nothing', () => {
+		it('nothing', () => {
 			// avoid failing on posix
 		});
 	}
