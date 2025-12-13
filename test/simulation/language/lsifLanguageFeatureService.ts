@@ -24,9 +24,9 @@ const liftLSIFLocations = (locations: undefined | LSIF.types.Location | LSIF.typ
 
 type IGraph = Pick<LSIF.JsonStore, 'declarations' | 'definitions' | 'references'>;
 
-/** Gets whether the SCIP occurence happens at the given posiiton */
+/** Gets whether the SCIP occurrence happens at the given position */
 const occursAt = (o: scip.Occurrence, position: LSIF.types.Position) => {
-	const range = occurenceToPosition(o);
+	const range = occurrenceToPosition(o);
 	if (position.line < range.start.line || (position.line === range.start.line && position.character < range.start.character)) {
 		return false;
 	}
@@ -38,8 +38,8 @@ const occursAt = (o: scip.Occurrence, position: LSIF.types.Position) => {
 	return true;
 };
 
-/** Converts an SCIP occurence to an LSIF range */
-const occurenceToPosition = (o: scip.Occurrence): LSIF.types.Range => {
+/** Converts an SCIP occurrence to an LSIF range */
+const occurrenceToPosition = (o: scip.Occurrence): LSIF.types.Range => {
 	const [startLine, startChar] = o.range;
 	let endLine: number;
 	let endChar: number;
@@ -67,7 +67,7 @@ class SCIPGraph implements IGraph {
 
 	declarations(uri: string, position: LSIF.types.Position): LSIF.types.Location | LSIF.types.Location[] | undefined {
 		// https://github.com/sourcegraph/scip/blob/0504a347d36dbff48b21f53ccfedb46f3803855e/scip.proto#L501
-		return this.findOccurencesOfSymbolAt(uri, position, o => !!(o.symbolRoles & 0x1));
+		return this.findOccurrencesOfSymbolAt(uri, position, o => !!(o.symbolRoles & 0x1));
 	}
 
 	definitions(uri: string, position: LSIF.types.Position): LSIF.types.Location | LSIF.types.Location[] | undefined {
@@ -75,19 +75,19 @@ class SCIPGraph implements IGraph {
 	}
 
 	references(uri: string, position: LSIF.types.Position, context: LSIF.types.ReferenceContext): LSIF.types.Location[] | undefined {
-		return this.findOccurencesOfSymbolAt(uri, position, () => true);
+		return this.findOccurrencesOfSymbolAt(uri, position, () => true);
 	}
 
-	private findOccurencesOfSymbolAt(uri: string, position: LSIF.types.Position, filter: (o: scip.Occurrence) => boolean): LSIF.types.Location[] {
+	private findOccurrencesOfSymbolAt(uri: string, position: LSIF.types.Position, filter: (o: scip.Occurrence) => boolean): LSIF.types.Location[] {
 		const toFind = this.getSymbolsAt(uri, position);
 		const locations: LSIF.types.Location[] = [];
 		for (const doc of this.index.documents) {
-			for (const occurence of doc.occurrences) {
-				if (occurence.symbolRoles & 0x1 && toFind.has(occurence.symbol)) {// definition
-					toFind.delete(occurence.symbol);
+			for (const occurrence of doc.occurrences) {
+				if (occurrence.symbolRoles & 0x1 && toFind.has(occurrence.symbol)) {// definition
+					toFind.delete(occurrence.symbol);
 					locations.push({
 						uri: URI.joinPath(this.workspaceUriOriginal, doc.relativePath.replaceAll('\\', '/')).toString(true),
-						range: occurenceToPosition(occurence),
+						range: occurrenceToPosition(occurrence),
 					});
 				}
 			}
@@ -101,9 +101,9 @@ class SCIPGraph implements IGraph {
 		if (!doc) { return new Set(); }
 
 		const toFind = new Set<string>();
-		for (const occurence of doc.occurrences) {
-			if (occursAt(occurence, position)) {
-				toFind.add(occurence.symbol);
+		for (const occurrence of doc.occurrences) {
+			if (occursAt(occurrence, position)) {
+				toFind.add(occurrence.symbol);
 			}
 		}
 
