@@ -373,7 +373,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			expect(body.thinking_budget).toBe(maxOutputTokens - 1);
 		});
 
-		it('should not set thinking_budget when configuredBudget is undefined', () => {
+		it('should use default thinking_budget of 4000', () => {
 			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, undefined);
 			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4-5');
 
@@ -395,7 +395,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const options = createTestOptions([createUserMessage('Hello')]);
 			const body = endpoint.createRequestBody(options);
 
-			expect(body.thinking_budget).toBeUndefined();
+			expect(body.thinking_budget).toBe(4000);
 		});
 
 		it('should not set thinking_budget for non-Anthropic models (gpt)', () => {

@@ -3315,13 +3315,11 @@
 						]
 					},
 					"github.copilot.chat.anthropic.thinking.budgetTokens": {
-						"type": [
-							"number",
-							"null"
-						],
+						"type": "number",
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
 						"minimum": 0,
 						"maximum": 32000,
+						"default": 4000,
 						"tags": [
 							"experimental",
 							"onExp"
