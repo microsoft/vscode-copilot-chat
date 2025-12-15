@@ -523,7 +523,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 	}
 
 	protected async onImage(part: LanguageModelDataPart) {
-		const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
+		const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)
 			: false;

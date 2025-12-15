@@ -875,7 +875,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (selection.includes(this.AUTHORIZE.toUpperCase())) {
 			stream.progress(vscode.l10n.t('Authorizing'));
 			try {
-				await this._authenticationService.getPermissiveGitHubSession({ createIfNone: true, silent: false });
+				await this._authenticationService.getGitHubSession('permissive', { createIfNone: true });
 				if (!this._authenticationService.permissiveGitHubSession) {
 					throw new Error('Failed to obtain permissive GitHub session');
 				}

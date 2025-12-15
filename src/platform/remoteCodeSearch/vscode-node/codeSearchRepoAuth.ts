@@ -52,7 +52,7 @@ export class VsCodeCodeSearchAuthenticationService implements ICodeSearchAuthent
 			}, signInButton, cancelButton);
 
 			if (result === signInButton) {
-				await this._authService.getAnyGitHubSession({ createIfNone: true });
+				await this._authService.getGitHubSession('any', { createIfNone: true });
 				return;
 			}
 		}

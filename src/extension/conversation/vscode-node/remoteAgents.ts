@@ -240,7 +240,7 @@ export class RemoteAgentContribution implements IDisposable {
 					} else if (data?.authPermissionPrompted) {
 						request = await this.authenticationChatUpgradeService.handleConfirmationRequest(responseStream, request, context.history);
 						metadata.command = request.command;
-						accessToken = (await this.authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken;
+						accessToken = (await this.authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken;
 						if (!accessToken) {
 							responseStream.markdown(l10n.t('The additional permissions are required for this feature.'));
 							return { metadata } satisfies ICopilotChatResult;
@@ -679,7 +679,7 @@ export class RemoteAgentContribution implements IDisposable {
 				if (ex instanceof Error && ex.message.includes('Failed to fetch repository info')) {
 					// TODO display a merged confirmation to reauthorize with the repo scope
 					// For now, raise a reauth badge so the user has a way out of this state
-					void this.authenticationService.getPermissiveGitHubSession({ silent: true });
+					void this.authenticationService.getGitHubSession('permissive', { silent: true });
 				}
 				this.logService.error(ex, 'Failed to fetch info about current GitHub repository');
 			}

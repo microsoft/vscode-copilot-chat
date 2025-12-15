@@ -299,7 +299,7 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 		location: { viewColumn: ViewColumn.Active },
 		hideFromUser: false
 	};
-	const session = await authenticationService.getAnyGitHubSession();
+	const session = await authenticationService.getGitHubSession('any', { silent: true });
 	if (session) {
 		options.env = {
 			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)

@@ -119,11 +119,7 @@ class TestAuthService extends Disposable implements IAuthenticationService {
 	private readonly _onDidAdoAuthenticationChange = this._register(new Emitter<void>());
 	readonly onDidAdoAuthenticationChange = this._onDidAdoAuthenticationChange.event;
 
-	async getAnyGitHubSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		return undefined;
-	}
-
-	async getPermissiveGitHubSession(options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+	async getGitHubSession(kind: 'permissive' | 'any', options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
 		return undefined;
 	}
 
