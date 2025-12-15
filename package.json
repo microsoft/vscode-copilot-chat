@@ -2176,6 +2176,14 @@
 				"title": "Hide NES Requests"
 			},
 			{
+				"command": "github.copilot.chat.debug.showGhostRequests",
+				"title": "Show Ghost Requests"
+			},
+			{
+				"command": "github.copilot.chat.debug.hideGhostRequests",
+				"title": "Hide Ghost Requests"
+			},
+			{
 				"command": "github.copilot.chat.debug.showRawRequestBody",
 				"title": "Show Raw Request Body"
 			},
@@ -4126,6 +4134,14 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.chat.debug.showGhostRequests",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideGhostRequests",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.chat.debug.exportLogItem",
 					"when": "false"
 				},
@@ -4449,6 +4465,16 @@
 					"command": "github.copilot.chat.debug.hideNesRequests",
 					"when": "!github.copilot.chat.debug.nesRequestsHidden",
 					"group": "commands@2"
+				},
+				{
+					"command": "github.copilot.chat.debug.showGhostRequests",
+					"when": "github.copilot.chat.debug.ghostRequestsHidden",
+					"group": "commands@3"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideGhostRequests",
+					"when": "!github.copilot.chat.debug.ghostRequestsHidden",
+					"group": "commands@3"
 				}
 			],
 			"notebook/toolbar": [

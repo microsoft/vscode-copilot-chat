@@ -817,6 +817,7 @@ class LogTreeFilters extends Disposable {
 	private _elementsShown = true;
 	private _toolsShown = true;
 	private _nesRequestsShown = true;
+	private _ghostRequestsShown = true;
 
 	private readonly _onDidChangeFilters = new vscode.EventEmitter<void>();
 	readonly onDidChangeFilters = this._onDidChangeFilters.event;
@@ -829,6 +830,7 @@ class LogTreeFilters extends Disposable {
 		this.setElementsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('elements')));
 		this.setToolsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('tools')));
 		this.setNesRequestsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('nesRequests')));
+		this.setGhostRequestsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('ghostRequests')));
 	}
 
 	private getStorageKey(name: string): string {
@@ -850,6 +852,11 @@ class LogTreeFilters extends Disposable {
 		this.setShown('nesRequests', this._nesRequestsShown);
 	}
 
+	setGhostRequestsShown(value: boolean) {
+		this._ghostRequestsShown = value;
+		this.setShown('ghostRequests', this._ghostRequestsShown);
+	}
+
 	itemIncluded(item: TreeItem): boolean {
 		if (item instanceof ChatPromptItem) {
 			if (this.isNesRequest(item)) {
@@ -865,9 +872,18 @@ class LogTreeFilters extends Disposable {
 			if (this.isNesRequest(item)) {
 				return this._nesRequestsShown;
 			}
+			// Check if this is a Ghost request
+			if (this.isGhostRequest(item)) {
+				return this._ghostRequestsShown;
+			}
 		}
 
 		return true;
+	}
+
+	private isGhostRequest(item: ChatRequestItem): boolean {
+		const debugName = item.info.entry.debugName.toLowerCase();
+		return debugName === 'ghost' || debugName.startsWith('ghost |');
 	}
 
 	private isNesRequest(item: ChatPromptItem | ChatRequestItem): boolean {
@@ -898,5 +914,7 @@ class LogTreeFilterCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideTools', () => filters.setToolsShown(false)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showNesRequests', () => filters.setNesRequestsShown(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideNesRequests', () => filters.setNesRequestsShown(false)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showGhostRequests', () => filters.setGhostRequestsShown(true)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideGhostRequests', () => filters.setGhostRequestsShown(false)));
 	}
 }
