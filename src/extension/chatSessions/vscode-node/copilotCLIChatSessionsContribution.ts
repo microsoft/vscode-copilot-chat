@@ -1006,7 +1006,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				});
 		}
 
-		stream.markdown(vscode.l10n.t('A backround agent has begun working on your request. Follow its progress in the sessions list.'));
+		stream.markdown(vscode.l10n.t('A background agent has begun working on your request. Follow its progress in the sessions list.'));
 
 		return {};
 	}
