@@ -11,7 +11,7 @@ import { ResourceSet } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { IObservable, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { dirname, isAbsolute } from '../../../util/vs/base/common/path';
-import { isEqualOrParent, joinPath, dirname as uriDirname } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { isObject } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { FileType, Uri } from '../../../vscodeTypes';
@@ -145,7 +145,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 					if (Array.isArray(chatInstructions)) {
 						for (const contribution of chatInstructions) {
 							if (contribution.path) {
-								const folderUri = uriDirname(joinPath(extension.extensionUri, contribution.path));
+								const folderUri = extUriBiasedIgnorePathCase.dirname(Uri.joinPath(extension.extensionUri, contribution.path));
 								locations.add(folderUri);
 							}
 						}
@@ -153,7 +153,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 				}
 				return ((uri: URI) => {
 					for (const location of locations) {
-						if (isEqualOrParent(uri, location)) {
+						if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, location)) {
 							return true;
 						}
 					}
@@ -170,9 +170,9 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 			})),
 			() => {
 				if (this.configurationService.getNonExtensionConfig<boolean>(USE_CLAUDE_SKILLS_SETTING)) {
-					const skillFolderUri = joinPath(this.envService.userHome, SKILL_FOLDER);
+					const skillFolderUri = extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, SKILL_FOLDER);
 					return ((uri: URI) => {
-						return isEqualOrParent(uri, skillFolderUri);
+						return extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri);
 					});
 				}
 				return (() => false);
@@ -189,7 +189,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		if (this.configurationService.getConfig(ConfigKey.UseInstructionFiles)) {
 			for (const folder of this.workspaceService.getWorkspaceFolders()) {
 				try {
-					const uri = joinPath(folder, COPILOT_INSTRUCTIONS_PATH);
+					const uri = extUriBiasedIgnorePathCase.joinPath(folder, COPILOT_INSTRUCTIONS_PATH);
 					if ((await this.fileSystemService.stat(uri)).type === FileType.File) {
 						result.push(uri);
 					}
