@@ -63,7 +63,7 @@ class CodexStyleGpt5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 			* If there are natural next steps the user may want to take, suggest them at the end of your response. Do not make suggestions if there are no natural next steps.<br />
 			* When suggesting multiple options, use numeric lists for the suggestions so the user can quickly respond with a single number.<br />
 			- The user does not command execution outputs. When asked to show the output of a command (e.g. `git show`), relay the important details in your answer or summarize the key lines so the user understands the result.<br />
-			- Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+			- Use proper Markdown formatting in your answers.<br />
 			<br />
 			### Final answer structure and style guidelines<br />
 			<br />
