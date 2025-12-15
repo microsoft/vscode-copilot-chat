@@ -105,7 +105,7 @@ export async function formatDiffAsUnified(accessor: ServicesAccessor, uri: URI, 
 	const diffService = accessor.get(IDiffService);
 	const diff = await diffService.computeDiff(oldContent, newContent, {
 		ignoreTrimWhitespace: false,
-		maxComputationTimeMs: 5000,
+		maxComputationTimeMs: 20000,
 		computeMoves: false,
 	});
 
