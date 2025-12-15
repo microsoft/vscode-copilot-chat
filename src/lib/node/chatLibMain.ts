@@ -26,7 +26,7 @@ import { GetGhostTextOptions } from '../../extension/completions-core/vscode-nod
 import { ICompletionsLastGhostText, LastGhostText } from '../../extension/completions-core/vscode-node/lib/src/ghostText/last';
 import { ITextEditorOptions } from '../../extension/completions-core/vscode-node/lib/src/ghostText/normalizeIndent';
 import { ICompletionsSpeculativeRequestCache, SpeculativeRequestCache } from '../../extension/completions-core/vscode-node/lib/src/ghostText/speculativeRequestCache';
-import { getInlineCompletions } from '../../extension/completions-core/vscode-node/lib/src/inlineCompletion';
+import { GhostText } from '../../extension/completions-core/vscode-node/lib/src/inlineCompletion';
 import { LocalFileSystem } from '../../extension/completions-core/vscode-node/lib/src/localFileSystem';
 import { LogLevel as CompletionsLogLevel, ICompletionsLogTargetService } from '../../extension/completions-core/vscode-node/lib/src/logger';
 import { ICompletionsFetcherService } from '../../extension/completions-core/vscode-node/lib/src/networking';
@@ -636,6 +636,8 @@ export function createInlineCompletionsProvider(options: IInlineCompletionsProvi
 
 class InlineCompletionsProvider extends Disposable implements IInlineCompletionsProvider {
 
+	private ghostText: GhostText;
+
 	constructor(
 		@IInstantiationService private _insta: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
@@ -643,6 +645,7 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 	) {
 		super();
 		this._register(_insta);
+		this.ghostText = this._insta.createInstance(GhostText);
 	}
 
 	updateTreatmentVariables(variables: Record<string, boolean | number | string>) {
@@ -652,7 +655,7 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 	}
 
 	async getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined> {
-		return await this._insta.invokeFunction(getInlineCompletions, textDocument, position, token, options);
+		return await this.ghostText.getInlineCompletions(textDocument, position, token, options);
 	}
 }
 
