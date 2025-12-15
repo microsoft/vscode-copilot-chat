@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
+import { ChatLocation } from '../../../chat/common/commonTypes';
 import { ConfigKey } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
@@ -290,7 +291,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(10000);
@@ -316,7 +317,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(15000);
@@ -341,7 +342,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(32000);
@@ -367,7 +368,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(maxOutputTokens - 1);
@@ -468,7 +469,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(maxOutputTokens - 1);
@@ -496,7 +497,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(5000);
@@ -546,7 +547,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(1024);
@@ -571,7 +572,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(1024);
@@ -596,7 +597,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(1024);
