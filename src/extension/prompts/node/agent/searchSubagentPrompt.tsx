@@ -2,10 +2,14 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
+
+
+import { AssistantMessage, PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { CopilotToolMode } from '../../../tools/common/toolsRegistry';
 import { ChatToolCalls } from '../panel/toolCalling';
+
+const MAX_SEARCH_TURNS = 4;
 
 /**
  * Prompt for the search subagent that uses custom search instructions
@@ -17,6 +21,10 @@ export class SearchSubagentPrompt extends PromptElement<GenericBasePromptElement
 
 		// Render the search instruction from the conversation
 		const searchInstruction = conversation?.turns[0]?.request.message;
+
+		// Check if we're at the last turn (to align with training where we coax final answer)
+		const currentTurn = toolCallRounds?.length ?? 0;
+		const isLastTurn = currentTurn >= MAX_SEARCH_TURNS - 1;
 
 		return (
 			<>
@@ -41,6 +49,11 @@ export class SearchSubagentPrompt extends PromptElement<GenericBasePromptElement
 					toolCallResults={toolCallResults}
 					toolCallMode={CopilotToolMode.FullContext}
 				/>
+				{isLastTurn && (
+					<AssistantMessage priority={898}>
+						OK, now I'm ready to produce a final answer. &lt;final_answer&gt;
+					</AssistantMessage>
+				)}
 			</>
 		);
 	}

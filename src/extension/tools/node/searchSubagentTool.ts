@@ -46,7 +46,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		].join('\n');
 
 		const loop = this.instantiationService.createInstance(SubagentToolCallingLoop, {
-			toolCallLimit: 5,
+			toolCallLimit: 4,
 			conversation: new Conversation('', [new Turn('', { type: 'user', message: searchInstruction })]),
 			request: this._inputContext!.request!,
 			location: this._inputContext!.request!.location,
