@@ -263,14 +263,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		const label = session.label;
 		const tooltipLines = [vscode.l10n.t(`Background agent session: {0}`, label)];
-		let description: vscode.MarkdownString | undefined;
+		let badge: vscode.MarkdownString | undefined;
 		let changes: vscode.ChatSessionItem['changes'] | undefined;
 
 		if (worktreePath && worktreeRelativePath) {
 			const worktreeUri = Uri.file(worktreePath);
-			// Description
-			description = new vscode.MarkdownString(`$(git-branch) ${worktreeRelativePath}`);
-			description.supportThemeIcons = true;
+			// Badge
+			badge = new vscode.MarkdownString(`$(git-branch) ${worktreeRelativePath}`);
+			badge.supportThemeIcons = true;
 
 			// Tooltip
 			tooltipLines.push(vscode.l10n.t(`Worktree: {0}`, worktreeRelativePath));
@@ -287,7 +287,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		return {
 			resource,
 			label,
-			description,
+			badge,
 			tooltip: tooltipLines.join('\n'),
 			timing: session.timing,
 			changes,
@@ -471,7 +471,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private CLI_INCLUDE_CHANGES = vscode.l10n.t('Include Changes');
 	private CLI_SKIP_CHANGES = vscode.l10n.t('Skip Changes');
 	private CLI_CANCEL = vscode.l10n.t('Cancel');
-
+	private readonly untitledSessionIdMapping = new Map<string, string>();
 	constructor(
 		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
 		private readonly promptResolver: CopilotCLIPromptResolver,
@@ -599,7 +599,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
-				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, additionalReferences, session.object.options.isolationEnabled, token);
+				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, additionalReferences, session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 			}
 
@@ -607,6 +607,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// Delete old information stored for untitled session id.
 				_sessionModel.delete(id);
 				_sessionModel.set(session.object.sessionId, modelId);
+				this.untitledSessionIdMapping.delete(id);
 				_untitledSessionIdMap.delete(session.object.sessionId);
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt });
 			}
@@ -673,15 +674,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, model: string | undefined, agent: SweCustomAgent | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
 		const { resource } = chatSessionContext.chatSessionItem;
-		const id = SessionIdForCLI.parse(resource);
-
+		const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(resource));
+		const id = existingSessionId ?? SessionIdForCLI.parse(resource);
+		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
-		const workingDirectoryValue = chatSessionContext.isUntitled ?
+		const workingDirectoryValue = isNewSession || !isolationEnabled ?
 			(isolationEnabled ? await this.worktreeManager.createWorktree(stream) : await this.copilotCLISDK.getDefaultWorkingDirectory().then(dir => dir?.fsPath)) :
 			this.worktreeManager.getWorktreePath(id);
 		const workingDirectory = workingDirectoryValue ? Uri.file(workingDirectoryValue) : undefined;
 
-		const session = chatSessionContext.isUntitled ?
+		const session = isNewSession ?
 			await this.sessionService.createSession({ model, workingDirectory, isolationEnabled, agent }, token) :
 			await this.sessionService.getSession(id, { model, workingDirectory, isolationEnabled, readonly: false, agent }, token);
 		this.sessionItemProvider.notifySessionsChange();
@@ -691,7 +693,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return undefined;
 		}
 
-		if (chatSessionContext.isUntitled && workingDirectory && isolationEnabled) {
+		if (isNewSession) {
+			this.untitledSessionIdMapping.set(id, session.object.sessionId);
+		}
+		if (isNewSession && workingDirectory && isolationEnabled) {
 			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory.fsPath);
 		}
 		disposables.add(session.object.attachStream(stream));
@@ -955,11 +960,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 		};
 
+		const getWorkingDirectoryPromise = getWorkingDirectory();
 		const [{ prompt, attachments, references }, model, agent] = await Promise.all([
-			requestPromptPromise.then(prompt => this.promptResolver.resolvePrompt(request, prompt, (otherReferences || []).concat([]), isolationEnabled, token)),
+			requestPromptPromise.then(async prompt => {
+				await getWorkingDirectoryPromise;
+				return this.promptResolver.resolvePrompt(request, prompt, (otherReferences || []).concat([]), isolationEnabled, workingDirectory, token);
+			}),
 			this.getModelId(undefined, request, true, token), // prefer model in request, as we're delegating from another session here.
 			this.getAgent(undefined, undefined, token),
-			getWorkingDirectory()
+			getWorkingDirectoryPromise
 		]);
 
 		const session = await this.sessionService.createSession({ workingDirectory, isolationEnabled, agent, model }, token);

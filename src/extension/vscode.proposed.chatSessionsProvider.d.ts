@@ -96,6 +96,11 @@ declare module 'vscode' {
 		description?: string | MarkdownString;
 
 		/**
+		 * An optional badge that provides additional context about the chat session.
+		 */
+		badge?: string | MarkdownString;
+
+		/**
 		 * An optional status indicating the current state of the session.
 		 */
 		status?: ChatSessionStatus;
@@ -161,7 +166,7 @@ declare module 'vscode' {
 		 */
 		deletions: number;
 
-		constructor(uri: Uri, insertions: number, deletions: number, compareUri?: Uri);
+		constructor(modifiedUri: Uri, insertions: number, deletions: number, originalUri?: Uri);
 	}
 
 	export interface ChatSession {

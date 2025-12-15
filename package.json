@@ -305,6 +305,7 @@
 				"name": "copilot_findFiles",
 				"toolReferenceName": "fileSearch",
 				"displayName": "%copilot.tools.findFiles.name%",
+				"userDescription": "%copilot.tools.findFiles.userDescription%",
 				"modelDescription": "Search for files in the workspace by glob pattern. This only returns the paths of matching files. Use this tool when you know the exact filename pattern of the files you're searching for. Glob patterns match from the root of the workspace folder. Examples:\n- **/*.{js,ts} to match all js/ts files in the workspace.\n- src/** to match all files under the top-level src folder.\n- **/foo/**/*.js to match all js files under any foo folder in the workspace.",
 				"tags": [
 					"vscode_codesearch"
@@ -330,6 +331,7 @@
 				"name": "copilot_findTextInFiles",
 				"toolReferenceName": "textSearch",
 				"displayName": "%copilot.tools.findTextInFiles.name%",
+				"userDescription": "%copilot.tools.findTextInFiles.userDescription%",
 				"modelDescription": "Do a fast text search in the workspace. Use this tool when you want to search with an exact string or regex. If you are not sure what words will appear in the workspace, prefer using regex patterns with alternation (|) or character classes to search for multiple potential words at once instead of making separate searches. For example, use 'function|method|procedure' to look for all of those words at once. Use includePattern to search within files matching a specific pattern, or in a specific file, using a relative path. Use 'includeIgnoredFiles' to include files normally ignored by .gitignore, other ignore files, and `files.exclude` and `search.exclude` settings. Warning: using this may cause the search to be slower, only set it when you want to search in ignored folders like node_modules or build outputs. Use this tool when you want to see an overview of a particular file, instead of using read_file many times to look for code within a file.",
 				"tags": [
 					"vscode_codesearch"
@@ -427,6 +429,7 @@
 				"name": "copilot_listDirectory",
 				"toolReferenceName": "listDirectory",
 				"displayName": "%copilot.tools.listDirectory.name%",
+				"userDescription": "%copilot.tools.listDirectory.userDescription%",
 				"modelDescription": "List the contents of a directory. Result will have the name of the child. If the name ends in /, it's a folder, otherwise a file",
 				"tags": [
 					"vscode_codesearch"
@@ -1811,38 +1814,38 @@
 		],
 		"chatViewsWelcome": [
 			{
-				"icon": "$(copilot-large)",
-				"title": "Ask Copilot",
+				"icon": "$(chat-sparkle)",
+				"title": "%copilot.title%",
 				"content": "%github.copilot.viewsWelcome.individual.expired%",
 				"when": "github.copilot.interactiveSession.individual.expired"
 			},
 			{
-				"icon": "$(copilot-large)",
-				"title": "Ask Copilot",
+				"icon": "$(chat-sparkle)",
+				"title": "%copilot.title%",
 				"content": "%github.copilot.viewsWelcome.enterprise%",
 				"when": "github.copilot.interactiveSession.enterprise.disabled"
 			},
 			{
-				"icon": "$(copilot-large)",
-				"title": "Ask Copilot",
+				"icon": "$(chat-sparkle)",
+				"title": "%copilot.title%",
 				"content": "%github.copilot.viewsWelcome.offline%",
 				"when": "github.copilot.offline"
 			},
 			{
-				"icon": "$(copilot-large)",
-				"title": "Ask Copilot",
+				"icon": "$(chat-sparkle)",
+				"title": "%copilot.title%",
 				"content": "%github.copilot.viewsWelcome.contactSupport%",
 				"when": "github.copilot.interactiveSession.contactSupport"
 			},
 			{
-				"icon": "$(copilot-large)",
-				"title": "Ask Copilot",
+				"icon": "$(chat-sparkle)",
+				"title": "%copilot.title%",
 				"content": "%github.copilot.viewsWelcome.chatDisabled%",
 				"when": "github.copilot.interactiveSession.chatDisabled"
 			},
 			{
-				"icon": "$(copilot-large)",
-				"title": "Ask Copilot",
+				"icon": "$(chat-sparkle)",
+				"title": "%copilot.title%",
 				"content": "%github.copilot.viewsWelcome.switchToReleaseChannel%",
 				"when": "github.copilot.interactiveSession.switchToReleaseChannel"
 			}

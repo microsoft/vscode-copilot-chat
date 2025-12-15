@@ -57,13 +57,16 @@ class UserPreferenceUpdatePrompt extends PromptElement<IUserPreferenceUpdateProm
 class UpdateUserPreferencesTool implements ICopilotTool<IUpdateUserPreferencesToolParams> {
 
 	public static readonly toolName = ToolName.UpdateUserPreferences;
-	private readonly endpoint = this.instantiationService.createInstance(Proxy4oEndpoint);
 
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
+	}
+
+	private getEndpoint(): Proxy4oEndpoint {
+		return this.instantiationService.createInstance(Proxy4oEndpoint);
 	}
 
 	private get userPreferenceFile(): URI {
@@ -87,9 +90,9 @@ class UpdateUserPreferencesTool implements ICopilotTool<IUpdateUserPreferencesTo
 	}
 
 	private async generateNewContent(currentContent: string, facts: string[], token: CancellationToken): Promise<string> {
-
-		const { messages } = await renderPromptElement(this.instantiationService, this.endpoint, UserPreferenceUpdatePrompt, { facts: facts, currentContent, userPreferenceFile: this.userPreferenceFile }, undefined, token);
-		return this.doFetch(messages, this.endpoint, currentContent, token);
+		const endpoint = this.getEndpoint();
+		const { messages } = await renderPromptElement(this.instantiationService, endpoint, UserPreferenceUpdatePrompt, { facts: facts, currentContent, userPreferenceFile: this.userPreferenceFile }, undefined, token);
+		return this.doFetch(messages, endpoint, currentContent, token);
 	}
 
 	private async doFetch(promptMessages: Raw.ChatMessage[], endpoint: IChatEndpoint, speculation: string, token: CancellationToken) {
