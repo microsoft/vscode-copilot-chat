@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IGitService } from '../../../platform/git/common/gitService';
+import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
@@ -522,15 +522,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			});
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
+			const currentRepository = this.gitService.activeRepository?.get();
 			if (!chatSessionContext) {
 				// Invoked from a 'normal' chat or 'cloud button' without CLI session context
 				// Or cases such as delegating from Regular chat to CLI chat
 				// Handle confirmation data
-				return await this.handlePushConfirmationData(request, context, stream, token);
+				return await this.handlePushConfirmationData(request, context, stream, token, currentRepository);
 			}
 
 			const isUntitled = chatSessionContext.isUntitled;
-			const currentRepository = this.gitService.activeRepository?.get();
 			const hasUncommittedChanges = currentRepository?.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
 			if (isUntitled && hasUncommittedChanges && confirmationResults.length === 0) {
 				// initial request for untitled cli editor w/ uncomitted changes
@@ -799,7 +799,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		request: vscode.ChatRequest,
 		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
-		token: vscode.CancellationToken
+		token: vscode.CancellationToken,
+		currentRepository: RepoContext | undefined
 	) {
 		// Check if this is a confirmation response
 		const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
@@ -807,7 +808,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return await this.handleWorktreeConfirmationResponse(request, confirmationResults, context, stream, token);
 		}
 
-		const currentRepository = this.gitService.activeRepository?.get();
 		if (!currentRepository) {
 			// No isolation, proceed without worktree
 			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, false, stream, token);
