@@ -269,7 +269,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		if (worktreePath && worktreeRelativePath) {
 			const worktreeUri = Uri.file(worktreePath);
 			// Description
-			description = new vscode.MarkdownString(`$(list-tree) ${worktreeRelativePath}`);
+			description = new vscode.MarkdownString(`$(git-branch) ${worktreeRelativePath}`);
 			description.supportThemeIcons = true;
 
 			// Tooltip

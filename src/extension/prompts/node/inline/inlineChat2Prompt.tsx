@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { AssistantMessage, PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
-import type { ExtendedLanguageModelToolResult } from 'vscode';
+import { ChatResponsePart } from '@vscode/prompt-tsx/dist/base/vscodeTypes';
+import type { CancellationToken, ExtendedLanguageModelToolResult, Position, Progress } from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
-import { ChatRequest, ChatRequestEditorData } from '../../../../vscodeTypes';
+import { ChatRequest, ChatRequestEditorData, Range } from '../../../../vscodeTypes';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
 import { IToolCall } from '../../../prompt/common/intents';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
@@ -41,15 +42,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 
 		const snapshotAtRequest = this.props.snapshotAtRequest;
 
-		// the full lines of the selection
-		// TODO@jrieken
-		// * if the selection is empty and if the line with the selection is empty we could hint to add code and
-		//   generally with empty selections we could allow the model to be a bit more creative
-		// * use the true selected text (now we extend to full lines)
-		const selectedLines = snapshotAtRequest.getText(this.props.data.selection.with({
-			start: this.props.data.selection.start.with({ character: 0 }),
-			end: this.props.data.selection.end.with({ character: Number.MAX_SAFE_INTEGER }),
-		}));
+		const selection = this.props.data.selection;
 
 		const variables = new ChatVariablesCollection(this.props.request.references);
 		const filepath = this._promptPathRepresentationService.getFilePath(snapshotAtRequest.uri);
@@ -74,9 +67,10 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					<Tag name='file'>
 						<CodeBlock includeFilepath={false} languageId={snapshotAtRequest.languageId} uri={snapshotAtRequest.uri} references={[new PromptReference(snapshotAtRequest.uri, undefined, undefined)]} code={snapshotAtRequest.getText()} />
 					</Tag>
-					<Tag name='file-selection'>
-						<CodeBlock includeFilepath={false} languageId={snapshotAtRequest.languageId} uri={snapshotAtRequest.uri} references={[new PromptReference(snapshotAtRequest.uri, undefined, undefined)]} code={selectedLines} />
-					</Tag>
+					{selection.isEmpty
+						? <FileContextElement snapshot={snapshotAtRequest} position={selection.start} />
+						: <FileSelectionElement snapshot={snapshotAtRequest} selection={selection} />
+					}
 					<ChatVariables flexGrow={3} priority={898} chatVariables={variables} useFixCookbook={true} />
 					<Tag name='reminder'>
 						If there is a user selection, focus on it, and try to make changes to the selected code and its context.<br />
@@ -98,7 +92,82 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 	}
 }
 
-export type EditAttemptsElementProps = PromptElementProps<{
+
+export type FileContextElementProps = PromptElementProps<{
+	snapshot: TextDocumentSnapshot;
+	position: Position;
+}>;
+
+export class FileContextElement extends PromptElement<FileContextElementProps> {
+
+	override render(state: void, sizing: PromptSizing, _progress?: Progress<ChatResponsePart>, _token?: CancellationToken) {
+
+		let startLine = this.props.position.line;
+		let endLine = this.props.position.line;
+		let n = 0;
+		let seenNonEmpty = false;
+		while (startLine > 0) {
+			seenNonEmpty = seenNonEmpty || !this.props.snapshot.lineAt(startLine).isEmptyOrWhitespace;
+			startLine--;
+			n++;
+			if (n >= 3 && seenNonEmpty) {
+				break;
+			}
+		}
+		n = 0;
+		seenNonEmpty = false;
+		while (endLine < this.props.snapshot.lineCount - 1) {
+			seenNonEmpty = seenNonEmpty || !this.props.snapshot.lineAt(endLine).isEmptyOrWhitespace;
+			endLine++;
+			n++;
+			if (n >= 3 && seenNonEmpty) {
+				break;
+			}
+		}
+
+		const textBefore = this.props.snapshot.getText(new Range(this.props.position.with({ line: startLine, character: 0 }), this.props.position));
+		const textAfter = this.props.snapshot.getText(new Range(this.props.position, this.props.position.with({ line: endLine, character: Number.MAX_SAFE_INTEGER })));
+
+		const code = `${textBefore}$CURSOR$${textAfter}`;
+
+		return <>
+			<Tag name='file-cursor-context'>
+				<CodeBlock includeFilepath={false} languageId={this.props.snapshot.languageId} uri={this.props.snapshot.uri} references={[new PromptReference(this.props.snapshot.uri, undefined, undefined)]} code={code} />
+			</Tag>
+		</>;
+	}
+}
+
+
+export type FileSelectionElementProps = PromptElementProps<{
+	snapshot: TextDocumentSnapshot;
+	selection: Range;
+}>;
+
+export class FileSelectionElement extends PromptElement<FileSelectionElementProps> {
+
+	override render(state: void, sizing: PromptSizing, progress?: Progress<ChatResponsePart>, token?: CancellationToken) {
+
+
+		// the full lines of the selection
+		// TODO@jrieken
+		// * use the true selected text (now we extend to full lines)
+
+		const selectedLines = this.props.snapshot.getText(this.props.selection.with({
+			start: this.props.selection.start.with({ character: 0 }),
+			end: this.props.selection.end.with({ character: Number.MAX_SAFE_INTEGER }),
+		}));
+
+		return <>
+			<Tag name='file-selection'>
+				<CodeBlock includeFilepath={false} languageId={this.props.snapshot.languageId} uri={this.props.snapshot.uri} references={[new PromptReference(this.props.snapshot.uri, undefined, undefined)]} code={selectedLines} />
+			</Tag>
+		</>;
+	}
+}
+
+
+type EditAttemptsElementProps = PromptElementProps<{
 	editAttempts: [IToolCall, ExtendedLanguageModelToolResult][];
 	data: ChatRequestEditorData;
 	documentVersionAtRequest: number;
