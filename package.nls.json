@@ -138,6 +138,7 @@
 	"github.copilot.config.gpt5CodexAlternatePrompt": "Specifies an experimental alternate prompt to use for the GPT-5-Codex model.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
 	"copilot.description": "Ask or edit in context",
+	"copilot.title": "Build with Agent",
 	"copilot.edits.description": "Edit files in your workspace",
 	"copilot.agent.description": "Edit files in your workspace in agent mode",
 	"copilot.workspace.description": "Ask about your workspace",
