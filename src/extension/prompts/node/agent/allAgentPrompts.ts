@@ -5,11 +5,13 @@
 
 import './anthropicPrompts';
 import './geminiPrompts';
+import './vscModelPrompts';
+// vscModelPrompts must be imported before gpt5Prompt to ensure VSC model prompt resolvers are registered first.
 import './openai/defaultOpenAIPrompt';
 import './openai/gpt51CodexPrompt';
 import './openai/gpt51Prompt';
 import './openai/gpt5CodexPrompt';
 import './openai/gpt5Prompt';
 import './openai/hiddenModelBPrompt';
-import './vscModelPrompts';
 import './xAIPrompts';
+
