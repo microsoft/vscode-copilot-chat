@@ -286,6 +286,45 @@ suite('applyPatch parser', () => {
 		]);
 	});
 
+	it('preserves tab chars in tex files', () => {
+		const input = [
+			'*** Begin Patch',
+			'*** Update File: a.tex',
+			'@@',
+			'hello',
+			'-\tworld',
+			'+\t\\textbf{world}',
+			'*** End Patch'
+		].join('\n');
+
+		expect(text_to_patch(input, {
+			'a.tex': new StringTextDocumentWithLanguageId('prefix\nhello\n\tworld\nwoo\nsuffix', 'text/plain')
+		})).toMatchInlineSnapshot(`
+			[
+			  {
+			    "actions": {
+			      "a.tex": {
+			        "chunks": [
+			          {
+			            "delLines": [
+			              "	world",
+			            ],
+			            "insLines": [
+			              "	\\textbf{world}",
+			            ],
+			            "origIndex": 2,
+			          },
+			        ],
+			        "movePath": undefined,
+			        "type": "update",
+			      },
+			    },
+			  },
+			  0,
+			]
+		`);
+	});
+
 	it('matches explicit \\n and \\t tab chars', () => {
 		const input = [
 			'*** Begin Patch',
