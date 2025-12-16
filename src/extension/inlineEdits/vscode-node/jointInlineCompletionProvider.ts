@@ -115,7 +115,7 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 				const excludes = this._excludedProviders.read(reader).slice();
 
 				let inlineEditProvider: InlineCompletionProviderImpl | undefined = undefined;
-				if (this.inlineEditsEnabled.read(reader)) {
+				if (!excludes.includes('nes') && this.inlineEditsEnabled.read(reader)) {
 					const logger = reader.store.add(this._instantiationService.createInstance(InlineEditLogger));
 
 					const statelessProviderId = this._inlineEditsProviderId.read(reader);
@@ -181,7 +181,10 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 
 					// @ulugbekna: note that we don't want it if modelUnification is on
 					const modelUnification = unificationStateValue?.modelUnification ?? false;
-					if (!modelUnification || unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
+					if (
+						(!modelUnification || unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) &&
+						!excludes.includes('completions')
+					) {
 						completionsProvider = this._copilotInlineCompletionItemProviderService.getOrCreateProvider() as CopilotInlineCompletionItemProvider;
 					}
 
