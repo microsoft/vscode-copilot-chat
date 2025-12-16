@@ -164,7 +164,11 @@ export class InlineEditRequestLogContext {
 		} else if (this._nesTypePicked === 'llm' && this._resultEdit) {
 			lines.push(`## Result:`);
 			lines.push('``` patch');
-			lines.push(this._resultEdit.toString());
+			if (typeof this._resultEdit === 'string') {
+				lines.push(this._resultEdit);
+			} else {
+				lines.push(this._resultEdit.toString());
+			}
 			lines.push('```');
 		} else {
 			lines.push(`## Result: <NOT-SET>`);
@@ -200,11 +204,11 @@ export class InlineEditRequestLogContext {
 		this._nextEditRequest = nextEditRequest;
 	}
 
-	private _resultEdit: RootedLineEdit | undefined = undefined;
+	private _resultEdit: RootedLineEdit | string | undefined = undefined;
 
-	setResult(resultEdit: RootedLineEdit) {
+	setResult(resultEditOrPatchString: RootedLineEdit | string) {
 		this._isVisible = true;
-		this._resultEdit = resultEdit;
+		this._resultEdit = resultEditOrPatchString;
 	}
 
 	protected _diagnosticsResultEdit: RootedLineEdit | undefined = undefined;

@@ -6,9 +6,10 @@
 import assert from 'assert';
 import Sinon from 'sinon';
 import { SyncDescriptor } from '../../../../../../util/vs/platform/instantiation/common/descriptors';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ResultType } from '../ghostText/ghostText';
 import { telemetryShown } from '../ghostText/telemetry';
-import { getInlineCompletions } from '../inlineCompletion';
+import { GhostText } from '../inlineCompletion';
 import { FetchOptions, ICompletionsFetcherService, Response } from '../networking';
 import { CompletionRequest, ICompletionsOpenAIFetcherService, LiveOpenAIFetcher } from '../openai/fetch';
 import { LocationFactory } from '../textDocument';
@@ -33,7 +34,9 @@ suite('getInlineCompletions()', function () {
 
 		// Setup closures with the state as default
 		function requestInlineCompletions(textDoc = doc, pos = position) {
-			return getInlineCompletions(accessor, textDoc, pos);
+			const instaService = accessor.get(IInstantiationService);
+			const ghostText = instaService.createInstance(GhostText);
+			return ghostText.getInlineCompletions(textDoc, pos);
 		}
 
 		return {

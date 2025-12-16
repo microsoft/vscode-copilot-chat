@@ -6,7 +6,7 @@
 import { Attachment, SweCustomAgent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler, Uri } from 'vscode';
+import { ChatExtendedRequestHandler, Uri, workspace } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
@@ -127,7 +127,10 @@ export class CopilotCLIWorktreeManager {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 				return undefined;
 			}
-			const worktreePath = await this.gitService.createWorktree(repository.rootUri);
+
+			const branchPrefix = workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
+			const branch = `${branchPrefix}worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+			const worktreePath = await this.gitService.createWorktree(repository.rootUri, { branch });
 			if (worktreePath) {
 				return worktreePath;
 			}
@@ -1006,7 +1009,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				});
 		}
 
-		stream.markdown(vscode.l10n.t('{0} has begun working on your request. Follow its progress in the Agents View.', 'Background Agent'));
+		stream.markdown(vscode.l10n.t('A background agent has begun working on your request. Follow its progress in the sessions list.'));
 
 		return {};
 	}
@@ -1033,7 +1036,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		session.addUserMessage(userPrompt);
 
 		// Add assistant message event with embedded PR metadata
-		const assistantMessage = `Cloud Agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri.toString()}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
+		const assistantMessage = `A cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri.toString()}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
 		session.addUserAssistantMessage(assistantMessage);
 	}
 }

@@ -836,7 +836,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		} else {
 			// Delegated flow
 			// NOTE: VS Code will now close the parent/source chat in most cases.
-			stream.markdown(vscode.l10n.t('Cloud Agent has begun working on your request. Follow its progress in the Agents View and associated pull request.'));
+			stream.markdown(vscode.l10n.t('A cloud agent has begun working on your request. Follow its progress in the sessions list and associated pull request.'));
 		}
 
 		// Return this for external callers, eg: CLI
@@ -875,7 +875,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (selection.includes(this.AUTHORIZE.toUpperCase())) {
 			stream.progress(vscode.l10n.t('Authorizing'));
 			try {
-				await this._authenticationService.getPermissiveGitHubSession({ createIfNone: true, silent: false });
+				await this._authenticationService.getGitHubSession('permissive', { createIfNone: true });
 				if (!this._authenticationService.permissiveGitHubSession) {
 					throw new Error('Failed to obtain permissive GitHub session');
 				}

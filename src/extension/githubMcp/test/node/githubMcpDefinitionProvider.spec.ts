@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import type { AuthenticationGetSessionOptions, AuthenticationSession } from 'vscode';
+import type { AuthenticationGetSessionOptions, AuthenticationGetSessionPresentationOptions, AuthenticationSession } from 'vscode';
 import { BaseAuthenticationService, IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
 import { ICopilotTokenManager } from '../../../../platform/authentication/common/copilotTokenManager';
@@ -42,15 +42,17 @@ class TestAuthenticationService extends BaseAuthenticationService {
 		this._onDidAuthenticationChange.fire();
 	}
 
-	getAnyGitHubSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		return Promise.resolve(this._anyGitHubSession);
-	}
-
-	getPermissiveGitHubSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		if (options?.createIfNone && !this._permissiveGitHubSession) {
-			throw new Error('No permissive GitHub session available');
+	override getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override getGitHubSession(kind: 'permissive' | 'any', options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+		if (kind === 'permissive') {
+			if (options?.createIfNone && !this._permissiveGitHubSession) {
+				throw new Error('No permissive GitHub session available');
+			}
+			return Promise.resolve(this._permissiveGitHubSession);
+		} else {
+			return Promise.resolve(this._anyGitHubSession);
 		}
-		return Promise.resolve(this._permissiveGitHubSession);
 	}
 
 	override getAnyAdoSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {

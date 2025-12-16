@@ -2237,6 +2237,14 @@
 				"title": "Hide NES Requests"
 			},
 			{
+				"command": "github.copilot.chat.debug.showGhostRequests",
+				"title": "Show Ghost Requests"
+			},
+			{
+				"command": "github.copilot.chat.debug.hideGhostRequests",
+				"title": "Hide Ghost Requests"
+			},
+			{
 				"command": "github.copilot.chat.debug.showRawRequestBody",
 				"title": "Show Raw Request Body"
 			},
@@ -2320,6 +2328,11 @@
 			{
 				"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.installPRExtension",
+				"title": "%github.copilot.command.installPRExtension.title%",
+				"icon": "$(extensions)"
 			},
 			{
 				"command": "github.copilot.chat.openSuggestionsPanel",
@@ -3319,13 +3332,11 @@
 						]
 					},
 					"github.copilot.chat.anthropic.thinking.budgetTokens": {
-						"type": [
-							"number",
-							"null"
-						],
+						"type": "number",
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
 						"minimum": 0,
 						"maximum": 32000,
+						"default": 4000,
 						"tags": [
 							"experimental",
 							"onExp"
@@ -4187,6 +4198,14 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.chat.debug.showGhostRequests",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideGhostRequests",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.chat.debug.exportLogItem",
 					"when": "false"
 				},
@@ -4236,6 +4255,10 @@
 				},
 				{
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.installPRExtension",
 					"when": "false"
 				},
 				{
@@ -4510,6 +4533,16 @@
 					"command": "github.copilot.chat.debug.hideNesRequests",
 					"when": "!github.copilot.chat.debug.nesRequestsHidden",
 					"group": "commands@2"
+				},
+				{
+					"command": "github.copilot.chat.debug.showGhostRequests",
+					"when": "github.copilot.chat.debug.ghostRequestsHidden",
+					"group": "commands@3"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideGhostRequests",
+					"when": "!github.copilot.chat.debug.ghostRequestsHidden",
+					"group": "commands@3"
 				}
 			],
 			"notebook/toolbar": [
@@ -4562,6 +4595,13 @@
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 					"when": "chatSessionType == copilot-cloud-agent",
 					"group": "context"
+				}
+			],
+			"chat/multiDiff/context": [
+				{
+					"command": "github.copilot.cloud.sessions.installPRExtension",
+					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
+					"group": "inline@1"
 				}
 			]
 		},

@@ -23,14 +23,21 @@ import { IInstantiationService, ServicesAccessor } from '../../../../../../util/
 import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
-import { getInlineCompletions } from '../../../lib/src/inlineCompletion';
+import { GhostText } from '../../../lib/src/inlineCompletion';
 import { telemetry } from '../../../lib/src/telemetry';
 import { wrapDoc } from '../textDocumentManager';
 
 const postInsertCmdName = '_github.copilot.ghostTextPostInsert2';
 
 export class GhostTextProvider implements InlineCompletionItemProvider {
-	constructor(@IInstantiationService private readonly instantiationService: IInstantiationService) { }
+
+	private readonly ghostText: GhostText;
+
+	constructor(
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) {
+		this.ghostText = this.instantiationService.createInstance(GhostText);
+	}
 
 	async provideInlineCompletionItems(
 		vscodeDoc: TextDocument,
@@ -51,7 +58,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 
 		const formattingOptions = window.visibleTextEditors.find(e => e.document.uri === vscodeDoc.uri)?.options;
 
-		const rawCompletions = await this.instantiationService.invokeFunction(getInlineCompletions, textDocument, position, token, {
+		const rawCompletions = await this.ghostText.getInlineCompletions(textDocument, position, token, {
 			isCycling: context.triggerKind === InlineCompletionTriggerKind.Invoke,
 			selectedCompletionInfo: context.selectedCompletionInfo,
 			formattingOptions,
