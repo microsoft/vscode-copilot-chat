@@ -4,26 +4,92 @@
 
 A feature that allows users to record/capture their "expected suggestion" when a Next Edit Suggestion (NES) was rejected or failed to appear. The captured data is saved in `.recording.w.json` format (compatible with stest infrastructure) for analysis and model improvement.
 
-## User Flow
+## Getting Started
+
+### 1. Enable the Feature
+Add this setting to your VS Code `settings.json`:
+
+```json
+{
+  // Enable the capture feature
+  "github.copilot.chat.advanced.inlineEdits.recordExpectedEdit.enabled": true
+}
+```
+
+That's it! Auto-capture on rejection is enabled by default. To disable it (you can still capture manually via **Cmd+K Cmd+R**):
+```json
+{
+  "github.copilot.chat.advanced.inlineEdits.recordExpectedEdit.onReject": false
+}
+```
+
+### 2. Capture an Expected Edit
+
+**When NES shows a wrong suggestion:**
+1. Reject the suggestion (press `Esc` or continue typing)
+2. If `onReject` is enabled, capture mode starts automatically
+3. Type the code you *expected* NES to suggest
+4. Press **Enter** to save, or **Esc** to cancel
+
+**When NES didn't appear but should have:**
+1. Press **Cmd+K Cmd+R** (Mac) or **Ctrl+K Ctrl+R** (Windows/Linux)
+2. Type the code you expected NES to suggest
+3. Press **Enter** to save
+
+> **Tip:** Use **Shift+Enter** to insert newlines during capture (since Enter saves).
+
+### 3. Submit Your Feedback
+Once you've captured some edits:
+1. Open Command Palette (**Cmd+Shift+P** / **Ctrl+Shift+P**)
+2. Run **"Copilot: Submit NES Captures"**
+3. Review the files to be included (you can exclude sensitive files)
+4. Click **Submit Feedback** to create a PR
+
+### Quick Reference
+
+| Action | Keybinding |
+|--------|------------|
+| Start capture manually | **Cmd+K Cmd+R** / **Ctrl+K Ctrl+R** |
+| Save capture | **Enter** |
+| Cancel capture | **Esc** |
+| Insert newline | **Shift+Enter** |
+
+| Command | Description |
+|---------|-------------|
+| Copilot: Record Expected Edit (NES) | Start a capture session |
+| Copilot: Submit NES Captures | Upload feedback to internal repo |
+
+## How It Works
 
 ### Trigger Points
-1. **Automatic**: User rejects an NES suggestion
-2. **Manual**: User invokes via Command Palette (**"Copilot: Record Expected Edit (NES)"**) or keybinding (**Cmd+K Cmd+R** on Mac, **Ctrl+K Ctrl+R** on Windows/Linux) when NES didn't appear but should have
+- **Automatic**: Capture starts when you reject an NES suggestion (if `onReject` setting is enabled)
+- **Manual**: Use the keyboard shortcut or Command Palette when NES didn't appear but should have
 
 ### Capture Session
-1. System enters "capture mode" and creates a bookmark in DebugRecorder
-2. Status bar shows: "Capture mode: edit code, Enter=save, Esc=cancel"
-3. User types their expected suggestion directly in the editor (replaces or inserts code)
-4. User presses **Enter** to confirm and save, or **Esc** to cancel
+When capture mode is active:
+1. A status bar indicator shows: **"NES CAPTURE MODE ACTIVE"**
+2. Type your expected edit naturally in the editor
+3. Press **Enter** to save or **Esc** to cancel
 
-### Keybindings
-- **Enter**: Confirm and save capture (only when `copilotNesCaptureMode` context is active)
-- **Shift+Enter**: Insert a newline character (since Enter is used to save, use Shift+Enter for multi-line edits)
-- **Esc**: Cancel capture session
+### Where Captures Are Saved
+Recordings are stored in your workspace under `.copilot/nes-feedback/`:
+- `capture-<timestamp>.recording.w.json` — The edit recording
+- `capture-<timestamp>.metadata.json` — Context about the capture
 
-## Technical Architecture
+---
 
-### Core Components
+## Technical Reference
+
+### Commands
+
+| Command ID | Description |
+|------------|-------------|
+| `github.copilot.nes.captureExpected.start` | Start capture manually |
+| `github.copilot.nes.captureExpected.confirm` | Confirm and save |
+| `github.copilot.nes.captureExpected.abort` | Cancel capture |
+| `github.copilot.nes.captureExpected.submit` | Submit to `microsoft/copilot-nes-feedback` |
+
+### Architecture
 
 #### State Management
 The capture controller maintains minimal state:
@@ -43,6 +109,7 @@ The capture controller maintains minimal state:
     suggestionText?: string;
     // [startLine, startCharacter, endLine, endCharacter]
     suggestionRange?: [number, number, number, number];
+    documentPath?: string;
   };
 }
 ```
@@ -131,84 +198,52 @@ A metadata file is saved alongside each recording with capture context:
 }
 ```
 
-## Commands
-
-### Internal Commands
-- `github.copilot.nes.captureExpected.start` - Start capture (manual trigger)
-- `github.copilot.nes.captureExpected.confirm` - Confirm and save
-- `github.copilot.nes.captureExpected.abort` - Cancel capture
-
-### User-Facing Keybindings
-The following keybindings are registered in `package.json`. The Enter and Escape bindings are scoped to the `copilotNesCaptureMode` context key, which is set to `true` during an active capture session.
-
-- **Cmd+K Cmd+R** (Mac) / **Ctrl+K Ctrl+R** (Windows/Linux): Start capture manually
-- **Enter**: Confirm and save capture
-- **Escape**: Abort capture
-
-### Command Palette
-The start command is available in the Command Palette:
-- **"Copilot: Record Expected Edit (NES)"** — Manually start a capture session
-
 ## Benefits
 
-### For Users
-- Zero-friction workflow (type naturally, press Enter)
-- No forms or dialogs to fill
-- Works for both rejected suggestions and missed opportunities
-
-### For Engineering
-- Minimal code complexity (leverage DebugRecorder)
-- Output directly compatible with existing stest infrastructure
-- No custom diff algorithms needed
-
-### For Model Improvement
-- Rich context: full edit history leading to expectation
-- Structured format for batch analysis
-- Reproducible via stest framework
-- Can compare expected vs actual NES suggestions
+- **Zero-friction**: Type naturally, press Enter — no forms or dialogs
+- **Works for both**: Rejected suggestions and missed opportunities
+- **Privacy-aware**: Sensitive files are automatically filtered before submission
 
 ## Edge Cases
 
-### Multiple Rapid Rejections
-- Only one capture session active at a time
-- Subsequent rejections during capture are ignored
-- Status bar shows active capture state
+| Scenario | Behavior |
+|----------|----------|
+| **Multiple rapid rejections** | Only one capture active at a time; subsequent rejections ignored |
+| **Document closed** | Capture automatically aborted |
+| **No edits made** | Valid feedback! Saved with `noEditExpected: true` (indicates the rejection was correct) |
+| **Large edits** | DebugRecorder handles size limits automatically |
 
-### Document Closed Before Confirm
-- Capture automatically aborted
-- No persistence occurs
+## Feedback Submission
 
-### No Edits Made
-- If user confirms without editing, the recording is saved with `nextUserEdit.edit` set to `{ "__marker__": "NO_EDIT_EXPECTED" }`
-- Metadata includes `noEditExpected: true`
-- This is valid feedback indicating the NES suggestion was correctly rejected (no edit was actually needed)
+When you run **"Copilot: Submit NES Captures"**:
 
-### Large Edits
-- DebugRecorder handles size limits automatically
-- If edit exceeds thresholds, it's collapsed into base state
-- Capture still succeeds with whatever was retained
+1. All captures from `.copilot/nes-feedback/` are collected
+2. A preview dialog shows which files will be included
+3. You can exclude specific files if needed
+4. A pull request is created in `microsoft/copilot-nes-feedback`
+
+### Privacy & Filtering
+Sensitive files are **automatically excluded** from submissions:
+- VS Code settings (`settings.json`, `launch.json`)
+- Credentials (`.npmrc`, `.env`, `.gitconfig`, etc.)
+- Private keys (`.pem`, `.key`, `id_rsa`, etc.)
+- Sensitive directories (`.aws/`, `.ssh/`, `.gnupg/`)
+
+**Requirements:** GitHub authentication with repo access to `microsoft/copilot-nes-feedback`
+
+---
 
 ## Future Enhancements
 
-### Optional Features
 - **Diff Preview**: Show visual comparison before saving
 - **Category Tagging**: Quick-pick to categorize expectation type (import, refactor, etc.)
 - **Auto-Generate stest**: Create `.stest.ts` wrapper file automatically
-- **Batch Export**: Command to zip all captures for sharing
-
-## Settings
-
-```typescript
-// Enable/disable the feature
-"github.copilot.chat.advanced.inlineEdits.recordExpectedEdit.enabled": true
-
-// Auto-start on rejection
-"github.copilot.chat.advanced.inlineEdits.recordExpectedEdit.onReject": true
-```
 
 ## Related Files
 
 - `src/extension/inlineEdits/node/debugRecorder.ts` - Core recording infrastructure
-- `src/extension/inlineEdits/vscode-node/components/inlineEditDebugComponent.ts` - Existing feedback/debug tooling
+- `src/extension/inlineEdits/vscode-node/components/inlineEditDebugComponent.ts` - Existing feedback/debug tooling and sensitive file filtering
+- `src/extension/inlineEdits/vscode-node/components/expectedEditCaptureController.ts` - Capture session management
+- `src/extension/inlineEdits/vscode-node/components/nesFeedbackSubmitter.ts` - Feedback submission to GitHub
 - `src/extension/inlineEdits/common/observableWorkspaceRecordingReplayer.ts` - Recording replay logic
 - `test/simulation/inlineEdit/inlineEditTester.ts` - stest infrastructure

@@ -236,6 +236,10 @@ export class InlineEditProviderFeature {
 			reader.store.add(commands.registerCommand(captureExpectedAbortCommandId, () => {
 				void expectedEditCaptureController.abortCapture();
 			}));
+
+			reader.store.add(commands.registerCommand(captureExpectedSubmitCommandId, () => {
+				void expectedEditCaptureController.submitCaptures();
+			}));
 		});
 	}
 }
@@ -249,3 +253,4 @@ export const reportNotebookNESIssueCommandId = 'github.copilot.debug.inlineEdit.
 const captureExpectedStartCommandId = 'github.copilot.nes.captureExpected.start';
 const captureExpectedConfirmCommandId = 'github.copilot.nes.captureExpected.confirm';
 const captureExpectedAbortCommandId = 'github.copilot.nes.captureExpected.abort';
+const captureExpectedSubmitCommandId = 'github.copilot.nes.captureExpected.submit';
