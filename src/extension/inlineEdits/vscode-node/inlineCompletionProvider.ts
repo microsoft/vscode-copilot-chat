@@ -545,7 +545,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 							item.range.start.character,
 							item.range.end.line,
 							item.range.end.character
-						] as [number, number, number, number] : undefined
+						] as [number, number, number, number] : undefined,
+						documentPath: item.info.documentId.path
 					};
 					void this.expectedEditCaptureController.startCapture('rejection', metadata);
 				}

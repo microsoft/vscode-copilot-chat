@@ -2568,6 +2568,11 @@
 				"category": "Copilot"
 			},
 			{
+				"command": "github.copilot.nes.captureExpected.submit",
+				"title": "Submit NES Captures",
+				"category": "Copilot"
+			},
+			{
 				"command": "github.copilot.chat.showAsChatSession",
 				"title": "Show as chat session",
 				"icon": "$(chat-sparkle)"
@@ -4494,6 +4499,10 @@
 				},
 				{
 					"command": "github.copilot.nes.captureExpected.start",
+					"when": "github.copilot.inlineEditsEnabled"
+				},
+				{
+					"command": "github.copilot.nes.captureExpected.submit",
 					"when": "github.copilot.inlineEditsEnabled"
 				}
 			],

@@ -4,13 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { commands, MarkdownString, StatusBarAlignment, StatusBarItem, ThemeColor, Uri, window, workspace } from 'vscode';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { DebugRecorderBookmark } from '../../../../platform/inlineEdits/common/debugRecorderBookmark';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
 import { ISerializedEdit, LogEntry } from '../../../../platform/workspaceRecorder/common/workspaceLog';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { DebugRecorder } from '../../node/debugRecorder';
+import { filterLogForSensitiveFiles } from './inlineEditDebugComponent';
+import { NesFeedbackSubmitter } from './nesFeedbackSubmitter';
 
 export const copilotNesCaptureMode = 'copilotNesCaptureMode';
 
@@ -28,6 +32,7 @@ interface CaptureState {
 		endpointUrl?: string;
 		suggestionText?: string;
 		suggestionRange?: [number, number, number, number];
+		documentPath?: string;
 	};
 }
 
@@ -42,13 +47,21 @@ export class ExpectedEditCaptureController extends Disposable {
 	private _state: CaptureState | undefined;
 	private _statusBarItem: StatusBarItem | undefined;
 	private _statusBarAnimationInterval: ReturnType<typeof setInterval> | undefined;
+	private readonly _feedbackSubmitter: NesFeedbackSubmitter;
 
 	constructor(
 		private readonly _debugRecorder: DebugRecorder,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@ILogService private readonly _logService: ILogService
+		@ILogService private readonly _logService: ILogService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IFetcherService private readonly _fetcherService: IFetcherService,
 	) {
 		super();
+		this._feedbackSubmitter = new NesFeedbackSubmitter(
+			this._logService,
+			this._authenticationService,
+			this._fetcherService
+		);
 	}
 
 	/**
@@ -151,8 +164,10 @@ export class ExpectedEditCaptureController extends Disposable {
 			);
 
 			// Build recording
+			// Filter out both non-interacted documents and sensitive files (settings.json, .env)
+			const filteredLog = filterLogForSensitiveFiles(this._filterLogForNonInteractedDocuments(logUpToStart));
 			const recording = {
-				log: this._filterLogForSensitiveFiles(logUpToStart),
+				log: filteredLog,
 				nextUserEdit: nextUserEdit
 			};
 
@@ -349,7 +364,7 @@ export class ExpectedEditCaptureController extends Disposable {
 	 * This removes startup noise like package.json files from node_modules that VS Code
 	 * opens in the background, while preserving real workspace files that existed before capture.
 	 */
-	private _filterLogForSensitiveFiles(log: LogEntry[]): LogEntry[] {
+	private _filterLogForNonInteractedDocuments(log: LogEntry[]): LogEntry[] {
 		// Collect document IDs that had actual user interaction
 		const interactedDocIds = new Set<number>();
 
@@ -444,6 +459,21 @@ export class ExpectedEditCaptureController extends Disposable {
 
 		const content = JSON.stringify(metadata, null, 2);
 		await workspace.fs.writeFile(metadataUri, Buffer.from(content, 'utf8'));
+	}
+
+	/**
+	 * Submit all captured NES feedback files to a private GitHub repository.
+	 * Delegates to NesFeedbackSubmitter for file collection, filtering, and upload.
+	 */
+	public async submitCaptures(): Promise<void> {
+		const workspaceFolder = workspace.workspaceFolders?.[0];
+		if (!workspaceFolder) {
+			window.showErrorMessage('No workspace folder found');
+			return;
+		}
+
+		const feedbackFolderUri = Uri.joinPath(workspaceFolder.uri, ExpectedEditCaptureController.CAPTURE_FOLDER);
+		await this._feedbackSubmitter.submitFromFolder(feedbackFolderUri);
 	}
 
 	override dispose(): void {
