@@ -522,13 +522,25 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			});
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
-			// Check if it was delegated from chat or cloud button or if it's the first iteration
-			const response = await this.generateConfirmationResponseIfNeeded(request, context, stream, token);
-			if (!chatSessionContext || chatSessionContext.isUntitled) {
+			const currentRepository = this.gitService.activeRepository?.get();
+			if (!chatSessionContext) {
+				// Invoked from a 'normal' chat or 'cloud button' without CLI session context
+				// Or cases such as delegating from Regular chat to CLI chat
+				// Handle confirmation data
+				const response = await this.generateConfirmationResponseIfNeeded(request, context, stream, token);
 				return response || {};
 			}
 
 			const isUntitled = chatSessionContext.isUntitled;
+			const hasUncommittedChanges = currentRepository?.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
+			if (isUntitled && hasUncommittedChanges && confirmationResults.length === 0) {
+				// initial request for untitled cli editor w/ uncomitted changes
+				return this.generateUncommittedChangesConfirmation(request, context, stream, token);
+			}
+
+			if (isUntitled && hasUncommittedChanges && confirmationResults.length > 0) {
+				return await this.handleWorktreeConfirmationResponse(request, confirmationResults, context, stream, token);
+			}
 			const { resource } = chatSessionContext.chatSessionItem;
 			sessionResource = resource;
 			const id = SessionIdForCLI.parse(resource);
