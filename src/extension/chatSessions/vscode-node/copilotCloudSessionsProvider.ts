@@ -276,20 +276,26 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
+		this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions Start');
 		const repoId = await getRepoId(this._gitService);
 		if (!repoId) {
+			this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions No Repo Id');
 			return { optionGroups: [] };
 		}
 
 		// TODO: handle no auth token case more gracefully
 		if (!this._authenticationService.permissiveGitHubSession) {
+			this.logService.trace('[copilotCloudSessionsProvider#provideChatSessionProviderOptions] No Auth Token');
 			return { optionGroups: [] };
 		}
 		try {
 			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true });
 			if (customAgents.length === 0) {
+				this.logService.trace('[copilotCloudSessionsProvider#provideChatSessionProviderOptions] No Custom Agents');
 				return { optionGroups: [] };
 			}
+
+			this.logService.trace(`[copilotCloudSessionsProvider#provideChatSessionProviderOptions] ${JSON.stringify(customAgents, undefined, 2)}`);
 
 			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 				{ id: DEFAULT_AGENT_ID, name: vscode.l10n.t('Agent') },
@@ -309,7 +315,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				]
 			};
 		} catch (error) {
-			this.logService.error(`Error fetching custom agents: ${error}`);
+			this.logService.error(`[copilotCloudSessionsProvider#provideChatSessionProviderOptions] Error fetching custom agents: ${error}`);
 			return { optionGroups: [] };
 		}
 	}
