@@ -197,7 +197,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.addPullRequestCommentWithToken(pullRequestId, commentBody, authToken);
 	}
 
-	async getAllOpenSessions(nwo?: string): Promise<SessionInfo[]> {
+	async getAllSessions(nwo?: string, open: boolean = true): Promise<SessionInfo[]> {
 		try {
 			const authToken = (await this._authService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 			if (!authToken) {
@@ -208,7 +208,7 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 				headers: {
 					Authorization: `Bearer ${authToken}`,
 				}
-			}, { type: RequestType.CopilotSessions, nwo, resourceState: 'draft,open' });
+			}, { type: RequestType.CopilotSessions, nwo, resourceState: open ? 'draft,open' : undefined });
 		} catch (e) {
 			this._logService.error(e);
 			return [];

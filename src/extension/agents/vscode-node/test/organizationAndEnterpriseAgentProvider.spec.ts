@@ -36,7 +36,7 @@ class MockOctoKitService implements IOctoKitService {
 	getJobByJobId = async () => undefined;
 	getJobBySessionId = async () => undefined;
 	addPullRequestComment = async () => null;
-	getAllOpenSessions = async () => [];
+	getAllSessions = async () => [];
 	getPullRequestFromGlobalId = async () => null;
 	getPullRequestFiles = async () => [];
 	closePullRequest = async () => false;
