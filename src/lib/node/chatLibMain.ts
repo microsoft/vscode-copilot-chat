@@ -636,7 +636,7 @@ export function createInlineCompletionsProvider(options: IInlineCompletionsProvi
 
 class InlineCompletionsProvider extends Disposable implements IInlineCompletionsProvider {
 
-	private ghostText: GhostText;
+	private readonly ghostText: GhostText;
 
 	constructor(
 		@IInstantiationService private _insta: IInstantiationService,
