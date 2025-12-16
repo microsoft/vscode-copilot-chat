@@ -230,7 +230,7 @@ class GeminiPromptResolver implements IAgentPrompt {
 
 	static readonly familyPrefixes = ['gemini'];
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isHiddenModelF(endpoint) || endpoint.family.toLowerCase().includes('gemini');
+		return isHiddenModelF(endpoint);
 	}
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
