@@ -214,9 +214,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						if (this.cachedSessionsSize !== sessions.length) {
 							this.refresh();
 						}
-						if (this.cachedSessionsSize !== sessions.length) {
-							this.refresh();
-						}
 					} catch (e) {
 						logService.error(`Error during background refresh: ${e}`);
 					}
