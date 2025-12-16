@@ -203,11 +203,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						this.refresh();
 					}
 				};
-				let interval = setInterval(intervalCallback, intervalMs);
+				let interval: TimeoutHandle | undefined = setInterval(intervalCallback, intervalMs);
 				this._register(toDisposable(() => clearInterval(interval)));
 				this._register(vscode.window.onDidChangeWindowState((e) => {
 					if (!e.active) {
 						clearInterval(interval);
+						interval = undefined;
 					} else if (!interval) {
 						interval = setInterval(intervalCallback, intervalMs);
 						this._register(toDisposable(() => clearInterval(interval)));
