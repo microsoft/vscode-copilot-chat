@@ -86,7 +86,7 @@ export class NesFeedbackSubmitter {
 			}
 
 			// Get GitHub auth token - need permissive session for repo access
-			const session = await this._authenticationService.getPermissiveGitHubSession({ createIfNone: true });
+			const session = await this._authenticationService.getGitHubSession('permissive', { createIfNone: true });
 			if (!session) {
 				window.showErrorMessage('GitHub authentication required with repo access. Please sign in to GitHub.');
 				return;
