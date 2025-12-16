@@ -16,7 +16,7 @@ import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobPaylo
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { DeferredPromise, retry } from '../../../util/vs/base/common/async';
+import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
@@ -188,32 +188,38 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				isEmptyWindow: !vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0
 			};
 			if (repoId) {
-				const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false);
-				const hasHistoricalSessions = sessions.length > 0;
-				const intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
-				telemetryObj.intervalMs = intervalMs;
-				telemetryObj.hasHistoricalSessions = hasHistoricalSessions;
-				const intervalCallback = async () => {
-					// TODO: handle no auth token case more gracefully
-					if (!this._authenticationService.permissiveGitHubSession) {
-						return;
-					}
-					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`);
-					if (this.cachedSessionsSize !== sessions.length) {
-						this.refresh();
-					}
-				};
-				let interval: TimeoutHandle | undefined = setInterval(intervalCallback, intervalMs);
-				this._register(toDisposable(() => clearInterval(interval)));
-				this._register(vscode.window.onDidChangeWindowState((e) => {
-					if (!e.active) {
-						clearInterval(interval);
-						interval = undefined;
-					} else if (!interval) {
-						interval = setInterval(intervalCallback, intervalMs);
-						this._register(toDisposable(() => clearInterval(interval)));
-					}
-				}));
+				try {
+					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false);
+					const hasHistoricalSessions = sessions.length > 0;
+					const intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
+					telemetryObj.intervalMs = intervalMs;
+					telemetryObj.hasHistoricalSessions = hasHistoricalSessions;
+					const schedulerCallback = async () => {
+						// TODO: handle no auth token case more gracefully
+						if (!this._authenticationService.permissiveGitHubSession) {
+							return;
+						}
+						const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`);
+						if (this.cachedSessionsSize !== sessions.length) {
+							this.refresh();
+						}
+					};
+					let lastRefreshedAt = 0;
+					const scheduler = this._register(new RunOnceScheduler(() => {
+						lastRefreshedAt = Date.now();
+						schedulerCallback();
+					}, intervalMs));
+					scheduler.schedule();
+					this._register(vscode.window.onDidChangeWindowState((e) => {
+						if (!e.active) {
+							scheduler.cancel();
+						} else if (!scheduler.isScheduled()) {
+							scheduler.schedule(Math.max(0, intervalMs - (Date.now() - lastRefreshedAt)));
+						}
+					}));
+				} catch (e) {
+					this.logService.error(`Error during background refresh setup: ${e instanceof Error ? e.message : String(e)}`);
+				}
 			}
 			const onDebouncedAuthRefresh = Event.debounce(this._authenticationService.onDidAuthenticationChange, () => { }, 500);
 			this._register(onDebouncedAuthRefresh(() => this.refresh()));
