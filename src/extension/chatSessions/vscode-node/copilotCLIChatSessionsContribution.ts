@@ -52,7 +52,7 @@ function getLockedIsolationOption(name: string): vscode.ChatSessionProviderOptio
 		name,
 		description: vscode.l10n.t('Using worktree for this session'),
 		locked: true,
-		icon: new vscode.ThemeIcon('git-branch')
+		icon: new vscode.ThemeIcon('worktree')
 	};
 }
 
@@ -265,18 +265,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.id);
 
 		const label = session.label;
-		const tooltipLines = [vscode.l10n.t(`Background agent session: {0}`, label)];
 		let badge: vscode.MarkdownString | undefined;
 		let changes: vscode.ChatSessionItem['changes'] | undefined;
 
 		if (worktreePath && worktreeRelativePath) {
 			const worktreeUri = Uri.file(worktreePath);
 			// Badge
-			badge = new vscode.MarkdownString(`$(git-branch) ${worktreeRelativePath}`);
+			badge = new vscode.MarkdownString(`$(worktree) ${worktreeRelativePath}`);
 			badge.supportThemeIcons = true;
-
-			// Tooltip
-			tooltipLines.push(vscode.l10n.t(`Worktree: {0}`, worktreeRelativePath));
 
 			// Statistics
 			const stats = await this.getStatisticsForWorktree(worktreeUri);
@@ -291,7 +287,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			resource,
 			label,
 			badge,
-			tooltip: tooltipLines.join('\n'),
 			timing: session.timing,
 			changes,
 			status
