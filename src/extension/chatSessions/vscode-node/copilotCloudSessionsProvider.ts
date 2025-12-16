@@ -183,43 +183,51 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const telemetryObj: {
 				intervalMs?: number;
 				hasHistoricalSessions?: boolean;
+				error?: string;
 				isEmptyWindow: boolean;
 			} = {
 				isEmptyWindow: !vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0
 			};
 			if (repoId) {
+				let intervalMs: number;
+				let hasHistoricalSessions: boolean;
 				try {
 					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false);
-					const hasHistoricalSessions = sessions.length > 0;
-					const intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
-					telemetryObj.intervalMs = intervalMs;
-					telemetryObj.hasHistoricalSessions = hasHistoricalSessions;
-					const schedulerCallback = async () => {
-						// TODO: handle no auth token case more gracefully
-						if (!this._authenticationService.permissiveGitHubSession) {
-							return;
-						}
-						const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`);
-						if (this.cachedSessionsSize !== sessions.length) {
-							this.refresh();
-						}
-					};
-					let lastRefreshedAt = 0;
-					const scheduler = this._register(new RunOnceScheduler(() => {
-						lastRefreshedAt = Date.now();
-						schedulerCallback();
-					}, intervalMs));
-					scheduler.schedule();
-					this._register(vscode.window.onDidChangeWindowState((e) => {
-						if (!e.active) {
-							scheduler.cancel();
-						} else if (!scheduler.isScheduled()) {
-							scheduler.schedule(Math.max(0, intervalMs - (Date.now() - lastRefreshedAt)));
-						}
-					}));
+					hasHistoricalSessions = sessions.length > 0;
+					intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
 				} catch (e) {
 					this.logService.error(`Error during background refresh setup: ${e instanceof Error ? e.message : String(e)}`);
+					hasHistoricalSessions = false;
+					intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
+					telemetryObj.error = e instanceof Error ? e.message : String(e);
 				}
+				telemetryObj.intervalMs = intervalMs;
+				telemetryObj.hasHistoricalSessions = hasHistoricalSessions;
+				const schedulerCallback = async () => {
+					// TODO: handle no auth token case more gracefully
+					if (!this._authenticationService.permissiveGitHubSession) {
+						return;
+					}
+					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`);
+					if (this.cachedSessionsSize !== sessions.length) {
+						this.refresh();
+					}
+					scheduler.schedule();
+				};
+				let lastRefreshedAt = 0;
+				const scheduler = this._register(new RunOnceScheduler(() => {
+					lastRefreshedAt = Date.now();
+					schedulerCallback();
+				}, intervalMs));
+				scheduler.schedule();
+				this._register(vscode.window.onDidChangeWindowState((e) => {
+					if (!e.active) {
+						scheduler.cancel();
+					} else if (!scheduler.isScheduled()) {
+						scheduler.schedule(Math.max(0, intervalMs - (Date.now() - lastRefreshedAt)));
+					}
+				}));
+
 			}
 			const onDebouncedAuthRefresh = Event.debounce(this._authenticationService.onDidAuthenticationChange, () => { }, 500);
 			this._register(onDebouncedAuthRefresh(() => this.refresh()));
