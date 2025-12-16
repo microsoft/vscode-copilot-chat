@@ -419,7 +419,28 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				return;
 			}
 
-			const exportableItems = allTreeItems.filter(item => item instanceof ChatPromptItem || (item instanceof ChatRequestItem && item.info.entry.debugName !== 'modelList'));
+			// Whitelist of exportable debugName patterns
+			const isExportable = (debugName: string): boolean => {
+				// Include main conversation requests (location/intent format)
+				if (debugName.includes('/')) {
+					return true;
+				}
+
+				// Include specific API wrapper calls and BYOK providers
+				const exportableNames = [
+					'copilotLanguageModelWrapper',  // Standard LM wrapper (covers most BYOK providers: OpenAI, xAI, Ollama, OpenRouter, CustomOAI, Azure)
+					'GeminiNativeBYOK',             // Gemini BYOK provider
+					'AnthropicBYOK',                 // Anthropic BYOK provider
+					'agentLMServer',                // Agent language model server
+					'oaiLMServer',                  // OpenAI language model server
+				];
+				return exportableNames.some(name => debugName.startsWith(name));
+			};
+
+			const exportableItems = allTreeItems.filter(item =>
+				item instanceof ChatPromptItem ||
+				(item instanceof ChatRequestItem && isExportable(item.info.entry.debugName))
+			);
 
 			if (exportableItems.length === 0) {
 				vscode.window.showInformationMessage('No chat prompts found to export.');
