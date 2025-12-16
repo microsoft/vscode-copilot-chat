@@ -6,7 +6,7 @@
 import { Attachment, SweCustomAgent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler, Uri } from 'vscode';
+import { ChatExtendedRequestHandler, Uri, workspace } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
@@ -127,7 +127,10 @@ export class CopilotCLIWorktreeManager {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 				return undefined;
 			}
-			const worktreePath = await this.gitService.createWorktree(repository.rootUri);
+
+			const branchPrefix = workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
+			const branch = `${branchPrefix}worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+			const worktreePath = await this.gitService.createWorktree(repository.rootUri, { branch });
 			if (worktreePath) {
 				return worktreePath;
 			}
