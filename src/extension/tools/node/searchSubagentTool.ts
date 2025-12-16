@@ -5,11 +5,14 @@
 
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
+import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
+import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelTextPart } from '../../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, Range } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { SubagentToolCallingLoop } from '../../prompt/node/subagentLoop';
@@ -35,6 +38,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) { }
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISearchSubagentParams>, token: vscode.CancellationToken) {
 		const searchInstruction = [
@@ -86,10 +90,68 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			subagentResponse = `The search subagent request failed with this message:\n${loopResult.response.type}: ${loopResult.response.reason}`;
 		}
 
+		// Parse and hydrate code snippets from <final_answer> tags
+		const hydratedResponse = await this.parseFinalAnswerAndHydrate(subagentResponse, token);
+
 		// toolMetadata will be automatically included in exportAllPromptLogsAsJsonCommand
-		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(subagentResponse)]);
+		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(hydratedResponse)]);
 		result.toolMetadata = toolMetadata;
 		return result;
+	}
+
+	/**
+	 * Parse the path and line range subagent response and hydrate code snippets
+	 * @param response The subagent response containing paths and line ranges
+	 * @param token Cancellation token
+	 * @returns The response with actual code snippets appended to file paths
+	 */
+	private async parseFinalAnswerAndHydrate(response: string, token: vscode.CancellationToken): Promise<string> {
+		const lines = response.split('\n');
+
+		// Parse file:line-line format
+		const fileRangePattern = /^(.+):(\d+)-(\d+)$/;
+		const processedLines: string[] = [];
+
+		for (const line of lines) {
+			const trimmedLine = line.trim();
+
+			const match = trimmedLine.match(fileRangePattern);
+			if (!match) {
+				// I decided to keep non-matching lines as-is, since non-SFTed models sometimes return added info
+				processedLines.push(line);
+				continue;
+			}
+
+			const [, filePath, startLineStr, endLineStr] = match;
+			const startLine = parseInt(startLineStr, 10);
+			const endLine = parseInt(endLineStr, 10);
+
+			try {
+				const uri = URI.file(filePath);
+				const document = await this.workspaceService.openTextDocument(uri);
+				const snapshot = TextDocumentSnapshot.create(document);
+
+				const clampedStartLine = Math.max(1, Math.min(startLine, snapshot.lineCount));
+				const clampedEndLine = Math.max(1, Math.min(endLine, snapshot.lineCount));
+
+				const range = new Range(
+					clampedStartLine - 1, 0,
+					clampedEndLine - 1, Number.MAX_SAFE_INTEGER
+				);
+
+				const code = snapshot.getText(range);
+				processedLines.push(`File: \`${filePath}\`, lines ${clampedStartLine}-${clampedEndLine}:\n\`\`\`\n${code}\n\`\`\``);
+			} catch (err) {
+				// If we can't read the file, keep the original line
+				processedLines.push(`${trimmedLine} (unable to read file: ${err})`);
+			}
+
+			if (token.isCancellationRequested) {
+				break;
+			}
+		}
+
+		return processedLines.join('\n');
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ISearchSubagentParams>, _token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {

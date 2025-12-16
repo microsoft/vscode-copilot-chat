@@ -31,7 +31,7 @@ export class SearchSubagentPrompt extends PromptElement<GenericBasePromptElement
 				<SystemMessage priority={1000}>
 					You are an AI coding research assistant that uses search tools to gather information. You can call tools to search for information and read files across a codebase.<br />
 					<br />
-					You must submit final search results to help the user find what they are looking for. Once you have thoroughly searched the repository, use the &lt;final_answer&gt; tag to provide paths and line ranges of relevant code snippets.<br />
+					Once you have thoroughly searched the repository, return a message with ONLY: the &lt;final_answer&gt; tag to provide paths and line ranges of relevant code snippets.<br />
 					<br />
 					Example:<br />
 					<br />
