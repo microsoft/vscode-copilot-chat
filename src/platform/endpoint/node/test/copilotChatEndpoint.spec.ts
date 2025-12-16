@@ -393,7 +393,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(4000);
