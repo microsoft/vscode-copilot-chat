@@ -127,17 +127,6 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		);
 	}
 
-	async handleConfirmationRequestWithContext(stream: ChatResponseStream, request: ChatRequest, history: ChatContext['history']): Promise<{ request: ChatRequest; context?: ChatContext }> {
-		const findConfirmationRequested: (ChatRequest & { context?: ChatContext }) | undefined = request.acceptedConfirmationData?.find(ref => ref?.authPermissionPrompted);
-		if (!findConfirmationRequested) {
-			return { request, context: undefined };
-		}
-		const context = findConfirmationRequested.context;
-
-		const updatedRequest = await this.handleConfirmationRequest(stream, request, history);
-		return { request: updatedRequest, context };
-	}
-
 	async handleConfirmationRequest(stream: ChatResponseStream, request: ChatRequest, history: ChatContext['history']): Promise<ChatRequest> {
 		const findConfirmationRequested: ChatRequest | undefined = request.acceptedConfirmationData?.find(ref => ref?.authPermissionPrompted);
 		if (!findConfirmationRequested) {

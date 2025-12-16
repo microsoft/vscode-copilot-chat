@@ -76,9 +76,38 @@ export interface IAuthenticationService {
 	readonly permissiveGitHubSession: AuthenticationSession | undefined;
 
 	/**
-	 *
-	 * @param kind
-	 * @param options
+	 * Gets a GitHub session capable of calling GitHub APIs.
+	 * @param kind - The kind of session that you need. **Your choice here should be thoughtful.**
+	 * - 'permissive': You need a session that can access the user's private repositories or needs write access.
+	 * - 'any': You only need a session that can access public information about the user.
+	 * @param options - Options for getting the session.
+	 * @returns Promise<AuthenticationSession> - The requested authentication session.
+	 * @throws MinimalModeError - If kind is 'permissive' and the authentication service is in minimal mode.
+	 * @throws Error - If no session is acquired (user cancels).
+	 */
+	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+
+	/**
+	 * Gets a GitHub session capable of calling GitHub APIs.
+	 * @param kind - The kind of session that you need. **Your choice here should be thoughtful.**
+	 * - 'permissive': You need a session that can access the user's private repositories or needs write access.
+	 * - 'any': You only need a session that can access public information about the user.
+	 * @param options - Options for getting the session.
+	 * @returns Promise<AuthenticationSession> - The requested authentication session.
+	 * @throws MinimalModeError - If kind is 'permissive' and the authentication service is in minimal mode.
+	 * @throws Error - If no session is acquired (user cancels).
+	 */
+	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+
+	/**
+	 * Gets a GitHub session capable of calling GitHub APIs.
+	 * @param kind - The kind of session that you need. **Your choice here should be thoughtful.**
+	 * - 'permissive': You need a session that can access the user's private repositories or needs write access.
+	 * - 'any': You only need a session that can access public information about the user.
+	 * @param options - Options for getting the session.
+	 * @returns Promise<AuthenticationSession> - The requested authentication session. OR
+	 * @returns Promise<undefined> - If no session is available or kind is 'permissive' and the authentication service is in minimal mode.
+	 * @see {@link isMinimalMode} for more information about minimal mode.
 	 */
 	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
 
