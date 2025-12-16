@@ -136,7 +136,6 @@ export interface ILoggedPendingRequest {
 	postOptions?: OptionalChatRequestParams;
 	body?: IEndpointBody;
 	ignoreStatefulMarker?: boolean;
-	/** False if this is a non-exportable utility request (like model list fetch or title generation), defaults to true for conversational requests */
 	isConversationRequest?: boolean;
 }
 
@@ -182,7 +181,6 @@ export interface ILoggedChatMLRequest {
 	chatParams: ILoggedPendingRequest;
 	startTime: Date;
 	endTime: Date;
-	/** False if this is a non-exportable utility request (like model list fetch or title generation), defaults to true for conversational requests */
 	isConversationRequest?: boolean;
 }
 

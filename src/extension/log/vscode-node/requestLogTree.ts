@@ -420,7 +420,6 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			// Filter out utility requests (e.g., model list fetch, title generation) - only export conversation requests
-			// isConversationRequest defaults to true, so we include items where it's undefined or explicitly true
 			const exportableItems = allTreeItems.filter(item =>
 				item instanceof ChatPromptItem ||
 				(item instanceof ChatRequestItem && item.info.entry.isConversationRequest !== false)
