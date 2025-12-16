@@ -10,13 +10,13 @@ describe('errorMessage', () => {
 	describe('toErrorMessage', () => {
 		it('returns default message for null', () => {
 			const result = toErrorMessage(null);
-			// In test environment, l10n.t returns the key
-			expect(result).toBe('error.defaultMessage');
+			// In test environment, l10n.t returns the message itself
+			expect(result).toBe('An unknown error occurred. Please consult the log for more details.');
 		});
 
 		it('returns default message for undefined', () => {
 			const result = toErrorMessage(undefined);
-			expect(result).toBe('error.defaultMessage');
+			expect(result).toBe('An unknown error occurred. Please consult the log for more details.');
 		});
 
 		it('returns the string when error is a string', () => {
@@ -33,8 +33,8 @@ describe('errorMessage', () => {
 		it('handles array of errors and returns first error message', () => {
 			const errors = [new Error('First error'), new Error('Second error')];
 			const result = toErrorMessage(errors);
-			// In test environment, l10n.t returns the key
-			expect(result).toBe('error.moreErrors');
+			// In test environment, l10n.t returns the formatted message
+			expect(result).toBe('First error (2 errors in total)');
 		});
 
 		it('handles array with single error', () => {
@@ -67,8 +67,8 @@ describe('errorMessage', () => {
 			const error = new Error('Error with stack');
 			error.stack = 'Error: Error with stack\n  at someFunction (file.ts:10:5)';
 			const result = toErrorMessage(error, true);
-			// In test environment, l10n.t returns the key
-			expect(result).toBe('stackTrace.format');
+			// Now using template string format
+			expect(result).toBe('Error with stack: Error: Error with stack\n  at someFunction (file.ts:10:5)');
 		});
 
 		it('does not include stack trace in non-verbose mode', () => {
@@ -85,7 +85,7 @@ describe('errorMessage', () => {
 				stack: ['at line 1', 'at line 2', 'at line 3']
 			};
 			const result = toErrorMessage(error, true);
-			expect(result).toBe('stackTrace.format');
+			expect(result).toBe('Array stack error: at line 1\nat line 2\nat line 3');
 		});
 
 		it('handles Node.js system errors', () => {
