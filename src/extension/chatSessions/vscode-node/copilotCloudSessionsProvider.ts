@@ -17,6 +17,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DeferredPromise, retry } from '../../../util/vs/base/common/async';
+import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -176,32 +177,46 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
-		this._register(this._authenticationService.onDidAuthenticationChange(() => {
-			this.refresh();
-		}));
 
 		// Background refresh
 		getRepoId(this._gitService).then(async repoId => {
+			const telemetryObj: {
+				intervalMs?: number;
+				hasHistoricalSessions?: boolean;
+				isEmptyWindow: boolean;
+			} = {
+				isEmptyWindow: !vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0
+			};
 			if (repoId) {
 				const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false);
 				const hasHistoricalSessions = sessions.length > 0;
 				const intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
-				this.telemetry.sendTelemetryEvent('copilotCloudSessions.refreshIntervalSet', { microsoft: true, github: false }, { intervalMs: intervalMs.toString(), hasHistoricalSessions });
-				const interval = setInterval(async () => {
+				telemetryObj.intervalMs = intervalMs;
+				telemetryObj.hasHistoricalSessions = hasHistoricalSessions;
+				const intervalCallback = async () => {
 					// TODO: handle no auth token case more gracefully
 					if (!this._authenticationService.permissiveGitHubSession) {
 						return;
 					}
-					const sessions = await this._octoKitService.getAllSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
+					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`);
 					if (this.cachedSessionsSize !== sessions.length) {
 						this.refresh();
 					}
-				}, intervalMs);
+				};
+				let interval = setInterval(intervalCallback, intervalMs);
 				this._register(toDisposable(() => clearInterval(interval)));
-				this._register(this._authenticationService.onDidAuthenticationChange(() => {
-					this.refresh();
+				this._register(vscode.window.onDidChangeWindowState((e) => {
+					if (!e.active) {
+						clearInterval(interval);
+					} else if (!interval) {
+						interval = setInterval(intervalCallback, intervalMs);
+						this._register(toDisposable(() => clearInterval(interval)));
+					}
 				}));
 			}
+			const onDebouncedAuthRefresh = Event.debounce(this._authenticationService.onDidAuthenticationChange, () => { }, 500);
+			this._register(onDebouncedAuthRefresh(() => this.refresh()));
+			this.telemetry.sendTelemetryEvent('copilotCloudSessions.refreshInterval', { microsoft: true, github: false }, telemetryObj);
 		});
 	}
 
