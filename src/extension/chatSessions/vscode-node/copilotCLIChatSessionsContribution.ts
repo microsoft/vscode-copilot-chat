@@ -96,6 +96,7 @@ export class CopilotCLIWorktreeManager {
 	constructor(
 		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
 	isSupported() {
@@ -138,6 +139,7 @@ export class CopilotCLIWorktreeManager {
 			return undefined;
 		} catch (error) {
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
+			this.logService.error(error, 'Error creating worktree for isolation');
 			return undefined;
 		}
 	}
