@@ -131,8 +131,8 @@ class TestAuthService extends Disposable implements IAuthenticationService {
 	private readonly _onDidAdoAuthenticationChange = this._register(new Emitter<void>());
 	readonly onDidAdoAuthenticationChange = this._onDidAdoAuthenticationChange.event;
 
-	async getGitHubSession(kind: 'permissive' | 'any', options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		return undefined;
+	async getGitHubSession(kind: 'permissive' | 'any', options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession> {
+		throw new Error('Method not implemented.');
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
