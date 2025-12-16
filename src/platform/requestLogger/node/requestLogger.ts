@@ -136,6 +136,8 @@ export interface ILoggedPendingRequest {
 	postOptions?: OptionalChatRequestParams;
 	body?: IEndpointBody;
 	ignoreStatefulMarker?: boolean;
+	/** False if this is a non-exportable utility request (like model list fetch or title generation), defaults to true for conversational requests */
+	isConversationRequest?: boolean;
 }
 
 export type LoggedInfo = ILoggedElementInfo | ILoggedRequestInfo | ILoggedToolCall;
@@ -180,6 +182,8 @@ export interface ILoggedChatMLRequest {
 	chatParams: ILoggedPendingRequest;
 	startTime: Date;
 	endTime: Date;
+	/** False if this is a non-exportable utility request (like model list fetch or title generation), defaults to true for conversational requests */
+	isConversationRequest?: boolean;
 }
 
 export interface ILoggedChatMLSuccessRequest extends ILoggedChatMLRequest {
@@ -206,6 +210,8 @@ export interface IMarkdownContentRequest {
 	icon: ThemeIcon | undefined;
 	debugName: string;
 	markdownContent: string;
+	/** False if this is a non-exportable utility request (like model list fetch or title generation), defaults to true for conversational requests */
+	isConversationRequest?: boolean;
 }
 
 export type LoggedRequest = (
@@ -278,7 +284,8 @@ class AbstractPendingLoggedRequest {
 			chatEndpoint: this._chatEndpoint,
 			chatParams: this._chatParams,
 			startTime: this._time,
-			endTime: new Date()
+			endTime: new Date(),
+			isConversationRequest: this._chatParams.isConversationRequest
 		});
 	}
 }
@@ -304,6 +311,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				startTime: this._time,
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
+				isConversationRequest: this._chatParams.isConversationRequest,
 				result,
 				deltas
 			});
@@ -316,6 +324,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				startTime: this._time,
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
+				isConversationRequest: this._chatParams.isConversationRequest,
 				result,
 			});
 		}

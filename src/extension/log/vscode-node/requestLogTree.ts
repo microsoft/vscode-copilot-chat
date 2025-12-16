@@ -419,27 +419,11 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				return;
 			}
 
-			// Whitelist of exportable debugName patterns
-			const isExportable = (debugName: string): boolean => {
-				// Include main conversation requests (location/intent format)
-				if (debugName.includes('/')) {
-					return true;
-				}
-
-				// Include specific API wrapper calls and BYOK providers
-				const exportableNames = [
-					'copilotLanguageModelWrapper',  // Standard LM wrapper (covers most BYOK providers: OpenAI, xAI, Ollama, OpenRouter, CustomOAI, Azure)
-					'GeminiNativeBYOK',             // Gemini BYOK provider
-					'AnthropicBYOK',                 // Anthropic BYOK provider
-					'agentLMServer',                // Agent language model server
-					'oaiLMServer',                  // OpenAI language model server
-				];
-				return exportableNames.some(name => debugName.startsWith(name));
-			};
-
+			// Filter out utility requests (e.g., model list fetch, title generation) - only export conversation requests
+			// isConversationRequest defaults to true, so we include items where it's undefined or explicitly true
 			const exportableItems = allTreeItems.filter(item =>
 				item instanceof ChatPromptItem ||
-				(item instanceof ChatRequestItem && isExportable(item.info.entry.debugName))
+				(item instanceof ChatRequestItem && item.info.entry.isConversationRequest !== false)
 			);
 
 			if (exportableItems.length === 0) {

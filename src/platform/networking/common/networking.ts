@@ -160,6 +160,8 @@ export interface IMakeChatRequestOptions {
 	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
 	/** Indicates if the request was user-initiated */
 	userInitiatedRequest?: boolean;
+	/** False if this is a non-exportable utility request (like model list fetch or title generation), defaults to true for conversational requests */
+	isConversationRequest?: boolean;
 	/** (CAPI-only) Optional telemetry properties for analytics */
 	telemetryProperties?: IChatRequestTelemetryProperties;
 	/** Enable retrying the request when it was filtered due to snippy. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
