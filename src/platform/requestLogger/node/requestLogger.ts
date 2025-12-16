@@ -208,7 +208,6 @@ export interface IMarkdownContentRequest {
 	icon: ThemeIcon | undefined;
 	debugName: string;
 	markdownContent: string;
-	/** False if this is a non-exportable utility request (like model list fetch or title generation), defaults to true for conversational requests */
 	isConversationRequest?: boolean;
 }
 
