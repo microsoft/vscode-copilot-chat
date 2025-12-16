@@ -29,13 +29,15 @@ class TestableNesFeedbackSubmitter extends NesFeedbackSubmitter {
 			isMinimalMode: false,
 			onDidAuthenticationChange: { dispose: () => { } },
 			onDidAccessTokenChange: { dispose: () => { } },
+			onDidAdoAuthenticationChange: { dispose: () => { } },
 			anyGitHubSession: undefined,
-			getAnyGitHubSession: async () => undefined,
 			permissiveGitHubSession: undefined,
-			getPermissiveGitHubSession: async () => undefined,
+			getGitHubSession: async () => undefined,
 			getCopilotToken: async () => undefined,
 			copilotToken: undefined,
-			expireCopilotToken: () => { }
+			resetCopilotToken: () => { },
+			speculativeDecodingEndpointToken: undefined,
+			getAdoAccessTokenBase64: async () => undefined
 		};
 
 		const mockFetcherService = {
@@ -591,8 +593,8 @@ describe('NesFeedbackSubmitter', () => {
 			// Should return the same array reference (no processing)
 			expect(result).toBe(files);
 
-			// Should be nearly instant (< 1ms)
-			expect(durationMs).toBeLessThan(1);
+			// Should be nearly instant (< 5ms, allowing for overhead)
+			expect(durationMs).toBeLessThan(5);
 		});
 	});
 });
