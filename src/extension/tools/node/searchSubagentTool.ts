@@ -80,7 +80,8 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		// All nested tool calls are already logged by ToolCallingLoop.logToolResult()
 		const toolMetadata = {
 			query: options.input.query,
-			description: options.input.description
+			description: options.input.description,
+			details: options.input.details
 		};
 
 		let subagentResponse = '';
