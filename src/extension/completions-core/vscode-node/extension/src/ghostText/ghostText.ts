@@ -31,7 +31,7 @@ const postInsertCmdName = '_github.copilot.ghostTextPostInsert2';
 
 export class GhostTextProvider implements InlineCompletionItemProvider {
 
-	private ghostText: GhostText;
+	private readonly ghostText: GhostText;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
