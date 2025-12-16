@@ -208,7 +208,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					if (!this._authenticationService.permissiveGitHubSession) {
 						return;
 					}
-					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`);
+					try {
+						const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`);
+						if (this.cachedSessionsSize !== sessions.length) {
+							this.refresh();
+						}
+					} catch (e) {
+						logService.error(`Error during background refresh: ${e}`);
+					}
+					
+					scheduler.schedule();
 					if (this.cachedSessionsSize !== sessions.length) {
 						this.refresh();
 					}
