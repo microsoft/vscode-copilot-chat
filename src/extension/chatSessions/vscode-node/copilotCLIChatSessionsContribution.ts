@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IGitService } from '../../../platform/git/common/gitService';
+import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
@@ -527,8 +527,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// Invoked from a 'normal' chat or 'cloud button' without CLI session context
 				// Or cases such as delegating from Regular chat to CLI chat
 				// Handle confirmation data
-				const response = await this.generateConfirmationResponseIfNeeded(request, context, stream, token);
-				return response || {};
+				return await this.handlePushConfirmationData(request, context, stream, token, currentRepository);
 			}
 
 			const isUntitled = chatSessionContext.isUntitled;
@@ -800,19 +799,19 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return {};
 	}
 
-	private async generateConfirmationResponseIfNeeded(
+	private async handlePushConfirmationData(
 		request: vscode.ChatRequest,
 		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
-		token: vscode.CancellationToken
-	) {
+		token: vscode.CancellationToken,
+		currentRepository: RepoContext | undefined
+	): Promise<vscode.ChatResult | void> {
 		// Check if this is a confirmation response
 		const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
 		if (confirmationResults.length > 0) {
 			return await this.handleWorktreeConfirmationResponse(request, confirmationResults, context, stream, token);
 		}
 
-		const currentRepository = this.gitService.activeRepository?.get();
 		if (!currentRepository) {
 			// No isolation, proceed without worktree
 			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, false, stream, token);
@@ -823,9 +822,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		if (!hasUncommittedChanges) {
 			// No uncommitted changes, create worktree and proceed
 			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, true, stream, token);
-		} else {
-			return this.generateUncommittedChangesConfirmation(request, context, stream, token);
 		}
+		return this.generateUncommittedChangesConfirmation(request, context, stream, token);
 	}
 
 	private generateUncommittedChangesConfirmation(
