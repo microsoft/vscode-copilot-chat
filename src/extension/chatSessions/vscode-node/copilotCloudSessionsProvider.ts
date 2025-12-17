@@ -14,8 +14,10 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { DeferredPromise, retry } from '../../../util/vs/base/common/async';
+import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
+import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -48,7 +50,6 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
-const BACKGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
@@ -173,24 +174,89 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IGithubRepositoryService private readonly _githubRepositoryService: IGithubRepositoryService,
 		@IChatDelegationSummaryService private readonly _chatDelegationSummaryService: IChatDelegationSummaryService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
-		const interval = setInterval(async () => {
-			const repoId = await getRepoId(this._gitService);
-			// TODO: handle no auth token case more gracefully
-			if (!this._authenticationService.permissiveGitHubSession) {
-				return;
+
+		// Background refresh
+		getRepoId(this._gitService).then(async repoId => {
+			const telemetryObj: {
+				intervalMs?: number;
+				hasHistoricalSessions?: boolean;
+				error?: string;
+				isEmptyWindow: boolean;
+			} = {
+				isEmptyWindow: !vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0
+			};
+			if (repoId) {
+				let intervalMs: number;
+				let hasHistoricalSessions: boolean;
+				try {
+					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false);
+					hasHistoricalSessions = sessions.length > 0;
+					intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
+				} catch (e) {
+					this.logService.error(`Error during background refresh setup: ${e instanceof Error ? e.message : String(e)}`);
+					hasHistoricalSessions = false;
+					intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
+					telemetryObj.error = e instanceof Error ? e.message : String(e);
+				}
+				telemetryObj.intervalMs = intervalMs;
+				telemetryObj.hasHistoricalSessions = hasHistoricalSessions;
+				const schedulerCallback = async () => {
+					// TODO: handle no auth token case more gracefully
+					if (!this._authenticationService.permissiveGitHubSession) {
+						return;
+					}
+					let sessions = [];
+					try {
+						sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`);
+						if (this.cachedSessionsSize !== sessions.length) {
+							this.refresh();
+						}
+					} catch (e) {
+						logService.error(`Error during background refresh: ${e}`);
+					}
+					scheduler.schedule();
+				};
+				let lastRefreshedAt = 0;
+				const scheduler = this._register(new RunOnceScheduler(() => {
+					lastRefreshedAt = Date.now();
+					schedulerCallback();
+				}, intervalMs));
+				scheduler.schedule();
+				this._register(vscode.window.onDidChangeWindowState((e) => {
+					if (!e.active) {
+						scheduler.cancel();
+					} else if (!scheduler.isScheduled()) {
+						scheduler.schedule(Math.max(0, intervalMs - (Date.now() - lastRefreshedAt)));
+					}
+				}));
+
 			}
-			const sessions = await this._octoKitService.getAllOpenSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
-			if (this.cachedSessionsSize !== sessions.length) {
-				this.refresh();
-			}
-		}, BACKGROUND_REFRESH_INTERVAL_MS);
-		this._register(toDisposable(() => clearInterval(interval)));
-		this._register(this._authenticationService.onDidAuthenticationChange(() => {
-			this.refresh();
-		}));
+			const onDebouncedAuthRefresh = Event.debounce(this._authenticationService.onDidAuthenticationChange, () => { }, 500);
+			this._register(onDebouncedAuthRefresh(() => this.refresh()));
+			this.telemetry.sendTelemetryEvent('copilotCloudSessions.refreshInterval', { microsoft: true, github: false }, telemetryObj);
+		});
 	}
+
+	private getRefreshIntervalTime(hasHistoricalSessions: boolean): number {
+		// Check for experiment overrides
+		const expRefreshInterval = this._experimentationService.getTreatmentVariable<number>('copilotCloudSessions.refreshInterval');
+		if (expRefreshInterval !== undefined) {
+			return expRefreshInterval;
+		}
+
+		// Default intervals
+		const fiveMinInterval = 5 * 60 * 1000; // 5 minutes
+		const tenMinInterval = 10 * 60 * 1000; // 10 minutes
+		if (hasHistoricalSessions) {
+			return fiveMinInterval;
+		} else {
+			return tenMinInterval;
+		}
+	}
+
 
 	public refresh(): void {
 		this.cachedSessionItems = undefined;
@@ -355,7 +421,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			if (!this._authenticationService.permissiveGitHubSession) {
 				return [];
 			}
-			const sessions = await this._octoKitService.getAllOpenSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
+
+			// Make sure if it's not a github repo we don't show any sessions
+			if (!repoId && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+				return [];
+			}
+			const sessions = await this._octoKitService.getAllSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
 			this.cachedSessionsSize = sessions.length;
 
 			// Group sessions by resource_id and keep only the latest per resource_id
