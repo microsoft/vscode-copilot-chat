@@ -16,7 +16,7 @@ import { FileChunkAndScore } from '../../../chunking/common/chunk';
 import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
-import { ApiClient } from './api';
+import { ApiClient } from './externalIngestApi';
 
 
 // Create a shared API client with throttling (target quota usage of 80)
