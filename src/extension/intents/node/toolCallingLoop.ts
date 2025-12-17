@@ -170,6 +170,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 	}
 
+	protected exitOnSearchSubagentCall = true;
+
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
@@ -192,6 +194,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				};
 
 				this.toolCallRounds.push(result.round);
+
+				// Check if search_subagent tool was called, and terminate if so
+				if (this.exitOnSearchSubagentCall && result.round.toolCalls.some(call => call.name === ToolName.SearchSubagent)) {
+					console.log('Terminating tool calling loop due to search_subagent tool call.');
+				}
+
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 					lastResult = lastResult;
 					break;
