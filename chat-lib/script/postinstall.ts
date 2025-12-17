@@ -67,7 +67,6 @@ async function main() {
 		...vendoredTiktokenFiles,
 		...treeSitterGrammars.map(grammar => `${wasm}/${grammar}.wasm`),
 		`${wasm}/tree-sitter.wasm`,
-		path.join(require.resolve('@github/blackbird-external-ingest-utils'), 'pkg', 'nodejs', 'external_ingest_utils_bg.wasm'),
 	], 'dist');
 
 }
