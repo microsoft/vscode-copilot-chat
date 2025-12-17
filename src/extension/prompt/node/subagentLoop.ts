@@ -48,6 +48,7 @@ export class SubagentToolCallingLoop extends ToolCallingLoop<ISubagentToolCallin
 		@ITelemetryService telemetryService: ITelemetryService,
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
+		this.exitOnSearchSubagentCall = false; // Disable automatic exit on search subagent call
 	}
 
 	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): IBuildPromptContext {
