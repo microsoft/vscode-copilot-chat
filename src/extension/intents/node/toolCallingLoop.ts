@@ -170,7 +170,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 	}
 
-	protected exitOnSearchSubagentCall = true;
+	protected exitOnSearchSubagentCall = false;
 
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {
 		let i = 0;
