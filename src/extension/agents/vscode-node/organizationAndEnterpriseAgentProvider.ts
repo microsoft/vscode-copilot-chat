@@ -157,6 +157,9 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			const agentsByOrg = new Map<string, Map<string, CustomAgentListItem>>();
 			let hadAnyFetchErrors = false;
 
+			// Track unique agents globally to dedupe enterprise agents that appear across multiple orgs
+			const seenAgents = new Map<string, CustomAgentListItem>();
+
 			for (const org of organizations) {
 				try {
 					const agentsForOrg = new Map<string, CustomAgentListItem>();
@@ -173,6 +176,15 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 					const repoName = repos[0];
 					const agents = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgents(org, repoName, internalOptions));
 					for (const agent of agents) {
+						// Create unique key to identify agents (enterprise agents may appear in multiple orgs)
+						const agentKey = `${agent.name}@${agent.version}`;
+
+						// Skip if we've already seen this agent (dedupe enterprise agents)
+						if (seenAgents.has(agentKey)) {
+							continue;
+						}
+
+						seenAgents.set(agentKey, agent);
 						agentsForOrg.set(agent.name, agent);
 					}
 					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName}`);
