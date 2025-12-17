@@ -448,8 +448,8 @@ export class ExternalIngestIndex extends Disposable {
 	}
 
 	private async getGithubAuthToken(): Promise<string | undefined> {
-		return (await this._authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken
-			?? (await this._authenticationService.getAnyGitHubSession({ silent: true }))?.accessToken;
+		return (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
+			?? (await this._authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
 	}
 
 	private getFilesetName(workspaceRoot: URI): string {
