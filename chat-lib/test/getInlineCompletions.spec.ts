@@ -28,6 +28,8 @@ import { ChatRequest } from '../src/_internal/vscodeTypes';
 import { createInlineCompletionsProvider, IActionItem, IAuthenticationService, ICompletionsStatusChangedEvent, ICompletionsTextDocumentManager, IEndpointProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
 
 class TestFetcher implements IFetcher {
+	private _fetched = new Map<string, number>();
+
 	constructor(private readonly responses: Record<string, string>) { }
 
 	getUserAgentLibrary(): string {
@@ -36,6 +38,7 @@ class TestFetcher implements IFetcher {
 
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
 		const uri = URI.parse(url);
+		this._markFetched(uri.path);
 		const responseText = this.responses[uri.path];
 
 		const headers = new class implements IHeaders {
@@ -57,6 +60,15 @@ class TestFetcher implements IFetcher {
 			async () => stream.Readable.from([responseText || '']),
 			'node-http'
 		);
+	}
+
+	private _markFetched(urlPath: string): void {
+		const count = this.fetchCount(urlPath);
+		this._fetched.set(urlPath, count + 1);
+	}
+
+	fetchCount(urlPath: string): number {
+		return this._fetched.get(urlPath) || 0;
 	}
 
 	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
@@ -119,12 +131,8 @@ class TestAuthService extends Disposable implements IAuthenticationService {
 	private readonly _onDidAdoAuthenticationChange = this._register(new Emitter<void>());
 	readonly onDidAdoAuthenticationChange = this._onDidAdoAuthenticationChange.event;
 
-	async getAnyGitHubSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		return undefined;
-	}
-
-	async getPermissiveGitHubSession(options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		return undefined;
+	async getGitHubSession(kind: 'permissive' | 'any', options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession> {
+		throw new Error('Method not implemented.');
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
@@ -199,9 +207,14 @@ class NullLogTarget implements ILogTarget {
 }
 
 describe('getInlineCompletions', () => {
-	it('should return completions for a document and position', async () => {
-		const provider = createInlineCompletionsProvider({
-			fetcher: new TestFetcher({ '/v1/engines/gpt-41-copilot/completions': await readFile(join(__dirname, 'getInlineCompletions.reply.txt'), 'utf8') }),
+	const completionsPath = '/v1/engines/gpt-41-copilot/completions';
+	let fetcher: TestFetcher;
+
+	async function getCompletionsProvider() {
+		fetcher = new TestFetcher({ [completionsPath]: await readFile(join(__dirname, 'getInlineCompletions.reply.txt'), 'utf8') });
+
+		return createInlineCompletionsProvider({
+			fetcher,
 			authService: new TestAuthService(),
 			telemetrySender: new TestTelemetrySender(),
 			logTarget: new NullLogTarget(),
@@ -225,6 +238,10 @@ describe('getInlineCompletions', () => {
 			},
 			endpointProvider: new TestEndpointProvider(),
 		});
+	}
+
+	it('should return completions for a document and position', async () => {
+		const provider = await getCompletionsProvider();
 		const doc = createTextDocument('file:///test.txt', 'javascript', 1, 'function main() {\n\n}\n');
 
 		const result = await provider.getInlineCompletions(doc, { line: 1, character: 0 });
@@ -233,5 +250,19 @@ describe('getInlineCompletions', () => {
 		expect(result.length).toBe(1);
 		expect(result[0].resultType).toBe(ResultType.Async);
 		expect(result[0].displayText).toBe('  console.log("Hello, World!");');
+	});
+
+	it('makes any pending speculative requests when a completion is shown', async () => {
+		const provider = await getCompletionsProvider();
+		const doc = createTextDocument('file:///test.txt', 'javascript', 1, 'function main() {\n\n}\n');
+
+		const result = await provider.getInlineCompletions(doc, { line: 1, character: 0 });
+
+		assert(result);
+		expect(result.length).toBe(1);
+
+		await provider.inlineCompletionShown(result[0].clientCompletionId);
+
+		expect(fetcher.fetchCount(completionsPath)).toBe(2);
 	});
 });

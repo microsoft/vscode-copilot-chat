@@ -239,7 +239,7 @@ export class RemoteContentExclusion implements IDisposable {
 		this._ignoreGlobResultCache.clear();
 		const startTime = Date.now();
 		const capiClientService = this._capiClientService;
-		const ghToken = (await this._authService.getAnyGitHubSession({ silent: true }))?.accessToken;
+		const ghToken = (await this._authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const remoteFetchUrls = Array.from(this._contentExclusionCache.keys());
 		const updateRulesForRepos = async (reposToFetch: string[]) => {
 

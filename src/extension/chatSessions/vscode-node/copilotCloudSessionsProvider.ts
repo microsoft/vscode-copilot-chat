@@ -7,6 +7,7 @@ import MarkdownIt from 'markdown-it';
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
+import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
@@ -15,7 +16,8 @@ import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/com
 import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { DeferredPromise, retry } from '../../../util/vs/base/common/async';
+import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
+import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -48,7 +50,6 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
-const BACKGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
@@ -173,23 +174,87 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IGithubRepositoryService private readonly _githubRepositoryService: IGithubRepositoryService,
 		@IChatDelegationSummaryService private readonly _chatDelegationSummaryService: IChatDelegationSummaryService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
-		const interval = setInterval(async () => {
-			const repoId = await getRepoId(this._gitService);
-			// TODO: handle no auth token case more gracefully
-			if (!this._authenticationService.permissiveGitHubSession) {
-				return;
+
+		// Background refresh
+		getRepoId(this._gitService).then(async repoId => {
+			const telemetryObj: {
+				intervalMs?: number;
+				hasHistoricalSessions?: boolean;
+				error?: string;
+				isEmptyWindow: boolean;
+			} = {
+				isEmptyWindow: !vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0
+			};
+			if (repoId) {
+				let intervalMs: number;
+				let hasHistoricalSessions: boolean;
+				try {
+					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false);
+					hasHistoricalSessions = sessions.length > 0;
+					intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
+				} catch (e) {
+					this.logService.error(`Error during background refresh setup: ${e instanceof Error ? e.message : String(e)}`);
+					hasHistoricalSessions = false;
+					intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
+					telemetryObj.error = e instanceof Error ? e.message : String(e);
+				}
+				telemetryObj.intervalMs = intervalMs;
+				telemetryObj.hasHistoricalSessions = hasHistoricalSessions;
+				const schedulerCallback = async () => {
+					// TODO: handle no auth token case more gracefully
+					if (!this._authenticationService.permissiveGitHubSession) {
+						return;
+					}
+					let sessions = [];
+					try {
+						sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`);
+						if (this.cachedSessionsSize !== sessions.length) {
+							this.refresh();
+						}
+					} catch (e) {
+						logService.error(`Error during background refresh: ${e}`);
+					}
+					scheduler.schedule();
+				};
+				let lastRefreshedAt = 0;
+				const scheduler = this._register(new RunOnceScheduler(() => {
+					lastRefreshedAt = Date.now();
+					schedulerCallback();
+				}, intervalMs));
+				scheduler.schedule();
+				this._register(vscode.window.onDidChangeWindowState((e) => {
+					if (!e.active) {
+						scheduler.cancel();
+					} else if (!scheduler.isScheduled()) {
+						scheduler.schedule(Math.max(0, intervalMs - (Date.now() - lastRefreshedAt)));
+					}
+				}));
+
 			}
-			const sessions = await this._octoKitService.getAllOpenSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
-			if (this.cachedSessionsSize !== sessions.length) {
-				this.refresh();
-			}
-		}, BACKGROUND_REFRESH_INTERVAL_MS);
-		this._register(toDisposable(() => clearInterval(interval)));
-		this._register(this._authenticationService.onDidAuthenticationChange(() => {
-			this.refresh();
-		}));
+			const onDebouncedAuthRefresh = Event.debounce(this._authenticationService.onDidAuthenticationChange, () => { }, 500);
+			this._register(onDebouncedAuthRefresh(() => this.refresh()));
+			this.telemetry.sendTelemetryEvent('copilotCloudSessions.refreshInterval', { microsoft: true, github: false }, telemetryObj);
+		});
+	}
+
+	private getRefreshIntervalTime(hasHistoricalSessions: boolean): number {
+		// Check for experiment overrides
+		const expRefreshInterval = this._experimentationService.getTreatmentVariable<number>('copilotCloudSessions.refreshInterval');
+		if (expRefreshInterval !== undefined) {
+			return expRefreshInterval;
+		}
+
+		// Default intervals
+		const fiveMinInterval = 5 * 60 * 1000; // 5 minutes
+		const tenMinInterval = 10 * 60 * 1000; // 10 minutes
+		if (hasHistoricalSessions) {
+			return fiveMinInterval;
+		} else {
+			return tenMinInterval;
+		}
 	}
 
 	public refresh(): void {
@@ -276,20 +341,26 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
+		this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions Start');
 		const repoId = await getRepoId(this._gitService);
 		if (!repoId) {
+			this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions No Repo Id');
 			return { optionGroups: [] };
 		}
 
 		// TODO: handle no auth token case more gracefully
 		if (!this._authenticationService.permissiveGitHubSession) {
+			this.logService.trace('[copilotCloudSessionsProvider#provideChatSessionProviderOptions] No Auth Token');
 			return { optionGroups: [] };
 		}
 		try {
 			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true });
 			if (customAgents.length === 0) {
+				this.logService.trace('[copilotCloudSessionsProvider#provideChatSessionProviderOptions] No Custom Agents');
 				return { optionGroups: [] };
 			}
+
+			this.logService.trace(`[copilotCloudSessionsProvider#provideChatSessionProviderOptions] ${JSON.stringify(customAgents, undefined, 2)}`);
 
 			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 				{ id: DEFAULT_AGENT_ID, name: vscode.l10n.t('Agent') },
@@ -309,7 +380,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				]
 			};
 		} catch (error) {
-			this.logService.error(`Error fetching custom agents: ${error}`);
+			this.logService.error(`[copilotCloudSessionsProvider#provideChatSessionProviderOptions] Error fetching custom agents: ${error}`);
 			return { optionGroups: [] };
 		}
 	}
@@ -344,7 +415,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			if (!this._authenticationService.permissiveGitHubSession) {
 				return [];
 			}
-			const sessions = await this._octoKitService.getAllOpenSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
+
+			// Make sure if it's not a github repo we don't show any sessions
+			if (!repoId && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+				return [];
+			}
+			const sessions = await this._octoKitService.getAllSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined);
 			this.cachedSessionsSize = sessions.length;
 
 			// Group sessions by resource_id and keep only the latest per resource_id
@@ -836,7 +912,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		} else {
 			// Delegated flow
 			// NOTE: VS Code will now close the parent/source chat in most cases.
-			stream.markdown(vscode.l10n.t('Cloud Agent has begun working on your request. Follow its progress in the Agents View and associated pull request.'));
+			stream.markdown(vscode.l10n.t('A cloud agent has begun working on your request. Follow its progress in the sessions list and associated pull request.'));
 		}
 
 		// Return this for external callers, eg: CLI
@@ -875,7 +951,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (selection.includes(this.AUTHORIZE.toUpperCase())) {
 			stream.progress(vscode.l10n.t('Authorizing'));
 			try {
-				await this._authenticationService.getPermissiveGitHubSession({ createIfNone: true, silent: false });
+				await this._authenticationService.getGitHubSession('permissive', { createIfNone: true });
 				if (!this._authenticationService.permissiveGitHubSession) {
 					throw new Error('Failed to obtain permissive GitHub session');
 				}

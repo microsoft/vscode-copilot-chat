@@ -32,7 +32,7 @@ export class BasicCodeSearchAuthenticationService implements ICodeSearchAuthenti
 			return;
 		}
 
-		await this._authenticationService.getAnyGitHubSession({ createIfNone: true });
+		await this._authenticationService.getGitHubSession('any', { createIfNone: true });
 	}
 
 	async tryReauthenticating(remoteInfo: ResolvedRepoRemoteInfo | undefined): Promise<void> {
@@ -41,7 +41,7 @@ export class BasicCodeSearchAuthenticationService implements ICodeSearchAuthenti
 			return;
 		}
 
-		await this._authenticationService.getPermissiveGitHubSession({ createIfNone: true });
+		await this._authenticationService.getGitHubSession('permissive', { createIfNone: true });
 	}
 
 	async promptForExpandedLocalIndexing(fileCount: number): Promise<boolean> {

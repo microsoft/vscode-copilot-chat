@@ -2269,6 +2269,11 @@
 				"title": "%github.copilot.command.closeChatSessionPullRequest.title%"
 			},
 			{
+				"command": "github.copilot.cloud.sessions.installPRExtension",
+				"title": "%github.copilot.command.installPRExtension.title%",
+				"icon": "$(extensions)"
+			},
+			{
 				"command": "github.copilot.chat.openSuggestionsPanel",
 				"title": "Open Completions Panel",
 				"enablement": "github.copilot.extensionUnification.activated && !isWeb",
@@ -3227,6 +3232,15 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.alternateGptPrompt.enabled%"
+					},
+					"github.copilot.chat.alternateGeminiModelFPrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental",
+							"onExp"
+						],
+						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
@@ -4192,6 +4206,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.cloud.sessions.installPRExtension",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 					"when": "false"
 				},
@@ -4525,6 +4543,13 @@
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 					"when": "chatSessionType == copilot-cloud-agent",
 					"group": "context"
+				}
+			],
+			"chat/multiDiff/context": [
+				{
+					"command": "github.copilot.cloud.sessions.installPRExtension",
+					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
+					"group": "inline@1"
 				}
 			]
 		},

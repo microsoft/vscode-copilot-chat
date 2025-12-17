@@ -206,8 +206,6 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 
 		const patch = lineEdit.humanReadablePatch(text.getLines());
 
-		logContext.addLog(`Provided inline completion item:`);
-		logContext.addCodeblockToLog(patch);
 		logContext.setResult(patch);
 	}
 }

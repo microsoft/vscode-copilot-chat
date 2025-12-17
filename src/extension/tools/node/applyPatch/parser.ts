@@ -42,6 +42,14 @@ const CHUNK_DELIMITER = '@@';
 // match in conservative cases.
 const EDIT_DISTANCE_ALLOWANCE_PER_LINE = 0.34;
 
+
+// GPT models have some tendency to forget to escape \t, \r, \n, and such in
+// their edits. Generally we're somewhat aggressive about normalizing these
+// when they lead a line. The following are a list of language/file extensions
+// where we don't do this because they are common operators,
+// such as `\textbf{}` in LaTeX.
+const AVOID_EXPLICIT_TABS_REGEX = /\.(tex|latex|sty|cls|bib|bst|ins)$/i;
+
 // -----------------------------------------------------------------------------
 // Types & Models
 // -----------------------------------------------------------------------------
@@ -261,6 +269,7 @@ export class Parser {
 	private parse_update_file(path: string, text: string, targetIndentStyle: IGuessedIndentation): PatchAction {
 		const action: PatchAction = { type: ActionType.UPDATE, chunks: [] };
 		const fileLines = text.split('\n');
+		const replaceExplicitTabsByDefault = !AVOID_EXPLICIT_TABS_REGEX.test(path.trimEnd());
 		let index = 0;
 
 		while (
@@ -399,8 +408,13 @@ export class Parser {
 			);
 
 			const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
+			const normalizedNextChunkContext = (match.fuzz & Fuzz.NormalizedExplicitTab)
+				? replace_explicit_tabs(nextSection.nextChunkContext[0])
+				: (match.fuzz & Fuzz.NormalizedExplicitNL)
+					? replace_explicit_nl(nextSection.nextChunkContext[0])
+					: nextSection.nextChunkContext[0];
 			const srcLineIndent = nextSection.nextChunkContext && nextSection.nextChunkContext.length > 0 ?
-				computeIndentLevel2(replace_explicit_tabs(replace_explicit_nl(nextSection.nextChunkContext[0])), srcIndentStyle.tabSize) : 0;
+				computeIndentLevel2(normalizedNextChunkContext, srcIndentStyle.tabSize) : 0;
 			const additionalIndentation = getIndentationChar(targetIndentStyle).repeat(Math.max(0, matchedLineIndent - srcLineIndent));
 
 			for (const ch of nextSection.chunks) {
@@ -410,7 +424,10 @@ export class Parser {
 					ch.delLines = ch.delLines.map(replace_explicit_nl);
 				}
 
-				ch.insLines = ch.insLines.map(replace_explicit_tabs);
+				if (replaceExplicitTabsByDefault || (match.fuzz & Fuzz.NormalizedExplicitTab)) {
+					ch.insLines = ch.insLines.map(replace_explicit_tabs);
+				}
+
 				ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
 
 				if (match.fuzz & Fuzz.NormalizedExplicitTab) {

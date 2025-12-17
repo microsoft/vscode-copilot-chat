@@ -7,9 +7,6 @@ import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/commo
 import { basename } from '../../../util/vs/base/common/path';
 
 export class GhostTextContext extends InlineEditRequestLogContext {
-	override get includeInLogTree(): boolean {
-		return true;
-	}
 	override getDebugName(): string {
 		return `Ghost | ${basename(this.filePath)} (v${this.version})`;
 	}

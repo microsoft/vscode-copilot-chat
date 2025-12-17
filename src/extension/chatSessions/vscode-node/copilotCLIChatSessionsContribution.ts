@@ -6,10 +6,10 @@
 import { Attachment, SweCustomAgent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler, Uri } from 'vscode';
+import { ChatExtendedRequestHandler, Uri, workspace } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IGitService } from '../../../platform/git/common/gitService';
+import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
@@ -52,7 +52,7 @@ function getLockedIsolationOption(name: string): vscode.ChatSessionProviderOptio
 		name,
 		description: vscode.l10n.t('Using worktree for this session'),
 		locked: true,
-		icon: new vscode.ThemeIcon('git-branch')
+		icon: new vscode.ThemeIcon('worktree')
 	};
 }
 
@@ -96,6 +96,7 @@ export class CopilotCLIWorktreeManager {
 	constructor(
 		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
 	isSupported() {
@@ -127,7 +128,10 @@ export class CopilotCLIWorktreeManager {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 				return undefined;
 			}
-			const worktreePath = await this.gitService.createWorktree(repository.rootUri);
+
+			const branchPrefix = workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
+			const branch = `${branchPrefix}worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+			const worktreePath = await this.gitService.createWorktree(repository.rootUri, { branch });
 			if (worktreePath) {
 				return worktreePath;
 			}
@@ -135,6 +139,7 @@ export class CopilotCLIWorktreeManager {
 			return undefined;
 		} catch (error) {
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
+			this.logService.error(error, 'Error creating worktree for isolation');
 			return undefined;
 		}
 	}
@@ -262,18 +267,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.id);
 
 		const label = session.label;
-		const tooltipLines = [vscode.l10n.t(`Background agent session: {0}`, label)];
 		let badge: vscode.MarkdownString | undefined;
 		let changes: vscode.ChatSessionItem['changes'] | undefined;
 
 		if (worktreePath && worktreeRelativePath) {
 			const worktreeUri = Uri.file(worktreePath);
 			// Badge
-			badge = new vscode.MarkdownString(`$(git-branch) ${worktreeRelativePath}`);
+			badge = new vscode.MarkdownString(`$(worktree) ${worktreeRelativePath}`);
 			badge.supportThemeIcons = true;
-
-			// Tooltip
-			tooltipLines.push(vscode.l10n.t(`Worktree: {0}`, worktreeRelativePath));
 
 			// Statistics
 			const stats = await this.getStatisticsForWorktree(worktreeUri);
@@ -288,7 +289,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			resource,
 			label,
 			badge,
-			tooltip: tooltipLines.join('\n'),
 			timing: session.timing,
 			changes,
 			status
@@ -468,7 +468,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 const WAIT_FOR_NEW_SESSION_TO_GET_USED = 5 * 60 * 1000; // 5 minutes
 
 export class CopilotCLIChatSessionParticipant extends Disposable {
-	private CLI_INCLUDE_CHANGES = vscode.l10n.t('Include Changes');
+	private CLI_MOVE_CHANGES = vscode.l10n.t('Move Changes');
+	private CLI_COPY_CHANGES = vscode.l10n.t('Copy Changes');
 	private CLI_SKIP_CHANGES = vscode.l10n.t('Skip Changes');
 	private CLI_CANCEL = vscode.l10n.t('Cancel');
 	private readonly untitledSessionIdMapping = new Map<string, string>();
@@ -521,14 +522,24 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			});
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
+			const currentRepository = this.gitService.activeRepository?.get();
 			if (!chatSessionContext) {
 				// Invoked from a 'normal' chat or 'cloud button' without CLI session context
 				// Or cases such as delegating from Regular chat to CLI chat
 				// Handle confirmation data
-				return await this.handlePushConfirmationData(request, context, stream, token);
+				return await this.handlePushConfirmationData(request, context, stream, token, currentRepository);
 			}
 
 			const isUntitled = chatSessionContext.isUntitled;
+			const hasUncommittedChanges = currentRepository?.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
+			if (isUntitled && hasUncommittedChanges && confirmationResults.length === 0) {
+				// initial request for untitled cli editor w/ uncomitted changes
+				return this.generateUncommittedChangesConfirmation(request, context, stream, token);
+			}
+
+			if (isUntitled && hasUncommittedChanges && confirmationResults.length > 0) {
+				return await this.handleWorktreeConfirmationResponse(request, confirmationResults, context, stream, token);
+			}
 			const { resource } = chatSessionContext.chatSessionItem;
 			sessionResource = resource;
 			const id = SessionIdForCLI.parse(resource);
@@ -730,7 +741,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		// Get model from request.
-		const preferredModelInRequest = preferModelInRequest && request?.model.id ? await this.copilotCLIModels.resolveModel(request.model.id) : undefined;
+		const preferredModelInRequest = preferModelInRequest && request?.model?.id ? await this.copilotCLIModels.resolveModel(request.model.id) : undefined;
 		if (preferredModelInRequest) {
 			return preferredModelInRequest;
 		}
@@ -792,7 +803,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		request: vscode.ChatRequest,
 		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
-		token: vscode.CancellationToken
+		token: vscode.CancellationToken,
+		currentRepository: RepoContext | undefined
 	): Promise<vscode.ChatResult | void> {
 		// Check if this is a confirmation response
 		const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
@@ -800,7 +812,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return await this.handleWorktreeConfirmationResponse(request, confirmationResults, context, stream, token);
 		}
 
-		const currentRepository = this.gitService.activeRepository?.get();
 		if (!currentRepository) {
 			// No isolation, proceed without worktree
 			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, false, stream, token);
@@ -812,14 +823,23 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// No uncommitted changes, create worktree and proceed
 			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, true, stream, token);
 		}
+		return this.generateUncommittedChangesConfirmation(request, context, stream, token);
+	}
 
+	private generateUncommittedChangesConfirmation(
+		request: vscode.ChatRequest,
+		context: vscode.ChatContext,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken
+	): vscode.ChatResult | void {
 		const message =
 			vscode.l10n.t('Background Agent will work in an isolated worktree to implement your requested changes.')
 			+ '\n\n'
 			+ vscode.l10n.t('This workspace has uncommitted changes. Should these changes be included in the new worktree?');
 
 		const buttons = [
-			this.CLI_INCLUDE_CHANGES,
+			this.CLI_COPY_CHANGES,
+			this.CLI_MOVE_CHANGES,
 			this.CLI_SKIP_CHANGES,
 			this.CLI_CANCEL
 		];
@@ -861,10 +881,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return {};
 		}
 
-		const includeChanges = selection.includes(this.CLI_INCLUDE_CHANGES.toUpperCase());
+		const moveChanges = selection === this.CLI_MOVE_CHANGES.toUpperCase();
+		const copyChanges = selection === this.CLI_COPY_CHANGES.toUpperCase();
 		const prompt = uncommittedChangesData.metadata.prompt;
 
-		if (includeChanges && this.worktreeManager.isSupported()) {
+		if ((moveChanges || copyChanges) && this.worktreeManager.isSupported()) {
 			// Create worktree first
 			stream.progress(vscode.l10n.t('Creating worktree...'));
 			const worktreePathValue = await this.worktreeManager.createWorktree(stream);
@@ -906,7 +927,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					} else {
 						await this.gitService.migrateChanges(worktreeRepo.rootUri, activeRepository.rootUri, {
 							confirmation: false,
-							deleteFromSource: true,
+							deleteFromSource: moveChanges,
 							untracked: true
 						});
 						stream.markdown(vscode.l10n.t('Changes migrated to worktree.'));
@@ -1006,7 +1027,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				});
 		}
 
-		stream.markdown(vscode.l10n.t('{0} has begun working on your request. Follow its progress in the Agents View.', 'Background Agent'));
+		stream.markdown(vscode.l10n.t('A background agent has begun working on your request. Follow its progress in the sessions list.'));
 
 		return {};
 	}
@@ -1033,7 +1054,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		session.addUserMessage(userPrompt);
 
 		// Add assistant message event with embedded PR metadata
-		const assistantMessage = `Cloud Agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri.toString()}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
+		const assistantMessage = `A cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri.toString()}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
 		session.addUserAssistantMessage(assistantMessage);
 	}
 }
