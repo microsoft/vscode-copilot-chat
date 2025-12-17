@@ -177,7 +177,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 					const agents = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgents(org, repoName, internalOptions));
 					for (const agent of agents) {
 						// Create unique key to identify agents (enterprise agents may appear in multiple orgs)
-						const agentKey = `${agent.name}@${agent.version}`;
+						const agentKey = `${agent.repo_owner}/${agent.repo_name}/${agent.name}@${agent.version}`;
 
 						// Skip if we've already seen this agent (dedupe enterprise agents)
 						if (seenAgents.has(agentKey)) {
