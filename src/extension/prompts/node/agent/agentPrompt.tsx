@@ -235,7 +235,9 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 				<UserOSPrompt />
 			</Tag>
 			<Tag name='workspace_info'>
-				<AgentTasksInstructions availableTools={this.props.availableTools} />
+				<TokenLimit max={2000}>
+					<AgentTasksInstructions availableTools={this.props.availableTools} />
+				</TokenLimit>
 				<WorkspaceFoldersHint />
 				<AgentMultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} availableTools={this.props.availableTools} />
 			</Tag>

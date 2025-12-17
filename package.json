@@ -3294,6 +3294,15 @@
 						],
 						"description": "%github.copilot.config.alternateGptPrompt.enabled%"
 					},
+					"github.copilot.chat.alternateGeminiModelFPrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental",
+							"onExp"
+						],
+						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
+					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
 						"default": true,

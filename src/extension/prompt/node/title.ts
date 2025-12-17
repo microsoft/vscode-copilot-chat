@@ -8,9 +8,9 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatRequestTurn } from '../../../vscodeTypes';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
 import { TitlePrompt } from '../../prompts/node/panel/title';
-import { ChatRequestTurn } from '../../../vscodeTypes';
 
 export class ChatTitleProvider implements vscode.ChatTitleProvider {
 
@@ -40,6 +40,7 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 			finishedCb: undefined,
 			location: ChatLocation.Panel,
 			userInitiatedRequest: false,
+			isConversationRequest: false,
 		}, token);
 		if (token.isCancellationRequested) {
 			return '';

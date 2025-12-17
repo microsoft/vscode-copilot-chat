@@ -51,6 +51,9 @@ import { makeSettable } from './utils/observablesUtils';
 
 export class JointCompletionsProviderContribution extends Disposable implements IExtensionContribution {
 
+	private static NES_GROUP_ID = 'nes';
+	private static COMPLETIONS_GROUP_ID = 'completions';
+
 	private readonly _inlineEditsProviderId = makeSettable(this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsProviderId, this._expService));
 
 	private readonly _hideInternalInterface = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsHideInternalInterface);
@@ -115,7 +118,7 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 				const excludes = this._excludedProviders.read(reader).slice();
 
 				let inlineEditProvider: InlineCompletionProviderImpl | undefined = undefined;
-				if (this.inlineEditsEnabled.read(reader)) {
+				if (!excludes.includes(JointCompletionsProviderContribution.NES_GROUP_ID) && this.inlineEditsEnabled.read(reader)) {
 					const logger = reader.store.add(this._instantiationService.createInstance(InlineEditLogger));
 
 					const statelessProviderId = this._inlineEditsProviderId.read(reader);
@@ -179,9 +182,15 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 					const configEnabled = this._configurationService.getExperimentBasedConfigObservable<boolean>(ConfigKey.TeamInternal.InlineEditsEnableGhCompletionsProvider, this._expService).read(reader);
 					const extensionUnification = unificationStateValue?.extensionUnification ?? false;
 
+					// respect excludes if NES is enabled
+					const isExcluded = excludes.includes(JointCompletionsProviderContribution.COMPLETIONS_GROUP_ID) && this.inlineEditsEnabled.read(reader);
+
 					// @ulugbekna: note that we don't want it if modelUnification is on
 					const modelUnification = unificationStateValue?.modelUnification ?? false;
-					if (!modelUnification || unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
+					if (
+						(!modelUnification || unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) &&
+						!isExcluded
+					) {
 						completionsProvider = this._copilotInlineCompletionItemProviderService.getOrCreateProvider() as CopilotInlineCompletionItemProvider;
 					}
 
