@@ -166,6 +166,7 @@ export const ICopilotCLIAgents = createServiceIdentifier<ICopilotCLIAgents>('ICo
 export class CopilotCLIAgents implements ICopilotCLIAgents {
 	declare _serviceBrand: undefined;
 	private sessionAgents: Record<string, { agentId?: string; createdDateTime: number }> = {};
+	private _agents?: Readonly<SweCustomAgent>[];
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -225,6 +226,20 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 	}
 
 	async getAgents(): Promise<Readonly<SweCustomAgent>[]> {
+		// Fetching agents from the SDK can be slow, cache the result while allowing background refreshes.
+		const agents = this._agents;
+		const promise = this.getAgentsImpl();
+
+		promise.then(fetchedAgents => {
+			this._agents = fetchedAgents;
+		}).catch((error) => {
+			this.logService.error('[CopilotCLISession] Failed to fetch custom agents', error);
+		});
+
+		return agents ?? promise;
+	}
+
+	async getAgentsImpl(): Promise<Readonly<SweCustomAgent>[]> {
 		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
 			return [];
 		}
@@ -313,7 +328,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 
 	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
-		const copilotToken = await this.authentService.getAnyGitHubSession();
+		const copilotToken = await this.authentService.getGitHubSession('any', { silent: true });
 		return {
 			type: 'token',
 			token: copilotToken?.accessToken ?? '',

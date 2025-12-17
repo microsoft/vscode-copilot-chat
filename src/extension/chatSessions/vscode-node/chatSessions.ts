@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { IEnvService } from '../../../platform/env/common/envService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
@@ -23,7 +24,9 @@ import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agent
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../agents/copilotcli/node/mcpHandler';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
+import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
+import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
@@ -60,6 +63,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		@IInstantiationService instantiationService: IInstantiationService,
 		@ILogService private readonly logService: ILogService,
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
+		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
 
@@ -73,9 +77,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
 		this._register(vscode.chat.registerChatSessionItemProvider(ClaudeChatSessionItemProvider.claudeSessionType, sessionItemProvider));
-		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.refresh', () => {
-			sessionItemProvider.refresh();
-		}));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider);
@@ -158,11 +159,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			)
 		);
 		this.copilotCloudRegistrations.add(
-			vscode.commands.registerCommand('github.copilot.cloud.sessions.refresh', () => {
-				cloudSessionsProvider.refresh();
-			})
-		);
-		this.copilotCloudRegistrations.add(
 			vscode.commands.registerCommand('github.copilot.cloud.resetWorkspaceConfirmations', () => {
 				cloudSessionsProvider.resetWorkspaceContext();
 			})
@@ -193,6 +189,43 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				}
 			})
 		);
+		this.copilotCloudRegistrations.add(
+			vscode.commands.registerCommand('github.copilot.cloud.sessions.installPRExtension', async () => {
+				await this.installPullRequestExtension();
+			})
+		);
 		return cloudSessionsProvider;
+	}
+
+	private isPullRequestExtensionInstalled(): boolean {
+		return vscode.extensions.getExtension(GHPR_EXTENSION_ID) !== undefined;
+	}
+
+	private async installPullRequestExtension(): Promise<void> {
+		if (this.isPullRequestExtensionInstalled()) {
+			return;
+		}
+		try {
+			const isInsiders = this.envService.getEditorInfo().version.includes('insider');
+			const installOptions = { enable: true, installPreReleaseVersion: isInsiders, justification: vscode.l10n.t('Enable additional pull request features, such as checking out and applying changes.') };
+			await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID, installOptions);
+			const maxWaitTime = 10_000; // 10 seconds
+			const pollInterval = 100; // 100ms
+			let elapsed = 0;
+			while (elapsed < maxWaitTime) {
+				if (this.isPullRequestExtensionInstalled()) {
+					vscode.window.showInformationMessage(vscode.l10n.t('GitHub Pull Request extension installed successfully.'));
+					break;
+				}
+				await new Promise(resolve => setTimeout(resolve, pollInterval));
+				elapsed += pollInterval;
+			}
+			if (!this.isPullRequestExtensionInstalled()) {
+				vscode.window.showWarningMessage(vscode.l10n.t('GitHub Pull Request extension is taking longer than expected to install.'));
+			}
+			await vscode.commands.executeCommand('setContext', prExtensionInstalledContextKey, true);
+		} catch (error) {
+			vscode.window.showErrorMessage(vscode.l10n.t('Failed to install GitHub Pull Request extension: {0}', error instanceof Error ? error.message : String(error)));
+		}
 	}
 }

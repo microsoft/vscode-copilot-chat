@@ -17,13 +17,18 @@ import {
 	workspace,
 } from 'vscode';
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
+import { LineEdit } from '../../../../../util/vs/editor/common/core/edits/lineEdit';
+import { TextEdit, TextReplacement } from '../../../../../util/vs/editor/common/core/edits/textEdit';
+import { Range } from '../../../../../util/vs/editor/common/core/range';
+import { LineBasedText } from '../../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { InlineEditLogger } from '../../../../inlineEdits/vscode-node/parts/inlineEditLogger';
+import { GhostTextContext } from '../../../common/ghostTextContext';
 import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
 import { BuildInfo } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
-import { Deferred } from '../../lib/src/util/async';
 import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
 import { ICompletionsExtensionStatus } from './extensionStatus';
@@ -52,10 +57,9 @@ export function exception(accessor: ServicesAccessor, error: unknown, origin: st
 
 /** @public */
 export class CopilotInlineCompletionItemProvider extends Disposable implements InlineCompletionItemProvider {
-	copilotCompletionFeedbackTracker: CopilotCompletionFeedbackTracker;
-	ghostTextProvider: InlineCompletionItemProvider;
-	initFallbackContext?: Promise<void>;
-	pendingRequests: Set<Promise<unknown>> = new Set();
+	private readonly copilotCompletionFeedbackTracker: CopilotCompletionFeedbackTracker;
+	private readonly ghostTextProvider: InlineCompletionItemProvider;
+	private readonly inlineEditLogger: InlineEditLogger;
 
 	public onDidChange = undefined;
 	public handleListEndOfLifetime: InlineCompletionItemProvider['handleListEndOfLifetime'] = undefined;
@@ -68,16 +72,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		super();
 		this.copilotCompletionFeedbackTracker = this._register(this.instantiationService.createInstance(CopilotCompletionFeedbackTracker));
 		this.ghostTextProvider = this.instantiationService.createInstance(GhostTextProvider);
-	}
-
-	async waitForPendingRequests(): Promise<void> {
-		while (this.pendingRequests.size > 0) {
-			await Promise.all(this.pendingRequests);
-		}
-	}
-
-	get delegate(): InlineCompletionItemProvider {
-		return this.ghostTextProvider;
+		this.inlineEditLogger = this.instantiationService.createInstance(InlineEditLogger);
 	}
 
 	async provideInlineCompletionItems(
@@ -86,10 +81,14 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<InlineCompletionList | undefined> {
+		const logContext = new GhostTextContext(doc.uri.toString(), doc.version, context);
 		try {
-			return await this._provideInlineCompletionItems(doc, position, context, token);
+			return await this._provideInlineCompletionItems(doc, position, context, logContext, token);
 		} catch (e) {
+			logContext.setError(e);
 			this.telemetryService.sendGHTelemetryException(e, 'codeUnification.completions.exception');
+		} finally {
+			this.inlineEditLogger.add(logContext);
 		}
 	}
 
@@ -97,11 +96,9 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		doc: TextDocument,
 		position: Position,
 		context: InlineCompletionContext,
+		logContext: GhostTextContext,
 		token: CancellationToken
 	): Promise<InlineCompletionList | undefined> {
-		const pendingRequestDeferred = new Deferred();
-		this.pendingRequests.add(pendingRequestDeferred.promise);
-
 		if (context.triggerKind === InlineCompletionTriggerKind.Automatic) {
 			if (!this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {
 				return;
@@ -119,16 +116,14 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		if (!copilotConfig.get('respectSelectedCompletionInfo', quickSuggestionsDisabled() || BuildInfo.isPreRelease())) {
 			context = { ...context, selectedCompletionInfo: undefined };
 		}
-		try {
-			let items = await this.delegate.provideInlineCompletionItems(doc, position, context, token);
 
-			// Release CompletionItemProvider after returning
-			setTimeout(() => {
-				this.pendingRequests.delete(pendingRequestDeferred.promise);
-				pendingRequestDeferred.resolve(undefined);
-			});
+		try {
+			let items = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, token);
 
 			if (!items) {
+				if (token.isCancellationRequested) {
+					logContext.setIsSkipped();
+				}
 				return undefined;
 			}
 
@@ -136,19 +131,23 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 			if (Array.isArray(items)) {
 				items = { items };
 			}
+
+			this.logSuggestion(logContext, doc, items);
+
 			return {
 				...items,
 				commands: [sendCompletionFeedbackCommand],
 			};
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
+			logContext.setError(e);
 		}
 	}
 
 	handleDidShowCompletionItem(item: InlineCompletionItem, updatedInsertText: string) {
 		try {
 			this.copilotCompletionFeedbackTracker.trackItem(item);
-			return this.delegate.handleDidShowCompletionItem?.(item, updatedInsertText);
+			return this.ghostTextProvider.handleDidShowCompletionItem?.(item, updatedInsertText);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
@@ -159,7 +158,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		acceptedLengthOrInfo: number & PartialAcceptInfo
 	) {
 		try {
-			return this.delegate.handleDidPartiallyAcceptCompletionItem?.(item, acceptedLengthOrInfo);
+			return this.ghostTextProvider.handleDidPartiallyAcceptCompletionItem?.(item, acceptedLengthOrInfo);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
@@ -167,9 +166,46 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 
 	handleEndOfLifetime(completionItem: InlineCompletionItem, reason: InlineCompletionEndOfLifeReason) {
 		try {
-			return this.delegate.handleEndOfLifetime?.(completionItem, reason);
+			return this.ghostTextProvider.handleEndOfLifetime?.(completionItem, reason);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.handleEndOfLifetime', logger);
 		}
+	}
+
+	private logSuggestion(
+		logContext: GhostTextContext,
+		doc: TextDocument,
+		items: InlineCompletionList
+	) {
+		if (items.items.length === 0) {
+			logContext.markAsNoSuggestions();
+			logContext.addLog('No inline completion items provided');
+			return;
+		}
+		const firstItem = items.items[0];
+		if (!firstItem.range) {
+			logContext.addLog('Inline completion item has no range');
+			return;
+		}
+		if (typeof firstItem.insertText !== 'string') {
+			logContext.addLog('Inline completion item has non-string insertText');
+			return;
+		}
+
+		const text = new LineBasedText(lineNumber => doc.lineAt(lineNumber - 1).text, doc.lineCount);
+
+		const lineEdit = LineEdit.fromTextEdit(
+			new TextEdit(
+				[new TextReplacement(
+					new Range(firstItem.range.start.line + 1, firstItem.range.start.character + 1, firstItem.range.end.line + 1, firstItem.range.end.character + 1),
+					firstItem.insertText,
+				)],
+			),
+			text
+		);
+
+		const patch = lineEdit.humanReadablePatch(text.getLines());
+
+		logContext.setResult(patch);
 	}
 }

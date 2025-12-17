@@ -134,6 +134,8 @@ export interface CustomAgentListItem {
 	metadata?: Record<string, string>;
 	target?: string;
 	config_error?: string;
+	model?: string;
+	infer?: boolean;
 	'mcp-servers'?: {
 		[serverName: string]: {
 			type: string;
@@ -243,7 +245,7 @@ export interface IOctoKitService {
 	/**
 	 * Gets all open Copilot sessions.
 	 */
-	getAllOpenSessions(nwo?: string): Promise<SessionInfo[]>;
+	getAllSessions(nwo?: string, open?: boolean): Promise<SessionInfo[]>;
 
 	/**
 	 * Gets pull request from global id.

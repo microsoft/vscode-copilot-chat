@@ -399,6 +399,19 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+						res.telemetryService.sendInternalMSFTTelemetryEvent('applyPatch.trackEditSurvival', {
+							requestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'applyPatchTool',
+							textBeforeAiEdits: res.textBeforeAiEdits ? JSON.stringify(res.textBeforeAiEdits) : undefined,
+							textAfterAiEdits: res.textAfterAiEdits ? JSON.stringify(res.textAfterAiEdits) : undefined,
+							textAfterUserEdits: res.textAfterUserEdits ? JSON.stringify(res.textAfterUserEdits) : undefined,
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
 						res.telemetryService.sendGHTelemetryEvent('applyPatch/trackEditSurvival', {
 							headerRequestId: this._promptContext?.requestId,
 							requestSource: 'agent',

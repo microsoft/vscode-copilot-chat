@@ -44,9 +44,14 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 		let server: RequestServer | undefined;
 
-		const getExportableLogEntries = (treeItem: ChatPromptItem): LoggedInfo[] => {
+		const getExportableLogEntries = (treeItem: ChatPromptItem, lastChatRequestItem?: ChatRequestItem): LoggedInfo[] => {
 			if (!treeItem || !treeItem.children) {
 				return [];
+			}
+
+			// lastChatRequestItem logs the actual request info, so use it if present
+			if (lastChatRequestItem && treeItem.children.length > 0 && treeItem.children[0] instanceof ChatRequestItem) {
+				treeItem.children[0] = lastChatRequestItem;
 			}
 
 			const logEntries = treeItem.children.map(child => {
@@ -60,8 +65,8 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 		};
 
 		// Helper method to process log entries for a single prompt
-		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem): Promise<any> => {
-			const logEntries = getExportableLogEntries(treeItem);
+		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem, lastChatRequestItem?: ChatRequestItem): Promise<any> => {
+			const logEntries = getExportableLogEntries(treeItem, lastChatRequestItem);
 
 			if (logEntries.length === 0) {
 				return;
@@ -414,10 +419,13 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				return;
 			}
 
-			// Filter to get only ChatPromptItem instances
-			const chatPromptItems = allTreeItems.filter((item): item is ChatPromptItem => item instanceof ChatPromptItem);
+			// Filter out utility requests (e.g., model list fetch, title generation) - only export conversation requests
+			const exportableItems = allTreeItems.filter(item =>
+				item instanceof ChatPromptItem ||
+				(item instanceof ChatRequestItem && item.info.entry.isConversationRequest !== false)
+			);
 
-			if (chatPromptItems.length === 0) {
+			if (exportableItems.length === 0) {
 				vscode.window.showInformationMessage('No chat prompts found to export.');
 				return;
 			}
@@ -452,13 +460,17 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				const allPromptsContent: any[] = [];
 				let totalLogEntries = 0;
 
-				// Process each chat prompt item using the shared function
-				for (const chatPromptItem of chatPromptItems) {
-					// Use the shared processing function
-					const promptObject = await preparePromptLogsAsJson(chatPromptItem);
-					if (promptObject) {
-						allPromptsContent.push(promptObject);
-						totalLogEntries += promptObject.logCount;
+				let lastChatRequestItem: ChatRequestItem | undefined;
+				for (const exportableItem of exportableItems) {
+					if (exportableItem instanceof ChatRequestItem) {
+						lastChatRequestItem = exportableItem;
+					} else if (exportableItem instanceof ChatPromptItem) {
+						const promptObject = await preparePromptLogsAsJson(exportableItem, lastChatRequestItem);
+						if (promptObject) {
+							allPromptsContent.push(promptObject);
+							totalLogEntries += promptObject.logCount;
+						}
+						lastChatRequestItem = undefined;
 					}
 				}
 
@@ -809,6 +821,7 @@ class LogTreeFilters extends Disposable {
 	private _elementsShown = true;
 	private _toolsShown = true;
 	private _nesRequestsShown = true;
+	private _ghostRequestsShown = true;
 
 	private readonly _onDidChangeFilters = new vscode.EventEmitter<void>();
 	readonly onDidChangeFilters = this._onDidChangeFilters.event;
@@ -821,6 +834,7 @@ class LogTreeFilters extends Disposable {
 		this.setElementsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('elements')));
 		this.setToolsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('tools')));
 		this.setNesRequestsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('nesRequests')));
+		this.setGhostRequestsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('ghostRequests')));
 	}
 
 	private getStorageKey(name: string): string {
@@ -842,6 +856,11 @@ class LogTreeFilters extends Disposable {
 		this.setShown('nesRequests', this._nesRequestsShown);
 	}
 
+	setGhostRequestsShown(value: boolean) {
+		this._ghostRequestsShown = value;
+		this.setShown('ghostRequests', this._ghostRequestsShown);
+	}
+
 	itemIncluded(item: TreeItem): boolean {
 		if (item instanceof ChatPromptItem) {
 			if (this.isNesRequest(item)) {
@@ -857,9 +876,18 @@ class LogTreeFilters extends Disposable {
 			if (this.isNesRequest(item)) {
 				return this._nesRequestsShown;
 			}
+			// Check if this is a Ghost request
+			if (this.isGhostRequest(item)) {
+				return this._ghostRequestsShown;
+			}
 		}
 
 		return true;
+	}
+
+	private isGhostRequest(item: ChatRequestItem): boolean {
+		const debugName = item.info.entry.debugName.toLowerCase();
+		return debugName === 'ghost' || debugName.startsWith('ghost |');
 	}
 
 	private isNesRequest(item: ChatPromptItem | ChatRequestItem): boolean {
@@ -890,5 +918,7 @@ class LogTreeFilterCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideTools', () => filters.setToolsShown(false)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showNesRequests', () => filters.setNesRequestsShown(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideNesRequests', () => filters.setNesRequestsShown(false)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showGhostRequests', () => filters.setGhostRequestsShown(true)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideGhostRequests', () => filters.setGhostRequestsShown(false)));
 	}
 }

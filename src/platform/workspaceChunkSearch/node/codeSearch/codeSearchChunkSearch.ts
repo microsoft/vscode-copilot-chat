@@ -821,8 +821,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async getGithubAuthToken() {
-		return (await this._authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken
-			?? (await this._authenticationService.getAnyGitHubSession({ silent: true }))?.accessToken;
+		return (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
+			?? (await this._authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
 	}
 
 	private async tryAuthIfNeeded(_telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<PromiseLike<undefined> | undefined> {

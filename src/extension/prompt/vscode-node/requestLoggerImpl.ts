@@ -292,7 +292,8 @@ export class RequestLogger extends AbstractRequestLogger {
 			debugName: 'modelList',
 			startTimeMs: Date.now(),
 			icon: Codicon.fileCode,
-			markdownContent: this._renderModelListToMarkdown(id, requestMetadata, models)
+			markdownContent: this._renderModelListToMarkdown(id, requestMetadata, models),
+			isConversationRequest: false
 		});
 	}
 
