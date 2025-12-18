@@ -4,12 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem } from '../../../platform/github/common/githubAPI';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { getRepoId } from '../vscode/copilotCodingAgentUtils';
 import { toPRContentUri } from './prContentProvider';
 
 export const IPullRequestFileChangesService = createServiceIdentifier<IPullRequestFileChangesService>('IPullRequestFileChangesService');
@@ -23,7 +21,6 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 	declare readonly _serviceBrand: undefined;
 
 	constructor(
-		@IGitService private readonly _gitService: IGitService,
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 		@ILogService private readonly logService: ILogService,
 	) { }
@@ -31,16 +28,10 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 	async getFileChangesMultiDiffPart(pullRequest: PullRequestSearchItem): Promise<vscode.ChatResponseMultiDiffPart | undefined> {
 		try {
 			this.logService.trace(`Getting file changes for PR #${pullRequest.number}`);
-			const repoId = await getRepoId(this._gitService);
-			let repoName, repoOwner = undefined;
-			if (repoId) {
-				repoName = repoId.repo;
-				repoOwner = repoId.org;
-			} else {
-				repoOwner = pullRequest.repository.owner.login;
-				repoName = pullRequest.repository.name;
-			}
-			if (!repoName || !repoOwner) {
+			const repoOwner = pullRequest.repository.owner.login;
+			const repoName = pullRequest.repository.name;
+
+			if (!repoOwner || !repoName) {
 				this.logService.warn('No repo ID available for fetching PR file changes');
 				return undefined;
 			}
