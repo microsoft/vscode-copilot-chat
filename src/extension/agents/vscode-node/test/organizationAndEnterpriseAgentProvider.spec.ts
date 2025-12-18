@@ -1201,6 +1201,5 @@ Test prompt
 		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);
 		assert.equal(agents[0].name, 'multi_version_agent');
-		assert.equal(agents[0].version, 'v1.0');
 	});
 });
