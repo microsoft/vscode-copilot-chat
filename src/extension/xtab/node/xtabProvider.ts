@@ -332,7 +332,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.PromptTooLarge('final'));
 		}
 
-		await this.debounce(delaySession, tracer, telemetryBuilder);
+		await this.debounce(delaySession, retryState, tracer, telemetryBuilder);
 		if (cancellationToken.isCancellationRequested) {
 			return Result.error(new NoNextEditReason.GotCancelled('afterDebounce'));
 		}
@@ -1101,8 +1101,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private async debounce(delaySession: DelaySession, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder) {
+	private async debounce(delaySession: DelaySession, retryState: RetryState, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder) {
 		if (this.simulationCtx.isInSimulationTests) {
+			return;
+		}
+		if (retryState === RetryState.Retrying) {
+			tracer.trace('Skipping debounce on retry');
 			return;
 		}
 		const debounceTime = delaySession.getDebounceTime();
