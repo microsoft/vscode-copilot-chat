@@ -154,7 +154,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 
 	handleDidPartiallyAcceptCompletionItem(
 		item: GhostTextCompletionItem,
-		acceptedLengthOrInfo: number & PartialAcceptInfo
+		acceptedLengthOrInfo: number | PartialAcceptInfo
 	) {
 		try {
 			return this.ghostTextProvider.handleDidPartiallyAcceptCompletionItem(item, acceptedLengthOrInfo);
