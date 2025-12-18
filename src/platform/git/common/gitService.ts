@@ -64,6 +64,8 @@ export interface IGitService extends IDisposable {
 	deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void>;
 
 	migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void>;
+
+	commit(uri: URI, message: string | undefined): Promise<void>;
 }
 
 /**

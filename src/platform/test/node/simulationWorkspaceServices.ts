@@ -768,6 +768,10 @@ export class TestingGitService implements IGitService {
 	async migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void> {
 		return;
 	}
+
+	async commit(uri: URI, message: string | undefined): Promise<void> {
+		return;
+	}
 }
 
 export class TestingTerminalService extends Disposable implements ITerminalService {

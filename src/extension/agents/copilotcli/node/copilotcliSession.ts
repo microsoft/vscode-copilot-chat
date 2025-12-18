@@ -5,6 +5,7 @@
 
 import type { Attachment, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
+import { IGitCommitMessageService } from '../../../../platform/git/common/gitCommitMessageService';
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -96,7 +97,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
-
+		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -238,12 +239,26 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
 			if (this._options.isolationEnabled && !token.isCancellationRequested) {
-				// When isolation is enabled and we are using a git workspace, stage
+				// When isolation is enabled and we are using a git worktree, commit
 				// all changes in the working directory when the session is completed
 				const workingDirectory = this._options.toSessionOptions().workingDirectory;
 				if (workingDirectory) {
-					await this.gitService.add(Uri.file(workingDirectory), []);
-					this.logService.trace(`[CopilotCLISession] Staged all changes in working directory ${workingDirectory}`);
+					// Generate the commit message
+					const repository = this.gitCommitMessageService.getRepository(Uri.file(workingDirectory));
+					if (!repository) {
+						this.logService.error(`[CopilotCLISession] Unable to find repository for working directory ${workingDirectory}`);
+						throw new Error(`Unable to find repository for working directory ${workingDirectory}`);
+					}
+
+					let message = await this.gitCommitMessageService.generateCommitMessage(repository, CancellationToken.None);
+					if (!message) {
+						// Fallback commit message
+						message = `Copilot CLI session ${this.sessionId} changes`;
+					}
+
+					// Commit the changes
+					await this.gitService.commit(Uri.file(workingDirectory), message);
+					this.logService.trace(`[CopilotCLISession] Committed all changes in working directory ${workingDirectory}`);
 				}
 			}
 			const requestDetails: { requestId: string; toolIdEditMap: Record<string, string> } = { requestId, toolIdEditMap: {} };
