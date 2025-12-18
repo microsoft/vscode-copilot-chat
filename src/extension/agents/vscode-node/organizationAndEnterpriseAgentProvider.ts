@@ -115,7 +115,6 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	}
 
 
-
 	private async fetchAndUpdateCache(): Promise<void> {
 		// Prevent concurrent fetches
 		if (this.isFetching) {
