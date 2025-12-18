@@ -44,11 +44,11 @@ class MockOctoKitService implements IOctoKitService {
 	getUserOrganizations = async () => this.userOrganizations;
 	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];
 
-	async getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]> {
+	async getCustomAgents(owner: string, repo: string, options: CustomAgentListOptions, authOptions: { createIfNone?: boolean }): Promise<CustomAgentListItem[]> {
 		return this.customAgents;
 	}
 
-	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined> {
+	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version: string, authOptions: { createIfNone?: boolean }): Promise<CustomAgentDetails | undefined> {
 		return this.agentDetails.get(agentName);
 	}
 
@@ -896,7 +896,7 @@ Test prompt
 				// Sign out user after first call
 				mockOctoKitService.getCurrentAuthedUser = async () => undefined as any;
 			}
-			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options);
+			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options, { createIfNone: false });
 		};
 
 		await provider.provideCustomAgents({}, {} as any);

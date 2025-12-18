@@ -140,7 +140,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Fetching custom agents from all user organizations');
 
 			// Get all organizations the user belongs to
-			const organizations = await this.runWithAuthCheck(() => this.octoKitService.getUserOrganizations());
+			const organizations = await this.runWithAuthCheck(() => this.octoKitService.getUserOrganizations({ createIfNone: true }));
 			if (organizations.length === 0) {
 				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User does not belong to any organizations');
 				return;
@@ -164,14 +164,14 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 					// Get the first repository for this organization to use in the API call
 					// We can't just use .github-private because user may not have access to it
-					const repos = await this.runWithAuthCheck(() => this.octoKitService.getOrganizationRepositories(org));
+					const repos = await this.runWithAuthCheck(() => this.octoKitService.getOrganizationRepositories(org, { createIfNone: true }));
 					if (repos.length === 0) {
 						this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] No repositories found for ${org}, skipping`);
 						continue;
 					}
 
 					const repoName = repos[0];
-					const agents = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgents(org, repoName, internalOptions));
+					const agents = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgents(org, repoName, internalOptions, { createIfNone: true }));
 					for (const agent of agents) {
 						agentsForOrg.set(agent.name, agent);
 					}
@@ -246,7 +246,8 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 							agent.repo_owner,
 							agent.repo_name,
 							agent.name,
-							agent.version
+							agent.version,
+							{ createIfNone: true }
 						));
 
 						// Generate agent markdown file content

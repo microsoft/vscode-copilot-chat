@@ -27,14 +27,16 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	async getCurrentAuthedUser(): Promise<IOctoKitUser | undefined> {
 		const authToken = (await this._authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		if (!authToken) {
+			this._logService.trace('No authentication token available for getCurrentAuthedUser');
 			return undefined;
 		}
 		return await this.getCurrentAuthedUserWithToken(authToken);
 	}
 
-	async getCopilotPullRequestsForUser(owner: string, repo: string): Promise<PullRequestSearchItem[]> {
-		const auth = (await this._authService.getGitHubSession('permissive', { createIfNone: true }));
+	async getCopilotPullRequestsForUser(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestSearchItem[]> {
+		const auth = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }));
 		if (!auth?.accessToken) {
+			this._logService.trace('No authentication token available for getCopilotPullRequestsForUser');
 			return [];
 		}
 		const response = await this.getCopilotPullRequestForUserWithToken(
@@ -46,10 +48,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return response;
 	}
 
-	async getCopilotSessionsForPR(prId: string): Promise<SessionInfo[]> {
+	async getCopilotSessionsForPR(prId: string, authOptions: { createIfNone?: boolean }): Promise<SessionInfo[]> {
 		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
+				this._logService.trace('No authentication token available for getCopilotSessionsForPR');
 				throw new Error('No authentication token available');
 			}
 			const response = await this._capiClientService.makeRequest<Response>({
@@ -72,10 +75,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async getSessionLogs(sessionId: string): Promise<string> {
+	async getSessionLogs(sessionId: string, authOptions: { createIfNone?: boolean }): Promise<string> {
 		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
+				this._logService.trace('No authentication token available for getSessionLogs');
 				throw new Error('No authentication token available');
 			}
 			const response = await this._capiClientService.makeRequest<Response>({
@@ -94,10 +98,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async getSessionInfo(sessionId: string): Promise<SessionInfo | undefined> {
+	async getSessionInfo(sessionId: string, authOptions: { createIfNone?: boolean }): Promise<SessionInfo | undefined> {
 		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
+				this._logService.trace('No authentication token available for getSessionInfo');
 				throw new Error('No authentication token available');
 			}
 			const response = await this._capiClientService.makeRequest<Response>({
@@ -120,10 +125,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async postCopilotAgentJob(owner: string, name: string, apiVersion: string, payload: RemoteAgentJobPayload): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode | undefined> {
+	async postCopilotAgentJob(owner: string, name: string, apiVersion: string, payload: RemoteAgentJobPayload, authOptions: { createIfNone?: boolean }): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode | undefined> {
 		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
+				this._logService.trace('No authentication token available for postCopilotAgentJob');
 				throw new Error('No authentication token available');
 			}
 			const response = await this._capiClientService.makeRequest<Response>({
@@ -145,10 +151,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo | undefined> {
+	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string, authOptions: { createIfNone?: boolean }): Promise<JobInfo | undefined> {
 		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
+				this._logService.trace('No authentication token available for getJobByJobId');
 				throw new Error('No authentication token available');
 			}
 			const response = await this._capiClientService.makeRequest<Response>({
@@ -167,10 +174,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string): Promise<JobInfo | undefined> {
+	async getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string, authOptions: { createIfNone?: boolean }): Promise<JobInfo | undefined> {
 		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
+				this._logService.trace('No authentication token available for getJobBySessionId');
 				throw new Error('No authentication token available');
 			}
 			const response = await this._capiClientService.makeRequest<Response>({
@@ -189,18 +197,20 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null> {
-		const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+	async addPullRequestComment(pullRequestId: string, commentBody: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestComment | null> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
+			this._logService.trace('No authentication token available for addPullRequestComment');
 			throw new Error('No authentication token available');
 		}
 		return this.addPullRequestCommentWithToken(pullRequestId, commentBody, authToken);
 	}
 
-	async getAllSessions(nwo?: string, open: boolean = true): Promise<SessionInfo[]> {
+	async getAllSessions(nwo: string | undefined, open: boolean, authOptions: { createIfNone?: boolean }): Promise<SessionInfo[]> {
 		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
+				this._logService.trace('No authentication token available for getAllSessions');
 				throw new Error('No authentication token available');
 			}
 			return await this._capiClientService.makeRequest<SessionInfo[]>({
@@ -215,18 +225,20 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null> {
-		const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+	async getPullRequestFromGlobalId(globalId: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestSearchItem | null> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
+			this._logService.trace('No authentication token available for getPullRequestFromGlobalId');
 			throw new Error('No authentication token available');
 		}
 		return this.getPullRequestFromSessionWithToken(globalId, authToken);
 	}
 
-	async getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]> {
+	async getCustomAgents(owner: string, repo: string, options: CustomAgentListOptions, authOptions: { createIfNone?: boolean }): Promise<CustomAgentListItem[]> {
 		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
+				this._logService.trace('No authentication token available for getCustomAgents');
 				throw new Error('No authentication token available');
 			}
 			const response = await this._capiClientService.makeRequest<Response>({
@@ -259,10 +271,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined> {
+	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version: string, authOptions: { createIfNone?: boolean }): Promise<CustomAgentDetails | undefined> {
 		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
+				this._logService.trace('No authentication token available for getCustomAgentDetails');
 				throw new Error('No authentication token available');
 			}
 
@@ -289,41 +302,46 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 	}
 
-	async getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<PullRequestFile[]> {
-		const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+	async getPullRequestFiles(owner: string, repo: string, pullNumber: number, authOptions: { createIfNone?: boolean }): Promise<PullRequestFile[]> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
+			this._logService.trace('No authentication token available for getPullRequestFiles');
 			return [];
 		}
 		return this.getPullRequestFilesWithToken(owner, repo, pullNumber, authToken);
 	}
 
-	async closePullRequest(owner: string, repo: string, pullNumber: number): Promise<boolean> {
-		const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+	async closePullRequest(owner: string, repo: string, pullNumber: number, authOptions: { createIfNone?: boolean }): Promise<boolean> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
+			this._logService.trace('No authentication token available for closePullRequest');
 			return false;
 		}
 		return this.closePullRequestWithToken(owner, repo, pullNumber, authToken);
 	}
 
-	async getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string> {
-		const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+	async getFileContent(owner: string, repo: string, ref: string, path: string, authOptions: { createIfNone?: boolean }): Promise<string> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
+			this._logService.trace('No authentication token available for getFileContent');
 			throw new Error('No GitHub authentication available');
 		}
 		return this.getFileContentWithToken(owner, repo, ref, path, authToken);
 	}
 
-	async getUserOrganizations(): Promise<string[]> {
-		const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+	async getUserOrganizations(authOptions: { createIfNone?: boolean }): Promise<string[]> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
+			this._logService.trace('No authentication token available for getUserOrganizations');
 			return [];
 		}
 		return this.getUserOrganizationsWithToken(authToken);
 	}
 
-	async getOrganizationRepositories(org: string): Promise<string[]> {
-		const authToken = (await this._authService.getGitHubSession('permissive', { createIfNone: true }))?.accessToken;
+	async getOrganizationRepositories(org: string, authOptions: { createIfNone?: boolean }): Promise<string[]> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
+			this._logService.trace('No authentication token available for getOrganizationRepositories');
 			return [];
 		}
 		return this.getOrganizationRepositoriesWithToken(org, authToken);

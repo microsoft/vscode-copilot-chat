@@ -46,7 +46,7 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 			}
 
 			this.logService.trace(`Fetching PR files from ${repoOwner}/${repoName} for PR #${pullRequest.number}`);
-			const files = await this._octoKitService.getPullRequestFiles(repoOwner, repoName, pullRequest.number);
+			const files = await this._octoKitService.getPullRequestFiles(repoOwner, repoName, pullRequest.number, { createIfNone: true });
 			this.logService.trace(`Got ${files?.length || 0} files from API`);
 
 			if (!files || files.length === 0) {
