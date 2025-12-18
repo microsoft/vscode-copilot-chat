@@ -21,6 +21,7 @@ import {
 } from 'vscode';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
+import { SURVEY_SIGNAL_USAGE_ID } from '../../../../../survey/vscode-node/surveyCommands';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
 import { GhostText } from '../../../lib/src/inlineCompletion';
@@ -119,7 +120,7 @@ export function registerGhostTextDependencies(accessor: ServicesAccessor) {
 	const postCmdHandler = commands.registerCommand(postInsertCmdName, async (e: CopilotCompletion) => {
 		instantiationService.invokeFunction(handleGhostTextPostInsert, e);
 		try {
-			await commands.executeCommand('github.copilot.survey.signalUsage', 'completions');
+			await commands.executeCommand(SURVEY_SIGNAL_USAGE_ID, 'completions');
 		} catch (e) {
 			// Ignore errors from the survey command execution
 		}
