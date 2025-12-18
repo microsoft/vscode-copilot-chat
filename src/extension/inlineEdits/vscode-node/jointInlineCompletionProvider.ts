@@ -33,6 +33,7 @@ import { StringText } from '../../../util/vs/editor/common/core/text/abstractTex
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { registerUnificationCommands } from '../../completions-core/vscode-node/completionsServiceBridges';
+import { GhostTextCompletionItem, GhostTextCompletionList } from '../../completions-core/vscode-node/extension/src/ghostText/ghostText';
 import { CopilotInlineCompletionItemProvider } from '../../completions-core/vscode-node/extension/src/inlineCompletion';
 import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
@@ -227,16 +228,16 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 }
 
 type SingularCompletionItem =
-	| ({ source: 'completions' } & vscode.InlineCompletionItem)
+	| ({ source: 'completions' } & GhostTextCompletionItem)
 	| ({ source: 'inlineEdits' } & NesCompletionItem)
 	;
 
 type SingularCompletionList =
-	| ({ source: 'completions' } & vscode.InlineCompletionList)
+	| ({ source: 'completions' } & GhostTextCompletionList)
 	| ({ source: 'inlineEdits' } & NesCompletionList)
 	;
 
-function toCompletionsList(list: vscode.InlineCompletionList): SingularCompletionList {
+function toCompletionsList(list: GhostTextCompletionList): SingularCompletionList {
 	return { ...list, items: list.items.map(item => ({ ...item, source: 'completions' })), source: 'completions' };
 }
 
@@ -573,7 +574,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	private _invokeCompletionsProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, ct: CancellationToken, sw: StopWatch) {
-		let completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined;
+		let completionsP: Promise<GhostTextCompletionList | undefined> | undefined;
 		if (this._completionsProvider) {
 			this._completionsRequestsInFlight.add(ct);
 			const disp = ct.onCancellationRequested(() => this._completionsRequestsInFlight.delete(ct));
@@ -604,7 +605,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	private async _returnCompletionsOrOtherwiseNES(
-		completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined,
+		completionsP: Promise<GhostTextCompletionList | undefined> | undefined,
 		nesP: Promise<NesCompletionList | undefined> | undefined,
 		docSnapshot: StringText,
 		sw: StopWatch,
@@ -644,7 +645,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	private _returnCompletions(
-		completionsR: vscode.InlineCompletionList,
+		completionsR: GhostTextCompletionList,
 		nesDisposeReason: vscode.InlineCompletionsDisposeReason,
 		nesP: Promise<NesCompletionList | undefined> | undefined,
 		sw: StopWatch,
@@ -661,7 +662,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	private _returnNES(
 		nesR: NesCompletionList,
 		completionsDisposeReason: vscode.InlineCompletionsDisposeReason,
-		completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined,
+		completionsP: Promise<GhostTextCompletionList | undefined> | undefined,
 		sw: StopWatch,
 		tracer: ITracer,
 		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
@@ -683,7 +684,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 
 	private static retainOnlyMeaningfulEdits<T extends vscode.InlineCompletionList>(docSnapshot: StringText, list: T): T {
 		// meaningful = not noop
-		function isMeaningfulEdit(item: vscode.InlineCompletionItem): boolean {
+		function isMeaningfulEdit(item: T['items'][number]): boolean {
 			if (item.range === undefined || // must be a completion with a side-effect, eg a command invocation or something
 				typeof item.insertText !== 'string' // shouldn't happen
 			) {
@@ -707,7 +708,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	public handleDidShowCompletionItem?(completionItem: SingularCompletionItem, updatedInsertText: string): void {
 		switch (completionItem.source) {
 			case 'completions':
-				this._completionsProvider?.handleDidShowCompletionItem?.(completionItem, updatedInsertText);
+				this._completionsProvider?.handleDidShowCompletionItem?.(completionItem);
 				break;
 			case 'inlineEdits':
 				this._inlineEditProvider?.handleDidShowCompletionItem?.(completionItem, updatedInsertText);

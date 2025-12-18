@@ -7,14 +7,13 @@ import {
 	CancellationToken,
 	InlineCompletionContext,
 	InlineCompletionEndOfLifeReason,
-	InlineCompletionItem,
 	InlineCompletionItemProvider,
 	InlineCompletionList,
 	InlineCompletionTriggerKind,
 	PartialAcceptInfo,
 	Position,
 	TextDocument,
-	workspace,
+	workspace
 } from 'vscode';
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
 import { LineEdit } from '../../../../../util/vs/editor/common/core/edits/lineEdit';
@@ -32,7 +31,7 @@ import { Logger } from '../../lib/src/logger';
 import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
 import { ICompletionsExtensionStatus } from './extensionStatus';
-import { GhostTextProvider } from './ghostText/ghostText';
+import { GhostTextCompletionItem, GhostTextCompletionList, GhostTextProvider } from './ghostText/ghostText';
 
 const logger = new Logger('inlineCompletionItemProvider');
 
@@ -58,7 +57,7 @@ export function exception(accessor: ServicesAccessor, error: unknown, origin: st
 /** @public */
 export class CopilotInlineCompletionItemProvider extends Disposable implements InlineCompletionItemProvider {
 	private readonly copilotCompletionFeedbackTracker: CopilotCompletionFeedbackTracker;
-	private readonly ghostTextProvider: InlineCompletionItemProvider;
+	private readonly ghostTextProvider: GhostTextProvider;
 	private readonly inlineEditLogger: InlineEditLogger;
 
 	public onDidChange = undefined;
@@ -80,7 +79,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		position: Position,
 		context: InlineCompletionContext,
 		token: CancellationToken
-	): Promise<InlineCompletionList | undefined> {
+	): Promise<GhostTextCompletionList | undefined> {
 		const logContext = new GhostTextContext(doc.uri.toString(), doc.version, context);
 		try {
 			return await this._provideInlineCompletionItems(doc, position, context, logContext, token);
@@ -98,7 +97,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		context: InlineCompletionContext,
 		logContext: GhostTextContext,
 		token: CancellationToken
-	): Promise<InlineCompletionList | undefined> {
+	): Promise<GhostTextCompletionList | undefined> {
 		if (context.triggerKind === InlineCompletionTriggerKind.Automatic) {
 			if (!this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {
 				return;
@@ -144,29 +143,29 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		}
 	}
 
-	handleDidShowCompletionItem(item: InlineCompletionItem, updatedInsertText: string) {
+	handleDidShowCompletionItem(item: GhostTextCompletionItem) {
 		try {
 			this.copilotCompletionFeedbackTracker.trackItem(item);
-			return this.ghostTextProvider.handleDidShowCompletionItem?.(item, updatedInsertText);
+			return this.ghostTextProvider.handleDidShowCompletionItem(item);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
 	}
 
 	handleDidPartiallyAcceptCompletionItem(
-		item: InlineCompletionItem,
+		item: GhostTextCompletionItem,
 		acceptedLengthOrInfo: number & PartialAcceptInfo
 	) {
 		try {
-			return this.ghostTextProvider.handleDidPartiallyAcceptCompletionItem?.(item, acceptedLengthOrInfo);
+			return this.ghostTextProvider.handleDidPartiallyAcceptCompletionItem(item, acceptedLengthOrInfo);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
 		}
 	}
 
-	handleEndOfLifetime(completionItem: InlineCompletionItem, reason: InlineCompletionEndOfLifeReason) {
+	handleEndOfLifetime(completionItem: GhostTextCompletionItem, reason: InlineCompletionEndOfLifeReason) {
 		try {
-			return this.ghostTextProvider.handleEndOfLifetime?.(completionItem, reason);
+			return this.ghostTextProvider.handleEndOfLifetime(completionItem, reason);
 		} catch (e) {
 			this.instantiationService.invokeFunction(exception, e, '.handleEndOfLifetime', logger);
 		}
