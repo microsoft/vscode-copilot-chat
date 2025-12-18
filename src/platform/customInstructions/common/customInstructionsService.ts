@@ -76,8 +76,8 @@ function isCodeGenerationTextInstruction(instruction: any): instruction is CodeG
 const INSTRUCTION_FILE_EXTENSION = '.instructions.md';
 const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
 
-const SKILL_FOLDER = '.claude/skills';
-const USE_CLAUDE_SKILLS_SETTING = 'chat.useClaudeSkills';
+const SKILL_FOLDERS = ['.copilot/skills', '.claude/skills'];
+const USE_AGENT_SKILLS_SETTING = 'chat.useAgentSkills';
 
 const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
 
@@ -164,15 +164,15 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 
 		this._matchInstructionLocationsFromSkills = observableFromEvent(
 			(handleChange) => this._register(configurationService.onDidChangeConfiguration(e => {
-				if (e.affectsConfiguration(USE_CLAUDE_SKILLS_SETTING)) {
+				if (e.affectsConfiguration(USE_AGENT_SKILLS_SETTING)) {
 					handleChange(e);
 				}
 			})),
 			() => {
-				if (this.configurationService.getNonExtensionConfig<boolean>(USE_CLAUDE_SKILLS_SETTING)) {
-					const skillFolderUri = extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, SKILL_FOLDER);
+				if (this.configurationService.getNonExtensionConfig<boolean>(USE_AGENT_SKILLS_SETTING)) {
+					const skillFolderUris = SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
 					return ((uri: URI) => {
-						return extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri);
+						return skillFolderUris.some(skillFolderUri => extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri));
 					});
 				}
 				return (() => false);
