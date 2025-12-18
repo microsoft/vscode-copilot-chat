@@ -188,7 +188,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 						seenAgents.set(agentKey, agent);
 						agentsForOrg.set(agent.name, agent);
 					}
-					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName}`);
+					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName} (${agentsForOrg.size} added after deduplication)`);
 				} catch (error) {
 					if (error instanceof UserNotSignedInError) {
 						this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
