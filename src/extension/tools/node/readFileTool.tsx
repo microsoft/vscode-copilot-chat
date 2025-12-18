@@ -124,8 +124,9 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
 		let ranges: IParamRanges | undefined;
+		let uri: URI | undefined;
 		try {
-			const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
+			uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
 			const documentSnapshot = await this.getSnapshot(uri);
 			ranges = getParamRanges(options.input, documentSnapshot);
 
@@ -147,7 +148,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				)
 			]);
 		} catch (err) {
-			void this.sendReadFileTelemetry('error', options, ranges || { start: 0, end: 0, truncated: false }, undefined);
+			void this.sendReadFileTelemetry('error', options, ranges || { start: 0, end: 0, truncated: false }, uri);
 			throw err;
 		}
 	}
@@ -158,14 +159,14 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			return;
 		}
 
-		let uri: URI;
+		let uri: URI | undefined;
 		let documentSnapshot: NotebookDocumentSnapshot | TextDocumentSnapshot;
 		try {
 			uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
-			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
+			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri!));
 			documentSnapshot = await this.getSnapshot(uri);
 		} catch (err) {
-			void this.sendReadFileTelemetry('invalidFile', options, { start: 0, end: 0, truncated: false }, undefined);
+			void this.sendReadFileTelemetry('invalidFile', options, { start: 0, end: 0, truncated: false }, uri);
 			throw err;
 		}
 
