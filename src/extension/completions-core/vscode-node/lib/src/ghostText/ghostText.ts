@@ -636,7 +636,7 @@ function getRemainingDebounceMs(accessor: ServicesAccessor, opts: GetGhostTextOp
 	return Math.max(0, debounce - elapsed);
 }
 
-function inlineCompletionRequestCancelled(
+function isCompletionRequestCancelled(
 	currentGhostText: ICompletionsCurrentGhostText,
 	requestId: string,
 	cancellationToken?: ICancellationToken
@@ -668,7 +668,7 @@ async function getGhostTextWithoutAbortHandling(
 	const currentGhostText = accessor.get(ICompletionsCurrentGhostText);
 	const statusReporter = accessor.get(ICompletionsStatusReporter);
 
-	if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
+	if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
 		return {
 			type: 'abortedBeforeIssued',
 			reason: 'cancelled before extractPrompt',
@@ -758,7 +758,7 @@ async function getGhostTextWithoutAbortHandling(
 	if (debounce > 0) {
 		ghostTextLogger.debug(logTarget, `Debouncing ghost text request for ${debounce}ms`);
 		await delay(debounce);
-		if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
+		if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
 			return {
 				type: 'abortedBeforeIssued',
 				reason: 'cancelled after debounce',
@@ -845,7 +845,7 @@ async function getGhostTextWithoutAbortHandling(
 				const trimmedChoice = makeGhostAPIChoice(choice[0], { forceSingleLine });
 				choices = [[trimmedChoice], ResultType.Async];
 			}
-			if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
+			if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
 				ghostTextLogger.debug(logTarget, 'Cancelled before requesting a new completion');
 				return {
 					type: 'abortedBeforeIssued',
@@ -988,7 +988,7 @@ async function getGhostTextWithoutAbortHandling(
 		if (resultType !== ResultType.TypingAsSuggested && !ghostTextOptions.isCycling && remainingDelay > 0) {
 			ghostTextLogger.debug(logTarget, `Waiting ${remainingDelay}ms before returning completion`);
 			await delay(remainingDelay);
-			if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
+			if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
 				ghostTextLogger.debug(logTarget, 'Cancelled after completions delay');
 				return {
 					type: 'canceled',
@@ -1038,7 +1038,7 @@ async function getGhostTextWithoutAbortHandling(
 			`Produced ${results.length} results from ${resultTypeToString(resultType)} at ${telemetryData.measurements.foundOffset} offset`
 		);
 
-		if (inlineCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
+		if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
 			return {
 				type: 'canceled',
 				reason: 'after post processing completions',
