@@ -1028,7 +1028,7 @@ Test prompt
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
-		// Different versions are deduplicated, only the last one is kept
+		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);
 		assert.equal(agents[0].name, 'versioned_agent');
 	});
