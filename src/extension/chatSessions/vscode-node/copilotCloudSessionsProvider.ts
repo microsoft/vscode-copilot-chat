@@ -407,16 +407,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.chatSessionItemsPromise = (async () => {
 			const repoId = await getRepoId(this._gitService);
 
-			// TODO: handle no auth token case more gracefully
-			if (!this._authenticationService.permissiveGitHubSession) {
-				return [];
-			}
-
 			// Make sure if it's not a github repo we don't show any sessions
 			if (!repoId && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 				return [];
 			}
-			const sessions = await this._octoKitService.getAllSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined, true, { createIfNone: true });
+			const sessions = await this._octoKitService.getAllSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined, true, { createIfNone: false });
 			this.cachedSessionsSize = sessions.length;
 
 			// Group sessions by resource_id and keep only the latest per resource_id
@@ -447,7 +442,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			// Fetch PRs for all unique resource_global_ids in parallel
 			const uniqueGlobalIds = new Set(Array.from(latestSessionsMap.values()).map(s => s.resource_global_id));
 			const prFetches = Array.from(uniqueGlobalIds).map(async globalId => {
-				const pr = await this._octoKitService.getPullRequestFromGlobalId(globalId, { createIfNone: true });
+				const pr = await this._octoKitService.getPullRequestFromGlobalId(globalId, { createIfNone: false });
 				return { globalId, pr };
 			});
 			const prResults = await Promise.all(prFetches);
