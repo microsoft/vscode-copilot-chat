@@ -192,7 +192,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				let intervalMs: number;
 				let hasHistoricalSessions: boolean;
 				try {
-					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false, { createIfNone: true });
+					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false, { createIfNone: false });
 					hasHistoricalSessions = sessions.length > 0;
 					intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
 				} catch (e) {
@@ -204,13 +204,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				telemetryObj.intervalMs = intervalMs;
 				telemetryObj.hasHistoricalSessions = hasHistoricalSessions;
 				const schedulerCallback = async () => {
-					// TODO: handle no auth token case more gracefully
-					if (!this._authenticationService.permissiveGitHubSession) {
-						return;
-					}
 					let sessions = [];
 					try {
-						sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, true, { createIfNone: true });
+						sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, true, { createIfNone: false });
 						if (this.cachedSessionsSize !== sessions.length) {
 							this.refresh();
 						}
