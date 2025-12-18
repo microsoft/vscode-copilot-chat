@@ -5,7 +5,6 @@
 
 import {
 	CancellationToken,
-	commands,
 	InlineCompletionContext,
 	InlineCompletionEndOfLifeReason,
 	InlineCompletionEndOfLifeReasonKind,
@@ -17,11 +16,12 @@ import {
 	Position,
 	Range,
 	TextDocument,
-	window,
+	window
 } from 'vscode';
-import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ISurveyService } from '../../../../../../platform/survey/common/surveyService';
+import { assertNever } from '../../../../../../util/vs/base/common/assert';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
-import { SURVEY_SIGNAL_USAGE_ID } from '../../../../../survey/vscode-node/surveyCommands';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
 import { GhostText } from '../../../lib/src/inlineCompletion';
@@ -36,6 +36,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ISurveyService private readonly _surveyService: ISurveyService,
 	) {
 		this.ghostText = this.instantiationService.createInstance(GhostText);
 	}
@@ -102,28 +103,29 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 	}
 
 	handleEndOfLifetime(completionItem: InlineCompletionItem, reason: InlineCompletionEndOfLifeReason) {
-		// Send telemetry event when a completion is explicitly dismissed
-		if (reason.kind !== InlineCompletionEndOfLifeReasonKind.Rejected) {
+		const copilotCompletion = completionItem.command!.arguments![0] as CopilotCompletion;
+		if (!copilotCompletion) {
 			return;
 		}
-		const cmp = completionItem.command?.arguments?.[0] as CopilotCompletion | undefined;
-		if (!cmp) {
-			return;
+		switch (reason.kind) {
+			case InlineCompletionEndOfLifeReasonKind.Accepted: {
+				this.instantiationService.invokeFunction(handleGhostTextPostInsert, copilotCompletion);
+				this._surveyService.signalUsage('completions').catch(() => {
+					// Ignore errors from the survey command execution
+				});
+				return;
+			}
+			case InlineCompletionEndOfLifeReasonKind.Rejected: {
+				this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', copilotCompletion.telemetry);
+				return;
+			}
+			case InlineCompletionEndOfLifeReasonKind.Ignored: {
+				// @ulugbekna: no-op ?
+				return;
+			}
+			default: {
+				assertNever(reason);
+			}
 		}
-		this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', cmp.telemetry);
 	}
-}
-
-/** Registers the commands necessary to use GhostTextProvider (but not GhostTextProvider itself) */
-export function registerGhostTextDependencies(accessor: ServicesAccessor) {
-	const instantiationService = accessor.get(IInstantiationService);
-	const postCmdHandler = commands.registerCommand(postInsertCmdName, async (e: CopilotCompletion) => {
-		instantiationService.invokeFunction(handleGhostTextPostInsert, e);
-		try {
-			await commands.executeCommand(SURVEY_SIGNAL_USAGE_ID, 'completions');
-		} catch (e) {
-			// Ignore errors from the survey command execution
-		}
-	});
-	return postCmdHandler;
 }

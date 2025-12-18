@@ -19,7 +19,6 @@ import { contextProviderMatch } from './extension/src/contextProviderMatch';
 import { registerPanelSupport } from './extension/src/copilotPanel/common';
 import { CopilotExtensionStatus, ICompletionsExtensionStatus } from './extension/src/extensionStatus';
 import { extensionFileSystem } from './extension/src/fileSystem';
-import { registerGhostTextDependencies } from './extension/src/ghostText/ghostText';
 import { exception } from './extension/src/inlineCompletion';
 import { ModelPickerManager } from './extension/src/modelPicker';
 import { CopilotStatusBar } from './extension/src/statusBar';
@@ -131,9 +130,6 @@ export function setup(serviceAccessor: ServicesAccessor, disposables: Disposable
 	// This must be registered before activation!
 	// CodeQuote needs to listen for the initial token notification event.
 	disposables.add(serviceAccessor.get(ICompletionsCitationManager).register());
-
-	// Send telemetry when ghost text is accepted
-	disposables.add(registerGhostTextDependencies(serviceAccessor));
 
 	// Register to listen for changes to the active document to keep track
 	// of last access time
