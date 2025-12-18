@@ -76,7 +76,7 @@ export class GhostTextProvider {
 			return;
 		}
 
-		const items = rawCompletions.map(completion => {
+		const items: GhostTextCompletionItem[] = rawCompletions.map(completion => {
 			const { start, end } = completion.range;
 			const newRange = new Range(start.line, start.character, end.line, end.character);
 			return {
