@@ -90,7 +90,7 @@ export class XtabNextCursorPredictor {
 			return Result.fromString(currentFileContentR.err);
 		}
 
-		const { taggedCurrentDocLines, areaAroundCodeToEdit } = currentFileContentR.val;
+		const { clippedTaggedCurrentDoc, areaAroundCodeToEdit } = currentFileContentR.val;
 
 		const newPromptPieces = new PromptPieces(
 			promptPieces.currentDocument,
@@ -98,7 +98,7 @@ export class XtabNextCursorPredictor {
 			promptPieces.areaAroundEditWindowLinesRange,
 			promptPieces.activeDoc,
 			promptPieces.xtabHistory,
-			taggedCurrentDocLines,
+			clippedTaggedCurrentDoc.lines,
 			areaAroundCodeToEdit,
 			promptPieces.langCtx,
 			promptPieces.aggressivenessLevel,
@@ -186,6 +186,9 @@ export class XtabNextCursorPredictor {
 			}
 			if (lineNumber < 0) {
 				return Result.fromString(`negativeLineNumber`);
+			}
+			if (lineNumber < clippedTaggedCurrentDoc.keptRange.start || clippedTaggedCurrentDoc.keptRange.endExclusive <= lineNumber) {
+				return Result.fromString(`modelNotSeenLineNumber`);
 			}
 
 			return Result.ok(lineNumber);

@@ -277,9 +277,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.PromptTooLarge('currentFile'));
 		}
 
-		const { taggedCurrentDocLines, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
+		const { clippedTaggedCurrentDoc, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
-		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
+		telemetryBuilder.setNLinesOfCurrentFileInPrompt(clippedTaggedCurrentDoc.lines.length);
 
 		const aggressivenessLevel = this.userInteractionMonitor.getAggressivenessLevel();
 
@@ -304,7 +304,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			activeDocument,
 			request.xtabEditHistory,
-			taggedCurrentDocLines,
+			clippedTaggedCurrentDoc.lines,
 			areaAroundCodeToEdit,
 			langCtx,
 			aggressivenessLevel,
