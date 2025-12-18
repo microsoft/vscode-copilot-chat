@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../../platform/github/common/githubService';
+import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -45,6 +45,9 @@ class MockOctoKitService implements IOctoKitService {
 	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];
 
 	async getCustomAgents(owner: string, repo: string, options: CustomAgentListOptions, authOptions: { createIfNone?: boolean }): Promise<CustomAgentListItem[]> {
+		if (!(await this.getCurrentAuthedUser())) {
+			throw new PermissiveAuthRequiredError();
+		}
 		return this.customAgents;
 	}
 

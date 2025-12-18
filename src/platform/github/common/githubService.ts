@@ -200,6 +200,13 @@ interface GitHubBlobResponse {
 	encoding: string;
 }
 
+export class PermissiveAuthRequiredError extends Error {
+	constructor() {
+		super('Permissive authentication is required');
+		this.name = 'PermissiveAuthRequiredError';
+	}
+}
+
 export interface IOctoKitService {
 
 	_serviceBrand: undefined;
@@ -217,25 +224,25 @@ export interface IOctoKitService {
 
 	/**
 	 * Returns the list of Copilot sessions for a given pull request.
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	getCopilotSessionsForPR(prId: string, authOptions: AuthOptions): Promise<SessionInfo[]>;
 
 	/**
 	 * Returns the logs for a specific Copilot session.
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	getSessionLogs(sessionId: string, authOptions: AuthOptions): Promise<string>;
 
 	/**
 	 * Returns the information for a specific Copilot session.
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	getSessionInfo(sessionId: string, authOptions: AuthOptions): Promise<SessionInfo | undefined>;
 
 	/**
 	 * Posts a new Copilot agent job.
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	postCopilotAgentJob(
 		owner: string,
@@ -247,31 +254,31 @@ export interface IOctoKitService {
 
 	/**
 	 * Gets a job by its job ID.
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string, authOptions: AuthOptions): Promise<JobInfo | undefined>;
 
 	/**
 	 * Gets a job by session ID
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string, authOptions: AuthOptions): Promise<JobInfo | undefined>;
 
 	/**
 	 * Adds a comment to a pull request.
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	addPullRequestComment(pullRequestId: string, commentBody: string, authOptions: AuthOptions): Promise<PullRequestComment | null>;
 
 	/**
 	 * Gets all open Copilot sessions.
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	getAllSessions(nwo: string | undefined, open: boolean, authOptions: AuthOptions): Promise<SessionInfo[]>;
 
 	/**
 	 * Gets pull request from global id.
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	getPullRequestFromGlobalId(globalId: string, authOptions: AuthOptions): Promise<PullRequestSearchItem | null>;
 
@@ -285,7 +292,7 @@ export interface IOctoKitService {
 	 *   - excludeInvalidConfigs: Exclude agents with invalid configurations.
 	 *   - deduplicate: Remove duplicate agents from the result.
 	 *   - source: Filter agents by their source (repo, org, enterprise).
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns An array of custom agent list items with basic metadata
 	 */
 	getCustomAgents(owner: string, repo: string, options: CustomAgentListOptions, authOptions: AuthOptions): Promise<CustomAgentListItem[]>;
@@ -296,7 +303,7 @@ export interface IOctoKitService {
 	 * @param repo The repository name
 	 * @param agentName The name of the custom agent
 	 * @param version Optional git ref (branch, tag, or commit SHA) to fetch from
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns The complete custom agent configuration including the prompt
 	 */
 	getCustomAgentDetails(owner: string, repo: string, agentName: string, version: string, authOptions: AuthOptions): Promise<CustomAgentDetails | undefined>;
@@ -327,14 +334,14 @@ export interface IOctoKitService {
 	 * @param repo The repository name
 	 * @param ref The commit SHA, branch name, or tag
 	 * @param path The file path within the repository
-	 * @param authOptions - Authentication options. By default, uses silent auth and throws if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns The file content as a string
 	 */
 	getFileContent(owner: string, repo: string, ref: string, path: string, authOptions: AuthOptions): Promise<string>;
 
 	/**
 	 * Gets the list of organizations that the authenticated user belongs to.
-	 * @param authOptions - Authentication options. By default, uses silent auth and returns empty array if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns An array of organization logins
 	 */
 	getUserOrganizations(authOptions: AuthOptions): Promise<string[]>;
@@ -342,7 +349,7 @@ export interface IOctoKitService {
 	/**
 	 * Gets the list of repositories for an organization.
 	 * @param org The organization name
-	 * @param authOptions - Authentication options. By default, uses silent auth and returns empty array if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns An array of repository names
 	 */
 	getOrganizationRepositories(org: string, authOptions: AuthOptions): Promise<string[]>;

@@ -8,17 +8,11 @@ import YAML from 'yaml';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
-import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
+import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 const AgentFileExtension = '.agent.md';
-
-class UserNotSignedInError extends Error {
-	constructor() {
-		super('User is not signed in');
-	}
-}
 
 export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentsProvider {
 
@@ -170,7 +164,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 					}
 					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName}`);
 				} catch (error) {
-					if (error instanceof UserNotSignedInError) {
+					if (error instanceof PermissiveAuthRequiredError) {
 						this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
 						return;
 					}
@@ -250,7 +244,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 							totalAgents++;
 						}
 					} catch (error) {
-						if (error instanceof UserNotSignedInError) {
+						if (error instanceof PermissiveAuthRequiredError) {
 							this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
 							return;
 						}
