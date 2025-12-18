@@ -55,6 +55,7 @@ export interface ICustomInstructionsService {
 
 	isExternalInstructionsFile(uri: URI): boolean;
 	isExternalInstructionsFolder(uri: URI): boolean;
+	isSkillFile(uri: URI): boolean;
 }
 
 export type CodeGenerationInstruction = { languagee?: string; text: string } | { languagee?: string; file: string };
@@ -76,7 +77,8 @@ function isCodeGenerationTextInstruction(instruction: any): instruction is CodeG
 const INSTRUCTION_FILE_EXTENSION = '.instructions.md';
 const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
 
-const SKILL_FOLDERS = ['.copilot/skills', '.claude/skills'];
+const WORKSPACE_SKILL_FOLDERS = ['.github/skills', '.claude/skills'];
+const PERSONAL_SKILL_FOLDERS = ['.copilot/skills', '.claude/skills'];
 const USE_AGENT_SKILLS_SETTING = 'chat.useAgentSkills';
 
 const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
@@ -170,7 +172,11 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 			})),
 			() => {
 				if (this.configurationService.getNonExtensionConfig<boolean>(USE_AGENT_SKILLS_SETTING)) {
-					const skillFolderUris = SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
+					const personalSkillFolderUris = PERSONAL_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
+					const workspaceSkillFolderUris = this.workspaceService.getWorkspaceFolders().flatMap(workspaceFolder =>
+						WORKSPACE_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(workspaceFolder, folder))
+					);
+					const skillFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
 					return ((uri: URI) => {
 						return skillFolderUris.some(skillFolderUri => extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri));
 					});
@@ -285,5 +291,9 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	public isExternalInstructionsFolder(uri: URI): boolean {
 		return this._matchInstructionLocationsFromExtensions.get()(uri)
 			|| this._matchInstructionLocationsFromSkills.get()(uri);
+	}
+
+	public isSkillFile(uri: URI): boolean {
+		return this._matchInstructionLocationsFromSkills.get()(uri);
 	}
 }
