@@ -138,7 +138,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 				commands: [sendCompletionFeedbackCommand],
 			};
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
+			this.instantiationService.invokeFunction(exception, e, '._provideInlineCompletionItems', logger);
 			logContext.setError(e);
 		}
 	}
@@ -148,7 +148,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 			this.copilotCompletionFeedbackTracker.trackItem(item);
 			return this.ghostTextProvider.handleDidShowCompletionItem(item);
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
+			this.instantiationService.invokeFunction(exception, e, '.handleDidShowCompletionItem', logger);
 		}
 	}
 
@@ -159,7 +159,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		try {
 			return this.ghostTextProvider.handleDidPartiallyAcceptCompletionItem(item, acceptedLengthOrInfo);
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '.provideInlineCompletionItems', logger);
+			this.instantiationService.invokeFunction(exception, e, '.handleDidPartiallyAcceptCompletionItem', logger);
 		}
 	}
 
