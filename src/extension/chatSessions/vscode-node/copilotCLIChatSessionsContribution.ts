@@ -87,26 +87,51 @@ function isUntitledSessionId(sessionId: string): boolean {
 	return sessionId.startsWith('untitled:') || sessionId.startsWith('untitled-');
 }
 
-interface CopilotCLIWorktreeProperties {
+interface CopilotCLIWorktreeData {
+	readonly data: string;
+	readonly version: number;
+}
+
+interface CopilotCLIWorktreePropertiesV1 {
 	readonly branchName: string;
 	readonly baseCommit: string;
 	readonly worktreePath: string;
 }
 
+type CopilotCLIWorktreeProperties = CopilotCLIWorktreePropertiesV1;
+
 export class CopilotCLIWorktreeManager {
 	static COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY = 'github.copilot.cli.sessionIsolation';
 	static COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
-	static COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY_2 = 'github.copilot.cli.sessionWorktrees2';
 
 	private _sessionIsolation: Map<string, boolean> = new Map();
-	private _sessionWorktrees: Map<string, string> = new Map();
-	private _sessionWorktreeProperties: Map<string, CopilotCLIWorktreeProperties> = new Map();
+	private _sessionWorktrees: Map<string, string | CopilotCLIWorktreeProperties> = new Map();
 
 	constructor(
 		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
-	) { }
+	) {
+		this.loadWorktreeProperties();
+	}
+
+	private loadWorktreeProperties(): void {
+		const data = this.extensionContext.globalState.get<Record<string, string | CopilotCLIWorktreeData>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, {});
+
+		for (const [key, value] of Object.entries(data)) {
+			if (typeof value === 'string') {
+				// Legacy worktree path
+				this._sessionWorktrees.set(key, value);
+			} else {
+				if (value.version === 1) {
+					// Worktree properties v1
+					this._sessionWorktrees.set(key, JSON.parse(value.data) satisfies CopilotCLIWorktreeProperties);
+				} else {
+					this.logService.warn(`Unsupported worktree properties version: ${value.version} for session ${key}`);
+				}
+			}
+		}
+	}
 
 	isSupported() {
 		const repository = this.gitService.activeRepository.get();
@@ -157,23 +182,30 @@ export class CopilotCLIWorktreeManager {
 		}
 	}
 
-	async storeWorktreePath(sessionId: string, workingDirectory: string): Promise<void> {
-		this._sessionWorktrees.set(sessionId, workingDirectory);
-		const sessionWorktrees = this.extensionContext.globalState.get<Record<string, string>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, {});
-		sessionWorktrees[sessionId] = workingDirectory;
-		await this.extensionContext.globalState.update(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, sessionWorktrees);
+	getWorktreeProperties(sessionId: string): CopilotCLIWorktreeProperties | undefined {
+		const properties = this._sessionWorktrees.get(sessionId);
+		return typeof properties === 'string' ? undefined : properties;
+	}
+
+	async saveWorktreeProperties(sessionId: string, properties: string | CopilotCLIWorktreeProperties): Promise<void> {
+		this._sessionWorktrees.set(sessionId, properties);
+
+		const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, string | CopilotCLIWorktreeData>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, {});
+		sessionWorktreesProperties[sessionId] = { data: JSON.stringify(properties), version: 1 };
+		await this.extensionContext.globalState.update(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, sessionWorktreesProperties);
 	}
 
 	getWorktreePath(sessionId: string): string | undefined {
-		let workingDirectory = this._sessionWorktrees.get(sessionId);
-		if (!workingDirectory) {
-			const sessionWorktrees = this.extensionContext.globalState.get<Record<string, string>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, {});
-			workingDirectory = sessionWorktrees[sessionId];
-			if (workingDirectory) {
-				this._sessionWorktrees.set(sessionId, workingDirectory);
-			}
+		const worktreeProperties = this._sessionWorktrees.get(sessionId);
+		if (worktreeProperties === undefined) {
+			return undefined;
+		} else if (typeof worktreeProperties === 'string') {
+			// Legacy worktree path
+			return worktreeProperties;
+		} else {
+			// Worktree properties v1
+			return worktreeProperties.worktreePath;
 		}
-		return workingDirectory;
 	}
 
 	getWorktreeRelativePath(sessionId: string): string | undefined {
@@ -185,26 +217,6 @@ export class CopilotCLIWorktreeManager {
 		// TODO@rebornix, @osortega: read the workingtree name from git extension
 		const lastIndex = worktreePath.lastIndexOf('/');
 		return worktreePath.substring(lastIndex + 1);
-
-	}
-
-	async storeWorktreeProperties(sessionId: string, properties: CopilotCLIWorktreeProperties): Promise<void> {
-		this._sessionWorktreeProperties.set(sessionId, properties);
-		const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, CopilotCLIWorktreeProperties>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY_2, {});
-		sessionWorktreesProperties[sessionId] = properties;
-		await this.extensionContext.globalState.update(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY_2, sessionWorktreesProperties);
-	}
-
-	getWorktreeProperties(sessionId: string): CopilotCLIWorktreeProperties | undefined {
-		let properties = this._sessionWorktreeProperties.get(sessionId);
-		if (!properties) {
-			const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, CopilotCLIWorktreeProperties>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY_2, {});
-			properties = sessionWorktreesProperties[sessionId];
-			if (properties) {
-				this._sessionWorktreeProperties.set(sessionId, properties);
-			}
-		}
-		return properties;
 	}
 
 	getDefaultIsolationPreference(): boolean {
@@ -772,8 +784,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			this.untitledSessionIdMapping.set(id, session.object.sessionId);
 		}
 		if (isNewSession && workingDirectory && worktreeProperties && isolationEnabled) {
-			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory.fsPath);
-			await this.worktreeManager.storeWorktreeProperties(session.object.sessionId, worktreeProperties);
+			await this.worktreeManager.saveWorktreeProperties(session.object.sessionId, worktreeProperties);
 		}
 		disposables.add(session.object.attachStream(stream));
 		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) => requestPermission(this.instantiationService, permissionRequest, toolCall, this.toolsService, request.toolInvocationToken, token)));
@@ -1033,10 +1044,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return summary ? `${userPrompt}\n${summary}` : userPrompt;
 		})();
 
+		let worktreeProperties: CopilotCLIWorktreeProperties | undefined;
 		const getWorkingDirectory = async () => {
 			// Create worktree if isolation is enabled and we don't have one yet
 			if (isolationEnabled && !workingDirectory) {
-				const worktreeProperties = await this.worktreeManager.createWorktree(stream);
+				worktreeProperties = await this.worktreeManager.createWorktree(stream);
 				workingDirectory = worktreeProperties ? URI.file(worktreeProperties.worktreePath) : undefined;
 			}
 
@@ -1063,8 +1075,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			void this.chatDelegationSummaryService.trackSummaryUsage(session.object.sessionId, summary);
 		}
 		// Do not await, we want this code path to be as fast as possible.
-		if (isolationEnabled && workingDirectory) {
-			void this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory.fsPath);
+		if (isolationEnabled && worktreeProperties) {
+			void this.worktreeManager.saveWorktreeProperties(session.object.sessionId, worktreeProperties);
 		}
 
 		try {

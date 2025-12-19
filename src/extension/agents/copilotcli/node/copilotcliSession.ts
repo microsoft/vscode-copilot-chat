@@ -92,12 +92,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
 		@IGitService private readonly gitService: IGitService,
+		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
-		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService
+		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;

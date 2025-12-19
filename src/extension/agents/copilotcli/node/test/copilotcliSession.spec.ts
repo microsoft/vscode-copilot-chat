@@ -6,6 +6,7 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext } from 'vscode';
+import { IGitCommitMessageService } from '../../../../../platform/git/common/gitCommitMessageService';
 import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
@@ -82,6 +83,7 @@ describe('CopilotCLISession', () => {
 	let workspaceService: IWorkspaceService;
 	let logger: ILogService;
 	let gitService: IGitService;
+	let gitCommitMessageService: IGitCommitMessageService;
 	let sessionOptions: CopilotCLISessionOptions;
 	let instaService: IInstantiationService;
 	let sdk: ICopilotCLISDK;
@@ -95,6 +97,7 @@ describe('CopilotCLISession', () => {
 		const accessor = services.createTestingAccessor();
 		logger = accessor.get(ILogService);
 		gitService = accessor.get(IGitService);
+		gitCommitMessageService = accessor.get(IGitCommitMessageService);
 		sdk = new class extends mock<ICopilotCLISDK>() {
 			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 				return {
@@ -121,6 +124,7 @@ describe('CopilotCLISession', () => {
 			sessionOptions,
 			sdkSession as unknown as Session,
 			gitService,
+			gitCommitMessageService,
 			logger,
 			workspaceService,
 			sdk,

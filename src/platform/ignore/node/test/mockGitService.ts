@@ -97,6 +97,10 @@ export class MockGitService implements IGitService {
 		return Promise.resolve();
 	}
 
+	commit(uri: URI, message: string | undefined): Promise<void> {
+		return Promise.resolve();
+	}
+
 	dispose(): void {
 		this._onDidCloseRepository.dispose();
 	}
