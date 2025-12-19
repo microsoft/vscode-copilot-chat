@@ -86,7 +86,7 @@ function formatSingleDiagnostic(
 
 	let codeStr = '';
 	if (diagnostic.code) {
-		const source = diagnostic.source ? `${diagnostic.source.toUpperCase()}` : '';
+		const source = diagnostic.source ? diagnostic.source.toUpperCase() : '';
 		codeStr = ` ${source}${diagnostic.code}`;
 	}
 

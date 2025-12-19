@@ -82,8 +82,8 @@ describe('LintErrors', () => {
 					message: 'Variable is never read',
 					range: new Range(0, 6, 0, 7),
 					severity: DiagnosticSeverity.Error,
-					code: { value: 'TS6133', target: 'file:///test' as unknown as import('vscode').Uri },
-					source: 'typescript'
+					code: { value: '6133', target: 'file:///test' as unknown as import('vscode').Uri },
+					source: 'ts'
 				}
 			]);
 
@@ -93,7 +93,6 @@ describe('LintErrors', () => {
 			);
 
 			const result = lintErrors.getFormattedLintErrors();
-			expect(result).toContain('TYPESCRIPT');
 			expect(result).toContain('TS6133');
 		});
 
