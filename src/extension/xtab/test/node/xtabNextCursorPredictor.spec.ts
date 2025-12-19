@@ -76,6 +76,7 @@ function createTestPromptPieces(): PromptPieces {
 		'<area_around_code_to_edit>\nline 2\nline 3\n</area_around_code_to_edit>', // areaAroundCodeToEdit
 		undefined, // langCtx - can be undefined
 		AggressivenessLevel.Medium,
+		undefined, // lintErrors
 		computeTokens,
 		opts
 	);
