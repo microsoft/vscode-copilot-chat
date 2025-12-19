@@ -43,7 +43,7 @@ export enum LintOptionWarning {
 export enum LintOptionShowCode {
 	YES = 'yes',
 	NO = 'no',
-	YES_WITH_SURROUNDING = 'yesWithSurroundinglines',
+	YES_WITH_SURROUNDING = 'yesWithSurroundingLines',
 }
 export type LintOptions = {
 	tagName: string; // name to use in tag e.g "linter diagnostics" => <|linter diagnostics|>...</|linter diagnostics|>
