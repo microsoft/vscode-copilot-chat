@@ -58,25 +58,17 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath, aggressivenessLevel) : '';
 
-	// Format lint diagnostics if lintOptions is configured
-	const lintDiagnosticsSection = lintErrors ? lintErrors.getFormattedLintErrors() : '';
-
-	// Build the main prompt with lint diagnostics after the current file
-	const currentFileSection = `${PromptTags.CURRENT_FILE.start}
-current_file_path: ${currentFilePath}
-${currentFileContent}
-${PromptTags.CURRENT_FILE.end}`;
-
-	const currentFileSectionWithLint = lintDiagnosticsSection
-		? `${currentFileSection}\n\n${lintDiagnosticsSection}`
-		: currentFileSection;
+	const lintsWithNewLinePadding = lintErrors ? `\n${lintErrors.getFormattedLintErrors()}\n` : '';
 
 	const mainPrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}
 ${PromptTags.RECENT_FILES.end}
 
-${currentFileSectionWithLint}
-
+${PromptTags.CURRENT_FILE.start}
+current_file_path: ${currentFilePath}
+${currentFileContent}
+${PromptTags.CURRENT_FILE.end}
+${lintsWithNewLinePadding}
 ${PromptTags.EDIT_HISTORY.start}
 ${editDiffHistory}
 ${PromptTags.EDIT_HISTORY.end}

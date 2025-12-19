@@ -54,7 +54,7 @@ describe('LintErrors', () => {
 
 			const lintErrors = createLintErrors(defaultLintOptions, document);
 
-			expect(lintErrors.getFormattedLintErrors()).toBe('');
+			expect(lintErrors.getFormattedLintErrors()).toBe('<|linter diagnostics|>\n\n<|/linter diagnostics|>');
 		});
 
 		it('should format single error diagnostic without code context', () => {

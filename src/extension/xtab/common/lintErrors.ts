@@ -61,9 +61,6 @@ export class LintErrors {
 
 	public getFormattedLintErrors(): string {
 		const diagnostics = this._getRelevantDiagnostics();
-		if (!diagnostics || diagnostics.length === 0) {
-			return '';
-		}
 
 		const formattedDiagnostics = diagnostics.map(d => formatSingleDiagnostic(d, this._document.lines, this._lintOptions)).join('\n');
 
