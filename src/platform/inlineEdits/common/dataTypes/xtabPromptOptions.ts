@@ -47,10 +47,10 @@ export enum LintOptionShowCode {
 }
 export type LintOptions = {
 	tagName: string; // name to use in tag e.g "linter diagnostics" => <|linter diagnostics|>...</|linter diagnostics|>
-	warnings: LintOptionWarning; // If warning diagnostics should be included in the prompt
-	showCode: LintOptionShowCode; // If the line of code including line number should be include in the prompt. yesWithSurroundinglines include also the line before and after the diagnostic
-	maxLints: number; // max lints to include in the prompt
-	maxLineDistance: number; // only include diagnostics less than maxLineDistance lines away from the cursor
+	warnings: LintOptionWarning;
+	showCode: LintOptionShowCode;
+	maxLints: number;
+	maxLineDistance: number;
 }
 
 export enum AggressivenessLevel {
