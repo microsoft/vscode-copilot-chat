@@ -23,11 +23,11 @@ export interface RawThinkingDelta {
 	reasoning_text?: string;
 
 	// Fireworks AI fields
-	// https://docs.fireworks.ai/guide/reasoning-models#deepseek-r1-models
+	// https://docs.fireworks.ai/api-reference/post-chatcompletions#body-reasoning-effort-one-of-0
 	reasoning_content?: string;
 
 	// vLLM fields
-	// https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html#extra-parameters-for-chat-completions-api
+	// https://docs.vllm.ai/en/latest/features/reasoning_outputs/
 	reasoning?: string;
 
 	// Anthropic fields
