@@ -93,9 +93,9 @@ interface CopilotCLIWorktreeData {
 }
 
 interface CopilotCLIWorktreePropertiesV1 {
-	readonly branchName: string;
 	readonly baseCommit: string;
-	readonly worktreePath: string;
+	readonly branchName: string;
+	readonly worktreePath: vscode.Uri;
 }
 
 type CopilotCLIWorktreeProperties = CopilotCLIWorktreePropertiesV1;
@@ -148,7 +148,7 @@ export class CopilotCLIWorktreeManager {
 				const result = await this.tryCreateWorktree(progress);
 				resolve(result);
 				if (result) {
-					return vscode.l10n.t('Created isolated worktree at {0}', basename(Uri.file(result.worktreePath)));
+					return vscode.l10n.t('Created isolated worktree at {0}', basename(result.worktreePath));
 				}
 				return undefined;
 			});
@@ -170,7 +170,7 @@ export class CopilotCLIWorktreeManager {
 				return {
 					branchName: branch,
 					baseCommit: repository.headCommitHash!,
-					worktreePath: worktreePath
+					worktreePath: Uri.file(worktreePath)
 				} satisfies CopilotCLIWorktreeProperties;
 			}
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
@@ -195,13 +195,13 @@ export class CopilotCLIWorktreeManager {
 		await this.extensionContext.globalState.update(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, sessionWorktreesProperties);
 	}
 
-	getWorktreePath(sessionId: string): string | undefined {
+	getWorktreePath(sessionId: string): vscode.Uri | undefined {
 		const worktreeProperties = this._sessionWorktrees.get(sessionId);
 		if (worktreeProperties === undefined) {
 			return undefined;
 		} else if (typeof worktreeProperties === 'string') {
 			// Legacy worktree path
-			return worktreeProperties;
+			return Uri.file(worktreeProperties);
 		} else {
 			// Worktree properties v1
 			return worktreeProperties.worktreePath;
@@ -215,8 +215,8 @@ export class CopilotCLIWorktreeManager {
 		}
 
 		// TODO@rebornix, @osortega: read the workingtree name from git extension
-		const lastIndex = worktreePath.lastIndexOf('/');
-		return worktreePath.substring(lastIndex + 1);
+		const lastIndex = worktreePath.fsPath.lastIndexOf('/');
+		return worktreePath.fsPath.substring(lastIndex + 1);
 	}
 
 	getDefaultIsolationPreference(): boolean {
@@ -323,8 +323,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		// Statistics
 		if (worktreePath) {
-			const worktreeUri = Uri.file(worktreePath);
-			const stats = await this.getStatisticsForWorktree(worktreeUri, worktreeProperties);
+			const stats = await this.getStatisticsForWorktree(worktreePath, worktreeProperties);
 			if (stats && stats.length > 0) {
 				CachedSessionStats.set(resource, stats);
 				changes = stats;
@@ -368,7 +367,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		// These changes are committed in the worktree branch
 		const changes = await this.gitService.diffBetween(
-			Uri.file(worktreeProperties.worktreePath),
+			worktreeProperties.worktreePath,
 			worktreeProperties.baseCommit,
 			worktreeProperties.branchName);
 
@@ -416,7 +415,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		const workingDirectoryValue = this.worktreeManager.getWorktreePath(copilotcliSessionId);
-		const workingDirectory = workingDirectoryValue ? URI.file(workingDirectoryValue) : undefined;
+		const workingDirectory = workingDirectoryValue ? workingDirectoryValue : undefined;
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(copilotcliSessionId);
 
 		const [defaultModel, sessionAgent, defaultAgent, existingSession] = await Promise.all([
@@ -757,19 +756,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
 
-		let workingDirectoryValue: string | undefined;
+		let workingDirectory: vscode.Uri | undefined;
 		let worktreeProperties: CopilotCLIWorktreeProperties | undefined;
 
 		if (isNewSession || !isolationEnabled) {
 			if (isolationEnabled) {
 				worktreeProperties = await this.worktreeManager.createWorktree(stream);
-				workingDirectoryValue = worktreeProperties?.worktreePath;
+				workingDirectory = worktreeProperties?.worktreePath;
 			} else {
-				workingDirectoryValue = await this.copilotCLISDK.getDefaultWorkingDirectory().then(dir => dir?.fsPath);
+				workingDirectory = await this.copilotCLISDK.getDefaultWorkingDirectory();
 			}
 		}
-		const workingDirectory = workingDirectoryValue ? Uri.file(workingDirectoryValue) : undefined;
-
 		const session = isNewSession ?
 			await this.sessionService.createSession({ model, workingDirectory, isolationEnabled, agent }, token) :
 			await this.sessionService.getSession(id, { model, workingDirectory, isolationEnabled, readonly: false, agent }, token);
@@ -965,7 +962,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Create worktree first
 			stream.progress(vscode.l10n.t('Creating worktree...'));
 			const worktreeProperties = await this.worktreeManager.createWorktree(stream);
-			const worktreePath = worktreeProperties ? URI.file(worktreeProperties.worktreePath) : undefined;
+			const worktreePath = worktreeProperties ? worktreeProperties.worktreePath : undefined;
 			if (!worktreePath) {
 				stream.warning(vscode.l10n.t('Failed to create worktree. Proceeding without isolation.'));
 				return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, undefined, false, stream, token);
@@ -1049,7 +1046,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Create worktree if isolation is enabled and we don't have one yet
 			if (isolationEnabled && !workingDirectory) {
 				worktreeProperties = await this.worktreeManager.createWorktree(stream);
-				workingDirectory = worktreeProperties ? URI.file(worktreeProperties.worktreePath) : undefined;
+				workingDirectory = worktreeProperties ? worktreeProperties.worktreePath : undefined;
 			}
 
 			// Fallback to default directory if worktree creation failed
@@ -1163,7 +1160,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 						if (!repository) {
 							throw new Error(vscode.l10n.t('No active repository found to delete worktree.'));
 						}
-						await gitService.deleteWorktree(repository.rootUri, worktreePath);
+						await gitService.deleteWorktree(repository.rootUri, worktreePath.fsPath);
 					} catch (error) {
 						vscode.window.showErrorMessage(vscode.l10n.t('Failed to delete worktree: {0}', error instanceof Error ? error.message : String(error)));
 					}
@@ -1191,7 +1188,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
-		const repository = await gitService.getRepository(Uri.file(sessionWorktree));
+		const repository = await gitService.getRepository(sessionWorktree);
 		if (!repository?.changes) {
 			return;
 		}
@@ -1231,20 +1228,19 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		}
 
 		const sessionId = SessionIdForCLI.parse(resource);
-		const sessionWorktree = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
+		const sessionWorktreePath = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
 
-		if (!sessionWorktree) {
+		if (!sessionWorktreePath) {
 			return;
 		}
 
-		const sessionWorktreeUri = Uri.file(sessionWorktree);
 		const activeRepository = gitService.activeRepository.get();
 		if (!activeRepository) {
 			return;
 		}
 
 		// Migrate the changes from the worktree to the main repository
-		await gitService.migrateChanges(activeRepository.rootUri, sessionWorktreeUri, {
+		await gitService.migrateChanges(activeRepository.rootUri, sessionWorktreePath, {
 			confirmation: false,
 			deleteFromSource: false,
 			untracked: true
