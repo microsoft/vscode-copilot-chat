@@ -179,7 +179,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 					const success = await this.octoKitService.closePullRequest(
 						ctx.pullRequestDetails.repository.owner.login,
 						ctx.pullRequestDetails.repository.name,
-						ctx.pullRequestDetails.number);
+						ctx.pullRequestDetails.number,
+						{ createIfNone: true });
 					if (!success) {
 						this.logService.error(`${CLOSE_SESSION_PR_CMD}: Failed to close PR #${ctx.pullRequestDetails.number}`);
 					}
