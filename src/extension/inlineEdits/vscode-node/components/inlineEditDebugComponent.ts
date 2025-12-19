@@ -166,7 +166,7 @@ stest({ description: 'MyTest', language: 'typescript' }, collection => tester.ru
  * accidental exposure of secrets, credentials, or private configuration.
  */
 const SENSITIVE_FILE_PATTERNS = {
-	// Exact basename matches
+	// Exact basename matches (case-insensitive)
 	exactNames: new Set([
 		'settings.json',      // VS Code settings
 		'keybindings.json',   // VS Code keybindings (may contain custom bindings)
@@ -179,6 +179,14 @@ const SENSITIVE_FILE_PATTERNS = {
 		'credentials.json',
 		'secrets.json',
 		'config.json',        // Often contains API keys
+		'password.txt',       // Plain text password files
+		'passwords.txt',
+		'password.json',
+		'passwords.json',
+		'token.json',         // Token storage files
+		'tokens.json',
+		'token.txt',
+		'tokens.txt',
 	]),
 
 	// File extensions that are sensitive (checked with endsWith)
@@ -211,8 +219,6 @@ const SENSITIVE_FILE_PATTERNS = {
 		'id_dsa',             // SSH private keys
 		'.secret',            // Files with .secret in name
 		'_secret',            // Files with _secret in name
-		'password',           // Files with password in name
-		'token',              // Files with token in name (e.g., token.json)
 	],
 };
 
@@ -229,8 +235,8 @@ function isSensitiveFile(relativePath: string): boolean {
 	const fileNameLower = fileName.toLowerCase();
 	const fileExt = extname(normalizedPath).toLowerCase();
 
-	// Check exact filename matches
-	if (SENSITIVE_FILE_PATTERNS.exactNames.has(fileName)) {
+	// Check exact filename matches (case-insensitive)
+	if (SENSITIVE_FILE_PATTERNS.exactNames.has(fileNameLower)) {
 		return true;
 	}
 

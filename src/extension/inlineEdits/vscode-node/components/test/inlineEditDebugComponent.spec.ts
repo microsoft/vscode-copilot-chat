@@ -136,10 +136,8 @@ suite('filter recording for sensitive files', () => {
 			{ documentType: 'workspaceRecording@1.0', kind: 'header', repoRootUri: 'file:///repo', time: 0, uuid: 'test' },
 			{ kind: 'documentEncountered', id: 1, relativePath: 'id_rsa', time: 0 },
 			{ kind: 'documentEncountered', id: 2, relativePath: 'id_ed25519.pub', time: 0 },
-			{ kind: 'documentEncountered', id: 3, relativePath: 'database_password.txt', time: 0 },
-			{ kind: 'documentEncountered', id: 4, relativePath: 'auth_token.json', time: 0 },
-			{ kind: 'documentEncountered', id: 5, relativePath: 'app.secret.yaml', time: 0 },
-			{ kind: 'documentEncountered', id: 6, relativePath: 'normal_file.ts', time: 0 },
+			{ kind: 'documentEncountered', id: 3, relativePath: 'app.secret.yaml', time: 0 },
+			{ kind: 'documentEncountered', id: 4, relativePath: 'normal_file.ts', time: 0 },
 		];
 
 		const result = filterLogForSensitiveFiles(log);
@@ -148,6 +146,36 @@ suite('filter recording for sensitive files', () => {
 		expect(result.find(e => e.kind === 'documentEncountered')).toMatchObject({
 			relativePath: 'normal_file.ts'
 		});
+	});
+
+	test('should filter exact password/token data files but not code files with those words', () => {
+		const log: LogEntry[] = [
+			{ documentType: 'workspaceRecording@1.0', kind: 'header', repoRootUri: 'file:///repo', time: 0, uuid: 'test' },
+			// These should be filtered (exact sensitive data files)
+			{ kind: 'documentEncountered', id: 1, relativePath: 'password.txt', time: 0 },
+			{ kind: 'documentEncountered', id: 2, relativePath: 'passwords.json', time: 0 },
+			{ kind: 'documentEncountered', id: 3, relativePath: 'token.json', time: 0 },
+			{ kind: 'documentEncountered', id: 4, relativePath: 'tokens.txt', time: 0 },
+			// These should NOT be filtered (code files that deal with passwords/tokens)
+			{ kind: 'documentEncountered', id: 5, relativePath: 'passwordValidator.ts', time: 0 },
+			{ kind: 'documentEncountered', id: 6, relativePath: 'tokenAnalyzer.ts', time: 0 },
+			{ kind: 'documentEncountered', id: 7, relativePath: 'auth/refreshToken.service.ts', time: 0 },
+			{ kind: 'documentEncountered', id: 8, relativePath: 'utils/passwordStrength.ts', time: 0 },
+		];
+
+		const result = filterLogForSensitiveFiles(log);
+
+		const remainingPaths = result
+			.filter((e): e is LogEntry & { kind: 'documentEncountered' } => e.kind === 'documentEncountered')
+			.map(e => e.relativePath);
+
+		// Only code files should remain
+		expect(remainingPaths).toEqual([
+			'passwordValidator.ts',
+			'tokenAnalyzer.ts',
+			'auth/refreshToken.service.ts',
+			'utils/passwordStrength.ts',
+		]);
 	});
 
 	test('should filter out other sensitive config files', () => {
