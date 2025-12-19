@@ -712,7 +712,7 @@ export namespace ConfigKey {
 		/** Allow reporting issue when clicking on the Unhelpful button
 		 * Requires a window reload to take effect
 		 */
-		export const DebugReportFeedback = defineTeamInternalSetting<boolean>('chat.advanced.debug.reportFeedback', ConfigType.Simple, { defaultValue: false, teamDefaultValue: true, owner: 'alexdima', expirationDate: '2025-12-28' });
+		export const DebugReportFeedback = defineTeamInternalSetting<boolean>('chat.advanced.debug.reportFeedback', ConfigType.Simple, false);
 		export const InlineEditsIgnoreCompletionsDisablement = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.ignoreCompletionsDisablement', ConfigType.Simple, false, vBoolean());
 		export const InlineEditsModelPickerEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.modelPicker.enabled', ConfigType.ExperimentBased, { defaultValue: false, teamDefaultValue: true, owner: 'ulugbekna', expirationDate: '2025-12-28' }, vBoolean());
 		export const InlineEditsUseSlashModels = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.useSlashModels', ConfigType.ExperimentBased, false);
