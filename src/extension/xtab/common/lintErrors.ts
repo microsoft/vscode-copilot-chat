@@ -7,6 +7,7 @@ import { DiagnosticData } from '../../../platform/inlineEdits/common/dataTypes/d
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LintOptions, LintOptionShowCode, LintOptionWarning } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
+import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
@@ -79,46 +80,52 @@ function formatSingleDiagnostic(
 	documentLines: readonly string[],
 	lintOptions: LintOptions
 ): string {
+	const headerLine = formatDiagnosticMessage(diagnostic, diagnostic.documentRange);
+
+	if (lintOptions.showCode === LintOptionShowCode.NO) {
+		return headerLine;
+	}
+
+	const codeLines = formatCodeLines(diagnostic.documentRange, lintOptions, documentLines);
+	return headerLine + '\n' + codeLines.join('\n');
+}
+
+function formatDiagnosticMessage(diagnostic: DiagnosticDataWithDistance, diagnosticRange: Range): string {
 	// Format: "line:column - severity CODE: message"
-
-	const diagnosticStartPosition = diagnostic.documentRange.getStartPosition();
-	const diagnosticEndPosition = diagnostic.documentRange.getEndPosition();
-
 	let codeStr = '';
 	if (diagnostic.code) {
 		const source = diagnostic.source ? diagnostic.source.toUpperCase() : '';
 		codeStr = ` ${source}${diagnostic.code}`;
 	}
 
+	const diagnosticStartPosition = diagnosticRange.getStartPosition();
 	const headerLine = `${diagnosticStartPosition.lineNumber}:${diagnosticStartPosition.column} - ${diagnostic.severity}${codeStr}: ${diagnostic.message}`;
+	return headerLine;
+}
 
-	if (lintOptions.showCode === LintOptionShowCode.NO) {
-		return headerLine;
+function formatCodeLines(diagnosticRange: Range, lintOptions: LintOptions, documentLines: readonly string[]): string[] {
+	const diagnosticStartLine = diagnosticRange.getStartPosition().lineNumber - 1; // 0-based for rendering and array access
+	const diagnosticEndLine = diagnosticRange.getEndPosition().lineNumber - 1; // 0-based for rendering and array access
+
+	let lineRangeToInclude = new OffsetRange(diagnosticStartLine, diagnosticEndLine + 1);
+	if (lintOptions.showCode === LintOptionShowCode.YES_WITH_SURROUNDING) {
+		lineRangeToInclude = lineRangeToInclude.deltaStart(-1).deltaEnd(1);
+	}
+
+	const lineRange = lineRangeToInclude.intersect(new OffsetRange(0, documentLines.length));
+	if (!lineRange) {
+		throw new BugIndicatingError('Unexpected: line range to include is out of document bounds.');
 	}
 
 	const codeLines: string[] = [];
-	const diagnosticStartLine = diagnosticStartPosition.lineNumber - 1; // 0-based
-	const diagnosticEndLine = diagnosticEndPosition.lineNumber - 1; // 0-based
-
-	if (lintOptions.showCode === LintOptionShowCode.YES_WITH_SURROUNDING) {
-		// Include line before, the diagnostic line, and line after
-		const startLine = Math.max(0, diagnosticStartLine - 1);
-		const endLine = Math.min(documentLines.length - 1, diagnosticEndLine + 1);
-
-		for (let i = startLine; i <= endLine; i++) {
-			const lineNumber = i; // use 0-based for display
-			const lineContent = i < documentLines.length ? documentLines[i] : '';
-			codeLines.push(`${lineNumber}|${lineContent}`);
-		}
-	} else {
-		// 'yes' - only include the diagnostic line
-		if (diagnosticStartLine < documentLines.length) {
-			const lineNumber = diagnosticStartLine;
-			codeLines.push(`${lineNumber}|${documentLines[diagnosticStartLine]}`);
-		}
+	for (let i = lineRange.start; i < lineRange.endExclusive; i++) {
+		codeLines.push(formatCodeLine(i, documentLines[i] ?? ''));
 	}
+	return codeLines;
+}
 
-	return headerLine + '\n' + codeLines.join('\n');
+function formatCodeLine(lineNumber: number, lineContent: string): string {
+	return `${lineNumber}|${lineContent}`;
 }
 
 function filterDiagnosticsByDistance(diagnostics: readonly DiagnosticDataWithDistance[], distance: number): readonly DiagnosticDataWithDistance[] {
