@@ -481,6 +481,64 @@ describe('LintErrors', () => {
 			expect(result).toContain('4|line5');
 		});
 
+		it('should handle multi-line diagnostics with YES_WITH_SURROUNDING', () => {
+			const document = createDocument(['function foo() {', 'const x = 1;', 'const y = 2;', 'const z = 3;', '}'], 2, 10);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{
+					message: 'Multi-line scope error',
+					range: new Range(1, 0, 3, 15),
+					severity: DiagnosticSeverity.Error
+				}
+			]);
+
+			const optionsWithSurrounding: LintOptions = {
+				...defaultLintOptions,
+				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
+			};
+
+			const lintErrors = createLintErrors(
+				optionsWithSurrounding,
+				document
+			);
+
+			const result = lintErrors.getFormattedLintErrors();
+			// Should include line before (0|function foo() {), all diagnostic lines, and line after (4|})
+			expect(result).toContain('0|function foo() {');
+			expect(result).toContain('1|const x = 1;');
+			expect(result).toContain('2|const y = 2;');
+			expect(result).toContain('3|const z = 3;');
+			expect(result).toContain('4|}');
+		});
+
+		it('should handle multi-line diagnostics with YES', () => {
+			const document = createDocument(['function foo() {', 'const x = 1;', 'const y = 2;', 'const z = 3;', '}'], 2, 10);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{
+					message: 'Multi-line scope error',
+					range: new Range(1, 0, 3, 15),
+					severity: DiagnosticSeverity.Error
+				}
+			]);
+
+			const optionsWithCode: LintOptions = {
+				...defaultLintOptions,
+				showCode: LintOptionShowCode.YES
+			};
+
+			const lintErrors = createLintErrors(
+				optionsWithCode,
+				document
+			);
+
+			const result = lintErrors.getFormattedLintErrors();
+			// Should include all diagnostic lines when YES is set
+			expect(result).toContain('1|const x = 1;');
+			expect(result).toContain('2|const y = 2;');
+			expect(result).toContain('3|const z = 3;');
+			// Should include the error location and message
+			expect(result).toContain('Multi-line scope error');
+		});
+
 		it('should use custom tag name', () => {
 			const document = createDocument(['const x = 1;'], 1, 1);
 			diagnosticsService.setDiagnostics(fileUri, [
@@ -572,6 +630,106 @@ describe('LintErrors', () => {
 			const result = lintErrors.getFormattedLintErrors();
 			expect(result).toContain('E001');
 			expect(result).toContain('Error without source');
+		});
+
+		it('should format exact string with code shown NO', () => {
+			const document = createDocument([
+				'const x = 1;',     // line 0
+				'const y = 2;',     // line 1
+				'const z = 3;',     // line 2
+				'const w = 4;',     // line 3
+				'const v = 5;',     // line 4
+				'const u = 6;'      // line 5
+			], 3, 5);
+
+			diagnosticsService.setDiagnostics(fileUri, [
+				{
+					message: 'Type mismatch in assignment',
+					range: new Range(1, 8, 2, 10),
+					severity: DiagnosticSeverity.Error,
+					code: { value: '2322', target: 'file:///test' as unknown as import('vscode').Uri },
+					source: 'ts'
+				},
+				{
+					message: 'Unused variable',
+					range: new Range(3, 6, 4, 10),
+					severity: DiagnosticSeverity.Warning,
+					code: { value: '6133', target: 'file:///test' as unknown as import('vscode').Uri },
+					source: 'ts'
+				}
+			]);
+
+			const options: LintOptions = {
+				tagName: 'linter diagnostics',
+				warnings: LintOptionWarning.YES,
+				showCode: LintOptionShowCode.NO,
+				maxLints: 10,
+				maxLineDistance: 20,
+			};
+
+			const lintErrors = createLintErrors(options, document);
+			const result = lintErrors.getFormattedLintErrors();
+
+			const expected = `<|linter diagnostics|>
+4:7 - warning TS6133: Unused variable
+2:9 - error TS2322: Type mismatch in assignment
+<|/linter diagnostics|>`;
+
+			expect(result).toBe(expected);
+		});
+
+		it('should format exact string with multiple multi-line diagnostics, code, source, and YES_WITH_SURROUNDING', () => {
+			const document = createDocument([
+				'const x = 1;',     // line 0
+				'const y = 2;',     // line 1
+				'const z = 3;',     // line 2
+				'const w = 4;',     // line 3
+				'const v = 5;',     // line 4
+				'const u = 6;'      // line 5
+			], 3, 5);
+
+			diagnosticsService.setDiagnostics(fileUri, [
+				{
+					message: 'Type mismatch in assignment',
+					range: new Range(1, 8, 2, 10),
+					severity: DiagnosticSeverity.Error,
+					code: { value: '2322', target: 'file:///test' as unknown as import('vscode').Uri },
+					source: 'ts'
+				},
+				{
+					message: 'Unused variable',
+					range: new Range(3, 6, 4, 10),
+					severity: DiagnosticSeverity.Warning,
+					code: { value: '6133', target: 'file:///test' as unknown as import('vscode').Uri },
+					source: 'ts'
+				}
+			]);
+
+			const options: LintOptions = {
+				tagName: 'linter diagnostics',
+				warnings: LintOptionWarning.YES,
+				showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
+				maxLints: 10,
+				maxLineDistance: 20,
+			};
+
+			const lintErrors = createLintErrors(options, document);
+			const result = lintErrors.getFormattedLintErrors();
+
+			const expected = `<|linter diagnostics|>
+4:7 - warning TS6133: Unused variable
+2|const z = 3;
+3|const w = 4;
+4|const v = 5;
+5|const u = 6;
+2:9 - error TS2322: Type mismatch in assignment
+0|const x = 1;
+1|const y = 2;
+2|const z = 3;
+3|const w = 4;
+<|/linter diagnostics|>`;
+
+			expect(result).toBe(expected);
 		});
 	});
 });
