@@ -22,6 +22,14 @@ export interface RawThinkingDelta {
 	reasoning_opaque?: string;
 	reasoning_text?: string;
 
+	// Fireworks AI fields
+	// https://docs.fireworks.ai/guide/reasoning-models#deepseek-r1-models
+	reasoning_content?: string;
+
+	// vLLM fields
+	// https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html#extra-parameters-for-chat-completions-api
+	reasoning?: string;
+
 	// Anthropic fields
 	thinking?: string;
 	signature?: string;
