@@ -139,7 +139,7 @@ export class CopilotCLIWorktreeManager {
 			}
 
 			const branchPrefix = workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
-			const branch = `${branchPrefix}worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+			const branch = `${branchPrefix}copilot-worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
 			const worktreePath = await this.gitService.createWorktree(repository.rootUri, { branch });
 			if (worktreePath) {
 				return {
