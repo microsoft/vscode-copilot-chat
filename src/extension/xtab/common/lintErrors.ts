@@ -20,10 +20,6 @@ export interface LintDiagnosticsContext {
 	readonly cursorLineNumber: number;
 }
 
-export function getLintDiagnostics(document: CurrentDocument, documentDiagnostics: readonly Diagnostic[]): LintDiagnosticsContext {
-	throw new Error('Function not implemented.');
-}
-
 export class LintErrors {
 	constructor(
 		private readonly _lintOptions: LintOptions,
@@ -54,25 +50,10 @@ export class LintErrors {
 
 	private _getRelevantDiagnostics(): readonly DiagnosticDataWithDistance[] {
 		let diagnostics = this._diagnostics();
+
 		diagnostics = filterDiagnosticsByDistance(diagnostics, this._lintOptions.maxLineDistance);
 		diagnostics = sortDiagnosticsByDistance(diagnostics);
-
-		switch (this._lintOptions.warnings) {
-			case LintOptionWarning.NO:
-				diagnostics = filterDiagnosticsBySeverity(diagnostics, ['error']);
-				break;
-			case LintOptionWarning.YES: {
-				diagnostics = filterDiagnosticsBySeverity(diagnostics, ['error', 'warning']);
-				break;
-			}
-			case LintOptionWarning.YES_IF_NO_ERRORS: {
-				const errorDiagnostics = filterDiagnosticsBySeverity(diagnostics, ['error']);
-				diagnostics = errorDiagnostics.length > 0
-					? errorDiagnostics
-					: filterDiagnosticsBySeverity(diagnostics, ['error', 'warning']);
-				break;
-			}
-		}
+		diagnostics = filterDiagnosticsBySeverity(diagnostics, this._lintOptions.warnings);
 
 		return diagnostics.slice(0, this._lintOptions.maxLints);
 	}
@@ -148,8 +129,20 @@ function sortDiagnosticsByDistance(diagnostics: readonly DiagnosticDataWithDista
 	return diagnostics.slice().sort((a, b) => CursorDistance.compareFn(a.distance, b.distance));
 }
 
-function filterDiagnosticsBySeverity(diagnostics: readonly DiagnosticDataWithDistance[], severitiesToInclude: string[]): readonly DiagnosticDataWithDistance[] {
-	return diagnostics.filter(d => severitiesToInclude.includes(d.severity));
+function filterDiagnosticsBySeverity(diagnostics: readonly DiagnosticDataWithDistance[], warnings: LintOptionWarning): readonly DiagnosticDataWithDistance[] {
+	switch (warnings) {
+		case LintOptionWarning.NO:
+			return diagnostics.filter(d => d.severity === 'error');
+		case LintOptionWarning.YES: {
+			return diagnostics.filter(d => d.severity === 'error' || d.severity === 'warning');
+		}
+		case LintOptionWarning.YES_IF_NO_ERRORS: {
+			const errorDiagnostics = diagnostics.filter(d => d.severity === 'error');
+			return errorDiagnostics.length > 0
+				? errorDiagnostics
+				: diagnostics.filter(d => d.severity === 'error' || d.severity === 'warning');
+		}
+	}
 }
 
 class CursorDistance {
