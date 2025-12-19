@@ -14,11 +14,13 @@ import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { coalesce } from '../../../util/vs/base/common/arrays';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
+import * as path from '../../../util/vs/base/common/path';
 import { basename, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -95,8 +97,8 @@ interface CopilotCLIWorktreeData {
 interface CopilotCLIWorktreePropertiesV1 {
 	readonly baseCommit: string;
 	readonly branchName: string;
-	readonly reporitoryPath: vscode.Uri;
-	readonly worktreePath: vscode.Uri;
+	readonly reporitoryPath: string;
+	readonly worktreePath: string;
 }
 
 type CopilotCLIWorktreeProperties = CopilotCLIWorktreePropertiesV1;
@@ -149,7 +151,7 @@ export class CopilotCLIWorktreeManager {
 				const result = await this.tryCreateWorktree(progress);
 				resolve(result);
 				if (result) {
-					return vscode.l10n.t('Created isolated worktree at {0}', basename(result.worktreePath));
+					return vscode.l10n.t('Created isolated worktree at {0}', basename(Uri.file(result.worktreePath)));
 				}
 				return undefined;
 			});
@@ -171,8 +173,8 @@ export class CopilotCLIWorktreeManager {
 				return {
 					branchName: branch,
 					baseCommit: repository.headCommitHash!,
-					reporitoryPath: repository.rootUri,
-					worktreePath: Uri.file(worktreePath)
+					reporitoryPath: repository.rootUri.fsPath,
+					worktreePath
 				} satisfies CopilotCLIWorktreeProperties;
 			}
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
@@ -206,7 +208,7 @@ export class CopilotCLIWorktreeManager {
 			return Uri.file(worktreeProperties);
 		} else {
 			// Worktree properties v1
-			return worktreeProperties.worktreePath;
+			return Uri.file(worktreeProperties.worktreePath);
 		}
 	}
 
@@ -369,7 +371,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		// These changes are committed in the worktree branch
 		const changes = await this.gitService.diffBetweenWithStats(
-			worktreeProperties.worktreePath,
+			Uri.file(worktreeProperties.worktreePath),
 			worktreeProperties.baseCommit,
 			worktreeProperties.branchName);
 
@@ -766,7 +768,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		if (isNewSession || !isolationEnabled) {
 			if (isolationEnabled) {
 				worktreeProperties = await this.worktreeManager.createWorktree(stream);
-				workingDirectory = worktreeProperties?.worktreePath;
+				workingDirectory = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
 			} else {
 				workingDirectory = await this.copilotCLISDK.getDefaultWorkingDirectory();
 			}
@@ -966,7 +968,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Create worktree first
 			stream.progress(vscode.l10n.t('Creating worktree...'));
 			const worktreeProperties = await this.worktreeManager.createWorktree(stream);
-			const worktreePath = worktreeProperties ? worktreeProperties.worktreePath : undefined;
+			const worktreePath = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
 			if (!worktreePath) {
 				stream.warning(vscode.l10n.t('Failed to create worktree. Proceeding without isolation.'));
 				return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, undefined, false, stream, token);
@@ -1050,7 +1052,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Create worktree if isolation is enabled and we don't have one yet
 			if (isolationEnabled && !workingDirectory) {
 				worktreeProperties = await this.worktreeManager.createWorktree(stream);
-				workingDirectory = worktreeProperties ? worktreeProperties.worktreePath : undefined;
+				workingDirectory = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
 			}
 
 			// Fallback to default directory if worktree creation failed
@@ -1232,23 +1234,80 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		}
 
 		const sessionId = SessionIdForCLI.parse(resource);
-		const sessionWorktreePath = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
 
-		if (!sessionWorktreePath) {
+		const worktreeProperties = copilotcliSessionItemProvider.worktreeManager.getWorktreeProperties(sessionId);
+		if (worktreeProperties === undefined) {
+			// Legacy background session that has the changes staged in the worktree.
+			// To apply the changes, we need to migrate them from the worktree to the
+			// main repository using a stash.
+			const worktreePath = copilotcliSessionItemProvider.worktreeManager.getWorktreePath(sessionId);
+			if (!worktreePath) {
+				return;
+			}
+
+			const activeRepository = gitService.activeRepository.get();
+			if (!activeRepository) {
+				return;
+			}
+
+			// Migrate the changes from the worktree to the main repository
+			await gitService.migrateChanges(activeRepository.rootUri, worktreePath, {
+				confirmation: false,
+				deleteFromSource: false,
+				untracked: true
+			});
+
+			copilotcliSessionItemProvider.notifySessionsChange(); // pick up new git state
 			return;
 		}
 
-		const activeRepository = gitService.activeRepository.get();
-		if (!activeRepository) {
+		// Background session that has the changes committed in the worktree. To apply the
+		// changes, we need to migrate them from the worktree to the main repository using
+		// a patch file.
+		const changes = await gitService.diffBetweenWithStats(
+			Uri.file(worktreeProperties.worktreePath),
+			worktreeProperties.baseCommit,
+			worktreeProperties.branchName);
+
+		// Temporary solution until there is git extension API
+		const diffs = await Promise.all((changes ?? [])
+			.map(change => {
+				return gitService.diffBetweenPatch(
+					Uri.file(worktreeProperties.worktreePath),
+					worktreeProperties.baseCommit,
+					worktreeProperties.branchName,
+					change.uri.fsPath
+				);
+			}));
+
+		const patch = coalesce(diffs).map(line => `${line}\n`);
+		if (patch.length === 0) {
 			return;
 		}
 
-		// Migrate the changes from the worktree to the main repository
-		await gitService.migrateChanges(activeRepository.rootUri, sessionWorktreePath, {
-			confirmation: false,
-			deleteFromSource: false,
-			untracked: true
+		// Write the patch to a temporary file
+		const encoder = new TextEncoder();
+		const patchFilePath = path.join(worktreeProperties.reporitoryPath, '.git', `${worktreeProperties.branchName}.patch`);
+		const patchFileUri = vscode.Uri.file(patchFilePath);
+		await vscode.workspace.fs.writeFile(patchFileUri, encoder.encode(patch.join('')));
+
+		try {
+			// Apply patch
+			await gitService.applyPatch(Uri.file(worktreeProperties.reporitoryPath), patchFilePath);
+		} finally {
+			await vscode.workspace.fs.delete(patchFileUri);
+		}
+
+		// Update base commit for the worktree after applying the changes
+		const ref = await gitService.getRefs(Uri.file(worktreeProperties.reporitoryPath), {
+			pattern: `refs/heads/${worktreeProperties.branchName}`
 		});
+		if (ref.length === 1 && ref[0].commit && ref[0].commit !== worktreeProperties.baseCommit) {
+			copilotcliSessionItemProvider.worktreeManager.saveWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				baseCommit: ref[0].commit
+			});
+		}
 
 		copilotcliSessionItemProvider.notifySessionsChange(); // pick up new git state
 	};

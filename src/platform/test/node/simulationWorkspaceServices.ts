@@ -12,6 +12,7 @@ import { getLanguageForResource } from '../../../util/common/languages';
 import { createTextDocumentData } from '../../../util/common/test/shims/textDocument';
 import { asArray, coalesce } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource, raceTimeout } from '../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
@@ -28,7 +29,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { FileType, RelativePattern } from '../../filesystem/common/fileTypes';
 import { NodeFileSystemService } from '../../filesystem/node/fileSystemServiceImpl';
 import { IGitService, RepoContext } from '../../git/common/gitService';
-import { Change, CommitShortStat, DiffChange } from '../../git/vscode/git';
+import { Change, CommitShortStat, DiffChange, Ref, RefQuery } from '../../git/vscode/git';
 import { AbstractLanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService } from '../../languages/common/languageFeaturesService';
 import { ILogService } from '../../log/common/logService';
@@ -741,6 +742,10 @@ export class TestingGitService implements IGitService {
 		return [];
 	}
 
+	async diffBetweenPatch(uri: URI, ref1: string, ref2: string, path: string): Promise<string | undefined> {
+		return undefined;
+	}
+
 	async diffWith(uri: vscode.Uri, ref: string): Promise<Change[] | undefined> {
 		return undefined;
 	}
@@ -773,8 +778,16 @@ export class TestingGitService implements IGitService {
 		return;
 	}
 
+	applyPatch(uri: URI, patch: string): Promise<void> {
+		return Promise.resolve();
+	}
+
 	async commit(uri: URI, message: string | undefined): Promise<void> {
 		return;
+	}
+
+	async getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
+		return [];
 	}
 }
 
