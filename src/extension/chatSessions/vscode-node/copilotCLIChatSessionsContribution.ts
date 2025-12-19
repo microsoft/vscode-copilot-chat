@@ -87,12 +87,21 @@ function isUntitledSessionId(sessionId: string): boolean {
 	return sessionId.startsWith('untitled:') || sessionId.startsWith('untitled-');
 }
 
+interface CopilotCLIWorktreeProperties {
+	readonly branchName: string;
+	readonly baseCommit: string;
+	readonly worktreePath: string;
+}
+
 export class CopilotCLIWorktreeManager {
 	static COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY = 'github.copilot.cli.sessionIsolation';
 	static COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
+	static COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY_2 = 'github.copilot.cli.sessionWorktrees2';
 
 	private _sessionIsolation: Map<string, boolean> = new Map();
 	private _sessionWorktrees: Map<string, string> = new Map();
+	private _sessionWorktreeProperties: Map<string, CopilotCLIWorktreeProperties> = new Map();
+
 	constructor(
 		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -104,24 +113,24 @@ export class CopilotCLIWorktreeManager {
 		return !!repository;
 	}
 
-	async createWorktree(stream?: vscode.ChatResponseStream): Promise<string | undefined> {
+	async createWorktree(stream?: vscode.ChatResponseStream): Promise<CopilotCLIWorktreeProperties | undefined> {
 		if (!stream) {
 			return this.tryCreateWorktree();
 		}
 
-		return new Promise<string | undefined>((resolve) => {
+		return new Promise<CopilotCLIWorktreeProperties | undefined>((resolve) => {
 			stream.progress(vscode.l10n.t('Creating isolated worktree for Background Agent session...'), async progress => {
 				const result = await this.tryCreateWorktree(progress);
 				resolve(result);
 				if (result) {
-					return vscode.l10n.t('Created isolated worktree at {0}', basename(Uri.file(result)));
+					return vscode.l10n.t('Created isolated worktree at {0}', basename(Uri.file(result.worktreePath)));
 				}
 				return undefined;
 			});
 		});
 	}
 
-	private async tryCreateWorktree(progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<string | undefined> {
+	private async tryCreateWorktree(progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<CopilotCLIWorktreeProperties | undefined> {
 		try {
 			const repository = this.gitService.activeRepository.get();
 			if (!repository) {
@@ -133,7 +142,11 @@ export class CopilotCLIWorktreeManager {
 			const branch = `${branchPrefix}worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
 			const worktreePath = await this.gitService.createWorktree(repository.rootUri, { branch });
 			if (worktreePath) {
-				return worktreePath;
+				return {
+					branchName: branch,
+					baseCommit: repository.headCommitHash!,
+					worktreePath: worktreePath
+				} satisfies CopilotCLIWorktreeProperties;
 			}
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 			return undefined;
@@ -173,6 +186,25 @@ export class CopilotCLIWorktreeManager {
 		const lastIndex = worktreePath.lastIndexOf('/');
 		return worktreePath.substring(lastIndex + 1);
 
+	}
+
+	async storeWorktreeProperties(sessionId: string, properties: CopilotCLIWorktreeProperties): Promise<void> {
+		this._sessionWorktreeProperties.set(sessionId, properties);
+		const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, CopilotCLIWorktreeProperties>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY_2, {});
+		sessionWorktreesProperties[sessionId] = properties;
+		await this.extensionContext.globalState.update(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY_2, sessionWorktreesProperties);
+	}
+
+	getWorktreeProperties(sessionId: string): CopilotCLIWorktreeProperties | undefined {
+		let properties = this._sessionWorktreeProperties.get(sessionId);
+		if (!properties) {
+			const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, CopilotCLIWorktreeProperties>>(CopilotCLIWorktreeManager.COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY_2, {});
+			properties = sessionWorktreesProperties[sessionId];
+			if (properties) {
+				this._sessionWorktreeProperties.set(sessionId, properties);
+			}
+		}
+		return properties;
 	}
 
 	getDefaultIsolationPreference(): boolean {
@@ -265,24 +297,28 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const resource = SessionIdForCLI.getResource(_untitledSessionIdMap.get(session.id) ?? session.id);
 		const worktreePath = this.worktreeManager.getWorktreePath(session.id);
 		const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.id);
+		const worktreeProperties = this.worktreeManager.getWorktreeProperties(session.id);
 
 		const label = session.label;
 		let badge: vscode.MarkdownString | undefined;
 		let changes: vscode.ChatSessionItem['changes'] | undefined;
 
-		if (worktreePath && worktreeRelativePath) {
-			const worktreeUri = Uri.file(worktreePath);
-			// Badge
-			badge = new vscode.MarkdownString(`$(worktree) ${worktreeRelativePath}`);
+		// Badge
+		if (worktreeRelativePath) {
+			badge = new vscode.MarkdownString(`$(worktree) ${worktreeProperties?.branchName ?? worktreeRelativePath}`);
 			badge.supportThemeIcons = true;
+		}
 
-			// Statistics
-			const stats = await this.getStatisticsForWorktree(worktreeUri);
+		// Statistics
+		if (worktreePath) {
+			const worktreeUri = Uri.file(worktreePath);
+			const stats = await this.getStatisticsForWorktree(worktreeUri, worktreeProperties);
 			if (stats && stats.length > 0) {
 				CachedSessionStats.set(resource, stats);
 				changes = stats;
 			}
 		}
+
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
 		return {
@@ -295,25 +331,44 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		} satisfies vscode.ChatSessionItem;
 	}
 
-	private async getStatisticsForWorktree(worktreeUri: Uri): Promise<vscode.ChatSessionChangedFile[]> {
-		const repository = await this.gitService.getRepository(worktreeUri, false);
-		if (!repository?.changes) {
+	private async getStatisticsForWorktree(worktreeUri: Uri, worktreeProperties: CopilotCLIWorktreeProperties | undefined): Promise<vscode.ChatSessionChangedFile[]> {
+		if (worktreeProperties === undefined) {
+			// These changes are staged in the worktree but not yet committed
+			const repository = await this.gitService.getRepository(worktreeUri, false);
+			if (!repository?.changes) {
+				return [];
+			}
+
+			const details: vscode.ChatSessionChangedFile[] = [];
+			for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
+				try {
+					const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
+					details.push(new vscode.ChatSessionChangedFile(
+						change.uri,
+						fileStats?.insertions ?? 0,
+						fileStats?.deletions ?? 0,
+						change.originalUri
+					));
+				} catch (error) { }
+			}
+			return details;
+		}
+
+		// These changes are committed in the worktree branch
+		const changes = await this.gitService.diffBetween(
+			Uri.file(worktreeProperties.worktreePath),
+			worktreeProperties.baseCommit,
+			worktreeProperties.branchName);
+
+		if (!changes) {
 			return [];
 		}
 
-		const details: vscode.ChatSessionChangedFile[] = [];
-		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
-			try {
-				const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
-				details.push(new vscode.ChatSessionChangedFile(
-					change.uri,
-					fileStats?.insertions ?? 0,
-					fileStats?.deletions ?? 0,
-					change.originalUri
-				));
-			} catch (error) { }
-		}
-		return details;
+		return changes.map(change => {
+			return new vscode.ChatSessionChangedFile(
+				toGitUri(change.uri, worktreeProperties.branchName), 100, 100,
+				toGitUri(change.originalUri, worktreeProperties.baseCommit));
+		});
 	}
 
 	public async createCopilotCLITerminal(): Promise<void> {
@@ -689,9 +744,18 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const id = existingSessionId ?? SessionIdForCLI.parse(resource);
 		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 		const isolationEnabled = this.worktreeManager.getIsolationPreference(id);
-		const workingDirectoryValue = isNewSession || !isolationEnabled ?
-			(isolationEnabled ? await this.worktreeManager.createWorktree(stream) : await this.copilotCLISDK.getDefaultWorkingDirectory().then(dir => dir?.fsPath)) :
-			this.worktreeManager.getWorktreePath(id);
+
+		let workingDirectoryValue: string | undefined;
+		let worktreeProperties: CopilotCLIWorktreeProperties | undefined;
+
+		if (isNewSession || !isolationEnabled) {
+			if (isolationEnabled) {
+				worktreeProperties = await this.worktreeManager.createWorktree(stream);
+				workingDirectoryValue = worktreeProperties?.worktreePath;
+			} else {
+				workingDirectoryValue = await this.copilotCLISDK.getDefaultWorkingDirectory().then(dir => dir?.fsPath);
+			}
+		}
 		const workingDirectory = workingDirectoryValue ? Uri.file(workingDirectoryValue) : undefined;
 
 		const session = isNewSession ?
@@ -707,8 +771,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		if (isNewSession) {
 			this.untitledSessionIdMapping.set(id, session.object.sessionId);
 		}
-		if (isNewSession && workingDirectory && isolationEnabled) {
+		if (isNewSession && workingDirectory && worktreeProperties && isolationEnabled) {
 			await this.worktreeManager.storeWorktreePath(session.object.sessionId, workingDirectory.fsPath);
+			await this.worktreeManager.storeWorktreeProperties(session.object.sessionId, worktreeProperties);
 		}
 		disposables.add(session.object.attachStream(stream));
 		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) => requestPermission(this.instantiationService, permissionRequest, toolCall, this.toolsService, request.toolInvocationToken, token)));
@@ -888,8 +953,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		if ((moveChanges || copyChanges) && this.worktreeManager.isSupported()) {
 			// Create worktree first
 			stream.progress(vscode.l10n.t('Creating worktree...'));
-			const worktreePathValue = await this.worktreeManager.createWorktree(stream);
-			const worktreePath = worktreePathValue ? URI.file(worktreePathValue) : undefined;
+			const worktreeProperties = await this.worktreeManager.createWorktree(stream);
+			const worktreePath = worktreeProperties ? URI.file(worktreeProperties.worktreePath) : undefined;
 			if (!worktreePath) {
 				stream.warning(vscode.l10n.t('Failed to create worktree. Proceeding without isolation.'));
 				return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, undefined, false, stream, token);
@@ -971,8 +1036,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const getWorkingDirectory = async () => {
 			// Create worktree if isolation is enabled and we don't have one yet
 			if (isolationEnabled && !workingDirectory) {
-				const workTreePath = await this.worktreeManager.createWorktree(stream);
-				workingDirectory = workTreePath ? URI.file(workTreePath) : undefined;
+				const worktreeProperties = await this.worktreeManager.createWorktree(stream);
+				workingDirectory = worktreeProperties ? URI.file(worktreeProperties.worktreePath) : undefined;
 			}
 
 			// Fallback to default directory if worktree creation failed
