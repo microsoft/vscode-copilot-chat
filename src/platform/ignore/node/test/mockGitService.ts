@@ -9,7 +9,7 @@ import { IObservable } from '../../../../util/vs/base/common/observableInternal'
 import { observableValue } from '../../../../util/vs/base/common/observableInternal/observables/observableValue';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IGitService, RepoContext } from '../../../git/common/gitService';
-import { Change, Commit, CommitShortStat, LogOptions } from '../../../git/vscode/git';
+import { Change, Commit, CommitShortStat, DiffChange, LogOptions } from '../../../git/vscode/git';
 
 /**
  * A configurable mock implementation of IGitService for testing.
@@ -66,6 +66,10 @@ export class MockGitService implements IGitService {
 	}
 
 	diffBetween(_uri: URI, _ref1: string, _ref2: string): Promise<Change[] | undefined> {
+		return Promise.resolve(undefined);
+	}
+
+	diffBetweenWithStats(_uri: URI, _ref1: string, _ref2: string, _path?: string): Promise<DiffChange[] | undefined> {
 		return Promise.resolve(undefined);
 	}
 

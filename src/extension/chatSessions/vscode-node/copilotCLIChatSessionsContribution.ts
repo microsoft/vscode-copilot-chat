@@ -95,6 +95,7 @@ interface CopilotCLIWorktreeData {
 interface CopilotCLIWorktreePropertiesV1 {
 	readonly baseCommit: string;
 	readonly branchName: string;
+	readonly reporitoryPath: vscode.Uri;
 	readonly worktreePath: vscode.Uri;
 }
 
@@ -170,6 +171,7 @@ export class CopilotCLIWorktreeManager {
 				return {
 					branchName: branch,
 					baseCommit: repository.headCommitHash!,
+					reporitoryPath: repository.rootUri,
 					worktreePath: Uri.file(worktreePath)
 				} satisfies CopilotCLIWorktreeProperties;
 			}
@@ -366,7 +368,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		}
 
 		// These changes are committed in the worktree branch
-		const changes = await this.gitService.diffBetween(
+		const changes = await this.gitService.diffBetweenWithStats(
 			worktreeProperties.worktreePath,
 			worktreeProperties.baseCommit,
 			worktreeProperties.branchName);
@@ -377,7 +379,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		return changes.map(change => {
 			return new vscode.ChatSessionChangedFile(
-				toGitUri(change.uri, worktreeProperties.branchName), 100, 100,
+				toGitUri(change.uri, worktreeProperties.branchName),
+				change.insertions,
+				change.deletions,
 				toGitUri(change.originalUri, worktreeProperties.baseCommit));
 		});
 	}

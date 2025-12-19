@@ -28,7 +28,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { FileType, RelativePattern } from '../../filesystem/common/fileTypes';
 import { NodeFileSystemService } from '../../filesystem/node/fileSystemServiceImpl';
 import { IGitService, RepoContext } from '../../git/common/gitService';
-import { Change, CommitShortStat } from '../../git/vscode/git';
+import { Change, CommitShortStat, DiffChange } from '../../git/vscode/git';
 import { AbstractLanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService } from '../../languages/common/languageFeaturesService';
 import { ILogService } from '../../log/common/logService';
@@ -734,6 +734,10 @@ export class TestingGitService implements IGitService {
 	}
 
 	async diffBetween(uri: URI, ref1: string, ref2: string): Promise<Change[]> {
+		return [];
+	}
+
+	async diffBetweenWithStats(uri: URI, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined> {
 		return [];
 	}
 

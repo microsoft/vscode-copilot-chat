@@ -19,7 +19,7 @@ import { ILogService } from '../../log/common/logService';
 import { IGitExtensionService } from '../common/gitExtensionService';
 import { IGitService, RepoContext } from '../common/gitService';
 import { parseGitRemotes } from '../common/utils';
-import { API, APIState, Change, Commit, CommitShortStat, LogOptions, Repository } from './git';
+import { API, APIState, Change, Commit, CommitShortStat, DiffChange, LogOptions, Repository } from './git';
 
 export class GitServiceImpl extends Disposable implements IGitService {
 
@@ -209,6 +209,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
 		return repository?.diffBetween(ref1, ref2);
+	}
+
+	async diffBetweenWithStats(uri: vscode.Uri, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.diffBetweenWithStats(ref1, ref2, path);
 	}
 
 	async diffWith(uri: vscode.Uri, ref: string): Promise<Change[] | undefined> {
