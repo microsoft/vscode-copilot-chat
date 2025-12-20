@@ -22,7 +22,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WireTypes } from '../common/dataTypes/inlineEditsModelsTypes';
 import { isPromptingStrategy, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
-import { IInlineEditsModelService } from '../common/inlineEditsModelService';
+import { IInlineEditsModelService, IUndesiredModelsManager } from '../common/inlineEditsModelService';
 
 const enum ModelSource {
 	LocalConfig = 'localConfig',
@@ -87,12 +87,10 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	private _tracer = createTracer(['NES', 'ModelsService'], (msg) => this._logService.trace(msg));
 
-	private _undesiredModelsManager: UndesiredModels.Manager;
-
 	constructor(
 		@ICopilotTokenStore private readonly _tokenStore: ICopilotTokenStore,
 		@IProxyModelsService private readonly _proxyModelsService: IProxyModelsService,
-		@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
+		@IUndesiredModelsManager private readonly _undesiredModelsManager: IUndesiredModelsManager,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -101,8 +99,6 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		super();
 
 		const tracer = this._tracer.sub('constructor');
-
-		this._undesiredModelsManager = new UndesiredModels.Manager(this._vscodeExtensionContext);
 
 		this._modelsObs = derived((reader) => {
 			tracer.trace('computing models');
@@ -401,15 +397,16 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}
 }
 
-namespace UndesiredModels {
+export namespace UndesiredModels {
 
 	const UNDESIRED_MODELS_KEY = 'copilot.chat.nextEdits.undesiredModelIds';
 	type UndesiredModelsValue = string[];
 
-	export class Manager {
+	export class Manager implements IUndesiredModelsManager {
+		declare _serviceBrand: undefined;
 
 		constructor(
-			private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
+			@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
 		) {
 		}
 
@@ -448,3 +445,4 @@ namespace UndesiredModels {
 		}
 	}
 }
+
