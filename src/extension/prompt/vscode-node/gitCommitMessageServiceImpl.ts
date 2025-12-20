@@ -69,9 +69,12 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 		}
 
 		return window.withProgress({ location: ProgressLocation.SourceControl }, async () => {
-			// Explicitly refresh the repository status to make sure that the
-			// repository state is up-to-date before generating the commit message.
-			await repository.status();
+			try {
+				// Explicitly refresh (best effort) the repository state to make
+				// sure that the repository state is up-to-date before generating
+				// the commit message.
+				await repository.status();
+			} catch (err) { }
 
 			const indexChanges = repository.state.indexChanges.length;
 			const workingTreeChanges = repository.state.workingTreeChanges.length;
