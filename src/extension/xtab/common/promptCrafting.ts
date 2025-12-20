@@ -19,6 +19,7 @@ import { Schemas } from '../../../util/vs/base/common/network';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
+import { LintErrors } from './lintErrors';
 import { PromptTags } from './tags';
 import { CurrentDocument } from './xtabCurrentDocument';
 
@@ -33,6 +34,7 @@ export class PromptPieces {
 		public readonly areaAroundCodeToEdit: string,
 		public readonly langCtx: LanguageContextResponse | undefined,
 		public readonly aggressivenessLevel: AggressivenessLevel,
+		public readonly lintErrors: LintErrors | undefined,
 		public readonly computeTokens: (s: string) => number,
 		public readonly opts: PromptOptions,
 	) {
@@ -41,7 +43,7 @@ export class PromptPieces {
 
 export function getUserPrompt(promptPieces: PromptPieces): string {
 
-	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, computeTokens, opts } = promptPieces;
+	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, lintErrors, computeTokens, opts } = promptPieces;
 	const currentFileContent = taggedCurrentDocLines.join('\n');
 
 	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
@@ -56,6 +58,8 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath, aggressivenessLevel) : '';
 
+	const lintsWithNewLinePadding = lintErrors ? `\n${lintErrors.getFormattedLintErrors()}\n` : '';
+
 	const mainPrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}
 ${PromptTags.RECENT_FILES.end}
@@ -64,7 +68,7 @@ ${PromptTags.CURRENT_FILE.start}
 current_file_path: ${currentFilePath}
 ${currentFileContent}
 ${PromptTags.CURRENT_FILE.end}
-
+${lintsWithNewLinePadding}
 ${PromptTags.EDIT_HISTORY.start}
 ${editDiffHistory}
 ${PromptTags.EDIT_HISTORY.end}

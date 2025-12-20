@@ -49,6 +49,7 @@ import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
+import { LintErrors } from '../common/lintErrors';
 import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
@@ -298,6 +299,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.GotCancelled('afterLanguageContextAwait'));
 		}
 
+		const lintErrors = promptOptions.lintOptions ? new LintErrors(promptOptions.lintOptions, activeDocument.id, currentDocument, this.langDiagService) : undefined;
+
 		const promptPieces = new PromptPieces(
 			currentDocument,
 			editWindowLinesRange,
@@ -308,6 +311,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundCodeToEdit,
 			langCtx,
 			aggressivenessLevel,
+			lintErrors,
 			XtabProvider.computeTokens,
 			promptOptions
 		);
@@ -1013,6 +1017,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				onlyForDocsInPrompt: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffOnlyForDocsInPrompt, this.expService),
 				useRelativePaths: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffUseRelativePaths, this.expService),
 			},
+			lintOptions: undefined,
 			includePostScript: true,
 		};
 
@@ -1033,6 +1038,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...modelConfig.currentFile,
 				includeTags: overridingConfig.includeTagsInCurrentFile,
 			},
+			lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
 		};
 	}
 
