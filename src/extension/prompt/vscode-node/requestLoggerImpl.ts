@@ -201,7 +201,7 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly thinking?: ThinkingData,
 		public readonly edits?: { path: string; edits: string }[],
 		public readonly toolMetadata?: unknown,
-		public readonly toolResultMessage?: string | MarkdownString,
+		public readonly toolResultMessage?: string,
 		public readonly toolResultError?: string,
 		public readonly hasError?: boolean,
 	) { }
@@ -518,7 +518,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		if (entry.toolResultMessage) {
 			result.push(`## Tool Result Message`);
 			result.push(`~~~`);
-			result.push(typeof entry.toolResultMessage === 'string' ? entry.toolResultMessage : entry.toolResultMessage.value);
+			result.push(entry.toolResultMessage);
 			result.push(`~~~`);
 		}
 

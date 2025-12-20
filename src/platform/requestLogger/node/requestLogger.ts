@@ -6,7 +6,7 @@
 import type { RequestMetadata } from '@vscode/copilot-api';
 import { HTMLTracer, IChatEndpointInfo, Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import { AsyncLocalStorage } from 'async_hooks';
-import type { Event, MarkdownString } from 'vscode';
+import type { Event } from 'vscode';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponses, FetchSuccess } from '../../../platform/chat/common/commonTypes';
 import { IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
@@ -125,7 +125,7 @@ export interface ILoggedToolCall {
 	time: number;
 	thinking?: ThinkingData;
 	toolMetadata?: unknown;
-	toolResultMessage?: string | MarkdownString;
+	toolResultMessage?: string;
 	toolResultError?: string;
 	hasError?: boolean;
 	toJSON(): Promise<object>;
