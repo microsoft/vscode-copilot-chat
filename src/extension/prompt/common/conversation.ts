@@ -133,13 +133,23 @@ export class Turn {
 		return metadata?.renderedUserMessage;
 	}
 
+	// TODO@roblourens Tracking result data in "agent as chat participant" is difficult and will be replaced in the future.
+	// This is likely a Turn from Ask mode that does not have tool call rounds.
+	// Use consistent instances so we can save state on them.
+	private _filledInMissingRounds: IToolCallRound[] | undefined;
+
 	get rounds(): readonly IToolCallRound[] {
 		const metadata = this.resultMetadata;
 		const rounds = metadata?.toolCallRounds;
 		if (!rounds || rounds.length === 0) {
+			if (this._filledInMissingRounds?.length) {
+				return this._filledInMissingRounds;
+			}
+
 			// Should always have at least one round
 			const response = this.responseMessage?.message ?? '';
-			return [new ToolCallRound(response, [], undefined, this.id)];
+			this._filledInMissingRounds = [new ToolCallRound(response, [], undefined, this.id)];
+			return this._filledInMissingRounds;
 		}
 
 		return rounds;
