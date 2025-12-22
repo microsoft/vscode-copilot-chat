@@ -14,6 +14,31 @@
 
 # Minimum required Copilot CLI version
 $RequiredVersion = "0.0.342"
+$PackageName = "@github/copilot"
+
+function Invoke-NpmGlobalCommand {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet('install', 'update')][string]$Command,
+        [Parameter(Mandatory = $true)][string]$Package
+    )
+
+    # Avoid hitting PowerShell aliases/functions named 'npm'.
+    $npmCmd = Get-Command npm -CommandType Application -ErrorAction SilentlyContinue
+    if (-not $npmCmd) {
+        $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+    }
+
+    if (-not $npmCmd -or -not $npmCmd.Source) {
+        throw "npm was not found on PATH"
+    }
+
+    # Be defensive: the extension can set NODE_OPTIONS; don't leak it into npm/node.
+    Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
+
+    $npmArgs = @($Command, '-g', $Package)
+    & $npmCmd.Source @npmArgs
+    return $LASTEXITCODE
+}
 
 function Find-RealCopilot {
     # Find the real copilot binary, avoiding this script if it's in PATH
@@ -73,16 +98,16 @@ function Test-AndLaunchCopilot {
         $answer = Read-Host "Install GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             try {
-                & npm install -g @github/copilot
-                if ($LASTEXITCODE -eq 0) {
+                $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
+                if ($exitCode -eq 0) {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
+                    Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                     return
                 }
             } catch {
-                Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
+                Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                 return
             }
         } else {
@@ -98,16 +123,16 @@ function Test-AndLaunchCopilot {
         if ($answer -eq "y" -or $answer -eq "Y") {
             Write-Host "Reinstalling GitHub Copilot CLI..."
             try {
-                & npm install -g @github/copilot
-                if ($LASTEXITCODE -eq 0) {
+                $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
+                if ($exitCode -eq 0) {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
+                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                     return
                 }
             } catch {
-                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
+                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                 return
             }
         } else {
@@ -125,16 +150,16 @@ function Test-AndLaunchCopilot {
         $answer = Read-Host "Would you like to reinstall GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             try {
-                & npm install -g @github/copilot
-                if ($LASTEXITCODE -eq 0) {
+                $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
+                if ($exitCode -eq 0) {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
+                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                     return
                 }
             } catch {
-                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
+                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                 return
             }
         } else {
@@ -159,16 +184,16 @@ function Test-AndLaunchCopilot {
         $answer = Read-Host "Reinstall GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             try {
-                & npm install -g @github/copilot
-                if ($LASTEXITCODE -eq 0) {
+                $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
+                if ($exitCode -eq 0) {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
+                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                     return
                 }
             } catch {
-                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
+                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                 return
             }
         } else {
@@ -182,16 +207,16 @@ function Test-AndLaunchCopilot {
         $answer = Read-Host "Update GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             try {
-                & npm update -g @github/copilot
-                if ($LASTEXITCODE -eq 0) {
+                $exitCode = Invoke-NpmGlobalCommand -Command 'update' -Package $PackageName
+                if ($exitCode -eq 0) {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Update failed. Please check your npm configuration and try again (or run: npm update -g @github/copilot)."
+                    Read-Host "Update failed. Please check your npm configuration and try again (or run: npm update -g $PackageName)."
                     return
                 }
             } catch {
-                Read-Host "Update failed. Please check your npm configuration and try again (or run: npm update -g @github/copilot)."
+                Read-Host "Update failed. Please check your npm configuration and try again (or run: npm update -g $PackageName)."
                 return
             }
         } else {
@@ -202,10 +227,12 @@ function Test-AndLaunchCopilot {
     # All checks passed, execute the real copilot binary
     $realCopilot = Find-RealCopilot
     if ($realCopilot -and (Test-Path $realCopilot)) {
+        Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
         & $realCopilot @Arguments
+        exit $LASTEXITCODE
     } else {
         Write-Host "Error: Could not find the real GitHub Copilot CLI binary"
-        Read-Host "Please ensure it's properly installed with: npm install -g @github/copilot"
+        Read-Host "Please ensure it's properly installed with: npm install -g $PackageName"
         return
     }
 }
@@ -215,7 +242,11 @@ $finalArgs = $args
 # Handle --clear argument
 if ($args.Length -gt 0 -and $args[0] -eq '--clear') {
     Clear-Host
-    $finalArgs = $args[1..($args.Length - 1)]
+    if ($args.Length -gt 1) {
+        $finalArgs = $args[1..($args.Length - 1)]
+    } else {
+        $finalArgs = @()
+    }
 }
 
 Test-AndLaunchCopilot $finalArgs
