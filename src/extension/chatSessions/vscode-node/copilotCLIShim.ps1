@@ -26,11 +26,10 @@ function Invoke-NpmGlobalCommand {
 
     $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
     if ($npmCmd) {
-        & $npmCmd.Source @npmArgs
+        & npm.cmd @npmArgs
     } else {
         & npm @npmArgs
     }
-    return $LASTEXITCODE
 }
 
 function Find-RealCopilot {
@@ -91,14 +90,14 @@ function Test-AndLaunchCopilot {
         $answer = Read-Host "Install GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             try {
-            $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
-            if ($exitCode -eq 0) {
-                Test-AndLaunchCopilot $Arguments
-                return
-            } else {
-                Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
-                return
-            }
+                Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
+                if ($LASTEXITCODE -eq 0) {
+                    Test-AndLaunchCopilot $Arguments
+                    return
+                } else {
+                    Read-Host "Installation failed, please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                    return
+                }
             } catch {
                 Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                 return
@@ -116,8 +115,8 @@ function Test-AndLaunchCopilot {
         if ($answer -eq "y" -or $answer -eq "Y") {
             Write-Host "Reinstalling GitHub Copilot CLI..."
             try {
-                $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
-                if ($exitCode -eq 0) {
+                Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
+                if ($LASTEXITCODE -eq 0) {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
@@ -143,8 +142,8 @@ function Test-AndLaunchCopilot {
         $answer = Read-Host "Would you like to reinstall GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             try {
-                $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
-                if ($exitCode -eq 0) {
+                Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
+                if ($LASTEXITCODE -eq 0) {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
@@ -177,8 +176,8 @@ function Test-AndLaunchCopilot {
         $answer = Read-Host "Reinstall GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             try {
-                $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
-                if ($exitCode -eq 0) {
+                Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
+                if ($LASTEXITCODE -eq 0) {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
@@ -200,8 +199,8 @@ function Test-AndLaunchCopilot {
         $answer = Read-Host "Update GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             try {
-                $exitCode = Invoke-NpmGlobalCommand -Command 'update' -Package $PackageName
-                if ($exitCode -eq 0) {
+                Invoke-NpmGlobalCommand -Command 'update' -Package $PackageName
+                if ($LASTEXITCODE -eq 0) {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
