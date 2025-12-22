@@ -250,9 +250,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						throw new Error(`Unable to find repository for working directory ${workingDirectory}`);
 					}
 
+					this.logService.trace(`[CopilotCLISession] Generating commit message for working directory ${workingDirectory}. Repository state: ${JSON.stringify(repository.state)}`);
 					let message = await this.gitCommitMessageService.generateCommitMessage(repository, CancellationToken.None);
 					if (!message) {
 						// Fallback commit message
+						this.logService.error(`[CopilotCLISession] Unable to generate commit message for working directory ${workingDirectory}. Repository state: ${JSON.stringify(repository.state)}`);
 						message = `Copilot CLI session ${this.sessionId} changes`;
 					}
 
