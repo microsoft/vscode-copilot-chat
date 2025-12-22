@@ -27,12 +27,14 @@ interface CopilotCLIWorktreePropertiesV1 {
 	readonly worktreePath: string;
 }
 
-type CopilotCLIWorktreeProperties = CopilotCLIWorktreePropertiesV1;
+export type CopilotCLIWorktreeProperties = CopilotCLIWorktreePropertiesV1;
 
 export const ICopilotCLIWorktreeManagerService = createServiceIdentifier<ICopilotCLIWorktreeManagerService>('ICopilotCLIWorktreeManagerService');
 
 export interface ICopilotCLIWorktreeManagerService {
 	readonly _serviceBrand: undefined;
+
+	isSupported(): boolean;
 
 	createWorktree(stream?: vscode.ChatResponseStream): Promise<CopilotCLIWorktreeProperties | undefined>;
 
@@ -125,6 +127,10 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 		}
 	}
 
+	isSupported(): boolean {
+		return this.gitService.activeRepository.get() !== undefined;
+	}
+
 	getWorktreeProperties(sessionId: string): CopilotCLIWorktreeProperties | undefined {
 		const properties = this._sessionWorktrees.get(sessionId);
 		return typeof properties === 'string' ? undefined : properties;
@@ -163,8 +169,7 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 	}
 
 	getDefaultIsolationPreference(): boolean {
-		const repository = this.gitService.activeRepository.get();
-		if (repository === undefined) {
+		if (!this.isSupported()) {
 			return false;
 		}
 		return this.extensionContext.globalState.get<boolean>(COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, true);
