@@ -927,6 +927,9 @@ export function canExistingFileBeEdited(accessor: ServicesAccessor, uri: URI): P
 	if (workspace.textDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
 		return Promise.resolve(true);
 	}
+	if (workspace.notebookDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
+		return Promise.resolve(true);
+	}
 
 	const fileSystemService = accessor.get(IFileSystemService);
 	return fileSystemService.stat(uri).then(() => true, () => false);
