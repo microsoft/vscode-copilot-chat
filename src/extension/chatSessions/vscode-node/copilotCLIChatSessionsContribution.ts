@@ -898,28 +898,24 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Migrate changes from active repository to worktree
 			const activeRepository = this.gitService.activeRepository.get();
 			if (activeRepository) {
+				const disposable = new DisposableStore();
 				try {
 					stream.progress(vscode.l10n.t('Migrating changes to worktree...'));
 					// Wait for the worktree repository to be ready
 					const worktreeRepo = await new Promise<typeof activeRepository | undefined>((resolve) => {
-						const disposable = this.gitService.onDidOpenRepository(repo => {
+						disposable.add(this.gitService.onDidOpenRepository(repo => {
 							if (isEqual(repo.rootUri, worktreePath)) {
-								disposable.dispose();
 								resolve(repo);
 							}
-						});
+						}));
 
 						this.gitService.getRepository(worktreePath).then(repo => {
 							if (repo) {
-								disposable.dispose();
 								resolve(repo);
 							}
 						});
 
-						setTimeout(() => {
-							disposable.dispose();
-							resolve(undefined);
-						}, 10_000);
+						disposable.add(disposableTimeout(() => resolve(undefined), 10_000));
 					});
 
 					if (!worktreeRepo) {
@@ -935,6 +931,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				} catch (error) {
 					// Continue even if migration fails
 					stream.warning(vscode.l10n.t('Failed to migrate some changes: {0}. Continuing with worktree creation.', error instanceof Error ? error.message : String(error)));
+				} finally {
+					disposable.dispose();
 				}
 			}
 
