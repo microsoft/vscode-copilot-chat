@@ -23,6 +23,7 @@ import { OllamaLMProvider } from './ollamaProvider';
 import { OAIBYOKLMProvider } from './openAIProvider';
 import { OpenRouterLMProvider } from './openRouterProvider';
 import { XAIBYOKLMProvider } from './xAIProvider';
+import { JulesProvider } from './julesProvider';
 
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
@@ -93,9 +94,12 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._providers.set(OpenRouterLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService));
 			this._providers.set(AzureBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService));
 			this._providers.set(CustomOAIBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(CustomOAIBYOKModelProvider, this._byokStorageService));
+			this._providers.set(JulesProvider.providerName.toLowerCase(), instantiationService.createInstance(JulesProvider, this._byokStorageService));
 
 			for (const [providerName, provider] of this._providers) {
-				this._store.add(lm.registerLanguageModelChatProvider(providerName, provider));
+				if (providerName !== JulesProvider.providerName.toLowerCase()) {
+					this._store.add(lm.registerLanguageModelChatProvider(providerName, provider));
+				}
 			}
 		}
 	}
