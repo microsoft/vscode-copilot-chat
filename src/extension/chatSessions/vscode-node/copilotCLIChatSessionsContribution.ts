@@ -854,7 +854,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 							deleteFromSource: moveChanges,
 							untracked: true
 						});
-						stream.markdown(vscode.l10n.t('Changes migrated to worktree.'));
+						stream.markdown(vscode.l10n.t('Changes migrated to worktree.') + '\n\n');
 					}
 				} catch (error) {
 					// Continue even if migration fails
