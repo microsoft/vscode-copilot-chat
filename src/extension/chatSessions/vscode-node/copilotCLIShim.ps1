@@ -95,11 +95,11 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Installation failed, please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                    Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
                     return
                 }
             } catch {
-                Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
                 return
             }
         } else {
@@ -120,11 +120,11 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
                     return
                 }
             } catch {
-                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
                 return
             }
         } else {
@@ -147,11 +147,11 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
                     return
                 }
             } catch {
-                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
                 return
             }
         } else {
@@ -181,11 +181,11 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
                     return
                 }
             } catch {
-                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
                 return
             }
         } else {
@@ -204,11 +204,11 @@ function Test-AndLaunchCopilot {
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
-                    Read-Host "Update failed. Please check your npm configuration and try again (or run: npm update -g $PackageName)."
+                    Read-Host "Update failed. Please check your npm configuration and try again (or run: npm update -g @github/copilot)."
                     return
                 }
             } catch {
-                Read-Host "Update failed. Please check your npm configuration and try again (or run: npm update -g $PackageName)."
+                Read-Host "Update failed. Please check your npm configuration and try again (or run: npm update -g @github/copilot)."
                 return
             }
         } else {
@@ -219,12 +219,10 @@ function Test-AndLaunchCopilot {
     # All checks passed, execute the real copilot binary
     $realCopilot = Find-RealCopilot
     if ($realCopilot -and (Test-Path $realCopilot)) {
-        Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
         & $realCopilot @Arguments
-        exit $LASTEXITCODE
     } else {
         Write-Host "Error: Could not find the real GitHub Copilot CLI binary"
-        Read-Host "Please ensure it's properly installed with: npm install -g $PackageName"
+        Read-Host "Please ensure it's properly installed with: npm install -g @github/copilot"
         return
     }
 }
@@ -234,11 +232,7 @@ $finalArgs = $args
 # Handle --clear argument
 if ($args.Length -gt 0 -and $args[0] -eq '--clear') {
     Clear-Host
-    if ($args.Length -gt 1) {
-        $finalArgs = $args[1..($args.Length - 1)]
-    } else {
-        $finalArgs = @()
-    }
+    $finalArgs = $args[1..($args.Length - 1)]
 }
 
 Test-AndLaunchCopilot $finalArgs
