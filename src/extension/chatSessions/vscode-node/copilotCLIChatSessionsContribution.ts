@@ -97,7 +97,7 @@ interface CopilotCLIWorktreeData {
 interface CopilotCLIWorktreePropertiesV1 {
 	readonly baseCommit: string;
 	readonly branchName: string;
-	readonly reporitoryPath: string;
+	readonly repositoryPath: string;
 	readonly worktreePath: string;
 }
 
@@ -173,7 +173,7 @@ export class CopilotCLIWorktreeManager {
 				return {
 					branchName: branch,
 					baseCommit: repository.headCommitHash,
-					reporitoryPath: repository.rootUri.fsPath,
+					repositoryPath: repository.rootUri.fsPath,
 					worktreePath
 				} satisfies CopilotCLIWorktreeProperties;
 			}
@@ -347,45 +347,46 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	private async getStatisticsForWorktree(worktreeUri: Uri, worktreeProperties: CopilotCLIWorktreeProperties | undefined): Promise<vscode.ChatSessionChangedFile[]> {
-		if (worktreeProperties === undefined) {
-			// These changes are staged in the worktree but not yet committed
-			const repository = await this.gitService.getRepository(worktreeUri, false);
-			if (!repository?.changes) {
+		if (worktreeProperties !== undefined) {
+			// These changes are committed in the worktree branch
+			const changes = await this.gitService.diffBetweenWithStats(
+				Uri.file(worktreeProperties.worktreePath),
+				worktreeProperties.baseCommit,
+				worktreeProperties.branchName);
+
+			if (!changes) {
 				return [];
 			}
 
-			const details: vscode.ChatSessionChangedFile[] = [];
-			for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
-				try {
-					const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
-					details.push(new vscode.ChatSessionChangedFile(
-						change.uri,
-						fileStats?.insertions ?? 0,
-						fileStats?.deletions ?? 0,
-						change.originalUri
-					));
-				} catch (error) { }
-			}
-			return details;
+			return changes.map(change => {
+				return new vscode.ChatSessionChangedFile(
+					toGitUri(change.uri, worktreeProperties.branchName),
+					change.insertions,
+					change.deletions,
+					toGitUri(change.originalUri, worktreeProperties.baseCommit));
+			});
 		}
 
-		// These changes are committed in the worktree branch
-		const changes = await this.gitService.diffBetweenWithStats(
-			Uri.file(worktreeProperties.worktreePath),
-			worktreeProperties.baseCommit,
-			worktreeProperties.branchName);
-
-		if (!changes) {
+		// These changes are staged in the worktree but not yet committed
+		const repository = await this.gitService.getRepository(worktreeUri, false);
+		if (!repository?.changes) {
 			return [];
 		}
 
-		return changes.map(change => {
-			return new vscode.ChatSessionChangedFile(
-				toGitUri(change.uri, worktreeProperties.branchName),
-				change.insertions,
-				change.deletions,
-				toGitUri(change.originalUri, worktreeProperties.baseCommit));
-		});
+		const details: vscode.ChatSessionChangedFile[] = [];
+		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
+			try {
+				const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
+				details.push(new vscode.ChatSessionChangedFile(
+					change.uri,
+					fileStats?.insertions ?? 0,
+					fileStats?.deletions ?? 0,
+					change.originalUri
+				));
+			} catch (error) { }
+		}
+
+		return details;
 	}
 
 	public async createCopilotCLITerminal(): Promise<void> {
@@ -1287,19 +1288,19 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		// Write the patch to a temporary file
 		const encoder = new TextEncoder();
-		const patchFilePath = path.join(worktreeProperties.reporitoryPath, '.git', `${worktreeProperties.branchName}.patch`);
+		const patchFilePath = path.join(worktreeProperties.repositoryPath, '.git', `${worktreeProperties.branchName}.patch`);
 		const patchFileUri = vscode.Uri.file(patchFilePath);
 		await vscode.workspace.fs.writeFile(patchFileUri, encoder.encode(patch.join('')));
 
 		try {
 			// Apply patch
-			await gitService.applyPatch(Uri.file(worktreeProperties.reporitoryPath), patchFilePath);
+			await gitService.applyPatch(Uri.file(worktreeProperties.repositoryPath), patchFilePath);
 		} finally {
 			await vscode.workspace.fs.delete(patchFileUri);
 		}
 
 		// Update base commit for the worktree after applying the changes
-		const ref = await gitService.getRefs(Uri.file(worktreeProperties.reporitoryPath), {
+		const ref = await gitService.getRefs(Uri.file(worktreeProperties.repositoryPath), {
 			pattern: `refs/heads/${worktreeProperties.branchName}`
 		});
 		if (ref.length === 1 && ref[0].commit && ref[0].commit !== worktreeProperties.baseCommit) {
