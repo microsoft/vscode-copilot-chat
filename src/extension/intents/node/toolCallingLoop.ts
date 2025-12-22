@@ -197,7 +197,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				// Check if search_subagent tool was called, and terminate if so
 				if (this.exitOnSearchSubagentCall && result.round.toolCalls.some(call => call.name === ToolName.SearchSubagent)) {
-					console.log('Terminating tool calling loop due to search_subagent tool call.');
+					this._logService.info('Terminating tool calling loop due to search_subagent tool call.');
+					lastResult = lastResult;
+					break;
 				}
 
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
