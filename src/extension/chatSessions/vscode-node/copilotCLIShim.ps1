@@ -22,21 +22,14 @@ function Invoke-NpmGlobalCommand {
         [Parameter(Mandatory = $true)][string]$Package
     )
 
-    # Avoid hitting PowerShell aliases/functions named 'npm'.
-    $npmCmd = Get-Command npm -CommandType Application -ErrorAction SilentlyContinue
-    if (-not $npmCmd) {
-        $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
-    }
-
-    if (-not $npmCmd -or -not $npmCmd.Source) {
-        throw "npm was not found on PATH"
-    }
-
-    # Be defensive: the extension can set NODE_OPTIONS; don't leak it into npm/node.
-    Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
-
     $npmArgs = @($Command, '-g', $Package)
-    & $npmCmd.Source @npmArgs
+
+    $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($npmCmd) {
+        & $npmCmd.Source @npmArgs
+    } else {
+        & npm @npmArgs
+    }
     return $LASTEXITCODE
 }
 
@@ -98,14 +91,14 @@ function Test-AndLaunchCopilot {
         $answer = Read-Host "Install GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             try {
-                $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
-                if ($exitCode -eq 0) {
-                    Test-AndLaunchCopilot $Arguments
-                    return
-                } else {
-                    Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
-                    return
-                }
+            $exitCode = Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
+            if ($exitCode -eq 0) {
+                Test-AndLaunchCopilot $Arguments
+                return
+            } else {
+                Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
+                return
+            }
             } catch {
                 Read-Host "Installation failed. Please check your npm configuration and try again (or run: npm install -g $PackageName)."
                 return
