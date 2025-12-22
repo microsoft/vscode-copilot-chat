@@ -230,7 +230,9 @@ export class JulesAgent extends Disposable {
                     return;
                 }
 
-                // Handle artifacts if needed
+                // TODO: If Jules activities begin returning artifacts (e.g., files, logs, or URLs),
+                //       surface them via the chat stream (markdown, progress, or a dedicated handler)
+                //       so users can access generated outputs beyond plain text.
             }
 
             if (data.nextPageToken) {
