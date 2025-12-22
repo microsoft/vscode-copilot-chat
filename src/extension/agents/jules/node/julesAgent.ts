@@ -80,23 +80,7 @@ export class JulesAgent extends Disposable {
         }
 
         try {
-            // Check for existing session in history or context
-            // Note: VS Code Chat API doesn't persist custom session state easily across requests unless we use the history or a map.
-            // For simplicity, we'll assume a new session or try to infer from context if possible.
-            // But since `context.history` gives previous messages, we might need to store the session ID in a way we can retrieve it.
-            // For now, let's treat every request as a potential new session OR a message to an ongoing session if we can find a session ID in the history (not easy).
-
-            // Actually, we can use a map keyed by the vscode session ID (if available, but `context` doesn't give a stable session ID for the chat window itself easily in all versions).
-            // `vscode.chat.createChatParticipant` doesn't pass a session object, but `context` has `history`.
-
-            // Let's create a new session for now if it's the first turn, or try to continue if we can.
-            // Since we can't easily persist state per chat window without a session ID from VS Code,
-            // we will create a new session for the first request.
-
-            // Wait, `context` might have metadata? No.
-
-            // Let's just implement creating a session and polling for now.
-
+            // Create a new Jules session for this request and monitor its progress.
             stream.progress('Initializing Jules session...');
             const session = await this.createSession(apiKey, request.prompt);
             stream.markdown(`Started Jules Session: [${session.id}](${session.url})\n\n`);
