@@ -14,6 +14,7 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, IObservable, observableFromEvent, observableSignalFromEvent, observableValue, waitForState } from '../../../util/vs/base/common/observableInternal';
 import * as path from '../../../util/vs/base/common/path';
+import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ILogService } from '../../log/common/logService';
 import { IGitExtensionService } from '../common/gitExtensionService';
@@ -284,8 +285,9 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		this._register(autorun(reader => {
 			onDidChangeStateSignal.read(reader);
 			const selected = selectedObs.read(reader);
+
 			const activeRepository = this.activeRepository.get();
-			if (activeRepository && !selected) {
+			if (activeRepository && !selected && !isEqual(activeRepository.rootUri, repository.rootUri)) {
 				return;
 			}
 
