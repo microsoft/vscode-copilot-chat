@@ -416,7 +416,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return this.handleRequest.bind(this);
 	}
 
-	private readonly previousReferences = new Map<string, vscode.ChatPromptReference[]>();
 	private readonly contextForRequest = new Map<string, { prompt: string; attachments: Attachment[] }>();
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
@@ -447,24 +446,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return await this.handleDelegationFromAnotherChat(request, context, confirmationResults, hasUncommittedChanges, stream, token);
 			}
 
-			const isUntitled = chatSessionContext.isUntitled;
-			let uncommitedChangesAction: 'copy' | 'move' | 'skip' | undefined;
-			if (isUntitled && hasUncommittedChanges) {
-				if (confirmationResults.length === 0) {
-					return this.generateUncommittedChangesConfirmation(request, context, stream);
-				}
-				const confirmation = this.getConfirmationResult(request);
-				if (confirmation === 'cancel' || token.isCancellationRequested) {
-					stream.markdown(vscode.l10n.t('Background Agent delegation cancelled.'));
-					return {};
-				}
-				uncommitedChangesAction = confirmation;
-			}
 
 			const { resource } = chatSessionContext.chatSessionItem;
 			const id = SessionIdForCLI.parse(resource);
-			const additionalReferences = this.previousReferences.get(id) || [];
-			this.previousReferences.delete(id);
+			const isUntitled = chatSessionContext.isUntitled;
+			if (isUntitled && hasUncommittedChanges) {
+				return this.handleDelegationFromAnotherChat(request, context, confirmationResults, hasUncommittedChanges, stream, token);
+			}
+
 			const [modelId, agent] = await Promise.all([
 				this.getModelId(id, request, false, token),
 				this.getAgent(id, request, token),
@@ -484,7 +473,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					}
 				}
 			}
-			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, uncommitedChangesAction, stream, disposables, token);
+			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, undefined, stream, disposables, token);
 			if (!session || token.isCancellationRequested) {
 				return {};
 			}
@@ -530,7 +519,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
-				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, additionalReferences, session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
+				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 			}
 
