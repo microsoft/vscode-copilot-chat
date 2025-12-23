@@ -23,6 +23,7 @@ import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatResponseConfirmationPart } from '../../../../vscodeTypes';
 import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common/delegationSummaryService';
 import { CopilotCLISDK, type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
@@ -58,12 +59,18 @@ vi.mock('../copilotCLITerminalIntegration', () => {
 });
 
 class FakeWorktreeManagerService extends mock<ICopilotCLIWorktreeManagerService>() {
+	constructor(private _isSupported: boolean = false) {
+		super();
+	}
 	override createWorktree = vi.fn(async () => undefined);
 	override setWorktreeProperties = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
 	override getIsolationPreference = vi.fn(() => false);
 	override getDefaultIsolationPreference = vi.fn(() => false);
-	override isSupported = vi.fn(() => false);
+	override isSupported = vi.fn(() => this._isSupported);
+	setSupported(supported: boolean) {
+		this._isSupported = supported;
+	}
 }
 
 class FakeModels implements ICopilotCLIModels {
@@ -289,17 +296,36 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cloudProvider.delegate).toHaveBeenCalled();
 	});
 
-	it('handles /delegate command for new untitled session with uncomitted changes', async () => {
+	it('handles /delegate command for new untitled session with uncomitted changes (has worktree support)', async () => {
 		expect(manager.sessions.size).toBe(0);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }] } }) } as unknown as IGitService['activeRepository'];
+		worktree.setSupported(true);
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = { chatSessionContext: undefined } as vscode.ChatContext;
-		const stream = new MockChatResponseStream();
+		const parts: vscode.ExtendedChatResponsePart[] = [];
+		const stream = new MockChatResponseStream((part) => parts.push(part));
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(manager.sessions.size).toBe(0);
+		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(true);
+	});
+
+	it('handles /delegate command for new untitled session with uncomitted changes (no worktree support)', async () => {
+		expect(manager.sessions.size).toBe(0);
+		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }] } }) } as unknown as IGitService['activeRepository'];
+		worktree.setSupported(false);
+		const request = new TestChatRequest('/delegate Build feature');
+		const context = { chatSessionContext: undefined } as vscode.ChatContext;
+		const parts: vscode.ExtendedChatResponsePart[] = [];
+		const stream = new MockChatResponseStream((part) => parts.push(part));
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		expect(manager.sessions.size).toBe(1);
+		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(false);
 	});
 
 	it('handles /delegate command for new session without uncommitted changes', async () => {
