@@ -363,8 +363,8 @@ export const CanceledMessage = { message: 'Canceled' };
  * Prefer cancellation tokens / CancellationError checks when available.
  */
 export function isCancellationMessage(message: string): boolean {
-	const normalized = message.toLowerCase();
-	return normalized === 'cancelled' || normalized === 'canceled';
+	const cancelPattern = /\bcancel(l|ll)?(ed|ing)?\b/i;
+	return cancelPattern.test(message);
 }
 
 export const CanceledResult: ChatResult = { errorDetails: CanceledMessage, };
