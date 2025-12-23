@@ -384,12 +384,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 }
 
 const WAIT_FOR_NEW_SESSION_TO_GET_USED = 5 * 60 * 1000; // 5 minutes
+const CLI_MOVE_CHANGES = vscode.l10n.t('Move Changes');
+const CLI_COPY_CHANGES = vscode.l10n.t('Copy Changes');
+const CLI_SKIP_CHANGES = vscode.l10n.t('Skip Changes');
+const CLI_CANCEL = vscode.l10n.t('Cancel');
 
 export class CopilotCLIChatSessionParticipant extends Disposable {
-	private CLI_MOVE_CHANGES = vscode.l10n.t('Move Changes');
-	private CLI_COPY_CHANGES = vscode.l10n.t('Copy Changes');
-	private CLI_SKIP_CHANGES = vscode.l10n.t('Skip Changes');
-	private CLI_CANCEL = vscode.l10n.t('Cancel');
 	private readonly untitledSessionIdMapping = new Map<string, string>();
 	constructor(
 		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
@@ -749,10 +749,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			+ vscode.l10n.t('This workspace has uncommitted changes. Should these changes be included in the new worktree?');
 
 		const buttons = [
-			this.CLI_COPY_CHANGES,
-			this.CLI_MOVE_CHANGES,
-			this.CLI_SKIP_CHANGES,
-			this.CLI_CANCEL
+			CLI_COPY_CHANGES,
+			CLI_MOVE_CHANGES,
+			CLI_SKIP_CHANGES,
+			CLI_CANCEL
 		];
 
 		stream.confirmation(
@@ -775,11 +775,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private getConfirmationResult(request: vscode.ChatRequest): 'move' | 'copy' | 'skip' | 'cancel' {
 		const selection = (request.prompt?.split(':')[0] || '').trim().toUpperCase();
 		switch (selection) {
-			case this.CLI_MOVE_CHANGES.toUpperCase():
+			case CLI_MOVE_CHANGES.toUpperCase():
 				return 'move';
-			case this.CLI_COPY_CHANGES.toUpperCase():
+			case CLI_COPY_CHANGES.toUpperCase():
 				return 'copy';
-			case this.CLI_SKIP_CHANGES.toUpperCase():
+			case CLI_SKIP_CHANGES.toUpperCase():
 				return 'skip';
 			default:
 				return 'cancel';
