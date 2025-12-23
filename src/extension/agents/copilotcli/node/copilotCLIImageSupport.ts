@@ -16,6 +16,7 @@ export class CopilotCLIImageSupport {
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		this.storageDir = URI.joinPath(this.context.globalStorageUri, 'copilot-cli-images');
 		this.initialized = new Lazy<Promise<void>>(() => this.initialize());
