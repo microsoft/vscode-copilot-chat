@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitService } from '../../../platform/git/common/gitService';
@@ -28,10 +29,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 
 	constructor(
-		@IGitService private readonly gitService: IGitService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
-		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext
 	) {
 		super();
 		this.loadWorktreeProperties();
@@ -85,12 +87,15 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				return undefined;
 			}
 
+			const autoCommit = this.configurationService.getConfig(ConfigKey.Advanced.CLIAutoCommitEnabled);
+
 			const branchPrefix = vscode.workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
 			const branch = `${branchPrefix}copilot-worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
 			const worktreePath = await this.gitService.createWorktree(repository.rootUri, { branch });
+
 			if (worktreePath && repository.headCommitHash) {
 				return {
-					autoCommit: true,
+					autoCommit,
 					branchName: branch,
 					baseCommit: repository.headCommitHash,
 					repositoryPath: repository.rootUri.fsPath,
