@@ -33,7 +33,7 @@ export const ICopilotCLIWorktreeManagerService = createServiceIdentifier<ICopilo
 
 export interface ICopilotCLIWorktreeManagerService {
 	readonly _serviceBrand: undefined;
-
+	onDidSupportedChanged: vscode.Event<void>;
 	isSupported(): boolean;
 
 	createWorktree(stream?: vscode.ChatResponseStream): Promise<CopilotCLIWorktreeProperties | undefined>;
@@ -55,6 +55,8 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 	private _sessionIsolation: Map<string, boolean> = new Map();
 	private _sessionWorktrees: Map<string, string | CopilotCLIWorktreeProperties> = new Map();
 
+	private readonly _onDidSupportedChanged = this._register(new vscode.EventEmitter<void>());
+	public readonly onDidSupportedChanged = this._onDidSupportedChanged.event;
 	constructor(
 		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -62,6 +64,19 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 	) {
 		super();
 		this.loadWorktreeProperties();
+		const isSupported = this.isSupported();
+		if (!isSupported) {
+			this._register(gitService.onDidFinishInitialization(() => {
+				if (isSupported !== this.isSupported()) {
+					this._onDidSupportedChanged.fire();
+				}
+			}));
+			this._register(gitService.onDidOpenRepository(() => {
+				if (isSupported !== this.isSupported()) {
+					this._onDidSupportedChanged.fire();
+				}
+			}));
+		}
 	}
 
 	private loadWorktreeProperties(): void {
