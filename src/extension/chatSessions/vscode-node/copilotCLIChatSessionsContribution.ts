@@ -421,7 +421,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		const { chatSessionContext } = context;
 		const disposables = new DisposableStore();
-		let sessionResource: vscode.Uri | undefined;
 		try {
 
 			/* __GDPR__
@@ -441,16 +440,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
 			const currentRepository = this.gitService.activeRepository?.get();
-			const hasUncommittedChanges = currentRepository?.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
+			const hasUncommittedChanges = (this.copilotCLIWorktreeManagerService.isSupported() && currentRepository?.changes) ? (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0) : false;
 
 			if (!chatSessionContext) {
 				// Delegating from another chat session
-				return await this.handleDelegationFromAnotherChat(request, context, confirmationResults, !!hasUncommittedChanges, stream, token);
+				return await this.handleDelegationFromAnotherChat(request, context, confirmationResults, hasUncommittedChanges, stream, token);
 			}
 
 			const isUntitled = chatSessionContext.isUntitled;
 			let uncommitedChangesAction: 'copy' | 'move' | 'skip' | undefined;
-			if (isUntitled && hasUncommittedChanges && this.copilotCLIWorktreeManagerService.isSupported()) {
+			if (isUntitled && hasUncommittedChanges) {
 				if (confirmationResults.length === 0) {
 					return this.generateUncommittedChangesConfirmation(request, context, stream);
 				}
@@ -463,7 +462,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			const { resource } = chatSessionContext.chatSessionItem;
-			sessionResource = resource;
 			const id = SessionIdForCLI.parse(resource);
 			const additionalReferences = this.previousReferences.get(id) || [];
 			this.previousReferences.delete(id);
@@ -553,8 +551,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 		finally {
 			// Clean cached references for this session
-			if (sessionResource) {
-				CachedSessionStats.delete(sessionResource);
+			if (chatSessionContext?.chatSessionItem.resource) {
+				CachedSessionStats.delete(chatSessionContext.chatSessionItem.resource);
 				this.sessionItemProvider.notifySessionsChange();
 			}
 			disposables.dispose();
@@ -732,15 +730,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				stream.warning(vscode.l10n.t('Invalid confirmation data.'));
 				return {};
 			}
-			const references = uncommittedChangesData.metadata.references?.length ? uncommittedChangesData.metadata.references : request.references;
 			const selection = this.getConfirmationResult(request);
-
 			if (selection === 'cancel' || token.isCancellationRequested) {
 				stream.markdown(vscode.l10n.t('Background Agent delegation cancelled.'));
 				return {};
 			}
 
 			const prompt = uncommittedChangesData.metadata.prompt;
+			const references = uncommittedChangesData.metadata.references?.length ? uncommittedChangesData.metadata.references : request.references;
 			return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, selection, stream, token);
 		}
 
