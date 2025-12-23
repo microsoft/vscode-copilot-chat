@@ -12,42 +12,42 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
 
-const COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
+const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 
-interface CopilotCLIWorktreeData {
+interface ChatSessionWorktreeData {
 	readonly data: string;
 	readonly version: number;
 }
 
-interface CopilotCLIWorktreePropertiesV1 {
+interface ChatSessionWorktreePropertiesV1 {
 	readonly baseCommit: string;
 	readonly branchName: string;
 	readonly repositoryPath: string;
 	readonly worktreePath: string;
 }
 
-export type CopilotCLIWorktreeProperties = CopilotCLIWorktreePropertiesV1;
+export type ChatSessionWorktreeProperties = ChatSessionWorktreePropertiesV1;
 
-export const ICopilotCLIWorktreeManagerService = createServiceIdentifier<ICopilotCLIWorktreeManagerService>('ICopilotCLIWorktreeManagerService');
+export const IChatSessionWorktreeService = createServiceIdentifier<IChatSessionWorktreeService>('IChatSessionWorktreeService');
 
-export interface ICopilotCLIWorktreeManagerService {
+export interface IChatSessionWorktreeService {
 	readonly _serviceBrand: undefined;
 	onDidSupportedChanged: vscode.Event<void>;
 	isSupported(): boolean;
 
-	createWorktree(stream?: vscode.ChatResponseStream): Promise<CopilotCLIWorktreeProperties | undefined>;
+	createWorktree(stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
 
-	getWorktreeProperties(sessionId: string): CopilotCLIWorktreeProperties | undefined;
-	setWorktreeProperties(sessionId: string, properties: string | CopilotCLIWorktreeProperties): Promise<void>;
+	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined;
+	setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void>;
 
 	getWorktreePath(sessionId: string): vscode.Uri | undefined;
 	getWorktreeRelativePath(sessionId: string): string | undefined;
 }
 
-export class CopilotCLIWorktreeManagerService extends Disposable implements ICopilotCLIWorktreeManagerService {
+export class ChatSessionWorktreeService extends Disposable implements IChatSessionWorktreeService {
 	declare _serviceBrand: undefined;
 
-	private _sessionWorktrees: Map<string, string | CopilotCLIWorktreeProperties> = new Map();
+	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 
 	private readonly _onDidSupportedChanged = this._register(new vscode.EventEmitter<void>());
 	public readonly onDidSupportedChanged = this._onDidSupportedChanged.event;
@@ -74,7 +74,7 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 	}
 
 	private loadWorktreeProperties(): void {
-		const data = this.extensionContext.globalState.get<Record<string, string | CopilotCLIWorktreeData>>(COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, {});
+		const data = this.extensionContext.globalState.get<Record<string, string | ChatSessionWorktreeData>>(CHAT_SESSION_WORKTREE_MEMENTO_KEY, {});
 
 		for (const [key, value] of Object.entries(data)) {
 			if (typeof value === 'string') {
@@ -83,7 +83,7 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 			} else {
 				if (value.version === 1) {
 					// Worktree properties v1
-					this._sessionWorktrees.set(key, JSON.parse(value.data) satisfies CopilotCLIWorktreeProperties);
+					this._sessionWorktrees.set(key, JSON.parse(value.data) satisfies ChatSessionWorktreeProperties);
 				} else {
 					this.logService.warn(`Unsupported worktree properties version: ${value.version} for session ${key}`);
 				}
@@ -91,12 +91,12 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 		}
 	}
 
-	async createWorktree(stream?: vscode.ChatResponseStream): Promise<CopilotCLIWorktreeProperties | undefined> {
+	async createWorktree(stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined> {
 		if (!stream) {
 			return this.tryCreateWorktree();
 		}
 
-		return new Promise<CopilotCLIWorktreeProperties | undefined>((resolve) => {
+		return new Promise<ChatSessionWorktreeProperties | undefined>((resolve) => {
 			stream.progress(l10n.t('Creating isolated worktree for Background Agent session...'), async progress => {
 				const result = await this.tryCreateWorktree(progress);
 				resolve(result);
@@ -108,7 +108,7 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 		});
 	}
 
-	private async tryCreateWorktree(progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<CopilotCLIWorktreeProperties | undefined> {
+	private async tryCreateWorktree(progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<ChatSessionWorktreeProperties | undefined> {
 		try {
 			const repository = this.gitService.activeRepository.get();
 			if (!repository) {
@@ -125,7 +125,7 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 					baseCommit: repository.headCommitHash,
 					repositoryPath: repository.rootUri.fsPath,
 					worktreePath
-				} satisfies CopilotCLIWorktreeProperties;
+				} satisfies ChatSessionWorktreeProperties;
 			}
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 			return undefined;
@@ -140,17 +140,17 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 		return this.gitService.activeRepository.get() !== undefined;
 	}
 
-	getWorktreeProperties(sessionId: string): CopilotCLIWorktreeProperties | undefined {
+	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined {
 		const properties = this._sessionWorktrees.get(sessionId);
 		return typeof properties === 'string' ? undefined : properties;
 	}
 
-	async setWorktreeProperties(sessionId: string, properties: string | CopilotCLIWorktreeProperties): Promise<void> {
+	async setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void> {
 		this._sessionWorktrees.set(sessionId, properties);
 
-		const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, string | CopilotCLIWorktreeData>>(COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, {});
+		const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, string | ChatSessionWorktreeData>>(CHAT_SESSION_WORKTREE_MEMENTO_KEY, {});
 		sessionWorktreesProperties[sessionId] = { data: JSON.stringify(properties), version: 1 };
-		await this.extensionContext.globalState.update(COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY, sessionWorktreesProperties);
+		await this.extensionContext.globalState.update(CHAT_SESSION_WORKTREE_MEMENTO_KEY, sessionWorktreesProperties);
 	}
 
 	getWorktreePath(sessionId: string): vscode.Uri | undefined {
