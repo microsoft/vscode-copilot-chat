@@ -165,7 +165,7 @@ export class CompletionsFromNetwork {
 
 				ghostTextLogger.debug(this.logTarget, `Awaited first result, id:  ${firstChoice.choiceIndex}`);
 				// Adds first result to cache
-				const processedFirstChoice = postProcessChoices(firstChoice, requestContext);
+				const processedFirstChoice = postProcessChoices(firstChoice);
 				if (processedFirstChoice) {
 					this.instantiationService.invokeFunction(appendToCache, requestContext, processedFirstChoice);
 					ghostTextLogger.debug(this.logTarget,
@@ -180,7 +180,7 @@ export class CompletionsFromNetwork {
 						ghostTextLogger.debug(this.logTarget,
 							`GhostText later completion (index ${choice?.choiceIndex}): ${JSON.stringify(choice.completionText)}`
 						);
-						const processedChoice = postProcessChoices(choice, requestContext, apiChoices);
+						const processedChoice = postProcessChoices(choice, apiChoices);
 						if (!processedChoice) { continue; }
 						apiChoices.push(processedChoice);
 						this.instantiationService.invokeFunction(appendToCache, requestContext, processedChoice);
@@ -236,7 +236,7 @@ export class CompletionsFromNetwork {
 							telemetryData: mkCanceledResultTelemetry(baseTelemetryData),
 						};
 					}
-					const processedChoice = postProcessChoices(choice, requestContext, apiChoices);
+					const processedChoice = postProcessChoices(choice, apiChoices);
 					if (!processedChoice) { continue; }
 					apiChoices.push(processedChoice);
 				}
@@ -385,7 +385,6 @@ export class CompletionsFromNetwork {
  */
 function postProcessChoices(
 	newChoice: APIChoice,
-	requestContext: RequestContext,
 	currentChoices?: APIChoice[]
 ): APIChoice | undefined {
 	if (!currentChoices) { currentChoices = []; }
