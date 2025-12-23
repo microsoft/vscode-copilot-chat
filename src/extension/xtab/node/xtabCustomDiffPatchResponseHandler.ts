@@ -10,6 +10,7 @@ import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineE
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
+import { ResponseTags } from '../common/tags';
 
 
 class Patch {
@@ -83,6 +84,9 @@ export class XtabCustomDiffPatchResponseHandler {
 		let currentPatch: Patch | null = null;
 		for await (const line of linesStream) {
 			// if no current patch, try to parse a new one
+			if (line.trim() === ResponseTags.NO_EDIT) {
+				break;
+			}
 			if (currentPatch === null) {
 				currentPatch = Patch.ofLine(line);
 				continue;
