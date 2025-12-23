@@ -3,7 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { TextEditor } from 'vscode';
+import { Event, TextEditor } from 'vscode';
+
+export type {
+	ChatRequestFinishedEvent, ChatRequestFinishStatus, ChatRequestStartedEvent, ChatRequestStartStatus
+} from './chatRequestApiTypes';
+
+import type { ChatRequestFinishedEvent, ChatRequestStartedEvent } from './chatRequestApiTypes';
 
 /**
  * The API provided by the Copilot extension.
@@ -17,4 +23,16 @@ export interface CopilotExtensionApi {
 	 * @returns A promise that resolves to the selected scope as a `Selection` object, or `undefined` if no scope was selected.
 	 */
 	selectScope: (editor?: TextEditor, options?: { reason?: string }) => Promise<Selection | undefined>;
+
+	/**
+	 * Fires when a Copilot Chat request begins.
+	 * Only exposes requestId + status to avoid leaking user content.
+	 */
+	readonly onDidStartChatRequest: Event<ChatRequestStartedEvent>;
+
+	/**
+	 * Fires when a Copilot Chat request finishes.
+	 * Only exposes requestId + status to avoid leaking user content.
+	 */
+	readonly onDidFinishChatRequest: Event<ChatRequestFinishedEvent>;
 }

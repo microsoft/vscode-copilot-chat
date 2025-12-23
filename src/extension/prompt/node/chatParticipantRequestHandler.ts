@@ -8,11 +8,12 @@ import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Loc
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
-import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { ChatLocation, isCancellationMessage } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FilterReason } from '../../../platform/networking/common/openai';
+import { ChatRequestOutcome, IObservabilityService } from '../../../platform/observability/common/observabilityService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -84,6 +85,7 @@ export class ChatParticipantRequestHandler {
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
+		@IObservabilityService private readonly _observabilityService: IObservabilityService,
 	) {
 		this.location = this.getLocation(request);
 
@@ -213,7 +215,12 @@ export class ChatParticipantRequestHandler {
 				}
 			};
 		}
+
+		const requestId = this.turn.id;
+		this._observabilityService.notifyChatRequestStart(requestId);
 		this._logService.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
+
+		let finishOutcome: ChatRequestOutcome = ChatRequestOutcome.Error;
 		try {
 
 			// sanitize the variables of all requests
@@ -274,11 +281,36 @@ export class ChatParticipantRequestHandler {
 				}
 			} satisfies ICopilotChatResult, true);
 
+			// At this point we have a successful result unless it contains error details.
+			finishOutcome = ChatRequestOutcome.Success;
+
+			if (result.errorDetails) {
+				// NOTE: This is a heuristic fallback. The VS Code ChatResult/ChatErrorDetails shape does not
+				// provide a structured cancellation signal (e.g. a code/flag), so when we only have a result
+				// we must infer cancellation from the user-visible message string.
+				// Prefer token/isCancellationError checks when available.
+				if (result.errorDetails.message && isCancellationMessage(result.errorDetails.message)) {
+					finishOutcome = ChatRequestOutcome.Cancelled;
+				} else {
+					finishOutcome = ChatRequestOutcome.Error;
+				}
+			}
+
 			return <ICopilotChatResult>result;
 
 		} catch (err) {
+			if (this.token.isCancellationRequested) {
+				finishOutcome = ChatRequestOutcome.Cancelled;
+			} else if (err instanceof Error && err.message && isCancellationMessage(err.message)) {
+				// NOTE: Message matching is a fallback; use token/isCancellationError when possible.
+				finishOutcome = ChatRequestOutcome.Cancelled;
+			} else {
+				finishOutcome = ChatRequestOutcome.Error;
+			}
 			// TODO This method should not throw at all, but return a result with errorDetails, and call the IConversationStore
 			throw err;
+		} finally {
+			this._observabilityService.notifyChatRequestFinish(requestId, { status: finishOutcome });
 		}
 	}
 
@@ -422,7 +454,9 @@ function createTurnFromVSCodeChatHistoryTurns(
 		} else {
 			status = TurnStatus.Filtered;
 		}
-	} else if (chatResponseTurn.result.errorDetails.message === 'Cancelled' || chatResponseTurn.result.errorDetails.message === CanceledMessage.message) {
+	} else if (chatResponseTurn.result.errorDetails?.message && isCancellationMessage(chatResponseTurn.result.errorDetails.message)) {
+		// NOTE: This is a heuristic fallback. The VS Code ChatResult/ChatErrorDetails shape does not
+		// provide a structured cancellation signal, so we infer cancellation from the message string.
 		status = TurnStatus.Cancelled;
 	} else {
 		status = TurnStatus.Error;

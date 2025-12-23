@@ -60,6 +60,7 @@ import { NotebookService } from '../../../platform/notebook/vscode/notebookServi
 import { NotebookSummaryTrackerImpl } from '../../../platform/notebook/vscode/notebookSummaryTrackerImpl';
 import { INotificationService, NullNotificationService } from '../../../platform/notification/common/notificationService';
 import { NotificationService } from '../../../platform/notification/vscode/notificationServiceImpl';
+import { IObservabilityService, ObservabilityService } from '../../../platform/observability/common/observabilityService';
 import { IUrlOpener, NullUrlOpener } from '../../../platform/open/common/opener';
 import { RealUrlOpener } from '../../../platform/open/vscode/opener';
 import { IProjectTemplatesIndex, ProjectTemplatesIndex } from '../../../platform/projectTemplatesIndex/common/projectTemplatesIndex';
@@ -130,6 +131,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(INotificationService, isTestMode && !isScenarioAutomation ? new NullNotificationService() : new NotificationService());
 	builder.define(IVSCodeExtensionContext, <any>/*force _serviceBrand*/extensionContext);
 	builder.define(IWorkbenchService, new WorkbenchServiceImpl());
+	builder.define(IObservabilityService, new SyncDescriptor(ObservabilityService));
 	builder.define(IConversationOptions, {
 		_serviceBrand: undefined,
 		maxResponseTokens: undefined,
