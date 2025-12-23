@@ -8,13 +8,13 @@ import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
-import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { coalesce } from '../../../util/vs/base/common/arrays';
-import { disposableTimeout } from '../../../util/vs/base/common/async';
+import { disposableTimeout, raceCancellation } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -30,6 +30,7 @@ import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcl
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { PermissionRequest, requestPermission } from '../../agents/copilotcli/node/permissionHelpers';
+import { createTimeout } from '../../inlineEdits/common/common';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
@@ -440,23 +441,27 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
 			const currentRepository = this.gitService.activeRepository?.get();
+			const hasUncommittedChanges = currentRepository?.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
+
 			if (!chatSessionContext) {
-				// Invoked from a 'normal' chat or 'cloud button' without CLI session context
-				// Or cases such as delegating from Regular chat to CLI chat
-				// Handle confirmation data
-				return await this.handlePushConfirmationData(request, context, stream, token, currentRepository);
+				// Delegating from another chat session
+				return await this.handleDelegationFromAnotherChat(request, context, confirmationResults, !!hasUncommittedChanges, stream, token);
 			}
 
 			const isUntitled = chatSessionContext.isUntitled;
-			const hasUncommittedChanges = currentRepository?.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
-			if (isUntitled && hasUncommittedChanges && confirmationResults.length === 0) {
-				// initial request for untitled cli editor w/ uncomitted changes
-				return this.generateUncommittedChangesConfirmation(request, context, stream, token);
+			let uncommitedChangesAction: 'copy' | 'move' | 'skip' | undefined;
+			if (isUntitled && hasUncommittedChanges && this.copilotCLIWorktreeManagerService.isSupported()) {
+				if (confirmationResults.length === 0) {
+					return this.generateUncommittedChangesConfirmation(request, context, stream);
+				}
+				const confirmation = this.getConfirmationResult(request);
+				if (confirmation === 'cancel' || token.isCancellationRequested) {
+					stream.markdown(vscode.l10n.t('Background Agent delegation cancelled.'));
+					return {};
+				}
+				uncommitedChangesAction = confirmation;
 			}
 
-			if (isUntitled && hasUncommittedChanges && confirmationResults.length > 0) {
-				return await this.handleWorktreeConfirmationResponse(request, confirmationResults, context, stream, token);
-			}
 			const { resource } = chatSessionContext.chatSessionItem;
 			sessionResource = resource;
 			const id = SessionIdForCLI.parse(resource);
@@ -481,7 +486,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					}
 				}
 			}
-			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, stream, disposables, token);
+			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, uncommitedChangesAction, stream, disposables, token);
 			if (!session || token.isCancellationRequested) {
 				return {};
 			}
@@ -512,14 +517,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			if (!isUntitled && confirmationResults.length) {
-				return await this.handleConfirmationData(request, session.object, request.prompt, confirmationResults, context, stream, token);
+				return await this.handleDelegationToCloudConfirmation(request, session.object, request.prompt, confirmationResults, context, stream, token);
 			}
 
 			// Check if we have context stored for this request (created in createCLISessionAndSubmitRequest, work around)
 			const contextForRequest = this.contextForRequest.get(session.object.sessionId);
 			this.contextForRequest.delete(session.object.sessionId);
 			if (request.prompt.startsWith('/delegate')) {
-				await this.handleDelegateCommand(session.object, request, context, stream, token);
+				await this.handleDelegationToCloud(session.object, request, context, stream, token);
 			} else if (contextForRequest) {
 				// This is a request that was created in createCLISessionAndSubmitRequest with attachments already resolved.
 				const { prompt, attachments } = contextForRequest;
@@ -600,24 +605,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, model: string | undefined, agent: SweCustomAgent | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
+	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, model: string | undefined, agent: SweCustomAgent | undefined, uncommitedChangesAction: 'copy' | 'move' | 'skip' | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
 		const { resource } = chatSessionContext.chatSessionItem;
 		const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(resource));
 		const id = existingSessionId ?? SessionIdForCLI.parse(resource);
 		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
-		const isolationEnabled = this.copilotCLIWorktreeManagerService.getIsolationPreference(id);
 
-		let workingDirectory: vscode.Uri | undefined;
-		let worktreeProperties: CopilotCLIWorktreeProperties | undefined;
-
-		if (isNewSession || !isolationEnabled) {
-			if (isolationEnabled) {
-				worktreeProperties = await this.copilotCLIWorktreeManagerService.createWorktree(stream);
-				workingDirectory = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
-			} else {
-				workingDirectory = await this.copilotCLISDK.getDefaultWorkingDirectory();
-			}
-		}
+		const { isolationEnabled, workingDirectory, worktreeProperties } = await this.getOrInitializeWorkingDirectory(chatSessionContext, uncommitedChangesAction, stream, token);
 		const session = isNewSession ?
 			await this.sessionService.createSession({ model, workingDirectory, isolationEnabled, agent }, token) :
 			await this.sessionService.getSession(id, { model, workingDirectory, isolationEnabled, readonly: false, agent }, token);
@@ -631,8 +625,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		if (isNewSession) {
 			this.untitledSessionIdMapping.set(id, session.object.sessionId);
 		}
-		if (isNewSession && workingDirectory && worktreeProperties && isolationEnabled) {
-			await this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
+		if (isNewSession && worktreeProperties) {
+			void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
 		}
 		disposables.add(session.object.attachStream(stream));
 		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) => requestPermission(this.instantiationService, permissionRequest, toolCall, this.toolsService, request.toolInvocationToken, token)));
@@ -673,7 +667,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return await this.copilotCLIModels.getDefaultModel();
 	}
 
-	private async handleDelegateCommand(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleDelegationToCloud(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		if (!this.cloudSessionProvider) {
 			stream.warning(vscode.l10n.t('No cloud agent available'));
 			return;
@@ -704,7 +698,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return results;
 	}
 
-	private async handleConfirmationData(request: vscode.ChatRequest, session: ICopilotCLISession, prompt: string, results: ConfirmationResult[], context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
+	private async handleDelegationToCloudConfirmation(request: vscode.ChatRequest, session: ICopilotCLISession, prompt: string, results: ConfirmationResult[], context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		const uncommittedChangesData = results.find(data => data.step === UncommittedChangesStep);
 		if (!uncommittedChangesData) {
 			stream.warning(`Unknown confirmation step: ${results.map(r => r.step).join(', ')}\n\n`);
@@ -723,38 +717,45 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return {};
 	}
 
-	private async handlePushConfirmationData(
+	private async handleDelegationFromAnotherChat(
 		request: vscode.ChatRequest,
 		context: vscode.ChatContext,
+		confirmationResults: ConfirmationResult[],
+		hasUncommittedChanges: boolean,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
-		currentRepository: RepoContext | undefined
 	): Promise<vscode.ChatResult | void> {
 		// Check if this is a confirmation response
-		const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
 		if (confirmationResults.length > 0) {
-			return await this.handleWorktreeConfirmationResponse(request, confirmationResults, context, stream, token);
-		}
+			const uncommittedChangesData = confirmationResults.find(data => data.step === UncommittedChangesStep);
+			if (!uncommittedChangesData || !uncommittedChangesData.metadata) {
+				stream.warning(vscode.l10n.t('Invalid confirmation data.'));
+				return {};
+			}
+			const references = uncommittedChangesData.metadata.references?.length ? uncommittedChangesData.metadata.references : request.references;
+			const selection = this.getConfirmationResult(request);
 
-		if (!currentRepository) {
-			// No isolation, proceed without worktree
-			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, false, stream, token);
+			if (selection === 'cancel' || token.isCancellationRequested) {
+				stream.markdown(vscode.l10n.t('Background Agent delegation cancelled.'));
+				return {};
+			}
+
+			const prompt = uncommittedChangesData.metadata.prompt;
+			return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, selection, stream, token);
 		}
 
 		// Check for uncommitted changes
-		const hasUncommittedChanges = currentRepository.changes && (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0);
-		if (!hasUncommittedChanges) {
-			// No uncommitted changes, create worktree and proceed
-			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, true, stream, token);
+		if (!hasUncommittedChanges || !this.copilotCLIWorktreeManagerService.isSupported()) {
+			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, stream, token);
 		}
-		return this.generateUncommittedChangesConfirmation(request, context, stream, token);
+
+		return this.generateUncommittedChangesConfirmation(request, context, stream);
 	}
 
 	private generateUncommittedChangesConfirmation(
 		request: vscode.ChatRequest,
 		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
-		token: vscode.CancellationToken
 	): vscode.ChatResult | void {
 		const message =
 			vscode.l10n.t('Background Agent will work in an isolated worktree to implement your requested changes.')
@@ -785,87 +786,123 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return {};
 	}
 
-	private async handleWorktreeConfirmationResponse(
-		request: vscode.ChatRequest,
-		results: ConfirmationResult[],
-		context: vscode.ChatContext,
+	private getConfirmationResult(request: vscode.ChatRequest): 'move' | 'copy' | 'skip' | 'cancel' {
+		const selection = (request.prompt?.split(':')[0] || '').trim().toUpperCase();
+		switch (selection) {
+			case this.CLI_MOVE_CHANGES.toUpperCase():
+				return 'move';
+			case this.CLI_COPY_CHANGES.toUpperCase():
+				return 'copy';
+			case this.CLI_SKIP_CHANGES.toUpperCase():
+				return 'skip';
+			default:
+				return 'cancel';
+		}
+	}
+
+	private async getOrInitializeWorkingDirectory(chatSessionContext: vscode.ChatSessionContext | undefined, uncommittedChangesAction: 'move' | 'copy' | 'skip' | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<{ workingDirectory: Uri | undefined; isolationEnabled: boolean; worktreeProperties: Awaited<ReturnType<ICopilotCLIWorktreeManagerService['createWorktree']>> | undefined }> {
+		const defaultWorkingDirectory = this.copilotCLISDK.getDefaultWorkingDirectory();
+		const createWorkingTreeIfRequired = async (create: boolean) => {
+			if (!create) {
+				const workingDirectory = await defaultWorkingDirectory;
+				return { workingDirectory, worktreeProperties: undefined };
+			}
+
+			const worktreeProperties = await this.copilotCLIWorktreeManagerService.createWorktree(stream);
+			if (worktreeProperties) {
+				return { workingDirectory, worktreeProperties };
+			} else {
+				stream.warning(vscode.l10n.t('Failed to create worktree. Proceeding without isolation.'));
+				const workingDirectory = await defaultWorkingDirectory;
+				return { workingDirectory, worktreeProperties: undefined };
+			}
+		};
+
+		let workingDirectory: Uri | undefined;
+		let worktreeProperties: Awaited<ReturnType<ICopilotCLIWorktreeManagerService['createWorktree']>> | undefined;
+		let isolationEnabled = false;
+
+		if (chatSessionContext) {
+			const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
+			const id = existingSessionId ?? SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource);
+			const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
+			isolationEnabled = this.copilotCLIWorktreeManagerService.getIsolationPreference(id);
+
+
+			if (isNewSession) {
+				({ workingDirectory, worktreeProperties } = await createWorkingTreeIfRequired(isolationEnabled));
+				// Means we failed to create worktree
+				if (!worktreeProperties) {
+					isolationEnabled = false;
+				}
+			} else {
+				workingDirectory = this.copilotCLIWorktreeManagerService.getWorktreePath(id);
+			}
+		} else {
+			// This happens when we're delegating from a non-Background session to a new Background session
+			isolationEnabled = this.copilotCLIWorktreeManagerService.isSupported();
+			({ workingDirectory, worktreeProperties } = await createWorkingTreeIfRequired(isolationEnabled));
+			// Means we failed to create worktree
+			if (!worktreeProperties) {
+				isolationEnabled = false;
+			}
+		}
+
+		// Migrate changes from active repository to worktree
+		if (worktreeProperties?.worktreePath && (uncommittedChangesAction === 'move' || uncommittedChangesAction === 'copy')) {
+			await this.moveOrCopyChangesToWorkTree(Uri.file(worktreeProperties.worktreePath), uncommittedChangesAction, stream, token);
+		}
+
+		// If we failed to create a worktree or isolation is disabled, then isolation is false
+		return { workingDirectory, isolationEnabled, worktreeProperties };
+	}
+
+	private async moveOrCopyChangesToWorkTree(
+		worktreePath: Uri,
+		moveOrCopyChanges: 'move' | 'copy',
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult | void> {
-		const uncommittedChangesData = results.find(data => data.step === UncommittedChangesStep);
-		if (!uncommittedChangesData || !uncommittedChangesData.metadata) {
-			stream.warning(vscode.l10n.t('Invalid confirmation data.'));
-			return {};
+		// Migrate changes from active repository to worktree
+		const activeRepository = this.gitService.activeRepository.get();
+		if (!activeRepository) {
+			return;
 		}
-		const references = uncommittedChangesData.metadata.references?.length ? uncommittedChangesData.metadata.references : request.references;
-		const selection = (request.prompt?.split(':')[0] || '').trim().toUpperCase();
-
-		if (!selection || selection === this.CLI_CANCEL.toUpperCase() || token.isCancellationRequested) {
-			stream.markdown(vscode.l10n.t('Background Agent delegation cancelled.'));
-			return {};
-		}
-
-		const moveChanges = selection === this.CLI_MOVE_CHANGES.toUpperCase();
-		const copyChanges = selection === this.CLI_COPY_CHANGES.toUpperCase();
-		const prompt = uncommittedChangesData.metadata.prompt;
-
-		if ((moveChanges || copyChanges) && this.copilotCLIWorktreeManagerService.isSupported()) {
-			// Create worktree first
-			stream.progress(vscode.l10n.t('Creating worktree...'));
-			const worktreeProperties = await this.copilotCLIWorktreeManagerService.createWorktree(stream);
-			const worktreePath = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
-			if (!worktreePath) {
-				stream.warning(vscode.l10n.t('Failed to create worktree. Proceeding without isolation.'));
-				return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, undefined, false, stream, token);
-			}
-
-			// Migrate changes from active repository to worktree
-			const activeRepository = this.gitService.activeRepository.get();
-			if (activeRepository) {
-				try {
-					stream.progress(vscode.l10n.t('Migrating changes to worktree...'));
-					// Wait for the worktree repository to be ready
-					const worktreeRepo = await new Promise<typeof activeRepository | undefined>((resolve) => {
-						const disposable = this.gitService.onDidOpenRepository(repo => {
-							if (isEqual(repo.rootUri, worktreePath)) {
-								disposable.dispose();
-								resolve(repo);
-							}
-						});
-
-						this.gitService.getRepository(worktreePath).then(repo => {
-							if (repo) {
-								disposable.dispose();
-								resolve(repo);
-							}
-						});
-
-						setTimeout(() => {
-							disposable.dispose();
-							resolve(undefined);
-						}, 10_000);
-					});
-
-					if (!worktreeRepo) {
-						stream.warning(vscode.l10n.t('Failed to get worktree repository. Proceeding without migration.'));
-					} else {
-						await this.gitService.migrateChanges(worktreeRepo.rootUri, activeRepository.rootUri, {
-							confirmation: false,
-							deleteFromSource: moveChanges,
-							untracked: true
-						});
-						stream.markdown(vscode.l10n.t('Changes migrated to worktree.'));
+		const disposables = new DisposableStore();
+		try {
+			// Wait for the worktree repository to be ready
+			stream.progress(vscode.l10n.t('Migrating changes to worktree...'));
+			const worktreeRepo = await raceCancellation(new Promise<typeof activeRepository | undefined>((resolve) => {
+				disposables.add(this.gitService.onDidOpenRepository(repo => {
+					if (isEqual(repo.rootUri, worktreePath)) {
+						resolve(repo);
 					}
-				} catch (error) {
-					// Continue even if migration fails
-					stream.warning(vscode.l10n.t('Failed to migrate some changes: {0}. Continuing with worktree creation.', error instanceof Error ? error.message : String(error)));
-				}
-			}
+				}));
 
-			return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, worktreePath, true, stream, token);
-		} else {
-			// Skip changes, just create worktree without migration
-			return await this.createCLISessionAndSubmitRequest(request, prompt, references, context, undefined, this.copilotCLIWorktreeManagerService.isSupported(), stream, token);
+				this.gitService.getRepository(worktreePath).then(repo => {
+					if (repo) {
+						resolve(repo);
+					}
+				});
+
+				disposables.add(createTimeout(10_000, () => resolve(undefined)));
+			}), token);
+
+			if (!worktreeRepo) {
+				stream.warning(vscode.l10n.t('Failed to get worktree repository. Proceeding without migration.'));
+			} else {
+				await this.gitService.migrateChanges(worktreeRepo.rootUri, activeRepository.rootUri, {
+					confirmation: false,
+					deleteFromSource: moveOrCopyChanges === 'move',
+					untracked: true
+				});
+				stream.markdown(vscode.l10n.t('Changes migrated to worktree.'));
+			}
+		} catch (error) {
+			// Continue even if migration fails
+			stream.warning(vscode.l10n.t('Failed to migrate some changes: {0}. Continuing with worktree creation.', error instanceof Error ? error.message : String(error)));
+		} finally {
+			disposables.dispose();
 		}
 	}
 
@@ -874,8 +911,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		userPrompt: string | undefined,
 		otherReferences: readonly vscode.ChatPromptReference[] | undefined,
 		context: vscode.ChatContext,
-		workingDirectory: Uri | undefined,
-		isolationEnabled: boolean,
+		uncommittedChangesAction: 'move' | 'copy' | 'skip' | undefined,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult> {
@@ -892,30 +928,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return summary ? `${userPrompt}\n${summary}` : userPrompt;
 		})();
 
-		let worktreeProperties: CopilotCLIWorktreeProperties | undefined;
-		const getWorkingDirectory = async () => {
-			// Create worktree if isolation is enabled and we don't have one yet
-			if (isolationEnabled && !workingDirectory) {
-				worktreeProperties = await this.copilotCLIWorktreeManagerService.createWorktree(stream);
-				workingDirectory = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
-			}
-
-			// Fallback to default directory if worktree creation failed
-			if (!isolationEnabled && !workingDirectory) {
-				workingDirectory = await this.copilotCLISDK.getDefaultWorkingDirectory();
-			}
-		};
-
-		const getWorkingDirectoryPromise = getWorkingDirectory();
-		const [{ prompt, attachments, references }, model, agent] = await Promise.all([
-			requestPromptPromise.then(async prompt => {
-				await getWorkingDirectoryPromise;
-				return this.promptResolver.resolvePrompt(request, prompt, (otherReferences || []).concat([]), isolationEnabled, workingDirectory, token);
-			}),
+		const [{ isolationEnabled, workingDirectory, worktreeProperties }, model, agent] = await Promise.all([
+			this.getOrInitializeWorkingDirectory(undefined, uncommittedChangesAction, stream, token),
 			this.getModelId(undefined, request, true, token), // prefer model in request, as we're delegating from another session here.
-			this.getAgent(undefined, undefined, token),
-			getWorkingDirectoryPromise
+			this.getAgent(undefined, undefined, token)
 		]);
+
+		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, (otherReferences || []).concat([]), isolationEnabled, workingDirectory, token);
 
 		const session = await this.sessionService.createSession({ workingDirectory, isolationEnabled, agent, model }, token);
 		void this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
@@ -923,7 +942,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			void this.chatDelegationSummaryService.trackSummaryUsage(session.object.sessionId, summary);
 		}
 		// Do not await, we want this code path to be as fast as possible.
-		if (isolationEnabled && worktreeProperties) {
+		if (worktreeProperties) {
 			void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
 		}
 
