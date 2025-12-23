@@ -36,7 +36,7 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
-import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
+import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLISessionIsolationManager } from '../copilotCLIChatSessionsContribution';
 import { ICopilotCLIWorktreeManagerService } from '../copilotCLIWorktreeManagerService';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 
@@ -65,8 +65,6 @@ class FakeWorktreeManagerService extends mock<ICopilotCLIWorktreeManagerService>
 	override createWorktree = vi.fn(async () => undefined);
 	override setWorktreeProperties = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
-	override getIsolationPreference = vi.fn(() => false);
-	override getDefaultIsolationPreference = vi.fn(() => false);
 	override isSupported = vi.fn(() => this._isSupported);
 	setSupported(supported: boolean) {
 		this._isSupported = supported;
@@ -122,6 +120,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let itemProvider: CopilotCLIChatSessionItemProvider;
 	let cloudProvider: FakeCloudProvider;
 	let summarizer: ChatSummarizerProvider;
+	let isolationManager: CopilotCLISessionIsolationManager;
 	let worktree: FakeWorktreeManagerService;
 	let git: FakeGitService;
 	let models: FakeModels;
@@ -155,6 +154,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		summarizer = new class extends mock<ChatSummarizerProvider>() {
 			override provideChatSummary(_context: vscode.ChatContext) { return Promise.resolve('summary text'); }
 		}();
+		isolationManager = new class extends mock<CopilotCLISessionIsolationManager>() {
+			override getIsolationPreference = vi.fn(() => false);
+		};
 		worktree = new FakeWorktreeManagerService();
 		git = new FakeGitService();
 		models = new FakeModels();
@@ -207,6 +209,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}
 		}();
 		participant = new CopilotCLIChatSessionParticipant(
+			isolationManager,
 			contentProvider,
 			promptResolver,
 			itemProvider,

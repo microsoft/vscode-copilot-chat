@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -88,6 +89,36 @@ const CachedSessionStats = new ResourceMap<vscode.ChatSessionChangedFile[]>();
 
 function isUntitledSessionId(sessionId: string): boolean {
 	return sessionId.startsWith('untitled:') || sessionId.startsWith('untitled-');
+}
+
+export class CopilotCLISessionIsolationManager {
+	static COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY = 'github.copilot.cli.sessionIsolation';
+	private _sessionIsolation: Map<string, boolean> = new Map();
+
+	constructor(
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@ICopilotCLIWorktreeManagerService private readonly worktreeManagerService: ICopilotCLIWorktreeManagerService
+	) { }
+
+	private getDefaultIsolationPreference(): boolean {
+		if (!this.worktreeManagerService.isSupported()) {
+			return false;
+		}
+		return this.extensionContext.globalState.get<boolean>(CopilotCLISessionIsolationManager.COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, true);
+	}
+
+	getIsolationPreference(sessionId: string): boolean {
+		if (!this._sessionIsolation.has(sessionId)) {
+			const defaultIsolation = this.getDefaultIsolationPreference();
+			this._sessionIsolation.set(sessionId, defaultIsolation);
+		}
+		return this._sessionIsolation.get(sessionId) ?? false;
+	}
+
+	async setIsolationPreference(sessionId: string, enabled: boolean): Promise<void> {
+		this._sessionIsolation.set(sessionId, enabled);
+		await this.extensionContext.globalState.update(CopilotCLISessionIsolationManager.COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, enabled);
+	}
 }
 
 namespace SessionIdForCLI {
@@ -255,6 +286,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
 	private worktreeOptionShown: boolean = false;
 	constructor(
+		private readonly isolationManager: CopilotCLISessionIsolationManager,
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
@@ -276,7 +308,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		const workingDirectoryValue = this.copilotCLIWorktreeManagerService.getWorktreePath(copilotcliSessionId);
 		const workingDirectory = workingDirectoryValue ? workingDirectoryValue : undefined;
-		const isolationEnabled = this.copilotCLIWorktreeManagerService.getIsolationPreference(copilotcliSessionId);
+		const isolationEnabled = this.isolationManager.getIsolationPreference(copilotcliSessionId);
 
 		const [defaultModel, sessionAgent, defaultAgent, existingSession] = await Promise.all([
 			this.copilotCLIModels.getDefaultModel(),
@@ -386,7 +418,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				void this.copilotCLIAgents.trackSessionAgent(sessionId, update.value);
 			} else if (update.optionId === ISOLATION_OPTION_ID) {
 				// Handle isolation option changes
-				await this.copilotCLIWorktreeManagerService.setIsolationPreference(sessionId, update.value === 'enabled');
+				await this.isolationManager.setIsolationPreference(sessionId, update.value === 'enabled');
 			}
 		}
 	}
@@ -401,6 +433,7 @@ const CLI_CANCEL = l10n.t('Cancel');
 export class CopilotCLIChatSessionParticipant extends Disposable {
 	private readonly untitledSessionIdMapping = new Map<string, string>();
 	constructor(
+		private readonly isolationManager: CopilotCLISessionIsolationManager,
 		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
@@ -821,8 +854,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
 			const id = existingSessionId ?? SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource);
 			const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
-			isolationEnabled = this.copilotCLIWorktreeManagerService.getIsolationPreference(id);
-
+			isolationEnabled = this.isolationManager.getIsolationPreference(id);
 
 			if (isNewSession) {
 				({ workingDirectory, worktreeProperties } = await createWorkingTreeIfRequired(isolationEnabled));

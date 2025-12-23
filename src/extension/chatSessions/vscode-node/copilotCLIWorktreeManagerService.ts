@@ -12,7 +12,6 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
 
-const COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY = 'github.copilot.cli.sessionIsolation';
 const COPILOT_CLI_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 
 interface CopilotCLIWorktreeData {
@@ -43,16 +42,11 @@ export interface ICopilotCLIWorktreeManagerService {
 
 	getWorktreePath(sessionId: string): vscode.Uri | undefined;
 	getWorktreeRelativePath(sessionId: string): string | undefined;
-
-	getDefaultIsolationPreference(): boolean;
-	getIsolationPreference(sessionId: string): boolean;
-	setIsolationPreference(sessionId: string, enabled: boolean): Promise<void>;
 }
 
 export class CopilotCLIWorktreeManagerService extends Disposable implements ICopilotCLIWorktreeManagerService {
 	declare _serviceBrand: undefined;
 
-	private _sessionIsolation: Map<string, boolean> = new Map();
 	private _sessionWorktrees: Map<string, string | CopilotCLIWorktreeProperties> = new Map();
 
 	private readonly _onDidSupportedChanged = this._register(new vscode.EventEmitter<void>());
@@ -181,25 +175,5 @@ export class CopilotCLIWorktreeManagerService extends Disposable implements ICop
 		// TODO@rebornix, @osortega: read the workingtree name from git extension
 		const lastIndex = worktreePath.fsPath.lastIndexOf('/');
 		return worktreePath.fsPath.substring(lastIndex + 1);
-	}
-
-	getDefaultIsolationPreference(): boolean {
-		if (!this.isSupported()) {
-			return false;
-		}
-		return this.extensionContext.globalState.get<boolean>(COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, true);
-	}
-
-	getIsolationPreference(sessionId: string): boolean {
-		if (!this._sessionIsolation.has(sessionId)) {
-			const defaultIsolation = this.getDefaultIsolationPreference();
-			this._sessionIsolation.set(sessionId, defaultIsolation);
-		}
-		return this._sessionIsolation.get(sessionId) ?? false;
-	}
-
-	async setIsolationPreference(sessionId: string, enabled: boolean): Promise<void> {
-		this._sessionIsolation.set(sessionId, enabled);
-		await this.extensionContext.globalState.update(COPILOT_CLI_DEFAULT_ISOLATION_MEMENTO_KEY, enabled);
 	}
 }
