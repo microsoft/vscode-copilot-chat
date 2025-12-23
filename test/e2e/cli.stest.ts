@@ -276,16 +276,16 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 const vscCopilotRoot = path.join(__dirname, '..');
 // NOTE: Ensure all files/folders/workingDirectories are under test/scenarios/test-cli for path replacements to work correctly.
 const sourcePath = path.join(__dirname, '..', 'test', 'scenarios', 'test-cli');
-
+let tmpDirCounter = 0;
 function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; promptResolver: CopilotCLIPromptResolver; init: (workingDirectory: URI) => Promise<void> }, scenariosPath: string, stream: MockChatResponseStream, disposables: DisposableStore) => Promise<void>) {
 	return async (testingServiceCollection: TestingServiceCollection) => {
 		const disposables = new DisposableStore();
 		// Temp folder can be `/var/folders/....` in our code we use `realpath` to resolve any symlinks.
 		// That results in these temp folders being resolved as `/private/var/folders/...` on macOS.
-		const scenariosPath = path.join(tmpdir(), 'vscode-copilot-chat', 'test-cli');
+		const scenariosPath = path.join(tmpdir() + tmpDirCounter++, 'vscode-copilot-chat', 'test-cli');
 		await fs.rm(scenariosPath, { recursive: true, force: true }).catch(() => { /* Ignore */ });
 		await fs.mkdir(scenariosPath, { recursive: true });
-		await fs.cp(sourcePath, scenariosPath, { recursive: true });
+		await fs.cp(sourcePath, scenariosPath, { recursive: true, force: true, errorOnExist: false });
 		try {
 			const services = registerChatServices(testingServiceCollection);
 			const stream = new MockChatResponseStream();

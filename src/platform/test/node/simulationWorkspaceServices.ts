@@ -155,16 +155,20 @@ export class SimulationFileSystemAdaptor implements IFileSystemService {
 	}
 
 	async stat(uri: URI): Promise<vscode.FileStat> {
-		const doc = await this._workspaceService.openTextDocument(uri);
-		if (doc) {
-			return {
-				type: FileType.File,
-				ctime: this._time,
-				mtime: this._time,
-				size: new TextEncoder().encode(doc.getText()).byteLength
-			};
+		try {
+			const doc = await this._workspaceService.openTextDocument(uri);
+			if (doc) {
+				return {
+					type: FileType.File,
+					ctime: this._time,
+					mtime: this._time,
+					size: new TextEncoder().encode(doc.getText()).byteLength
+				};
+			}
+			return await this._delegate.stat(this._workspace.mapLocation(uri));
+		} catch {
+			return await this._delegate.stat(this._workspace.mapLocation(uri));
 		}
-		return await this._delegate.stat(this._workspace.mapLocation(uri));
 	}
 
 	async readFile(uri: URI): Promise<Uint8Array> {
