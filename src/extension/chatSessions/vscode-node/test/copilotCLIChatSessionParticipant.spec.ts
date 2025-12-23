@@ -296,7 +296,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cloudProvider.delegate).toHaveBeenCalled();
 	});
 
-	it('handles /delegate command for new untitled session with uncomitted changes (has worktree support)', async () => {
+	it('handles /delegate command from another chat (has worktree support)', async () => {
 		expect(manager.sessions.size).toBe(0);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }] } }) } as unknown as IGitService['activeRepository'];
 		worktree.setSupported(true);
@@ -312,7 +312,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(true);
 	});
 
-	it('handles /delegate command for new untitled session with uncomitted changes (no worktree support)', async () => {
+	it('handles /delegate command from another chat (no worktree support)', async () => {
 		expect(manager.sessions.size).toBe(0);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }] } }) } as unknown as IGitService['activeRepository'];
 		worktree.setSupported(false);
