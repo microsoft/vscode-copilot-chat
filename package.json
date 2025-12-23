@@ -1261,6 +1261,16 @@
 		],
 		"chatParticipants": [
 			{
+				"id": "jules",
+				"name": "jules",
+				"fullName": "Jules",
+				"description": "Jules Cloud Agent",
+				"isDefault": false,
+				"locations": [
+					"panel"
+				]
+			},
+			{
 				"id": "github.copilot.default",
 				"name": "GitHubCopilot",
 				"fullName": "GitHub Copilot",

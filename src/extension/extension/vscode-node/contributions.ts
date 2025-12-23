@@ -50,6 +50,7 @@ import * as workspaceChunkSearchContribution from '../../workspaceChunkSearch/no
 import * as workspaceIndexingContribution from '../../workspaceChunkSearch/vscode-node/workspaceChunkSearch.contribution';
 import { WorkspaceRecorderFeature } from '../../workspaceRecorder/vscode-node/workspaceRecorderFeature';
 import vscodeContributions from '../vscode/contributions';
+import { JulesAgentContrib } from '../../agents/jules/vscode-node/julesAgentContrib';
 
 // ###################################################################################################
 // ###                                                                                             ###
@@ -117,5 +118,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(McpSetupCommands),
 	asContributionFactory(LanguageModelProxyContrib),
 	asContributionFactory(OrganizationAndEnterpriseAgentContribution),
+	asContributionFactory(JulesAgentContrib),
 	newWorkspaceContribution,
 ];
