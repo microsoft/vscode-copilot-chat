@@ -5,51 +5,20 @@
 
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
+import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
-import { createServiceIdentifier } from '../../../util/common/services';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived, IObservable } from '../../../util/vs/base/common/observable';
 import * as path from '../../../util/vs/base/common/path';
 import { basename } from '../../../util/vs/base/common/resources';
+import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
-
-interface ChatSessionWorktreeData {
-	readonly data: string;
-	readonly version: number;
-}
-
-interface ChatSessionWorktreePropertiesV1 {
-	readonly autoCommit: boolean;
-	readonly baseCommit: string;
-	readonly branchName: string;
-	readonly repositoryPath: string;
-	readonly worktreePath: string;
-}
-
-export type ChatSessionWorktreeProperties = ChatSessionWorktreePropertiesV1;
-
-export const IChatSessionWorktreeService = createServiceIdentifier<IChatSessionWorktreeService>('IChatSessionWorktreeService');
-
-export interface IChatSessionWorktreeService {
-	readonly _serviceBrand: undefined;
-	readonly isWorktreeSupportedObs: IObservable<boolean>;
-
-	createWorktree(stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
-
-	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined;
-	setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void>;
-
-	getWorktreePath(sessionId: string): vscode.Uri | undefined;
-	getWorktreeRelativePath(sessionId: string): string | undefined;
-
-	applyWorktreeChanges(sessionId: string): Promise<void>;
-	getWorktreeChanges(sessionId: string): Promise<vscode.ChatSessionChangedFile[] | undefined>;
-}
 
 export class ChatSessionWorktreeService extends Disposable implements IChatSessionWorktreeService {
 	declare _serviceBrand: undefined;
@@ -60,6 +29,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	constructor(
 		@IGitService private readonly gitService: IGitService,
+		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 	) {
@@ -84,7 +54,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 					// Worktree properties v1
 					this._sessionWorktrees.set(key, JSON.parse(value.data) satisfies ChatSessionWorktreeProperties);
 				} else {
-					this.logService.warn(`Unsupported worktree properties version: ${value.version} for session ${key}`);
+					this.logService.warn(`[ChatSessionWorktreeService][loadWorktreeProperties] Unsupported worktree properties version: ${value.version} for session ${key}`);
 				}
 			}
 		}
@@ -131,7 +101,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return undefined;
 		} catch (error) {
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
-			this.logService.error(error, 'Error creating worktree for isolation');
+			this.logService.error('[ChatSessionWorktreeService][_createWorktree] Error creating worktree for isolation: ', error);
 			return undefined;
 		}
 	}
@@ -298,5 +268,39 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				change.deletions,
 				toGitUri(change.originalUri, worktreeProperties.baseCommit));
 		});
+	}
+
+	async handleRequestCompleted(sessionId: string): Promise<void> {
+		const worktreeProperties = this.getWorktreeProperties(sessionId);
+		if (!worktreeProperties) {
+			return;
+		}
+
+		const worktreePath = worktreeProperties.worktreePath;
+
+		if (!worktreeProperties.autoCommit) {
+			// Stage all changes in the worktree
+			await this.gitService.add(vscode.Uri.file(worktreePath), []);
+			return;
+		}
+
+		// Commit all changes in the worktree
+		const repository = this.gitCommitMessageService.getRepository(vscode.Uri.file(worktreePath));
+		if (!repository) {
+			this.logService.error(`[ChatSessionWorktreeService][handleRequestCompleted] Unable to find repository for working directory ${worktreePath}`);
+			throw new Error(`Unable to find repository for working directory ${worktreePath}`);
+		}
+
+		this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);
+		let message = await this.gitCommitMessageService.generateCommitMessage(repository, CancellationToken.None);
+		if (!message) {
+			// Fallback commit message
+			this.logService.warn(`[ChatSessionWorktreeService][handleRequestCompleted] Unable to generate commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);
+			message = `Copilot CLI session ${sessionId} changes`;
+		}
+
+		// Commit the changes
+		await this.gitService.commit(vscode.Uri.file(worktreePath), message);
+		this.logService.trace(`[ChatSessionWorktreeService] Committed all changes in working directory ${worktreePath}`);
 	}
 }

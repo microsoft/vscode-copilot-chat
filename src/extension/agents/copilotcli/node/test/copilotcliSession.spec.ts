@@ -6,8 +6,6 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext } from 'vscode';
-import { IGitCommitMessageService } from '../../../../../platform/git/common/gitCommitMessageService';
-import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -18,6 +16,7 @@ import * as path from '../../../../../util/vs/base/common/path';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
+import { IChatSessionWorktreeService } from '../../../../chatSessions/common/chatSessionWorktreeService';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
@@ -82,8 +81,6 @@ describe('CopilotCLISession', () => {
 	let sdkSession: MockSdkSession;
 	let workspaceService: IWorkspaceService;
 	let logger: ILogService;
-	let gitService: IGitService;
-	let gitCommitMessageService: IGitCommitMessageService;
 	let sessionOptions: CopilotCLISessionOptions;
 	let instaService: IInstantiationService;
 	let sdk: ICopilotCLISDK;
@@ -92,12 +89,11 @@ describe('CopilotCLISession', () => {
 			return undefined;
 		}
 	}();
+	const chatSessionWorktreeService = new class extends mock<IChatSessionWorktreeService>() { };
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logger = accessor.get(ILogService);
-		gitService = accessor.get(IGitService);
-		gitCommitMessageService = accessor.get(IGitCommitMessageService);
 		sdk = new class extends mock<ICopilotCLISDK>() {
 			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 				return {
@@ -123,13 +119,12 @@ describe('CopilotCLISession', () => {
 		return disposables.add(new CopilotCLISession(
 			sessionOptions,
 			sdkSession as unknown as Session,
-			gitService,
-			gitCommitMessageService,
 			logger,
 			workspaceService,
 			sdk,
 			instaService,
-			delegationService
+			delegationService,
+			chatSessionWorktreeService
 		));
 	}
 

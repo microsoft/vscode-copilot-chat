@@ -33,7 +33,7 @@ import { PermissionRequest, requestPermission } from '../../agents/copilotcli/no
 import { createTimeout } from '../../inlineEdits/common/common';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
-import { IChatSessionWorktreeService } from './chatSessionWorktreeService';
+import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { convertReferenceToVariable } from './copilotPromptReferences';

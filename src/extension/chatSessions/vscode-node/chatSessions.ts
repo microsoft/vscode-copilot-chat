@@ -26,8 +26,9 @@ import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/lan
 import { IExtensionContribution } from '../../common/contributions';
 import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
+import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
-import { ChatSessionWorktreeService, IChatSessionWorktreeService } from './chatSessionWorktreeService';
+import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';

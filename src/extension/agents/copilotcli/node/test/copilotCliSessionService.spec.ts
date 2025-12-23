@@ -11,8 +11,6 @@ import { IAuthenticationService } from '../../../../../platform/authentication/c
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
-import { IGitCommitMessageService } from '../../../../../platform/git/common/gitCommitMessageService';
-import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -20,6 +18,7 @@ import { mock } from '../../../../../util/common/test/simpleMock';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IChatSessionWorktreeService } from '../../../../chatSessions/common/chatSessionWorktreeService';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
@@ -102,8 +101,6 @@ describe('CopilotCLISessionService', () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logService = accessor.get(ILogService);
-		const gitService = accessor.get(IGitService);
-		const gitCommitMessageService = accessor.get(IGitCommitMessageService);
 		const workspaceService = new NullWorkspaceService();
 		const cliAgents = new NullCopilotCLIAgents();
 		const authService = {
@@ -114,6 +111,7 @@ describe('CopilotCLISessionService', () => {
 				return undefined;
 			}
 		}();
+		const chatSessionWorktreeService = new class extends mock<IChatSessionWorktreeService>() { };
 		instantiationService = {
 			invokeFunction(fn: (accessor: unknown, ...args: any[]) => any, ...args: any[]): any {
 				return fn(accessor, ...args);
@@ -130,7 +128,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, gitCommitMessageService, logService, workspaceService, sdk, instantiationService, delegationService));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, chatSessionWorktreeService));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);

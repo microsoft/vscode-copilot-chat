@@ -12,7 +12,6 @@ import { IEnvService } from '../../../../platform/env/common/envService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { IGitCommitMessageService } from '../../../../platform/git/common/gitCommitMessageService';
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
@@ -37,7 +36,7 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
-import { IChatSessionWorktreeService } from '../chatSessionWorktreeService';
+import { IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLISessionIsolationManager } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 
@@ -59,18 +58,18 @@ vi.mock('../copilotCLITerminalIntegration', () => {
 	};
 });
 
-class FakeWorktreeManagerService extends mock<IChatSessionWorktreeService>() {
+class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>() {
 	override readonly isWorktreeSupportedObs: ISettableObservable<boolean>;
 	constructor(_isSupported: boolean = false) {
 		super();
 		this.isWorktreeSupportedObs = observableValue(this, _isSupported);
 	}
-	override createWorktree = vi.fn(async () => undefined);
-	override setWorktreeProperties = vi.fn(async () => { });
-	override getWorktreePath = vi.fn((_id: string) => undefined);
 	setSupported(supported: boolean) {
 		this.isWorktreeSupportedObs.set(supported, undefined);
 	}
+	override createWorktree = vi.fn(async () => undefined);
+	override setWorktreeProperties = vi.fn(async () => { });
+	override getWorktreePath = vi.fn((_id: string) => undefined);
 }
 
 class FakeModels implements ICopilotCLIModels {
@@ -123,7 +122,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let cloudProvider: FakeCloudProvider;
 	let summarizer: ChatSummarizerProvider;
 	let isolationManager: CopilotCLISessionIsolationManager;
-	let worktree: FakeWorktreeManagerService;
+	let worktree: FakeChatSessionWorktreeService;
 	let git: FakeGitService;
 	let models: FakeModels;
 	let sessionService: CopilotCLISessionService;
@@ -159,7 +158,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		isolationManager = new class extends mock<CopilotCLISessionIsolationManager>() {
 			override getIsolationPreference = vi.fn(() => false);
 		};
-		worktree = new FakeWorktreeManagerService();
+		worktree = new FakeChatSessionWorktreeService();
 		git = new FakeGitService();
 		models = new FakeModels();
 		telemetry = new NullTelemetryService();
@@ -169,8 +168,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const vscodeExtensionContext = accessor.get(IVSCodeExtensionContext);
 		const copilotSDK = new CopilotCLISDK(vscodeExtensionContext, accessor.get(IEnvService), logger, accessor.get(IInstantiationService), accessor.get(IAuthenticationService), workspaceService);
 		const logService = accessor.get(ILogService);
-		const gitService = accessor.get(IGitService);
-		const gitCommitMessageService = accessor.get(IGitCommitMessageService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
 			override async loadMcpConfig(_workingDirectory: Uri | undefined) {
 				return undefined;
@@ -197,7 +194,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, gitService, gitCommitMessageService, logService, workspaceService, sdk, instantiationService, delegationService);
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, worktree);
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
