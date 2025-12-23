@@ -100,7 +100,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);
 	}
 
-	private async getEndpointImpl(model: LanguageModelChatInformation): Promise<OpenAIEndpoint> {
+	protected async getEndpointImpl(model: LanguageModelChatInformation): Promise<OpenAIEndpoint> {
 		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
 		const url = modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses) ?
 			`${this._baseUrl}/responses` :
