@@ -10,6 +10,7 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { derived, IObservable } from '../../../util/vs/base/common/observable';
 import { basename } from '../../../util/vs/base/common/resources';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -32,8 +33,7 @@ export const IChatSessionWorktreeService = createServiceIdentifier<IChatSessionW
 
 export interface IChatSessionWorktreeService {
 	readonly _serviceBrand: undefined;
-	onDidSupportedChanged: vscode.Event<void>;
-	isSupported(): boolean;
+	readonly isWorktreeSupportedObs: IObservable<boolean>;
 
 	createWorktree(stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
 
@@ -47,10 +47,10 @@ export interface IChatSessionWorktreeService {
 export class ChatSessionWorktreeService extends Disposable implements IChatSessionWorktreeService {
 	declare _serviceBrand: undefined;
 
+	readonly isWorktreeSupportedObs: IObservable<boolean>;
+
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 
-	private readonly _onDidSupportedChanged = this._register(new vscode.EventEmitter<void>());
-	public readonly onDidSupportedChanged = this._onDidSupportedChanged.event;
 	constructor(
 		@IGitService private readonly gitService: IGitService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -58,19 +58,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	) {
 		super();
 		this.loadWorktreeProperties();
-		const isSupported = this.isSupported();
-		if (!isSupported) {
-			this._register(gitService.onDidFinishInitialization(() => {
-				if (isSupported !== this.isSupported()) {
-					this._onDidSupportedChanged.fire();
-				}
-			}));
-			this._register(gitService.onDidOpenRepository(() => {
-				if (isSupported !== this.isSupported()) {
-					this._onDidSupportedChanged.fire();
-				}
-			}));
-		}
+
+		this.isWorktreeSupportedObs = derived(reader => {
+			const activeRepository = this.gitService.activeRepository.read(reader);
+			return activeRepository !== undefined;
+		});
 	}
 
 	private loadWorktreeProperties(): void {
@@ -134,10 +126,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			this.logService.error(error, 'Error creating worktree for isolation');
 			return undefined;
 		}
-	}
-
-	isSupported(): boolean {
-		return this.gitService.activeRepository.get() !== undefined;
 	}
 
 	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined {

@@ -22,6 +22,7 @@ import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/wo
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { ISettableObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseConfirmationPart } from '../../../../vscodeTypes';
 import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common/delegationSummaryService';
@@ -59,15 +60,16 @@ vi.mock('../copilotCLITerminalIntegration', () => {
 });
 
 class FakeWorktreeManagerService extends mock<IChatSessionWorktreeService>() {
-	constructor(private _isSupported: boolean = false) {
+	override readonly isWorktreeSupportedObs: ISettableObservable<boolean>;
+	constructor(_isSupported: boolean = false) {
 		super();
+		this.isWorktreeSupportedObs = observableValue(this, _isSupported);
 	}
 	override createWorktree = vi.fn(async () => undefined);
 	override setWorktreeProperties = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
-	override isSupported = vi.fn(() => this._isSupported);
 	setSupported(supported: boolean) {
-		this._isSupported = supported;
+		this.isWorktreeSupportedObs.set(supported, undefined);
 	}
 }
 
