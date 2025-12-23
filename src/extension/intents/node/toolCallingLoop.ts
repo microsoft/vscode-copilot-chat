@@ -654,6 +654,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 		};
 
+		// Simulate error for tools with "file" in the name before they execute
+		const lastRound = this.toolCallRounds.at(-1);
+		if (lastRound) {
+			for (const toolCall of lastRound.toolCalls) {
+				if (toolCall.name.toLowerCase().includes('file')) {
+					throw new ToolCallExecutionError(toolCall.name, `Simulated error: Tool "${toolCall.name}" failed during execution`);
+				}
+			}
+		}
+
 		const buildPromptResult = await this.buildPrompt(buildPromptContext, progress, token);
 		for (const metadata of buildPromptResult.metadata.getAll(ToolResultMetadata)) {
 			this.logToolResult(buildPromptContext, metadata);
@@ -697,6 +707,17 @@ async function finalizeStreams(streams: readonly ChatResponseStream[]) {
 export class EmptyPromptError extends Error {
 	constructor() {
 		super('Empty prompt');
+	}
+}
+
+/**
+ * Error thrown when a tool call fails during execution.
+ * This error is handled specially to show a "Try Again" button.
+ */
+export class ToolCallExecutionError extends Error {
+	constructor(public readonly toolName: string, message: string) {
+		super(message);
+		this.name = 'ToolCallExecutionError';
 	}
 }
 
