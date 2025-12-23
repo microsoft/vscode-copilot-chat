@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as fs from 'fs/promises';
 import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { CancellationToken, ChatRequest, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
