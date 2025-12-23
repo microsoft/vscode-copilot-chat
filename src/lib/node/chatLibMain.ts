@@ -26,7 +26,7 @@ import { GetGhostTextOptions } from '../../extension/completions-core/vscode-nod
 import { ICompletionsLastGhostText, LastGhostText } from '../../extension/completions-core/vscode-node/lib/src/ghostText/last';
 import { ITextEditorOptions } from '../../extension/completions-core/vscode-node/lib/src/ghostText/normalizeIndent';
 import { ICompletionsSpeculativeRequestCache, SpeculativeRequestCache } from '../../extension/completions-core/vscode-node/lib/src/ghostText/speculativeRequestCache';
-import { getInlineCompletions } from '../../extension/completions-core/vscode-node/lib/src/inlineCompletion';
+import { GhostText } from '../../extension/completions-core/vscode-node/lib/src/inlineCompletion';
 import { LocalFileSystem } from '../../extension/completions-core/vscode-node/lib/src/localFileSystem';
 import { LogLevel as CompletionsLogLevel, ICompletionsLogTargetService } from '../../extension/completions-core/vscode-node/lib/src/logger';
 import { ICompletionsFetcherService } from '../../extension/completions-core/vscode-node/lib/src/networking';
@@ -80,7 +80,7 @@ import { NullGitExtensionService } from '../../platform/git/common/nullGitExtens
 import { IIgnoreService, NullIgnoreService } from '../../platform/ignore/common/ignoreService';
 import { DocumentId } from '../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../platform/inlineEdits/common/inlineEditLogContext';
-import { IInlineEditsModelService } from '../../platform/inlineEdits/common/inlineEditsModelService';
+import { IInlineEditsModelService, IUndesiredModelsManager, NullUndesiredModelsManager } from '../../platform/inlineEdits/common/inlineEditsModelService';
 import { ObservableGit } from '../../platform/inlineEdits/common/observableGit';
 import { IObservableDocument, ObservableWorkspace } from '../../platform/inlineEdits/common/observableWorkspace';
 import { NesHistoryContextProvider } from '../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
@@ -175,6 +175,7 @@ export interface INESProviderOptions {
 	 * INESProvider.updateTreatmentVariables() must be called to unblock.
 	 */
 	readonly waitForTreatmentVariables?: boolean;
+	readonly undesiredModelsManager?: IUndesiredModelsManager;
 }
 
 export interface INESResult {
@@ -373,6 +374,7 @@ function setupServices(options: INESProviderOptions) {
 	});
 	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
+	builder.define(IUndesiredModelsManager, options.undesiredModelsManager || new SyncDescriptor(NullUndesiredModelsManager));
 	return builder.seal();
 }
 
@@ -626,6 +628,7 @@ export type IGetInlineCompletionsOptions = Exclude<Partial<GetGhostTextOptions>,
 export interface IInlineCompletionsProvider {
 	updateTreatmentVariables(variables: Record<string, boolean | number | string>): void;
 	getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined>;
+	inlineCompletionShown(completionId: string): Promise<void>;
 	dispose(): void;
 }
 
@@ -636,13 +639,17 @@ export function createInlineCompletionsProvider(options: IInlineCompletionsProvi
 
 class InlineCompletionsProvider extends Disposable implements IInlineCompletionsProvider {
 
+	private readonly ghostText: GhostText;
+
 	constructor(
 		@IInstantiationService private _insta: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@ICompletionsSpeculativeRequestCache private readonly _speculativeRequestCache: ICompletionsSpeculativeRequestCache,
 
 	) {
 		super();
 		this._register(_insta);
+		this.ghostText = this._insta.createInstance(GhostText);
 	}
 
 	updateTreatmentVariables(variables: Record<string, boolean | number | string>) {
@@ -652,7 +659,11 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 	}
 
 	async getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined> {
-		return await this._insta.invokeFunction(getInlineCompletions, textDocument, position, token, options);
+		return await this.ghostText.getInlineCompletions(textDocument, position, token, options);
+	}
+
+	async inlineCompletionShown(completionId: string): Promise<void> {
+		return await this._speculativeRequestCache.request(completionId);
 	}
 }
 

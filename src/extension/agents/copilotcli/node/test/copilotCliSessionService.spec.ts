@@ -11,6 +11,7 @@ import { IAuthenticationService } from '../../../../../platform/authentication/c
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
+import { IGitCommitMessageService } from '../../../../../platform/git/common/gitCommitMessageService';
 import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
@@ -102,6 +103,7 @@ describe('CopilotCLISessionService', () => {
 		const accessor = services.createTestingAccessor();
 		logService = accessor.get(ILogService);
 		const gitService = accessor.get(IGitService);
+		const gitCommitMessageService = accessor.get(IGitCommitMessageService);
 		const workspaceService = new NullWorkspaceService();
 		const cliAgents = new NullCopilotCLIAgents();
 		const authService = {
@@ -128,7 +130,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService, delegationService));
+				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, gitCommitMessageService, logService, workspaceService, sdk, instantiationService, delegationService));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);

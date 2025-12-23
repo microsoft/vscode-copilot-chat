@@ -12,6 +12,18 @@ import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { addPullRequestCommentGraphQLRequest, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 
+/**
+ * Options for controlling authentication behavior in OctoKit service methods.
+ */
+export interface AuthOptions {
+	/**
+	 * If true, prompts the user to sign in if no authentication token is available.
+	 * If false or undefined, fails silently without prompting.
+	 * @default false
+	 */
+	readonly createIfNone?: boolean;
+}
+
 export type IGetRepositoryInfoResponseData = Endpoints['GET /repos/{owner}/{repo}']['response']['data'];
 
 export const IGithubRepositoryService = createServiceIdentifier<IGithubRepositoryService>('IGithubRepositoryService');
@@ -134,6 +146,8 @@ export interface CustomAgentListItem {
 	metadata?: Record<string, string>;
 	target?: string;
 	config_error?: string;
+	model?: string;
+	infer?: boolean;
 	'mcp-servers'?: {
 		[serverName: string]: {
 			type: string;
@@ -186,6 +200,13 @@ interface GitHubBlobResponse {
 	encoding: string;
 }
 
+export class PermissiveAuthRequiredError extends Error {
+	constructor() {
+		super('Permissive authentication is required');
+		this.name = 'PermissiveAuthRequiredError';
+	}
+}
+
 export interface IOctoKitService {
 
 	_serviceBrand: undefined;
@@ -197,58 +218,69 @@ export interface IOctoKitService {
 
 	/**
 	 * Returns the list of Copilot pull requests for a given user on a specific repo.
+	 * @param authOptions - Authentication options. By default, uses silent auth and returns empty array if not authenticated.
 	 */
-	getCopilotPullRequestsForUser(owner: string, repo: string): Promise<PullRequestSearchItem[]>;
+	getCopilotPullRequestsForUser(owner: string, repo: string, authOptions: AuthOptions): Promise<PullRequestSearchItem[]>;
 
 	/**
 	 * Returns the list of Copilot sessions for a given pull request.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
-	getCopilotSessionsForPR(prId: string): Promise<SessionInfo[]>;
+	getCopilotSessionsForPR(prId: string, authOptions: AuthOptions): Promise<SessionInfo[]>;
 
 	/**
 	 * Returns the logs for a specific Copilot session.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
-	getSessionLogs(sessionId: string): Promise<string>;
+	getSessionLogs(sessionId: string, authOptions: AuthOptions): Promise<string>;
 
 	/**
 	 * Returns the information for a specific Copilot session.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
-	getSessionInfo(sessionId: string): Promise<SessionInfo | undefined>;
+	getSessionInfo(sessionId: string, authOptions: AuthOptions): Promise<SessionInfo | undefined>;
 
 	/**
 	 * Posts a new Copilot agent job.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
 	postCopilotAgentJob(
 		owner: string,
 		name: string,
 		apiVersion: string,
 		payload: RemoteAgentJobPayload,
+		authOptions: AuthOptions,
 	): Promise<RemoteAgentJobResponse | ErrorResponseWithStatusCode | undefined>;
 
 	/**
 	 * Gets a job by its job ID.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
-	getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo | undefined>;
+	getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string, authOptions: AuthOptions): Promise<JobInfo | undefined>;
 
 	/**
 	 * Gets a job by session ID
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
-	getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string): Promise<JobInfo | undefined>;
+	getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string, authOptions: AuthOptions): Promise<JobInfo | undefined>;
 
 	/**
 	 * Adds a comment to a pull request.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
-	addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null>;
+	addPullRequestComment(pullRequestId: string, commentBody: string, authOptions: AuthOptions): Promise<PullRequestComment | null>;
 
 	/**
 	 * Gets all open Copilot sessions.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
-	getAllOpenSessions(nwo?: string): Promise<SessionInfo[]>;
+	getAllSessions(nwo: string | undefined, open: boolean, authOptions: AuthOptions): Promise<SessionInfo[]>;
 
 	/**
 	 * Gets pull request from global id.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 */
-	getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null>;
+	getPullRequestFromGlobalId(globalId: string, authOptions: AuthOptions): Promise<PullRequestSearchItem | null>;
 
 	/**
 	 * Gets the list of custom agents available for a repository.
@@ -260,9 +292,10 @@ export interface IOctoKitService {
 	 *   - excludeInvalidConfigs: Exclude agents with invalid configurations.
 	 *   - deduplicate: Remove duplicate agents from the result.
 	 *   - source: Filter agents by their source (repo, org, enterprise).
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns An array of custom agent list items with basic metadata
 	 */
-	getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]>;
+	getCustomAgents(owner: string, repo: string, options: CustomAgentListOptions, authOptions: AuthOptions): Promise<CustomAgentListItem[]>;
 
 	/**
 	 * Gets the full configuration for a specific custom agent.
@@ -270,27 +303,30 @@ export interface IOctoKitService {
 	 * @param repo The repository name
 	 * @param agentName The name of the custom agent
 	 * @param version Optional git ref (branch, tag, or commit SHA) to fetch from
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns The complete custom agent configuration including the prompt
 	 */
-	getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined>;
+	getCustomAgentDetails(owner: string, repo: string, agentName: string, version: string, authOptions: AuthOptions): Promise<CustomAgentDetails | undefined>;
 
 	/**
 	 * Gets the list of files changed in a pull request.
 	 * @param owner The repository owner
 	 * @param repo The repository name
 	 * @param pullNumber The pull request number
+	 * @param authOptions - Authentication options. By default, uses silent auth and returns empty array if not authenticated.
 	 * @returns An array of changed files with their metadata
 	 */
-	getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<PullRequestFile[]>;
+	getPullRequestFiles(owner: string, repo: string, pullNumber: number, authOptions: AuthOptions): Promise<PullRequestFile[]>;
 
 	/**
 	 * Closes a pull request.
 	 * @param owner The repository owner
 	 * @param repo The repository name
 	 * @param pullNumber The pull request number
+	 * @param authOptions - Authentication options. By default, uses silent auth and returns false if not authenticated.
 	 * @returns A promise that resolves to true if the PR was successfully closed
 	 */
-	closePullRequest(owner: string, repo: string, pullNumber: number): Promise<boolean>;
+	closePullRequest(owner: string, repo: string, pullNumber: number, authOptions: AuthOptions): Promise<boolean>;
 
 	/**
 	 * Get file content from a specific commit.
@@ -298,22 +334,25 @@ export interface IOctoKitService {
 	 * @param repo The repository name
 	 * @param ref The commit SHA, branch name, or tag
 	 * @param path The file path within the repository
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns The file content as a string
 	 */
-	getFileContent(owner: string, repo: string, ref: string, path: string): Promise<string>;
+	getFileContent(owner: string, repo: string, ref: string, path: string, authOptions: AuthOptions): Promise<string>;
 
 	/**
 	 * Gets the list of organizations that the authenticated user belongs to.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns An array of organization logins
 	 */
-	getUserOrganizations(): Promise<string[]>;
+	getUserOrganizations(authOptions: AuthOptions): Promise<string[]>;
 
 	/**
 	 * Gets the list of repositories for an organization.
 	 * @param org The organization name
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns An array of repository names
 	 */
-	getOrganizationRepositories(org: string): Promise<string[]>;
+	getOrganizationRepositories(org: string, authOptions: AuthOptions): Promise<string[]>;
 }
 
 /**

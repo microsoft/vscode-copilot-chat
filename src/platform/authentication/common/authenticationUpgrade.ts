@@ -42,13 +42,4 @@ export interface IAuthenticationChatUpgradeService {
 	 * was passed in if we don't detect that the confirmation was presented.
 	 */
 	handleConfirmationRequest(stream: ChatResponseStream, request: ChatRequest, history: ChatContext['history']): Promise<ChatRequest>;
-
-	/**
-	 * TODO: Fold this into one API with the above
-	 * Manages the user's input regarding the confirmation request for a session upgrade.
-	 * @param request - The chat request object containing details necessary for the upgrade flow.
-	 * @returns Promise<ChatRequest> - The ChatRequest that was originally presented the confirmation, or the request that
-	 * was passed in if we don't detect that the confirmation was presented.
-	 */
-	handleConfirmationRequestWithContext(stream: ChatResponseStream, request: ChatRequest, history: ChatContext['history']): Promise<{ request: ChatRequest; context?: ChatContext }>;
 }

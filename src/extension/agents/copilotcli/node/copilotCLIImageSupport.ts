@@ -5,6 +5,7 @@
 
 import * as fs from 'fs/promises';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
+import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -23,7 +24,7 @@ export class CopilotCLIImageSupport {
 
 	private async initialize(): Promise<void> {
 		try {
-			await fs.mkdir(this.storageDir.fsPath, { recursive: true });
+			await createDirectoryIfNotExists(this.fileSystemService, this.storageDir);
 			void this.cleanupOldImages();
 		} catch (error) {
 			this.logService.error(`[CopilotCLISession] ImageStorage: Failed to initialize`, error);

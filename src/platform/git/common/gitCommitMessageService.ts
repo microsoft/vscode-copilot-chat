@@ -22,7 +22,7 @@ export class NoopGitCommitMessageService implements IGitCommitMessageService {
 	declare readonly _serviceBrand: undefined;
 
 	generateCommitMessage(): Promise<string | undefined> {
-		return Promise.resolve(undefined);
+		return Promise.resolve('Test commit message');
 	}
 
 	getRepository(): Repository | null {

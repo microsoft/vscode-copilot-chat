@@ -14,13 +14,14 @@ import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/re
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
+import { IGitCommitMessageService, NoopGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { NullGitDiffService } from '../../../platform/git/common/nullGitDiffService';
 import { NullGitExtensionService } from '../../../platform/git/common/nullGitExtensionService';
-import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
-import { InlineEditsModelService } from '../../../platform/inlineEdits/node/inlineEditsModelService';
+import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
+import { InlineEditsModelService, UndesiredModels } from '../../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
@@ -99,6 +100,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IEditLogService, new SyncDescriptor(EditLogService));
 	testingServiceCollection.define(IProxyModelsService, new SyncDescriptor(NullProxyModelsService));
 	testingServiceCollection.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
+	testingServiceCollection.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
 	testingServiceCollection.define(IMultiFileEditInternalTelemetryService, new SyncDescriptor(MultiFileEditInternalTelemetryService));
 	testingServiceCollection.define(ICodeMapperService, new SyncDescriptor(CodeMapperService));
 	testingServiceCollection.define(IAlternativeNotebookContentService, new SyncDescriptor(SimulationAlternativeNotebookContentService));
@@ -119,6 +121,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IGitService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IGitDiffService, new SyncDescriptor(NullGitDiffService));
+	testingServiceCollection.define(IGitCommitMessageService, new SyncDescriptor(NoopGitCommitMessageService));
 	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(MockGithubAvailableEmbeddingTypesService));
 	return testingServiceCollection;
 }

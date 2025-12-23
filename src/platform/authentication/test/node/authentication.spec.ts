@@ -55,13 +55,13 @@ suite('AuthenticationService', function () {
 	});
 
 	test('Can get anyGitHubToken', async () => {
-		const token = await authenticationService.getAnyGitHubSession({ silent: true });
+		const token = await authenticationService.getGitHubSession('any', { silent: true });
 		expect(token?.accessToken).toBe(testToken);
 		expect(authenticationService.anyGitHubSession?.accessToken).toBe(testToken);
 	});
 
 	test('Can get permissiveGitHubToken', async () => {
-		const token = await authenticationService.getPermissiveGitHubSession({ silent: true });
+		const token = await authenticationService.getGitHubSession('permissive', { silent: true });
 		expect(token?.accessToken).toBe(testToken);
 		expect(authenticationService.permissiveGitHubSession?.accessToken).toBe(testToken);
 	});

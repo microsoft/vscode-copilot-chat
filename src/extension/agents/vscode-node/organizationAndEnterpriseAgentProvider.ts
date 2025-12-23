@@ -8,17 +8,11 @@ import YAML from 'yaml';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
-import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
+import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 const AgentFileExtension = '.agent.md';
-
-class UserNotSignedInError extends Error {
-	constructor() {
-		super('User is not signed in');
-	}
-}
 
 export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentsProvider {
 
@@ -114,13 +108,6 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		}
 	}
 
-	private async runWithAuthCheck<T>(operation: () => Promise<T>): Promise<T> {
-		const user = await this.octoKitService.getCurrentAuthedUser();
-		if (!user) {
-			throw new UserNotSignedInError();
-		}
-		return operation();
-	}
 
 	private async fetchAndUpdateCache(): Promise<void> {
 		// Prevent concurrent fetches
@@ -140,7 +127,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Fetching custom agents from all user organizations');
 
 			// Get all organizations the user belongs to
-			const organizations = await this.runWithAuthCheck(() => this.octoKitService.getUserOrganizations());
+			const organizations = await this.octoKitService.getUserOrganizations({ createIfNone: false });
 			if (organizations.length === 0) {
 				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User does not belong to any organizations');
 				return;
@@ -157,6 +144,9 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			const agentsByOrg = new Map<string, Map<string, CustomAgentListItem>>();
 			let hadAnyFetchErrors = false;
 
+			// Track unique agents globally to dedupe enterprise agents that appear across multiple orgs
+			const seenAgents = new Map<string, CustomAgentListItem>();
+
 			for (const org of organizations) {
 				try {
 					const agentsForOrg = new Map<string, CustomAgentListItem>();
@@ -164,20 +154,30 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 					// Get the first repository for this organization to use in the API call
 					// We can't just use .github-private because user may not have access to it
-					const repos = await this.runWithAuthCheck(() => this.octoKitService.getOrganizationRepositories(org));
+					const repos = await this.octoKitService.getOrganizationRepositories(org, { createIfNone: false });
 					if (repos.length === 0) {
 						this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] No repositories found for ${org}, skipping`);
 						continue;
 					}
 
 					const repoName = repos[0];
-					const agents = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgents(org, repoName, internalOptions));
+					const agents = await this.octoKitService.getCustomAgents(org, repoName, internalOptions, { createIfNone: false });
 					for (const agent of agents) {
+						// Create unique key to identify agents (enterprise agents may appear in multiple orgs)
+						// Note: version is not included, so different versions are deduplicated
+						const agentKey = `${agent.repo_owner}/${agent.repo_name}/${agent.name}`;
+
+						// Skip if we've already seen this agent (dedupe enterprise agents)
+						if (seenAgents.has(agentKey)) {
+							continue;
+						}
+
+						seenAgents.set(agentKey, agent);
 						agentsForOrg.set(agent.name, agent);
 					}
-					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName}`);
+					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName} (${agentsForOrg.size} added after deduplication)`);
 				} catch (error) {
-					if (error instanceof UserNotSignedInError) {
+					if (error instanceof PermissiveAuthRequiredError) {
 						this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
 						return;
 					}
@@ -242,12 +242,13 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 						const filename = this.sanitizeFilename(agent.name) + AgentFileExtension;
 
 						// Fetch full agent details including prompt content
-						const agentDetails = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgentDetails(
+						const agentDetails = await this.octoKitService.getCustomAgentDetails(
 							agent.repo_owner,
 							agent.repo_name,
 							agent.name,
-							agent.version
-						));
+							agent.version,
+							{ createIfNone: false }
+						);
 
 						// Generate agent markdown file content
 						if (agentDetails) {
@@ -256,7 +257,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 							totalAgents++;
 						}
 					} catch (error) {
-						if (error instanceof UserNotSignedInError) {
+						if (error instanceof PermissiveAuthRequiredError) {
 							this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
 							return;
 						}
@@ -388,6 +389,12 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		}
 		if (agent.target) {
 			frontmatterObj.target = agent.target;
+		}
+		if (agent.model) {
+			frontmatterObj.model = agent.model;
+		}
+		if (agent.infer) {
+			frontmatterObj.infer = agent.infer;
 		}
 
 		const frontmatter = YAML.stringify(frontmatterObj, { lineWidth: 0 }).trim();

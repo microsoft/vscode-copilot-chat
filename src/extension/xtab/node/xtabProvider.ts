@@ -49,6 +49,7 @@ import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
+import { LintErrors } from '../common/lintErrors';
 import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
@@ -277,9 +278,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.PromptTooLarge('currentFile'));
 		}
 
-		const { taggedCurrentDocLines, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
+		const { clippedTaggedCurrentDoc, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
-		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
+		telemetryBuilder.setNLinesOfCurrentFileInPrompt(clippedTaggedCurrentDoc.lines.length);
 
 		const aggressivenessLevel = this.userInteractionMonitor.getAggressivenessLevel();
 
@@ -298,16 +299,19 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.GotCancelled('afterLanguageContextAwait'));
 		}
 
+		const lintErrors = promptOptions.lintOptions ? new LintErrors(promptOptions.lintOptions, activeDocument.id, currentDocument, this.langDiagService) : undefined;
+
 		const promptPieces = new PromptPieces(
 			currentDocument,
 			editWindowLinesRange,
 			areaAroundEditWindowLinesRange,
 			activeDocument,
 			request.xtabEditHistory,
-			taggedCurrentDocLines,
+			clippedTaggedCurrentDoc.lines,
 			areaAroundCodeToEdit,
 			langCtx,
 			aggressivenessLevel,
+			lintErrors,
 			XtabProvider.computeTokens,
 			promptOptions
 		);
@@ -332,7 +336,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.PromptTooLarge('final'));
 		}
 
-		await this.debounce(delaySession, tracer, telemetryBuilder);
+		await this.debounce(delaySession, retryState, tracer, telemetryBuilder);
 		if (cancellationToken.isCancellationRequested) {
 			return Result.error(new NoNextEditReason.GotCancelled('afterDebounce'));
 		}
@@ -1013,6 +1017,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				onlyForDocsInPrompt: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffOnlyForDocsInPrompt, this.expService),
 				useRelativePaths: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffUseRelativePaths, this.expService),
 			},
+			lintOptions: undefined,
 			includePostScript: true,
 		};
 
@@ -1033,6 +1038,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...modelConfig.currentFile,
 				includeTags: overridingConfig.includeTagsInCurrentFile,
 			},
+			lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
 		};
 	}
 
@@ -1101,8 +1107,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private async debounce(delaySession: DelaySession, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder) {
+	private async debounce(delaySession: DelaySession, retryState: RetryState, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder) {
 		if (this.simulationCtx.isInSimulationTests) {
+			return;
+		}
+		if (retryState === RetryState.Retrying) {
+			tracer.trace('Skipping debounce on retry');
 			return;
 		}
 		const debounceTime = delaySession.getDebounceTime();

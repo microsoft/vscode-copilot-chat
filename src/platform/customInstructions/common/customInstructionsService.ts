@@ -11,7 +11,7 @@ import { ResourceSet } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { IObservable, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { dirname, isAbsolute } from '../../../util/vs/base/common/path';
-import { isEqualOrParent, joinPath, dirname as uriDirname } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { isObject } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { FileType, Uri } from '../../../vscodeTypes';
@@ -55,6 +55,7 @@ export interface ICustomInstructionsService {
 
 	isExternalInstructionsFile(uri: URI): boolean;
 	isExternalInstructionsFolder(uri: URI): boolean;
+	isSkillFile(uri: URI): boolean;
 }
 
 export type CodeGenerationInstruction = { languagee?: string; text: string } | { languagee?: string; file: string };
@@ -76,8 +77,9 @@ function isCodeGenerationTextInstruction(instruction: any): instruction is CodeG
 const INSTRUCTION_FILE_EXTENSION = '.instructions.md';
 const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
 
-const SKILL_FOLDER = '.claude/skills';
-const USE_CLAUDE_SKILLS_SETTING = 'chat.useClaudeSkills';
+const WORKSPACE_SKILL_FOLDERS = ['.github/skills', '.claude/skills'];
+const PERSONAL_SKILL_FOLDERS = ['.copilot/skills', '.claude/skills'];
+const USE_AGENT_SKILLS_SETTING = 'chat.useAgentSkills';
 
 const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
 
@@ -145,7 +147,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 					if (Array.isArray(chatInstructions)) {
 						for (const contribution of chatInstructions) {
 							if (contribution.path) {
-								const folderUri = uriDirname(joinPath(extension.extensionUri, contribution.path));
+								const folderUri = extUriBiasedIgnorePathCase.dirname(Uri.joinPath(extension.extensionUri, contribution.path));
 								locations.add(folderUri);
 							}
 						}
@@ -153,7 +155,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 				}
 				return ((uri: URI) => {
 					for (const location of locations) {
-						if (isEqualOrParent(uri, location)) {
+						if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, location)) {
 							return true;
 						}
 					}
@@ -164,15 +166,19 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 
 		this._matchInstructionLocationsFromSkills = observableFromEvent(
 			(handleChange) => this._register(configurationService.onDidChangeConfiguration(e => {
-				if (e.affectsConfiguration(USE_CLAUDE_SKILLS_SETTING)) {
+				if (e.affectsConfiguration(USE_AGENT_SKILLS_SETTING)) {
 					handleChange(e);
 				}
 			})),
 			() => {
-				if (this.configurationService.getNonExtensionConfig<boolean>(USE_CLAUDE_SKILLS_SETTING)) {
-					const skillFolderUri = joinPath(this.envService.userHome, SKILL_FOLDER);
+				if (this.configurationService.getNonExtensionConfig<boolean>(USE_AGENT_SKILLS_SETTING)) {
+					const personalSkillFolderUris = PERSONAL_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
+					const workspaceSkillFolderUris = this.workspaceService.getWorkspaceFolders().flatMap(workspaceFolder =>
+						WORKSPACE_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(workspaceFolder, folder))
+					);
+					const skillFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
 					return ((uri: URI) => {
-						return isEqualOrParent(uri, skillFolderUri);
+						return skillFolderUris.some(skillFolderUri => extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri));
 					});
 				}
 				return (() => false);
@@ -189,7 +195,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		if (this.configurationService.getConfig(ConfigKey.UseInstructionFiles)) {
 			for (const folder of this.workspaceService.getWorkspaceFolders()) {
 				try {
-					const uri = joinPath(folder, COPILOT_INSTRUCTIONS_PATH);
+					const uri = extUriBiasedIgnorePathCase.joinPath(folder, COPILOT_INSTRUCTIONS_PATH);
 					if ((await this.fileSystemService.stat(uri)).type === FileType.File) {
 						result.push(uri);
 					}
@@ -285,5 +291,9 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	public isExternalInstructionsFolder(uri: URI): boolean {
 		return this._matchInstructionLocationsFromExtensions.get()(uri)
 			|| this._matchInstructionLocationsFromSkills.get()(uri);
+	}
+
+	public isSkillFile(uri: URI): boolean {
+		return this._matchInstructionLocationsFromSkills.get()(uri);
 	}
 }

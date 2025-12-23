@@ -19,6 +19,7 @@ import { Schemas } from '../../../util/vs/base/common/network';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
+import { LintErrors } from './lintErrors';
 import { PromptTags } from './tags';
 import { CurrentDocument } from './xtabCurrentDocument';
 
@@ -33,6 +34,7 @@ export class PromptPieces {
 		public readonly areaAroundCodeToEdit: string,
 		public readonly langCtx: LanguageContextResponse | undefined,
 		public readonly aggressivenessLevel: AggressivenessLevel,
+		public readonly lintErrors: LintErrors | undefined,
 		public readonly computeTokens: (s: string) => number,
 		public readonly opts: PromptOptions,
 	) {
@@ -41,7 +43,7 @@ export class PromptPieces {
 
 export function getUserPrompt(promptPieces: PromptPieces): string {
 
-	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, computeTokens, opts } = promptPieces;
+	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, lintErrors, computeTokens, opts } = promptPieces;
 	const currentFileContent = taggedCurrentDocLines.join('\n');
 
 	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
@@ -56,6 +58,8 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath, aggressivenessLevel) : '';
 
+	const lintsWithNewLinePadding = lintErrors ? `\n${lintErrors.getFormattedLintErrors()}\n` : '';
+
 	const mainPrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}
 ${PromptTags.RECENT_FILES.end}
@@ -64,7 +68,7 @@ ${PromptTags.CURRENT_FILE.start}
 current_file_path: ${currentFilePath}
 ${currentFileContent}
 ${PromptTags.CURRENT_FILE.end}
-
+${lintsWithNewLinePadding}
 ${PromptTags.EDIT_HISTORY.start}
 ${editDiffHistory}
 ${PromptTags.EDIT_HISTORY.end}
@@ -419,7 +423,7 @@ export function buildCodeSnippetsUsingPagedClipping(
 			const startPos = contentTransform.getPosition(startOffset);
 			const endPos = contentTransform.getPosition(endOffset);
 
-			const { firstPageIdx, lastPageIdx, budgetLeft } = expandRangeToPageRange(
+			const { firstPageIdx, lastPageIdxIncl, budgetLeft } = expandRangeToPageRange(
 				file.content.getLines(),
 				new OffsetRange(startPos.lineNumber - 1 /* convert from 1-based to 0-based */, endPos.lineNumber),
 				pageSize,
@@ -431,7 +435,7 @@ export function buildCodeSnippetsUsingPagedClipping(
 			if (budgetLeft === maxTokenBudget) {
 				break;
 			} else {
-				const linesToKeep = file.content.getLines().slice(firstPageIdx * pageSize, (lastPageIdx + 1) * pageSize);
+				const linesToKeep = file.content.getLines().slice(firstPageIdx * pageSize, (lastPageIdxIncl + 1) * pageSize);
 				docsInPrompt.add(file.id);
 				snippets.push(formatCodeSnippet(file.id, linesToKeep.join('\n'), linesToKeep.length < lines.length));
 				maxTokenBudget = budgetLeft;
@@ -495,14 +499,14 @@ export const N_LINES_BELOW = 5;
 
 export const N_LINES_AS_CONTEXT = 15;
 
-function expandRangeToPageRange(
+export function expandRangeToPageRange(
 	currentDocLines: string[],
 	areaAroundEditWindowLinesRange: OffsetRange,
 	pageSize: number,
 	maxTokens: number,
 	computeTokens: (s: string) => number,
 	prioritizeAboveCursor: boolean,
-): { firstPageIdx: number; lastPageIdx: number; budgetLeft: number } {
+): { firstPageIdx: number; lastPageIdxIncl: number; budgetLeft: number } {
 
 	const totalNOfPages = Math.ceil(currentDocLines.length / pageSize);
 
@@ -512,12 +516,15 @@ function expandRangeToPageRange(
 		const page = currentDocLines.slice(start, end);
 		return countTokensForLines(page, computeTokens);
 	}
-	let firstPageIdx = Math.floor(areaAroundEditWindowLinesRange.start / pageSize);
-	let lastPageIdx = Math.floor((areaAroundEditWindowLinesRange.endExclusive - 1) / pageSize);
 
-	const availableTokenBudget = maxTokens - range(firstPageIdx, lastPageIdx + 1).reduce((sum, idx) => sum + computeTokensForPage(idx), 0);
+	// [0, pageSize) -> 0, [pageSize, 2*pageSize) -> 1, ...
+	// eg 5 -> 0, 63 -> 6
+	let firstPageIdx = Math.floor(areaAroundEditWindowLinesRange.start / pageSize);
+	let lastPageIdxIncl = Math.floor((areaAroundEditWindowLinesRange.endExclusive - 1) / pageSize);
+
+	const availableTokenBudget = maxTokens - range(firstPageIdx, lastPageIdxIncl + 1).reduce((sum, idx) => sum + computeTokensForPage(idx), 0);
 	if (availableTokenBudget < 0) {
-		return { firstPageIdx, lastPageIdx, budgetLeft: availableTokenBudget };
+		return { firstPageIdx, lastPageIdxIncl, budgetLeft: availableTokenBudget };
 	}
 
 	let tokenBudget = availableTokenBudget;
@@ -540,13 +547,13 @@ function expandRangeToPageRange(
 
 		tokenBudget = halfOfAvailableTokenBudget;
 
-		for (let i = lastPageIdx + 1; i <= totalNOfPages && tokenBudget > 0; ++i) {
+		for (let i = lastPageIdxIncl + 1; i < totalNOfPages && tokenBudget > 0; ++i) {
 			const tokenCountForPage = computeTokensForPage(i);
 			const newTokenBudget = tokenBudget - tokenCountForPage;
 			if (newTokenBudget < 0) {
 				break;
 			}
-			lastPageIdx = i;
+			lastPageIdxIncl = i;
 			tokenBudget = newTokenBudget;
 		}
 	} else { // code above consumes as much as it can and the leftover budget is given to code below
@@ -562,18 +569,18 @@ function expandRangeToPageRange(
 			tokenBudget = newTokenBudget;
 		}
 
-		for (let i = lastPageIdx + 1; i <= totalNOfPages && tokenBudget > 0; ++i) {
+		for (let i = lastPageIdxIncl + 1; i < totalNOfPages && tokenBudget > 0; ++i) {
 			const tokenCountForPage = computeTokensForPage(i);
 			const newTokenBudget = tokenBudget - tokenCountForPage;
 			if (newTokenBudget < 0) {
 				break;
 			}
-			lastPageIdx = i;
+			lastPageIdxIncl = i;
 			tokenBudget = newTokenBudget;
 		}
 	}
 
-	return { firstPageIdx, lastPageIdx, budgetLeft: tokenBudget };
+	return { firstPageIdx, lastPageIdxIncl, budgetLeft: tokenBudget };
 }
 
 export function clipPreservingRange(
@@ -585,12 +592,13 @@ export function clipPreservingRange(
 ): Result<OffsetRange, 'outOfBudget'> {
 
 	// subtract budget consumed by rangeToPreserve
-	const availableTokenBudget = opts.maxTokens - countTokensForLines(docLines.slice(rangeToPreserve.start, rangeToPreserve.endExclusive), computeTokens);
+	const linesToPreserve = docLines.slice(rangeToPreserve.start, rangeToPreserve.endExclusive);
+	const availableTokenBudget = opts.maxTokens - countTokensForLines(linesToPreserve, computeTokens);
 	if (availableTokenBudget < 0) {
 		return Result.error('outOfBudget');
 	}
 
-	const { firstPageIdx, lastPageIdx } = expandRangeToPageRange(
+	const { firstPageIdx, lastPageIdxIncl } = expandRangeToPageRange(
 		docLines,
 		rangeToPreserve,
 		pageSize,
@@ -600,9 +608,17 @@ export function clipPreservingRange(
 	);
 
 	const linesOffsetStart = firstPageIdx * pageSize;
-	const linesOffsetEndExcl = lastPageIdx * pageSize + pageSize;
-
+	const linesOffsetEndExcl = (lastPageIdxIncl + 1) * pageSize;
 	return Result.ok(new OffsetRange(linesOffsetStart, linesOffsetEndExcl));
+}
+
+class ClippedDocument {
+	constructor(
+		/** The lines of the document that were kept after clipping. */
+		public readonly lines: string[],
+		/** The range in the original document that corresponds to the kept lines. */
+		public readonly keptRange: OffsetRange,
+	) { }
 }
 
 export function createTaggedCurrentFileContentUsingPagedClipping(
@@ -612,7 +628,7 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	computeTokens: (s: string) => number,
 	pageSize: number,
 	opts: CurrentFileOptions
-): Result<readonly string[], 'outOfBudget'> {
+): Result<ClippedDocument, 'outOfBudget'> {
 
 	const r = clipPreservingRange(
 		currentDocLines,
@@ -623,18 +639,23 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	);
 
 	if (r.isError()) {
-		return Result.error('outOfBudget');
+		return r;
 	}
 
-	const clippedRange = r.val;
+	const rangeToKeep = r.val;
 
 	const taggedCurrentFileContent = [
-		...currentDocLines.slice(clippedRange.start, areaAroundEditWindowLinesRange.start),
+		...currentDocLines.slice(rangeToKeep.start, areaAroundEditWindowLinesRange.start),
 		areaAroundCodeToEdit,
-		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, clippedRange.endExclusive),
+		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, rangeToKeep.endExclusive),
 	];
 
-	return Result.ok(taggedCurrentFileContent);
+	const keptRange = new OffsetRange(
+		rangeToKeep.start,
+		rangeToKeep.start + taggedCurrentFileContent.length
+	);
+
+	return Result.ok(new ClippedDocument(taggedCurrentFileContent, keptRange));
 }
 
 export function constructTaggedFile(
@@ -699,8 +720,8 @@ export function constructTaggedFile(
 		promptOptions.currentFile,
 	);
 
-	return taggedCurrentFileContentResult.map(taggedCurrentDocLines => ({
-		taggedCurrentDocLines,
+	return taggedCurrentFileContentResult.map(clippedTaggedCurrentDoc => ({
+		clippedTaggedCurrentDoc,
 		areaAroundCodeToEdit,
 	}));
 }

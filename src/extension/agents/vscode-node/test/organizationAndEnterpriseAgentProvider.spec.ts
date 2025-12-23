@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../../platform/github/common/githubService';
+import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -36,7 +36,7 @@ class MockOctoKitService implements IOctoKitService {
 	getJobByJobId = async () => undefined;
 	getJobBySessionId = async () => undefined;
 	addPullRequestComment = async () => null;
-	getAllOpenSessions = async () => [];
+	getAllSessions = async () => [];
 	getPullRequestFromGlobalId = async () => null;
 	getPullRequestFiles = async () => [];
 	closePullRequest = async () => false;
@@ -44,11 +44,14 @@ class MockOctoKitService implements IOctoKitService {
 	getUserOrganizations = async () => this.userOrganizations;
 	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];
 
-	async getCustomAgents(owner: string, repo: string, options?: CustomAgentListOptions): Promise<CustomAgentListItem[]> {
+	async getCustomAgents(owner: string, repo: string, options: CustomAgentListOptions, authOptions: { createIfNone?: boolean }): Promise<CustomAgentListItem[]> {
+		if (!(await this.getCurrentAuthedUser())) {
+			throw new PermissiveAuthRequiredError();
+		}
 		return this.customAgents;
 	}
 
-	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined> {
+	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version: string, authOptions: { createIfNone?: boolean }): Promise<CustomAgentDetails | undefined> {
 		return this.agentDetails.get(agentName);
 	}
 
@@ -225,6 +228,8 @@ Test prompt content`;
 		const mockDetails: CustomAgentDetails = {
 			...mockAgent,
 			prompt: 'Detailed prompt content',
+			model: 'gpt-4',
+			infer: true,
 		};
 		mockOctoKitService.setAgentDetails('full_agent', mockDetails);
 
@@ -246,6 +251,8 @@ tools:
   - tool2
 argument-hint: Provide context
 target: vscode
+model: gpt-4
+infer: true
 ---
 Detailed prompt content
 `;
@@ -650,6 +657,8 @@ Agent 1 prompt`;
 		assert.ok(!content.includes('tools:'));
 		assert.ok(!content.includes('argument-hint:'));
 		assert.ok(!content.includes('target:'));
+		assert.ok(!content.includes('model:'));
+		assert.ok(!content.includes('infer:'));
 	});
 
 	test('excludes tools field when array contains only wildcard', async () => {
@@ -890,7 +899,7 @@ Test prompt
 				// Sign out user after first call
 				mockOctoKitService.getCurrentAuthedUser = async () => undefined as any;
 			}
-			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options);
+			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options, { createIfNone: false });
 		};
 
 		await provider.provideCustomAgents({}, {} as any);
@@ -898,5 +907,302 @@ Test prompt
 
 		// Should have aborted after first org, so second org shouldn't be processed
 		assert.equal(callCount, 1);
+	});
+
+	test('deduplicates enterprise agents that appear in multiple organizations', async () => {
+		const provider = createProvider();
+
+		// Setup multiple organizations
+		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
+
+		// Create an enterprise agent that will appear in both organizations
+		const enterpriseAgent: CustomAgentListItem = {
+			name: 'enterprise_agent',
+			repo_owner_id: 999,
+			repo_owner: 'enterprise_org',
+			repo_id: 123,
+			repo_name: 'enterprise_repo',
+			display_name: 'Enterprise Agent',
+			description: 'Shared enterprise agent',
+			tools: [],
+			version: 'v1.0',
+		};
+
+		// Mock getCustomAgents to return the same enterprise agent for both orgs
+		mockOctoKitService.getCustomAgents = async (owner: string, repo: string) => {
+			// Both orgs return the same enterprise agent (same repo_owner, repo_name, name, version)
+			return [enterpriseAgent];
+		};
+
+		mockOctoKitService.setAgentDetails('enterprise_agent', {
+			...enterpriseAgent,
+			prompt: 'Enterprise prompt',
+		});
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		// Should only have one agent, not two (deduped)
+		assert.equal(agents.length, 1);
+		assert.equal(agents[0].name, 'enterprise_agent');
+
+		// Verify it was only written to one org directory
+		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
+		const orgADir = URI.joinPath(cacheDir, 'orga');
+		const orgBDir = URI.joinPath(cacheDir, 'orgb');
+
+		// Check which org has the agent file
+		let orgAHasAgent = false;
+		let orgBHasAgent = false;
+
+		try {
+			const file = await mockFileSystem.readFile(URI.joinPath(orgADir, 'enterprise_agent.agent.md'));
+			orgAHasAgent = file !== undefined;
+		} catch {
+			// File doesn't exist in orgA
+		}
+
+		try {
+			const file = await mockFileSystem.readFile(URI.joinPath(orgBDir, 'enterprise_agent.agent.md'));
+			orgBHasAgent = file !== undefined;
+		} catch {
+			// File doesn't exist in orgB
+		}
+
+		// Agent should be in exactly one org directory (the first one processed)
+		assert.ok(orgAHasAgent && !orgBHasAgent, 'Enterprise agent should only be cached in first org');
+	});
+
+	test('deduplicates agents with same repo regardless of version', async () => {
+		const provider = createProvider();
+
+		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
+
+		// Create agents with same name but different versions
+		const agentV1: CustomAgentListItem = {
+			name: 'versioned_agent',
+			repo_owner_id: 999,
+			repo_owner: 'enterprise_org',
+			repo_id: 123,
+			repo_name: 'enterprise_repo',
+			display_name: 'Versioned Agent',
+			description: 'Agent version 1',
+			tools: [],
+			version: 'v1.0',
+		};
+
+		const agentV2: CustomAgentListItem = {
+			name: 'versioned_agent',
+			repo_owner_id: 999,
+			repo_owner: 'enterprise_org',
+			repo_id: 123,
+			repo_name: 'enterprise_repo',
+			display_name: 'Versioned Agent',
+			description: 'Agent version 2',
+			tools: [],
+			version: 'v2.0',
+		};
+
+		let callCount = 0;
+		mockOctoKitService.getCustomAgents = async (owner: string, repo: string) => {
+			callCount++;
+			if (callCount === 1) {
+				// First org returns v1 and v2
+				return [agentV1, agentV2];
+			} else {
+				// Second org also returns both versions
+				return [agentV1, agentV2];
+			}
+		};
+
+		mockOctoKitService.getCustomAgentDetails = async (owner: string, repo: string, agentName: string, version?: string) => {
+			if (version === 'v1.0') {
+				return { ...agentV1, prompt: 'Version 1 prompt' };
+			} else if (version === 'v2.0') {
+				return { ...agentV2, prompt: 'Version 2 prompt' };
+			}
+			return undefined;
+		};
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		// Different versions are deduplicated, only the first one is kept
+		assert.equal(agents.length, 1);
+		assert.equal(agents[0].name, 'versioned_agent');
+	});
+
+	test('does not deduplicate org-specific agents with same name from different orgs', async () => {
+		const provider = createProvider();
+
+		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
+
+		// Create agents with same name but from different org repos (not enterprise)
+		const orgAAgent: CustomAgentListItem = {
+			name: 'org_agent',
+			repo_owner_id: 1,
+			repo_owner: 'orgA',
+			repo_id: 10,
+			repo_name: 'orgA_repo',
+			display_name: 'Org A Agent',
+			description: 'Agent specific to org A',
+			tools: [],
+			version: 'v1.0',
+		};
+
+		const orgBAgent: CustomAgentListItem = {
+			name: 'org_agent',
+			repo_owner_id: 2,
+			repo_owner: 'orgB',
+			repo_id: 20,
+			repo_name: 'orgB_repo',
+			display_name: 'Org B Agent',
+			description: 'Agent specific to org B',
+			tools: [],
+			version: 'v1.0',
+		};
+
+		let callCount = 0;
+		mockOctoKitService.getCustomAgents = async (owner: string, repo: string) => {
+			callCount++;
+			if (callCount === 1) {
+				return [orgAAgent];
+			} else {
+				return [orgBAgent];
+			}
+		};
+
+		mockOctoKitService.getCustomAgentDetails = async (owner: string, repo: string, agentName: string, version?: string) => {
+			if (owner === 'orgA') {
+				return { ...orgAAgent, prompt: 'Org A prompt' };
+			} else if (owner === 'orgB') {
+				return { ...orgBAgent, prompt: 'Org B prompt' };
+			}
+			return undefined;
+		};
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		// Should have 2 agents since they're from different repos (not duplicates)
+		assert.equal(agents.length, 2);
+		assert.equal(agents[0].name, 'org_agent');
+		assert.equal(agents[1].name, 'org_agent');
+	});
+
+	test('deduplicates enterprise agents even when API returns them in different order', async () => {
+		const provider = createProvider();
+
+		mockOctoKitService.setUserOrganizations(['orgA', 'orgB', 'orgC']);
+
+		const enterpriseAgent1: CustomAgentListItem = {
+			name: 'enterprise_agent1',
+			repo_owner_id: 999,
+			repo_owner: 'enterprise_org',
+			repo_id: 123,
+			repo_name: 'enterprise_repo',
+			display_name: 'Enterprise Agent 1',
+			description: 'First enterprise agent',
+			tools: [],
+			version: 'v1.0',
+		};
+
+		const enterpriseAgent2: CustomAgentListItem = {
+			name: 'enterprise_agent2',
+			repo_owner_id: 999,
+			repo_owner: 'enterprise_org',
+			repo_id: 123,
+			repo_name: 'enterprise_repo',
+			display_name: 'Enterprise Agent 2',
+			description: 'Second enterprise agent',
+			tools: [],
+			version: 'v1.0',
+		};
+
+		let callCount = 0;
+		mockOctoKitService.getCustomAgents = async (owner: string, repo: string) => {
+			callCount++;
+			// Return agents in different orders for different orgs
+			if (callCount === 1) {
+				return [enterpriseAgent1, enterpriseAgent2];
+			} else if (callCount === 2) {
+				return [enterpriseAgent2, enterpriseAgent1]; // Reversed order
+			} else {
+				return [enterpriseAgent1, enterpriseAgent2];
+			}
+		};
+
+		mockOctoKitService.getCustomAgentDetails = async (owner: string, repo: string, agentName: string, version?: string) => {
+			if (agentName === 'enterprise_agent1') {
+				return { ...enterpriseAgent1, prompt: 'Prompt 1' };
+			} else if (agentName === 'enterprise_agent2') {
+				return { ...enterpriseAgent2, prompt: 'Prompt 2' };
+			}
+			return undefined;
+		};
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		// Should have exactly 2 agents, not 6 (2 agents x 3 orgs)
+		assert.equal(agents.length, 2);
+
+		// Verify both agent names are present
+		const agentNames = agents.map(a => a.name).sort();
+		assert.deepEqual(agentNames, ['enterprise_agent1', 'enterprise_agent2']);
+	});
+
+	test('deduplication key does not include version so different versions are deduplicated', async () => {
+		const provider = createProvider();
+
+		mockOctoKitService.setUserOrganizations(['orgA']);
+
+		// Same agent with two different versions
+		const agentV1: CustomAgentListItem = {
+			name: 'multi_version_agent',
+			repo_owner_id: 999,
+			repo_owner: 'enterprise_org',
+			repo_id: 123,
+			repo_name: 'enterprise_repo',
+			display_name: 'Multi Version Agent',
+			description: 'Agent with multiple versions',
+			tools: [],
+			version: 'v1.0',
+		};
+
+		const agentV2: CustomAgentListItem = {
+			...agentV1,
+			version: 'v2.0',
+		};
+
+		mockOctoKitService.getCustomAgents = async () => {
+			return [agentV1, agentV2];
+		};
+
+		mockOctoKitService.getCustomAgentDetails = async (owner: string, repo: string, agentName: string, version?: string) => {
+			if (version === 'v1.0') {
+				return { ...agentV1, prompt: 'Prompt for v1' };
+			} else if (version === 'v2.0') {
+				return { ...agentV2, prompt: 'Prompt for v2' };
+			}
+			return undefined;
+		};
+
+		await provider.provideCustomAgents({}, {} as any);
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		// Different versions are deduplicated, only the first one is kept
+		assert.equal(agents.length, 1);
+		assert.equal(agents[0].name, 'multi_version_agent');
 	});
 });

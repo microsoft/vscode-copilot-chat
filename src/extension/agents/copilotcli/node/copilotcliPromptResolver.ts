@@ -8,13 +8,15 @@ import type * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../../util/common/types';
 import { raceCancellation } from '../../../../util/vs/base/common/async';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import * as path from '../../../../util/vs/base/common/path';
+import { relativePath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatReferenceBinaryData, FileType } from '../../../../vscodeTypes';
+import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType, Location } from '../../../../vscodeTypes';
 import { ChatVariablesCollection, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
 import { CopilotCLIImageSupport } from './copilotCLIImageSupport';
@@ -24,6 +26,7 @@ export class CopilotCLIPromptResolver {
 		private readonly imageSupport: CopilotCLIImageSupport,
 		@ILogService private readonly logService: ILogService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) { }
@@ -32,13 +35,13 @@ export class CopilotCLIPromptResolver {
 	 * Generates the final prompt for the Copilot CLI agent, resolving variables and preparing attachments.
 	 * @param prompt Provide a prompt to override the request prompt
 	 */
-	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], isIsolationEnabled: boolean, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[]; references: vscode.ChatPromptReference[] }> {
+	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], isIsolationEnabled: boolean, workingDirectory: vscode.Uri | undefined, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[]; references: vscode.ChatPromptReference[] }> {
 		const allReferences = request.references.concat(additionalReferences.filter(ref => !request.references.includes(ref)));
 		prompt = prompt ?? request.prompt;
 		if (prompt.startsWith('/')) {
 			return { prompt, attachments: [], references: [] }; // likely a slash command, don't modify
 		}
-		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(allReferences), isIsolationEnabled, token);
+		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(allReferences), isIsolationEnabled, workingDirectory, token);
 		if (token.isCancellationRequested) {
 			return { prompt, attachments: [], references: [] };
 		}
@@ -47,7 +50,7 @@ export class CopilotCLIPromptResolver {
 		return { prompt: prompt ?? '', attachments, references };
 	}
 
-	private async constructChatVariablesAndAttachments(variables: ChatVariablesCollection, isIsolationEnabled: boolean, token: vscode.CancellationToken): Promise<[variables: ChatVariablesCollection, Attachment[]]> {
+	private async constructChatVariablesAndAttachments(variables: ChatVariablesCollection, isIsolationEnabled: boolean, workingDirectory: vscode.Uri | undefined, token: vscode.CancellationToken): Promise<[variables: ChatVariablesCollection, Attachment[]]> {
 		const validReferences: vscode.ChatPromptReference[] = [];
 		const fileFolderReferences: vscode.ChatPromptReference[] = [];
 		await Promise.all(Array.from(variables).map(async variable => {
@@ -59,14 +62,15 @@ export class CopilotCLIPromptResolver {
 			if (isIsolationEnabled && isWorkspaceRepoInformationItem(variable)) {
 				return;
 			}
+			const variableRef = await this.translateWorkspaceRefToWorkingDirectoryRef(variable.reference, isIsolationEnabled, workingDirectory, token);
 			// Images will be attached using regular attachments via Copilot CLI SDK.
 			if (variable.value instanceof ChatReferenceBinaryData) {
-				validReferences.push(variable.reference);
-				fileFolderReferences.push(variable.reference);
+				validReferences.push(variableRef);
+				fileFolderReferences.push(variableRef);
 				return;
 			}
 			if (isLocation(variable.value)) {
-				validReferences.push(variable.reference);
+				validReferences.push(variableRef);
 				return;
 			}
 			// Notebooks are not supported yet.
@@ -79,12 +83,12 @@ export class CopilotCLIPromptResolver {
 				}
 
 				// Files and directories will be attached using regular attachments via Copilot CLI SDK.
-				validReferences.push(variable.reference);
-				fileFolderReferences.push(variable.reference);
+				validReferences.push(variableRef);
+				fileFolderReferences.push(variableRef);
 				return;
 			}
 
-			validReferences.push(variable.reference);
+			validReferences.push(variableRef);
 		}));
 
 		variables = new ChatVariablesCollection(validReferences);
@@ -142,6 +146,53 @@ export class CopilotCLIPromptResolver {
 		}));
 
 		return attachments;
+	}
+
+	private async translateWorkspaceRefToWorkingDirectoryRef(ref: vscode.ChatPromptReference, isIsolationEnabled: boolean, workingDirectory: vscode.Uri | undefined, token: vscode.CancellationToken): Promise<vscode.ChatPromptReference> {
+		if (!isIsolationEnabled || !workingDirectory || ref.value instanceof ChatReferenceBinaryData) {
+			return ref;
+		}
+
+		if (isLocation(ref.value)) {
+			const uri = await this.translateWorkspaceUriToWorkingDirectoryUri(ref.value.uri, workingDirectory, token);
+			const loc = new Location(uri, ref.value.range);
+			return {
+				...ref,
+				value: loc
+			};
+		} else if (URI.isUri(ref.value)) {
+			const uri = await this.translateWorkspaceUriToWorkingDirectoryUri(ref.value, workingDirectory, token);
+			return {
+				...ref,
+				value: uri
+			};
+		} else if (ref.value instanceof ChatReferenceDiagnostic) {
+			const diagnostics = await Promise.all(ref.value.diagnostics.map(async ([uri, diags]) => {
+				const translatedUri = await this.translateWorkspaceUriToWorkingDirectoryUri(uri, workingDirectory, token);
+				return [translatedUri, diags] as [vscode.Uri, vscode.Diagnostic[]];
+			}));
+			return {
+				...ref,
+				value: new ChatReferenceDiagnostic(diagnostics)
+			};
+		}
+
+		return ref;
+	}
+
+	private async translateWorkspaceUriToWorkingDirectoryUri(uri: vscode.Uri, workingDirectory: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.Uri> {
+		const workspaceFolder = this.workspaceService.getWorkspaceFolder(uri);
+		if (!workspaceFolder) {
+			return uri;
+		}
+		const rel = relativePath(workspaceFolder, uri);
+		if (!rel) {
+			return uri;
+		}
+		const segments = rel.split('/');
+		const candidate = URI.joinPath(workingDirectory, ...segments);
+		const candidateStat = await raceCancellation(this.fileSystemService.stat(candidate), token).catch(() => undefined);
+		return candidateStat ? candidate : uri;
 	}
 }
 

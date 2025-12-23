@@ -105,7 +105,7 @@ export async function formatDiffAsUnified(accessor: ServicesAccessor, uri: URI, 
 	const diffService = accessor.get(IDiffService);
 	const diff = await diffService.computeDiff(oldContent, newContent, {
 		ignoreTrimWhitespace: false,
-		maxComputationTimeMs: 5000,
+		maxComputationTimeMs: 20000,
 		computeMoves: false,
 	});
 
@@ -925,6 +925,9 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 export function canExistingFileBeEdited(accessor: ServicesAccessor, uri: URI): Promise<boolean> {
 	const workspace = accessor.get(IWorkspaceService);
 	if (workspace.textDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
+		return Promise.resolve(true);
+	}
+	if (workspace.notebookDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
 		return Promise.resolve(true);
 	}
 

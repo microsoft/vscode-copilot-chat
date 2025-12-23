@@ -505,7 +505,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 
 		// Then try code search but fallback to local search on error or timeout
-		const codeSearchTimeout = this._simulationTestContext.isInSimulationTests ? 1_000_000 : 12_500;
+		const codeSearchTimeout = this._simulationTestContext.isInSimulationTests || this._codeSearchChunkSearch.isExternalIngestEnabled() ? 1_000_000 : 12_500;
 		return this.runSearchStrategyWithFallback(
 			this._codeSearchChunkSearch,
 			() => createCancelablePromise(token => this.doSearchFileChunksLocally(sizing, query, options, telemetryInfo, token)),
