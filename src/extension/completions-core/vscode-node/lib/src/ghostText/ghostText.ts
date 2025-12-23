@@ -108,6 +108,7 @@ export class CompletionsFromNetwork {
 		@ICompletionsFeaturesService private readonly featuresService: ICompletionsFeaturesService,
 		@ICompletionsRuntimeModeService private readonly runtimeMode: ICompletionsRuntimeModeService,
 		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
+		@ICompletionsCacheService private readonly completionsCacheService: ICompletionsCacheService,
 		@ICompletionsUserErrorNotifierService private readonly userErrorNotifier: ICompletionsUserErrorNotifierService,
 	) { }
 
@@ -167,7 +168,7 @@ export class CompletionsFromNetwork {
 				// Adds first result to cache
 				const processedFirstChoice = postProcessChoices(firstChoice);
 				if (processedFirstChoice) {
-					this.instantiationService.invokeFunction(appendToCache, requestContext, processedFirstChoice);
+					appendToCache(this.completionsCacheService, requestContext, processedFirstChoice);
 					ghostTextLogger.debug(this.logTarget,
 						`GhostText first completion (index ${processedFirstChoice?.choiceIndex}): ${JSON.stringify(processedFirstChoice?.completionText)}`
 					);
@@ -183,7 +184,7 @@ export class CompletionsFromNetwork {
 						const processedChoice = postProcessChoices(choice, apiChoices);
 						if (!processedChoice) { continue; }
 						apiChoices.push(processedChoice);
-						this.instantiationService.invokeFunction(appendToCache, requestContext, processedChoice);
+						appendToCache(this.completionsCacheService, requestContext, processedChoice);
 					}
 				})();
 				if (this.runtimeMode.isRunningInTest()) {
@@ -243,7 +244,7 @@ export class CompletionsFromNetwork {
 				//Append results to current completions cache, and network cache
 				if (apiChoices.length > 0) {
 					for (const choice of apiChoices) {
-						this.instantiationService.invokeFunction(appendToCache, requestContext, choice);
+						appendToCache(this.completionsCacheService, requestContext, choice);
 					}
 
 					this.instantiationService.invokeFunction(telemetryPerformance, 'cyclingPerformance', apiChoices[0], requestStart, processingTime);
@@ -571,6 +572,7 @@ function buildFinishedCallback(
 				? featuresService.longLookaheadSize(telemetryData)
 				: featuresService.shortLookaheadSize(telemetryData);
 
+		const completionsCacheService = accessor.get(ICompletionsCacheService);
 		const finishedCb = instantiationService.createInstance(StreamedCompletionSplitter,
 			prefix,
 			document.detectedLanguageId,
@@ -581,7 +583,7 @@ function buildFinishedCallback(
 					prefix: prefix + extraPrefix,
 					prompt: { ...prompt, prefix: prompt.prefix + extraPrefix },
 				};
-				instantiationService.invokeFunction(appendToCache, cacheContext, item);
+				appendToCache(completionsCacheService, cacheContext, item);
 			}
 		).getFinishedCallback();
 
@@ -1330,8 +1332,8 @@ async function shouldRequestMultiline(
 }
 
 /** Appends completions to existing entry in cache or creates new entry. */
-function appendToCache(accessor: ServicesAccessor, requestContext: CacheContext, choice: APIChoice) {
-	accessor.get(ICompletionsCacheService).append(requestContext.prefix, requestContext.prompt.suffix, choice);
+function appendToCache(competionsCacheService: ICompletionsCacheService, requestContext: CacheContext, choice: APIChoice) {
+	competionsCacheService.append(requestContext.prefix, requestContext.prompt.suffix, choice);
 }
 
 function adjustLeadingWhitespace(index: number, text: string, ws: string): GhostCompletion {
