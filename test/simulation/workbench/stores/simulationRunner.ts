@@ -411,14 +411,21 @@ class SimulationExecutor {
 	private async interpretOutput(stream: AsyncIterableObject<RunOutput>, stdoutFile: string): Promise<void> {
 		const writtenFilesBaseDir = path.dirname(stdoutFile);
 		const entries: RunOutput[] = [];
+
+		const batchProcessor = new BatchProcess<RunOutput>(
+			(batch) => mobx.runInAction(() => batch.forEach((entry) => this.interpretOutputEntry(writtenFilesBaseDir, entry))),
+			20
+		);
+
 		try {
 			for await (const entry of stream) {
 				entries.push(entry);
-				mobx.runInAction(() => this.interpretOutputEntry(writtenFilesBaseDir, entry)); // TODO@ulugbekna: we should batch updates
+				batchProcessor.pushForProcessing(entry);
 			}
 		} catch (e) {
 			console.error('interpretOutput', JSON.stringify(e, null, '\t'));
 		} finally {
+			batchProcessor.drain();
 			await fs.promises.writeFile(stdoutFile, JSON.stringify(entries, null, '\t'));
 			this.currentCancellationTokenSource = undefined;
 			mobx.runInAction(() => {
@@ -474,4 +481,27 @@ function findInitialTestSummary(runOutput: RunOutput[]): IInitialTestSummaryOutp
 		}
 	}
 	return undefined;
+}
+
+class BatchProcess<T> {
+	private readonly batch: T[];
+
+	constructor(
+		private readonly processBatch: (batch: T[]) => void,
+		private readonly batchSize: number
+	) {
+		this.batch = [];
+	}
+
+	public pushForProcessing(entry: T) {
+		this.batch.push(entry);
+		if (this.batch.length >= this.batchSize) {
+			this.drain();
+		}
+	}
+
+	public drain() {
+		this.processBatch(this.batch);
+		this.batch.length = 0;
+	}
 }
