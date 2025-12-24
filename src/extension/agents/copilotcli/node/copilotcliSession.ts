@@ -156,7 +156,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				token
 			);
 		}));
-
+		const chunkMessageIds = new Set<string>();
 		try {
 			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
 			const [currentModel, authInfo] = await Promise.all([
@@ -176,7 +176,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				sdkRequestId = event.id;
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
-				if (typeof event.data.content === 'string' && event.data.content.length) {
+				// Support for streaming chunked messages.
+				if (typeof event.data.chunkContent === 'string' && event.data.chunkContent.length) {
+					chunkMessageIds.add(event.data.messageId);
+					this._stream?.markdown(event.data.chunkContent);
+				}
+				if (typeof event.data.content === 'string' && event.data.content.length && !chunkMessageIds.has(event.data.messageId)) {
 					this._stream?.markdown(event.data.content);
 				}
 			})));
