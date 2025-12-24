@@ -517,10 +517,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				const { prompt, attachments } = contextForRequest;
 				this.contextForRequest.delete(session.object.sessionId);
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
+				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
+				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			}
 
 			if (isUntitled && !token.isCancellationRequested) {
@@ -545,6 +547,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.sessionItemProvider.notifySessionsChange();
 			}
 			disposables.dispose();
+		}
+	}
+
+	private async commitWorktreeChangesIfNeeded(session: ICopilotCLISession, token: vscode.CancellationToken): Promise<void> {
+		if (session.status === vscode.ChatSessionStatus.Completed && session.options.isolationEnabled && !token.isCancellationRequested) {
+			// When isolation is enabled and we are using a git worktree, we either stage
+			// or commit all changes in the working directory when the session is completed
+			await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
 		}
 	}
 
@@ -947,6 +957,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Now that we've delegated it to a session, we can get out of here.
 			// Else if the request takes say 10 minutes, the caller would be blocked for that long.
 			session.object.handleRequest(request.id, prompt, attachments, model, token)
+				.then(() => this.commitWorktreeChangesIfNeeded(session.object, token))
 				.catch(error => {
 					this.logService.error(`Failed to handle CLI session request: ${error}`);
 					// Optionally: stream.error(error) to notify the user

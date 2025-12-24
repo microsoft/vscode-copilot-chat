@@ -15,7 +15,6 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
-import { IChatSessionWorktreeService } from '../../../chatSessions/common/chatSessionWorktreeService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
@@ -95,7 +94,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
-		@IChatSessionWorktreeService private readonly chatSessionWorktreeService: IChatSessionWorktreeService
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -236,11 +234,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
-			if (this._options.isolationEnabled && !token.isCancellationRequested) {
-				// When isolation is enabled and we are using a git worktree, we either stage
-				// or commit all changes in the working directory when the session is completed
-				await this.chatSessionWorktreeService.handleRequestCompleted(this.sessionId);
-			}
 			const requestDetails: { requestId: string; toolIdEditMap: Record<string, string> } = { requestId, toolIdEditMap: {} };
 			await Promise.all(Array.from(toolIdEditMap.entries()).map(async ([toolId, editFilePromise]) => {
 				const editId = await editFilePromise.catch(() => undefined);
