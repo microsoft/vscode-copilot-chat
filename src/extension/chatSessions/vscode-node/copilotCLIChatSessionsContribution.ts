@@ -18,7 +18,6 @@ import { disposableTimeout, raceCancellation } from '../../../util/vs/base/commo
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
-import { ResourceMap } from '../../../util/vs/base/common/map';
 import { autorun } from '../../../util/vs/base/common/observable';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -81,10 +80,6 @@ const _sessionModel: Map<string, string | undefined> = new Map();
 // There's an issue in core (about holding onto ref of the Chat Model).
 // As a temporary solution, return the same untitled session id back to core until the session is completed.
 const _untitledSessionIdMap = new Map<string, string>();
-
-// Right now it's expensive to get the sessions stats in some cases, specially for worktrees.
-// We should cache them until we get a new request
-const CachedSessionStats = new ResourceMap<vscode.ChatSessionChangedFile[]>();
 
 function isUntitledSessionId(sessionId: string): boolean {
 	return sessionId.startsWith('untitled:') || sessionId.startsWith('untitled-');
@@ -165,7 +160,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	public notifySessionsChange(): void {
-		CachedSessionStats.clear();
 		this._onDidChangeChatSessionItems.fire();
 	}
 
@@ -189,21 +183,16 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const worktreeProperties = this.worktreeManager.getWorktreeProperties(session.id);
 
 		const label = session.label;
-		let badge: vscode.MarkdownString | undefined;
-		let changes: vscode.ChatSessionItem['changes'] | undefined;
 
 		// Badge
+		let badge: vscode.MarkdownString | undefined;
 		if (worktreeProperties?.branchName || worktreeRelativePath) {
 			badge = new vscode.MarkdownString(`$(worktree) ${worktreeProperties?.branchName ?? worktreeRelativePath}`);
 			badge.supportThemeIcons = true;
 		}
 
 		// Statistics
-		const stats = await this.worktreeManager.getWorktreeChanges(session.id);
-		if (stats && stats.length > 0) {
-			CachedSessionStats.set(resource, stats);
-			changes = stats;
-		}
+		const changes = await this.worktreeManager.getWorktreeChanges(session.id);
 
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
@@ -541,9 +530,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			throw ex;
 		}
 		finally {
-			// Clean cached references for this session
 			if (chatSessionContext?.chatSessionItem.resource) {
-				CachedSessionStats.delete(chatSessionContext.chatSessionItem.resource);
 				this.sessionItemProvider.notifySessionsChange();
 			}
 			disposables.dispose();
