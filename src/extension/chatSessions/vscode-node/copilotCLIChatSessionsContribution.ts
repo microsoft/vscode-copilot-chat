@@ -33,7 +33,7 @@ import { PermissionRequest, requestPermission } from '../../agents/copilotcli/no
 import { createTimeout } from '../../inlineEdits/common/common';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
-import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { convertReferenceToVariable } from './copilotPromptReferences';
@@ -796,7 +796,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private async getOrInitializeWorkingDirectory(chatSessionContext: vscode.ChatSessionContext | undefined, uncommittedChangesAction: 'move' | 'copy' | 'skip' | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<{ workingDirectory: Uri | undefined; isolationEnabled: boolean; worktreeProperties: Awaited<ReturnType<IChatSessionWorktreeService['createWorktree']>> | undefined }> {
+	private async getOrInitializeWorkingDirectory(
+		chatSessionContext: vscode.ChatSessionContext | undefined,
+		uncommittedChangesAction: 'move' | 'copy' | 'skip' | undefined,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken
+	): Promise<{
+		isolationEnabled: boolean;
+		workingDirectory: Uri | undefined;
+		worktreeProperties: ChatSessionWorktreeProperties | undefined;
+	}> {
 		const defaultWorkingDirectory = this.copilotCLISDK.getDefaultWorkingDirectory();
 		const createWorkingTreeIfRequired = async (create: boolean) => {
 			if (!create) {
@@ -806,7 +815,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.createWorktree(stream);
 			if (worktreeProperties) {
-				return { workingDirectory, worktreeProperties };
+				return { workingDirectory: Uri.file(worktreeProperties.worktreePath), worktreeProperties };
 			} else {
 				stream.warning(l10n.t('Failed to create worktree. Proceeding without isolation.'));
 				const workingDirectory = await defaultWorkingDirectory;
@@ -849,7 +858,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		// If we failed to create a worktree or isolation is disabled, then isolation is false
-		return { workingDirectory, isolationEnabled, worktreeProperties };
+		return { isolationEnabled, workingDirectory, worktreeProperties };
 	}
 
 	private async moveOrCopyChangesToWorkTree(
