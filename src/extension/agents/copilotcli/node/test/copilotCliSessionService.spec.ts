@@ -18,7 +18,6 @@ import { mock } from '../../../../../util/common/test/simpleMock';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { IChatSessionWorktreeService } from '../../../../chatSessions/common/chatSessionWorktreeService';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
@@ -111,7 +110,6 @@ describe('CopilotCLISessionService', () => {
 				return undefined;
 			}
 		}();
-		const chatSessionWorktreeService = new class extends mock<IChatSessionWorktreeService>() { };
 		instantiationService = {
 			invokeFunction(fn: (accessor: unknown, ...args: any[]) => any, ...args: any[]): any {
 				return fn(accessor, ...args);
@@ -128,7 +126,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, chatSessionWorktreeService));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);

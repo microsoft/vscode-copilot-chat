@@ -16,7 +16,6 @@ import * as path from '../../../../../util/vs/base/common/path';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
-import { IChatSessionWorktreeService } from '../../../../chatSessions/common/chatSessionWorktreeService';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
@@ -89,7 +88,6 @@ describe('CopilotCLISession', () => {
 			return undefined;
 		}
 	}();
-	const chatSessionWorktreeService = new class extends mock<IChatSessionWorktreeService>() { };
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
@@ -124,7 +122,6 @@ describe('CopilotCLISession', () => {
 			sdk,
 			instaService,
 			delegationService,
-			chatSessionWorktreeService
 		));
 	}
 
