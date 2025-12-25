@@ -164,13 +164,7 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 			}
 
 			if (this.cacheMode === CacheMode.Require) {
-				console.log(JSON.stringify(options.body, (key, value) => {
-					if (typeof value === 'string') {
-						const split = value.split(/\n/g);
-						return split.length > 1 ? split : value;
-					}
-					return value;
-				}, 4));
+				prettyPrintJsonEncodedObject(options.body);
 				await this.throwCacheMissing(request);
 			}
 
@@ -178,13 +172,7 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 				this.requests.set(options.requestId, { request, hitsCache: false });
 			} catch (err) {
 				if (/Key already exists/.test(err.message)) {
-					console.log(JSON.stringify(options.body, (key, value) => {
-						if (typeof value === 'string') {
-							const split = value.split(/\n/g);
-							return split.length > 1 ? split : value;
-						}
-						return value;
-					}, 4));
+					prettyPrintJsonEncodedObject(options.body);
 					console.log(`\n✗ ${err.message}`);
 					await drainStdoutAndExit(1);
 				}
@@ -292,4 +280,14 @@ function inventModelFromURI(uri: string): string | undefined {
 	}
 	const secondLastSlash = uri.lastIndexOf('/', lastSlash - 1);
 	return uri.substring(secondLastSlash + 1);
+}
+
+function prettyPrintJsonEncodedObject(obj: string) {
+	console.log(JSON.stringify(obj, (key, value) => {
+		if (typeof value === 'string') {
+			const split = value.split(/\n/g);
+			return split.length > 1 ? split : value;
+		}
+		return value;
+	}, 4));
 }

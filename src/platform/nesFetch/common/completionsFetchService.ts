@@ -37,7 +37,7 @@ export interface ModelParams extends BaseCompletionsParams, CodexV2Params { }
 export type FetchOptions = {
 	requestId: string;
 	headers: { [name: string]: string };
-	body: any;
+	body: string;
 };
 
 export type CompletionsFetchFailure =

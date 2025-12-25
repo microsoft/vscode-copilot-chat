@@ -49,10 +49,10 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		const options = {
 			requestId,
 			headers: this.getHeaders(requestId, secretKey, headerOverrides),
-			body: {
+			body: JSON.stringify({
 				...params,
 				stream: true,
-			}
+			})
 		};
 
 		const fetchResponse = await this._fetchFromUrl(url, options, ct);
@@ -116,7 +116,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 			const response = await this.fetcherService.fetch(url, {
 				headers: options.headers,
-				json: options.body,
+				body: options.body,
 				signal: fetchAbortCtl.signal,
 				method: 'POST',
 			});
