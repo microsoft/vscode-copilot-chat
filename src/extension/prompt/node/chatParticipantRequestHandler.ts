@@ -21,6 +21,7 @@ import { fileTreePartToMarkdown } from '../../../util/common/fileTree';
 import { isLocation, isSymbolInformation } from '../../../util/common/types';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Event } from '../../../util/vs/base/common/event';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { mixin } from '../../../util/vs/base/common/objects';
@@ -301,8 +302,7 @@ export class ChatParticipantRequestHandler {
 		} catch (err) {
 			if (this.token.isCancellationRequested) {
 				finishOutcome = ChatRequestOutcome.Cancelled;
-			} else if (err instanceof Error && err.message && isCancellationMessage(err.message)) {
-				// NOTE: Message matching is a fallback; use token/isCancellationError when possible.
+			} else if (isCancellationError(err)) {
 				finishOutcome = ChatRequestOutcome.Cancelled;
 			} else {
 				finishOutcome = ChatRequestOutcome.Error;
