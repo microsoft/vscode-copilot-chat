@@ -173,6 +173,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				untracked: true
 			});
 
+			// Clear worktree changes cache
+			this._sessionWorktreeChanges.delete(sessionId);
+
 			return;
 		}
 
@@ -224,6 +227,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				baseCommit: ref[0].commit
 			});
 		}
+
+		// Clear worktree changes cache
+		this._sessionWorktreeChanges.delete(sessionId);
 	}
 
 	async getWorktreeChanges(sessionId: string): Promise<vscode.ChatSessionChangedFile[] | undefined> {
