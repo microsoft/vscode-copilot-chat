@@ -24,7 +24,7 @@ jobs:
           node-version-file: .nvmrc
 
       - name: Restore build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: build-cache
         with:
           key: build_cache-${{ hashFiles('build/.cachesalt', 'package-lock.json') }}
@@ -64,7 +64,7 @@ jobs:
           architecture: 'x64'
 
       - name: Restore build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: build-cache
         with:
           key: windows-build_cache-${{ hashFiles('build/.cachesalt', 'package-lock.json') }}
