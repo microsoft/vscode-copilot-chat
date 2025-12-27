@@ -252,6 +252,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// Check whether the worktree belongs to any of the discovered repositories
 		const worktreePaths = this.gitService.repositories.map(r => r.worktrees.map(w => w.path)).flat();
 		if (!worktreePaths.some(p => isEqual(vscode.Uri.file(p), worktreePath))) {
+			this._sessionWorktreeChanges.set(sessionId, undefined);
 			return undefined;
 		}
 
@@ -260,6 +261,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// shown in the Source Control view since it is being hidden.
 		const repository = await this.gitService.getRepository(worktreePath);
 		if (!repository) {
+			this._sessionWorktreeChanges.set(sessionId, undefined);
 			return undefined;
 		}
 
