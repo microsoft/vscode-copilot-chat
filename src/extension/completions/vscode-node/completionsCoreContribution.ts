@@ -13,10 +13,12 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { createContext, registerUnificationCommands, setup } from '../../completions-core/vscode-node/completionsServiceBridges';
 import { CopilotInlineCompletionItemProvider } from '../../completions-core/vscode-node/extension/src/inlineCompletion';
 import { unificationStateObservable } from './completionsUnificationContribution';
+import { Qwen3CompletionProvider } from './qwen3CompletionProvider';
 
 export class CompletionsCoreContribution extends Disposable {
 
 	private _provider: CopilotInlineCompletionItemProvider | undefined;
+	private _qwen3Provider: Qwen3CompletionProvider | undefined;
 
 	private readonly _copilotToken = observableFromEvent(this, this.authenticationService.onDidAuthenticationChange, () => this.authenticationService.copilotToken);
 
@@ -37,7 +39,26 @@ export class CompletionsCoreContribution extends Disposable {
 			const configEnabled = configurationService.getExperimentBasedConfigObservable<boolean>(ConfigKey.TeamInternal.InlineEditsEnableGhCompletionsProvider, experimentationService).read(reader);
 			const extensionUnification = unificationStateValue?.extensionUnification ?? false;
 
-			if (unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
+			// Check if Qwen3 is configured
+			const qwen3ApiKey = process.env.QWEN3_API_KEY;
+			const qwen3BaseUrl = process.env.QWEN3_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+
+			if (qwen3ApiKey) {
+				// Use Qwen3 provider if configured
+				const qwen3Provider = this._getOrCreateQwen3Provider(qwen3ApiKey, qwen3BaseUrl);
+				reader.store.add(
+					languages.registerInlineCompletionItemProvider(
+						{ pattern: '**' },
+						qwen3Provider,
+						{
+							debounceDelayMs: 0,
+							excludes: ['qwen3-completions'],
+							groupId: 'completions'
+						}
+					)
+				);
+			} else if (unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
+				// Fall back to Copilot provider if Qwen3 not configured
 				const provider = this._getOrCreateProvider();
 				reader.store.add(
 					languages.registerInlineCompletionItemProvider(
@@ -73,5 +94,12 @@ export class CompletionsCoreContribution extends Disposable {
 			this._provider = disposables.add(this._completionsInstantiationService.createInstance(CopilotInlineCompletionItemProvider));
 		}
 		return this._provider;
+	}
+
+	private _getOrCreateQwen3Provider(apiKey: string, baseUrl: string) {
+		if (!this._qwen3Provider) {
+			this._qwen3Provider = this._register(this._instantiationService.createInstance(Qwen3CompletionProvider, apiKey, baseUrl));
+		}
+		return this._qwen3Provider;
 	}
 }

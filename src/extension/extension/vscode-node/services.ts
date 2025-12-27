@@ -54,8 +54,8 @@ import { ScopeSelectorImpl } from '../../../platform/scopeSelection/vscode-node/
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { SearchServiceImpl } from '../../../platform/search/vscode-node/searchServiceImpl';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
+import { LogTelemetryService } from '../../../platform/telemetry/common/logTelemetryService';
 import { IExperimentationService, NullExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { NullTelemetryService } from '../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService, ITelemetryUserConfig, TelemetryUserConfigImpl } from '../../../platform/telemetry/common/telemetry';
 import { APP_INSIGHTS_KEY_ENHANCED, APP_INSIGHTS_KEY_STANDARD } from '../../../platform/telemetry/node/azureInsights';
 import { MicrosoftExperimentationService } from '../../../platform/telemetry/vscode-node/microsoftExperimentationService';
@@ -228,7 +228,9 @@ function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext:
 		]));
 	} else {
 		// If we're developing or testing we don't want telemetry to be sent, so we turn it off
-		builder.define(ITelemetryService, new NullTelemetryService());
+		// Use LogTelemetryService to see what telemetry would be sent, or NullTelemetryService to disable logging
+		builder.define(ITelemetryService, new LogTelemetryService());
+		// builder.define(ITelemetryService, new NullTelemetryService());
 	}
 
 	setupMSFTExperimentationService(builder, extensionContext);

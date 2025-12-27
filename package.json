@@ -81,6 +81,7 @@
 	"activationEvents": [
 		"onStartupFinished",
 		"onLanguageModelChat:copilot",
+		"onLanguageModelAccess:feima",
 		"onUri",
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings"
@@ -138,6 +139,12 @@
 		"contribEditorContentMenu"
 	],
 	"contributes": {
+		"authentication": [
+			{
+				"id": "feima-authentication",
+				"label": "Feima Auth"
+			}
+		],
 		"languageModelTools": [
 			{
 				"name": "copilot_searchCodebase",
@@ -1680,6 +1687,10 @@
 		],
 		"languageModelChatProviders": [
 			{
+				"vendor": "feima",
+				"displayName": "Feima Models"
+			},
+			{
 				"vendor": "copilot",
 				"displayName": "Copilot"
 			},
@@ -1836,6 +1847,26 @@
 			{
 				"command": "github.copilot.chat.triggerPermissiveSignIn",
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
+			},
+			{
+				"command": "github.copilot.feima.signIn",
+				"title": "Sign in with Dummy",
+				"category": "Feima Auth"
+			},
+			{
+				"command": "github.copilot.feima.signOut",
+				"title": "Sign Out of Feima Auth",
+				"category": "Feima Auth"
+			},
+			{
+				"command": "github.copilot.feima.listModels",
+				"title": "List Available Models",
+				"category": "Feima Auth"
+			},
+			{
+				"command": "github.copilot.feima.checkContextKey",
+				"title": "Check Context Key State",
+				"category": "Feima Auth"
 			},
 			{
 				"command": "github.copilot.claude.sessions.refresh",
@@ -3963,6 +3994,13 @@
 			}
 		],
 		"menus": {
+			"AccountsContext": [
+				{
+					"command": "github.copilot.feima.signIn",
+					"group": "1_accounts",
+					"when": "!github.copilot.feimaAuth.signedIn"
+				}
+			],
 			"editor/title": [
 				{
 					"command": "github.copilot.debug.generateInlineEditTests",

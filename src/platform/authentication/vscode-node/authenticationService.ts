@@ -26,8 +26,10 @@ export class AuthenticationService extends BaseAuthenticationService {
 		super(logService, tokenStore, tokenManager, configurationService);
 		this._register(authentication.onDidChangeSessions((e) => {
 			if (e.provider.id === authProviderId(configurationService) || e.provider.id === AuthProviderId.Microsoft) {
-				this._logService.debug('Handling onDidChangeSession.');
+				this._logService.debug(`Handling onDidChangeSession for provider: ${e.provider.id}`);
 				void this._handleAuthChangeEvent();
+			} else {
+				this._logService.debug(`Ignoring onDidChangeSession for provider: ${e.provider.id}`);
 			}
 		}));
 		this._register(this._domainService.onDidChangeDomains((e) => {

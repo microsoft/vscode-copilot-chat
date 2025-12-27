@@ -74,8 +74,12 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		// initial
 		this.activationBlocker = Promise.all([
-			this._registerChatProvider(),
-			this._registerEmbeddings(),
+			this._registerChatProvider().catch(err => {
+				this._logService.error('[LanguageModelAccess] Failed to register chat provider:', err);
+			}),
+			this._registerEmbeddings().catch(err => {
+				this._logService.error('[LanguageModelAccess] Failed to register embeddings:', err);
+			}),
 		]).then(() => { });
 	}
 
