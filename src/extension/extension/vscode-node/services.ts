@@ -44,6 +44,8 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
+import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { PromptPathRepresentationServiceNode } from '../../../platform/prompts/node/promptPathRepresentationServiceNode';
 import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
 import { ProxyModelsService } from '../../../platform/proxyModels/node/proxyModelsService';
 import { AdoCodeSearchService, IAdoCodeSearchService } from '../../../platform/remoteCodeSearch/common/adoCodeSearchService';
@@ -214,6 +216,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
 	builder.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(CopilotInlineCompletionItemProviderService));
+	builder.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationServiceNode));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {
