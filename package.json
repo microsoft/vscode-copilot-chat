@@ -165,6 +165,66 @@
 				}
 			},
 			{
+				"name": "search_subagent",
+				"toolReferenceName": "searchSubagent",
+				"displayName": "%copilot.tools.searchSubagent.name%",
+				"icon": "$(search)",
+				"canBeReferencedInPrompt": true,
+				"userDescription": "%copilot.tools.searchSubagent.description%",
+				"modelDescription": "Launch an iterative search-focused subagent that orchestrates semantic_search, file_search, and grep_search tool calls to gather and refine relevant workspace code for a natural language query.\n CALL THIS AT THE START OF EVERY CONVERSATION! \n\nTypical strategy:\n1. If query is conceptual or vague, start with semantic_search to collect broad candidate chunks.\n2. Use file_search (glob patterns) to locate likely modules, directories, or filenames implied by the query.\n3. Use grep_search to confirm identifiers, patterns, or symbols and capture surrounding lines for context.\n4. Refine or branch the query internally only when new hypotheses emerge.\n5. Avoid redundant calls—don't repeat identical searches.\n6. Stop once you have high-confidence, non-duplicative snippets covering the query scope.\n\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message.",
+				"tags": [
+					"vscode_codesearch"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Natural language description of what to search for."
+						},
+						"description": {
+							"type": "string",
+							"description": "A short (3-5 word) description of the task."
+						},
+						"details": {
+							"type": "string",
+							"description": "A more detailed description of the objective for the search subagent. This helps the sub-agent remain on task and understand its purpose. "
+						}
+					},
+					"required": [
+						"query",
+						"description",
+						"details"
+					]
+				}
+			},
+			{
+				"name": "runSubagent",
+				"toolReferenceName": "runSubagent",
+				"displayName": "%copilot.tools.runSubagent.name%",
+				"canBeReferencedInPrompt": true,
+				"userDescription": "%copilot.tools.runSubagent.description%",
+				"modelDescription": "Launch a new agent to handle complex, multi-step tasks autonomously. This tool is good at researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use this agent to perform the search for you.\n\n- Agents do not run async or in the background, you will wait for the agent's result.\n- When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n - Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.\n - The agent's outputs should generally be trusted\n - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"prompt": {
+							"type": "string",
+							"description": "A detailed description of the task for the agent to perform"
+						},
+						"description": {
+							"type": "string",
+							"description": "A short (3-5 word) description of the task"
+						}
+					},
+					"required": [
+						"prompt",
+						"description"
+					]
+				}
+			},
+			{
 				"name": "copilot_searchWorkspaceSymbols",
 				"toolReferenceName": "symbols",
 				"displayName": "%copilot.tools.searchWorkspaceSymbols.name%",
@@ -1234,7 +1294,8 @@
 					"listDirectory",
 					"searchResults",
 					"textSearch",
-					"usages"
+					"usages",
+					"searchSubagent"
 				]
 			},
 			{
