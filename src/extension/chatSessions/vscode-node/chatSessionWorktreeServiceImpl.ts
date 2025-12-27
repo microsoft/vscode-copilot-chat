@@ -233,12 +233,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	}
 
 	async getWorktreeChanges(sessionId: string): Promise<vscode.ChatSessionChangedFile[] | undefined> {
-		// Ensure the initial repository discovery is completed and the repository
-		// states are initialized in the vscode.git extension. At this point, the
-		// worktrees may not have been opened yet so we may need to explicitly open
-		// them.
-		await this.gitService.initialize();
-
 		if (this._sessionWorktreeChanges.has(sessionId)) {
 			return this._sessionWorktreeChanges.get(sessionId);
 		}
@@ -248,6 +242,12 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		if (!worktreePath) {
 			return undefined;
 		}
+
+		// Ensure the initial repository discovery is completed and the repository
+		// states are initialized in the vscode.git extension. At this point, the
+		// worktrees may not have been opened yet so we may need to explicitly open
+		// them.
+		await this.gitService.initialize();
 
 		// Check whether the worktree belongs to any of the discovered repositories
 		const worktreePaths = this.gitService.repositories.map(r => r.worktrees.map(w => w.path)).flat();
