@@ -39,6 +39,8 @@ import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
 import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
 
+const MODEL_NAME_OVERRIDES_KEY = 'copilot.modelNameOverrides';
+
 export class LanguageModelAccess extends Disposable implements IExtensionContribution {
 
 	readonly id = 'languageModelAccess';
@@ -50,6 +52,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	private _chatEndpoints: IChatEndpoint[] = [];
 	private _lmWrapper: CopilotLanguageModelWrapper;
 	private _promptBaseCountCache: LanguageModelAccessPromptBaseCountCache;
+	private _modelNameOverrides: Record<string, string> = {};
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
@@ -70,6 +73,12 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			this._logService.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
 			return;
 		}
+
+		// Load model name overrides from storage
+		this._loadModelNameOverrides();
+
+		// Register manage models command
+		this._register(vscode.commands.registerCommand('github.copilot.chat.manageModels', () => this._manageModels()));
 
 		// initial
 		this.activationBlocker = Promise.all([
@@ -98,6 +107,139 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			// Auth changed which means models could've changed. Fire the event
 			this._onDidChange.fire();
 		}));
+	}
+
+	private _loadModelNameOverrides(): void {
+		const overrides = this._vsCodeExtensionContext.globalState.get<Record<string, string>>(MODEL_NAME_OVERRIDES_KEY);
+		this._modelNameOverrides = overrides ?? {};
+	}
+
+	private async _saveModelNameOverrides(): Promise<void> {
+		await this._vsCodeExtensionContext.globalState.update(MODEL_NAME_OVERRIDES_KEY, this._modelNameOverrides);
+	}
+
+	private async _manageModels(): Promise<void> {
+		// Only allow internal users to rename models
+		if (!this._authenticationService.copilotToken?.isInternal) {
+			vscode.window.showInformationMessage('Model management is only available for internal users.');
+			return;
+		}
+
+		const models = this._currentModels.filter(m => m.isUserSelectable);
+		if (models.length === 0) {
+			vscode.window.showInformationMessage('No models available to manage.');
+			return;
+		}
+
+		interface ModelQuickPickItem extends vscode.QuickPickItem {
+			modelId: string;
+			action: 'rename' | 'reset';
+		}
+
+		const items: ModelQuickPickItem[] = [];
+
+		// Add rename options for each model
+		for (const model of models) {
+			const hasOverride = this._modelNameOverrides[model.id];
+			items.push({
+				label: `$(edit) Rename "${model.name}"`,
+				description: hasOverride ? `(overridden from "${this._getOriginalModelName(model.id)}")` : undefined,
+				modelId: model.id,
+				action: 'rename'
+			});
+		}
+
+		// Add separator and reset options if there are any overrides
+		const overrideCount = Object.keys(this._modelNameOverrides).length;
+		if (overrideCount > 0) {
+			items.push({
+				label: '',
+				kind: vscode.QuickPickItemKind.Separator,
+				modelId: '',
+				action: 'reset'
+			});
+			items.push({
+				label: '$(trash) Reset all model name overrides',
+				description: `(${overrideCount} override${overrideCount > 1 ? 's' : ''})`,
+				modelId: '',
+				action: 'reset'
+			});
+		}
+
+		const selected = await vscode.window.showQuickPick(items, {
+			placeHolder: 'Select a model to rename',
+			title: 'Manage Copilot Models (Internal Only)'
+		});
+
+		if (!selected) {
+			return;
+		}
+
+		if (selected.action === 'reset') {
+			const confirm = await vscode.window.showWarningMessage(
+				'Are you sure you want to reset all model name overrides?',
+				{ modal: true },
+				'Reset'
+			);
+			if (confirm === 'Reset') {
+				this._modelNameOverrides = {};
+				await this._saveModelNameOverrides();
+				this._onDidChange.fire();
+				vscode.window.showInformationMessage('All model name overrides have been reset.');
+			}
+			return;
+		}
+
+		// Handle rename
+		const model = models.find(m => m.id === selected.modelId);
+		if (!model) {
+			return;
+		}
+
+		const currentName = model.name;
+		const originalName = this._getOriginalModelName(selected.modelId);
+		const newName = await vscode.window.showInputBox({
+			prompt: `Enter new display name for "${currentName}"`,
+			value: currentName,
+			title: 'Rename Model',
+			validateInput: (value) => {
+				if (!value || value.trim().length === 0) {
+					return 'Name cannot be empty';
+				}
+				return undefined;
+			}
+		});
+
+		if (newName) {
+			const trimmedName = newName.trim();
+			if (trimmedName === originalName) {
+				// User entered the original name, remove override
+				delete this._modelNameOverrides[selected.modelId];
+				await this._saveModelNameOverrides();
+				this._onDidChange.fire();
+				vscode.window.showInformationMessage(`Model name reset to "${originalName}".`);
+			} else if (trimmedName !== currentName) {
+				// Store the trimmed name as the override
+				this._modelNameOverrides[selected.modelId] = trimmedName;
+				await this._saveModelNameOverrides();
+				this._onDidChange.fire();
+				vscode.window.showInformationMessage(`Model renamed to "${trimmedName}".`);
+			}
+		}
+	}
+
+	private _getOriginalModelName(modelId: string): string {
+		const endpoint = this._chatEndpoints.find(e =>
+			(e instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : e.model) === modelId
+		);
+		if (endpoint instanceof AutoChatEndpoint) {
+			return 'Auto';
+		}
+		return endpoint?.name ?? modelId;
+	}
+
+	private _getModelDisplayName(modelId: string, originalName: string): string {
+		return this._modelNameOverrides[modelId] ?? originalName;
 	}
 
 	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
@@ -187,9 +329,13 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 			const session = this._authenticationService.anyGitHubSession;
 
+			const modelId = endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model;
+			const originalName = endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name;
+			const displayName = this._getModelDisplayName(modelId, originalName);
+
 			const model: vscode.LanguageModelChatInformation = {
-				id: endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model,
-				name: endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name,
+				id: modelId,
+				name: displayName,
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,
