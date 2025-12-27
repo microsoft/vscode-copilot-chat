@@ -386,6 +386,7 @@ export class RepoContextImpl implements RepoContext {
 	public readonly isRebasing = this._repo.state.rebaseCommit !== null;
 	public readonly remotes = this._repo.state.remotes.map(r => r.name);
 	public readonly remoteFetchUrls = this._repo.state.remotes.map(r => r.fetchUrl);
+	public readonly worktrees = this._repo.state.worktrees;
 
 	public readonly changes = {
 		mergeChanges: this._repo.state.mergeChanges,

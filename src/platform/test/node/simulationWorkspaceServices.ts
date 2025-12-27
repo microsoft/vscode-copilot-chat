@@ -725,6 +725,7 @@ export class TestingGitService implements IGitService {
 					`https://github.com/microsoft/simuluation-test-${basename(workspaceFolderPath)}`
 				],
 				remotes: [],
+				worktrees: [],
 				changes: undefined,
 				headBranchNameObs: constObservable(undefined),
 				headCommitHashObs: constObservable(undefined),

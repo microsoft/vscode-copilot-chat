@@ -16,7 +16,7 @@ import { coalesce } from '../../../util/vs/base/common/arrays';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived, IObservable } from '../../../util/vs/base/common/observable';
 import * as path from '../../../util/vs/base/common/path';
-import { basename } from '../../../util/vs/base/common/resources';
+import { basename, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -233,24 +233,40 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	}
 
 	async getWorktreeChanges(sessionId: string): Promise<vscode.ChatSessionChangedFile[] | undefined> {
+		// Ensure the initial repository discovery is completed and the repository
+		// states are initialized in the vscode.git extension. At this point, the
+		// worktrees may not have been opened yet so we may need to explicitly open
+		// them.
 		await this.gitService.initialize();
 
 		if (this._sessionWorktreeChanges.has(sessionId)) {
 			return this._sessionWorktreeChanges.get(sessionId);
 		}
 
+		// Check whether the session has an associated worktree
 		const worktreePath = this.getWorktreePath(sessionId);
-		const worktreeProperties = this.getWorktreeProperties(sessionId);
-
 		if (!worktreePath) {
-			this._sessionWorktreeChanges.set(sessionId, undefined);
 			return undefined;
 		}
 
+		// Check whether the worktree belongs to any of the discovered repositories
+		const worktreePaths = this.gitService.repositories.map(r => r.worktrees.map(w => w.path)).flat();
+		if (!worktreePaths.some(p => isEqual(vscode.Uri.file(p), worktreePath))) {
+			return undefined;
+		}
+
+		// Open the worktree repository. This will initialize the repository state
+		// in the vscode.git extension but the source control provider will not be
+		// shown in the Source Control view since it is being hidden.
+		const repository = await this.gitService.getRepository(worktreePath);
+		if (!repository) {
+			return undefined;
+		}
+
+		const worktreeProperties = this.getWorktreeProperties(sessionId);
 		if (worktreeProperties === undefined || worktreeProperties.autoCommit === false) {
 			// These changes are staged in the worktree but not yet committed
-			const repository = await this.gitService.getRepository(worktreePath, false);
-			if (!repository?.changes) {
+			if (!repository.changes) {
 				this._sessionWorktreeChanges.set(sessionId, []);
 				return [];
 			}
