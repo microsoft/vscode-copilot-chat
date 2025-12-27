@@ -358,4 +358,13 @@ export function getFilteredMessage(category: FilterReason, supportsMarkdown: boo
  */
 export const CanceledMessage = { message: 'Canceled' };
 
+/**
+ * Heuristic fallback for identifying cancellations when all we have is a user-visible message.
+ * Prefer cancellation tokens / CancellationError checks when available.
+ */
+export function isCancellationMessage(message: string): boolean {
+	const cancelPattern = /\bcancel(l|ll)?(ed|ing)?\b/i;
+	return cancelPattern.test(message);
+}
+
 export const CanceledResult: ChatResult = { errorDetails: CanceledMessage, };
