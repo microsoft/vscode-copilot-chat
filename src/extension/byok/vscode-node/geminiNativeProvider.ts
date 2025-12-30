@@ -25,7 +25,6 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 	private _genAIClient: GoogleGenAI | undefined;
 	private _apiKey: string | undefined;
 
-
 	constructor(
 		private readonly _knownModels: BYOKKnownModels | undefined,
 		private readonly _byokStorageService: IBYOKStorageService,
