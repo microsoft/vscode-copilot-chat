@@ -14,10 +14,12 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 
 	for (const part of content) {
 		if (part instanceof LanguageModelThinkingPart) {
-			// Extract thought signature from thinking part id field
-			// (VS Code preserves 'id' field but not 'metadata' in conversation history)
-			if (part.id && typeof part.id === 'string') {
-				pendingSignature = part.id;
+			// Extract thought signature from thinking part metadata
+			if (part.metadata && typeof part.metadata === 'object' && 'signature' in part.metadata) {
+				const signature = (part.metadata as any).signature;
+				if (typeof signature === 'string') {
+					pendingSignature = signature;
+				}
 			}
 			// Note: We don't emit thinking content to Gemini as it's already been processed
 			// The signature will be attached to the next function call

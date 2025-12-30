@@ -261,9 +261,9 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 								progress.report(new LanguageModelTextPart(part.text));
 							} else if (part.functionCall && part.functionCall.name) {
 								// Gemini 3 includes thought signatures for function calling
-								// If we have a pending signature, emit it as a thinking part with id set to the signature
+								// If we have a pending signature, emit it as a thinking part with metadata.signature
 								if (pendingThinkingSignature) {
-									const thinkingPart = new LanguageModelThinkingPart('', pendingThinkingSignature);
+									const thinkingPart = new LanguageModelThinkingPart('', undefined, { signature: pendingThinkingSignature });
 									progress.report(thinkingPart);
 									pendingThinkingSignature = undefined;
 								}
