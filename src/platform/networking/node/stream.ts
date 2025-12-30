@@ -428,18 +428,43 @@ export class SSEProcessor {
 							delta.ipCodeCitations = undefined;
 						}
 
-						finishOffset = await finishedCb(solution.text.join(''), choice.index, {
-							text: solution.flush(),
-							logprobs: choice.logprobs,
-							codeVulnAnnotations: delta?.vulnAnnotations,
-							ipCitations: delta?.ipCodeCitations,
-							copilotReferences: delta?.references,
-							copilotToolCalls: delta?.toolCalls,
-							_deprecatedCopilotFunctionCalls: delta?.functionCalls,
-							beginToolCalls: delta?.beginToolCalls,
-							copilotErrors: delta?.errors,
-							thinking: thinkingDelta ?? delta?.thinking,
-						});
+						const thinking = thinkingDelta ?? delta?.thinking;
+						const text = solution.flush();
+
+						if (text && thinking) {
+							finishOffset = await finishedCb(solution.text.join(''), choice.index, {
+								text,
+								logprobs: choice.logprobs,
+								codeVulnAnnotations: delta?.vulnAnnotations,
+								ipCitations: delta?.ipCodeCitations,
+								copilotReferences: delta?.references,
+								copilotToolCalls: delta?.toolCalls,
+								_deprecatedCopilotFunctionCalls: delta?.functionCalls,
+								beginToolCalls: delta?.beginToolCalls,
+								copilotErrors: delta?.errors,
+							});
+
+							if (finishOffset === undefined) {
+								finishOffset = await finishedCb(solution.text.join(''), choice.index, {
+									text: '',
+									thinking
+								});
+							}
+						} else {
+							finishOffset = await finishedCb(solution.text.join(''), choice.index, {
+								text,
+								logprobs: choice.logprobs,
+								codeVulnAnnotations: delta?.vulnAnnotations,
+								ipCitations: delta?.ipCodeCitations,
+								copilotReferences: delta?.references,
+								copilotToolCalls: delta?.toolCalls,
+								_deprecatedCopilotFunctionCalls: delta?.functionCalls,
+								beginToolCalls: delta?.beginToolCalls,
+								copilotErrors: delta?.errors,
+								thinking,
+							});
+						}
+
 						if (finishOffset !== undefined) {
 							hadEarlyFinishedSolution = true;
 						}
