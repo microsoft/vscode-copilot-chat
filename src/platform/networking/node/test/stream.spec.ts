@@ -5,9 +5,9 @@
 
 import { Readable } from 'stream';
 import { describe, expect, it, vi } from 'vitest';
+import { ILogService } from '../../../log/common/logService';
+import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { Response } from '../../common/fetcherService';
-import { ILogService } from '../../log/common/logService';
-import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { SSEProcessor } from '../stream';
 
 describe('SSEProcessor', () => {
