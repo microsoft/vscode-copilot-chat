@@ -6,17 +6,22 @@ import type { Content, FunctionCall, FunctionResponse, Part } from '@google/gena
 import { Raw } from '@vscode/prompt-tsx';
 import type { LanguageModelChatMessage } from 'vscode';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
-import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from '../../../vscodeTypes';
+import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from '../../../vscodeTypes';
 
-// Import to access the thought signature cache
-type ThoughtSignatureProvider = {
-	getThoughtSignature(callId: string): string | undefined;
-};
-
-function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart)[], signatureProvider?: ThoughtSignatureProvider): Part[] {
+function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart | LanguageModelThinkingPart)[]): Part[] {
 	const convertedContent: Part[] = [];
+	let pendingSignature: string | undefined;
+
 	for (const part of content) {
-		if (part instanceof LanguageModelToolCallPart) {
+		if (part instanceof LanguageModelThinkingPart) {
+			// Extract thought signature from thinking part id field
+			// (VS Code preserves 'id' field but not 'metadata' in conversation history)
+			if (part.id && typeof part.id === 'string') {
+				pendingSignature = part.id;
+			}
+			// Note: We don't emit thinking content to Gemini as it's already been processed
+			// The signature will be attached to the next function call
+		} else if (part instanceof LanguageModelToolCallPart) {
 			const functionCallPart: any = {
 				functionCall: {
 					name: part.name,
@@ -24,13 +29,10 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 				}
 			};
 
-			// Retrieve cached thought signature using call ID
-			if (signatureProvider && part.callId) {
-				const cachedSignature = signatureProvider.getThoughtSignature(part.callId);
-				if (cachedSignature) {
-					// Attach signature to function call part
-					functionCallPart.thoughtSignature = cachedSignature;
-				}
+			// Attach pending thought signature if available (required by Gemini 3 for function calling)
+			if (pendingSignature) {
+				functionCallPart.thoughtSignature = pendingSignature;
+				pendingSignature = undefined; // Clear after use
 			}
 
 			convertedContent.push(functionCallPart);
@@ -116,7 +118,7 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 	return convertedContent;
 }
 
-export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[], signatureProvider?: ThoughtSignatureProvider): { contents: Content[]; systemInstruction?: Content } {
+export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[]): { contents: Content[]; systemInstruction?: Content } {
 	const contents: Content[] = [];
 	let systemInstruction: Content | undefined;
 
@@ -138,7 +140,7 @@ export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[], 
 				};
 			}
 		} else if (message.role === LanguageModelChatMessageRole.Assistant) {
-			const parts = apiContentToGeminiContent(message.content, signatureProvider);
+			const parts = apiContentToGeminiContent(message.content);
 
 			// Store function calls for later matching with responses
 			parts.forEach(part => {
@@ -152,7 +154,7 @@ export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[], 
 				parts
 			});
 		} else if (message.role === LanguageModelChatMessageRole.User) {
-			const parts = apiContentToGeminiContent(message.content, signatureProvider);
+			const parts = apiContentToGeminiContent(message.content);
 
 			contents.push({
 				role: 'user',

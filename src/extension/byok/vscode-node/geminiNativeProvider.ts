@@ -25,23 +25,6 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 	private _genAIClient: GoogleGenAI | undefined;
 	private _apiKey: string | undefined;
 
-	// Cache thought signatures since VS Code LM API doesn't preserve DataParts in history
-	private static readonly _thoughtSignatureCache = new Map<string, string>();
-
-	private static _storeThoughtSignature(callId: string, signature: string): void {
-		this._thoughtSignatureCache.set(callId, signature);
-		// Cleanup old entries (keep last 100)
-		if (this._thoughtSignatureCache.size > 100) {
-			const firstKey = this._thoughtSignatureCache.keys().next().value;
-			if (firstKey) {
-				this._thoughtSignatureCache.delete(firstKey);
-			}
-		}
-	}
-
-	static getThoughtSignature(callId: string): string | undefined {
-		return this._thoughtSignatureCache.get(callId);
-	}
 
 	constructor(
 		private readonly _knownModels: BYOKKnownModels | undefined,
@@ -112,7 +95,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 		}
 
 		// Convert the messages from the API format into messages that we can use against Gemini
-		const { contents, systemInstruction } = apiMessageToGeminiMessage(messages as LanguageModelChatMessage[], GeminiNativeBYOKLMProvider);
+		const { contents, systemInstruction } = apiMessageToGeminiMessage(messages as LanguageModelChatMessage[]);
 
 		const requestId = generateUuid();
 		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(
@@ -246,6 +229,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 			const stream = await this._genAIClient.models.generateContentStream(params);
 
 			let usage: APIUsage | undefined;
+			let pendingThinkingSignature: string | undefined;
 
 			for await (const chunk of stream) {
 				if (token.isCancellationRequested) {
@@ -265,24 +249,27 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 
 					if (candidate.content && candidate.content.parts) {
 						for (const part of candidate.content.parts) {
+							// First, capture thought signature from this part (if present)
+							if ('thoughtSignature' in part && part.thoughtSignature) {
+								pendingThinkingSignature = part.thoughtSignature as string;
+							}
+							// Now handle the actual content parts
 							if ('thought' in part && part.thought === true && part.text) {
 								// Handle thinking/reasoning content from Gemini API
 								progress.report(new LanguageModelThinkingPart(part.text));
 							} else if (part.text) {
 								progress.report(new LanguageModelTextPart(part.text));
-							} else if (part.functionCall && part.functionCall.name) {							// Gemini 3 requires thought signatures for function calling
-								// Generate a unique call id using UUID to avoid collisions
-								const callId = generateUuid();
-
-								// Store signature in cache for later retrieval
-								if ('thoughtSignature' in part && part.thoughtSignature) {
-									const base64String = part.thoughtSignature as string;
-									GeminiNativeBYOKLMProvider._storeThoughtSignature(callId, base64String);
-									this._logService.trace(`Stored thought signature for call: ${callId}`);
+							} else if (part.functionCall && part.functionCall.name) {
+								// Gemini 3 includes thought signatures for function calling
+								// If we have a pending signature, emit it as a thinking part with id set to the signature
+								if (pendingThinkingSignature) {
+									const thinkingPart = new LanguageModelThinkingPart('', pendingThinkingSignature);
+									progress.report(thinkingPart);
+									pendingThinkingSignature = undefined;
 								}
 
 								progress.report(new LanguageModelToolCallPart(
-									callId,
+									generateUuid(),
 									part.functionCall.name,
 									part.functionCall.args || {}
 								));
