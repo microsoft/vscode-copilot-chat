@@ -495,6 +495,12 @@ export class CopilotLanguageModelWrapper extends Disposable {
 	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.ProvideLanguageModelChatResponseOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<void> {
 		let thinkingActive = false;
 		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
+			if (delta.text) {
+				progress.report(new vscode.LanguageModelTextPart(delta.text));
+			}
+			// Note: in case a single delta contains both text and thinking, we first report the text,
+			// then the thinking. This is intentional to ensure the thinking part appears after the text.
+			// See https://github.com/microsoft/vscode/issues/278557
 			if (delta.thinking) {
 				// Show thinking progress for unencrypted thinking deltas
 				if (!isEncryptedThinkingDelta(delta.thinking)) {
@@ -505,9 +511,6 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			} else if (thinkingActive) {
 				progress.report(new vscode.LanguageModelThinkingPart('', '', { vscode_reasoning_done: true }));
 				thinkingActive = false;
-			}
-			if (delta.text) {
-				progress.report(new vscode.LanguageModelTextPart(delta.text));
 			}
 			if (delta.copilotToolCalls) {
 				for (const call of delta.copilotToolCalls) {

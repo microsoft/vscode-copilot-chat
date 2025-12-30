@@ -428,45 +428,18 @@ export class SSEProcessor {
 							delta.ipCodeCitations = undefined;
 						}
 
-						const thinking = thinkingDelta ?? delta?.thinking;
-						const text = solution.flush();
-						const fullText = solution.text.join('');
-
-						// If both text and thinking are present, emit them separately. For more context, see https://github.com/microsoft/vscode/issues/278557
-						if (text && thinking) {
-							finishOffset = await finishedCb(fullText, choice.index, {
-								text,
-								logprobs: choice.logprobs,
-								codeVulnAnnotations: delta?.vulnAnnotations,
-								ipCitations: delta?.ipCodeCitations,
-								copilotReferences: delta?.references,
-								copilotToolCalls: delta?.toolCalls,
-								_deprecatedCopilotFunctionCalls: delta?.functionCalls,
-								beginToolCalls: delta?.beginToolCalls,
-								copilotErrors: delta?.errors,
-							});
-
-							if (finishOffset === undefined) {
-								finishOffset = await finishedCb(fullText, choice.index, {
-									text: '',
-									thinking
-								});
-							}
-						} else {
-							finishOffset = await finishedCb(fullText, choice.index, {
-								text,
-								logprobs: choice.logprobs,
-								codeVulnAnnotations: delta?.vulnAnnotations,
-								ipCitations: delta?.ipCodeCitations,
-								copilotReferences: delta?.references,
-								copilotToolCalls: delta?.toolCalls,
-								_deprecatedCopilotFunctionCalls: delta?.functionCalls,
-								beginToolCalls: delta?.beginToolCalls,
-								copilotErrors: delta?.errors,
-								thinking,
-							});
-						}
-
+						finishOffset = await finishedCb(solution.text.join(''), choice.index, {
+							text: solution.flush(),
+							logprobs: choice.logprobs,
+							codeVulnAnnotations: delta?.vulnAnnotations,
+							ipCitations: delta?.ipCodeCitations,
+							copilotReferences: delta?.references,
+							copilotToolCalls: delta?.toolCalls,
+							_deprecatedCopilotFunctionCalls: delta?.functionCalls,
+							beginToolCalls: delta?.beginToolCalls,
+							copilotErrors: delta?.errors,
+							thinking: thinkingDelta ?? delta?.thinking,
+						});
 						if (finishOffset !== undefined) {
 							hadEarlyFinishedSolution = true;
 						}
