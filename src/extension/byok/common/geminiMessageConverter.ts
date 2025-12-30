@@ -8,16 +8,32 @@ import type { LanguageModelChatMessage } from 'vscode';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from '../../../vscodeTypes';
 
-function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart)[]): Part[] {
+// Import to access the thought signature cache
+type ThoughtSignatureProvider = {
+	getThoughtSignature(callId: string): string | undefined;
+};
+
+function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart)[], signatureProvider?: ThoughtSignatureProvider): Part[] {
 	const convertedContent: Part[] = [];
 	for (const part of content) {
 		if (part instanceof LanguageModelToolCallPart) {
-			convertedContent.push({
+			const functionCallPart: any = {
 				functionCall: {
 					name: part.name,
 					args: part.input as Record<string, unknown> || {}
 				}
-			});
+			};
+
+			// Retrieve cached thought signature using call ID
+			if (signatureProvider && part.callId) {
+				const cachedSignature = signatureProvider.getThoughtSignature(part.callId);
+				if (cachedSignature) {
+					// Attach signature to function call part
+					functionCallPart.thoughtSignature = cachedSignature;
+				}
+			}
+
+			convertedContent.push(functionCallPart);
 		} else if (part instanceof LanguageModelDataPart) {
 			if (part.mimeType !== CustomDataPartMimeTypes.StatefulMarker && part.mimeType !== CustomDataPartMimeTypes.CacheControl) {
 				convertedContent.push({
@@ -88,7 +104,7 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 			};
 
 			convertedContent.push({ functionResponse });
-		} else {
+		} else if (part instanceof LanguageModelTextPart) {
 			// Text content - only filter completely empty strings, keep whitespace
 			if (part.value !== '') {
 				convertedContent.push({
@@ -100,7 +116,7 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 	return convertedContent;
 }
 
-export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[]): { contents: Content[]; systemInstruction?: Content } {
+export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[], signatureProvider?: ThoughtSignatureProvider): { contents: Content[]; systemInstruction?: Content } {
 	const contents: Content[] = [];
 	let systemInstruction: Content | undefined;
 
@@ -122,7 +138,7 @@ export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[]):
 				};
 			}
 		} else if (message.role === LanguageModelChatMessageRole.Assistant) {
-			const parts = apiContentToGeminiContent(message.content);
+			const parts = apiContentToGeminiContent(message.content, signatureProvider);
 
 			// Store function calls for later matching with responses
 			parts.forEach(part => {
@@ -136,7 +152,7 @@ export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[]):
 				parts
 			});
 		} else if (message.role === LanguageModelChatMessageRole.User) {
-			const parts = apiContentToGeminiContent(message.content);
+			const parts = apiContentToGeminiContent(message.content, signatureProvider);
 
 			contents.push({
 				role: 'user',
