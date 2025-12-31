@@ -66,16 +66,16 @@ export class BYOKStorageService implements IBYOKStorageService {
 		// If model-specific key is requested, try to get it first
 		if (modelId) {
 			const modelKey = await this._extensionContext.secrets.get(`copilot-byok-${providerName}-${modelId}-api-key`);
-			// Only return the key if it's non-empty after trimming
+			// Only return the key if it's non-empty after trimming, and return the trimmed version
 			if (modelKey && modelKey.trim()) {
-				return modelKey;
+				return modelKey.trim();
 			}
 		}
 
 		// Fall back to provider key if no model-specific key or it was requested directly
 		const providerKey = await this._extensionContext.secrets.get(`copilot-byok-${providerName}-api-key`);
-		// Only return the key if it's non-empty after trimming
-		return providerKey && providerKey.trim() ? providerKey : undefined;
+		// Only return the key if it's non-empty after trimming, and return the trimmed version
+		return providerKey?.trim() || undefined;
 	}
 
 	public async storeAPIKey(providerName: string, apiKey: string, authType: BYOKAuthType, modelId?: string): Promise<void> {
@@ -87,7 +87,7 @@ export class BYOKStorageService implements IBYOKStorageService {
 
 		// Ignore empty or whitespace-only API keys.
 		// This prevents invalid keys from being stored
-		if (!apiKey || !apiKey.trim()) {
+		if (!apiKey?.trim()) {
 			return;
 		}
 

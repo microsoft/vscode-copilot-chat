@@ -73,7 +73,8 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
 		if (!this._apiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
 			const storedKey = await this._byokStorageService.getAPIKey(GeminiNativeBYOKLMProvider.providerName);
-			// Only use the stored key if it's non-empty after trimming
+			// Normalize empty strings to undefined - the || undefined ensures that if trim() returns an empty string,
+			// we store undefined instead, so subsequent if (this._apiKey) checks treat it as "no key"
 			this._apiKey = storedKey?.trim() || undefined;
 		}
 		try {
