@@ -14,13 +14,13 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 const AgentFileExtension = '.agent.md';
 
-export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentsProvider {
+export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.ChatContributionsProvider {
 
-	private readonly _onDidChangeCustomAgents = this._register(new vscode.EventEmitter<void>());
-	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
+	private readonly _onDidChangeContributions = this._register(new vscode.EventEmitter<void>());
+	readonly onDidChangeContributions = this._onDidChangeContributions.event;
 
 	private isFetching = false;
-	private memoryCache: vscode.CustomAgentResource[] | undefined;
+	private memoryCache: vscode.ChatContributionResource[] | undefined;
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
@@ -41,10 +41,10 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		return vscode.Uri.joinPath(this.extensionContext.globalStorageUri, 'githubAgentsCache');
 	}
 
-	async provideCustomAgents(
-		_options: vscode.CustomAgentQueryOptions,
+	async provideContributions(
+		_options: vscode.ChatContributionQueryOptions,
 		_token: vscode.CancellationToken
-	): Promise<vscode.CustomAgentResource[]> {
+	): Promise<vscode.ChatContributionResource[]> {
 		try {
 			if (this.memoryCache !== undefined) {
 				return this.memoryCache;
@@ -53,12 +53,12 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			// Return results from file cache
 			return await this.readFromCache();
 		} catch (error) {
-			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in provideCustomAgents: ${error}`);
+			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in provideContributions: ${error}`);
 			return [];
 		}
 	}
 
-	private async readFromCache(): Promise<vscode.CustomAgentResource[]> {
+	private async readFromCache(): Promise<vscode.ChatContributionResource[]> {
 		try {
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
@@ -66,7 +66,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 				return [];
 			}
 
-			const agents: vscode.CustomAgentResource[] = [];
+			const agents: vscode.ChatContributionResource[] = [];
 
 			// Check if cache directory exists
 			try {
@@ -323,7 +323,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			}
 
 			// Fire event to notify consumers that agents have changed
-			this._onDidChangeCustomAgents.fire();
+			this._onDidChangeContributions.fire();
 		} finally {
 			this.isFetching = false;
 		}

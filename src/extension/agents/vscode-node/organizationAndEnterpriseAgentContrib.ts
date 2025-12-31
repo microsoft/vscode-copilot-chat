@@ -19,11 +19,11 @@ export class OrganizationAndEnterpriseAgentContribution extends Disposable imple
 	) {
 		super();
 
-		if ('registerCustomAgentsProvider' in vscode.chat) {
+		if ('registerContributionsProvider' in vscode.chat) {
 			// Only register the provider if the setting is enabled
 			if (configurationService.getConfig(ConfigKey.ShowOrganizationAndEnterpriseAgents)) {
 				const provider = instantiationService.createInstance(OrganizationAndEnterpriseAgentProvider);
-				this._register(vscode.chat.registerCustomAgentsProvider(provider));
+				this._register(vscode.chat.registerContributionsProvider('agent', provider));
 			}
 		}
 	}

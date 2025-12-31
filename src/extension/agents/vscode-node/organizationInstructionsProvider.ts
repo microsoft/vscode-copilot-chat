@@ -15,10 +15,10 @@ import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
 
 const InstructionFileExtension = '.instruction.md';
 
-export class OrganizationInstructionsProvider extends Disposable implements vscode.InstructionsProvider {
+export class OrganizationInstructionsProvider extends Disposable implements vscode.ChatContributionsProvider {
 
-	private readonly _onDidChangeInstructions = this._register(new vscode.EventEmitter<void>());
-	readonly onDidChangeInstructions = this._onDidChangeInstructions.event;
+	private readonly _onDidChangeContributions = this._register(new vscode.EventEmitter<void>());
+	readonly onDidChangeContributions = this._onDidChangeContributions.event;
 
 	private isFetching = false;
 
@@ -43,10 +43,10 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		return orgLogin + InstructionFileExtension;
 	}
 
-	async provideInstructions(
-		options: vscode.InstructionQueryOptions,
+	async provideContributions(
+		options: vscode.ChatContributionQueryOptions,
 		_token: vscode.CancellationToken
-	): Promise<vscode.CustomAgentResource[]> {
+	): Promise<vscode.ChatContributionResource[]> {
 		try {
 			// Get repository information from the active git repository
 			const repoId = await getRepoId(this.gitService);
@@ -67,14 +67,14 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 
 			return cachedInstructions;
 		} catch (error) {
-			this.logService.error(`[OrganizationInstructionsProvider] Error in provideInstructions: ${error}`);
+			this.logService.error(`[OrganizationInstructionsProvider] Error in provideContributions: ${error}`);
 			return [];
 		}
 	}
 
 	private async readFromCache(
 		orgLogin: string,
-	): Promise<vscode.CustomAgentResource[]> {
+	): Promise<vscode.ChatContributionResource[]> {
 		try {
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
@@ -88,7 +88,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 				return [];
 			}
 
-			const instructions: vscode.CustomAgentResource[] = [];
+			const instructions: vscode.ChatContributionResource[] = [];
 			const fileName = this.getCacheFilename(orgLogin);
 			const fileUri = vscode.Uri.joinPath(cacheDir, fileName);
 			instructions.push({
@@ -107,7 +107,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 
 	private async fetchAndUpdateCache(
 		orgLogin: string,
-		options: vscode.InstructionQueryOptions
+		options: vscode.ChatContributionQueryOptions
 	): Promise<void> {
 		// Prevent concurrent fetches
 		if (this.isFetching) {
@@ -154,7 +154,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 			this.logService.trace(`[OrganizationInstructionsProvider] Updated cache with instructions for org ${orgLogin}`);
 
 			// Fire event to notify consumers that instructions have changed
-			this._onDidChangeInstructions.fire();
+			this._onDidChangeContributions.fire();
 		} finally {
 			this.isFetching = false;
 		}
