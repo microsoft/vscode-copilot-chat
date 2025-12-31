@@ -34,7 +34,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 	) { }
 
 	private async getAllModels(apiKey: string): Promise<BYOKKnownModels> {
-		// Recreate the client only if the API key has changed to avoid stale keys while minimizing overhead
+		// Recreate the client only if the API key has changed to avoid using stale keys
 		if (!this._genAIClient || this._genAIClientApiKey !== apiKey) {
 			this._genAIClient = new GoogleGenAI({ apiKey });
 			this._genAIClientApiKey = apiKey;

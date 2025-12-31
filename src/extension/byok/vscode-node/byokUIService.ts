@@ -76,8 +76,7 @@ export async function promptForAPIKey(contextName: string, reconfigure: boolean 
 		return undefined;
 	}
 
-	// Trim the input to normalize whitespace-only input to empty string
-	// This ensures that accidental spaces are treated as "delete key" in reconfigure mode
-	// and prevents whitespace-only strings from being stored as API keys
+	// Trim the input to normalize whitespace-only input to empty string.
+	// Prevents whitespace-only strings from being stored as API keys
 	return result?.trim();
 }
