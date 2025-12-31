@@ -23,6 +23,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 	public static readonly providerName = 'Gemini';
 	public readonly authType: BYOKAuthType = BYOKAuthType.GlobalApiKey;
 	private _genAIClient: GoogleGenAI | undefined;
+	private _genAIClientApiKey: string | undefined;
 	private _apiKey: string | undefined;
 
 	constructor(
@@ -33,8 +34,10 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 	) { }
 
 	private async getAllModels(apiKey: string): Promise<BYOKKnownModels> {
-		if (!this._genAIClient) {
+		// Recreate the client only if the API key has changed to avoid stale keys while minimizing overhead
+		if (!this._genAIClient || this._genAIClientApiKey !== apiKey) {
 			this._genAIClient = new GoogleGenAI({ apiKey });
+			this._genAIClientApiKey = apiKey;
 		}
 		try {
 			const models = await this._genAIClient.models.list();
@@ -63,12 +66,15 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 		if (!result.cancelled) {
 			this._apiKey = result.apiKey;
 			this._genAIClient = undefined;
+			this._genAIClientApiKey = undefined;
 		}
 	}
 
 	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
 		if (!this._apiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
-			this._apiKey = await this._byokStorageService.getAPIKey(GeminiNativeBYOKLMProvider.providerName);
+			const storedKey = await this._byokStorageService.getAPIKey(GeminiNativeBYOKLMProvider.providerName);
+			// Only use the stored key if it's non-empty after trimming
+			this._apiKey = storedKey?.trim() || undefined;
 		}
 		try {
 			if (this._apiKey) {
