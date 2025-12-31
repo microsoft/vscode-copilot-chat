@@ -49,7 +49,7 @@ export class CopilotCLISessionOptions {
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
 			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
 			return {
-				kind: "denied-interactively-by-user"
+				kind: 'denied-interactively-by-user'
 			};
 		};
 		this.requestPermissionHandler = this.requestPermissionRejected;
@@ -87,6 +87,7 @@ export class CopilotCLISessionOptions {
 		if (this.customAgents) {
 			allOptions.customAgents = this.customAgents;
 		}
+		// allOptions.enableStreaming = true;
 		return allOptions as Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }>;
 	}
 }
@@ -115,7 +116,8 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
-		return models.find(m => m.id === modelId)?.id;
+		modelId = modelId.trim().toLowerCase();
+		return models.find(m => m.id.toLowerCase() === modelId)?.id;
 	}
 	public async getDefaultModel() {
 		// First item in the list is always the default model (SDK sends the list ordered based on default preference)
@@ -124,9 +126,9 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 			return;
 		}
 		const defaultModel = models[0];
-		const preferredModelId = this.extensionContext.globalState.get<string>(COPILOT_CLI_MODEL_MEMENTO_KEY, defaultModel.id);
+		const preferredModelId = this.extensionContext.globalState.get<string>(COPILOT_CLI_MODEL_MEMENTO_KEY, defaultModel.id)?.trim()?.toLowerCase();
 
-		return models.find(m => m.id === preferredModelId)?.id ?? defaultModel.id;
+		return models.find(m => m.id.toLowerCase() === preferredModelId)?.id ?? defaultModel.id;
 	}
 
 	public async setDefaultModel(modelId: string | undefined): Promise<void> {
@@ -165,6 +167,7 @@ export const ICopilotCLIAgents = createServiceIdentifier<ICopilotCLIAgents>('ICo
 export class CopilotCLIAgents implements ICopilotCLIAgents {
 	declare _serviceBrand: undefined;
 	private sessionAgents: Record<string, { agentId?: string; createdDateTime: number }> = {};
+	private _agents?: Readonly<SweCustomAgent>[];
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -197,17 +200,17 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 			return undefined;
 		}
 		const agents = await this.getAgents();
-		return agents.find(agent => agent.name === agentId)?.name;
+		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name;
 	}
 
 	async getDefaultAgent(): Promise<string> {
-		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, COPILOT_CLI_DEFAULT_AGENT_ID);
+		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, COPILOT_CLI_DEFAULT_AGENT_ID).toLowerCase();
 		if (agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
 			return agentId;
 		}
 
 		const agents = await this.getAgents();
-		return agents.find(agent => agent.name === agentId)?.name ?? COPILOT_CLI_DEFAULT_AGENT_ID;
+		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name ?? COPILOT_CLI_DEFAULT_AGENT_ID;
 	}
 	async setDefaultAgent(agent: string | undefined): Promise<void> {
 		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
@@ -217,12 +220,27 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 	}
 	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
 		const customAgents = await this.getAgents();
-		const agent = customAgents.find(agent => agent.name === agentId);
+		agentId = agentId.toLowerCase();
+		const agent = customAgents.find(agent => agent.name.toLowerCase() === agentId);
 		// Return a clone to allow mutations (to tools, etc).
 		return agent ? this.cloneAgent(agent) : undefined;
 	}
 
 	async getAgents(): Promise<Readonly<SweCustomAgent>[]> {
+		// Fetching agents from the SDK can be slow, cache the result while allowing background refreshes.
+		const agents = this._agents;
+		const promise = this.getAgentsImpl();
+
+		promise.then(fetchedAgents => {
+			this._agents = fetchedAgents;
+		}).catch((error) => {
+			this.logService.error('[CopilotCLISession] Failed to fetch custom agents', error);
+		});
+
+		return agents ?? promise;
+	}
+
+	async getAgentsImpl(): Promise<Readonly<SweCustomAgent>[]> {
 		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
 			return [];
 		}
@@ -311,7 +329,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 
 	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
-		const copilotToken = await this.authentService.getAnyGitHubSession();
+		const copilotToken = await this.authentService.getGitHubSession('any', { silent: true });
 		return {
 			type: 'token',
 			token: copilotToken?.accessToken ?? '',

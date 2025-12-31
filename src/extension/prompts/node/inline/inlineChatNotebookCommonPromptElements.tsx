@@ -163,10 +163,10 @@ export class InlineChatJupyterNotebookCellsContextTagBasedRenderer extends Promp
 						The content of cells are listed below, source code is contained in ```{lang.languageId} blocks<br />
 						Each cell is a block of code that can be executed independently.<br />
 						Below you will find a set of examples of what you should respond with. Please follow the exmaples on how to avoid repeating code.<br />
-						<Tag name="example">
-							<Tag name="cellsAbove">
+						<Tag name='example'>
+							<Tag name='cellsAbove'>
 								Here are the cells above the current cell that I am editing in this Jupyter Notebook:<br />
-								<IndexedTag name="cell" index={0}>
+								<IndexedTag name='cell' index={0}>
 									<TextChunk>
 										```python<br />
 										import pandas as pd<br />
@@ -178,7 +178,7 @@ export class InlineChatJupyterNotebookCellsContextTagBasedRenderer extends Promp
 									</TextChunk>
 								</IndexedTag>
 							</Tag>
-							<Tag name="UserRequest">
+							<Tag name='UserRequest'>
 								Now I create a new cell in this Jupyter Notebook document at index 1.<br />
 								<TextChunk>
 									```python<br />
@@ -186,7 +186,7 @@ export class InlineChatJupyterNotebookCellsContextTagBasedRenderer extends Promp
 								</TextChunk>
 								plot the data frame<br />
 							</Tag>
-							<Tag name="Response">
+							<Tag name='Response'>
 								To plot the dataframe, we can use the `plot()` method of pandas dataframe. Here's the code:<br />
 								```python<br />
 								df.plot(x='Name', y='Age', kind='bar')<br />
@@ -194,14 +194,14 @@ export class InlineChatJupyterNotebookCellsContextTagBasedRenderer extends Promp
 							</Tag>
 						</Tag>
 						{aboveCellsInfo.length > 0 &&
-							<Tag name="cellsAbove">
+							<Tag name='cellsAbove'>
 								Here are the cells above the current cell that I am editing in this Jupyter Notebook:<br />
 								{aboveCellsInfo.map((cell, index) => (this._renderCellContent(cell, index)))}
 							</Tag>
 						}
 						{
 							belowCellsInfo.length > 0 &&
-							<Tag name="cellsBelow">
+							<Tag name='cellsBelow'>
 								Here are the cells below the current cell that I am editing in this Jupyter Notebook:<br />
 								{belowCellsInfo.map((cell, index) => (this._renderCellContent(cell, index + aboveCellsInfo.length + 1)))}
 							</Tag>
@@ -214,7 +214,7 @@ export class InlineChatJupyterNotebookCellsContextTagBasedRenderer extends Promp
 
 	private _renderCellContent(cell: CodeContextRegion, index: number) {
 		const code = createFencedCodeBlock(cell.language.languageId, cell.lines.join('\n'));
-		return <IndexedTag name="cell" index={index}>
+		return <IndexedTag name='cell' index={index}>
 			<TextChunk>
 				{code}
 			</TextChunk>

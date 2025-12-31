@@ -28,6 +28,7 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
+import { isAnthropicFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
@@ -261,7 +262,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			return this.customizeMessagesBody(body);
 		} else {
 			const body = createCapiRequestBody(options, this.model, this.getCompletionsCallback());
-			return this.customizeCapiBody(body);
+			return this.customizeCapiBody(body, options);
 		}
 	}
 
@@ -277,13 +278,14 @@ export class ChatEndpoint implements IChatEndpoint {
 		return body;
 	}
 
-	protected customizeCapiBody(body: IEndpointBody): IEndpointBody {
-		const isAnthropicModel = this.family.startsWith('claude') || this.family.startsWith('Anthropic');
-		if (isAnthropicModel) {
+	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
+		const isConversationAgent = options.location === ChatLocation.Agent;
+		if (isAnthropicFamily(this) && !options.disableThinking && isConversationAgent) {
 			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
-			if (configuredBudget) {
+			if (configuredBudget && configuredBudget > 0) {
+				const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
 				// Cap thinking budget to Anthropic's recommended max (32000), and ensure it's less than max output tokens
-				body.thinking_budget = Math.min(32000, this._maxOutputTokens - 1, configuredBudget);
+				body.thinking_budget = Math.min(32000, this._maxOutputTokens - 1, normalizedBudget);
 			}
 		}
 		return body;

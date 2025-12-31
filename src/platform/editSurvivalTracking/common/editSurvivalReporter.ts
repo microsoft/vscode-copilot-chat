@@ -27,6 +27,13 @@ export interface EditSurvivalResult {
 	 * See ArcTracker.
 	*/
 	readonly arc?: number;
+
+	/**
+	 * Text states for each edit region
+	 */
+	readonly textBeforeAiEdits?: string[];
+	readonly textAfterAiEdits?: string[];
+	readonly textAfterUserEdits?: string[];
 }
 
 export class EditSurvivalReporter {
@@ -74,6 +81,8 @@ export class EditSurvivalReporter {
 		this._initialBranchName = this._gitService.activeRepository.get()?.headBranchName;
 
 		// This aligns with github inline completions
+		this._reportAfter(0);
+		this._reportAfter(5 * 1000);
 		this._reportAfter(30 * 1000);
 		this._reportAfter(120 * 1000);
 		this._reportAfter(300 * 1000);
@@ -104,7 +113,6 @@ export class EditSurvivalReporter {
 
 		const currentBranch = this._getCurrentBranchName();
 		const didBranchChange = currentBranch !== this._initialBranchName;
-
 		this._sendTelemetryEvent({
 			telemetryService: this._telemetryService,
 			fourGram: survivalRate.fourGram,
@@ -113,6 +121,9 @@ export class EditSurvivalReporter {
 			didBranchChange,
 			currentFileContent: this._document.getText(),
 			arc: this._arcTracker?.getAcceptedRestrainedCharactersCount(),
+			textBeforeAiEdits: survivalRate.textBeforeAiEdits,
+			textAfterAiEdits: survivalRate.textAfterAiEdits,
+			textAfterUserEdits: survivalRate.textAfterUserEdits,
 		});
 	}
 

@@ -12,7 +12,7 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { Edits } from '../../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
-import { DEFAULT_OPTIONS, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, DEFAULT_OPTIONS, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { createTracer, ITracer } from '../../../../util/common/tracing';
@@ -75,6 +75,8 @@ function createTestPromptPieces(): PromptPieces {
 		currentDocLines, // taggedCurrentDocLines as string[]
 		'<area_around_code_to_edit>\nline 2\nline 3\n</area_around_code_to_edit>', // areaAroundCodeToEdit
 		undefined, // langCtx - can be undefined
+		AggressivenessLevel.Medium,
+		undefined, // lintErrors
 		computeTokens,
 		opts
 	);
@@ -207,7 +209,7 @@ describe('XtabNextCursorPredictor', () => {
 				requestId: 'test-request-id',
 				serverRequestId: 'test-server-request-id',
 				usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110, prompt_tokens_details: { cached_tokens: 0 } },
-				value: '42',
+				value: '0',
 				resolvedModel: 'test-model'
 			});
 
@@ -215,7 +217,7 @@ describe('XtabNextCursorPredictor', () => {
 
 			expect(result.isOk()).toBe(true);
 			if (result.isOk()) {
-				expect(result.val).toBe(42);
+				expect(result.val).toBe(0);
 			}
 
 			// Predictor should still be enabled

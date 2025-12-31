@@ -289,7 +289,22 @@ export type ExtendedTokenInfo = TokenInfo & { username: string; isVscodeTeamMemb
 
 export type TokenEnvelope = Omit<TokenInfo, 'token' | 'organization_list'>;
 
-export type TokenErrorReason = 'NotAuthorized' | 'FailedToGetToken' | 'TokenInvalid' | 'GitHubLoginFailed' | 'HTTP401' | 'RateLimited';
+/**
+ * Reasons for token retrieval failures.
+ */
+export type TokenErrorReason =
+	/** User doesn't have Copilot access or authorization failed. Includes detailed error_details from server with notification_id specifying the specific authorization issue. */
+	'NotAuthorized' |
+	/** Network request failed - no response received from the server (connection failed, endpoint unreachable, etc.). */
+	'RequestFailed' |
+	/** Server response could not be parsed as JSON (malformed or unexpected response format). */
+	'ParseFailed' |
+	/** User not authenticated with GitHub through VS Code. Only returned from VS Code integration layer, not from platform token minting. */
+	'GitHubLoginFailed' |
+	/** Server returned 401 Unauthorized HTTP status. */
+	'HTTP401' |
+	/** GitHub API rate limit exceeded (403 status with rate limit message). */
+	'RateLimited';
 
 export enum TokenErrorNotificationId {
 	EnterPriseManagedUserAccount = 'enterprise_managed_user_account',

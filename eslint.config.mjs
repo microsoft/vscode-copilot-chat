@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url';
 import headerEslint from 'eslint-plugin-header';
 headerEslint.rules.header.meta.schema = false;
 
-import localEslint from './.eslintplugin/index.js';
+import * as localEslint from './.eslintplugin/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ignores = fs.readFileSync(path.join(__dirname, '.eslint-ignore'), 'utf8')
@@ -277,6 +277,8 @@ export default tseslint.config(
 					string: 'Generate with Copilot'
 				}
 			],
+			'local/no-nls-localize': ['error'],
+			'local/no-unexternalized-strings': ['error'],
 		}
 	},
 	{

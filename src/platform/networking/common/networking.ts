@@ -160,6 +160,8 @@ export interface IMakeChatRequestOptions {
 	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
 	/** Indicates if the request was user-initiated */
 	userInitiatedRequest?: boolean;
+	/** Indicate whether this is a conversation request or a non-conversation utility request (like model list fetch or title generation) */
+	isConversationRequest?: boolean;
 	/** (CAPI-only) Optional telemetry properties for analytics */
 	telemetryProperties?: IChatRequestTelemetryProperties;
 	/** Enable retrying the request when it was filtered due to snippy. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
@@ -168,6 +170,8 @@ export interface IMakeChatRequestOptions {
 	enableRetryOnError?: boolean;
 	/** Which fetcher to use, overrides the default. */
 	useFetcher?: FetcherId;
+	/** Disable extended thinking for this request. Used when resuming from tool call errors where the original thinking blocks are not available. */
+	disableThinking?: boolean;
 }
 
 export type IChatRequestTelemetryProperties = {
@@ -178,7 +182,9 @@ export type IChatRequestTelemetryProperties = {
 	associatedRequestId?: string;
 	retryAfterErrorCategory?: string;
 	retryAfterError?: string;
+	retryAfterErrorGitHubRequestId?: string;
 	connectivityTestError?: string;
+	connectivityTestErrorGitHubRequestId?: string;
 	retryAfterFilterCategory?: string;
 }
 

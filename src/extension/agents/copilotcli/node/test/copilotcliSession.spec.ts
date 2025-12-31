@@ -5,7 +5,7 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { IGitService } from '../../../../../platform/git/common/gitService';
+import type { ChatContext } from 'vscode';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -20,6 +20,7 @@ import { createExtensionUnitTestingServices } from '../../../../test/node/servic
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
 import { ToolCall } from '../../common/copilotCLITools';
+import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
@@ -79,15 +80,18 @@ describe('CopilotCLISession', () => {
 	let sdkSession: MockSdkSession;
 	let workspaceService: IWorkspaceService;
 	let logger: ILogService;
-	let gitService: IGitService;
 	let sessionOptions: CopilotCLISessionOptions;
 	let instaService: IInstantiationService;
 	let sdk: ICopilotCLISDK;
+	const delegationService = new class extends mock<IChatDelegationSummaryService>() {
+		override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
+			return undefined;
+		}
+	}();
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logger = accessor.get(ILogService);
-		gitService = accessor.get(IGitService);
 		sdk = new class extends mock<ICopilotCLISDK>() {
 			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 				return {
@@ -113,11 +117,11 @@ describe('CopilotCLISession', () => {
 		return disposables.add(new CopilotCLISession(
 			sessionOptions,
 			sdkSession as unknown as Session,
-			gitService,
 			logger,
 			workspaceService,
 			sdk,
 			instaService,
+			delegationService,
 		));
 	}
 

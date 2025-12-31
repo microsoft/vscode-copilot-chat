@@ -5,7 +5,6 @@
 
 import type { Attachment, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
-import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { raceCancellation } from '../../../../util/vs/base/common/async';
@@ -18,6 +17,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
+import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
 
@@ -37,6 +37,7 @@ export interface ICopilotCLISession extends IDisposable {
 		readonly isolationEnabled: boolean;
 		readonly workingDirectory?: Uri;
 	};
+	readonly pendingPrompt: string | undefined;
 	attachPermissionHandler(handler: PermissionHandler): IDisposable;
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
 	handleRequest(
@@ -81,15 +82,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		};
 	}
 	private _lastUsedModel: string | undefined;
-
+	private _pendingPrompt: string | undefined;
+	public get pendingPrompt(): string | undefined {
+		return this._pendingPrompt;
+	}
 	constructor(
 		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
-		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -124,6 +128,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
+		this._pendingPrompt = prompt;
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
 
@@ -151,7 +156,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				token
 			);
 		}));
-
+		const chunkMessageIds = new Set<string>();
 		try {
 			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
 			const [currentModel, authInfo] = await Promise.all([
@@ -171,7 +176,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				sdkRequestId = event.id;
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
-				if (typeof event.data.content === 'string' && event.data.content.length) {
+				// Support for streaming chunked messages.
+				if (typeof event.data.chunkContent === 'string' && event.data.chunkContent.length) {
+					chunkMessageIds.add(event.data.messageId);
+					this._stream?.markdown(event.data.chunkContent);
+				}
+				if (typeof event.data.content === 'string' && event.data.content.length && !chunkMessageIds.has(event.data.messageId)) {
 					this._stream?.markdown(event.data.content);
 				}
 			})));
@@ -229,15 +239,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
-			if (this._options.isolationEnabled && !token.isCancellationRequested) {
-				// When isolation is enabled and we are using a git workspace, stage
-				// all changes in the working directory when the session is completed
-				const workingDirectory = this._options.toSessionOptions().workingDirectory;
-				if (workingDirectory) {
-					await this.gitService.add(Uri.file(workingDirectory), []);
-					this.logService.trace(`[CopilotCLISession] Staged all changes in working directory ${workingDirectory}`);
-				}
-			}
 			const requestDetails: { requestId: string; toolIdEditMap: Record<string, string> } = { requestId, toolIdEditMap: {} };
 			await Promise.all(Array.from(toolIdEditMap.entries()).map(async ([toolId, editFilePromise]) => {
 				const editId = await editFilePromise.catch(() => undefined);
@@ -256,6 +257,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this.logService.error(`[CopilotCLISession] Invoking session (error) ${this.sessionId}`, error);
 			this._stream?.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 		} finally {
+			this._pendingPrompt = undefined;
 			disposables.dispose();
 		}
 	}
@@ -280,7 +282,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const getVSCodeRequestId = (sdkRequestId: string) => {
 			return this.copilotCLISDK.getRequestId(sdkRequestId);
 		};
-		return buildChatHistoryFromEvents(events, getVSCodeRequestId);
+		return buildChatHistoryFromEvents(this.sessionId, events, getVSCodeRequestId, this._delegationSummaryService);
 	}
 
 	private async requestPermission(

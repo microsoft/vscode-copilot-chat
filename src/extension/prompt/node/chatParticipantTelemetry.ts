@@ -8,11 +8,13 @@ import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { Intent } from '../../common/constants';
 import { DiagnosticsTelemetryData, findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
 import { InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
@@ -162,6 +164,8 @@ type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	maybeOffTopic: number;
 	userPromptCount: number;
 	summarizationEnabled: number;
+	isBYOK: number;
+	isAuto: number;
 };
 
 // EVENT: inline.request
@@ -642,7 +646,9 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"toolCounts": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The number of times each tool was used" },
 				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
-				"summarizationEnabled" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether summarization is enabled (the default) or disabled (via user setting)" }
+				"summarizationEnabled" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether summarization is enabled (the default) or disabled (via user setting)" },
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
@@ -675,7 +681,9 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			...getCustomInstructionTelemetry(turn.references),
 			numToolCalls: toolCalls.length,
 			availableToolCount: this._availableToolCount,
-			summarizationEnabled: this._configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) ? 1 : 0
+			summarizationEnabled: this._configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) ? 1 : 0,
+			isBYOK: isBYOKModel(this._endpoint),
+			isAuto: isAutoModel(this._endpoint)
 		} satisfies RequestPanelTelemetryMeasurements);
 
 		const modeName = this._getModeName();

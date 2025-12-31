@@ -86,11 +86,11 @@ export function assertPartsEqual(actualParts: readonly LinkifiedPart[], expected
 		if (typeof actual === 'string') {
 			assert.strictEqual(actual, expected);
 		} else if (actual instanceof LinkifyLocationAnchor) {
-			assert(expected instanceof LinkifyLocationAnchor, "Expected LinkifyLocationAnchor");
+			assert(expected instanceof LinkifyLocationAnchor, 'Expected LinkifyLocationAnchor');
 			assert.strictEqual(actual.value.toString(), expected.value.toString());
 		} else {
 			assert(actual instanceof LinkifySymbolAnchor);
-			assert(expected instanceof LinkifySymbolAnchor, "Expected LinkifySymbolAnchor");
+			assert(expected instanceof LinkifySymbolAnchor, 'Expected LinkifySymbolAnchor');
 			assert.strictEqual(actual.symbolInformation.name, expected.symbolInformation.name);
 		}
 	}

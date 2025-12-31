@@ -192,7 +192,7 @@ class TestFromTestPrompt extends PromptElement<Props> {
 					{/* include summarized source file: */}
 					<Test2Impl priority={800} documentContext={context} srcFile={testGenInfo} />
 					{/* include summarized test file: */}
-					<Tag name="testsFile" priority={900}>
+					<Tag name='testsFile' priority={900}>
 						<SummarizedDocumentWithSelection
 							documentData={data}
 							tokenBudget={sizing.tokenBudget / 3}
@@ -201,11 +201,11 @@ class TestFromTestPrompt extends PromptElement<Props> {
 						{/* repeat tested declaration -- otherwise, model seems to forget it: */}
 					</Tag>
 					{testGenInfo !== undefined && testedDeclarationExcerpt !== undefined && /* FIXME@ulugbekna: include class around */
-						<Tag name="codeToTest" priority={900}>
+						<Tag name='codeToTest' priority={900}>
 							{`Repeating excerpt from \`${testGenInfo?.uri.path}\` here that needs to be tested:`}{/* FIXME@ulugbekna */}<br />
 							<CodeBlock uri={testGenInfo.uri} languageId={context.language.languageId} code={testedDeclarationExcerpt} />
 						</Tag>}
-					<Tag name="userPrompt" priority={900}>
+					<Tag name='userPrompt' priority={900}>
 						{requestAndUserQuery}
 					</Tag>
 				</UserMessage>

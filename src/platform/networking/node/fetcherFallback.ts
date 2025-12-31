@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Readable } from 'stream';
-import { ILogService } from '../../log/common/logService';
+import { collectSingleLineErrorMessage, ILogService } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { FetcherId, FetchOptions, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
@@ -21,13 +21,20 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 	if (options.retryFallbacks && availableFetchers.length > 1) {
 		let firstResult: { ok: boolean; response: Response } | { ok: false; err: any } | undefined;
 		const updatedKnownBadFetchers = new Set<string>();
+		let lastError: string | undefined;
 		for (const fetcher of availableFetchers) {
 			const result = await tryFetch(fetcher, url, options, logService);
 			if (fetcher === availableFetchers[0]) {
 				firstResult = result;
 			}
 			if (!result.ok) {
-				updatedKnownBadFetchers.add(fetcher.getUserAgentLibrary());
+				const fetcherId = fetcher.getUserAgentLibrary();
+				if ('response' in result) {
+					lastError = `${fetcherId}: ${result.response.status} ${result.response.statusText}`;
+				} else {
+					lastError = `${fetcherId}: ${collectSingleLineErrorMessage(result.err, true)}`;
+				}
+				updatedKnownBadFetchers.add(fetcherId);
 				continue;
 			}
 			if (fetcher !== availableFetchers[0]) {
@@ -42,12 +49,14 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 						"comment": "Sent when the fetcher service switches to a fallback fetcher due to the primary fetcher failing",
 						"newFetcher": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the fetcher that is now being used" },
 						"knownBadFetchers": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of fetchers that are known to be failing" },
-						"knownBadFetchersCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of fetchers that are known to be failing" }
+						"knownBadFetchersCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of fetchers that are known to be failing" },
+						"lastError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The last error encountered, containing fetcher ID, status code and error message" }
 					}
 				*/
 				telemetryService?.sendTelemetryEvent('fetcherFallback', { github: true, microsoft: true }, {
 					newFetcher: fetcher.getUserAgentLibrary(),
 					knownBadFetchers: Array.from(updatedKnownBadFetchers).join(','),
+					lastError,
 				}, {
 					knownBadFetchersCount: updatedKnownBadFetchers.size,
 				});

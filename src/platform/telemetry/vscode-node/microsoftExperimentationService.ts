@@ -114,7 +114,7 @@ class CopilotCompletionsFilterProvider implements IExperimentationFilterProvider
 	getFilters(): Map<string, string> {
 		const filters = new Map<string, string>();
 		for (const [key, value] of this._getCompletionsFilters()) {
-			if (value !== "") {
+			if (value !== '') {
 				filters.set(key, value);
 			}
 		}

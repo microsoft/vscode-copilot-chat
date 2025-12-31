@@ -110,7 +110,7 @@ async function createWorkspace(logService: ILogService, workspaceRoot: Uri | und
 		const result = await window.showInformationMessage(message, { modal: true }, ...choices);
 		if (result === open) {
 
-			interactive.transferActiveChat(workspaceUri);
+			await interactive.transferActiveChat(workspaceUri);
 			logService.info(
 				'[newIntent] Opening folder: ' + workspaceUri.fsPath,
 			);

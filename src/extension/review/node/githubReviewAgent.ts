@@ -358,7 +358,7 @@ async function fetchComments(logService: ILogService, authService: IAuthenticati
 		messages: [{
 			role: 'user',
 			...(kind === 'selection' ? {
-				review_type: "snippet",
+				review_type: 'snippet',
 				snippet_files: headFileContents.map(f => ({
 					path: f.path,
 					regions: [

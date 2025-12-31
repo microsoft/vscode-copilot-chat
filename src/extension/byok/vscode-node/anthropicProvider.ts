@@ -13,11 +13,11 @@ import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
-import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from '../common/anthropicMessageConverter';
-import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, handleAPIKeyUpdate, LMResponsePart } from '../common/byokProvider';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
 
@@ -37,7 +37,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 	private _getThinkingBudget(modelId: string, maxOutputTokens: number): number | undefined {
 		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._experimentationService);
-		if (!configuredBudget) {
+		if (!configuredBudget || configuredBudget === 0) {
 			return undefined;
 		}
 
@@ -46,7 +46,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		if (!modelSupportsThinking) {
 			return undefined;
 		}
-		return Math.min(32000, maxOutputTokens - 1, configuredBudget);
+		const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
+		return Math.min(32000, maxOutputTokens - 1, normalizedBudget);
 	}
 
 	/**
@@ -99,9 +100,9 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 	}
 
 	async updateAPIKey(): Promise<void> {
-		this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName) !== undefined);
-		if (this._apiKey) {
-			await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+		const result = await handleAPIKeyUpdate(AnthropicLMProvider.providerName, this._byokStorageService, promptForAPIKey);
+		if (!result.cancelled) {
+			this._apiKey = result.apiKey;
 			this._anthropicAPIClient = undefined;
 		}
 	}

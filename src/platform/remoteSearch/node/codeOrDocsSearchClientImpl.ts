@@ -112,7 +112,7 @@ export class DocsSearchClient implements IDocsSearchClient {
 		options: ICodeOrDocsSearchOptions,
 		token: CancellationToken
 	): Promise<IDocsSearchResponse> {
-		const authToken = (await this._authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken ?? (await this._authenticationService.getAnyGitHubSession({ silent: true }))?.accessToken;
+		const authToken = (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken ?? (await this._authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
 		if (token.isCancellationRequested) {
 			throw new CancellationError();
 		}

@@ -993,17 +993,17 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #6276', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6276', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
 				files: [
 					fromFixture('edit/6276.ts')
 				],
 				queries: [
 					{
-						file: "6276.ts",
+						file: '6276.ts',
 						selection: [162, 0, 163, 39],
-						query: "declare as fields",
-						expectedIntent: "edit",
+						query: 'declare as fields',
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							await assertNoDiagnosticsAsync(accessor, outcome, workspace, KnownDiagnosticProviders.tscIgnoreImportErrors);
 							assertInlineEdit(outcome);
@@ -1015,18 +1015,18 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #7487', language: "typescriptreact", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #7487', language: 'typescriptreact', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
 				files: [
-					fromFixture("edit/issue-7487/EditForm.tsx")
+					fromFixture('edit/issue-7487/EditForm.tsx')
 				],
 				queries: [
 					{
-						file: "EditForm.tsx",
+						file: 'EditForm.tsx',
 						selection: [138, 0, 147, 17],
-						query: "smaller lighter text with more padding",
+						query: 'smaller lighter text with more padding',
 						diagnostics: 'tsc',
-						expectedIntent: "edit",
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							await assertNoSyntacticDiagnosticsAsync(accessor, outcome, workspace, 'tsc');
@@ -1042,18 +1042,18 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #6329', language: "javascript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6329', language: 'javascript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
 				files: [toFile({
-					filePath: fromFixture("edit/issue-6329/math.js")
+					filePath: fromFixture('edit/issue-6329/math.js')
 				})],
 				queries: [
 					{
-						file: "math.js",
+						file: 'math.js',
 						selection: [36, 0, 36, 0],
-						query: "use assert lib from nodejs to check that N is positive",
+						query: 'use assert lib from nodejs to check that N is positive',
 						diagnostics: 'tsc',
-						expectedIntent: "edit",
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							await assertNoDiagnosticsAsync(accessor, outcome, workspace, 'tsc');
 							assertInlineEdit(outcome);
@@ -1065,19 +1065,19 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #7202', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #7202', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
 				files: [
-					fromFixture("edit/issue-7202/languageModelToolsContribution.ts")
+					fromFixture('edit/issue-7202/languageModelToolsContribution.ts')
 				],
 				queries: [
 					{
-						file: "languageModelToolsContribution.ts",
+						file: 'languageModelToolsContribution.ts',
 						selection: [112, 127, 112, 127],
 						visibleRanges: [[92, 132]],
-						query: "make this message match the format of the log message below",
+						query: 'make this message match the format of the log message below',
 						diagnostics: 'tsc',
-						expectedIntent: "edit",
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							await assertNoSyntacticDiagnosticsAsync(accessor, outcome, workspace, 'tsc');
@@ -1095,15 +1095,15 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #6469', language: "css", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6469', language: 'css', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
-				files: [fromFixture("edit/issue-6469/inlineChat.css")],
+				files: [fromFixture('edit/issue-6469/inlineChat.css')],
 				queries: [
 					{
-						file: "inlineChat.css",
+						file: 'inlineChat.css',
 						selection: [80, 0, 81, 17],
-						query: "combine this",
-						expectedIntent: "edit",
+						query: 'combine this',
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							assertInlineEditShape(outcome, [{
@@ -1118,16 +1118,16 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #6956', language: "javascript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6956', language: 'javascript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
-				files: [fromFixture("generate/issue-6956/.eslintrc.js")],
+				files: [fromFixture('generate/issue-6956/.eslintrc.js')],
 				queries: [
 					{
-						file: ".eslintrc.js",
+						file: '.eslintrc.js',
 						selection: [23, 6, 23, 6],
-						query: "turn prefer-const off for destructured variables",
+						query: 'turn prefer-const off for destructured variables',
 						diagnostics: 'tsc',
-						expectedIntent: "generate",
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							await assertNoDiagnosticsAsync(accessor, outcome, workspace, KnownDiagnosticProviders.tscIgnoreImportErrors);
@@ -1138,16 +1138,16 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'Issue #7282', language: "javascript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'Issue #7282', language: 'javascript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
-				files: [fromFixture("edit/issue-7282/math.js")],
+				files: [fromFixture('edit/issue-7282/math.js')],
 				queries: [
 					{
-						file: "math.js",
+						file: 'math.js',
 						selection: [1, 0, 8, 0],
-						query: "avoid recursion",
+						query: 'avoid recursion',
 						diagnostics: 'tsc',
-						expectedIntent: "edit",
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							assertNoElidedCodeComments(outcome.fileContents);
@@ -1157,18 +1157,18 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #6973', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6973', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
 				files: [
-					fromFixture("edit/issue-6973/utils.ts")
+					fromFixture('edit/issue-6973/utils.ts')
 				],
 				queries: [
 					{
-						file: "utils.ts",
+						file: 'utils.ts',
 						selection: [7, 0, 17, 0],
-						query: "implement logging",
+						query: 'implement logging',
 						diagnostics: 'tsc',
-						expectedIntent: "edit",
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							await assertNoDiagnosticsAsync(accessor, outcome, workspace, KnownDiagnosticProviders.tscIgnoreImportErrors);
@@ -1179,16 +1179,16 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #7660', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #7660', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
-				files: [fromFixture("unknown/issue-7660/positionOffsetTransformer.spec.ts")],
+				files: [fromFixture('unknown/issue-7660/positionOffsetTransformer.spec.ts')],
 				queries: [
 					{
-						file: "positionOffsetTransformer.spec.ts",
+						file: 'positionOffsetTransformer.spec.ts',
 						selection: [0, 0, 77, 0],
-						query: "convert to suite, test and assert",
+						query: 'convert to suite, test and assert',
 						diagnostics: 'tsc',
-						expectedIntent: "unknown",
+						expectedIntent: 'unknown',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							await assertNoDiagnosticsAsync(accessor, outcome, workspace, KnownDiagnosticProviders.tscIgnoreImportErrors);
@@ -1201,16 +1201,16 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #6614', language: "html", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6614', language: 'html', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
-				files: [fromFixture("edit/issue-6614/workbench-dev.html")],
+				files: [fromFixture('edit/issue-6614/workbench-dev.html')],
 				queries: [
 					{
-						file: "workbench-dev.html",
+						file: 'workbench-dev.html',
 						selection: [75, 4, 75, 4],
 						visibleRanges: [[37, 77]],
-						query: "add a style sheel from out/vs/workbench/workbench.web.main.css",
-						expectedIntent: "edit",
+						query: 'add a style sheel from out/vs/workbench/workbench.web.main.css',
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							assertInlineEditShape(outcome, [{
@@ -1241,16 +1241,16 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'issue #6059', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6059', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
-				files: [fromFixture("edit/issue-6059/serializers.ts")],
+				files: [fromFixture('edit/issue-6059/serializers.ts')],
 				queries: [
 					{
-						file: "serializers.ts",
+						file: 'serializers.ts',
 						selection: [202, 0, 211, 5],
-						query: "sort properties",
+						query: 'sort properties',
 						diagnostics: 'tsc',
-						expectedIntent: "edit",
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							assert.ok(outcome.fileContents.length > outcome.originalFileContents.length / 2, 'File was truncated');
@@ -1263,16 +1263,16 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 		});
 
 
-		stest({ description: 'Issue #7996 - use entire context window', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'Issue #7996 - use entire context window', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
-				files: [fromFixture("edit/issue-7996/codeEditorWidget.ts")],
+				files: [fromFixture('edit/issue-7996/codeEditorWidget.ts')],
 				queries: [
 					{
-						file: "codeEditorWidget.ts",
+						file: 'codeEditorWidget.ts',
 						selection: [1666, 0, 1757, 0],
-						query: "convert this to if/else",
+						query: 'convert this to if/else',
 						diagnostics: 'tsc',
-						expectedIntent: "edit",
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace) => {
 							assertInlineEdit(outcome);
 							assert.ok(outcome.fileContents.length > outcome.originalFileContents.length / 2, 'File was truncated');
@@ -1284,16 +1284,16 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 		});
 
 
-		stest({ description: 'Issue #8129 (no errors)', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'Issue #8129 (no errors)', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
-				files: [fromFixture("edit/issue-8129/optimize.ts")],
+				files: [fromFixture('edit/issue-8129/optimize.ts')],
 				queries: [
 					{
-						file: "optimize.ts",
+						file: 'optimize.ts',
 						selection: [365, 6, 376, 79],
-						query: "adjust the sourcemaps if we have a filecontentmapper",
+						query: 'adjust the sourcemaps if we have a filecontentmapper',
 						diagnostics: 'tsc',
-						expectedIntent: "edit",
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							assert.ok(outcome.fileContents.length > outcome.originalFileContents.length / 2, 'File was truncated');
@@ -1305,16 +1305,16 @@ forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigura
 			});
 		});
 
-		stest({ description: 'Issue #8129 (no syntax errors)', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'Issue #8129 (no syntax errors)', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
-				files: [fromFixture("edit/issue-8129/optimize.ts")],
+				files: [fromFixture('edit/issue-8129/optimize.ts')],
 				queries: [
 					{
-						file: "optimize.ts",
+						file: 'optimize.ts',
 						selection: [365, 6, 376, 79],
-						query: "adjust the sourcemaps if we have a filecontentmapper",
+						query: 'adjust the sourcemaps if we have a filecontentmapper',
 						diagnostics: 'tsc',
-						expectedIntent: "edit",
+						expectedIntent: 'edit',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							assert.ok(outcome.fileContents.length > outcome.originalFileContents.length / 2, 'File was truncated');

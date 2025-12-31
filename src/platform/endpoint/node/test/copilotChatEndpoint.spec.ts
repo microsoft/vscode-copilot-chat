@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
+import { ChatLocation } from '../../../chat/common/commonTypes';
 import { ConfigKey } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
@@ -290,7 +291,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(10000);
@@ -316,7 +317,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(15000);
@@ -341,7 +342,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(32000);
@@ -367,13 +368,13 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(maxOutputTokens - 1);
 		});
 
-		it('should not set thinking_budget when configuredBudget is undefined', () => {
+		it('should use default thinking_budget of 4000', () => {
 			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, undefined);
 			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4-5');
 
@@ -392,10 +393,10 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
-			expect(body.thinking_budget).toBeUndefined();
+			expect(body.thinking_budget).toBe(4000);
 		});
 
 		it('should not set thinking_budget for non-Anthropic models (gpt)', () => {
@@ -468,7 +469,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(maxOutputTokens - 1);
@@ -496,10 +497,262 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = createTestOptions([createUserMessage('Hello')]);
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(5000);
+		});
+
+		it('should disable thinking when configuredBudget is 0', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 0);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = createTestOptions([createUserMessage('Hello')]);
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBeUndefined();
+		});
+
+		it('should normalize values between 1-1023 to 1024 (Anthropic minimum)', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 500);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBe(1024);
+		});
+
+		it('should normalize value of 1 to 1024', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 1);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBe(1024);
+		});
+
+		it('should use exactly 1024 when configured to 1024', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 1024);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBe(1024);
+		});
+
+		it('should not set thinking_budget when disableThinking is true', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = {
+				...createTestOptions([createUserMessage('Hello')]),
+				disableThinking: true
+			};
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBeUndefined();
+		});
+
+		it('should not set thinking_budget when location is ChatLocation.Other', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			const options = {
+				...createTestOptions([createUserMessage('Hello')]),
+				location: ChatLocation.Other
+			};
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.thinking_budget).toBeUndefined();
+		});
+
+		it('should not set thinking_budget for non-Agent locations (Panel, Editor, Terminal)', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			// Test Panel location
+			let options = {
+				...createTestOptions([createUserMessage('Hello')]),
+				location: ChatLocation.Panel
+			};
+			let body = endpoint.createRequestBody(options);
+			expect(body.thinking_budget).toBeUndefined();
+
+			// Test Editor location
+			options = {
+				...createTestOptions([createUserMessage('Hello')]),
+				location: ChatLocation.Editor
+			};
+			body = endpoint.createRequestBody(options);
+			expect(body.thinking_budget).toBeUndefined();
+
+			// Test Terminal location
+			options = {
+				...createTestOptions([createUserMessage('Hello')]),
+				location: ChatLocation.Terminal
+			};
+			body = endpoint.createRequestBody(options);
+			expect(body.thinking_budget).toBeUndefined();
+
+			// Test Notebook location
+			options = {
+				...createTestOptions([createUserMessage('Hello')]),
+				location: ChatLocation.Notebook
+			};
+			body = endpoint.createRequestBody(options);
+			expect(body.thinking_budget).toBeUndefined();
+
+			// Test EditingSession location
+			options = {
+				...createTestOptions([createUserMessage('Hello')]),
+				location: ChatLocation.EditingSession
+			};
+			body = endpoint.createRequestBody(options);
+			expect(body.thinking_budget).toBeUndefined();
+		});
+
+		it('should only set thinking_budget when location is Agent', () => {
+			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
+
+			const endpoint = new ChatEndpoint(
+				modelMetadata,
+				mockServices.domainService,
+				mockServices.capiClientService,
+				mockServices.fetcherService,
+				mockServices.telemetryService,
+				mockServices.authService,
+				mockServices.chatMLFetcher,
+				mockServices.tokenizerProvider,
+				mockServices.instantiationService,
+				mockServices.configurationService,
+				mockServices.expService,
+				mockServices.logService
+			);
+
+			// Verify Agent location sets thinking_budget
+			const agentOptions = {
+				...createTestOptions([createUserMessage('Hello')]),
+				location: ChatLocation.Agent
+			};
+			const agentBody = endpoint.createRequestBody(agentOptions);
+			expect(agentBody.thinking_budget).toBe(10000);
+
+			// Verify non-Agent location does not set thinking_budget
+			const panelOptions = {
+				...createTestOptions([createUserMessage('Hello')]),
+				location: ChatLocation.Panel
+			};
+			const panelBody = endpoint.createRequestBody(panelOptions);
+			expect(panelBody.thinking_budget).toBeUndefined();
 		});
 	});
 });

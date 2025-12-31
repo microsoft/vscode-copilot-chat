@@ -57,7 +57,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		'disabled';
 	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
 	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
-	const effort = effortConfig === 'default' ? undefined : effortConfig;
+	const effort = effortConfig === 'default' ? 'medium' : effortConfig;
 	const summary = summaryConfig === 'off' ? undefined : summaryConfig;
 	if (effort || summary) {
 		body.reasoning = {

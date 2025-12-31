@@ -20,7 +20,7 @@ describe('RejectionCollector[visualizable]', () => {
 	test('test1', async () => {
 		const result = await runRecording(
 			await loadJSON<IRecordingInformation>({
-				filePath: relativeFile("recordings/RejectionCollector.test1.w.json"),
+				filePath: relativeFile('recordings/RejectionCollector.test1.w.json'),
 			}),
 			ctx => {
 				const rejs: (boolean | string)[] = [];

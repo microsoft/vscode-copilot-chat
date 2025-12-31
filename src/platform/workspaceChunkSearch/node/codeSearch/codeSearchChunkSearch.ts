@@ -44,6 +44,7 @@ import { EmbeddingsChunkSearch } from '../embeddingsChunkSearch';
 import { TfIdfWithSemanticChunkSearch } from '../tfidfWithSemanticChunkSearch';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
 import { AdoCodeSearchRepo, BuildIndexTriggerReason, CodeSearchRepo, CodeSearchRepoStatus, GithubCodeSearchRepo, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
+import { ExternalIngestIndex } from './externalIngestIndex';
 import { CodeSearchRepoTracker, RepoInfo, TrackedRepoStatus } from './repoTracker';
 import { CodeSearchDiff, CodeSearchWorkspaceDiffTracker } from './workspaceDiff';
 
@@ -135,6 +136,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 	private readonly _repoTracker: CodeSearchRepoTracker;
 
+	private readonly _externalIngestIndex: Lazy<ExternalIngestIndex>;
+
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
 		embeddingsChunkSearch: EmbeddingsChunkSearch,
@@ -159,6 +162,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._tfIdfChunkSearch = tfIdfChunkSearch;
 
 		this._repoTracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
+		this._externalIngestIndex = new Lazy(() => this._register(instantiationService.createInstance(ExternalIngestIndex)));
 
 		this._register(this._repoTracker.onDidAddOrUpdateRepo(info => {
 			if (info.status === TrackedRepoStatus.Resolved && info.resolvedRemoteInfo) {
@@ -243,6 +247,19 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 					// And make sure they have done their initial checks.
 					// After this the repos may still be left polling github but we've done at least one check
 					await Promise.all(Array.from(this._codeSearchRepos.values(), info => info.repo.initialize()));
+					if (this._isDisposed) {
+						return;
+					}
+
+					// Update external ingest index with the code search repo roots (if external ingest is enabled)
+					if (this.isExternalIngestEnabled()) {
+						this.updateExternalIngestRoots();
+					}
+
+					// Initialize external ingest index if enabled
+					if (this.isExternalIngestEnabled()) {
+						await this._externalIngestIndex.value.initialize();
+					}
 				} finally {
 					this._hasFinishedInitialization = true;
 					this._onDidFinishInitialization.fire();
@@ -250,6 +267,17 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			});
 		})();
 		await this._initializePromise;
+	}
+
+	/**
+	 * Updates the external ingest index with the current code search repo roots.
+	 * Files under these roots will be excluded from external ingest indexing.
+	 */
+	private updateExternalIngestRoots(): void {
+		const readyRepos = Array.from(this._codeSearchRepos.values())
+			.filter(entry => entry.repo.status === CodeSearchRepoStatus.Ready)
+			.map(entry => entry.repo.repoInfo.rootUri);
+		this._externalIngestIndex.rawValue?.updateCodeSearchRoots(readyRepos);
 	}
 
 	private isInitializing(): boolean {
@@ -402,6 +430,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.WorkspaceEnableCodeSearch, this._experimentationService);
 	}
 
+	public isExternalIngestEnabled() {
+		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.TeamInternal.WorkspaceEnableCodeSearchExternalIngest, this._experimentationService);
+	}
+
 	public getRemoteIndexState(): CodeSearchRemoteIndexState {
 		if (!this.isCodeSearchEnabled()) {
 			return {
@@ -466,9 +498,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			});
 
 			const indexedRepos = allRepos.filter(repo => repo.status === CodeSearchRepoStatus.Ready);
-			if (!indexedRepos.length) {
-				return;
-			}
 
 			const diffArray = await raceCancellationError(this.getLocalDiff(), token);
 			if (!Array.isArray(diffArray)) {
@@ -483,30 +512,47 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			const innerTelemetryInfo = telemetryInfo.addCaller('CodeSearchChunkSearch::searchWorkspace');
 
 			// Trigger code search for all files without any excludes for diffed files.
-			// This is needed incase local diff times out
-			const codeSearchOperation = this.doCodeSearch(query, indexedRepos, sizing, options, innerTelemetryInfo, token).catch(e => {
-				if (!isCancellationError(e)) {
-					this._logService.error(`Code search failed`, e);
-				}
+			// This is needed in case local diff times out
+			const codeSearchOperation = indexedRepos.length > 0
+				? this.doCodeSearch(query, indexedRepos, sizing, options, innerTelemetryInfo, token).catch(e => {
+					if (!isCancellationError(e)) {
+						this._logService.error(`Code search failed`, e);
+					}
 
-				// If code search fails, cancel local search too because we won't be able to merge
-				localSearchCts.cancel();
-				throw e;
-			});
+					// If code search fails, cancel local search too because we won't be able to merge
+					localSearchCts.cancel();
+					throw e;
+				})
+				: Promise.resolve({ chunks: [], outOfSync: false });
+
+			// Also search external ingest for files not in code search repos (if enabled)
+			const externalIngestOperation = this.isExternalIngestEnabled()
+				? this._externalIngestIndex.value.search(sizing, query, token).catch(e => {
+					if (!isCancellationError(e)) {
+						this._logService.warn(`External ingest search failed: ${e}`);
+					}
+					return [];
+				})
+				: Promise.resolve([]);
 
 			const localSearchOperation = raceTimeout(this.searchLocalDiff(diffArray, sizing, query, options, innerTelemetryInfo, localSearchCts.token), this.localDiffSearchTimeout, () => {
 				localSearchCts.cancel();
 			});
 
 			let codeSearchResults: CodeSearchResult | undefined;
+			let externalIngestResults: readonly FileChunkAndScore[] = [];
 			let localResults: DiffSearchResult | undefined;
 			try {
-				// However await them in sequence since if code search fails we don't care about local result
-				codeSearchResults = await raceCancellationError(codeSearchOperation, token);
-				if (codeSearchResults) {
+				// Await code search and external ingest in parallel
+				[codeSearchResults, externalIngestResults] = await Promise.all([
+					raceCancellationError(codeSearchOperation, token),
+					raceCancellationError(externalIngestOperation, token),
+				]);
+
+				if (codeSearchResults || externalIngestResults.length > 0) {
 					localResults = await raceCancellationError(localSearchOperation, token);
 				} else {
-					// No need to do local search if code search failed
+					// No need to do local search if both searches failed
 					localSearchCts.cancel();
 				}
 			} finally {
@@ -521,6 +567,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 					"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
 					"diffSearchStrategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Search strategy for the diff" },
 					"chunkCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks just from code search" },
+					"externalIngestChunkCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks from external ingest" },
 					"locallyChangedFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of files that are different than the code search index" },
 					"codeSearchOutOfSync": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Tracks if the local commit we think code search has indexed matches what code search actually has indexed" },
 					"embeddingsRecomputedFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of files that needed to have their embeddings recomputed. Only logged when embeddings search is used" }
@@ -532,26 +579,31 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				diffSearchStrategy: localResults?.strategyId ?? 'none',
 			}, {
 				chunkCount: codeSearchResults?.chunks.length ?? 0,
+				externalIngestChunkCount: externalIngestResults.length,
 				locallyChangedFileCount: diffArray.length,
 				codeSearchOutOfSync: codeSearchResults?.outOfSync ? 1 : 0,
 				embeddingsRecomputedFileCount: localResults?.embeddingsComputeInfo?.recomputedFileCount ?? 0,
 			});
 
-			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, localResults: ${localResults?.chunks.length}`);
+			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults.length}, localResults: ${localResults?.chunks.length}`);
 
-			if (!codeSearchResults) {
+			// If neither code search nor external ingest returned results, bail
+			if (!codeSearchResults && externalIngestResults.length === 0) {
 				return;
 			}
 
-			const mergedChunks: readonly FileChunkAndScore[] = localResults ?
-				[
-					...codeSearchResults.chunks
-						.filter(x => shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
-					...(localResults?.chunks ?? [])
-						.filter(x => shouldInclude(x.chunk.file, { include: diffFilePattern })),
-				]
-				// If there are no local results, use the full code search results without filtering
-				: codeSearchResults.chunks;
+			// Merge results from code search, external ingest, and local diff search
+			const mergedChunks: readonly FileChunkAndScore[] = [
+				// Code search results (excluding diffed files if we have local results)
+				...(codeSearchResults?.chunks ?? [])
+					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
+				// External ingest results (excluding diffed files if we have local results)
+				...externalIngestResults
+					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
+				// Local diff results
+				...(localResults?.chunks ?? [])
+					.filter(x => shouldInclude(x.chunk.file, { include: diffFilePattern })),
+			];
 
 			const outChunks = mergedChunks
 				.filter(x => shouldInclude(x.chunk.file, options.globPatterns));
@@ -708,11 +760,22 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		if (remoteInfo.repoId.type === 'github') {
 			this.updateRepoEntry(repo, this._instantiationService.createInstance(GithubCodeSearchRepo, repo, remoteInfo.repoId, remoteInfo));
+			// Update external ingest roots since this repo is now covered by code search
+			if (this.isExternalIngestEnabled()) {
+				this.updateExternalIngestRoots();
+			}
+			return;
 		} else if (remoteInfo.repoId.type === 'ado') {
 			this.updateRepoEntry(repo, this._instantiationService.createInstance(AdoCodeSearchRepo, repo, remoteInfo.repoId, remoteInfo));
-		} else {
-			this._logService.warn(`CodeSearchChunkSearch.openGitRepo: Unsupported repo type ${remoteInfo.repoId} for repo at ${repo.rootUri}`);
+			// Update external ingest roots since this repo is now covered by code search
+			if (this.isExternalIngestEnabled()) {
+				this.updateExternalIngestRoots();
+			}
+			return;
 		}
+
+		// For unsupported repo types, the external ingest index will handle the files
+		this._logService.trace(`CodeSearchChunkSearch.openGitRepo: Repo type ${remoteInfo.repoId} not directly supported for code search, files will be indexed via external ingest`);
 	}
 
 	private updateRepoEntry(repoInfo: RepoInfo, newEntry: CodeSearchRepo) {
@@ -821,8 +884,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async getGithubAuthToken() {
-		return (await this._authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken
-			?? (await this._authenticationService.getAnyGitHubSession({ silent: true }))?.accessToken;
+		return (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
+			?? (await this._authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
 	}
 
 	private async tryAuthIfNeeded(_telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<PromiseLike<undefined> | undefined> {

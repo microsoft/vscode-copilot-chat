@@ -191,7 +191,6 @@ async function doIt(filepaths: string[]) {
 			'vs/workbench/contrib/chat/common/promptSyntax/promptFileParser.ts',
 
 			'vs/base/common/sseParser.ts',
-			'vs/base/common/errorMessage.ts',
 
 			// SPECIAL IMPLICIT DEPENDENCIES
 			'typings/vscode-globals-nls.d.ts',

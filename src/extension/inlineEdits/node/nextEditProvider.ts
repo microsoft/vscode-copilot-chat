@@ -42,9 +42,13 @@ import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from './nextEditResult';
 
+export interface NESInlineCompletionContext extends vscode.InlineCompletionContext {
+	enforceCacheDelay: boolean;
+}
+
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
-	getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: TTelemetry, data?: TData): Promise<T>;
+	getNextEdit(docId: DocumentId, context: NESInlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: TTelemetry, data?: TData): Promise<T>;
 	handleShown(suggestion: T): void;
 	handleAcceptance(docId: DocumentId, suggestion: T): void;
 	handleRejection(docId: DocumentId, suggestion: T): void;
@@ -121,7 +125,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public async getNextEdit(
 		docId: DocumentId,
-		context: vscode.InlineCompletionContext,
+		context: NESInlineCompletionContext,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: LlmNESTelemetryBuilder
@@ -160,7 +164,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	private async _getNextEditCanThrow(
 		docId: DocumentId,
-		context: vscode.InlineCompletionContext,
+		context: NESInlineCompletionContext,
 		triggerTime: number,
 		shouldExpandEditWindow: boolean,
 		parentTracer: ITracer,
@@ -303,7 +307,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		telemetryBuilder.setHasNextEdit(true);
 
-		const delay = this.computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit }, tracer);
+		const delay = this.computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, enforceCacheDelay: context.enforceCacheDelay }, tracer);
 		if (delay > 0) {
 			await timeout(delay);
 			if (cancellationToken.isCancellationRequested) {
@@ -702,7 +706,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return disposables;
 	}
 
-	private computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit }: { triggerTime: number; isRebasedCachedEdit: boolean; isSubsequentCachedEdit: boolean }, tracer: ITracer): number {
+	private computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, enforceCacheDelay }: { triggerTime: number; isRebasedCachedEdit: boolean; isSubsequentCachedEdit: boolean; enforceCacheDelay: boolean }, tracer: ITracer): number {
+
+		if (!enforceCacheDelay) {
+			tracer.trace('[minimumDelay] no minimum delay enforced due to enforceCacheDelay being false');
+			return 0;
+		}
 
 		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsCacheDelay, this._expService);
 		const rebasedCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsRebasedCacheDelay, this._expService);

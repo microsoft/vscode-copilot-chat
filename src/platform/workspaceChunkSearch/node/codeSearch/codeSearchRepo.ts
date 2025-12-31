@@ -112,7 +112,7 @@ export namespace TriggerRemoteIndexingError {
 }
 
 
-type RemoteCodeSearchState =
+export type RemoteCodeSearchState =
 	{
 		readonly status: CodeSearchRepoStatus.BuildingIndex | CodeSearchRepoStatus.CheckingStatus | CodeSearchRepoStatus.CouldNotCheckIndexStatus | CodeSearchRepoStatus.NotAuthorized | CodeSearchRepoStatus.NotIndexable | CodeSearchRepoStatus.NotResolvable | CodeSearchRepoStatus.Resolving | CodeSearchRepoStatus.NotYetIndexed;
 	} | {
@@ -199,13 +199,16 @@ abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearch
 			status: CodeSearchRepoStatus.CheckingStatus,
 		};
 
-		this.initTask = createCancelablePromise<void>(initToken => this.refreshStatusFromEndpoint(false, initToken)
-			.then(() => void 0)
-			.catch(e => {
+		this.initTask = createCancelablePromise<void>(async initToken => {
+			try {
+				await raceCancellationError(timeout(0), initToken); // Allow constructor to complete
+				await raceCancellationError(this.refreshStatusFromEndpoint(false, initToken), initToken);
+			} catch (e) {
 				if (!isCancellationError(e)) {
 					this._logService.error(`CodeSearchChunkSearch.openGitRepo(${repoInfo.rootUri}). Failed to initialize repo state from endpoint. ${e}`);
 				}
-			}));
+			}
+		});
 	}
 
 	public override dispose(): void {

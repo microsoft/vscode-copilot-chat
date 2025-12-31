@@ -178,6 +178,7 @@ export function collectErrorMessages(e: any): string {
 		const messageStr = message.toString?.() as (string | undefined) || '';
 		return [
 			messageStr ? `${messageStr.split('\n').map(line => `${indent}${line}`).join('\n')}\n` : '',
+			e.chromiumDetails ? `${indent}${JSON.stringify(extractChromiumDetails(e.chromiumDetails))}\n` : '',
 			collect(e.cause, indent + '  '),
 			...(Array.isArray(e.errors) ? e.errors.map((e: any) => collect(e, indent + '  ')) : []),
 		].join('');
@@ -186,7 +187,7 @@ export function collectErrorMessages(e: any): string {
 		.trim();
 }
 
-export function collectSingleLineErrorMessage(e: any): string {
+export function collectSingleLineErrorMessage(e: any, includeDetails = false): string {
 	// Collect error messages from nested errors as seen with Node's `fetch`.
 	const seen = new Set<any>();
 	function collect(e: any): string {
@@ -198,12 +199,78 @@ export function collectSingleLineErrorMessage(e: any): string {
 		const messageStr = message.toString?.() as (string | undefined) || '';
 		const messageLine = messageStr.trim().split('\n').join(' ');
 		const details = [
+			...(includeDetails && e.chromiumDetails ? [JSON.stringify(extractChromiumDetails(e.chromiumDetails))] : []),
 			...(e.cause ? [collect(e.cause)] : []),
 			...(Array.isArray(e.errors) ? e.errors.map((e: any) => collect(e)) : []),
 		].join(', ');
 		return details ? `${messageLine}: ${details}` : messageLine;
 	}
 	return collect(e);
+}
+
+function extractChromiumDetails(details: any): any {
+	if (!details || typeof details !== 'object') {
+		return {};
+	}
+
+	const extracted: any = {
+		// source_id: details.source_id,
+		// host_port_pair: details.host_port_pair,
+		// network_anonymization_key: details.network_anonymization_key,
+		active_streams: details.active_streams,
+		created_streams: details.created_streams,
+		pending_create_stream_request_count: details.pending_create_stream_request_count,
+		negotiated_protocol: details.negotiated_protocol,
+		error: details.error,
+		error_on_unavailable: details.error_on_unavailable,
+		max_concurrent_streams: details.max_concurrent_streams,
+		streams_initiated_count: details.streams_initiated_count,
+		streams_abandoned_count: details.streams_abandoned_count,
+		stream_hi_water_mark: details.stream_hi_water_mark,
+		frames_received: details.frames_received,
+		send_window_size: details.send_window_size,
+		recv_window_size: details.recv_window_size,
+		unacked_recv_window_bytes: details.unacked_recv_window_bytes,
+		// support_websocket: details.support_websocket,
+		availability_state: details.availability_state,
+		last_good_stream_id: details.last_good_stream_id,
+		reused: details.reused,
+		drain_error: details.drain_error,
+		drain_description: details.drain_description,
+		go_away_error: details.go_away_error,
+		go_away_debug_data: details.go_away_debug_data,
+		rst_stream_error: details.rst_stream_error,
+		rst_stream_description: details.rst_stream_description,
+		aliases_length: Array.isArray(details.aliases) ? details.aliases.length : undefined,
+	};
+
+	// Extract proxy schemes
+	if (details.proxy) {
+		const proxyString = Array.isArray(details.proxy) ? details.proxy.join(' ') : String(details.proxy);
+		const proxySchemes = [...proxyString.matchAll(/([a-z][a-z0-9+.-]*):\/\//gi)].map(match => match[1]);
+		if (proxySchemes.length > 0) {
+			extracted.proxy_schemes = proxySchemes;
+		}
+	}
+
+	if (details.spdy_session_key && typeof details.spdy_session_key === 'object') {
+		extracted.spdy_session = { // Omit _key suffix to avoid filter
+			privacy_mode: details.spdy_session_key.privacy_mode,
+			secure_dns_policy: details.spdy_session_key.secure_dns_policy,
+			disable_cert_verification_network_fetches: details.spdy_session_key.disable_cert_verification_network_fetches,
+		};
+	}
+
+	if (Array.isArray(details.active_stream_details)) {
+		extracted.active_stream_details = details.active_stream_details.map((stream: any) => ({
+			stream_id: stream.stream_id,
+			io_state: stream.io_state,
+			send_stalled_by_flow_control: stream.send_stalled_by_flow_control,
+			pending_send_status: stream.pending_send_status,
+		}));
+	}
+
+	return extracted;
 }
 
 export class LogMemory {

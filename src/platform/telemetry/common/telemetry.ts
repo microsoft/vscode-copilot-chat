@@ -15,7 +15,7 @@ export interface TelemetryEventMeasurements {
 }
 
 export interface TelemetryEventProperties {
-	readonly [key: string]: string | import("vscode").TelemetryTrustedValue<string> | undefined;
+	readonly [key: string]: string | import('vscode').TelemetryTrustedValue<string> | undefined;
 }
 
 // Interfaces taken from and should match `vscode-tas-client`

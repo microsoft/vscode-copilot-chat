@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Event as vscodeEvent, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -13,6 +13,7 @@ import { EditSurvivalReporter } from '../../../platform/editSurvivalTracking/com
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
+import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -24,15 +25,18 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { findCell, findNotebook, isNotebookCell } from '../../../util/common/notebooks';
-import { ITracer, createTracer } from '../../../util/common/tracing';
+import { createTracer, ITracer } from '../../../util/common/tracing';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
-import { IObservable } from '../../../util/vs/base/common/observable';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { autorun, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { basename } from '../../../util/vs/base/common/path';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
+import { createCorrelationId } from '../common/correlationId';
+import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
@@ -101,7 +105,7 @@ function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo
 const GoToNextEdit = l10n.t('Go To Inline Suggestion');
 
 
-export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
+export class InlineCompletionProviderImpl extends Disposable implements InlineCompletionItemProvider {
 	public readonly displayName = 'Inline Suggestion';
 
 	private readonly _tracer: ITracer;
@@ -109,6 +113,17 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
 	public readonly handleDidPartiallyAcceptCompletionItem = undefined;
 	public readonly handleDidRejectCompletionItem = undefined;
+
+	//#region Model picker
+	private _isModelPickerEnabled: IObservable<boolean> = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsModelPickerEnabled, this._expService);
+
+	public modelInfo: InlineCompletionModelInfo | undefined;
+
+	private readonly _onDidChangeModelInfo = this._register(new Emitter<void>());
+	public onDidChangeModelInfo = this._onDidChangeModelInfo.event;
+
+	public setCurrentModelId: ((modelId: string) => Thenable<void>) | undefined;
+	//#endregion
 
 	private readonly _displayNextEditorNES: boolean;
 	private readonly _renameSymbolSuggestions: IObservable<boolean>;
@@ -129,10 +144,22 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@INotebookService private readonly _notebookService: INotebookService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@IInlineEditsModelService private readonly _modelService: IInlineEditsModelService,
 	) {
+		super();
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 		this._renameSymbolSuggestions = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsRenameSymbolSuggestions, this._expService);
+
+		this.setCurrentModelId = (modelId: string) => this._modelService.setCurrentModelId(modelId);
+
+		const modelListUpdatedObs = observableFromEvent(this, this._modelService.onModelListUpdated, () => this._modelService.modelInfo);
+
+		this._register(autorun(reader => {
+			this.modelInfo = this._isModelPickerEnabled.read(reader) ? modelListUpdatedObs.read(reader) : undefined;
+			this._onDidChangeModelInfo.fire();
+		}));
+
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -148,19 +175,19 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	public async provideInlineCompletionItems(
 		document: TextDocument,
 		position: Position,
-		context: InlineCompletionContext,
+		context: InlineCompletionContext | NESInlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
 		const label = `NES | ${basename(document.uri.fsPath)} (v${document.version})`;
 		const capturingToken = new CapturingToken(label, undefined, true, true);
-
-		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, context, token));
+		const nesContext: NESInlineCompletionContext = { enforceCacheDelay: true, ...context };
+		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, nesContext, token));
 	}
 
 	private async _provideInlineCompletionItems(
 		document: TextDocument,
 		position: Position,
-		context: InlineCompletionContext,
+		context: NESInlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
 		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
@@ -226,6 +253,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			requestCancellationTokenSource.cancel();
 
 			const emptyList = new NesCompletionList(context.requestUuid, undefined, [], telemetryBuilder);
+			const correlationId = createCorrelationId('nes');
 
 			if (token.isCancellationRequested) {
 				tracer.returns('lost race to cancellation');
@@ -254,6 +282,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					wasShown: false,
 					telemetryBuilder,
 					jumpToPosition,
+					correlationId
 				};
 				return new NesCompletionList(context.requestUuid, jumpToPositionCompletionItem, [], telemetryBuilder);
 			}
@@ -332,7 +361,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				isInlineEdit: !isInlineCompletion,
 				showInlineEditMenu: !serveAsCompletionsProvider,
 				wasShown: false,
-				supportsRename
+				supportsRename,
+				correlationId,
 			};
 
 			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
