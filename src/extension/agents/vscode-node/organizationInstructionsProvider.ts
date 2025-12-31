@@ -119,7 +119,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		try {
 			this.logService.trace(`[OrganizationInstructionsProvider] Fetching custom instructions for org ${orgLogin}`);
 
-			const instructions = await this.octoKitService.getOrgCustomInstructions(orgLogin);
+			const instructions = await this.octoKitService.getOrgCustomInstructions(orgLogin, {});
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
 				this.logService.trace('[OrganizationInstructionsProvider] No workspace open, cannot use cache');

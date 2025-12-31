@@ -46,6 +46,7 @@ class MockGitService implements IGitService {
 				isRebasing: false,
 				remoteFetchUrls: [`https://github.com/${repoId.org}/${repoId.repo}.git`],
 				remotes: [],
+				worktrees: [],
 				changes: undefined,
 				headBranchNameObs: constObservable(undefined),
 				headCommitHashObs: constObservable(undefined),
@@ -75,6 +76,12 @@ class MockGitService implements IGitService {
 	async diffBetween(uri: URI, ref1: string, ref2: string): Promise<any[] | undefined> {
 		return [];
 	}
+	async diffBetweenPatch(uri: URI, ref1: string, ref2: string, path: string): Promise<string | undefined> {
+		return undefined;
+	}
+	async diffBetweenWithStats(uri: URI, ref1: string, ref2: string, path?: string): Promise<any[] | undefined> {
+		return [];
+	}
 	async diffWith(uri: URI, ref: string): Promise<any[] | undefined> {
 		return [];
 	}
@@ -90,6 +97,11 @@ class MockGitService implements IGitService {
 	}
 	async deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void> { }
 	async migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void> { }
+	async applyPatch(uri: URI, patch: string): Promise<void> { }
+	async commit(uri: URI, message: string | undefined): Promise<void> { }
+	async getRefs(uri: URI, query: any, cancellationToken?: any): Promise<any[]> {
+		return [];
+	}
 
 	dispose() { }
 }
@@ -112,10 +124,13 @@ class MockOctoKitService implements IOctoKitService {
 	getJobBySessionId = async () => undefined;
 	addPullRequestComment = async () => null;
 	getAllOpenSessions = async () => [];
+	getAllSessions = async () => [];
 	getPullRequestFromGlobalId = async () => null;
 	getPullRequestFiles = async () => [];
 	closePullRequest = async () => false;
 	getFileContent = async () => '';
+	getUserOrganizations = async () => [];
+	getOrganizationRepositories = async () => [];
 	getCustomAgents = async () => [];
 	getCustomAgentDetails = async () => undefined;
 
