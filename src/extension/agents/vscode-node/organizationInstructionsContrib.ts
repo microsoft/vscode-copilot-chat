@@ -23,7 +23,7 @@ export class OrganizationInstructionsContribution extends Disposable implements 
 			// Only register the provider if the setting is enabled
 			if (configurationService.getConfig(ConfigKey.UseOrganizationInstructions)) {
 				const provider = instantiationService.createInstance(OrganizationInstructionsProvider);
-				this._register(vscode.chat.registerContributionsProvider('instruction', provider));
+				this._register(vscode.chat.registerContributionsProvider(vscode.PromptsType.instructions, provider));
 			}
 		}
 	}
