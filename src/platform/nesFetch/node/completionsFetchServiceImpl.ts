@@ -42,7 +42,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 	): Promise<Result<ResponseStream, Completions.CompletionsFetchFailure>> {
 
 		if (ct.isCancellationRequested) {
-			return Result.error({ kind: 'cancelled' });
+			return Result.error(new Completions.RequestCancelled());
 		}
 
 		const options = {

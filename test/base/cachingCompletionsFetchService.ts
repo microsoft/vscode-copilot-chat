@@ -283,11 +283,17 @@ function inventModelFromURI(uri: string): string | undefined {
 }
 
 function prettyPrintJsonEncodedObject(obj: string) {
-	console.log(JSON.stringify(obj, (key, value) => {
-		if (typeof value === 'string') {
-			const split = value.split(/\n/g);
-			return split.length > 1 ? split : value;
-		}
-		return value;
-	}, 4));
+	console.log(
+		JSON.stringify(
+			JSON.parse(obj, (key, value) => {
+				if (typeof value === 'string') {
+					const split = value.split(/\n/g);
+					return split.length > 1 ? split : value;
+				}
+				return value;
+			}),
+			null,
+			4
+		)
+	);
 }

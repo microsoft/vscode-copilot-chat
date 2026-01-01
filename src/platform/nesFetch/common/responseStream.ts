@@ -54,7 +54,7 @@ export class ResponseStream {
 					emitter.emitOne(completion);
 				}
 			} catch (e: unknown) {
-				const error = errors.fromUnknown(e);
+				error = errors.fromUnknown(e);
 				emitter.reject(error);
 			} finally {
 				tokensDeferredPromise.complete(
