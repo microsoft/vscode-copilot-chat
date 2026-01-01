@@ -2,6 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { IExperimentationService } from '../../../../../../lib/node/chatLibMain';
+import { ConfigKey as ChatConfigKey, IConfigurationService } from '../../../../../../platform/configuration/common/configurationService';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry';
 import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
@@ -110,6 +112,8 @@ export class CompletionsFromNetwork {
 		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
 		@ICompletionsCacheService private readonly completionsCacheService: ICompletionsCacheService,
 		@ICompletionsUserErrorNotifierService private readonly userErrorNotifier: ICompletionsUserErrorNotifierService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly expService: IExperimentationService,
 	) { }
 
 	/** Requests new completion from OpenAI, should be called if and only if the completions for given prompt were not cached before.
@@ -335,7 +339,10 @@ export class CompletionsFromNetwork {
 				headers: requestContext.headers,
 				extra,
 			};
-			const res = await this.fetcherService.fetchAndStreamCompletions(completionParams, baseTelemetryData, finishedCb, cancellationToken);
+			const res =
+				this.configurationService.getExperimentBasedConfig(ChatConfigKey.TeamInternal.GhostTextUseCompletionsFetchService, this.expService)
+					? await this.fetcherService.fetchAndStreamCompletions2(completionParams, baseTelemetryData, finishedCb, cancellationToken)
+					: await this.fetcherService.fetchAndStreamCompletions(completionParams, baseTelemetryData, finishedCb, cancellationToken);
 			if (res.type === 'failed') {
 				return {
 					type: 'failed',
