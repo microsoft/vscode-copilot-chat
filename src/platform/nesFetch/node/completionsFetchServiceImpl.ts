@@ -9,7 +9,7 @@ import { Result } from '../../../util/common/result';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IFetcherService, IHeaders } from '../../networking/common/fetcherService';
+import { FetchOptions, IFetcherService, IHeaders } from '../../networking/common/fetcherService';
 import { Completions, ICompletionsFetchService } from '../common/completionsFetchService';
 import { ResponseStream } from '../common/responseStream';
 import { jsonlStreamToCompletions, streamToLines } from './streamTransformer';
@@ -98,12 +98,14 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 		try {
 
-			const response = await this.fetcherService.fetch(url, {
+			const request: FetchOptions = {
 				headers: options.headers,
 				body: options.body,
 				signal: fetchAbortCtl.signal,
 				method: 'POST',
-			});
+			};
+
+			const response = await this.fetcherService.fetch(url, request);
 
 			if (response.status === 200 && this.authService.copilotToken?.isFreeUser && this.authService.copilotToken?.isChatQuotaExceeded) {
 				this.authService.resetCopilotToken();
