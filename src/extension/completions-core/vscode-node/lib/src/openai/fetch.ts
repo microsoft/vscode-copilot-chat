@@ -7,6 +7,7 @@ import { ClientHttp2Stream } from 'http2';
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../../../../platform/env/common/envService';
 import { ICompletionsFetchService } from '../../../../../../platform/nesFetch/common/completionsFetchService';
+import { RequestId, getRequestId } from '../../../../../../platform/networking/common/fetch';
 import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -35,7 +36,6 @@ import { getKey } from '../util/unknown';
 import {
 	APIChoice,
 	APIJsonData,
-	RequestId,
 	getMaxSolutionTokens,
 	getStops,
 	getTemperatureForSamples,
@@ -140,14 +140,6 @@ export declare interface CompletionRequestExtra {
 export type PostOptions = Partial<CompletionFetchRequestFields>;
 
 // Request helpers
-
-export function getRequestId(response: Response): RequestId {
-	return {
-		headerRequestId: response.headers.get('x-request-id') || '',
-		serverExperiments: response.headers.get('X-Copilot-Experiment') || '',
-		deploymentId: response.headers.get('azureml-model-deployment') || '',
-	};
-}
 
 function getProcessingTime(response: Response): number {
 	const reqIdStr = response.headers.get('openai-processing-ms');
@@ -454,7 +446,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		@ICompletionsStatusReporter private readonly statusReporter: ICompletionsStatusReporter,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@ICompletionsFetchService private readonly fetchService: ICompletionsFetchService,
-		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
+		// @ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
 		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
@@ -572,7 +564,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			const prompt = params.prompt;
 			const ourRequestId = params.ourRequestId;
 			const headers = params.headers;
-			const logTarget = this.logTarget;
+			// const logTarget = this.logTarget;
 
 			const telemetryData = telemetryExp.extendedBy(
 				{
@@ -593,7 +585,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 
 			this.instantiationService.invokeFunction(telemetry, 'request.sent', telemetryData);
 
-			const requestStart = now();
+			// const requestStart = now();
 			const intent = uiKindToIntent(uiKind);
 
 			// Wrap the Promise with success/error callbacks so we can log/measure it
@@ -654,7 +646,10 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 					requestId: {
 						headerRequestId: '',
 						serverExperiments: '',
-						deploymentId: ''
+						deploymentId: '',
+						gitHubRequestId: '',
+						completionId: '',
+						created: 0
 					} satisfies RequestId, // FIXME
 					tokens: [],
 					numTokens: 0,

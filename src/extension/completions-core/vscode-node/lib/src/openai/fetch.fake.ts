@@ -48,6 +48,9 @@ export function fakeAPIChoice(
 			headerRequestId,
 			serverExperiments: 'dummy',
 			deploymentId: 'dummy',
+			gitHubRequestId: 'dummy',
+			completionId: 'dummy',
+			created: 0
 		},
 		telemetryData,
 		// This slightly convoluted way of getting the tokens as a string array is an

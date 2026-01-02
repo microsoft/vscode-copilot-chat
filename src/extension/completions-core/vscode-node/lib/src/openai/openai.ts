@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RequestId } from '../../../../../../platform/networking/common/fetch';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../prompt/src/prompt';
@@ -11,13 +12,7 @@ import { TelemetryWithExp, logEngineCompletion } from '../telemetry';
 import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 import { CopilotNamedAnnotationList } from './stream';
 
-export { FinishedCallback, getRequestId } from './fetch';
-
-export interface RequestId {
-	headerRequestId: string;
-	serverExperiments: string;
-	deploymentId: string;
-}
+export { FinishedCallback } from './fetch';
 
 export interface APIChoice {
 	completionText: string;
