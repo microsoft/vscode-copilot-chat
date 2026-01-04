@@ -94,6 +94,7 @@
 	"github.copilot.nextEditSuggestions.fixes": "Whether to offer fixes for diagnostics via next edit suggestions (NES).",
 	"github.copilot.nextEditSuggestions.allowWhitespaceOnlyChanges": "Whether to allow whitespace-only changes be proposed by next edit suggestions (NES).",
 	"github.copilot.chat.copilotDebugCommand.enabled": "Whether the `copilot-debug` command is enabled in the terminal.",
+	"github.copilot.chat.chatInlineCompletions.enabled": "AI-suggested inline completion in the chat input field.",
 	"github.copilot.config.terminalChatLocation": "Controls where chat queries from the terminal should be opened.",
 	"github.copilot.config.terminalChatLocation.chatView": "Open the chat view.",
 	"github.copilot.config.terminalChatLocation.quickChat": "Open quick chat.",
