@@ -9,6 +9,7 @@ import { Result } from '../../../util/common/result';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
+import { getRequestId, RequestId } from '../../networking/common/fetch';
 import { FetchOptions, IFetcherService, IHeaders } from '../../networking/common/fetcherService';
 import { Completions, ICompletionsFetchService } from '../common/completionsFetchService';
 import { ResponseStream } from '../common/responseStream';
@@ -19,6 +20,7 @@ export type FetchResponse = {
 	statusText: string;
 	headers: { [name: string]: string };
 	body: AsyncIterableObject<string>;
+	requestId: RequestId;
 };
 
 export interface IFetchRequestParams extends Completions.ModelParams { }
@@ -74,7 +76,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				return c.choices.length > 0;
 			}); // we only support `n=1`, so we only get choice.index = 0
 
-			const response = new ResponseStream(completions);
+			const response = new ResponseStream(completions, fetchResponse.val.requestId);
 
 			return Result.ok(response);
 
@@ -154,6 +156,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				statusText: response.statusText,
 				headers: headersObjectToKv(response.headers),
 				body: responseStream,
+				requestId: getRequestId(response),
 			});
 
 		} catch (reason: unknown) {

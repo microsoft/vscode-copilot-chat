@@ -643,14 +643,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 					meanLogProb: undefined,
 					meanAlternativeLogProb: undefined,
 					choiceIndex: 0,
-					requestId: {
-						headerRequestId: '',
-						serverExperiments: '',
-						deploymentId: '',
-						gitHubRequestId: '',
-						completionId: '',
-						created: 0
-					} satisfies RequestId, // FIXME
+					requestId: res.val.requestId,
 					tokens: [],
 					numTokens: 0,
 					blockFinished: false,

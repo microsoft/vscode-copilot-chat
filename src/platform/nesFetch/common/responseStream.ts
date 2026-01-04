@@ -7,6 +7,7 @@ import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { AsyncIterableObject, DeferredPromise } from '../../../util/vs/base/common/async';
 import { assertType } from '../../../util/vs/base/common/types';
+import { RequestId } from '../../networking/common/fetch';
 import { Completion } from './completionsAPI';
 
 export class ResponseStream {
@@ -31,7 +32,7 @@ export class ResponseStream {
 	 */
 	public readonly stream: AsyncIterableObject<Completion>;
 
-	constructor(stream: AsyncIterable<Completion>) {
+	constructor(stream: AsyncIterable<Completion>, public readonly requestId: RequestId) {
 		const tokensDeferredPromise = new DeferredPromise<Result<Completion[], Error>>();
 		this.aggregatedStream = tokensDeferredPromise.p;
 		this.response = this.aggregatedStream.then((completions) => {
