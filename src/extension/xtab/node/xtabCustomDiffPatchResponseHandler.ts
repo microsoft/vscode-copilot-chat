@@ -76,7 +76,7 @@ export class XtabCustomDiffPatchResponseHandler {
 		}
 	}
 
-	public static resolveEdit(patch: Patch): LineReplacement {
+	private static resolveEdit(patch: Patch): LineReplacement {
 		return new LineReplacement(new LineRange(patch.lineNumZeroBased + 1, patch.lineNumZeroBased + 1 + patch.removedLines.length), patch.addedLines);
 	}
 
