@@ -36,9 +36,6 @@ export namespace Completions {
 	export class RequestCancelled {
 		readonly kind = 'cancelled' as const;
 	}
-	export class QuotaExceeded {
-		readonly kind = 'quota-exceeded' as const;
-	}
 	export class UnsuccessfulResponse {
 		readonly kind = 'not-200-status' as const;
 		constructor(
@@ -54,7 +51,6 @@ export namespace Completions {
 	}
 	export type CompletionsFetchFailure =
 		| Completions.RequestCancelled
-		| Completions.QuotaExceeded
 		| Completions.UnsuccessfulResponse
 		| Completions.Unexpected;
 
