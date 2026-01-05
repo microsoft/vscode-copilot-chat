@@ -138,6 +138,7 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 	}
 
 	const out: CAPIChatMessage = toMode(OutputMode.OpenAI, message);
+
 	if ('copilot_references' in message) {
 		out.copilot_references = (message as any).copilot_references;
 	}

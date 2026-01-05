@@ -162,14 +162,14 @@ export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IC
  * The model can accept image urls as the `image_url` parameter in mcp tool results.
  */
 export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return !isAnthropicFamily(model) && !model.family.toLowerCase().startsWith('gemini') && !isHiddenModelE(model) && !isHiddenModelF(model);
+	return !isAnthropicFamily(model) && !isHiddenModelE(model);
 }
 
 /**
  * The model can accept image urls as the `image_url` parameter in requests.
  */
 export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return !model.family.toLowerCase().startsWith('gemini') && !isHiddenModelF(model);
+	return true;
 }
 
 /**

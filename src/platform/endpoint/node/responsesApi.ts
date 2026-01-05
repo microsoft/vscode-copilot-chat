@@ -141,7 +141,8 @@ function rawContentToResponsesContent(part: Raw.ChatCompletionContentPart): Open
 		case Raw.ChatCompletionContentPartKind.Text:
 			return { type: 'input_text', text: part.text };
 		case Raw.ChatCompletionContentPartKind.Image:
-			return { type: 'input_image', detail: part.imageUrl.detail || 'auto', image_url: part.imageUrl.url };
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			return { type: 'input_image', detail: part.imageUrl.detail || 'auto', image_url: part.imageUrl.url, media_type: part.imageUrl.media_type } as any;
 		case Raw.ChatCompletionContentPartKind.Opaque: {
 			const maybeCast = part.value as OpenAI.Responses.ResponseInputContent;
 			if (maybeCast.type === 'input_text' || maybeCast.type === 'input_image' || maybeCast.type === 'input_file') {
@@ -484,7 +485,11 @@ export class OpenAIResponsesProcessor {
 							if (item.type === 'message') {
 								return { type: Raw.ChatCompletionContentPartKind.Text, text: item.content.map(c => c.type === 'output_text' ? c.text : c.refusal).join('') };
 							} else if (item.type === 'image_generation_call' && item.result) {
-								return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: item.result } };
+								// Extract media_type from data URL if not already present
+								const mediaTypeMatch = item.result.match(/^data:(image\/[^;]+)/);
+								const media_type = mediaTypeMatch?.[1] as Raw.ImageMediaType | undefined;
+								// Note: item.result is a string URL, not an imageUrl object, so we set media_type here
+								return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: item.result, media_type } };
 							}
 						}).filter(isDefined),
 					}

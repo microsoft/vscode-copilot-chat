@@ -148,7 +148,8 @@ class BPETokenizer extends Disposable implements ITokenizer {
 			case Raw.ChatCompletionContentPartKind.Image:
 				if (text.imageUrl.url.startsWith('data:image/')) {
 					try {
-						return calculateImageTokenCost(text.imageUrl.url, text.imageUrl.detail);
+						const detail = text.imageUrl.detail === 'auto' ? undefined : text.imageUrl.detail;
+						return calculateImageTokenCost(text.imageUrl.url, detail);
 					} catch {
 						return this._textTokenLength(text.imageUrl.url);
 					}

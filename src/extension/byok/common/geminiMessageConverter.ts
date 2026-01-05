@@ -257,7 +257,7 @@ export function geminiMessagesToRawMessages(contents: Content[], systemInstructi
 				} else if (part.inlineData) {
 					messageParts.push({
 						type: Raw.ChatCompletionContentPartKind.Image,
-						imageUrl: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` }
+						imageUrl: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`, media_type: part.inlineData.mimeType as Raw.ImageMediaType }
 					});
 				} else if (part.functionCall && part.functionCall.name) {
 					toolCalls ??= [];
@@ -281,7 +281,7 @@ export function geminiMessagesToRawMessages(contents: Content[], systemInstructi
 							if (img && typeof img === 'object' && 'data' in img && 'mimeType' in img) {
 								toolContent.push({
 									type: Raw.ChatCompletionContentPartKind.Image,
-									imageUrl: { url: `data:${img.mimeType};base64,${img.data}` }
+									imageUrl: { url: `data:${img.mimeType};base64,${img.data}`, media_type: img.mimeType as Raw.ImageMediaType }
 								});
 							}
 						}
