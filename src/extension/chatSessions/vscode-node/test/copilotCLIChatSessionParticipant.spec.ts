@@ -22,6 +22,7 @@ import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { ISettableObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
+import { sep } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseConfirmationPart } from '../../../../vscodeTypes';
@@ -257,8 +258,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			autoCommit: false,
 			baseCommit: 'deadbeef',
 			branchName: 'test',
-			repositoryPath: '/repo',
-			worktreePath: '/worktree'
+			repositoryPath: `${sep}repo`,
+			worktreePath: `${sep}worktree`
 		} satisfies ChatSessionWorktreeProperties);
 
 		const request = new TestChatRequest('Say hi');
@@ -270,12 +271,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].options.isolationEnabled).toBe(true);
-		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe('/worktree');
+		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe(`${sep}worktree`);
 		expect(mcpHandler.loadMcpConfig).toHaveBeenCalled();
-		expect((mcpHandler.loadMcpConfig as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]?.fsPath).toBe('/worktree');
+		expect((mcpHandler.loadMcpConfig as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]?.fsPath).toBe(`${sep}worktree`);
 		// Prompt resolver should receive the effective workingDirectory.
 		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
-		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe('/worktree');
+		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe(`${sep}worktree`);
 	});
 
 	it('falls back to workspace workingDirectory when isolation is enabled but worktree creation fails', async () => {
@@ -292,12 +293,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].options.isolationEnabled).toBe(false);
-		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe('/workspace');
+		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe(`${sep}workspace`);
 		expect(mcpHandler.loadMcpConfig).toHaveBeenCalled();
-		expect((mcpHandler.loadMcpConfig as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]?.fsPath).toBe('/workspace');
+		expect((mcpHandler.loadMcpConfig as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]?.fsPath).toBe(`${sep}workspace`);
 		// Prompt resolver should receive the effective workingDirectory.
 		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
-		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe('/workspace');
+		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe(`${sep}workspace`);
 	});
 
 	it('reuses existing session (non-untitled) and does not create new one', async () => {
