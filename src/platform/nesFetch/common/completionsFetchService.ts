@@ -46,7 +46,7 @@ export namespace Completions {
 	export class Unexpected {
 		readonly kind = 'unexpected' as const;
 		constructor(
-			public readonly message: Error
+			public readonly error: Error
 		) { }
 	}
 	export type CompletionsFetchFailure =
