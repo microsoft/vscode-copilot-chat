@@ -116,29 +116,46 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 	}
 	const parent = Symbols.getParent(symbol);
 	const declarations: tt.Declaration[] | undefined = symbol.getDeclarations();
-	if (declarations !== undefined && declarations.length > 1) {
-		// If the symbol has more than one declaration we need to be careful to rename it. The second declaration
-		// could simply be a copy paste of the previous one and renaming it could cause some bad side effects.
-		if (Symbols.isFunction(symbol)) {
-			const checker = new DeclarationChecker(result, symbol);
-			checker.checkDeclarations();
-			if (result.getCanRename() === RenameKind.no) {
-				return;
+	if (declarations !== undefined) {
+		if (declarations.length === 1 && (Symbols.isBlockScopedVariable(symbol) || Symbols.isFunctionScopedVariable(symbol))) {
+			// if we have a block scoped or function scoped variable then it might still be redeclared in the same scope. We need
+			// to catch this since renaming it could cause issues.
+			const typeChecker = symbols.getTypeChecker();
+			const inScope = typeChecker.getSymbolsInScope(declarations[0], ts.SymbolFlags.BlockScopedVariable | ts.SymbolFlags.FunctionScopedVariable);
+			for (const inScopeSymbol of inScope) {
+				if (inScopeSymbol === symbol) {
+					continue;
+				}
+				if (inScopeSymbol.getName() === symbol.getName()) {
+					result.setCanRename(RenameKind.no, `A variable with the name '${oldName}' already exists in the same scope`);
+					return;
+				}
 			}
-		} else if (!Symbols.isMethod(symbol) || parent === undefined) {
-			result.setCanRename(RenameKind.no, 'The symbol has multiple declarations');
-			return;
-		} else {
-			// We do have a method with multiple declarations.
-			if (Symbols.isInterface(parent) || Symbols.isTypeLiteral(parent) || Symbols.isClass(parent)) {
+		} else if (declarations.length > 1) {
+			// If the symbol has more than one declaration we need to be careful to rename it. The second declaration
+			// could simply be a copy paste of the previous one and renaming it could cause some bad side effects.
+			if (Symbols.isFunction(symbol)) {
 				const checker = new DeclarationChecker(result, symbol);
 				checker.checkDeclarations();
 				if (result.getCanRename() === RenameKind.no) {
 					return;
 				}
+			} else if (!Symbols.isMethod(symbol) || parent === undefined) {
+				result.setCanRename(RenameKind.no, 'The symbol has multiple declarations');
+				return;
+			} else {
+				// We do have a method with multiple declarations.
+				if (Symbols.isInterface(parent) || Symbols.isTypeLiteral(parent) || Symbols.isClass(parent)) {
+					const checker = new DeclarationChecker(result, symbol);
+					checker.checkDeclarations();
+					if (result.getCanRename() === RenameKind.no) {
+						return;
+					}
+				}
 			}
 		}
 	}
+
 
 	const escapedNewName = ts.escapeLeadingUnderscores(newName);
 	// First see if the symbol has a parent. If so the new name must not conflict with existing members.
