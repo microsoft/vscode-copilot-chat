@@ -63,6 +63,10 @@ export abstract class AbstractLanguageModelChatProvider<C extends LanguageModelC
 				configuration
 			}));
 		} catch (e) {
+			if (e instanceof Error && e.message.includes('key')) {
+				// Likely bad API key so we will prompt user to update it one more time
+				// TODO: @sandy081 Propagate error to UI for prompting user to update API key
+			}
 			this._logService.error(e, `Error fetching available ${this._name} models`);
 			return [];
 		}
