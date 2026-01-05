@@ -660,11 +660,11 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	} else if (toolCall.toolName === 'search_bash') {
 		invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
 	} else if (toolCall.toolName === 'glob') {
-		const searchInPath = toolCall.arguments.path ? ` in ${toolCall.arguments.path}` : '';
-		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}${searchInPath}\``;
+		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
+		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	} else if (toolCall.toolName === 'grep') {
-		const searchInPath = toolCall.arguments.path ? ` in ${toolCall.arguments.path}` : '';
-		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}${searchInPath}\``;
+		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
+		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	}
 }
 

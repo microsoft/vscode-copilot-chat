@@ -167,6 +167,30 @@ describe('CopilotCLITools', () => {
 			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
 			expect(msg).toMatch(/Created/);
 		});
+		it('formats glob tool invocation without path', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'glob', toolCallId: 'g1', arguments: { pattern: '*.js' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
+			expect(msg).toBe('Pattern: `*.js`');
+		});
+		it('formats glob tool invocation with path - backticks separate pattern and path', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'glob', toolCallId: 'g2', arguments: { pattern: '*.js', path: '/some/path' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
+			expect(msg).toBe('Pattern: `*.js` in `/some/path`');
+		});
+		it('formats grep tool invocation without path', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'grep', toolCallId: 'gr1', arguments: { pattern: 'function' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
+			expect(msg).toBe('Pattern: `function`');
+		});
+		it('formats grep tool invocation with path - backticks separate pattern and path', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'grep', toolCallId: 'gr2', arguments: { pattern: 'function', path: '/src/utils' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
+			expect(msg).toBe('Pattern: `function` in `/src/utils`');
+		});
 	});
 
 	describe('process tool execution lifecycle', () => {
