@@ -141,6 +141,7 @@ async function main() {
 	await copyStaticAssets([
 		...treeSitterGrammars.map(grammar => `node_modules/@vscode/tree-sitter-wasm/wasm/${grammar.name}.wasm`),
 		'node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter.wasm',
+		'node_modules/@github/blackbird-external-ingest-utils/pkg/nodejs/external_ingest_utils_bg.wasm',
 	], 'dist');
 
 	await createCopilotCliSharpShim();

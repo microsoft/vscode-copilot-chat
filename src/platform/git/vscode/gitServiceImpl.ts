@@ -9,17 +9,18 @@ import { Uri } from 'vscode';
 import { BatchedProcessor } from '../../../util/common/async';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CachedFunction } from '../../../util/vs/base/common/cache';
-import { cancelOnDispose } from '../../../util/vs/base/common/cancellation';
+import { CancellationToken, cancelOnDispose } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, IObservable, observableFromEvent, observableSignalFromEvent, observableValue, waitForState } from '../../../util/vs/base/common/observableInternal';
 import * as path from '../../../util/vs/base/common/path';
+import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ILogService } from '../../log/common/logService';
 import { IGitExtensionService } from '../common/gitExtensionService';
 import { IGitService, RepoContext } from '../common/gitService';
 import { parseGitRemotes } from '../common/utils';
-import { API, APIState, Change, Commit, CommitShortStat, LogOptions, Repository } from './git';
+import { API, APIState, Change, Commit, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, Repository } from './git';
 
 export class GitServiceImpl extends Disposable implements IGitService {
 
@@ -211,6 +212,18 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return repository?.diffBetween(ref1, ref2);
 	}
 
+	async diffBetweenPatch(uri: vscode.Uri, ref1: string, ref2: string, path: string): Promise<string | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return repository?.diffBetween(ref1, ref2, path);
+	}
+
+	async diffBetweenWithStats(uri: vscode.Uri, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.diffBetweenWithStats(ref1, ref2, path);
+	}
+
 	async diffWith(uri: vscode.Uri, ref: string): Promise<Change[] | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
@@ -238,6 +251,22 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return repository?.getMergeBase(ref1, ref2);
 	}
 
+	async commit(uri: URI, message: string): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		if (!repository) {
+			return;
+		}
+
+		await repository.commit(message, { all: true, noVerify: true });
+	}
+
+	async applyPatch(uri: URI, patch: string): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.apply(patch, false);
+	}
+
 	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
@@ -254,6 +283,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
 		return await repository?.migrateChanges(sourceRepositoryUri.fsPath, options);
+	}
+
+	async getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.getRefs(query, cancellationToken) ?? [];
 	}
 
 	async initialize(): Promise<void> {
@@ -284,8 +319,9 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		this._register(autorun(reader => {
 			onDidChangeStateSignal.read(reader);
 			const selected = selectedObs.read(reader);
+
 			const activeRepository = this.activeRepository.get();
-			if (activeRepository && !selected) {
+			if (activeRepository && !selected && !isEqual(activeRepository.rootUri, repository.rootUri)) {
 				return;
 			}
 
@@ -350,6 +386,7 @@ export class RepoContextImpl implements RepoContext {
 	public readonly isRebasing = this._repo.state.rebaseCommit !== null;
 	public readonly remotes = this._repo.state.remotes.map(r => r.name);
 	public readonly remoteFetchUrls = this._repo.state.remotes.map(r => r.fetchUrl);
+	public readonly worktrees = this._repo.state.worktrees;
 
 	public readonly changes = {
 		mergeChanges: this._repo.state.mergeChanges,

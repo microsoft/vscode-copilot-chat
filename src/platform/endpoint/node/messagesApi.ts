@@ -3,13 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
-import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
@@ -97,24 +96,16 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
-	const systemParts: string[] = [];
+	const systemBlocks: TextBlockParam[] = [];
 
 	for (const message of messages) {
 		switch (message.role) {
 			case Raw.ChatRole.System: {
-				const systemText = message.content
-					.filter(c => c.type === Raw.ChatCompletionContentPartKind.Text)
-					.map(c => c.text)
-					.join('\n');
-				if (systemText) {
-					systemParts.push(systemText);
-				}
+				systemBlocks.push(...rawContentToAnthropicContent(message.content).filter((c): c is TextBlockParam => c.type === 'text'));
 				break;
 			}
 			case Raw.ChatRole.User: {
-				const content = message.content
-					.map(rawContentToAnthropicContent)
-					.filter(isDefined);
+				const content = rawContentToAnthropicContent(message.content);
 				if (content.length > 0) {
 					unmergedMessages.push({
 						role: 'user',
@@ -124,13 +115,7 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 				break;
 			}
 			case Raw.ChatRole.Assistant: {
-				const content: ContentBlockParam[] = [];
-				for (const part of message.content) {
-					const anthropicPart = rawContentToAnthropicContent(part);
-					if (anthropicPart) {
-						content.push(anthropicPart);
-					}
-				}
+				const content = rawContentToAnthropicContent(message.content);
 				if (message.toolCalls) {
 					for (const toolCall of message.toolCalls) {
 						let parsedInput: Record<string, unknown> = {};
@@ -158,26 +143,16 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 			}
 			case Raw.ChatRole.Tool: {
 				if (message.toolCallId) {
-					const toolContent: (TextBlockParam | ContentBlockParam)[] = message.content
-						.map(c => {
-							if (c.type === Raw.ChatCompletionContentPartKind.Text) {
-								return { type: 'text' as const, text: c.text };
-							} else if (c.type === Raw.ChatCompletionContentPartKind.Image) {
-								return rawContentToAnthropicContent(c);
-							}
-							return undefined;
-						})
-						.filter(isDefined);
-					const validToolContent = toolContent.filter(
-						(c): c is TextBlockParam | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string } } =>
-							c.type === 'text' || c.type === 'image'
+					const toolContent = rawContentToAnthropicContent(message.content);
+					const validContent = toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
+						c.type === 'text' || c.type === 'image'
 					);
 					unmergedMessages.push({
 						role: 'user',
 						content: [{
 							type: 'tool_result',
 							tool_use_id: message.toolCallId,
-							content: validToolContent,
+							content: validContent.length > 0 ? validContent : undefined,
 						}],
 					});
 				}
@@ -198,46 +173,80 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 		}
 	}
 
-	const systemText = systemParts.join('\n');
 	return {
 		messages: mergedMessages,
-		...(systemText ? { system: [{ type: 'text', text: systemText }] } : {}),
+		...(systemBlocks.length ? { system: systemBlocks } : {}),
 	};
 }
 
-function rawContentToAnthropicContent(part: Raw.ChatCompletionContentPart): ContentBlockParam | ThinkingBlockParam | RedactedThinkingBlockParam | undefined {
-	switch (part.type) {
-		case Raw.ChatCompletionContentPartKind.Text:
-			if (part.text.trim()) {
-				return { type: 'text', text: part.text };
+function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[]): ContentBlockParam[] {
+	const convertedContent: ContentBlockParam[] = [];
+
+	for (const part of content) {
+		switch (part.type) {
+			case Raw.ChatCompletionContentPartKind.Text:
+				if (part.text.trim()) {
+					convertedContent.push({ type: 'text', text: part.text });
+				}
+				break;
+			case Raw.ChatCompletionContentPartKind.Image: {
+				const url = part.imageUrl.url;
+				// Parse data URL: data:image/png;base64,<data>
+				const match = url.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/);
+				if (match) {
+					convertedContent.push({
+						type: 'image',
+						source: {
+							type: 'base64',
+							media_type: match[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+							data: match[2],
+						}
+					});
+				}
+				break;
 			}
-			return undefined;
-		case Raw.ChatCompletionContentPartKind.Image:
-			// TODO: Add support for image content blocks in Messages API
-			return undefined;
-		case Raw.ChatCompletionContentPartKind.Opaque: {
-			if (part.value && typeof part.value === 'object' && 'type' in part.value) {
-				const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string; encrypted?: string } };
-				if (opaqueValue.type === 'thinking' && opaqueValue.thinking) {
-					if (opaqueValue.thinking.encrypted) {
-						return {
-							type: 'redacted_thinking',
-							data: opaqueValue.thinking.encrypted,
-						};
-					} else if (opaqueValue.thinking.text) {
-						return {
-							type: 'thinking',
-							thinking: opaqueValue.thinking.text,
-							signature: '',
-						};
+			case Raw.ChatCompletionContentPartKind.CacheBreakpoint: {
+				const previousBlock = convertedContent.at(-1);
+				if (previousBlock && contentBlockSupportsCacheControl(previousBlock)) {
+					previousBlock.cache_control = { type: 'ephemeral' };
+				} else {
+					// Empty string is invalid
+					convertedContent.push({
+						type: 'text',
+						text: ' ',
+						cache_control: { type: 'ephemeral' }
+					});
+				}
+				break;
+			}
+			case Raw.ChatCompletionContentPartKind.Opaque: {
+				if (part.value && typeof part.value === 'object' && 'type' in part.value) {
+					const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string; encrypted?: string } };
+					if (opaqueValue.type === 'thinking' && opaqueValue.thinking) {
+						if (opaqueValue.thinking.encrypted) {
+							convertedContent.push({
+								type: 'redacted_thinking',
+								data: opaqueValue.thinking.encrypted,
+							});
+						} else if (opaqueValue.thinking.text) {
+							convertedContent.push({
+								type: 'thinking',
+								thinking: opaqueValue.thinking.text,
+								signature: '',
+							});
+						}
 					}
 				}
+				break;
 			}
-			return undefined;
 		}
-		default:
-			return undefined;
 	}
+
+	return convertedContent;
+}
+
+function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Exclude<ContentBlockParam, ThinkingBlockParam | RedactedThinkingBlockParam> {
+	return block.type !== 'thinking' && block.type !== 'redacted_thinking';
 }
 
 export async function processResponseFromMessagesEndpoint(

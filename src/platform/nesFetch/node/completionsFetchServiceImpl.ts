@@ -4,14 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Readable } from 'stream';
-import * as stream_consumers from 'stream/consumers';
+import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { safeStringify } from '../../../util/vs/base/common/objects';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IFetcherService, IHeaders } from '../../networking/common/fetcherService';
-import { CompletionsFetchFailure, FetchOptions, ICompletionsFetchService, ModelParams } from '../common/completionsFetchService';
+import { Completions, ICompletionsFetchService } from '../common/completionsFetchService';
 import { ResponseStream } from '../common/responseStream';
 import { jsonlStreamToCompletions, streamToLines } from './streamTransformer';
 
@@ -22,7 +21,7 @@ export type FetchResponse = {
 	body: AsyncIterableObject<string>;
 };
 
-export interface IFetchRequestParams extends ModelParams { }
+export interface IFetchRequestParams extends Completions.ModelParams { }
 
 export class CompletionsFetchService implements ICompletionsFetchService {
 	readonly _serviceBrand: undefined;
@@ -40,19 +39,19 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		requestId: string,
 		ct: CancellationToken,
 		headerOverrides?: Record<string, string>,
-	): Promise<Result<ResponseStream, CompletionsFetchFailure>> {
+	): Promise<Result<ResponseStream, Completions.CompletionsFetchFailure>> {
 
 		if (ct.isCancellationRequested) {
-			return Result.error({ kind: 'cancelled' });
+			return Result.error(new Completions.RequestCancelled());
 		}
 
 		const options = {
 			requestId,
 			headers: this.getHeaders(requestId, secretKey, headerOverrides),
-			body: {
+			body: JSON.stringify({
 				...params,
 				stream: true,
-			}
+			})
 		};
 
 		const fetchResponse = await this._fetchFromUrl(url, options, ct);
@@ -80,31 +79,16 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			return Result.ok(response);
 
 		} else {
+			const error: Completions.CompletionsFetchFailure = new Completions.UnsuccessfulResponse(
+				fetchResponse.val.status,
+				fetchResponse.val.statusText,
+			);
 
-			const body = await stream_consumers.text(fetchResponse.val.body);
-			if (body.match(/This model's maximum context length is /)) {
-				return Result.error({ kind: 'context-window-exceeded', message: body });
-			}
-			if (
-				body.match(
-					/Access denied due to invalid subscription key or wrong API endpoint/
-				) || fetchResponse.val.status === 401 || fetchResponse.val.status === 403
-			) {
-				return Result.error({ kind: 'invalid-api-key', message: body });
-			}
-			if (body.match(/exceeded call rate limit/)) {
-				return Result.error({ kind: 'exceeded-rate-limit', message: body });
-			}
-			const error: CompletionsFetchFailure = {
-				kind: 'not-200-status',
-				status: fetchResponse.val.status,
-				statusText: fetchResponse.val.statusText,
-			};
 			return Result.error(error);
 		}
 	}
 
-	protected async _fetchFromUrl(url: string, options: FetchOptions, ct: CancellationToken): Promise<Result<FetchResponse, CompletionsFetchFailure>> {
+	protected async _fetchFromUrl(url: string, options: Completions.Internal.FetchOptions, ct: CancellationToken): Promise<Result<FetchResponse, Completions.CompletionsFetchFailure>> {
 
 		const fetchAbortCtl = this.fetcherService.makeAbortController();
 
@@ -116,7 +100,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 			const response = await this.fetcherService.fetch(url, {
 				headers: options.headers,
-				json: options.body,
+				body: options.body,
 				signal: fetchAbortCtl.signal,
 				method: 'POST',
 			});
@@ -130,15 +114,10 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 					// When we receive a 402, we have exceed the free tier quota
 					// This is stored on the token so let's refresh it
 					this.authService.resetCopilotToken(response.status);
-					return Result.error<CompletionsFetchFailure>({ kind: 'quota-exceeded' });
+					return Result.error(new Completions.QuotaExceeded());
 				}
 
-				const error: CompletionsFetchFailure = {
-					kind: 'not-200-status',
-					status: response.status,
-					statusText: response.statusText,
-				};
-				return Result.error(error);
+				return Result.error(new Completions.UnsuccessfulResponse(response.status, response.statusText));
 			}
 
 			const responseBody = await response.body();
@@ -161,20 +140,8 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 						emitter.emitOne(str);
 					}
 				} catch (err: unknown) {
-					if (!(err instanceof Error)) {
-						throw new Error(safeStringify(err));
-					}
-
-					if (this.fetcherService.isAbortError(err) || err.name === 'AbortError') {
-						// stream aborted - ignore
-					} else if (
-						err.message === 'ERR_HTTP2_STREAM_ERROR' ||
-						(err as any).code === 'ERR_HTTP2_STREAM_ERROR'
-					) {
-						// stream closed - ignore
-					} else {
-						throw err;
-					}
+					const error = errors.fromUnknown(err);
+					emitter.reject(error);
 				} finally {
 					onCancellationDisposable.dispose();
 				}
@@ -187,25 +154,16 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				body: responseStream,
 			});
 
-		} catch (reason: any) { // TODO: replace with unknown with proper error handling
+		} catch (reason: unknown) {
 
 			onCancellationDisposable.dispose();
 
 			if (reason instanceof Error && reason.message === 'This operation was aborted') {
-				return Result.error({ kind: 'cancelled', errorMessage: reason.message });
+				return Result.error(new Completions.RequestCancelled());
 			}
 
-			if (
-				reason.code === 'ECONNRESET' ||
-				reason.code === 'ETIMEDOUT' ||
-				reason.code === 'ERR_HTTP2_INVALID_SESSION' ||
-				reason.message === 'ERR_HTTP2_GOAWAY_SESSION' ||
-				reason.code === '429'
-			) {
-				return Result.error({ kind: 'model_overloaded', errorMessage: reason.message });
-			} else {
-				return Result.error({ kind: 'model_error', errorMessage: reason.message });
-			}
+			const error = errors.fromUnknown(reason);
+			return Result.error(new Completions.Unexpected(error));
 		}
 	}
 

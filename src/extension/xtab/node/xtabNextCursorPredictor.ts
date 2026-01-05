@@ -8,6 +8,9 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
+import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { parseLintOptionString } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { fromUnknown } from '../../../util/common/errors';
@@ -17,6 +20,7 @@ import { ITracer } from '../../../util/common/tracing';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { LintErrors } from '../common/lintErrors';
 import { constructTaggedFile, getUserPrompt, PromptPieces } from '../common/promptCrafting';
 import { constructMessages } from './xtabUtils';
 
@@ -29,6 +33,7 @@ export class XtabNextCursorPredictor {
 		@IInstantiationService private readonly instaService: IInstantiationService,
 		@IConfigurationService private readonly configService: IConfigurationService,
 		@IExperimentationService private readonly expService: IExperimentationService,
+		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 	) {
 		this.isDisabled = false;
 	}
@@ -90,7 +95,11 @@ export class XtabNextCursorPredictor {
 			return Result.fromString(currentFileContentR.err);
 		}
 
-		const { taggedCurrentDocLines, areaAroundCodeToEdit } = currentFileContentR.val;
+		const { clippedTaggedCurrentDoc, areaAroundCodeToEdit } = currentFileContentR.val;
+
+		// Get lint diagnostics if enabled for cursor prediction
+		const lintOptions = this.determineLintOptions();
+		const lintErrors = lintOptions ? new LintErrors(lintOptions, promptPieces.activeDoc.id, promptPieces.currentDocument, this.langDiagService) : undefined;
 
 		const newPromptPieces = new PromptPieces(
 			promptPieces.currentDocument,
@@ -98,15 +107,17 @@ export class XtabNextCursorPredictor {
 			promptPieces.areaAroundEditWindowLinesRange,
 			promptPieces.activeDoc,
 			promptPieces.xtabHistory,
-			taggedCurrentDocLines,
+			clippedTaggedCurrentDoc.lines,
 			areaAroundCodeToEdit,
 			promptPieces.langCtx,
 			promptPieces.aggressivenessLevel,
+			lintErrors,
 			this.computeTokens,
 			{
 				...promptPieces.opts,
 				includePostScript: false,
-			}
+				lintOptions,
+			},
 		);
 
 		const userMessage = getUserPrompt(newPromptPieces);
@@ -187,6 +198,9 @@ export class XtabNextCursorPredictor {
 			if (lineNumber < 0) {
 				return Result.fromString(`negativeLineNumber`);
 			}
+			if (lineNumber < clippedTaggedCurrentDoc.keptRange.start || clippedTaggedCurrentDoc.keptRange.endExclusive <= lineNumber) {
+				return Result.fromString(`modelNotSeenLineNumber`);
+			}
 
 			return Result.ok(lineNumber);
 		} catch (err: unknown) {
@@ -194,4 +208,19 @@ export class XtabNextCursorPredictor {
 			return Result.fromString(`failedToParseLine:"${response.value}". Error ${fromUnknown(err).message}`);
 		}
 	}
+
+	private determineLintOptions(): xtabPromptOptions.LintOptions | undefined {
+		const localLintOptions = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionLintOptions);
+		if (localLintOptions) {
+			return localLintOptions;
+		}
+
+		const expLintOptions = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionLintOptionsString, this.expService);
+		if (!expLintOptions) {
+			return undefined;
+		}
+
+		return parseLintOptionString(expLintOptions);
+	}
 }
+

@@ -90,6 +90,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 
 	private async _authShowWarnings(): Promise<ExtendedTokenInfo> {
 		const tokenResult = await this._taskSingler.getOrCreate('auth', () => this._auth());
+		this.sendTokenResultErrorTelemetry(tokenResult);
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'NotAuthorized') {
 			const message = tokenResult.message;
@@ -127,7 +128,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		}
 
 		if (tokenResult.kind === 'failure') {
-			throw Error('Failed to get copilot token');
+			throw Error('Failed to get copilot token. reason: ' + tokenResult.reason);
 		}
 
 		if (tokenResult.kind === 'success' && tokenResult.chat_enabled === false) {
@@ -135,5 +136,24 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		}
 
 		return tokenResult;
+	}
+
+	private sendTokenResultErrorTelemetry(tokenResult: TokenInfoOrError): void {
+		if (tokenResult.kind === 'success') {
+			return;
+		}
+
+		/* __GDPR__
+			"copilotTokenFetching.error" : {
+				"owner": "TylerLeonhardt",
+				"comment": "Report on the frequency of token retrieval failures.",
+				"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason for the token retrieval failure" },
+				"notification_id": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The notification ID associated with the failure, if any" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('copilotTokenFetching.error', {
+			reason: tokenResult.reason,
+			notification_id: tokenResult.notification_id,
+		});
 	}
 }
