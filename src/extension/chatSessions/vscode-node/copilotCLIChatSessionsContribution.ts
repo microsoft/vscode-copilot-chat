@@ -35,7 +35,7 @@ import { IToolsService } from '../../tools/common/toolsService';
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
-import { convertReferenceToVariable } from './copilotPromptReferences';
+import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 
 const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
