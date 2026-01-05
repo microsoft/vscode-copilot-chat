@@ -623,7 +623,7 @@ class ClippedDocument {
 
 export function createTaggedCurrentFileContentUsingPagedClipping(
 	currentDocLines: string[],
-	areaAroundCodeToEdit: string,
+	areaAroundCodeToEdit: string[],
 	areaAroundEditWindowLinesRange: OffsetRange,
 	computeTokens: (s: string) => number,
 	pageSize: number,
@@ -646,7 +646,7 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 
 	const taggedCurrentFileContent = [
 		...currentDocLines.slice(rangeToKeep.start, areaAroundEditWindowLinesRange.start),
-		areaAroundCodeToEdit,
+		...areaAroundCodeToEdit,
 		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, rangeToKeep.endExclusive),
 	];
 
@@ -690,7 +690,7 @@ export function constructTaggedFile(
 		PromptTags.EDIT_WINDOW.end,
 		...contentWithCursorAsLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
 		PromptTags.AREA_AROUND.end
-	].join('\n');
+	];
 
 	const currentFileContentWithCursorLines = opts.includeLineNumbers.currentFileContent
 		? addLineNumbers(contentWithCursorAsLinesOriginal)
@@ -699,7 +699,7 @@ export function constructTaggedFile(
 		? addLineNumbers(currentDocument.lines)
 		: currentDocument.lines;
 
-	let areaAroundCodeToEditForCurrentFile: string;
+	let areaAroundCodeToEditForCurrentFile: string[];
 	if (promptOptions.currentFile.includeTags && opts.includeLineNumbers.currentFileContent === opts.includeLineNumbers.areaAroundCodeToEdit) {
 		areaAroundCodeToEditForCurrentFile = areaAroundCodeToEdit;
 	} else {
@@ -708,7 +708,7 @@ export function constructTaggedFile(
 			...currentFileContentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
 			...editWindowLines,
 			...currentFileContentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
-		].join('\n');
+		];
 	}
 
 	const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
@@ -722,6 +722,6 @@ export function constructTaggedFile(
 
 	return taggedCurrentFileContentResult.map(clippedTaggedCurrentDoc => ({
 		clippedTaggedCurrentDoc,
-		areaAroundCodeToEdit,
+		areaAroundCodeToEdit: areaAroundCodeToEdit.join('\n'),
 	}));
 }

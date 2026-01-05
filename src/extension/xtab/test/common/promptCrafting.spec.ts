@@ -160,7 +160,7 @@ suite('Paged clipping - current file', () => {
 
 		return createTaggedCurrentFileContentUsingPagedClipping(
 			currentDocLines,
-			areaAroundCodeToEdit,
+			areaAroundCodeToEdit.split('\n'),
 			areaAroundEditWindowLinesRange,
 			computeTokens,
 			pageSize,
