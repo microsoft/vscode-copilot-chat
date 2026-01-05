@@ -30,6 +30,7 @@ export namespace ChatInputPromptTags {
 	export const CURRENT_INPUT = PromptTags.createTag('current_input');
 	export const OPENED_FILES = PromptTags.createTag('opened_files');
 	export const CUSTOM_INSTRUCTIONS = PromptTags.createTag('custom_instructions');
+	export const ACTIVE_SELECTION = PromptTags.createTag('active_selection');
 }
 
 const enum TelemetryEvent {
@@ -108,13 +109,14 @@ export class ChatInputCompletionProvider implements vscode.ChatInlineCompletionI
 
 			const model = models[0];
 
-			const [instructionsContent, openedFilesContent] = await Promise.all([
+			const [instructionsContent, openedFilesContent, selectionContent] = await Promise.all([
 				this.getCustomInstructionsContent(),
 				this.getOpenedFilesContent(),
+				this.getActiveSelectionContent(),
 			]);
 
 			const systemPrompt = this.buildSystemPrompt();
-			const userPrompt = this.buildUserPrompt(input, instructionsContent, openedFilesContent);
+			const userPrompt = this.buildUserPrompt(input, instructionsContent, openedFilesContent, selectionContent);
 
 			const messages = [
 				new vscode.LanguageModelChatMessage(vscode.LanguageModelChatMessageRole.System, systemPrompt),
@@ -126,6 +128,7 @@ export class ChatInputCompletionProvider implements vscode.ChatInlineCompletionI
 				modelFamily,
 				hasInstructions: String(!!instructionsContent),
 				hasOpenedFiles: String(!!openedFilesContent),
+				hasSelection: String(!!selectionContent),
 			});
 
 			const response = await model.sendRequest(messages, {
@@ -185,7 +188,8 @@ Return ONLY the completion text - no quotes, no explanations, no meta-commentary
 	private buildUserPrompt(
 		input: string,
 		instructionsContent: string | undefined,
-		openedFilesContent: string | undefined
+		openedFilesContent: string | undefined,
+		selectionContent: string | undefined
 	): string {
 		const instructionsSection = instructionsContent
 			? `${ChatInputPromptTags.CUSTOM_INSTRUCTIONS.start}
@@ -203,9 +207,17 @@ ${ChatInputPromptTags.OPENED_FILES.end}
 `
 			: '';
 
+		const selectionSection = selectionContent
+			? `${ChatInputPromptTags.ACTIVE_SELECTION.start}
+${selectionContent}
+${ChatInputPromptTags.ACTIVE_SELECTION.end}
+
+`
+			: '';
+
 		return `The developer is typing a prompt in GitHub Copilot Chat.
 
-${instructionsSection}${openedFilesSection}${ChatInputPromptTags.CURRENT_INPUT.start}
+${instructionsSection}${openedFilesSection}${selectionSection}${ChatInputPromptTags.CURRENT_INPUT.start}
 ${input}${PromptTags.CURSOR}
 ${ChatInputPromptTags.CURRENT_INPUT.end}
 `;
@@ -243,6 +255,54 @@ ${ChatInputPromptTags.CURRENT_INPUT.end}
 			return allInstructions.length > 0 ? allInstructions.join('\n\n') : undefined;
 		} catch (error) {
 			this.logService.trace(`[ChatInlineCompletions] Failed to load custom instructions: ${error}`);
+			return undefined;
+		}
+	}
+
+	/**
+	 * Gets the active text selection from the current editor.
+	 */
+	private async getActiveSelectionContent(): Promise<string | undefined> {
+		try {
+			const activeEditor = this.tabsAndEditorsService.activeTextEditor;
+
+			if (!activeEditor) {
+				return undefined;
+			}
+
+			const selection = activeEditor.selection;
+
+			// Only include non-empty selections
+			if (!selection || selection.isEmpty) {
+				return undefined;
+			}
+
+			const doc = activeEditor.document;
+			const uri = URI.from(doc.uri);
+			const filePath = this.workspaceService.asRelativePath(vscode.Uri.from(uri), false);
+			const languageId = doc.languageId;
+
+			const selectedText = doc.getText(selection);
+
+			if (!selectedText.trim()) {
+				return undefined;
+			}
+
+			// Limit selection size to avoid overly long context
+			const maxLines = 50;
+			const lines = selectedText.split('\n');
+			const truncated = lines.length > maxLines;
+			const textToInclude = truncated ? lines.slice(0, maxLines).join('\n') : selectedText;
+
+			const truncatedNote = truncated ? ' (truncated)' : '';
+			const startLine = selection.start.line + 1;
+			const endLine = selection.end.line + 1;
+
+			return `active_selection_file_path: ${filePath} (${languageId})${truncatedNote}
+lines ${startLine}-${endLine}:
+${textToInclude}`;
+		} catch (error) {
+			this.logService.trace(`[ChatInlineCompletions] Failed to gather active selection: ${error}`);
 			return undefined;
 		}
 	}

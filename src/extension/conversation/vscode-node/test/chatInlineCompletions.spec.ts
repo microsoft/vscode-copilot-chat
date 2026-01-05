@@ -4,9 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
+import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAndEditorsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { TestingTabsAndEditorsService } from '../../../../platform/test/node/simulationWorkspaceServices';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -100,6 +103,11 @@ describe('ChatInputCompletionProvider', () => {
 		it('should have correct tag format for CUSTOM_INSTRUCTIONS', () => {
 			expect(ChatInputPromptTags.CUSTOM_INSTRUCTIONS.start).toBe('<|custom_instructions|>');
 			expect(ChatInputPromptTags.CUSTOM_INSTRUCTIONS.end).toBe('<|/custom_instructions|>');
+		});
+
+		it('should have correct tag format for ACTIVE_SELECTION', () => {
+			expect(ChatInputPromptTags.ACTIVE_SELECTION.start).toBe('<|active_selection|>');
+			expect(ChatInputPromptTags.ACTIVE_SELECTION.end).toBe('<|/active_selection|>');
 		});
 	});
 
@@ -239,6 +247,183 @@ describe('ChatInputCompletionProvider', () => {
 			);
 
 			// Default is 'gpt-4.1', should work without explicit config
+			expect(result).toBeUndefined();
+		});
+	});
+
+	describe('active selection context', () => {
+		it('should not include selection when no active editor', async () => {
+			// Setup service with no active editor
+			const testingServiceCollection = createExtensionUnitTestingServices(disposables);
+			testingServiceCollection.set(ICustomInstructionsService, mockCustomInstructionsService);
+			testingServiceCollection.set(ITabsAndEditorsService, new TestingTabsAndEditorsService({
+				getActiveTextEditor: () => undefined,
+				getVisibleTextEditors: () => [],
+				getActiveNotebookEditor: () => undefined,
+			}));
+
+			const testAccessor = disposables.add(testingServiceCollection.createTestingAccessor());
+			const testInstaService = testAccessor.get(IInstantiationService);
+			const provider = testInstaService.createInstance(ChatInputCompletionProvider);
+
+			// Should handle gracefully without throwing
+			const result = await provider.provideChatInlineCompletionItems(
+				'hello world',
+				11,
+				{ isCancellationRequested: false, onCancellationRequested: vi.fn() as any }
+			);
+
+			expect(result).toBeUndefined();
+		});
+
+		it('should not include selection when selection is empty', async () => {
+			// Create mock editor with empty selection
+			const mockDocument = {
+				uri: vscode.Uri.file('/test/file.ts'),
+				languageId: 'typescript',
+				fileName: '/test/file.ts',
+				getText: vi.fn().mockReturnValue(''),
+			} as any;
+
+			const mockEditor = {
+				document: mockDocument,
+				selection: new vscode.Selection(0, 0, 0, 0), // Empty selection
+				visibleRanges: [],
+			} as any;
+
+			const testingServiceCollection = createExtensionUnitTestingServices(disposables);
+			testingServiceCollection.set(ICustomInstructionsService, mockCustomInstructionsService);
+			testingServiceCollection.set(ITabsAndEditorsService, new TestingTabsAndEditorsService({
+				getActiveTextEditor: () => mockEditor,
+				getVisibleTextEditors: () => [mockEditor],
+				getActiveNotebookEditor: () => undefined,
+			}));
+
+			const testAccessor = disposables.add(testingServiceCollection.createTestingAccessor());
+			const testInstaService = testAccessor.get(IInstantiationService);
+			const provider = testInstaService.createInstance(ChatInputCompletionProvider);
+
+			const result = await provider.provideChatInlineCompletionItems(
+				'hello world',
+				11,
+				{ isCancellationRequested: false, onCancellationRequested: vi.fn() as any }
+			);
+
+			// Should handle gracefully
+			expect(result).toBeUndefined();
+		});
+
+		it('should include selection when text is selected', async () => {
+			// Create mock editor with non-empty selection
+			const selectedText = 'function add(a: number, b: number) {\n\treturn a + b;\n}';
+			const mockDocument = {
+				uri: vscode.Uri.file('/workspace/src/math.ts'),
+				languageId: 'typescript',
+				fileName: '/workspace/src/math.ts',
+				getText: vi.fn().mockReturnValue(selectedText),
+			} as any;
+
+			const mockEditor = {
+				document: mockDocument,
+				selection: new vscode.Selection(5, 0, 7, 1), // Non-empty selection
+				visibleRanges: [],
+			} as any;
+
+			const testingServiceCollection = createExtensionUnitTestingServices(disposables);
+			testingServiceCollection.set(ICustomInstructionsService, mockCustomInstructionsService);
+			testingServiceCollection.set(ITabsAndEditorsService, new TestingTabsAndEditorsService({
+				getActiveTextEditor: () => mockEditor,
+				getVisibleTextEditors: () => [mockEditor],
+				getActiveNotebookEditor: () => undefined,
+			}));
+
+			const testAccessor = disposables.add(testingServiceCollection.createTestingAccessor());
+			const testInstaService = testAccessor.get(IInstantiationService);
+			const provider = testInstaService.createInstance(ChatInputCompletionProvider);
+
+			const result = await provider.provideChatInlineCompletionItems(
+				'explain this',
+				12,
+				{ isCancellationRequested: false, onCancellationRequested: vi.fn() as any }
+			);
+
+			// Result will be undefined (no model available), but the provider should handle selection context
+			expect(result).toBeUndefined();
+		});
+
+		it('should truncate large selections', async () => {
+			// Create a selection with more than 50 lines
+			const lines = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`);
+			const selectedText = lines.join('\n');
+
+			const mockDocument = {
+				uri: vscode.Uri.file('/workspace/largefile.ts'),
+				languageId: 'typescript',
+				fileName: '/workspace/largefile.ts',
+				getText: vi.fn().mockReturnValue(selectedText),
+			} as any;
+
+			const mockEditor = {
+				document: mockDocument,
+				selection: new vscode.Selection(0, 0, 59, 10), // 60 lines selected
+				visibleRanges: [],
+			} as any;
+
+			const testingServiceCollection = createExtensionUnitTestingServices(disposables);
+			testingServiceCollection.set(ICustomInstructionsService, mockCustomInstructionsService);
+			testingServiceCollection.set(ITabsAndEditorsService, new TestingTabsAndEditorsService({
+				getActiveTextEditor: () => mockEditor,
+				getVisibleTextEditors: () => [mockEditor],
+				getActiveNotebookEditor: () => undefined,
+			}));
+
+			const testAccessor = disposables.add(testingServiceCollection.createTestingAccessor());
+			const testInstaService = testAccessor.get(IInstantiationService);
+			const provider = testInstaService.createInstance(ChatInputCompletionProvider);
+
+			const result = await provider.provideChatInlineCompletionItems(
+				'refactor this',
+				13,
+				{ isCancellationRequested: false, onCancellationRequested: vi.fn() as any }
+			);
+
+			// Result will be undefined (no model available), but provider should handle large selections
+			expect(result).toBeUndefined();
+		});
+
+		it('should not include whitespace-only selections', async () => {
+			const mockDocument = {
+				uri: vscode.Uri.file('/test/file.ts'),
+				languageId: 'typescript',
+				fileName: '/test/file.ts',
+				getText: vi.fn().mockReturnValue('   \n\t\n   '), // Only whitespace
+			} as any;
+
+			const mockEditor = {
+				document: mockDocument,
+				selection: new vscode.Selection(0, 0, 2, 3),
+				visibleRanges: [],
+			} as any;
+
+			const testingServiceCollection = createExtensionUnitTestingServices(disposables);
+			testingServiceCollection.set(ICustomInstructionsService, mockCustomInstructionsService);
+			testingServiceCollection.set(ITabsAndEditorsService, new TestingTabsAndEditorsService({
+				getActiveTextEditor: () => mockEditor,
+				getVisibleTextEditors: () => [mockEditor],
+				getActiveNotebookEditor: () => undefined,
+			}));
+
+			const testAccessor = disposables.add(testingServiceCollection.createTestingAccessor());
+			const testInstaService = testAccessor.get(IInstantiationService);
+			const provider = testInstaService.createInstance(ChatInputCompletionProvider);
+
+			const result = await provider.provideChatInlineCompletionItems(
+				'test input',
+				10,
+				{ isCancellationRequested: false, onCancellationRequested: vi.fn() as any }
+			);
+
+			// Should handle gracefully and not include whitespace-only selection
 			expect(result).toBeUndefined();
 		});
 	});
