@@ -54,7 +54,11 @@ export interface FetchOptions {
 	headers?: { [name: string]: string };
 	body?: string;
 	timeout?: number;
-	json?: any;
+	/**
+	 * If `json` is provided, it will be stringified using `JSON.stringify` and sent as the body with
+	 * the `Content-Type` header set to `application/json`.
+	 */
+	json?: unknown;
 	method?: 'GET' | 'POST';
 	signal?: IAbortSignal;
 	retryFallbacks?: boolean;

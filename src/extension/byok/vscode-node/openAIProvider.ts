@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IExperimentationService } from '../../../lib/node/chatLibMain';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -43,13 +43,10 @@ export class OAIBYOKLMProvider extends AbstractOpenAICompatibleLMProvider {
 
 	protected override getModelInfo(modelId: string, modelUrl: string): IChatModelInformation {
 		const modelInfo = super.getModelInfo(modelId, modelUrl);
-		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._expService);
-		if (enableResponsesApi) {
-			modelInfo.supported_endpoints = [
-				ModelSupportedEndpoint.ChatCompletions,
-				ModelSupportedEndpoint.Responses
-			];
-		}
+		modelInfo.supported_endpoints = [
+			ModelSupportedEndpoint.ChatCompletions,
+			ModelSupportedEndpoint.Responses
+		];
 		return modelInfo;
 	}
 }

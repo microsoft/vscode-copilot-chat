@@ -6,17 +6,17 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
+import { l10n } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IStringDictionary } from '../../../util/vs/base/common/collections';
 import { randomPath } from '../../../util/vs/base/common/extpath';
 import { isObject } from '../../../util/vs/base/common/types';
-import { localize } from '../../../util/vs/nls';
 import { ValidatePackageErrorType, ValidatePackageResult } from './commands';
 import { CommandExecutor, ICommandExecutor } from './util';
 
 interface NuGetServiceIndexResponse {
-	resources?: Array<{ "@id": string; "@type": string }>;
+	resources?: Array<{ '@id': string; '@type': string }>;
 }
 
 interface DotnetPackageSearchOutput {
@@ -39,7 +39,7 @@ interface DotnetCli {
 	args: Array<string>;
 }
 
-const MCP_SERVER_SCHEMA_2025_07_09_GH = "https://modelcontextprotocol.io/schemas/draft/2025-07-09/server.json";
+const MCP_SERVER_SCHEMA_2025_07_09_GH = 'https://modelcontextprotocol.io/schemas/draft/2025-07-09/server.json';
 
 export class NuGetMcpSetup {
 	constructor(
@@ -69,10 +69,10 @@ export class NuGetMcpSetup {
 			if (errorCode === 'ENOENT') {
 				return {
 					state: 'error',
-					error: localize("mcp.setup.dotnetNotFound", "The '{0}' command was not found. .NET SDK 10 or newer must be installed and available in PATH.", this.dotnet.command),
+					error: l10n.t("The '{0}' command was not found. .NET SDK 10 or newer must be installed and available in PATH.", this.dotnet.command),
 					errorType: ValidatePackageErrorType.MissingCommand,
 					helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
-					helpUriLabel: localize("mcp.setup.installDotNetSdk", "Install .NET SDK"),
+					helpUriLabel: l10n.t("Install .NET SDK"),
 				};
 			} else {
 				throw error;
@@ -84,10 +84,10 @@ export class NuGetMcpSetup {
 		if (dotnetMajorVersion < 10) {
 			return {
 				state: 'error',
-				error: localize("mcp.setup.badDotnetSdkVersion", "The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
+				error: l10n.t("The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
 				errorType: ValidatePackageErrorType.BadCommandVersion,
 				helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
-				helpUriLabel: localize("mcp.setup.installDotNetSdk", "Update .NET SDK"),
+				helpUriLabel: l10n.t("Update .NET SDK"),
 			};
 		}
 
@@ -97,7 +97,7 @@ export class NuGetMcpSetup {
 			return {
 				state: 'error',
 				errorType: ValidatePackageErrorType.NotFound,
-				error: localize("mcp.setup.nugetPackageNotFound", "Package {0} does not exist on NuGet.org.", id)
+				error: l10n.t("Package {0} does not exist on NuGet.org.", id)
 			};
 		}
 
@@ -121,7 +121,7 @@ export class NuGetMcpSetup {
 
 	async getServerManifest(id: string, version: string): Promise<string | undefined> {
 		this.logService.info(`Reading .mcp/server.json from NuGet package ${id}@${version}.`);
-		const installDir = randomPath(os.tmpdir(), "vscode-nuget-mcp");
+		const installDir = randomPath(os.tmpdir(), 'vscode-nuget-mcp');
 		try {
 			// perform a local tool install using the .NET CLI
 			// this warms the cache (user packages folder) so dnx will be fast
@@ -260,7 +260,7 @@ stderr: ${result.stderr}`);
 	}
 
 	async installLocalTool(id: string, version: string, cwd: string): Promise<boolean> {
-		const args = this.dotnet.args.concat(["tool", "install", `${id}@${version}`, "--source", this.source, "--local", "--create-manifest-if-needed"]);
+		const args = this.dotnet.args.concat(['tool', 'install', `${id}@${version}`, '--source', this.source, '--local', '--create-manifest-if-needed']);
 		const installResult = await this.commandExecutor.executeWithTimeout(this.dotnet.command, args, cwd);
 
 		if (installResult.exitCode !== 0) {
@@ -285,7 +285,7 @@ stderr: ${installResult.stderr}`);
 			for (const pkg of manifest.packages) {
 				if (!pkg) { continue; }
 				const registryType = pkg.registryType ?? pkg.registry_type ?? pkg.registry_name;
-				if (registryType === "nuget") {
+				if (registryType === 'nuget') {
 					if (pkg.name && pkg.name !== id) {
 						this.logService.warn(`Package name mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.name}.`);
 						pkg.name = id;
@@ -305,8 +305,8 @@ stderr: ${installResult.stderr}`);
 		}
 
 		// the original .NET MCP server project template used a schema URL that is deprecated
-		if (manifest["$schema"] === MCP_SERVER_SCHEMA_2025_07_09_GH || !manifest["$schema"]) {
-			manifest["$schema"] = McpServerSchemaVersion_v2025_07_09.SCHEMA;
+		if (manifest['$schema'] === MCP_SERVER_SCHEMA_2025_07_09_GH || !manifest['$schema']) {
+			manifest['$schema'] = McpServerSchemaVersion_v2025_07_09.SCHEMA;
 		}
 
 		// add missing properties to improve mapping
@@ -318,7 +318,7 @@ stderr: ${installResult.stderr}`);
 	}
 
 	async readServerManifest(packagesDir: string, id: string, version: string): Promise<string | undefined> {
-		const serverJsonPath = path.join(packagesDir, id.toLowerCase(), version.toLowerCase(), ".mcp", "server.json");
+		const serverJsonPath = path.join(packagesDir, id.toLowerCase(), version.toLowerCase(), '.mcp', 'server.json');
 		try {
 			await fs.access(serverJsonPath, fs.constants.R_OK);
 		} catch {

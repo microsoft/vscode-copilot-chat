@@ -194,7 +194,7 @@ suite.skip('Conversation telemetry tests', { timeout: 10000 }, function () {
 	test('Test getCodeBlocks with multiple nested code blocks', async function () {
 		// Set up inputs
 		const multiNested =
-			"\n```\n```python\ndef hello_world():\n    print('Hello, world!'')\n```\n```\n\nThis will render as:\n\n```python\ndef hello_world():\n    print('Hello, world!'')\n```";
+			'\n```\n```python\ndef hello_world():\n    print(\'Hello, world!\'\')\n```\n```\n\nThis will render as:\n\n```python\ndef hello_world():\n    print(\'Hello, world!\'\')\n```';
 
 		// Test multi nested case
 		const multiNestedResult = getCodeBlocks(multiNested);

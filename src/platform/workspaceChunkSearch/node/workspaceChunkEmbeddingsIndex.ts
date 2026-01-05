@@ -25,7 +25,7 @@ import { ILogService } from '../../log/common/logService';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WorkspaceChunkSearchOptions } from '../common/workspaceChunkSearch';
-import { BuildIndexTriggerReason } from './codeSearch/codeSearchChunkSearch';
+import { BuildIndexTriggerReason } from './codeSearch/codeSearchRepo';
 import { createWorkspaceChunkAndEmbeddingCache, IWorkspaceChunkAndEmbeddingCache } from './workspaceChunkAndEmbeddingCache';
 import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
 
@@ -450,6 +450,6 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 	}
 
 	private async tryGetAuthToken(options: AuthenticationGetSessionOptions = { createIfNone: true }): Promise<string | undefined> {
-		return (await this._authService.getAnyGitHubSession(options))?.accessToken;
+		return (await this._authService.getGitHubSession('any', options))?.accessToken;
 	}
 }

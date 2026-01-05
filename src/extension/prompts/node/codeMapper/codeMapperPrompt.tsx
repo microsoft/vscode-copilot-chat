@@ -92,11 +92,11 @@ export class CodeMapperPatchRewritePrompt extends PromptElement<CodeMapperPrompt
 							<PatchEditInputCodeBlock
 								uri={exampleUri}
 								languageId='typescript'
-								code={["import { readFileSync } from 'fs';", "", "class C { }"]}
+								code={[`import { readFileSync } from 'fs';`, '', 'class C { }']}
 							/>
 							< br />
 							This is the code block that represents a suggestion for a code change:<br />
-							<UnsafeCodeBlock code={"private _stream: Stream;"} languageId={'typescript'} includeFilepath={false} />
+							<UnsafeCodeBlock code={'private _stream: Stream;'} languageId={'typescript'} includeFilepath={false} />
 							< br />
 							Please find out how the code block can be applied to the editor.
 						</Tag>
@@ -106,13 +106,13 @@ export class CodeMapperPatchRewritePrompt extends PromptElement<CodeMapperPrompt
 									[
 										{
 											uri: exampleUri,
-											find: ["import { readFileSync } from 'fs';",],
-											replace: ["import { readFileSync } from 'fs';", "import { Stream } from 'stream';"]
+											find: [`import { readFileSync } from 'fs';`,],
+											replace: [`import { readFileSync } from 'fs';`, `import { Stream } from 'stream';`]
 										},
 										{
 											uri: exampleUri,
-											find: ["class C { }"],
-											replace: ["class C {", "\tprivate _stream: Stream;", "}"]
+											find: ['class C { }'],
+											replace: ['class C {', '\tprivate _stream: Stream;', '}']
 										},
 
 									]

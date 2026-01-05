@@ -11,36 +11,36 @@ suite('filter recording for sensitive files', () => {
 	test('should filter out settings.json files', () => {
 		const log: LogEntry[] = [
 			{
-				documentType: "workspaceRecording@1.0",
-				kind: "header",
-				repoRootUri: "file:///path/to/repo",
+				documentType: 'workspaceRecording@1.0',
+				kind: 'header',
+				repoRootUri: 'file:///path/to/repo',
 				time: 1733253792609,
-				uuid: "233d78f2-202a-4d3e-9b90-0f1acc058125"
+				uuid: '233d78f2-202a-4d3e-9b90-0f1acc058125'
 			},
 			{
-				kind: "documentEncountered",
+				kind: 'documentEncountered',
 				id: 1,
-				relativePath: "package.json",
+				relativePath: 'package.json',
 				time: 1733253735332
 			},
 			{
-				kind: "documentEncountered",
+				kind: 'documentEncountered',
 				id: 2,
-				relativePath: ".vscode/settings.json",
+				relativePath: '.vscode/settings.json',
 				time: 1733253735340
 			},
 			{
-				kind: "setContent",
+				kind: 'setContent',
 				id: 1,
 				v: 1,
-				content: "{ \"name\": \"example\" }",
+				content: '{ "name": "example" }',
 				time: 1733253735332
 			},
 			{
-				kind: "setContent",
+				kind: 'setContent',
 				id: 2,
 				v: 1,
-				content: "{ \"sensitive\": \"data\" }",
+				content: '{ "sensitive": "data" }',
 				time: 1733253735340
 			}
 		];

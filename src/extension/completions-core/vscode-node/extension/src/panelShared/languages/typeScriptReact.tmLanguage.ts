@@ -4634,13 +4634,13 @@ export const typescriptreact: LanguageInput = {
 		},
 		'qstring-single': {
 			name: 'string.quoted.single.tsx',
-			begin: "'",
+			begin: `'`,
 			beginCaptures: {
 				'0': {
 					name: 'punctuation.definition.string.begin.tsx',
 				},
 			},
-			end: "(\\')|((?:[^\\\\\\n])$)",
+			end: `(\\')|((?:[^\\\\\\n])$)`,
 			endCaptures: {
 				'1': {
 					name: 'punctuation.definition.string.end.tsx',
@@ -5448,7 +5448,7 @@ export const typescriptreact: LanguageInput = {
 				},
 				{
 					contentName: 'variable.other.jsdoc',
-					begin: "((@)(?:default(?:value)?|license|version))\\s+(([''\"]))",
+					begin: `((@)(?:default(?:value)?|license|version))\\s+(([''"]))`,
 					beginCaptures: {
 						'1': {
 							name: 'storage.type.class.jsdoc',
@@ -5901,8 +5901,8 @@ export const typescriptreact: LanguageInput = {
 		},
 		'jsx-string-single-quoted': {
 			name: 'string.quoted.single.tsx',
-			begin: "'",
-			end: "'",
+			begin: `'`,
+			end: `'`,
 			beginCaptures: {
 				'0': {
 					name: 'punctuation.definition.string.begin.tsx',

@@ -20,16 +20,24 @@ import {
 	window,
 } from 'vscode';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
-import { getInlineCompletions } from '../../../lib/src/inlineCompletion';
+import { GhostText } from '../../../lib/src/inlineCompletion';
 import { telemetry } from '../../../lib/src/telemetry';
 import { wrapDoc } from '../textDocumentManager';
 
 const postInsertCmdName = '_github.copilot.ghostTextPostInsert2';
 
 export class GhostTextProvider implements InlineCompletionItemProvider {
-	constructor(@IInstantiationService private readonly instantiationService: IInstantiationService) { }
+
+	private readonly ghostText: GhostText;
+
+	constructor(
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) {
+		this.ghostText = this.instantiationService.createInstance(GhostText);
+	}
 
 	async provideInlineCompletionItems(
 		vscodeDoc: TextDocument,
@@ -50,7 +58,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 
 		const formattingOptions = window.visibleTextEditors.find(e => e.document.uri === vscodeDoc.uri)?.options;
 
-		const rawCompletions = await this.instantiationService.invokeFunction(getInlineCompletions, textDocument, position, token, {
+		const rawCompletions = await this.ghostText.getInlineCompletions(textDocument, position, token, {
 			isCycling: context.triggerKind === InlineCompletionTriggerKind.Invoke,
 			selectedCompletionInfo: context.selectedCompletionInfo,
 			formattingOptions,
@@ -64,11 +72,16 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 		const items = rawCompletions.map(completion => {
 			const { start, end } = completion.range;
 			const newRange = new Range(start.line, start.character, end.line, end.character);
-			return new InlineCompletionItem(completion.insertText, newRange, {
-				title: 'Completion Accepted', // Unused
-				command: postInsertCmdName,
-				arguments: [completion],
-			});
+			return {
+				insertText: completion.insertText,
+				range: newRange,
+				command: {
+					title: 'Completion Accepted', // Unused
+					command: postInsertCmdName,
+					arguments: [completion],
+				},
+				correlationId: createCorrelationId('completions'),
+			};
 		});
 
 		return { items };

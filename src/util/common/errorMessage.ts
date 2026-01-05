@@ -1,18 +1,18 @@
-//!!! DO NOT modify, this file was COPIED from 'microsoft/vscode'
-
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as arrays from './arrays';
-import * as types from './types';
-import * as nls from '../../nls';
-import { IAction } from './actions';
+import * as l10n from '@vscode/l10n';
+import * as arrays from '../vs/base/common/arrays';
+import * as types from '../vs/base/common/types';
 
-function exceptionToErrorMessage(exception: any, verbose: boolean): string {
-	if (verbose && (exception.stack || exception.stacktrace)) {
-		return nls.localize('stackTrace.format', "{0}: {1}", detectSystemErrorMessage(exception), stackToString(exception.stack) || stackToString(exception.stacktrace));
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+function exceptionToErrorMessage(exception: unknown, verbose: boolean): string {
+	if (verbose && ((exception as any).stack || (exception as any).stacktrace)) {
+		const stackStr = stackToString((exception as any).stack) || stackToString((exception as any).stacktrace);
+		return `${detectSystemErrorMessage(exception)}: ${stackStr || ''}`;
 	}
 
 	return detectSystemErrorMessage(exception);
@@ -30,15 +30,15 @@ function detectSystemErrorMessage(exception: any): string {
 
 	// Custom node.js error from us
 	if (exception.code === 'ERR_UNC_HOST_NOT_ALLOWED') {
-		return `${exception.message}. Please update the 'security.allowedUNCHosts' setting if you want to allow this host.`;
+		return l10n.t("{0}. Please update the '{1}' setting if you want to allow this host.", exception.message, 'security.allowedUNCHosts');
 	}
 
 	// See https://nodejs.org/api/errors.html#errors_class_system_error
 	if (typeof exception.code === 'string' && typeof exception.errno === 'number' && typeof exception.syscall === 'string') {
-		return nls.localize('nodeExceptionMessage', "A system error occurred ({0})", exception.message);
+		return l10n.t('A system error occurred ({0})', exception.message);
 	}
 
-	return exception.message || nls.localize('error.defaultMessage', "An unknown error occurred. Please consult the log for more details.");
+	return exception.message || l10n.t('An unknown error occurred. Please consult the log for more details.');
 }
 
 /**
@@ -49,7 +49,7 @@ function detectSystemErrorMessage(exception: any): string {
  */
 export function toErrorMessage(error: any = null, verbose: boolean = false): string {
 	if (!error) {
-		return nls.localize('error.defaultMessage', "An unknown error occurred. Please consult the log for more details.");
+		return l10n.t('An unknown error occurred. Please consult the log for more details.');
 	}
 
 	if (Array.isArray(error)) {
@@ -57,7 +57,7 @@ export function toErrorMessage(error: any = null, verbose: boolean = false): str
 		const msg = toErrorMessage(errors[0], verbose);
 
 		if (errors.length > 1) {
-			return nls.localize('error.moreErrors', "{0} ({1} errors in total)", msg, errors.length);
+			return l10n.t('{0} ({1} errors in total)', msg, errors.length);
 		}
 
 		return msg;
@@ -87,29 +87,5 @@ export function toErrorMessage(error: any = null, verbose: boolean = false): str
 		return error.message;
 	}
 
-	return nls.localize('error.defaultMessage', "An unknown error occurred. Please consult the log for more details.");
-}
-
-
-export interface IErrorWithActions extends Error {
-	actions: IAction[];
-}
-
-export function isErrorWithActions(obj: unknown): obj is IErrorWithActions {
-	const candidate = obj as IErrorWithActions | undefined;
-
-	return candidate instanceof Error && Array.isArray(candidate.actions);
-}
-
-export function createErrorWithActions(messageOrError: string | Error, actions: IAction[]): IErrorWithActions {
-	let error: IErrorWithActions;
-	if (typeof messageOrError === 'string') {
-		error = new Error(messageOrError) as IErrorWithActions;
-	} else {
-		error = messageOrError as IErrorWithActions;
-	}
-
-	error.actions = actions;
-
-	return error;
+	return l10n.t('An unknown error occurred. Please consult the log for more details.');
 }

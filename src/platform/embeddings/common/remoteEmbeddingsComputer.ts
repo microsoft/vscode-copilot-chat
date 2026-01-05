@@ -63,7 +63,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 				return embeddings ?? { type: embeddingType, values: [] };
 			}
 
-			const token = (await this._authService.getAnyGitHubSession({ silent: true }))?.accessToken;
+			const token = (await this._authService.getGitHubSession('any', { silent: true }))?.accessToken;
 			if (!token) {
 				throw new Error('No authentication token available');
 			}

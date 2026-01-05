@@ -255,7 +255,7 @@ class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
 					}
 
 					return <>
-						<Tag name="error" attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diagnosticSeverityMap[d.severity] }}>
+						<Tag name='error' attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diagnosticSeverityMap[d.severity] }}>
 							{d.message}
 						</Tag>
 						{cookbook && <DiagnosticSuggestedFix cookbook={cookbook} />}

@@ -89,7 +89,7 @@ testFamilies.forEach(family => {
 
 		async function agentPromptToString(accessor: ITestingServicesAccessor, promptContext: IBuildPromptContext, otherProps?: Partial<AgentPromptProps>): Promise<string> {
 			const instaService = accessor.get(IInstantiationService);
-			const endpoint = family === "default"
+			const endpoint = family === 'default'
 				? instaService.createInstance(MockEndpoint, undefined)
 				: instaService.createInstance(MockEndpoint, family);
 			if (!promptContext.conversation) {

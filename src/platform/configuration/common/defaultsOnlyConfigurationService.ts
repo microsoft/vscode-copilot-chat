@@ -5,7 +5,7 @@
 
 import type { ConfigurationScope } from 'vscode';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { AbstractConfigurationService, BaseConfig, Config, ExperimentBasedConfig, ExperimentBasedConfigType, InspectConfigResult } from './configurationService';
+import { AbstractConfigurationService, BaseConfig, Config, ExperimentBasedConfig, ExperimentBasedConfigType, globalConfigRegistry, InspectConfigResult } from './configurationService';
 
 /** Provides only the default values, ignoring the user's settings or exp. */
 
@@ -63,6 +63,26 @@ export class DefaultsOnlyConfigurationService extends AbstractConfigurationServi
 		}
 
 		return this.getDefaultValue(key);
+	}
+
+	override updateExperimentBasedConfiguration(treatments: string[]): void {
+		if (treatments.length === 0) {
+			return;
+		}
+
+		// Fire simulated event which checks if a configuration is affected in the treatments
+		this._onDidChangeConfiguration.fire({
+			affectsConfiguration: (section: string, _scope?: ConfigurationScope) => {
+				if (treatments.some(t => t.startsWith(`config.${section}`))) {
+					return true;
+				}
+				const oldId = globalConfigRegistry.configs.get(section)?.fullyQualifiedOldId;
+				if (oldId && treatments.some(t => t.startsWith(`config.${oldId}`))) {
+					return true;
+				}
+				return false;
+			}
+		});
 	}
 
 	override dumpConfig(): { [key: string]: string } {

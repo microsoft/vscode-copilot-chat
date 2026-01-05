@@ -29,47 +29,37 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 			return;
 		}
 
-		const canceledBundle: SettingsSearchResult = {
-			query,
-			kind: SettingsSearchResultKind.CANCELED,
-			settings: []
-		};
-
+		// Start searching for embedding results.
 		let embeddingResult: Embeddings;
 		try {
 			embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, new TelemetryCorrelationId('SettingsEditorSearchServiceImpl::provideSettingsSearchResults'), token);
 		} catch {
-			if (token.isCancellationRequested) {
-				progress.report(canceledBundle);
-				return;
-			}
-
-			progress.report({
-				query,
-				kind: SettingsSearchResultKind.EMBEDDED,
-				settings: []
-			});
+			this.reportEmptyEmbeddingsResult(query, progress);
 			if (!options.embeddingsOnly) {
-				progress.report({
-					query,
-					kind: SettingsSearchResultKind.LLM_RANKED,
-					settings: []
-				});
+				this.reportEmptyLLMRankedResult(query, progress);
 			}
 			return;
 		}
 
-		if (token.isCancellationRequested) {
-			progress.report(canceledBundle);
+		if (token.isCancellationRequested || !embeddingResult || embeddingResult.values.length === 0) {
+			this.reportEmptyEmbeddingsResult(query, progress);
+			if (!options.embeddingsOnly) {
+				this.reportEmptyLLMRankedResult(query, progress);
+			}
 			return;
 		}
 
 		await this.embeddingIndex.loadIndexes();
 		const embeddingSettings: SettingListItem[] = this.embeddingIndex.settingsIndex.nClosestValues(embeddingResult.values[0], 25);
 		if (token.isCancellationRequested) {
-			progress.report(canceledBundle);
+			this.reportEmptyEmbeddingsResult(query, progress);
+			if (!options.embeddingsOnly) {
+				this.reportEmptyLLMRankedResult(query, progress);
+			}
 			return;
 		}
+
+		// Report final embedding results.
 		progress.report({
 			query,
 			kind: SettingsSearchResultKind.EMBEDDED,
@@ -80,13 +70,10 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 			return;
 		}
 
+		// Start searching LLM-ranked results.
 		const copilotToken = await this.authenticationService.getCopilotToken();
 		if (embeddingSettings.length === 0 || copilotToken.isFreeUser || copilotToken.isNoAuthUser) {
-			progress.report({
-				query,
-				kind: SettingsSearchResultKind.LLM_RANKED,
-				settings: []
-			});
+			this.reportEmptyLLMRankedResult(query, progress);
 			return;
 		}
 
@@ -95,13 +82,31 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 		const generator = this.instantiationService.createInstance(SettingsEditorSearchResultsSelector);
 		const llmSearchSuggestions = await generator.selectTopSearchResults(endpoint, query, embeddingSettings, token);
 		if (token.isCancellationRequested) {
-			progress.report(canceledBundle);
+			this.reportEmptyLLMRankedResult(query, progress);
 			return;
 		}
+
+		// Report final LLM-ranked results.
 		progress.report({
 			query,
 			kind: SettingsSearchResultKind.LLM_RANKED,
 			settings: llmSearchSuggestions
+		});
+	}
+
+	private reportEmptyEmbeddingsResult(query: string, progress: Progress<SettingsSearchResult>): void {
+		progress.report({
+			query,
+			kind: SettingsSearchResultKind.EMBEDDED,
+			settings: []
+		});
+	}
+
+	private reportEmptyLLMRankedResult(query: string, progress: Progress<SettingsSearchResult>): void {
+		progress.report({
+			query,
+			kind: SettingsSearchResultKind.LLM_RANKED,
+			settings: []
 		});
 	}
 }

@@ -71,62 +71,62 @@ export class InlineEditRequestLogContext {
 
 		if (this._nextEditRequest) {
 			lines.push(`## Latest user edits ${isCachedStr}`);
-			lines.push("<details open><summary>Edit</summary>\n");
+			lines.push('<details open><summary>Edit</summary>\n');
 			lines.push(this._nextEditRequest.toMarkdown());
-			lines.push("\n</details>\n");
+			lines.push('\n</details>\n');
 		}
 
 		if (this._diagnosticsResultEdit) {
 			lines.push(`## Proposed diagnostics suggestion ${this._nesTypePicked === 'diagnostics' ? '(Picked)' : '(Not Picked)'}`);
-			lines.push("<details open><summary>Edit</summary>\n");
-			lines.push("``` patch");
+			lines.push('<details open><summary>Edit</summary>\n');
+			lines.push('``` patch');
 			lines.push(this._diagnosticsResultEdit.toString());
-			lines.push("```");
-			lines.push("\n</details>\n");
+			lines.push('```');
+			lines.push('\n</details>\n');
 		}
 
 		if (this._resultEdit) {
 			lines.push(`## Proposed inline suggestion ${isCachedStr}`);
-			lines.push("<details open><summary>Edit</summary>\n");
-			lines.push("``` patch");
+			lines.push('<details open><summary>Edit</summary>\n');
+			lines.push('``` patch');
 			lines.push(this._resultEdit.toString());
-			lines.push("```");
-			lines.push("\n</details>\n");
+			lines.push('```');
+			lines.push('\n</details>\n');
 		}
 
 		if (this.prompt) {
 			lines.push(`## Prompt ${isCachedStr}`);
-			lines.push("<details><summary>Click to view</summary>\n");
+			lines.push('<details><summary>Click to view</summary>\n');
 			const e = this.prompt;
-			lines.push("````");
+			lines.push('````');
 			lines.push(...e.split('\n'));
-			lines.push("````");
-			lines.push("\n</details>\n");
+			lines.push('````');
+			lines.push('\n</details>\n');
 		}
 
 		if (this.error) {
 			lines.push(`## Error ${isCachedStr}`);
-			lines.push("```");
+			lines.push('```');
 			lines.push(errors.toString(errors.fromUnknown(this.error)));
-			lines.push("```");
+			lines.push('```');
 		}
 
 		if (this.response) {
 			lines.push(`## Response ${isCachedStr}`);
-			lines.push("<details><summary>Click to view</summary>\n");
-			lines.push("````");
+			lines.push('<details><summary>Click to view</summary>\n');
+			lines.push('````');
 			lines.push(this.response);
-			lines.push("````");
-			lines.push("\n</details>\n");
+			lines.push('````');
+			lines.push('\n</details>\n');
 		}
 
 		if (this._responseResults) {
 			lines.push(`## Response Results ${isCachedStr}`);
-			lines.push("<details><summary>Click to view</summary>\n");
-			lines.push("```");
+			lines.push('<details><summary>Click to view</summary>\n');
+			lines.push('```');
 			lines.push(yaml.stringify(this._responseResults, null, '\t'));
-			lines.push("```");
-			lines.push("\n</details>\n");
+			lines.push('```');
+			lines.push('\n</details>\n');
 		}
 
 		if (this._isAccepted !== undefined) {
@@ -134,19 +134,19 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this._logs.length > 0) {
-			lines.push("## Logs");
-			lines.push("<details open><summary>Logs</summary>\n");
+			lines.push('## Logs');
+			lines.push('<details open><summary>Logs</summary>\n');
 			lines.push(...this._logs);
-			lines.push("\n</details>\n");
+			lines.push('\n</details>\n');
 		}
 
 		if (this._trace.length > 0) {
-			lines.push("## Trace");
-			lines.push("<details open><summary>Trace</summary>\n");
-			lines.push("```");
+			lines.push('## Trace');
+			lines.push('<details open><summary>Trace</summary>\n');
+			lines.push('```');
 			lines.push(...this._trace);
-			lines.push("```");
-			lines.push("\n</details>\n");
+			lines.push('```');
+			lines.push('\n</details>\n');
 		}
 
 		return lines.join('\n');
@@ -158,23 +158,27 @@ export class InlineEditRequestLogContext {
 
 		if (this._nesTypePicked === 'diagnostics' && this._diagnosticsResultEdit) {
 			lines.push(`## Result (Diagnostics):`);
-			lines.push("``` patch");
+			lines.push('``` patch');
 			lines.push(this._diagnosticsResultEdit.toString());
-			lines.push("```");
+			lines.push('```');
 		} else if (this._nesTypePicked === 'llm' && this._resultEdit) {
 			lines.push(`## Result:`);
-			lines.push("``` patch");
-			lines.push(this._resultEdit.toString());
-			lines.push("```");
+			lines.push('``` patch');
+			if (typeof this._resultEdit === 'string') {
+				lines.push(this._resultEdit);
+			} else {
+				lines.push(this._resultEdit.toString());
+			}
+			lines.push('```');
 		} else {
 			lines.push(`## Result: <NOT-SET>`);
 		}
 
 		if (this.error) {
 			lines.push(`## Error:`);
-			lines.push("```");
+			lines.push('```');
 			lines.push(errors.toString(errors.fromUnknown(this.error)));
-			lines.push("```");
+			lines.push('```');
 		}
 
 		lines.push(`### Info:`);
@@ -200,11 +204,11 @@ export class InlineEditRequestLogContext {
 		this._nextEditRequest = nextEditRequest;
 	}
 
-	private _resultEdit: RootedLineEdit | undefined = undefined;
+	private _resultEdit: RootedLineEdit | string | undefined = undefined;
 
-	setResult(resultEdit: RootedLineEdit) {
+	setResult(resultEditOrPatchString: RootedLineEdit | string) {
 		this._isVisible = true;
-		this._resultEdit = resultEdit;
+		this._resultEdit = resultEditOrPatchString;
 	}
 
 	protected _diagnosticsResultEdit: RootedLineEdit | undefined = undefined;

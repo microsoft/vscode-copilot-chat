@@ -6,22 +6,25 @@ import type tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
-import type { __String } from 'typescript/lib/tsserverlibrary';
 import { PrepareNesRenameResponse, RenameKind } from './protocol';
 import { Symbols } from './typescripts';
 
 export class PrepareNesRenameResult {
 
-	private canRename: RenameKind;
+	private canRename: RenameKind | undefined;
 	private oldName: string | undefined;
 	private reason: string | undefined;
 	private timedOut: boolean;
 
 	constructor() {
-		this.canRename = RenameKind.no;
+		this.canRename = undefined;
 		this.oldName = undefined;
 		this.reason = undefined;
 		this.timedOut = false;
+	}
+
+	public getCanRename(): RenameKind | undefined {
+		return this.canRename;
 	}
 
 	public setCanRename(value: RenameKind.no, reason?: string): PrepareNesRenameResult;
@@ -65,6 +68,45 @@ export class PrepareNesRenameResult {
 	}
 }
 
+class DeclarationChecker {
+
+	private readonly result: PrepareNesRenameResult;
+	private readonly symbol: tt.Symbol;
+
+	constructor(result: PrepareNesRenameResult, symbol: tt.Symbol) {
+		this.result = result;
+		this.symbol = symbol;
+	}
+
+	public checkDeclarations(): void {
+		const declarations: tt.Declaration[] | undefined = this.symbol.getDeclarations();
+		if (declarations === undefined || declarations.length <= 1) {
+			return;
+		}
+		let withBody = 0;
+		const signatures: Set<string> = new Set<string>();
+		for (const declaration of declarations) {
+			if (ts.isMethodDeclaration(declaration) || ts.isFunctionDeclaration(declaration)) {
+				if (declaration.body !== undefined) {
+					withBody++;
+					if (withBody === 2) {
+						this.result.setCanRename(RenameKind.no, 'The symbol has multiple declarations with body');
+						return;
+					}
+					continue;
+				}
+			}
+			const text = declaration.getText();
+			if (signatures.has(text)) {
+				this.result.setCanRename(RenameKind.no, 'The symbol has multiple identical declarations');
+				return;
+			} else {
+				signatures.add(text);
+			}
+		}
+	}
+}
+
 export function validateNesRename(result: PrepareNesRenameResult, program: tt.Program, node: tt.Node, oldName: string, newName: string, token: tt.CancellationToken): void {
 	const symbols = new Symbols(program);
 	const symbol = symbols.getLeafSymbolAtLocation(node);
@@ -72,9 +114,34 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 		result.setCanRename(RenameKind.no, 'No symbol found at location');
 		return;
 	}
+	const parent = Symbols.getParent(symbol);
+	const declarations: tt.Declaration[] | undefined = symbol.getDeclarations();
+	if (declarations !== undefined && declarations.length > 1) {
+		// If the symbol has more than one declaration we need to be careful to rename it. The second declaration
+		// could simply be a copy paste of the previous one and renaming it could cause some bad side effects.
+		if (Symbols.isFunction(symbol)) {
+			const checker = new DeclarationChecker(result, symbol);
+			checker.checkDeclarations();
+			if (result.getCanRename() === RenameKind.no) {
+				return;
+			}
+		} else if (!Symbols.isMethod(symbol) || parent === undefined) {
+			result.setCanRename(RenameKind.no, 'The symbol has multiple declarations');
+			return;
+		} else {
+			// We do have a method with multiple declarations.
+			if (Symbols.isInterface(parent) || Symbols.isTypeLiteral(parent) || Symbols.isClass(parent)) {
+				const checker = new DeclarationChecker(result, symbol);
+				checker.checkDeclarations();
+				if (result.getCanRename() === RenameKind.no) {
+					return;
+				}
+			}
+		}
+	}
+
 	const escapedNewName = ts.escapeLeadingUnderscores(newName);
 	// First see if the symbol has a parent. If so the new name must not conflict with existing members.
-	const parent = Symbols.getParent(symbol);
 	if (parent !== undefined) {
 		const members = parent.members;
 		if (members !== undefined && members.has(escapedNewName)) {
@@ -104,22 +171,78 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 		}
 	}
 	token.throwIfCancellationRequested();
-	if (!isInScope(symbols, node, escapedNewName)) {
-		result.setCanRename(RenameKind.yes, oldName);
-		return;
+	if (declarations !== undefined && declarations.length > 0) {
+		if (hasSameSymbolOnDeclarationSide(symbols, symbol, declarations, newName)) {
+			result.setCanRename(RenameKind.no, `A symbol with the name '${newName}' already exists in the scope`);
+			return;
+		} else {
+			result.setCanRename(RenameKind.yes, oldName);
+			return;
+		}
 	} else {
-		result.setCanRename(RenameKind.no, `A symbol with the name '${newName}' already exists in the current scope`);
+		result.setCanRename(RenameKind.no, 'The symbol has no declarations');
 		return;
 	}
 }
 
-function isInScope(symbols: Symbols, node: tt.Node, newName: __String): boolean {
+function hasSameSymbolOnDeclarationSide(symbols: Symbols, _symbol: tt.Symbol, declarations: tt.Declaration[], newName: string): boolean {
 	const typeChecker = symbols.getTypeChecker();
-	const inScope = typeChecker.getSymbolsInScope(node, ts.SymbolFlags.All);
-	for (const symbol of inScope) {
-		if (symbol.escapedName === newName) {
+	let inModule: boolean | undefined = undefined;
+	for (const declaration of declarations) {
+		const inScope = typeChecker.resolveName(newName, declaration, ts.SymbolFlags.All, /*excludeGlobals*/ false);
+		if (inScope !== undefined) {
+			inModule = inModule ?? isInModule(symbols, declarations);
+			if (!inModule) {
+				return true;
+			} else {
+				const block = getParentBlock(declaration);
+				if (block === undefined) {
+					return true;
+				} else {
+					if (isInSameBlockScopeDeclared(inScope, block)) {
+						return true;
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
+function isInModule(symbols: Symbols, declarations: tt.Declaration[]): boolean {
+	for (const declaration of declarations) {
+		const sourceFile = declaration.getSourceFile();
+		const moduleSymbol = symbols.getSymbolAtLocation(sourceFile);
+		if (moduleSymbol === undefined) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function isInSameBlockScopeDeclared(symbol: tt.Symbol, block: tt.Block | tt.ModuleBlock | tt.SourceFile): boolean {
+	const declarations: tt.Declaration[] | undefined = symbol.getDeclarations();
+	if (declarations === undefined) {
+		return false;
+	}
+	for (const declaration of declarations) {
+		const parentBlock = getParentBlock(declaration);
+		if (parentBlock === block) {
 			return true;
 		}
 	}
 	return false;
+}
+
+function getParentBlock(node: tt.Node): tt.Block | tt.ModuleBlock | tt.SourceFile | undefined {
+	let current: tt.Node | undefined = node;
+	while (current !== undefined) {
+		if (current.kind === ts.SyntaxKind.Block ||
+			current.kind === ts.SyntaxKind.ModuleBlock ||
+			current.kind === ts.SyntaxKind.SourceFile) {
+			return current as tt.Block | tt.ModuleBlock | tt.SourceFile;
+		}
+		current = current.parent;
+	}
+	return undefined;
 }

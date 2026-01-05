@@ -5,22 +5,24 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ChatContext } from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
-import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
+import { mock } from '../../../../../util/common/test/simpleMock';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
+import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
-import { CopilotCLISessionService } from '../copilotcliSessionService';
+import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
@@ -98,21 +100,35 @@ describe('CopilotCLISessionService', () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logService = accessor.get(ILogService);
-		const gitService = accessor.get(IGitService);
 		const workspaceService = new NullWorkspaceService();
 		const cliAgents = new NullCopilotCLIAgents();
 		const authService = {
 			getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
 		} as unknown as IAuthenticationService;
+		const delegationService = new class extends mock<IChatDelegationSummaryService>() {
+			override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
+				return undefined;
+			}
+		}();
 		instantiationService = {
 			invokeFunction(fn: (accessor: unknown, ...args: any[]) => any, ...args: any[]): any {
 				return fn(accessor, ...args);
 			},
-			createInstance: (_ctor: unknown, options: any, sdkSession: any) => {
-				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService));
+			createInstance: (ctor: unknown, options: any, sdkSession: any) => {
+				if (ctor === CopilotCLISessionWorkspaceTracker) {
+					return new class extends mock<CopilotCLISessionWorkspaceTracker>() {
+						override async initialize(_oldSessions: string[]): Promise<void> { return; }
+						override async trackSession(_sessionId: string, _operation: 'add' | 'delete'): Promise<void> {
+							return;
+						}
+						override shouldShowSession(_sessionId: string): boolean {
+							return true;
+						}
+					}();
+				}
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService));
 			}
 		} as unknown as IInstantiationService;
-
 		const configurationService = accessor.get(IConfigurationService);
 		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService), cliAgents));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;

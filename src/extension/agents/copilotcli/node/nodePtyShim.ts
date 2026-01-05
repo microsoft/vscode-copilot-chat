@@ -40,7 +40,7 @@ export async function ensureNodePtyShim(extensionPath: string, vscodeAppRoot: st
 }
 
 async function _ensureNodePtyShim(extensionPath: string, vscodeAppRoot: string, logService: ILogService): Promise<void> {
-	const nodePtyDir = path.join(extensionPath, 'node_modules', '@github', 'copilot', 'prebuilds', process.platform + "-" + process.arch);
+	const nodePtyDir = path.join(extensionPath, 'node_modules', '@github', 'copilot', 'prebuilds', process.platform + '-' + process.arch);
 	const vscodeNodePtyPath = path.join(vscodeAppRoot, 'node_modules', 'node-pty', 'build', 'Release');
 
 	logService.info(`Creating node-pty shim: source=${vscodeNodePtyPath}, dest=${nodePtyDir}`);

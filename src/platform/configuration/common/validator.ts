@@ -49,19 +49,19 @@ class TypeofValidator<TKey extends keyof TypeOfMap> implements IValidator<TypeOf
 	}
 }
 
-const vStringValidator = new TypeofValidator("string");
+const vStringValidator = new TypeofValidator('string');
 export function vString(): IValidator<string> { return vStringValidator; }
 
-const vNumberValidator = new TypeofValidator("number");
+const vNumberValidator = new TypeofValidator('number');
 export function vNumber(): IValidator<number> { return vNumberValidator; }
 
-const vBooleanValidator = new TypeofValidator("boolean");
+const vBooleanValidator = new TypeofValidator('boolean');
 export function vBoolean(): IValidator<boolean> { return vBooleanValidator; }
 
-const vObjAnyValidator = new TypeofValidator("object");
+const vObjAnyValidator = new TypeofValidator('object');
 export function vObjAny(): IValidator<object> { return vObjAnyValidator; }
 
-const vUndefinedValidator = new TypeofValidator("undefined");
+const vUndefinedValidator = new TypeofValidator('undefined');
 export function vUndefined(): IValidator<undefined> { return vUndefinedValidator; }
 
 export function vUnchecked<T>(): IValidator<T> {
@@ -87,7 +87,7 @@ export function vRequired<T>(validator: IValidator<T>): IValidator<T> {
 	return {
 		validate(content: unknown): { content: T; error: undefined } | { content: undefined; error: ValidationError } {
 			if (content === undefined) {
-				return { content: undefined, error: { message: "Required field is missing" } };
+				return { content: undefined, error: { message: 'Required field is missing' } };
 			}
 			return validator.validate(content);
 		},
@@ -103,8 +103,8 @@ export function vRequired<T>(validator: IValidator<T>): IValidator<T> {
 export function vObj<T extends Record<string, IValidator<any>>>(properties: T): IValidator<{ [K in keyof T]: ValidatorType<T[K]> }> {
 	return {
 		validate(content: unknown): { content: any; error: undefined } | { content: undefined; error: ValidationError } {
-			if (typeof content !== "object" || content === null) {
-				return { content: undefined, error: { message: "Expected object" } };
+			if (typeof content !== 'object' || content === null) {
+				return { content: undefined, error: { message: 'Expected object' } };
 			}
 
 			const result: any = {};
@@ -145,7 +145,7 @@ export function vObj<T extends Record<string, IValidator<any>>>(properties: T): 
 			}
 
 			const schema: JsonSchema = {
-				type: "object",
+				type: 'object',
 				properties: schemaProperties,
 				...(requiredFields.length > 0 ? { required: requiredFields } : {})
 			};
@@ -159,7 +159,7 @@ export function vArray<T>(validator: IValidator<T>): IValidator<T[]> {
 	return {
 		validate(content: unknown): { content: T[]; error: undefined } | { content: undefined; error: ValidationError } {
 			if (!Array.isArray(content)) {
-				return { content: undefined, error: { message: "Expected array" } };
+				return { content: undefined, error: { message: 'Expected array' } };
 			}
 
 			const result: T[] = [];
@@ -177,7 +177,7 @@ export function vArray<T>(validator: IValidator<T>): IValidator<T[]> {
 
 		toSchema(): JsonSchema {
 			return {
-				type: "array",
+				type: 'array',
 				items: validator.toSchema(),
 			};
 		}
@@ -188,7 +188,7 @@ export function vTuple<T extends IValidator<any>[]>(...validators: T): IValidato
 	return {
 		validate(content: unknown): { content: any; error: undefined } | { content: undefined; error: ValidationError } {
 			if (!Array.isArray(content)) {
-				return { content: undefined, error: { message: "Expected array" } };
+				return { content: undefined, error: { message: 'Expected array' } };
 			}
 
 			if (content.length !== validators.length) {
@@ -211,7 +211,7 @@ export function vTuple<T extends IValidator<any>[]>(...validators: T): IValidato
 
 		toSchema(): JsonSchema {
 			return {
-				type: "array",
+				type: 'array',
 				items: validators.map(validator => validator.toSchema()),
 			};
 		}
@@ -246,7 +246,7 @@ export function vEnum<T extends string[]>(...values: T): IValidator<T[number]> {
 	return {
 		validate(content: unknown): { content: any; error: undefined } | { content: undefined; error: ValidationError } {
 			if (values.indexOf(content as any) === -1) {
-				return { content: undefined, error: { message: `Expected one of: ${values.join(", ")}` } };
+				return { content: undefined, error: { message: `Expected one of: ${values.join(', ')}` } };
 			}
 
 			return { content, error: undefined };

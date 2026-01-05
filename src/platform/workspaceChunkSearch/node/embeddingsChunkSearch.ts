@@ -23,7 +23,7 @@ import { ISimulationTestContext } from '../../simulationTestContext/common/simul
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../common/workspaceChunkSearch';
-import { BuildIndexTriggerReason, TriggerIndexingError } from './codeSearch/codeSearchChunkSearch';
+import { BuildIndexTriggerReason, TriggerIndexingError } from './codeSearch/codeSearchRepo';
 import { WorkspaceChunkEmbeddingsIndex, WorkspaceChunkEmbeddingsIndexState } from './workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 

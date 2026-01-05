@@ -17,8 +17,8 @@ interface OllamaModelInfoAPIResponse {
 	capabilities: string[];
 	details: { family: string };
 	model_info: {
-		"general.basename": string;
-		"general.architecture": string;
+		'general.basename': string;
+		'general.architecture': string;
 		[other: string]: any;
 	};
 }
@@ -132,8 +132,8 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 			name: modelInfo.model_info['general.basename'],
 			maxOutputTokens: outputTokens,
 			maxInputTokens: contextWindow - outputTokens,
-			vision: modelInfo.capabilities.includes("vision"),
-			toolCalling: modelInfo.capabilities.includes("tools")
+			vision: modelInfo.capabilities.includes('vision'),
+			toolCalling: modelInfo.capabilities.includes('tools')
 		};
 
 		return resolveModelInfo(modelId, this._name, this._knownModels, modelCapabilities);

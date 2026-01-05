@@ -25,6 +25,7 @@ import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
 import { extUriBiasedIgnorePathCase, normalizePath } from '../../../util/vs/base/common/resources';
+import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
@@ -32,7 +33,6 @@ import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common
 import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { formatUriForFileWidget } from '../common/toolUtils';
-import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -105,7 +105,7 @@ export async function formatDiffAsUnified(accessor: ServicesAccessor, uri: URI, 
 	const diffService = accessor.get(IDiffService);
 	const diff = await diffService.computeDiff(oldContent, newContent, {
 		ignoreTrimWhitespace: false,
-		maxComputationTimeMs: 5000,
+		maxComputationTimeMs: 20000,
 		computeMoves: false,
 	});
 
@@ -290,7 +290,7 @@ function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResul
 			editPosition,
 			strategy: 'exact',
 			matchPositions,
-			suggestion: "Multiple exact matches found. Make your search string more specific."
+			suggestion: 'Multiple exact matches found. Make your search string more specific.'
 		};
 	}
 	// Exactly one exact match found.
@@ -344,7 +344,7 @@ function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string
 			type: 'multiple',
 			editPosition: [],
 			matchPositions: positions.map(p => convert.positionToOffset(p.start)),
-			suggestion: "Multiple matches found with flexible whitespace. Make your search string more unique.",
+			suggestion: 'Multiple matches found with flexible whitespace. Make your search string more unique.',
 			strategy: 'whitespace',
 		};
 	}
@@ -399,7 +399,7 @@ function tryFuzzyMatch(text: string, oldStr: string, newStr: string, eol: string
 			text,
 			type: 'multiple',
 			editPosition: [],
-			suggestion: "Multiple fuzzy matches found. Try including more context in your search string.",
+			suggestion: 'Multiple fuzzy matches found. Try including more context in your search string.',
 			strategy: 'fuzzy',
 			matchPositions: matches.map(match => match.index || 0),
 		};
@@ -821,8 +821,9 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 	};
 
 	function checkUri(uri: URI) {
-		const workspaceFolder = workspaceService.getWorkspaceFolder(uri);
-		if (!workspaceFolder && !customInstructionsService.isExternalInstructionsFile(uri) && uri.scheme !== Schemas.untitled) {
+		const normalizedUri = normalizePath(uri);
+		const workspaceFolder = workspaceService.getWorkspaceFolder(normalizedUri);
+		if (!workspaceFolder && uri.scheme !== Schemas.untitled) { // don't allow to edit external instruction files
 			return ConfirmationCheckResult.OutsideWorkspace;
 		}
 
@@ -924,6 +925,9 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 export function canExistingFileBeEdited(accessor: ServicesAccessor, uri: URI): Promise<boolean> {
 	const workspace = accessor.get(IWorkspaceService);
 	if (workspace.textDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
+		return Promise.resolve(true);
+	}
+	if (workspace.notebookDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
 		return Promise.resolve(true);
 	}
 

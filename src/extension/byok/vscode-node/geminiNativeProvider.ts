@@ -10,8 +10,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
-import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, LMResponsePart } from '../common/byokProvider';
 import { toGeminiFunction as toGeminiFunctionDeclaration, ToolJsonSchema } from '../common/geminiFunctionDeclarationConverter';
@@ -198,6 +198,7 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 			const stream = await client.models.generateContentStream(params);
 
 			let usage: APIUsage | undefined;
+			let pendingThinkingSignature: string | undefined;
 
 			for await (const chunk of stream) {
 				if (token.isCancellationRequested) {
@@ -217,16 +218,27 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 
 					if (candidate.content && candidate.content.parts) {
 						for (const part of candidate.content.parts) {
+							// First, capture thought signature from this part (if present)
+							if ('thoughtSignature' in part && part.thoughtSignature) {
+								pendingThinkingSignature = part.thoughtSignature as string;
+							}
+							// Now handle the actual content parts
 							if ('thought' in part && part.thought === true && part.text) {
 								// Handle thinking/reasoning content from Gemini API
 								progress.report(new LanguageModelThinkingPart(part.text));
 							} else if (part.text) {
 								progress.report(new LanguageModelTextPart(part.text));
 							} else if (part.functionCall && part.functionCall.name) {
-								// Generate a synthetic call id
-								const callId = `${part.functionCall.name}_${Date.now()}`;
+								// Gemini 3 includes thought signatures for function calling
+								// If we have a pending signature, emit it as a thinking part with metadata.signature
+								if (pendingThinkingSignature) {
+									const thinkingPart = new LanguageModelThinkingPart('', undefined, { signature: pendingThinkingSignature });
+									progress.report(thinkingPart);
+									pendingThinkingSignature = undefined;
+								}
+
 								progress.report(new LanguageModelToolCallPart(
-									callId,
+									generateUuid(),
 									part.functionCall.name,
 									part.functionCall.args || {}
 								));

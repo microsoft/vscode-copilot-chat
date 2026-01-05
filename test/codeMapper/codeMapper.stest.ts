@@ -163,53 +163,53 @@ forEditsAndAgent((variant, model, configurations) => {
 				selection: [25, 0, 50, 0],
 				focusLocations: [],
 				codeBlock: [
-					"// Checks if a character code is a numeric hex digit (0-9)",
-					"function isNumericHexDigit(ch: number): boolean {",
-					"    return ch >= CharacterCodes._0 && ch <= CharacterCodes._9;",
-					"}",
-					"",
-					"// Checks if a character code is an alphabetic hex digit (A-F or a-f)",
-					"function isAlphabeticHexDigit(ch: number): boolean {",
-					"    return (ch >= CharacterCodes.A && ch <= CharacterCodes.F) || (ch >= CharacterCodes.a && ch <= CharacterCodes.f);",
-					"}",
-					"",
-					"// Calculates the numerical value of a hex digit character code",
-					"function calculateHexValue(ch: number): number {",
-					"    if (isNumericHexDigit(ch)) {",
-					"        return ch - CharacterCodes._0;",
-					"    } else if (ch >= CharacterCodes.A && ch <= CharacterCodes.F) {",
-					"        return 10 + ch - CharacterCodes.A;",
-					"    } else if (ch >= CharacterCodes.a && ch <= CharacterCodes.f) {",
-					"        return 10 + ch - CharacterCodes.a;",
-					"    }",
-					"    // Return -1 if not a hex digit, though this case should be handled before calling this function",
-					"    return -1;",
-					"}",
-					"",
-					"// The main scanning function, refactored to use the helper functions",
-					"function scanHexDigits(count: number, exact?: boolean): number {",
-					"    let digits = 0;",
-					"    let value = 0;",
-					"    while (digits < count || !exact) {",
-					"        let ch = text.charCodeAt(pos);",
-					"        if (isNumericHexDigit(ch) || isAlphabeticHexDigit(ch)) {",
-					"            value = value * 16 + calculateHexValue(ch);",
-					"        } else {",
-					"            break;",
-					"        }",
-					"        pos++;",
-					"        digits++;",
-					"    }",
-					"    if (digits < count) {",
-					"        value = -1;",
-					"    }",
-					"    return value;",
-					"}"
+					'// Checks if a character code is a numeric hex digit (0-9)',
+					'function isNumericHexDigit(ch: number): boolean {',
+					'    return ch >= CharacterCodes._0 && ch <= CharacterCodes._9;',
+					'}',
+					'',
+					'// Checks if a character code is an alphabetic hex digit (A-F or a-f)',
+					'function isAlphabeticHexDigit(ch: number): boolean {',
+					'    return (ch >= CharacterCodes.A && ch <= CharacterCodes.F) || (ch >= CharacterCodes.a && ch <= CharacterCodes.f);',
+					'}',
+					'',
+					'// Calculates the numerical value of a hex digit character code',
+					'function calculateHexValue(ch: number): number {',
+					'    if (isNumericHexDigit(ch)) {',
+					'        return ch - CharacterCodes._0;',
+					'    } else if (ch >= CharacterCodes.A && ch <= CharacterCodes.F) {',
+					'        return 10 + ch - CharacterCodes.A;',
+					'    } else if (ch >= CharacterCodes.a && ch <= CharacterCodes.f) {',
+					'        return 10 + ch - CharacterCodes.a;',
+					'    }',
+					'    // Return -1 if not a hex digit, though this case should be handled before calling this function',
+					'    return -1;',
+					'}',
+					'',
+					'// The main scanning function, refactored to use the helper functions',
+					'function scanHexDigits(count: number, exact?: boolean): number {',
+					'    let digits = 0;',
+					'    let value = 0;',
+					'    while (digits < count || !exact) {',
+					'        let ch = text.charCodeAt(pos);',
+					'        if (isNumericHexDigit(ch) || isAlphabeticHexDigit(ch)) {',
+					'            value = value * 16 + calculateHexValue(ch);',
+					'        } else {',
+					'            break;',
+					'        }',
+					'        pos++;',
+					'        digits++;',
+					'    }',
+					'    if (digits < count) {',
+					'        value = -1;',
+					'    }',
+					'    return value;',
+					'}'
 				],
 				validate: async (outcome, workspace, accessor) => {
 					assert.ok(outcome.appliedEdits.length, 'has edits');
 					assert.equal(numOccurrences(outcome.editedFile, '\t// Checks if a character code is a numeric hex digit (0-9)'), 1, 'inserted with indent');
-					assert.deepEqual(await getWorkspaceDiagnostics(accessor, workspace, KnownDiagnosticProviders.tsc), [], "no diagnostics");
+					assert.deepEqual(await getWorkspaceDiagnostics(accessor, workspace, KnownDiagnosticProviders.tsc), [], 'no diagnostics');
 					assertNoElidedCodeComments(outcome.editedFile);
 					validateConsistentIndentation(outcome.editedFile, false, outcome.annotations);
 				}
@@ -317,8 +317,8 @@ forEditsAndAgent((variant, model, configurations) => {
 				validate: async (outcome, workspace, accessor) => {
 					assert.ok(outcome.appliedEdits.length, 'has edits');
 					const newText = outcome.editedFile;
-					assert.ok(!newText.includes("'path'"), 'rewritten file contains unused imports');
-					assert.ok(!newText.includes("'fs'"), 'rewritten file contains unused imports');
+					assert.ok(!newText.includes(`'path'`), 'rewritten file contains unused imports');
+					assert.ok(!newText.includes(`'fs'`), 'rewritten file contains unused imports');
 					assertNoElidedCodeComments(outcome.editedFile);
 					validateConsistentIndentation(outcome.editedFile, false, outcome.annotations);
 				}
@@ -473,7 +473,7 @@ forEditsAndAgent((variant, model, configurations) => {
 				activeDocument: inputFile.fileName,
 				selection: [363, 0, 387, 0],
 				focusLocations: [],
-				textBeforeCodeBlock: "I'll modify the snap building section to split it into two parts - preparation and building within the FOO container.",
+				textBeforeCodeBlock: `I'll modify the snap building section to split it into two parts - preparation and building within the FOO container.`,
 				codeBlock: [
 					`    - script: |`,
 					`        set -e`,
