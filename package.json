@@ -2457,6 +2457,11 @@
 				"icon": "$(pinned-dirty)"
 			},
 			{
+				"command": "github.copilot.chat.manageBYOKAPIKey",
+				"title": "Manage Bring Your Own Key API Key",
+				"enablement": "false"
+			},
+			{
 				"command": "github.copilot.cloud.sessions.refresh",
 				"title": "%github.copilot.command.refreshAgentSessions%",
 				"icon": "$(refresh)"

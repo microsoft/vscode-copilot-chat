@@ -70,11 +70,6 @@ export interface BYOKModelRegistry {
 }
 
 export interface BYOKModelProvider<T extends LanguageModelChatInformation> extends LanguageModelChatProvider<T> {
-	readonly authType: BYOKAuthType;
-	/**
-	 * Called when the user is requesting an API key update via UI. The provider should handle all the UI and updating the storage
-	 */
-	updateAPIKey(): Promise<void>;
 	/**
 	 * Called when the user is requesting an API key update via VS Code Command. The provider should handle loading from environment variable and updating the storage
 	 * @param envVarName - Name of the environment variable containing the API key

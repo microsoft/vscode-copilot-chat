@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { LanguageModelChatInformation, LanguageModelChatProvider, lm } from 'vscode';
+import { commands, LanguageModelChatInformation, lm } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -10,7 +10,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKKnownModels, isBYOKEnabled } from '../../byok/common/byokProvider';
+import { BYOKKnownModels, BYOKModelProvider, isBYOKEnabled } from '../../byok/common/byokProvider';
 import { IExtensionContribution } from '../../common/contributions';
 import { AnthropicLMProvider } from './anthropicProvider';
 import { AzureBYOKModelProvider } from './azureProvider';
@@ -26,7 +26,7 @@ import { XAIBYOKLMProvider } from './xAIProvider';
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
 	private readonly _byokStorageService: IBYOKStorageService;
-	private readonly _providers: Map<string, LanguageModelChatProvider<LanguageModelChatInformation>> = new Map();
+	private readonly _providers: Map<string, BYOKModelProvider<LanguageModelChatInformation>> = new Map();
 	private _byokProvidersRegistered = false;
 
 	constructor(
@@ -38,6 +38,24 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super();
+		this._register(commands.registerCommand('github.copilot.chat.manageBYOKAPIKey', async (vendor: string, envVarName: string, action?: 'update' | 'remove', modelId?: string) => {
+			const provider = this._providers.get(vendor);
+			if (!provider) {
+				this._logService.error(`BYOK: Provider ${vendor} not found`);
+				return;
+			}
+
+			try {
+				if (provider.updateAPIKeyViaCmd) {
+					await provider.updateAPIKeyViaCmd(envVarName, action ?? 'update', modelId);
+				} else {
+					this._logService.error(`BYOK: Provider ${vendor} does not support API key management via command`);
+				}
+			} catch (error) {
+				this._logService.error(`BYOK: Failed to ${action || 'update'} API key for provider ${vendor}${modelId ? ` and model ${modelId}` : ''}`, error);
+				throw error;
+			}
+		}));
 		this._byokStorageService = new BYOKStorageService(extensionContext);
 		this._authChange(authService, this._instantiationService);
 
