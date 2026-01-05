@@ -55,6 +55,7 @@ describe('CopilotCLI SDK Upgrade', function () {
 			path.join('ripgrep', 'bin', 'linux-x64', 'rg'),
 			path.join('ripgrep', 'bin', 'linux-arm64', 'rg'),
 			// sharp related files
+			path.join('sharp', 'node_modules', '@img', 'sharp-wasm32', 'lib', 'sharp-wasm32.node.wasm'),
 			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-linux-arm64', 'lib', 'libvips-cpp.so.8.17.3'),
 			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-linux-x64', 'lib', 'libvips-cpp.so.8.17.3'),
 			path.join('sharp', 'node_modules', '@img', 'sharp-darwin-arm64', 'lib', 'sharp-darwin-arm64.node'),
