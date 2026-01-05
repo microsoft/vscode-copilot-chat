@@ -19,7 +19,7 @@ class Patch {
 
 	private constructor(
 		public readonly filename: string,
-		public readonly line: number,
+		public readonly lineNumZeroBased: number,
 	) { }
 
 	public static ofLine(line: string): Patch | null {
@@ -46,7 +46,7 @@ class Patch {
 
 	public toString(): string {
 		return [
-			`${this.filename}:${this.line}`,
+			`${this.filename}:${this.lineNumZeroBased}`,
 			...this.removedLines.map(l => `-${l}`),
 			...this.addedLines.map(l => `+${l}`),
 		].join('\n');
@@ -77,7 +77,7 @@ export class XtabCustomDiffPatchResponseHandler {
 	}
 
 	public static resolveEdit(patch: Patch): LineReplacement {
-		return new LineReplacement(new LineRange(patch.line, patch.line + patch.removedLines.length), patch.addedLines);
+		return new LineReplacement(new LineRange(patch.lineNumZeroBased + 1, patch.lineNumZeroBased + 1 + patch.removedLines.length), patch.addedLines);
 	}
 
 	public static async *extractEdits(linesStream: AsyncIterableObject<string>): AsyncGenerator<Patch> {
