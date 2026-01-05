@@ -17,7 +17,7 @@ import { CachedFunction } from '../../src/util/vs/base/common/cache';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { IJSONOutputPrinter } from '../jsonOutputPrinter';
 import { InterceptedRequest, ISerialisedChatResponse, OutputType } from '../simulation/shared/sharedTypes';
-
+import { getRequestId } from '../../src/platform/networking/common/fetch';
 import { LockMap } from '../../src/util/common/lock';
 import { assertType } from '../../src/util/vs/base/common/types';
 import { OPENAI_FETCHER_CACHE_SALT } from '../cacheSalt';
@@ -196,9 +196,10 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 		const fetchResult: Result<FetchResponse, fetcher.Completions.CompletionsFetchFailure> =
 			this.isNoFetchModeEnabled
 				? Result.ok({
+					requestId: getRequestId(new Headers()),
 					status: 200,
 					statusText: '',
-					headers: {},
+					headers: new Headers(),
 					body: AsyncIterableObject.fromArray(['']),
 				} satisfies FetchResponse)
 				: await new Promise((resolve, reject) => {

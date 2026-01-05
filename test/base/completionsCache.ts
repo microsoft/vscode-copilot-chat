@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { FetchResponse } from '../../src/platform/nesFetch/node/completionsFetchServiceImpl';
+import { getRequestId } from '../../src/platform/networking/common/fetch';
 import { AsyncIterableObject } from '../../src/util/vs/base/common/async';
 import { SQLiteSlottedCache } from './cache';
 import { CachedResponseMetadata } from './cachingChatMLFetcher';
@@ -45,11 +46,13 @@ export namespace ICacheableCompletionsResponse {
 		// 	but we want to be able to capture edits proposed before the error
 		const bodyStream = stringToChunkedStream(v.body, 512 /* arbitrary chunk size to hit fast/correct balance */);
 
+		const headers = new Headers();
+
 		return {
 			status: v.status,
 			statusText: v.statusText,
 			body: bodyStream,
-			headers: {} // @ulugbekna: we don't use headers, so this should be ok for now
+			requestId: getRequestId(headers),
 		};
 	}
 

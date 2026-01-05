@@ -258,7 +258,7 @@ interface ChoiceJSON {
  * soon as it's finished.
  */
 export class SSEProcessor {
-	private requestId: RequestId = getRequestId(this.response);
+	private requestId: RequestId = getRequestId(this.response.headers);
 	private stats = new ChunkStats();
 	/**
 	 * A key & value being here means at least one chunk with that choice index

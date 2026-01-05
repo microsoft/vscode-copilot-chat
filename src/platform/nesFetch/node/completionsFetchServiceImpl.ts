@@ -155,7 +155,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				statusText: response.statusText,
 				headers: headersObjectToKv(response.headers),
 				body: responseStream,
-				requestId: getRequestId(response),
+				requestId: getRequestId(response.headers),
 			});
 
 		} catch (reason: unknown) {
