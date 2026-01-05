@@ -53,10 +53,10 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			}
 
 			// Show quick pick for Azure and CustomOAI providers
-			if (provider && (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase())) {
+			if (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase()) {
 				const configurator = new CustomOAIModelConfigurator(this._configurationService, vendor, provider);
 				await configurator.configureModelOrUpdateAPIKey();
-			} else if (provider) {
+			} else {
 				// For all other providers, directly go to API key management
 				await provider.updateAPIKey();
 			}
