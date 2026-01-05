@@ -6,9 +6,11 @@
 import { ClientHttp2Stream } from 'http2';
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../../../../platform/env/common/envService';
-import { ICompletionsFetchService } from '../../../../../../platform/nesFetch/common/completionsFetchService';
+import { Completions, ICompletionsFetchService } from '../../../../../../platform/nesFetch/common/completionsFetchService';
 import { RequestId, getRequestId } from '../../../../../../platform/networking/common/fetch';
+import { IHeaders } from '../../../../../../platform/networking/common/fetcherService';
 import { createServiceIdentifier } from '../../../../../../util/common/services';
+import { assertNever } from '../../../../../../util/vs/base/common/assert';
 import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
@@ -522,6 +524,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			stream: true, // Always true: non streaming requests are not supported by this proxy
 			extra: params.extra,
 		} satisfies CompletionRequest;
+
 		// fetchWithParameters
 		{
 
@@ -627,7 +630,23 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			);
 
 			if (res.isError()) {
-				throw new Error('implement me'); // FIXME
+
+				const err = res.err;
+
+				if (err instanceof Completions.RequestCancelled) {
+					return { type: 'canceled', reason: 'during fetch request' };
+				} else if (err instanceof Completions.Unexpected) {
+					throw err.error;
+				} else if (err instanceof Completions.UnsuccessfulResponse) {
+					const telemetryData = this.createTelemetryData(endpoint, params); // FIXME
+					return this.handleError(this.statusReporter, telemetryData, {
+						status: err.status,
+						text: err.text,
+						headers: err.headers,
+					}, copilotToken);
+				} else {
+					assertNever(err);
+				}
 			}
 
 			const choices: AsyncIterable<APIChoice> = (async function* () {
@@ -635,11 +654,12 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				if (completionTextRes.isError()) {
 					throw new Error('implement me'); // FIXME
 				}
-				if (completionTextRes.val.choices.length === 0 || !completionTextRes.val.choices[0].text) {
+				const completion = completionTextRes.val;
+				if (completion.choices.length === 0 || !completion.choices[0].text) {
 					throw new Error('implement me'); // FIXME
 				}
 				yield {
-					completionText: completionTextRes.val.choices[0].text,
+					completionText: completion.choices[0].text,
 					meanLogProb: undefined,
 					meanAlternativeLogProb: undefined,
 					choiceIndex: 0,
@@ -649,7 +669,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 					blockFinished: false,
 					telemetryData: baseTelemetryData, // FIXME
 					clientCompletionId: '',
-					finishReason: ''
+					finishReason: completion.choices[0].finish_reason ?? '', // FIXME
 				} satisfies APIChoice;
 			})();
 
@@ -825,7 +845,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	async handleError(
 		statusReporter: ICompletionsStatusReporter,
 		telemetryData: TelemetryData,
-		response: Response,
+		response: { status: number; text(): Promise<string>; headers: IHeaders },
 		copilotToken: CopilotToken
 	): Promise<CompletionError> {
 		const text = await response.text();
@@ -890,6 +910,6 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	}
 }
 
-function isClientError(response: Response): boolean {
+function isClientError(response: { status: number }): boolean {
 	return response.status >= 400 && response.status < 500;
 }

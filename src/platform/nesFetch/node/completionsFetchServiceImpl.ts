@@ -18,7 +18,7 @@ import { jsonlStreamToCompletions, streamToLines } from './streamTransformer';
 export type FetchResponse = {
 	status: number;
 	statusText: string;
-	headers: { [name: string]: string };
+	headers: IHeaders;
 	body: AsyncIterableObject<string>;
 	requestId: RequestId;
 };
@@ -84,6 +84,8 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			const error: Completions.CompletionsFetchFailure = new Completions.UnsuccessfulResponse(
 				fetchResponse.val.status,
 				fetchResponse.val.statusText,
+				fetchResponse.val.headers,
+				() => fetchResponse.val.body.toPromise().then(arr => arr.join('')).catch(() => ''),
 			);
 
 			return Result.error(error);
@@ -120,7 +122,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 					this.authService.resetCopilotToken(response.status);
 				}
 
-				return Result.error(new Completions.UnsuccessfulResponse(response.status, response.statusText));
+				return Result.error(new Completions.UnsuccessfulResponse(response.status, response.statusText, response.headers, () => response.text().catch(() => '')));
 			}
 
 			const responseBody = await response.body();
@@ -153,7 +155,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			return Result.ok({
 				status: response.status,
 				statusText: response.statusText,
-				headers: headersObjectToKv(response.headers),
+				headers: response.headers,
 				body: responseStream,
 				requestId: getRequestId(response.headers),
 			});
@@ -187,12 +189,4 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 		return headers;
 	}
-}
-
-function headersObjectToKv(headers: IHeaders): { [name: string]: string } {
-	const result: { [name: string]: string } = {};
-	for (const [name, value] of headers) {
-		result[name] = value;
-	}
-	return result;
 }

@@ -46,12 +46,13 @@ export namespace ICacheableCompletionsResponse {
 		// 	but we want to be able to capture edits proposed before the error
 		const bodyStream = stringToChunkedStream(v.body, 512 /* arbitrary chunk size to hit fast/correct balance */);
 
-		const headers = new Headers();
+		const headers = new Headers(); // @ulugbekna: we don't use headers, so this should be ok for now
 
 		return {
 			status: v.status,
 			statusText: v.statusText,
 			body: bodyStream,
+			headers,
 			requestId: getRequestId(headers),
 		};
 	}

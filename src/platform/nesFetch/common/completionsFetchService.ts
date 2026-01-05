@@ -6,6 +6,7 @@
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { IHeaders } from '../../networking/common/fetcherService';
 import { ResponseStream } from './responseStream';
 
 export namespace Completions {
@@ -40,7 +41,9 @@ export namespace Completions {
 		readonly kind = 'not-200-status' as const;
 		constructor(
 			public readonly status: number,
-			public readonly statusText: string
+			public readonly statusText: string,
+			public readonly headers: IHeaders,
+			public readonly text: () => Promise<string>
 		) { }
 	}
 	export class Unexpected {
