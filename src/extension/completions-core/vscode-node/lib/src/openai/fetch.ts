@@ -782,7 +782,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		});
 	}
 
-	async fetchWithParameters(
+	protected async fetchWithParameters(
 		endpoint: string,
 		params: CompletionParams,
 		copilotToken: CopilotToken,
