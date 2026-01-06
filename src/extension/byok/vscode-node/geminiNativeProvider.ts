@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { GenerateContentParameters, GoogleGenAI, Tool, Type } from '@google/genai';
+import { ApiError, GenerateContentParameters, GoogleGenAI, Tool, Type } from '@google/genai';
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -54,9 +54,17 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 				}
 			}
 			return byokKnownModelsToAPIInfo(this._name, modelList);
-		} catch (error) {
+		} catch (e) {
+			let error: Error;
+			if (e instanceof ApiError) {
+				let message = e.message;
+				try { message = JSON.parse(message).error?.message; } catch { /* ignore */ }
+				error = new Error(message ?? e.message, { cause: e });
+			} else {
+				error = new Error(toErrorMessage(e, true));
+			}
 			this._logService.error(error, `Error fetching available ${GeminiNativeBYOKLMProvider.providerName} models`);
-			throw new Error(toErrorMessage(error, true));
+			throw error;
 		}
 	}
 
