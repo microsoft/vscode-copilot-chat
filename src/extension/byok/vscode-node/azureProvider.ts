@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { CancellationToken, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { IExperimentationService } from '../../../lib/node/chatLibMain';
-import { AzureAuthMode, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { AzureAuthMode, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -66,6 +66,14 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 			configurationService,
 			expService
 		);
+		this.migrateExistingConfigs();
+	}
+
+	private async migrateExistingConfigs(): Promise<void> {
+		if (this._configurationService.getConfig(ConfigKey.AzureAuthType) === AzureAuthMode.EntraId) {
+			await this.migrateConfig(ConfigKey.AzureModels, AzureBYOKModelProvider.providerName, AzureBYOKModelProvider.providerName);
+			await this._configurationService.setConfig(ConfigKey.AzureAuthType, undefined);
+		}
 	}
 
 	protected override resolveUrl(modelId: string, url: string): string {

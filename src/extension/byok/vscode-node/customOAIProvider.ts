@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IExperimentationService } from '../../../lib/node/chatLibMain';
-import { Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { AzureAuthMode, Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EndpointEditToolName, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -80,6 +80,23 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 		super(id, name, undefined, byokStorageService, fetcherService, logService, instantiationService, configurationService, expService);
 	}
 
+	protected async migrateConfig(configKey: Config<IStringDictionary<_CustomOAIModelConfig>>, providerName: string, providerGroupName: string): Promise<void> {
+		const customOAIModelConfigsByApiKey: Map<string, Array<CustomOAIModelConfig & { requiresAPIKey?: boolean }>> = new Map();
+		const customOAIModelProviderConfig = this._configurationService.getConfig<IStringDictionary<_CustomOAIModelConfig>>(configKey);
+		for (const [modelId, modelConfig] of Object.entries(customOAIModelProviderConfig)) {
+			const apiKey = await this._byokStorageService.getAPIKey(providerName, modelId) ?? '';
+			const customOAIModelConfigs = customOAIModelConfigsByApiKey.get(apiKey) ?? [];
+			customOAIModelConfigs.push({ ...modelConfig, id: modelId, requiresAPIKey: undefined });
+			customOAIModelConfigsByApiKey.set(apiKey, customOAIModelConfigs);
+		}
+		if (customOAIModelConfigsByApiKey.size > 0) {
+			for (const [apiKey, customOAIModelConfigs] of customOAIModelConfigsByApiKey.entries()) {
+				await this.configureDefaultGroupIfExists(providerGroupName, { models: customOAIModelConfigs, apiKey: apiKey || undefined });
+			}
+			await this._configurationService.setConfig(configKey, undefined);
+		}
+	}
+
 	protected override async getAllModels(silent: boolean, apiKey: string | undefined, configuration: CustomOAIModelProviderConfig | undefined): Promise<OpenAIComaptibleLanguageModelChatInformation<CustomOAIModelProviderConfig>[]> {
 		if (configuration?.url) {
 			return super.getAllModels(silent, apiKey, configuration);
@@ -146,23 +163,8 @@ export class CustomOAIBYOKModelProvider extends AbstractCustomOAIBYOKModelProvid
 
 	private async migrateExistingConfigs(): Promise<void> {
 		await this.migrateConfig(ConfigKey.CustomOAIModels, this.providerName, this.providerName);
-		await this.migrateConfig(ConfigKey.AzureModels, 'Azure', 'Azure');
-	}
-
-	private async migrateConfig(configKey: Config<IStringDictionary<_CustomOAIModelConfig>>, providerName: string, providerGroupName: string): Promise<void> {
-		const customOAIModelConfigsByApiKey: Map<string, Array<CustomOAIModelConfig & { requiresAPIKey?: boolean }>> = new Map();
-		const customOAIModelProviderConfig = this._configurationService.getConfig<IStringDictionary<_CustomOAIModelConfig>>(configKey);
-		for (const [modelId, modelConfig] of Object.entries(customOAIModelProviderConfig)) {
-			const apiKey = await this._byokStorageService.getAPIKey(providerName, modelId) ?? '';
-			const customOAIModelConfigs = customOAIModelConfigsByApiKey.get(apiKey) ?? [];
-			customOAIModelConfigs.push({ ...modelConfig, id: modelId, requiresAPIKey: undefined });
-			customOAIModelConfigsByApiKey.set(apiKey, customOAIModelConfigs);
-		}
-		if (customOAIModelConfigsByApiKey.size > 0) {
-			for (const [apiKey, customOAIModelConfigs] of customOAIModelConfigsByApiKey.entries()) {
-				await this.configureDefaultGroupIfExists(providerGroupName, { models: customOAIModelConfigs, apiKey: apiKey || undefined });
-			}
-			await this._configurationService.setConfig(configKey, undefined);
+		if (this._configurationService.getConfig(ConfigKey.AzureAuthType) !== AzureAuthMode.EntraId) {
+			await this.migrateConfig(ConfigKey.AzureModels, 'Azure', 'Azure');
 		}
 	}
 

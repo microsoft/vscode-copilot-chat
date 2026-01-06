@@ -1799,7 +1799,6 @@
 			},
 			{
 				"vendor": "customoai",
-				"when": "productQualityType != 'stable'",
 				"displayName": "OpenAI Compatible",
 				"configuration": {
 					"type": "object",
@@ -1809,6 +1808,90 @@
 							"secret": true,
 							"description": "API key for the models"
 						},
+						"models": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"name": {
+										"type": "string",
+										"description": "Display name of the custom OpenAI model"
+									},
+									"gpu": {
+										"type": "string",
+										"description": "Display name of the custom OpenAI model"
+									},
+									"url": {
+										"type": "string",
+										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
+									},
+									"toolCalling": {
+										"type": "boolean",
+										"description": "Whether the model supports tool calling"
+									},
+									"vision": {
+										"type": "boolean",
+										"description": "Whether the model supports vision capabilities"
+									},
+									"maxInputTokens": {
+										"type": "number",
+										"description": "Maximum number of input tokens supported by the model"
+									},
+									"maxOutputTokens": {
+										"type": "number",
+										"description": "Maximum number of output tokens supported by the model"
+									},
+									"editTools": {
+										"type": "array",
+										"description": "List of edit tools supported by the model. If this is not configured, the editor will try multiple edit tools and pick the best one.\n\n- 'find-replace': Find and replace text in a document.\n- 'multi-find-replace': Find and replace text in a document.\n- 'apply-patch': A file-oriented diff format used by some OpenAI models\n- 'code-rewrite': A general but slower editing tool that allows the model to rewrite and code snippet and provide only the replacement to the editor.",
+										"items": {
+											"type": "string",
+											"enum": [
+												"find-replace",
+												"multi-find-replace",
+												"apply-patch",
+												"code-rewrite"
+											]
+										}
+									},
+									"thinking": {
+										"type": "boolean",
+										"default": false,
+										"description": "Whether the model supports thinking capabilities"
+									},
+									"zeroDataRetentionEnabled": {
+										"type": "boolean",
+										"default": false,
+										"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
+									},
+									"requestHeaders": {
+										"type": "object",
+										"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
+										"additionalProperties": {
+											"type": "string"
+										}
+									}
+								},
+								"required": [
+									"name",
+									"url",
+									"toolCalling",
+									"vision",
+									"maxInputTokens",
+									"maxOutputTokens"
+								]
+							}
+						}
+					},
+					"markdownDescription": "Configure custom OpenAI-compatible models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+				}
+			},
+			{
+				"vendor": "azure",
+				"displayName": "Azure",
+				"configuration": {
+					"type": "object",
+					"properties": {
 						"models": {
 							"type": "array",
 							"items": {
