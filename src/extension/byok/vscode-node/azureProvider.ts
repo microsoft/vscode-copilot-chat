@@ -69,6 +69,7 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 		this.migrateExistingConfigs();
 	}
 
+	// TODO: Remove this after 6 months
 	private async migrateExistingConfigs(): Promise<void> {
 		if (this._configurationService.getConfig(ConfigKey.AzureAuthType) === AzureAuthMode.EntraId) {
 			await this.migrateConfig(ConfigKey.AzureModels, AzureBYOKModelProvider.providerName, AzureBYOKModelProvider.providerName);
@@ -78,25 +79,6 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 
 	protected override resolveUrl(modelId: string, url: string): string {
 		return resolveAzureUrl(modelId, url);
-	}
-
-	protected override async getAllModels(silent: boolean, apiKey: string | undefined, configuration: CustomOAIModelProviderConfig | undefined): Promise<OpenAIComaptibleLanguageModelChatInformation<CustomOAIModelProviderConfig>[]> {
-		if (!silent) {
-			try {
-				await vscode.authentication.getSession(
-					AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
-					[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-					{ createIfNone: true }
-				);
-			} catch (error) {
-				// If sign-in fails, don't show models in picker
-				this._logService.error('[AzureBYOKModelProvider] Authentication failed during Entra ID sign-in:', error);
-				return [];
-			}
-		}
-
-		// Return all configured models (no API key check needed for Entra ID)
-		return super.getAllModels(silent, apiKey, configuration);
 	}
 
 	override async provideLanguageModelChatResponse(

@@ -36,6 +36,7 @@ export abstract class AbstractLanguageModelChatProvider<C extends LanguageModelC
 		this.configureDefaultGroupWithApiKeyOnly();
 	}
 
+	// TODO: Remove this after 6 months
 	protected async configureDefaultGroupWithApiKeyOnly(): Promise<string | undefined> {
 		const apiKey = await this._byokStorageService.getAPIKey(this._name);
 		if (apiKey) {
@@ -55,21 +56,12 @@ export abstract class AbstractLanguageModelChatProvider<C extends LanguageModelC
 			apiKey = await this.configureDefaultGroupWithApiKeyOnly();
 		}
 
-		try {
-			const models = await this.getAllModels(silent, apiKey, configuration as C);
-			return models.map(model => ({
-				...model,
-				apiKey,
-				configuration
-			}));
-		} catch (e) {
-			if (e instanceof Error && e.message.includes('key')) {
-				// Likely bad API key so we will prompt user to update it one more time
-				// TODO: @sandy081 Propagate error to UI for prompting user to update API key
-			}
-			this._logService.error(e, `Error fetching available ${this._name} models`);
-			return [];
-		}
+		const models = await this.getAllModels(silent, apiKey, configuration as C);
+		return models.map(model => ({
+			...model,
+			apiKey,
+			configuration
+		}));
 	}
 
 	abstract provideLanguageModelChatResponse(model: T, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void>;

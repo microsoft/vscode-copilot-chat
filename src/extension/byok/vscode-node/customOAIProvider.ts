@@ -97,6 +97,11 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 		}
 	}
 
+	protected override async configureDefaultGroupWithApiKeyOnly(): Promise<string | undefined> {
+		// No-op: Custom OAI models are configured separatekly via migration
+		return;
+	}
+
 	protected override async getAllModels(silent: boolean, apiKey: string | undefined, configuration: CustomOAIModelProviderConfig | undefined): Promise<OpenAIComaptibleLanguageModelChatInformation<CustomOAIModelProviderConfig>[]> {
 		if (configuration?.url) {
 			return super.getAllModels(silent, apiKey, configuration);
@@ -161,6 +166,7 @@ export class CustomOAIBYOKModelProvider extends AbstractCustomOAIBYOKModelProvid
 		this.migrateExistingConfigs();
 	}
 
+	// TODO: Remove this after 6 months
 	private async migrateExistingConfigs(): Promise<void> {
 		await this.migrateConfig(ConfigKey.CustomOAIModels, this.providerName, this.providerName);
 		if (this._configurationService.getConfig(ConfigKey.AzureAuthType) !== AzureAuthMode.EntraId) {
