@@ -16,6 +16,6 @@ export class LanguageDiagnosticsServiceImpl extends AbstractLanguageDiagnosticsS
 
 	override getAllDiagnostics(): [vscode.Uri, vscode.Diagnostic[]][] {
 		return vscode.languages.getDiagnostics()
-			.filter(([uri]) => !LanguageDiagnosticsServiceImpl.ignoredSchemes.has(uri.scheme));
+			.filter(([uri]) => !LanguageDiagnosticsServiceImpl.ignoredSchemes2.has(uri.scheme));
 	}
 }

@@ -18,7 +18,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
-import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, ThinkingEffort } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -57,8 +57,12 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		'disabled';
 	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
 	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
-	const effort = effortConfig === 'default' ? 'medium' : effortConfig;
-	const summary = summaryConfig === 'off' ? undefined : summaryConfig;
+	const thinkingDisabled = options.thinkingEffort === ThinkingEffort.None;
+	const thinkingOverride = mapThinkingEffortToResponses(options.thinkingEffort);
+	const effort = thinkingDisabled ?
+		undefined :
+		(thinkingOverride ?? (effortConfig === 'default' ? 'medium' : effortConfig));
+	const summary = thinkingDisabled ? undefined : (summaryConfig === 'off' ? undefined : summaryConfig);
 	if (effort || summary) {
 		body.reasoning = {
 			...(effort ? { effort } : {}),
@@ -66,9 +70,22 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		};
 	}
 
-	body.include = ['reasoning.encrypted_content'];
+	body.include = thinkingDisabled ? undefined : ['reasoning.encrypted_content'];
 
 	return body;
+}
+
+function mapThinkingEffortToResponses(thinkingEffort: ThinkingEffort | undefined): 'low' | 'medium' | 'high' | undefined {
+	switch (thinkingEffort) {
+		case ThinkingEffort.Low:
+			return 'low';
+		case ThinkingEffort.Medium:
+			return 'medium';
+		case ThinkingEffort.High:
+			return 'high';
+		default:
+			return undefined;
+	}
 }
 
 function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {

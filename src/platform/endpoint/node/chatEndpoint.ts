@@ -19,7 +19,7 @@ import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuratio
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
-import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest, ThinkingEffort } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, RawMessageConversionCallback } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
 import { SSEProcessor } from '../../networking/node/stream';
@@ -279,7 +279,7 @@ export class ChatEndpoint implements IChatEndpoint {
 
 	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
 		const isConversationAgent = options.location === ChatLocation.Agent;
-		if (isAnthropicFamily(this) && !options.disableThinking && isConversationAgent) {
+		if (isAnthropicFamily(this) && options.thinkingEffort !== ThinkingEffort.None && isConversationAgent) {
 			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
 			if (configuredBudget && configuredBudget > 0) {
 				const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;

@@ -144,6 +144,13 @@ export interface IEmbeddingsEndpoint extends IEndpoint {
 	readonly maxBatchSize: number;
 }
 
+export enum ThinkingEffort {
+	None,
+	Low,
+	Medium,
+	High
+}
+
 export interface IMakeChatRequestOptions {
 	/** The debug name for this request */
 	debugName: string;
@@ -170,8 +177,8 @@ export interface IMakeChatRequestOptions {
 	enableRetryOnError?: boolean;
 	/** Which fetcher to use, overrides the default. */
 	useFetcher?: FetcherId;
-	/** Disable extended thinking for this request. Used when resuming from tool call errors where the original thinking blocks are not available. */
-	disableThinking?: boolean;
+	/** Explicitly override reasoning effort for this request. The default is Medium. This should generally not be set. */
+	thinkingEffort?: ThinkingEffort;
 }
 
 export type IChatRequestTelemetryProperties = {

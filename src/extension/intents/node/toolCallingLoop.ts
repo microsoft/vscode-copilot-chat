@@ -14,7 +14,7 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
-import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { IMakeChatRequestOptions, ThinkingEffort } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
@@ -84,7 +84,7 @@ export interface IToolCallingBuiltPromptEvent {
 	tools: LanguageModelToolInformation[];
 }
 
-export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>> & Pick<IMakeChatRequestOptions, 'disableThinking'>;
+export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>> & Pick<IMakeChatRequestOptions, 'thinkingEffort'>;
 
 /**
  * This is a base class that can be used to implement a tool calling loop
@@ -436,7 +436,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
-		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
+		const thinkingEffort = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages) ? ThinkingEffort.None : undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {
@@ -468,7 +468,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				})),
 			},
 			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.isSubagent,
-			disableThinking,
+			thinkingEffort,
 		}, token);
 
 		fetchStreamSource?.resolve();

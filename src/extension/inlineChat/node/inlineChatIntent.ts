@@ -17,7 +17,7 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Prediction } from '../../../platform/networking/common/fetch';
-import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, IMakeChatRequestOptions, ThinkingEffort } from '../../../platform/networking/common/networking';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -381,6 +381,7 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 			messages,
 			userInitiatedRequest: true,
 			location: ChatLocation.Editor,
+			thinkingEffort: ThinkingEffort.Low,
 			requestOptions,
 			telemetryProperties: {
 				messageId: telemetry.telemetryMessageId,

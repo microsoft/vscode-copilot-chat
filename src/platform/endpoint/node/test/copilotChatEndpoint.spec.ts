@@ -18,7 +18,7 @@ import { IChatModelInformation } from '../../../endpoint/common/endpointProvider
 import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
-import { ICreateEndpointBodyOptions } from '../../../networking/common/networking';
+import { ICreateEndpointBodyOptions, ThinkingEffort } from '../../../networking/common/networking';
 import { NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
@@ -603,7 +603,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			expect(body.thinking_budget).toBe(1024);
 		});
 
-		it('should not set thinking_budget when disableThinking is true', () => {
+		it('should not set thinking_budget when thinkingEffort is None', () => {
 			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
 			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
 
@@ -624,7 +624,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 
 			const options = {
 				...createTestOptions([createUserMessage('Hello')]),
-				disableThinking: true
+				thinkingEffort: ThinkingEffort.None
 			};
 			const body = endpoint.createRequestBody(options);
 
