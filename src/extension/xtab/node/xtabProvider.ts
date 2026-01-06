@@ -814,7 +814,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 
 		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement();
-		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying) {
+		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying && nextCursorLinePrediction !== NextCursorLinePrediction.Off) {
 			const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer);
 			if (cancellationToken.isCancellationRequested) {
 				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
@@ -848,8 +848,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 							pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow, nextCursorPosition)));
 							return;
 						}
-						case NextCursorLinePrediction.OnlyWithEdit:
-						case NextCursorLinePrediction.LabelOnlyWithEdit: {
+						case NextCursorLinePrediction.OnlyWithEdit: {
 							this.doGetNextEditWithSelection(
 								request,
 								new Range(nextCursorLineOneBased, nextCursorColumn, nextCursorLineOneBased, nextCursorColumn),

@@ -11,6 +11,7 @@
 
 import { ConfigurationTarget, l10n, Uri, window, workspace, WorkspaceFolder } from 'vscode';
 import { ConfigurationKeyValuePairs, ConfigurationMigration, ConfigurationMigrationRegistry, ConfigurationValue } from '../../../platform/configuration/common/configurationService';
+import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
 
@@ -157,6 +158,21 @@ ConfigurationMigrationRegistry.registerConfigurationMigrations([{
 		return [
 			['github.copilot.chat.generateTests.codeLens', { value }],
 			['github.copilot.chat.experimental.generateTests.codeLens', { value: undefined }]
+		];
+	}
+}]);
+
+ConfigurationMigrationRegistry.registerConfigurationMigrations([{
+	key: 'github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.enabled',
+	migrateFn: async (value: NextCursorLinePrediction | /* the rest is for backward compat: */ 'labelOnlyWithEdit' | boolean | undefined) => {
+		if (typeof value === 'boolean') {
+			value = value ? NextCursorLinePrediction.OnlyWithEdit : NextCursorLinePrediction.Off;
+		} else if (value === 'labelOnlyWithEdit') {
+			value = NextCursorLinePrediction.OnlyWithEdit;
+		}
+		return [
+			['github.copilot.nextEditSuggestions.nextCursorPrediction.enabled', { value }],
+			['github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.enabled', { value: undefined }]
 		];
 	}
 }]);

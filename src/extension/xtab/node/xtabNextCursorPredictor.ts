@@ -43,23 +43,14 @@ export class XtabNextCursorPredictor {
 			return undefined;
 		}
 
-		const originalNextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionEnabled, this.expService);
+		const originalNextCursorLinePrediction = this.configService.getExperimentBasedConfig(ConfigKey.InlineEditsNextCursorPredictionEnabled, this.expService);
 
 		switch (originalNextCursorLinePrediction) {
 			case NextCursorLinePrediction.OnlyWithEdit:
 			case NextCursorLinePrediction.Jump:
-			case undefined:
+			case NextCursorLinePrediction.Off:
 				return originalNextCursorLinePrediction;
 
-			// remove support for LabelOnlyWithEdit
-			case NextCursorLinePrediction.LabelOnlyWithEdit:
-				return NextCursorLinePrediction.OnlyWithEdit;
-
-			// for backward compatibility
-			case true:
-				return NextCursorLinePrediction.OnlyWithEdit;
-			case false:
-				return undefined;
 			default:
 				assertNever(originalNextCursorLinePrediction);
 		}
