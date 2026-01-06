@@ -126,7 +126,7 @@ The capture flow leverages **DebugRecorder**, which already tracks all document 
 
 4. **Abort/Cleanup**: Clear state, reset context key, and dispose status bar item.
 
-See `ExpectedEditCaptureController` in `src/extension/inlineEdits/vscode-node/components/expectedEditCaptureController.ts` for the full implementation.
+See `ExpectedEditCaptureController` in [vscode-node/components/expectedEditCaptureController.ts](vscode-node/components/expectedEditCaptureController.ts) for the full implementation.
 
 ### File Output
 
@@ -241,9 +241,9 @@ Sensitive files are **automatically excluded** from submissions:
 
 ## Related Files
 
-- `src/extension/inlineEdits/node/debugRecorder.ts` - Core recording infrastructure
-- `src/extension/inlineEdits/vscode-node/components/inlineEditDebugComponent.ts` - Existing feedback/debug tooling and sensitive file filtering
-- `src/extension/inlineEdits/vscode-node/components/expectedEditCaptureController.ts` - Capture session management
-- `src/extension/inlineEdits/vscode-node/components/nesFeedbackSubmitter.ts` - Feedback submission to GitHub
-- `src/extension/inlineEdits/common/observableWorkspaceRecordingReplayer.ts` - Recording replay logic
-- `test/simulation/inlineEdit/inlineEditTester.ts` - stest infrastructure
+- [node/debugRecorder.ts](node/debugRecorder.ts) - Core recording infrastructure
+- [vscode-node/components/inlineEditDebugComponent.ts](vscode-node/components/inlineEditDebugComponent.ts) - Existing feedback/debug tooling and sensitive file filtering
+- [vscode-node/components/expectedEditCaptureController.ts](vscode-node/components/expectedEditCaptureController.ts) - Capture session management
+- [vscode-node/components/nesFeedbackSubmitter.ts](vscode-node/components/nesFeedbackSubmitter.ts) - Feedback submission to GitHub
+- [common/observableWorkspaceRecordingReplayer.ts](common/observableWorkspaceRecordingReplayer.ts) - Recording replay logic
+- [../../../test/simulation/inlineEdit/inlineEditTester.ts](../../../test/simulation/inlineEdit/inlineEditTester.ts) - stest infrastructure
