@@ -132,7 +132,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
 
-		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
+		this.logService.info(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const disposables = this.add(new DisposableStore());
 		const abortController = new AbortController();
 		disposables.add(token.onCancellationRequested(() => {

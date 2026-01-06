@@ -3242,6 +3242,15 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
+					"github.copilot.chat.anthropic.useMessagesApi": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.useMessagesApi%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
 						"default": true,

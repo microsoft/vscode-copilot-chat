@@ -55,7 +55,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22.20.x'
+          node-version: '22.21.x'
 
       - name: Setup Python
         uses: actions/setup-python@v6
