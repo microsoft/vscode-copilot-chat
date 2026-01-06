@@ -204,7 +204,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			variables = new ChatVariablesCollection([...this.request.references, ...toolReferences]);
 		}
 
-		const tools = await this.getAvailableTools();
+		const tools = promptContext.tools?.availableTools;
 		const toolTokens = tools?.length ? await this.endpoint.acquireTokenizer().countToolTokens(tools) : 0;
 
 		const summarizeThresholdOverride = this.configurationService.getConfig<number | undefined>(ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold);

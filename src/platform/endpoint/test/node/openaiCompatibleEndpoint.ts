@@ -8,7 +8,7 @@ import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
-import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
+import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { isOpenAiFunctionTool } from '../../../networking/common/fetch';
@@ -119,10 +119,6 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 				? modelConfig.supported_endpoints
 				: [ModelSupportedEndpoint.ChatCompletions]
 		};
-		// configurationService.useResponsesApi should be set to true if ModelSupportedEndpoint.Responses is in modelConfig.supported_endpoints
-		if (modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses)) {
-			configurationService.setConfig(ConfigKey.UseResponsesApi, true);
-		}
 
 		super(
 			modelInfo,

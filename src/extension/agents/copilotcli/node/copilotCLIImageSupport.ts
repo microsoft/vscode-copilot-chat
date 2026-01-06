@@ -3,13 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as fs from 'fs/promises';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { FileType } from '../../../../vscodeTypes';
 
 export class CopilotCLIImageSupport {
 	private readonly storageDir: URI;
@@ -17,7 +16,6 @@ export class CopilotCLIImageSupport {
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		this.storageDir = URI.joinPath(this.context.globalStorageUri, 'copilot-cli-images');
@@ -42,23 +40,23 @@ export class CopilotCLIImageSupport {
 		const filename = `${timestamp}-${randomId}${extension}`;
 		const imageUri = URI.joinPath(this.storageDir, filename);
 
-		await this.workspaceService.fs.writeFile(imageUri, imageData);
+		await fs.writeFile(imageUri.fsPath, imageData);
 		return imageUri;
 	}
 
 	async cleanupOldImages(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): Promise<void> {
 		try {
-			const entries = await this.workspaceService.fs.readDirectory(this.storageDir);
+			const entries = await fs.readdir(this.storageDir.fsPath, { withFileTypes: true });
 			const now = Date.now();
 			const cutoff = now - maxAgeMs;
 
-			for (const [filename, fileType] of entries) {
-				if (fileType === FileType.File) {
-					const fileUri = URI.joinPath(this.storageDir, filename);
+			for (const entry of entries) {
+				if (entry.isFile()) {
+					const fileUri = URI.joinPath(this.storageDir, entry.name);
 					try {
-						const stat = await this.workspaceService.fs.stat(fileUri);
-						if (stat.mtime < cutoff) {
-							await this.workspaceService.fs.delete(fileUri);
+						const stat = await fs.stat(fileUri.fsPath);
+						if (stat.mtime.getTime() < cutoff) {
+							await fs.unlink(fileUri.fsPath);
 						}
 					} catch {
 						// Skip files we can't access

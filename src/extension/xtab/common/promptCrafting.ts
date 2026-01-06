@@ -129,6 +129,9 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 		case PromptingStrategy.XtabAggressiveness:
 			postScript = `<|aggressive|>${aggressivenessLevel}<|/aggressive|>`;
 			break;
+		case PromptingStrategy.PatchBased:
+			postScript = `Output a modified diff style format with the changes you want. Each change patch must start with \`<filename>:<line number>\` and then include some non empty "anchor lines" preceded by \`-\` and the new lines meant to replace them preceded by \`+\`. Put your changes in the order that makes the most sense, for example edits inside the code_to_edit region and near the user's <|cursor|> should always be prioritized. Output "<NO_EDIT>" if you don't have a good edit candidate.`;
+			break;
 		case PromptingStrategy.SimplifiedSystemPrompt:
 		case PromptingStrategy.CopilotNesXtab:
 		case undefined:
@@ -623,7 +626,7 @@ class ClippedDocument {
 
 export function createTaggedCurrentFileContentUsingPagedClipping(
 	currentDocLines: string[],
-	areaAroundCodeToEdit: string,
+	areaAroundCodeToEdit: string[],
 	areaAroundEditWindowLinesRange: OffsetRange,
 	computeTokens: (s: string) => number,
 	pageSize: number,
@@ -646,7 +649,7 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 
 	const taggedCurrentFileContent = [
 		...currentDocLines.slice(rangeToKeep.start, areaAroundEditWindowLinesRange.start),
-		areaAroundCodeToEdit,
+		...areaAroundCodeToEdit,
 		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, rangeToKeep.endExclusive),
 	];
 
@@ -690,7 +693,7 @@ export function constructTaggedFile(
 		PromptTags.EDIT_WINDOW.end,
 		...contentWithCursorAsLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
 		PromptTags.AREA_AROUND.end
-	].join('\n');
+	];
 
 	const currentFileContentWithCursorLines = opts.includeLineNumbers.currentFileContent
 		? addLineNumbers(contentWithCursorAsLinesOriginal)
@@ -699,7 +702,7 @@ export function constructTaggedFile(
 		? addLineNumbers(currentDocument.lines)
 		: currentDocument.lines;
 
-	let areaAroundCodeToEditForCurrentFile: string;
+	let areaAroundCodeToEditForCurrentFile: string[];
 	if (promptOptions.currentFile.includeTags && opts.includeLineNumbers.currentFileContent === opts.includeLineNumbers.areaAroundCodeToEdit) {
 		areaAroundCodeToEditForCurrentFile = areaAroundCodeToEdit;
 	} else {
@@ -708,7 +711,7 @@ export function constructTaggedFile(
 			...currentFileContentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
 			...editWindowLines,
 			...currentFileContentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
-		].join('\n');
+		];
 	}
 
 	const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
@@ -722,6 +725,6 @@ export function constructTaggedFile(
 
 	return taggedCurrentFileContentResult.map(clippedTaggedCurrentDoc => ({
 		clippedTaggedCurrentDoc,
-		areaAroundCodeToEdit,
+		areaAroundCodeToEdit: areaAroundCodeToEdit.join('\n'),
 	}));
 }

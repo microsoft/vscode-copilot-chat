@@ -8,22 +8,22 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '../.env' });
 
 import { promises as fs } from 'fs';
+import { outdent } from 'outdent';
 import * as path from 'path';
 import * as stream from 'stream';
-import { outdent } from 'outdent';
 import { assert, describe, expect, it } from 'vitest';
+import { CopilotToken } from '../src/_internal/platform/authentication/common/copilotToken';
+import { ICopilotTokenManager } from '../src/_internal/platform/authentication/common/copilotTokenManager';
 import { DocumentId } from '../src/_internal/platform/inlineEdits/common/dataTypes/documentId';
 import { MutableObservableWorkspace } from '../src/_internal/platform/inlineEdits/common/observableWorkspace';
 import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../src/_internal/platform/networking/common/fetcherService';
 import { IFetcher } from '../src/_internal/platform/networking/common/networking';
 import { CancellationToken } from '../src/_internal/util/vs/base/common/cancellation';
+import { Emitter } from '../src/_internal/util/vs/base/common/event';
 import { URI } from '../src/_internal/util/vs/base/common/uri';
 import { StringEdit, StringReplacement } from '../src/_internal/util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../src/_internal/util/vs/editor/common/core/ranges/offsetRange';
 import { createNESProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
-import { ICopilotTokenManager } from '../src/_internal/platform/authentication/common/copilotTokenManager';
-import { Emitter } from '../src/_internal/util/vs/base/common/event';
-import { CopilotToken } from '../src/_internal/platform/authentication/common/copilotToken';
 
 
 class TestFetcher implements IFetcher {
@@ -92,17 +92,17 @@ class TestFetcher implements IFetcher {
 }
 
 class TestCopilotTokenManager implements ICopilotTokenManager {
-    _serviceBrand: undefined;
+	_serviceBrand: undefined;
 
-    onDidCopilotTokenRefresh = new Emitter<void>().event;
+	onDidCopilotTokenRefresh = new Emitter<void>().event;
 
-    async getCopilotToken(force?: boolean): Promise<CopilotToken> {
-        return new CopilotToken({ token: 'fixedToken', expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown' });
-    }
+	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
+		return new CopilotToken({ token: 'fixedToken', expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown' });
+	}
 
-    resetCopilotToken(httpError?: number): void {
-        // nothing
-    }
+	resetCopilotToken(httpError?: number): void {
+		// nothing
+	}
 }
 
 class TestTelemetrySender implements ITelemetrySender {
@@ -163,7 +163,11 @@ describe('NESProvider Facade', () => {
 		assert.strictEqual(fetcher.requests.length, 2, `Unexpected requests: ${JSON.stringify(fetcher.requests, null, 2)}`);
 		assert.ok(fetcher.requests[0].url.endsWith('/models'), `Unexpected URL: ${fetcher.requests[0].url}`);
 		assert.ok(fetcher.requests[1].url.endsWith('/chat/completions'), `Unexpected URL: ${fetcher.requests[1].url}`);
-		assert.strictEqual(fetcher.requests[1].options.json?.model, 'xtab-test');
+
+		assert(fetcher.requests[1].options.json);
+		assert(typeof fetcher.requests[1].options.json === 'object');
+		assert('model' in fetcher.requests[1].options.json);
+		assert(fetcher.requests[1].options.json.model === 'xtab-test');
 
 		assert(result.result);
 

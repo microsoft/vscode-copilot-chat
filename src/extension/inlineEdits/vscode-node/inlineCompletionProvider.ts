@@ -30,6 +30,7 @@ import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { clamp } from '../../../util/vs/base/common/numbers';
 import { autorun, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { basename } from '../../../util/vs/base/common/path';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -247,13 +248,13 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 			let [providerSuggestion, diagnosticsSuggestion] = await first;
 
-			const hasNonEmptyLlmNes = providerSuggestion && providerSuggestion.result !== undefined;
+			const hasNonEmptyLlmNes = !!providerSuggestion && providerSuggestion.result !== undefined;
 
-			const shouldGiveMoreTimeToDiagnostics = !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider;
-
+			const shouldGiveMoreTimeToDiagnostics = !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider && !diagnosticsSuggestion;
 			if (shouldGiveMoreTimeToDiagnostics) {
 				tracer.trace('giving some more time to diagnostics provider');
-				timeout(1000).then(() => requestCancellationTokenSource.cancel());
+				const remainingTime = clamp(0, 1250 - (Date.now() - context.requestIssuedDateTime), 1250);
+				timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
 				[, diagnosticsSuggestion] = await all;
 			}
 

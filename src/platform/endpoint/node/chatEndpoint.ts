@@ -169,7 +169,23 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public getExtraHeaders(): Record<string, string> {
-		return this.modelMetadata.requestHeaders ?? {};
+		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
+
+		if (this.useMessagesApi && this._getThinkingBudget()) {
+			headers['anthropic-beta'] = 'interleaved-thinking-2025-05-14';
+		}
+
+		return headers;
+	}
+
+	private _getThinkingBudget(): number | undefined {
+		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
+		if (!configuredBudget || configuredBudget <= 0) {
+			return undefined;
+		}
+		const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
+		// Cap thinking budget to Anthropic's recommended max (32000), and ensure it's less than max output tokens
+		return Math.min(32000, this._maxOutputTokens - 1, normalizedBudget);
 	}
 
 	public get modelMaxPromptTokens(): number {
@@ -196,12 +212,11 @@ export class ChatEndpoint implements IChatEndpoint {
 			return true;
 		}
 
-		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._expService);
-		return !!(enableResponsesApi && this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses));
+		return !!this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses);
 	}
 
 	protected get useMessagesApi(): boolean {
-		const enableMessagesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.UseMessagesApi, this._expService);
+		const enableMessagesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, this._expService);
 		return !!(enableMessagesApi && this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Messages));
 	}
 
@@ -281,11 +296,9 @@ export class ChatEndpoint implements IChatEndpoint {
 	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
 		const isConversationAgent = options.location === ChatLocation.Agent;
 		if (isAnthropicFamily(this) && !options.disableThinking && isConversationAgent) {
-			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
-			if (configuredBudget && configuredBudget > 0) {
-				const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
-				// Cap thinking budget to Anthropic's recommended max (32000), and ensure it's less than max output tokens
-				body.thinking_budget = Math.min(32000, this._maxOutputTokens - 1, normalizedBudget);
+			const thinkingBudget = this._getThinkingBudget();
+			if (thinkingBudget) {
+				body.thinking_budget = thinkingBudget;
 			}
 		}
 		return body;

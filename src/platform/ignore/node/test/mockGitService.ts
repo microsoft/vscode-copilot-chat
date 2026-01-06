@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { vi } from 'vitest';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { IObservable } from '../../../../util/vs/base/common/observableInternal';
 import { observableValue } from '../../../../util/vs/base/common/observableInternal/observables/observableValue';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IGitService, RepoContext } from '../../../git/common/gitService';
-import { Change, Commit, CommitShortStat, LogOptions } from '../../../git/vscode/git';
+import { Change, Commit, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery } from '../../../git/vscode/git';
 
 /**
  * A configurable mock implementation of IGitService for testing.
@@ -69,6 +70,14 @@ export class MockGitService implements IGitService {
 		return Promise.resolve(undefined);
 	}
 
+	diffBetweenWithStats(_uri: URI, _ref1: string, _ref2: string, _path?: string): Promise<DiffChange[] | undefined> {
+		return Promise.resolve(undefined);
+	}
+
+	diffBetweenPatch(uri: URI, ref1: string, ref2: string, path: string): Promise<string | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	diffWith(_uri: URI, _ref: string): Promise<Change[] | undefined> {
 		return Promise.resolve(undefined);
 	}
@@ -95,6 +104,18 @@ export class MockGitService implements IGitService {
 
 	migrateChanges(_uri: URI, _sourceRepositoryUri: URI, _options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void> {
 		return Promise.resolve();
+	}
+
+	applyPatch(uri: URI, patch: string): Promise<void> {
+		return Promise.resolve();
+	}
+
+	commit(uri: URI, message: string | undefined): Promise<void> {
+		return Promise.resolve();
+	}
+
+	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
+		return Promise.resolve([]);
 	}
 
 	dispose(): void {

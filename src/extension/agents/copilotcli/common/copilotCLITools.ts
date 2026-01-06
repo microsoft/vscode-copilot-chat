@@ -292,8 +292,37 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 
 	let details: { requestId: string; toolIdEditMap: Record<string, string> } | undefined;
 	let isFirstUserMessage = true;
+	const currentAssistantMessage: { chunks: string[] } = { chunks: [] };
+	const processedMessages = new Set<string>();
+
+	function processAssistantMessage(content: string) {
+		// Extract PR metadata if present
+		const { cleanedContent, prPart } = extractPRMetadata(content);
+		// Add PR part first if it exists
+		if (prPart) {
+			currentResponseParts.push(prPart);
+		}
+		if (cleanedContent) {
+			currentResponseParts.push(
+				new ChatResponseMarkdownPart(new MarkdownString(cleanedContent))
+			);
+		}
+	}
+
+	function flushPendingAssistantMessage() {
+		if (currentAssistantMessage.chunks.length > 0) {
+			const content = currentAssistantMessage.chunks.join('');
+			currentAssistantMessage.chunks = [];
+			processAssistantMessage(content);
+		}
+	}
+
 	for (const event of events) {
 		details = getVSCodeRequestId(event.id) ?? details;
+		if (event.type !== 'assistant.message') {
+			flushPendingAssistantMessage();
+		}
+
 		switch (event.type) {
 			case 'user.message': {
 				// Flush any pending response parts before adding user message
@@ -354,20 +383,11 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				break;
 			}
 			case 'assistant.message': {
-				if (event.data.content) {
-					// Extract PR metadata if present
-					const { cleanedContent, prPart } = extractPRMetadata(event.data.content);
-
-					// Add PR part first if it exists
-					if (prPart) {
-						currentResponseParts.push(prPart);
-					}
-
-					if (cleanedContent) {
-						currentResponseParts.push(
-							new ChatResponseMarkdownPart(new MarkdownString(cleanedContent))
-						);
-					}
+				if (typeof event.data.chunkContent === 'string') {
+					processedMessages.add(event.data.messageId);
+					currentAssistantMessage.chunks.push(event.data.chunkContent);
+				} else if (event.data.content && !processedMessages.has(event.data.messageId)) {
+					processAssistantMessage(event.data.content);
 				}
 				break;
 			}
@@ -402,6 +422,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 		}
 	}
 
+	flushPendingAssistantMessage();
 
 	if (currentResponseParts.length > 0) {
 		turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
@@ -637,13 +658,13 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	} else if (toolCall.toolName === 'semantic_code_search') {
 		invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
 	} else if (toolCall.toolName === 'search_bash') {
-		invocation.invocationMessage = `Command: ${toolCall.arguments.command}`;
+		invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
 	} else if (toolCall.toolName === 'glob') {
-		const searchInPath = toolCall.arguments.path ? ` in ${toolCall.arguments.path}` : '';
-		invocation.invocationMessage = `Pattern: ${toolCall.arguments.pattern}${searchInPath}`;
+		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
+		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	} else if (toolCall.toolName === 'grep') {
-		const searchInPath = toolCall.arguments.path ? ` in ${toolCall.arguments.path}` : '';
-		invocation.invocationMessage = `Pattern: ${toolCall.arguments.pattern}${searchInPath}`;
+		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
+		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	}
 }
 

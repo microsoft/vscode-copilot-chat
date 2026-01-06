@@ -92,7 +92,7 @@ export class GetNewWorkspaceTool implements ICopilotTool<INewWorkspaceToolParams
 
 				workspaceUri = newWorkspaceUri;
 				this.commandService.executeCommand('setContext', 'chatSkipRequestInProgressMessage', true);
-				this.interactiveSession.transferActiveChat(newWorkspaceUri);
+				await this.interactiveSession.transferActiveChat(newWorkspaceUri);
 				this.commandService.executeCommand('vscode.openFolder', newWorkspaceUri, { forceReuseWindow: true });
 
 				return new LanguageModelToolResult([

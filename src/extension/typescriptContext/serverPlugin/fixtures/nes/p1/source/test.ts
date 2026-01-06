@@ -164,3 +164,14 @@ export function myFunc(): void {
 	function baz(): void {
 	}
 }
+
+export function redeclaredVariable(): void {
+	const minimalIconWidth = 16;
+	//// { "title": "Variable - no rename redeclared", "oldName": "minimalIconWidth", "newName": "minimalIconWidthWithPadding", "expected": "no", "delta": 6 }
+	const minimalIconWidth = minimalIconWidth + 2;
+}
+
+export function redeclaredVariableFunctionScoped(minimalIconWidth = 16): void {
+	//// { "title": "Variable - no rename redeclared param", "oldName": "minimalIconWidth", "newName": "minimalIconWidthWithPadding", "expected": "no", "delta": 6 }
+	const minimalIconWidth = minimalIconWidth + 2;
+}
