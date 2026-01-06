@@ -872,7 +872,7 @@ export namespace ConfigKey {
 	export const InlineEditsEnabled = defineSetting<boolean>('nextEditSuggestions.enabled', ConfigType.ExperimentBased, false);
 	export const InlineEditsEnableDiagnosticsProvider = defineSetting<boolean>('nextEditSuggestions.fixes', ConfigType.ExperimentBased, true);
 	export const InlineEditsAllowWhitespaceOnlyChanges = defineSetting<boolean>('nextEditSuggestions.allowWhitespaceOnlyChanges', ConfigType.ExperimentBased, true);
-	export const InlineEditsNextCursorPredictionEnabled = defineSetting<NextCursorLinePrediction>('nextEditSuggestions.nextCursorPrediction.enabled', ConfigType.ExperimentBased, NextCursorLinePrediction.Off);
+	export const InlineEditsNextCursorPredictionEnabled = defineSetting<NextCursorLinePrediction>('nextEditSuggestions.nextCursorPrediction.enabled', ConfigType.ExperimentBased, NextCursorLinePrediction.Off, undefined, { oldKey: 'chat.advanced.inlineEdits.nextCursorPrediction.enabled' });
 	export const NewWorkspaceCreationAgentEnabled = defineSetting<boolean>('chat.newWorkspaceCreation.enabled', ConfigType.Simple, true);
 	export const NewWorkspaceUseContext7 = defineSetting<boolean>('chat.newWorkspace.useContext7', ConfigType.Simple, false);
 	export const SummarizeAgentConversationHistory = defineSetting<boolean>('chat.summarizeAgentConversationHistory.enabled', ConfigType.Simple, true);
