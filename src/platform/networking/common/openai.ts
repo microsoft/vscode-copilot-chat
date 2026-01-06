@@ -157,6 +157,7 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 				if (rawPart?.type === Raw.ChatCompletionContentPartKind.Image && rawPart.imageUrl?.mediaType) {
 					// CAPI expects `media_type` instead of `mediaType`. This is only used for CAPI and not OpenAI.
 					(part.image_url as ChatCompletionContentPartImage.ImageURL & { media_type: string }).media_type = rawPart.imageUrl.mediaType;
+					delete rawPart.imageUrl.mediaType;
 				}
 			}
 		}
