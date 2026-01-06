@@ -12,7 +12,6 @@ import { IGitCommitMessageService } from '../../../platform/git/common/gitCommit
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
-import { coalesce } from '../../../util/vs/base/common/arrays';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived, IObservable } from '../../../util/vs/base/common/observable';
 import * as path from '../../../util/vs/base/common/path';
@@ -182,32 +181,17 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// Background session that has the changes committed in the worktree. To apply the
 		// changes, we need to migrate them from the worktree to the main repository using
 		// a patch file.
-		const changes = await this.gitService.diffBetweenWithStats(
+		const patch = await this.gitService.diffBetweenPatch(
 			vscode.Uri.file(worktreeProperties.worktreePath),
 			worktreeProperties.baseCommit,
-			worktreeProperties.branchName);
-
-		// Temporary solution until there is git extension API
-		const diffs = await Promise.all((changes ?? [])
-			.map(change => {
-				return this.gitService.diffBetweenPatch(
-					vscode.Uri.file(worktreeProperties.worktreePath),
-					worktreeProperties.baseCommit,
-					worktreeProperties.branchName,
-					change.uri.fsPath
-				);
-			}));
-
-		const patch = coalesce(diffs).map(line => `${line}\n`);
-		if (patch.length === 0) {
-			return;
-		}
+			worktreeProperties.branchName,
+		);
 
 		// Write the patch to a temporary file
 		const encoder = new TextEncoder();
 		const patchFilePath = path.join(worktreeProperties.repositoryPath, '.git', `${worktreeProperties.branchName}.patch`);
 		const patchFileUri = vscode.Uri.file(patchFilePath);
-		await vscode.workspace.fs.writeFile(patchFileUri, encoder.encode(patch.join('')));
+		await vscode.workspace.fs.writeFile(patchFileUri, encoder.encode(patch));
 
 		try {
 			// Apply patch
