@@ -112,7 +112,7 @@ export namespace TriggerRemoteIndexingError {
 }
 
 
-type RemoteCodeSearchState =
+export type RemoteCodeSearchState =
 	{
 		readonly status: CodeSearchRepoStatus.BuildingIndex | CodeSearchRepoStatus.CheckingStatus | CodeSearchRepoStatus.CouldNotCheckIndexStatus | CodeSearchRepoStatus.NotAuthorized | CodeSearchRepoStatus.NotIndexable | CodeSearchRepoStatus.NotResolvable | CodeSearchRepoStatus.Resolving | CodeSearchRepoStatus.NotYetIndexed;
 	} | {

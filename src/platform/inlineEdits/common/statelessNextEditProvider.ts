@@ -31,7 +31,13 @@ export const enum ShowNextEditPreference {
 	AroundEdit = 'aroundEdit',
 }
 
-export type PushEdit = (edit: Result<{ edit: LineReplacement; window?: OffsetRange; targetDocument?: DocumentId }, NoNextEditReason>) => void;
+export type StreamedEdit = {
+	readonly edit: LineReplacement;
+	readonly window?: OffsetRange;
+	readonly targetDocument?: DocumentId;
+}
+
+export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 
 export interface IStatelessNextEditProvider {
 	readonly ID: string;

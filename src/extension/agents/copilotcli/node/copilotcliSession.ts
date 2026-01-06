@@ -5,7 +5,6 @@
 
 import type { Attachment, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
-import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { raceCancellation } from '../../../../util/vs/base/common/async';
@@ -90,13 +89,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	constructor(
 		private readonly _options: CopilotCLISessionOptions,
 		private readonly _sdkSession: Session,
-		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
-
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -135,7 +132,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
 
-		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
+		this.logService.info(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const disposables = this.add(new DisposableStore());
 		const abortController = new AbortController();
 		disposables.add(token.onCancellationRequested(() => {
@@ -159,7 +156,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				token
 			);
 		}));
-
+		const chunkMessageIds = new Set<string>();
 		try {
 			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
 			const [currentModel, authInfo] = await Promise.all([
@@ -179,7 +176,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				sdkRequestId = event.id;
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
-				if (typeof event.data.content === 'string' && event.data.content.length) {
+				// Support for streaming chunked messages.
+				if (typeof event.data.chunkContent === 'string' && event.data.chunkContent.length) {
+					chunkMessageIds.add(event.data.messageId);
+					this._stream?.markdown(event.data.chunkContent);
+				}
+				if (typeof event.data.content === 'string' && event.data.content.length && !chunkMessageIds.has(event.data.messageId)) {
 					this._stream?.markdown(event.data.content);
 				}
 			})));
@@ -237,15 +239,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
-			if (this._options.isolationEnabled && !token.isCancellationRequested) {
-				// When isolation is enabled and we are using a git workspace, stage
-				// all changes in the working directory when the session is completed
-				const workingDirectory = this._options.toSessionOptions().workingDirectory;
-				if (workingDirectory) {
-					await this.gitService.add(Uri.file(workingDirectory), []);
-					this.logService.trace(`[CopilotCLISession] Staged all changes in working directory ${workingDirectory}`);
-				}
-			}
 			const requestDetails: { requestId: string; toolIdEditMap: Record<string, string> } = { requestId, toolIdEditMap: {} };
 			await Promise.all(Array.from(toolIdEditMap.entries()).map(async ([toolId, editFilePromise]) => {
 				const editId = await editFilePromise.catch(() => undefined);

@@ -2487,6 +2487,15 @@
 						"markdownDescription": "%github.copilot.nextEditSuggestions.enabled%",
 						"scope": "language-overridable"
 					},
+					"github.copilot.nextEditSuggestions.extendedRange": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"nextEditSuggestions",
+							"onExp"
+						],
+						"markdownDescription": "%github.copilot.nextEditSuggestions.extendedRange%"
+					},
 					"github.copilot.nextEditSuggestions.fixes": {
 						"type": "boolean",
 						"default": true,
@@ -3303,6 +3312,15 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
+					"github.copilot.chat.anthropic.useMessagesApi": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.useMessagesApi%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
 						"default": true,
@@ -3936,6 +3954,15 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.mcp.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.cli.autoCommit.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.autoCommit.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"
@@ -4593,7 +4620,7 @@
 				{
 					"command": "github.copilot.cli.sessions.delete",
 					"when": "chatSessionType == copilotcli",
-					"group": "inline@2"
+					"group": "1_edit@10"
 				},
 				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
@@ -4603,7 +4630,7 @@
 				{
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 					"when": "chatSessionType == copilot-cloud-agent",
-					"group": "context"
+					"group": "1_edit@10"
 				}
 			],
 			"chat/multiDiff/context": [
@@ -5209,6 +5236,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "0.1.55",
 		"@anthropic-ai/sdk": "^0.68.0",
+		"@github/blackbird-external-ingest-utils": "^0.1.0",
 		"@github/copilot": "^0.0.366",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",

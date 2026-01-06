@@ -154,7 +154,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		if (!response) {
 			this._logService.warn('Failed to get copilot token');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_failed');
-			return { kind: 'failure', reason: 'FailedToGetToken' };
+			return { kind: 'failure', reason: 'RequestFailed' };
 		}
 
 		// FIXME: Unverified type after inputting response
@@ -162,7 +162,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		if (!tokenInfo) {
 			this._logService.warn('Failed to get copilot token');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_read_failed');
-			return { kind: 'failure', reason: 'FailedToGetToken' };
+			return { kind: 'failure', reason: 'ParseFailed' };
 		}
 
 		if (response.status === 401) {

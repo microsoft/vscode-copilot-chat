@@ -34,12 +34,12 @@ export class LanguageModelServer implements ILanguageModelServer {
 	declare _serviceBrand: undefined;
 
 	private server: http.Server;
-	private config: ILanguageModelServerConfig;
+	protected config: ILanguageModelServerConfig;
 	protected adapterFactories: Map<string, IProtocolAdapterFactory>;
-
+	protected readonly requestHandlers = new Map<string, { method: string; handler: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void> }>();
 	constructor(
 		@ILogService private readonly logService: ILogService,
-		@IEndpointProvider private readonly endpointProvider: IEndpointProvider
+		@IEndpointProvider protected readonly endpointProvider: IEndpointProvider
 	) {
 		this.config = {
 			port: 0, // Will be set to random available port
@@ -58,6 +58,12 @@ export class LanguageModelServer implements ILanguageModelServer {
 			if (req.method === 'OPTIONS') {
 				res.writeHead(200);
 				res.end();
+				return;
+			}
+
+			const handler = this.requestHandlers.get(req.url || '');
+			if (handler && handler.method === req.method) {
+				await handler.handler(req, res);
 				return;
 			}
 

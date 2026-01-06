@@ -672,6 +672,10 @@ describe('makeUriConfirmationChecker', async () => {
 			return false;
 		}
 
+		isSkillFile(uri: URI): boolean {
+			return false;
+		}
+
 		fetchInstructionsFromSetting(): Promise<any[]> {
 			return Promise.resolve([]);
 		}

@@ -234,7 +234,7 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 		if (!repoId) {
 			return;
 		}
-		const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
+		const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo, { createIfNone: true });
 		const pullRequest = pullRequests.find(pr => pr.id === prId);
 		if (!pullRequest) {
 			return;
