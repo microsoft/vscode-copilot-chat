@@ -171,8 +171,23 @@ export class ChatEndpoint implements IChatEndpoint {
 	public getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
-		if (this.useMessagesApi && this._getThinkingBudget()) {
-			headers['anthropic-beta'] = 'interleaved-thinking-2025-05-14';
+		if (this.useMessagesApi) {
+			const betaFeatures: string[] = [];
+
+			// Add thinking beta if enabled
+			if (this._getThinkingBudget()) {
+				betaFeatures.push('interleaved-thinking-2025-05-14');
+			}
+
+			// Add context management beta if enabled
+			const contextEditingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, this._expService);
+			if (contextEditingEnabled) {
+				betaFeatures.push('context-management-2025-06-27');
+			}
+
+			if (betaFeatures.length > 0) {
+				headers['anthropic-beta'] = betaFeatures.join(',');
+			}
 		}
 
 		return headers;
@@ -316,7 +331,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (this.useResponsesApi) {
 			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
 		} else if (this.useMessagesApi) {
-			return processResponseFromMessagesEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
+			return processResponseFromMessagesEndpoint(this._instantiationService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
 		} else {

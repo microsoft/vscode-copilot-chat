@@ -837,6 +837,31 @@ export namespace ConfigKey {
 	/** Enable memory tool */
 	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, false);
 
+	/** Context editing for Anthropic Messages API */
+	export const AnthropicContextEditingEnabled = defineSetting<boolean>('chat.anthropic.contextEditing.enabled', ConfigType.ExperimentBased, true);
+	export const AnthropicContextEditing = defineSetting<{
+		toolResult: {
+			triggerTokens: number;
+			keepCount: number;
+			clearAtLeastTokens?: number;
+			excludeTools: string[];
+			clearInputs: boolean;
+		};
+		thinking: {
+			keepTurns: number;
+		};
+	}>('chat.anthropic.contextEditing', ConfigType.Simple, {
+		toolResult: {
+			triggerTokens: 0,
+			keepCount: 5,
+			excludeTools: [],
+			clearInputs: false,
+		},
+		thinking: {
+			keepTurns: 1,
+		},
+	});
+
 	/** User provided code generation instructions for the chat */
 	export const CodeGenerationInstructions = defineSetting('chat.codeGeneration.instructions', ConfigType.Simple, [] as CodeGenerationInstruction[]);
 	export const TestGenerationInstructions = defineSetting('chat.testGeneration.instructions', ConfigType.Simple, [] as CodeGenerationInstruction[]);
