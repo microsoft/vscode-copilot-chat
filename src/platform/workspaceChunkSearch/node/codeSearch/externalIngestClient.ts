@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DocumentContents, GeoFilter, IngestFilter, canIngestDocument, createCodedSymbols, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
+import { canIngestDocument, canIngestPathAndSize, DocumentContents, GeoFilter, IngestFilter, createCodedSymbols, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
 import crypto from 'crypto';
 import fs from 'fs';
 import { posix } from 'node:path';
@@ -18,19 +18,57 @@ import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ApiClient } from './externalIngestApi';
 
+export interface ExternalIngestFile {
+	readonly uri: URI;
+	readonly docSha: Uint8Array;
+
+	read(): Promise<Uint8Array>;
+}
+
+/**
+ * Interface for the external ingest client that handles indexing and searching files.
+ */
+export interface IExternalIngestClient {
+	doInitialIndex(authToken: string, filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void>;
+
+	listFilesets(authToken: string, token: CancellationToken): Promise<string[]>;
+	deleteFileset(authToken: string, filesetName: string, token: CancellationToken): Promise<void>;
+
+	searchFilesets(authToken: string, filesetName: string, rootUri: URI, prompt: string, limit: number, token: CancellationToken): Promise<CodeSearchResult>;
+
+	/**
+	 * Quickly checks if a file can be ingested based on its path and size.
+	 */
+	canIngestPathAndSize(filePath: string, size: number): boolean;
+
+	/**
+	 * Checks if a file can be ingested based on its path and file contents.
+	 */
+	canIngestDocument(filePath: string, data: Uint8Array): boolean;
+}
 
 // Create a shared API client with throttling (target quota usage of 80)
 // You can change this to `null` to ignore the throttle
 
-export class ExternalIngestClient {
+export class ExternalIngestClient implements IExternalIngestClient {
 	private static apiClient = new ApiClient(80);
 
 	private static readonly PROMISE_POOL_SIZE = 32;
 	private static baseUrl = 'https://api.github.com';
 
+	private readonly _ingestFilter = new IngestFilter();
+
 	constructor(
 		@ILogService private readonly logService: ILogService,
 	) { }
+
+	public canIngestPathAndSize(filePath: string, size: number): boolean {
+		return canIngestPathAndSize(this._ingestFilter, filePath, size);
+	}
+
+	public canIngestDocument(filePath: string, data: Uint8Array): boolean {
+		return canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+	}
 
 	private getHeaders(authToken: string): Record<string, string> {
 		const headers: Record<string, string> = {
@@ -51,56 +89,30 @@ export class ExternalIngestClient {
 		return ExternalIngestClient.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
 	}
 
-	async doInitialIndex(authToken: string, filesetName: string, root: URI, allFiles: AsyncIterable<{ readonly uri: URI; readonly docSha: Uint8Array }>, token: CancellationToken): Promise<void> {
+	async doInitialIndex(authToken: string, filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void> {
 		setupPanicHooks();
 
 		// Initial setup
-		const ingestFilter = new IngestFilter();
 		const mappings = new Map<string, { full: string; relative: string }>();
 		const geoFilter = new GeoFilter();
 
 
 		this.logService.info(`ExternalIngestClient::doInitialIndex(). Creating ingest for fileset: ${filesetName}`);
-		const allDocShas: Uint8Array[] = [];
 
 		this.logService.trace(`ExternalIngestClient::doInitialIndex(). Checking for ingestable files...`);
 		const ingestableCheckStart = performance.now();
-		// Figure out which documents are uploadable and insert them into the geoFilter
-		// and DocSha to path map and DocSha array.
-		const checking = new Set<Promise<void>>();
+
+		const allDocShas: Uint8Array[] = [];
 		for await (const file of allFiles) {
 			const relativePath = posix.relative(root.path, file.uri.path);
 			const full = file.uri.fsPath;
 
-			const p = (async () => {
-				this.logService.debug(`ExternalIngestClient::doInitialIndex(). Checking if file can be ingested: ${relativePath}`);
-				const fileBytes = await fs.promises.readFile(full);
-				const content = new DocumentContents(fileBytes);
-				if (canIngestDocument(ingestFilter, relativePath, content)) { // Can we do this lazily?
-					try {
-						const docSha = file.docSha; //getDocSha(relativePath, content);
-						geoFilter.push(docSha);
-						allDocShas.push(docSha);
-						// Clients of the external ingest process are required to store a mapping of docSha to
-						// document path. In this example ingestion code it is handled in memory but you might want
-						// to persist somewhere. Note that our example converts the Uin8Arrays to base64 strings
-						// since Uint8Array doesn't work as a Map key because equality is checked by reference.
-						const docShaBase64 = Buffer.from(docSha).toString('base64');
-						mappings.set(docShaBase64, { full, relative: relativePath });
-					} catch (err) {
-						throw new Error('Exception during ingest file', err);
-					}
-				}
-			})();
-			p.finally(() => {
-				checking.delete(p);
-			});
-			checking.add(p);
-			if (checking.size >= ExternalIngestClient.PROMISE_POOL_SIZE) {
-				await Promise.race(checking);
-			}
+			geoFilter.push(file.docSha);
+			allDocShas.push(file.docSha);
+
+			const docShaBase64 = Buffer.from(file.docSha).toString('base64');
+			mappings.set(docShaBase64, { full, relative: relativePath });
 		}
-		await Promise.all(checking);
 
 		this.logService.debug(`ExternalIngestClient::doInitialIndex(). Found ${mappings.size} ingestable files in ${Math.round(performance.now() - ingestableCheckStart)}ms`,);
 
