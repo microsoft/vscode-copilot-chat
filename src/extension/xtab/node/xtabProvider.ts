@@ -827,7 +827,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 
 		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement();
-		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying && nextCursorLinePrediction !== NextCursorLinePrediction.Off) {
+		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying) {
 			const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer);
 			if (cancellationToken.isCancellationRequested) {
 				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));

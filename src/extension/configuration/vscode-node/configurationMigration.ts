@@ -162,17 +162,19 @@ ConfigurationMigrationRegistry.registerConfigurationMigrations([{
 	}
 }]);
 
+const oldCursorJumpKey = 'github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.enabled';
+const newCursorJumpKey = 'github.copilot.nextEditSuggestions.extendedRange';
 ConfigurationMigrationRegistry.registerConfigurationMigrations([{
-	key: 'github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.enabled',
-	migrateFn: async (value: NextCursorLinePrediction | /* the rest is for backward compat: */ 'labelOnlyWithEdit' | boolean | undefined) => {
-		if (typeof value === 'boolean') {
-			value = value ? NextCursorLinePrediction.OnlyWithEdit : NextCursorLinePrediction.Off;
-		} else if (value === 'labelOnlyWithEdit') {
-			value = NextCursorLinePrediction.OnlyWithEdit;
+	key: oldCursorJumpKey,
+	migrateFn: async (value: boolean |  /* the rest is for backward compat: */ NextCursorLinePrediction | 'labelOnlyWithEdit' | boolean | undefined) => {
+		if (typeof value === 'string') { // for backward compatibility -- one of 'onlyWithEdit' | 'jump' | 'labelOnlyWithEdit'
+			value = true;
+		} else if (value === undefined) {
+			value = false;
 		}
 		return [
-			['github.copilot.nextEditSuggestions.nextCursorPrediction.enabled', { value }],
-			['github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.enabled', { value: undefined }]
+			[newCursorJumpKey, { value }],
+			[oldCursorJumpKey, { value: undefined }]
 		];
 	}
 }]);

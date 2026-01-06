@@ -2426,19 +2426,14 @@
 						"markdownDescription": "%github.copilot.nextEditSuggestions.enabled%",
 						"scope": "language-overridable"
 					},
-					"github.copilot.nextEditSuggestions.nextCursorPrediction.enabled": {
-						"type": "string",
-						"enum": [
-							"off",
-							"onlyWithEdit",
-							"jump"
-						],
-						"default": "off",
+					"github.copilot.nextEditSuggestions.extendedRange": {
+						"type": "boolean",
+						"default": false,
 						"tags": [
 							"nextEditSuggestions",
 							"onExp"
 						],
-						"markdownDescription": "%github.copilot.nextEditSuggestions.nextCursorPrediction.enabled%"
+						"markdownDescription": "%github.copilot.nextEditSuggestions.extendedRange%"
 					},
 					"github.copilot.nextEditSuggestions.fixes": {
 						"type": "boolean",

@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 export enum NextCursorLinePrediction {
-	Off = 'off',
 	Jump = 'jump',
 	OnlyWithEdit = 'onlyWithEdit',
 }
