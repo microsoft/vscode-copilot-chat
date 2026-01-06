@@ -19,7 +19,6 @@ import { IPromptEndpoint } from '../base/promptRenderer';
 export interface ImageProps extends BasePromptElementProps {
 	variableName: string;
 	variableValue: Uint8Array | Promise<Uint8Array>;
-	mimeType?: string;
 	omitReferences?: boolean;
 	reference?: Uri;
 }
@@ -56,17 +55,21 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			}
 			const variable = await this.props.variableValue;
 			let imageSource = Buffer.from(variable).toString('base64');
-			let imageMimeType: string | undefined;
+			let imageMimeType: string = 'image/png';
 			const isChatCompletions = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions;
 			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService);
 			if (isChatCompletions && enabled && modelCanUseImageURL(this.promptEndpoint)) {
 				try {
 					const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
-					const mimeType = this.props.mimeType ?? getMimeType(imageSource) ?? 'image/png';
+					const mimeType = getMimeType(imageSource) ?? imageMimeType;
 					const uri = await this.imageService.uploadChatImageAttachment(variable, this.props.variableName, mimeType, githubToken);
 					if (uri) {
 						imageSource = uri.toString();
 						imageMimeType = mimeType;
+						// TODO: figure out why gifs return 400 invalid request
+						if (imageMimeType === 'image/gif') {
+							imageMimeType = 'image/png';
+						}
 					}
 				} catch (error) {
 					this.logService.warn(`Image upload failed, using base64 fallback: ${error}`);
@@ -75,7 +78,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 
 			return (
 				<UserMessage priority={0}>
-					<BaseImage src={imageSource} detail='high' mimeType={imageMimeType || 'image/png'} />
+					<BaseImage src={imageSource} detail='high' mimeType={imageMimeType} />
 					{this.props.reference && (
 						<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: fillerUri } : fillerUri, undefined)]} />
 					)}

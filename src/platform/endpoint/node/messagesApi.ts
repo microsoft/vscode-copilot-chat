@@ -192,45 +192,16 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 			case Raw.ChatCompletionContentPartKind.Image: {
 				const url = part.imageUrl.url;
 				// Parse data URL: data:image/png;base64,<data>
-				const match = url.match(/^data:(image\/(?:jpeg|png|gif|webp|heic|heif));base64,(.+)$/);
+				const match = url.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/);
 				if (match) {
-					// Always prefer media_type from the part if available, otherwise parse from URL
-					const mediaType = part.imageUrl.media_type || match[1] as Raw.ImageMediaType;
 					convertedContent.push({
 						type: 'image',
 						source: {
 							type: 'base64',
-							media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+							media_type: match[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
 							data: match[2],
 						}
 					});
-				} else if (url.startsWith('http://') || url.startsWith('https://')) {
-					// Handle URL-based images - Anthropic's url source type doesn't require media_type
-					// but we should preserve it if available for when converting back to Raw format
-					convertedContent.push({
-						type: 'image',
-						source: {
-							type: 'url',
-							url: url,
-						}
-					});
-				} else {
-					// Fallback: try to extract media_type from malformed data URL or use existing media_type
-					const mediaTypeMatch = url.match(/^data:(image\/[^;,]+)/);
-					// Always prefer explicit media_type, then parse from URL
-					const mediaType = (part.imageUrl.media_type || mediaTypeMatch?.[1]) as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | undefined;
-					const base64Match = url.match(/base64,(.+)$/);
-
-					if (base64Match) {
-						convertedContent.push({
-							type: 'image',
-							source: {
-								type: 'base64',
-								media_type: mediaType || 'image/png',
-								data: base64Match[1],
-							}
-						});
-					}
 				}
 				break;
 			}

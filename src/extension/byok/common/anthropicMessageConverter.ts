@@ -198,13 +198,9 @@ export function anthropicMessagesToRawMessages(messages: MessageParam[], system:
 
 		const toRawImage = (img: ImageBlockParam): Raw.ChatCompletionContentPartImage | undefined => {
 			if (img.source.type === 'base64') {
-				return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: `data:${img.source.media_type};base64,${img.source.data}`, media_type: img.source.media_type as Raw.ImageMediaType } };
+				return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: `data:${img.source.media_type};base64,${img.source.data}` } };
 			} else if (img.source.type === 'url') {
-				// For URL-based images, try to infer media_type from URL extension or content-type
-				// This ensures media_type is available for subsequent requests even if switching models
-				const extensionMatch = img.source.url.match(/\.(jpe?g|png|gif|webp|heic|heif)(?:[?#]|$)/i);
-				const inferredMediaType = extensionMatch ? `image/${extensionMatch[1].replace('jpg', 'jpeg').toLowerCase()}` as Raw.ImageMediaType : 'image/png' as Raw.ImageMediaType;
-				return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: img.source.url, media_type: inferredMediaType } };
+				return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: img.source.url } };
 			}
 		};
 

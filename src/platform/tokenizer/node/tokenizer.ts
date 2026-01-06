@@ -148,8 +148,7 @@ class BPETokenizer extends Disposable implements ITokenizer {
 			case Raw.ChatCompletionContentPartKind.Image:
 				if (text.imageUrl.url.startsWith('data:image/')) {
 					try {
-						const detail = text.imageUrl.detail === 'auto' ? undefined : text.imageUrl.detail;
-						return calculateImageTokenCost(text.imageUrl.url, detail);
+						return calculateImageTokenCost(text.imageUrl.url, text.imageUrl.detail);
 					} catch {
 						return this._textTokenLength(text.imageUrl.url);
 					}
@@ -333,7 +332,7 @@ class BPETokenizer extends Disposable implements ITokenizer {
 //#region Image tokenizer helpers
 
 // https://platform.openai.com/docs/guides/vision#calculating-costs
-export function calculateImageTokenCost(imageUrl: string, detail: 'low' | 'high' | undefined): number {
+export function calculateImageTokenCost(imageUrl: string, detail: 'low' | 'high' | 'auto' | undefined): number {
 	let { width, height } = getImageDimensions(imageUrl);
 
 	if (detail === 'low') {

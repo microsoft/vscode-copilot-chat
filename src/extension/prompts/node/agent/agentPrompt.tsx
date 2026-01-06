@@ -406,8 +406,7 @@ export function renderedMessageToTsxChildren(message: string | readonly Raw.Chat
 		if (part.type === Raw.ChatCompletionContentPartKind.Text) {
 			return part.text;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.Image) {
-			const detail = part.imageUrl.detail === 'auto' ? undefined : part.imageUrl.detail;
-			return <Image src={part.imageUrl.url} detail={detail} mimeType={part.imageUrl.media_type} />;
+			return <Image src={part.imageUrl.url} detail={part.imageUrl.detail} mimeType={part.imageUrl.media_type} />;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
 			return enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />;
 		}

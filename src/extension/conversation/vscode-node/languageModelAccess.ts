@@ -543,7 +543,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				if (part instanceof vscode.LanguageModelTextPart) {
 					return { type: Raw.ChatCompletionContentPartKind.Text, text: part.value };
 				} else if (isImageDataPart(part)) {
-					return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: `data:${part.mimeType};base64,${Buffer.from(part.data).toString('base64url')}`, media_type: part.mimeType as Raw.ImageMediaType } };
+					return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: `data:${part.mimeType};base64,${Buffer.from(part.data).toString('base64url')}` } };
 				} else {
 					return undefined;
 				}
