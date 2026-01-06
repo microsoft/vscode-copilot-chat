@@ -7,6 +7,7 @@ import { ClientHttp2Stream } from 'http2';
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../../../../platform/env/common/envService';
 import { Completions, ICompletionsFetchService } from '../../../../../../platform/nesFetch/common/completionsFetchService';
+import { ResponseStream } from '../../../../../../platform/nesFetch/common/responseStream';
 import { RequestId, getRequestId } from '../../../../../../platform/networking/common/fetch';
 import { IHeaders } from '../../../../../../platform/networking/common/fetcherService';
 import { createServiceIdentifier } from '../../../../../../util/common/services';
@@ -649,34 +650,11 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				}
 			}
 
-			const choices: AsyncIterable<APIChoice> = (async function* () {
-				const completionTextRes = await res.val.response;
-				if (completionTextRes.isError()) {
-					throw new Error('implement me'); // FIXME
-				}
-				const completion = completionTextRes.val;
-				if (completion.choices.length === 0 || !completion.choices[0].text) {
-					throw new Error('implement me'); // FIXME
-				}
-				yield {
-					completionText: completion.choices[0].text,
-					meanLogProb: undefined,
-					meanAlternativeLogProb: undefined,
-					choiceIndex: 0,
-					requestId: res.val.requestId,
-					tokens: [],
-					numTokens: 0,
-					blockFinished: false,
-					telemetryData: baseTelemetryData, // FIXME
-					clientCompletionId: '',
-					finishReason: completion.choices[0].finish_reason ?? '', // FIXME
-				} satisfies APIChoice;
-			})();
-
+			const choices = this.chunkStreamToApiChoices(res.val, finishedCb, baseTelemetryData);
 
 			return {
 				type: 'success',
-				choices: choices,
+				choices,
 				getProcessingTime: () => 0, // FIXME
 			};
 
@@ -840,6 +818,63 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			params.headers
 		);
 		return response;
+	}
+
+	private async *chunkStreamToApiChoices(resp: ResponseStream, finishedCb: FinishedCallback, baseTelemetryData: TelemetryWithExp): AsyncIterable<APIChoice> {
+		const completions: { responseSoFar: string; isFinished: boolean }[] = [];
+
+		for await (const chunk of resp.stream) {
+			const chunkIdx = chunk.choices[0].index;
+			if (completions[chunkIdx] === undefined) {
+				completions[chunkIdx] = { responseSoFar: '', isFinished: false };
+			}
+			const chunkText = chunk.choices[0].text;
+			if (chunkText) {
+				completions[chunkIdx].responseSoFar += chunkText;
+			}
+			const isFinished = !!(chunk.choices[0].finish_reason);
+			finishedCb(completions[chunkIdx].responseSoFar, {
+				index: chunkIdx,
+				text: chunkText ?? '',
+				finished: isFinished,
+			} satisfies RequestDelta);
+
+			if (isFinished) {
+				completions[chunkIdx].isFinished = true;
+				yield {
+					choiceIndex: chunkIdx,
+					completionText: completions[chunkIdx].responseSoFar,
+					requestId: resp.requestId,
+					finishReason: chunk.choices[0].finish_reason ?? '',
+					tokens: [], // FIXME
+					numTokens: 0, // FIXME
+					blockFinished: false, // FIXME
+					telemetryData: baseTelemetryData, // FIXME
+					clientCompletionId: '', // FIXME
+					meanLogProb: undefined,
+					meanAlternativeLogProb: undefined,
+				} satisfies APIChoice;
+			}
+		}
+
+		// in case stream ends but some completions are not finished yet
+		for (const [chunkIdx, completion] of completions.entries()) {
+			if (!completion.isFinished) {
+				yield {
+					choiceIndex: chunkIdx,
+					completionText: completion.responseSoFar,
+					requestId: resp.requestId,
+					finishReason: 'no-finish-reason',
+					tokens: [], // FIXME
+					numTokens: 0, // FIXME
+					blockFinished: false, // FIXME
+					telemetryData: baseTelemetryData, // FIXME
+					clientCompletionId: '', // FIXME
+					meanLogProb: undefined,
+					meanAlternativeLogProb: undefined,
+				} satisfies APIChoice;
+			}
+		}
 	}
 
 	async handleError(
