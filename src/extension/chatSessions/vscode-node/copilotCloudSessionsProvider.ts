@@ -615,7 +615,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		};
 	}
 
-	async openSessionsInBrowser(chatSessionItem: vscode.ChatSessionItem): Promise<void> {
+	async openSessionInBrowser(chatSessionItem: vscode.ChatSessionItem): Promise<void> {
 		const session = SessionIdForPr.parse(chatSessionItem.resource);
 		let prNumber = session?.prNumber;
 		if (typeof prNumber === 'undefined' || isNaN(prNumber)) {
@@ -634,8 +634,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return;
 		}
 
-		const url = `https://github.com/copilot/tasks/pull/${pr.id}`;
-		await vscode.env.openExternal(vscode.Uri.parse(url));
+		await vscode.env.openExternal(vscode.Uri.parse(pr.url));
 	}
 
 	async openChanges(chatSessionItemResource: vscode.Uri): Promise<void> {
