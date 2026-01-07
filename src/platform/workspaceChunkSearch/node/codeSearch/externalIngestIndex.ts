@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { getDocSha, DocumentContents } from '@github/blackbird-external-ingest-utils';
+import { DocumentContents, getDocSha } from '@github/blackbird-external-ingest-utils';
 import sql from 'node:sqlite';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -13,7 +13,6 @@ import { Schemas } from '../../../../util/vs/base/common/network';
 import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../../chunking/common/chunk';
 import { IEnvService } from '../../../env/common/envService';
 import { IVSCodeExtensionContext } from '../../../extContext/common/extensionContext';
@@ -60,7 +59,6 @@ export class ExternalIngestIndex extends Disposable {
 
 	constructor(
 		client: IExternalIngestClient,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
@@ -122,12 +120,6 @@ export class ExternalIngestIndex extends Disposable {
 	async doInitialIngest(token: CancellationToken): Promise<void> {
 		await this.initialize();
 
-		const authToken = await this.getGithubAuthToken();
-		if (!authToken) {
-			this._logService.warn('ExternalIngestIndex: No auth token available for initial ingest');
-			return;
-		}
-
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 		if (!workspaceFolders.length) {
 			return;
@@ -137,7 +129,6 @@ export class ExternalIngestIndex extends Disposable {
 		const primaryRoot = workspaceFolders[0];
 
 		await this._client.doInitialIndex(
-			authToken,
 			this.getFilesetName(primaryRoot),
 			primaryRoot,
 			this.getFilesToIndexFromDb(),
@@ -151,12 +142,6 @@ export class ExternalIngestIndex extends Disposable {
 			return [];
 		}
 
-		const authToken = await this.getGithubAuthToken();
-		if (!authToken) {
-			this._logService.warn('ExternalIngestIndex: No auth token available for search');
-			return [];
-		}
-
 		const resolvedQuery = await query.resolveQuery(token);
 
 		await raceCancellationError(this.doInitialIngest(token), token);
@@ -164,7 +149,6 @@ export class ExternalIngestIndex extends Disposable {
 		// TODO: search changed files too
 		const primaryRoot = workspaceFolders[0];
 		const result = await raceCancellationError(this._client.searchFilesets(
-			authToken,
 			this.getFilesetName(primaryRoot),
 			primaryRoot,
 			resolvedQuery,
@@ -226,7 +210,7 @@ export class ExternalIngestIndex extends Disposable {
 	}
 
 	/**
-	 * Determines whether the given file should be tracked all by the external ingest index.
+	 * Determines whether the given file should be tracked by the external ingest index.
 	 *
 	 * This does NOT consider whether the file should be ingested, only whether it should be tracked.
 	 */
@@ -252,11 +236,7 @@ export class ExternalIngestIndex extends Disposable {
 	}
 
 	private async shouldIngestFile(uri: URI, stat: { size: number; mtime: number }): Promise<boolean> {
-		if (uri.scheme !== Schemas.file) {
-			return false;
-		}
-
-		if (!this._instantiationService.invokeFunction(accessor => shouldPotentiallyIndexFile(accessor, uri))) {
+		if (!await this.shouldTrackFile(uri, CancellationToken.None)) {
 			return false;
 		}
 
@@ -449,11 +429,6 @@ export class ExternalIngestIndex extends Disposable {
 				return undefined;
 			}
 		});
-	}
-
-	private async getGithubAuthToken(): Promise<string | undefined> {
-		return (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
-			?? (await this._authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
 	}
 
 	private getFilesetName(workspaceRoot: URI): string {

@@ -37,18 +37,18 @@ function createMockExternalIngestClient(options?: {
 	return {
 		ingestedFiles,
 		searchCalls,
-		async doInitialIndex(_authToken: string, _filesetName: string, _root: URI, allFiles: AsyncIterable<ExternalIngestFile>, _token: CancellationToken): Promise<void> {
+		async doInitialIndex(_filesetName: string, _root: URI, allFiles: AsyncIterable<ExternalIngestFile>, _token: CancellationToken): Promise<void> {
 			for await (const file of allFiles) {
 				ingestedFiles.push(file);
 			}
 		},
-		async listFilesets(_authToken: string, _token: CancellationToken): Promise<string[]> {
+		async listFilesets(_token: CancellationToken): Promise<string[]> {
 			return [];
 		},
-		async deleteFileset(_authToken: string, _filesetName: string, _token: CancellationToken): Promise<void> {
+		async deleteFileset(_filesetName: string, _token: CancellationToken): Promise<void> {
 			// no-op
 		},
-		async searchFilesets(_authToken: string, filesetName: string, _rootUri: URI, prompt: string, _limit: number, _token: CancellationToken): Promise<CodeSearchResult> {
+		async searchFilesets(filesetName: string, _rootUri: URI, prompt: string, _limit: number, _token: CancellationToken): Promise<CodeSearchResult> {
 			searchCalls.push({ filesetName, prompt });
 			return { chunks: [], outOfSync: false };
 		},

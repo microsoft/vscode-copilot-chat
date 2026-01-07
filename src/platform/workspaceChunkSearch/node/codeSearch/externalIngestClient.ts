@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { canIngestDocument, canIngestPathAndSize, DocumentContents, GeoFilter, IngestFilter, createCodedSymbols, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
+import { canIngestDocument, canIngestPathAndSize, createCodedSymbols, DocumentContents, GeoFilter, IngestFilter, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
 import crypto from 'crypto';
 import fs from 'fs';
 import { posix } from 'node:path';
@@ -12,6 +12,7 @@ import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { timeout } from '../../../../util/vs/base/common/async';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
+import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../../chunking/common/chunk';
 import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { ILogService } from '../../../log/common/logService';
@@ -29,12 +30,12 @@ export interface ExternalIngestFile {
  * Interface for the external ingest client that handles indexing and searching files.
  */
 export interface IExternalIngestClient {
-	doInitialIndex(authToken: string, filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void>;
+	doInitialIndex(filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void>;
 
-	listFilesets(authToken: string, token: CancellationToken): Promise<string[]>;
-	deleteFileset(authToken: string, filesetName: string, token: CancellationToken): Promise<void>;
+	listFilesets(token: CancellationToken): Promise<string[]>;
+	deleteFileset(filesetName: string, token: CancellationToken): Promise<void>;
 
-	searchFilesets(authToken: string, filesetName: string, rootUri: URI, prompt: string, limit: number, token: CancellationToken): Promise<CodeSearchResult>;
+	searchFilesets(filesetName: string, rootUri: URI, prompt: string, limit: number, token: CancellationToken): Promise<CodeSearchResult>;
 
 	/**
 	 * Quickly checks if a file can be ingested based on its path and size.
@@ -59,8 +60,14 @@ export class ExternalIngestClient implements IExternalIngestClient {
 	private readonly _ingestFilter = new IngestFilter();
 
 	constructor(
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ILogService private readonly logService: ILogService,
 	) { }
+
+	public async getAuthToken(): Promise<string | undefined> {
+		return (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
+			?? (await this._authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
+	}
 
 	public canIngestPathAndSize(filePath: string, size: number): boolean {
 		return canIngestPathAndSize(this._ingestFilter, filePath, size);
@@ -89,7 +96,13 @@ export class ExternalIngestClient implements IExternalIngestClient {
 		return ExternalIngestClient.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
 	}
 
-	async doInitialIndex(authToken: string, filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void> {
+	async doInitialIndex(filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void> {
+		const authToken = await this.getAuthToken();
+		if (!authToken) {
+			this.logService.warn('ExternalIngestClient::doInitialIndex(): No auth token available');
+			return;
+		}
+
 		setupPanicHooks();
 
 		// Initial setup
@@ -292,7 +305,13 @@ export class ExternalIngestClient implements IExternalIngestClient {
 		this.logService.debug(`requestId: '${requestId}', body: ${body}`);
 	}
 
-	async listFilesets(authToken: string, token: CancellationToken): Promise<string[]> {
+	async listFilesets(token: CancellationToken): Promise<string[]> {
+		const authToken = await this.getAuthToken();
+		if (!authToken) {
+			this.logService.warn('ExternalIngestClient::listFilesets(): No auth token available');
+			return [];
+		}
+
 		const resp = await ExternalIngestClient.apiClient.makeRequest(
 			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
 			this.getHeaders(authToken),
@@ -305,7 +324,13 @@ export class ExternalIngestClient implements IExternalIngestClient {
 		return coalesce((body.filesets ?? []).map(x => x.name));
 	}
 
-	async deleteFileset(authToken: string, filesetName: string, token: CancellationToken): Promise<void> {
+	async deleteFileset(filesetName: string, token: CancellationToken): Promise<void> {
+		const authToken = await this.getAuthToken();
+		if (!authToken) {
+			this.logService.warn('ExternalIngestClient::deleteFileset(): No auth token available');
+			return;
+		}
+
 		return this.deleteFilesetByName(authToken, filesetName, token);
 	}
 
@@ -325,7 +350,13 @@ export class ExternalIngestClient implements IExternalIngestClient {
 		this.logService.info(`ExternalIngestClient::deleteFilesetByName(): Deleted: ${fileSetName}`);
 	}
 
-	async searchFilesets(authToken: string, filesetName: string, rootUri: URI, prompt: string, limit: number, token: CancellationToken): Promise<CodeSearchResult> {
+	async searchFilesets(filesetName: string, rootUri: URI, prompt: string, limit: number, token: CancellationToken): Promise<CodeSearchResult> {
+		const authToken = await this.getAuthToken();
+		if (!authToken) {
+			this.logService.warn('ExternalIngestClient::searchFilesets(): No auth token available');
+			return { outOfSync: false, chunks: [] };
+		}
+
 		this.logService.debug(`ExternalIngestClient::searchFilesets(): Searching fileset '${filesetName}' for prompt: '${prompt}'`);
 		const embeddingType = EmbeddingType.metis_1024_I16_Binary;
 		const resp = await this.post(authToken, '/external/embeddings/code/search', {
