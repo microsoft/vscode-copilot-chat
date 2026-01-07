@@ -53,7 +53,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			// Return results from file cache
 			return await this.readFromCache();
 		} catch (error) {
-			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in provideContributions: ${error}`);
+			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in provideCustomAgents: ${error}`);
 			return [];
 		}
 	}
