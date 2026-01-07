@@ -68,26 +68,25 @@ export interface ContextManagementResponse {
 	applied_edits: AppliedContextEdit[];
 }
 
+export interface ContextEditingConfig {
+	triggerType: 'input_tokens' | 'tool_uses';
+	triggerValue: number;
+	keepCount: number;
+	clearAtLeastTokens: number | undefined;
+	excludeTools: string[];
+	clearInputs: boolean;
+	thinkingKeepTurns: number;
+}
+
 /**
  * Builds the context_management configuration object for the Messages API request.
- * @param config The context editing configuration from settings
+ * @param config The context editing configuration from individual settings
  * @param hasThinking Whether extended thinking is enabled (the thinking budget value)
  * @param modelMaxTokens The maximum input tokens supported by the model
  * @returns The context_management object to include in the request, or undefined if no edits
  */
 export function buildContextManagement(
-	config: {
-		toolResult: {
-			triggerTokens: number;
-			keepCount: number;
-			clearAtLeastTokens?: number;
-			excludeTools: string[];
-			clearInputs: boolean;
-		};
-		thinking: {
-			keepTurns: number;
-		};
-	},
+	config: ContextEditingConfig,
 	hasThinking: number | undefined,
 	modelMaxTokens: number
 ): ContextManagement | undefined {
@@ -95,7 +94,7 @@ export function buildContextManagement(
 
 	// Add thinking block clearing if extended thinking is enabled
 	if (hasThinking) {
-		const thinkingKeepTurns = config.thinking.keepTurns;
+		const thinkingKeepTurns = config.thinkingKeepTurns;
 		edits.push({
 			type: 'clear_thinking_20251015',
 			keep: thinkingKeepTurns > 0 ? { type: 'thinking_turns', value: thinkingKeepTurns } : { type: 'thinking_turns', value: 1 },
@@ -103,14 +102,14 @@ export function buildContextManagement(
 	}
 
 	// Add tool result clearing configuration
-	const { triggerTokens, keepCount, clearAtLeastTokens, excludeTools, clearInputs } = config.toolResult;
+	const { triggerType, triggerValue, keepCount, clearAtLeastTokens, excludeTools, clearInputs } = config;
 
-	// Calculate trigger tokens: use configured value if set, otherwise calculate as 90% of model max tokens
-	const calculatedTriggerTokens = triggerTokens > 0 ? triggerTokens : Math.floor(modelMaxTokens * 0.9);
+	// Build trigger based on type - use configured values directly (defaults match Anthropic's recommendations)
+	const trigger: ContextManagementTrigger = { type: triggerType, value: triggerValue };
 
 	const toolEdit: ContextManagementEdit = {
 		type: 'clear_tool_uses_20250919',
-		trigger: { type: 'input_tokens', value: calculatedTriggerTokens },
+		trigger,
 		keep: { type: 'tool_uses', value: keepCount },
 		...(clearAtLeastTokens ? { clear_at_least: { type: 'input_tokens' as const, value: clearAtLeastTokens } } : {}),
 		...(excludeTools.length > 0 ? { exclude_tools: excludeTools } : {}),

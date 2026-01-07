@@ -82,7 +82,15 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Build context management configuration
 	const contextEditingEnabled = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, experimentationService);
-	const contextEditingConfig = configurationService.getConfig(ConfigKey.AnthropicContextEditing);
+	const contextEditingConfig = {
+		triggerType: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultTriggerType, experimentationService),
+		triggerValue: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultTriggerValue, experimentationService),
+		keepCount: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultKeepCount, experimentationService),
+		clearAtLeastTokens: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultClearAtLeastTokens, experimentationService),
+		excludeTools: configurationService.getConfig(ConfigKey.AnthropicContextEditingToolResultExcludeTools),
+		clearInputs: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultClearInputs, experimentationService),
+		thinkingKeepTurns: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingThinkingKeepTurns, experimentationService),
+	};
 	const contextManagement = contextEditingEnabled ? buildContextManagement(contextEditingConfig, thinkingBudget, endpoint.modelMaxPromptTokens) : undefined;
 
 	return {
