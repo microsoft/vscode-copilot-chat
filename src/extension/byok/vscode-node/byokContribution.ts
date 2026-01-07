@@ -23,6 +23,7 @@ import { OllamaLMProvider } from './ollamaProvider';
 import { OAIBYOKLMProvider } from './openAIProvider';
 import { OpenRouterLMProvider } from './openRouterProvider';
 import { XAIBYOKLMProvider } from './xAIProvider';
+import { ZhipuAILMProvider } from './zhipuaiProvider';
 
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
@@ -90,8 +91,19 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	}
 
 	private async _authChange(authService: IAuthenticationService, instantiationService: IInstantiationService) {
+		this._logService.info(`BYOK: Auth change detected - hasToken: ${!!authService.copilotToken}, alreadyRegistered: ${this._byokProvidersRegistered}`);
+
+		if (!authService.copilotToken) {
+			this._logService.info('BYOK: No Copilot token - user may not be authenticated');
+			return;
+		}
+
+		const byokEnabled = isBYOKEnabled(authService.copilotToken, this._capiClientService);
+		this._logService.info(`BYOK: isBYOKEnabled check result: ${byokEnabled}`);
+
 		if (authService.copilotToken && isBYOKEnabled(authService.copilotToken, this._capiClientService) && !this._byokProvidersRegistered) {
 			this._byokProvidersRegistered = true;
+			this._logService.info('BYOK: Registering providers...');
 			// Update known models list from CDN so all providers have the same list
 			const knownModels = await this.fetchKnownModelList(this._fetcherService);
 			this._providers.set(OllamaLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OllamaLMProvider, this._configurationService.getConfig(ConfigKey.OllamaEndpoint), this._byokStorageService));
@@ -102,10 +114,13 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._providers.set(OpenRouterLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService));
 			this._providers.set(AzureBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService));
 			this._providers.set(CustomOAIBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(CustomOAIBYOKModelProvider, this._byokStorageService));
+			this._providers.set(ZhipuAILMProvider.providerName.toLowerCase(), instantiationService.createInstance(ZhipuAILMProvider, knownModels[ZhipuAILMProvider.providerName], this._byokStorageService));
+			this._logService.info(`BYOK: ZhipuAI provider registered (known models: ${knownModels[ZhipuAILMProvider.providerName] ? 'yes' : 'using defaults'})`);
 
 			for (const [providerName, provider] of this._providers) {
 				this._store.add(lm.registerLanguageModelChatProvider(providerName, provider));
 			}
+			this._logService.info(`BYOK: All ${this._providers.size} providers registered successfully`);
 		}
 	}
 	private async fetchKnownModelList(fetcherService: IFetcherService): Promise<Record<string, BYOKKnownModels>> {

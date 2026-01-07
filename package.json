@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.108.0",
+		"vscode": "^1.107.0",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -1727,6 +1727,11 @@
 				"vendor": "customoai",
 				"when": "productQualityType != 'stable'",
 				"displayName": "OpenAI Compatible",
+				"managementCommand": "github.copilot.chat.manageBYOK"
+			},
+			{
+				"vendor": "zhipuai",
+				"displayName": "ZhipuAI",
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
