@@ -311,6 +311,10 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		if (!worktreeProperties.autoCommit) {
 			// Stage all changes in the worktree
 			await this.gitService.add(vscode.Uri.file(worktreePath), []);
+
+			// Delete worktree changes from cache
+			this._sessionWorktreeChanges.delete(sessionId);
+
 			return;
 		}
 
