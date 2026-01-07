@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -121,8 +122,8 @@ export class ToolsService extends BaseToolsService {
 				return resultTool;
 			})
 			.filter(tool => {
-				// Check if search subagent tool is disabled via configuration
-				if (tool.name === ToolName.SearchSubagent && !searchSubagentEnabled) {
+				// Check if search subagent tool is disabled via configuration or not in auto mode
+				if (tool.name === ToolName.SearchSubagent && (!searchSubagentEnabled || isAutoModel(endpoint) !== 1)) {
 					return false;
 				}
 
