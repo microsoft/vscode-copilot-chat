@@ -129,7 +129,7 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		mockOctoKitService.setUserOrganizations([]);
 		const provider = createProvider();
 
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.deepEqual(agents, []);
 	});
@@ -138,7 +138,7 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		mockExtensionContext.globalStorageUri = undefined;
 		const provider = createProvider();
 
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.deepEqual(agents, []);
 	});
@@ -159,7 +159,7 @@ description: A test agent
 Test prompt content`;
 		mockFileSystem.mockFile(agentFile, agentContent);
 
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
 		assert.equal(agents[0].name, 'test_agent');
@@ -190,20 +190,20 @@ Test prompt content`;
 		mockOctoKitService.setAgentDetails('api_agent', mockDetails);
 
 		// First call returns cached (empty) results and triggers background fetch
-		const agents1 = await provider.provideContributions({}, {} as any);
+		const agents1 = await provider.provideCustomAgents({}, {} as any);
 		assert.deepEqual(agents1, []);
 
 		// Wait for background fetch to complete
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Second call should return newly cached agents from memory
-		const agents2 = await provider.provideContributions({}, {} as any);
+		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
 		assert.equal(agents2[0].name, 'api_agent');
 		assert.equal(agents2[0].description, 'An agent from API');
 
 		// Third call should also return from memory cache without file I/O
-		const agents3 = await provider.provideContributions({}, {} as any);
+		const agents3 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents3.length, 1);
 		assert.equal(agents3[0].name, 'api_agent');
 	});
@@ -234,7 +234,7 @@ Test prompt content`;
 		};
 		mockOctoKitService.setAgentDetails('full_agent', mockDetails);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check cached file content
@@ -283,7 +283,7 @@ Detailed prompt content
 		};
 		mockOctoKitService.setAgentDetails('Agent With Spaces!@#', mockDetails);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check that file was created with sanitized name
@@ -322,12 +322,12 @@ Detailed prompt content
 		mockOctoKitService.setAgentDetails('changing_agent', mockDetails);
 
 		let eventFired = false;
-		provider.onDidChangeContributions(() => {
+		provider.onDidChangeCustomAgents(() => {
 			eventFired = true;
 		});
 
 		// First call triggers background fetch
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
 
 		// Event should fire after initial successful fetch
@@ -343,7 +343,7 @@ Detailed prompt content
 		};
 
 		// Should not throw, should return empty array
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 		assert.deepEqual(agents, []);
 	});
 
@@ -356,9 +356,9 @@ Detailed prompt content
 			return [];
 		};
 
-		const queryOptions: vscode.ChatContributionQueryOptions = {};
+		const queryOptions: vscode.CustomAgentQueryOptions = {};
 
-		await provider.provideContributions(queryOptions, {} as any);
+		await provider.provideCustomAgents(queryOptions, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		assert.ok(capturedOptions);
@@ -377,9 +377,9 @@ Detailed prompt content
 		};
 
 		// Make multiple concurrent calls
-		const promise1 = provider.provideContributions({}, {} as any);
-		const promise2 = provider.provideContributions({}, {} as any);
-		const promise3 = provider.provideContributions({}, {} as any);
+		const promise1 = provider.provideCustomAgents({}, {} as any);
+		const promise2 = provider.provideCustomAgents({}, {} as any);
+		const promise3 = provider.provideCustomAgents({}, {} as any);
 
 		await Promise.all([promise1, promise2, promise3]);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -435,12 +435,12 @@ description: First agent
 Agent 1 prompt`;
 		mockFileSystem.mockFile(URI.joinPath(orgDir, 'agent1.agent.md'), agentContent);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// With error handling, partial failures skip cache update for that org
 		// So the existing file cache is returned with the one successful agent
-		const cachedAgents = await provider.provideContributions({}, {} as any);
+		const cachedAgents = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents.length, 1);
 		assert.equal(cachedAgents[0].name, 'agent1');
 	});
@@ -466,11 +466,11 @@ Agent 1 prompt`;
 			prompt: 'Initial prompt',
 		});
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// After successful fetch, subsequent calls return from memory
-		const agents1 = await provider.provideContributions({}, {} as any);
+		const agents1 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents1.length, 1);
 		assert.equal(agents1[0].name, 'initial_agent');
 
@@ -493,7 +493,7 @@ Agent 1 prompt`;
 		});
 
 		// Memory cache returns old results without refetching
-		const agents2 = await provider.provideContributions({}, {} as any);
+		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
 		assert.equal(agents2[0].name, 'initial_agent');
 	});
@@ -530,18 +530,18 @@ Agent 1 prompt`;
 		mockOctoKitService.setAgentDetails('agent1', { ...agents[0], prompt: 'Prompt 1' });
 		mockOctoKitService.setAgentDetails('agent2', { ...agents[1], prompt: 'Prompt 2' });
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Verify both agents are cached
-		const cachedAgents1 = await provider.provideContributions({}, {} as any);
+		const cachedAgents1 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents1.length, 2);
 
 		// Remove one agent from API
 		mockOctoKitService.setCustomAgents([agents[0]]);
 
 		// Memory cache still returns both agents (no refetch)
-		const cachedAgents2 = await provider.provideContributions({}, {} as any);
+		const cachedAgents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents2.length, 2);
 		assert.equal(cachedAgents2[0].name, 'agent1');
 		assert.equal(cachedAgents2[1].name, 'agent2');
@@ -567,16 +567,16 @@ Agent 1 prompt`;
 			prompt: 'Stable prompt',
 		});
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		let changeEventCount = 0;
-		provider.onDidChangeContributions(() => {
+		provider.onDidChangeCustomAgents(() => {
 			changeEventCount++;
 		});
 
 		// Fetch again with identical content
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
 
 		// No change event should fire
@@ -604,18 +604,18 @@ Agent 1 prompt`;
 			prompt: 'Temporary prompt',
 		});
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Verify agent is cached
-		const agents1 = await provider.provideContributions({}, {} as any);
+		const agents1 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents1.length, 1);
 
 		// API now returns empty array
 		mockOctoKitService.setCustomAgents([]);
 
 		// Memory cache still returns the agent (no refetch)
-		const agents2 = await provider.provideContributions({}, {} as any);
+		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
 		assert.equal(agents2[0].name, 'temporary_agent');
 	});
@@ -643,7 +643,7 @@ Agent 1 prompt`;
 		};
 		mockOctoKitService.setAgentDetails('minimal_agent', mockDetails);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
@@ -684,7 +684,7 @@ Agent 1 prompt`;
 		};
 		mockOctoKitService.setAgentDetails('wildcard_agent', mockDetails);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
@@ -720,7 +720,7 @@ Valid prompt`;
 		const noFrontmatterContent = `Just some content without any frontmatter`;
 		mockFileSystem.mockFile(URI.joinPath(orgDir, 'no_frontmatter.agent.md'), noFrontmatterContent);
 
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Parser is lenient - both agents are returned, one with empty description
 		assert.equal(agents.length, 2);
@@ -742,7 +742,7 @@ Valid prompt`;
 			return [];
 		};
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Should have fetched from all three organizations
@@ -776,7 +776,7 @@ Valid prompt`;
 		};
 		mockOctoKitService.setAgentDetails('world_domination', mockDetails);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
@@ -821,7 +821,7 @@ You are a world-class computer scientist.
 		};
 		mockOctoKitService.setAgentDetails('special_chars_agent', mockDetails);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
@@ -864,7 +864,7 @@ Test prompt with special characters
 		};
 		mockOctoKitService.setAgentDetails('multiline_agent', mockDetails);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
@@ -903,7 +903,7 @@ Test prompt
 			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options, { createIfNone: false });
 		};
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Should have aborted after first org, so second org shouldn't be processed
@@ -940,10 +940,10 @@ Test prompt
 			prompt: 'Enterprise prompt',
 		});
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Should only have one agent, not two (deduped)
 		assert.equal(agents.length, 1);
@@ -1027,10 +1027,10 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);
@@ -1086,10 +1086,10 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Should have 2 agents since they're from different repos (not duplicates)
 		assert.equal(agents.length, 2);
@@ -1148,10 +1148,10 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Should have exactly 2 agents, not 6 (2 agents x 3 orgs)
 		assert.equal(agents.length, 2);
@@ -1197,10 +1197,10 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const agents = await provider.provideContributions({}, {} as any);
+		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);

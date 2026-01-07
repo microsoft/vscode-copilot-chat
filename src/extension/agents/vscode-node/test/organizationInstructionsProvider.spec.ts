@@ -209,7 +209,7 @@ suite('OrganizationInstructionsProvider', () => {
 		mockGitService.setActiveRepository(undefined);
 		const provider = createProvider();
 
-		const instructions = await provider.provideContributions({}, {} as any);
+		const instructions = await provider.provideInstructions({}, {} as any);
 
 		assert.deepEqual(instructions, []);
 	});
@@ -219,7 +219,7 @@ suite('OrganizationInstructionsProvider', () => {
 		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
-		const instructions = await provider.provideContributions({}, {} as any);
+		const instructions = await provider.provideInstructions({}, {} as any);
 
 		assert.deepEqual(instructions, []);
 	});
@@ -237,7 +237,7 @@ suite('OrganizationInstructionsProvider', () => {
 Always follow our coding standards.`;
 		mockFileSystem.mockFile(instructionFile, instructionContent);
 
-		const instructions = await provider.provideContributions({}, {} as any);
+		const instructions = await provider.provideInstructions({}, {} as any);
 
 		assert.equal(instructions.length, 1);
 		assert.equal(instructions[0].name, 'testorg');
@@ -255,14 +255,14 @@ Always use TypeScript strict mode.`;
 		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
 
 		// First call returns cached (empty) results
-		const instructions1 = await provider.provideContributions({}, {} as any);
+		const instructions1 = await provider.provideInstructions({}, {} as any);
 		assert.deepEqual(instructions1, []);
 
 		// Wait for background fetch to complete
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Second call should return newly cached instructions
-		const instructions2 = await provider.provideContributions({}, {} as any);
+		const instructions2 = await provider.provideInstructions({}, {} as any);
 		assert.equal(instructions2.length, 1);
 		assert.equal(instructions2[0].name, 'testorg');
 	});
@@ -278,7 +278,7 @@ Always use TypeScript strict mode.`;
 3. Write comprehensive tests`;
 		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check cached file content
@@ -297,11 +297,11 @@ Always use TypeScript strict mode.`;
 		const mockInstructions = `# Initial Instructions`;
 		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		let eventFired = false;
-		provider.onDidChangeContributions(() => {
+		provider.onDidChangeInstructions(() => {
 			eventFired = true;
 		});
 
@@ -309,7 +309,7 @@ Always use TypeScript strict mode.`;
 		const updatedInstructions = `# Updated Instructions`;
 		mockOctoKitService.setOrgInstructions('testorg', updatedInstructions);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
 
 		assert.equal(eventFired, true);
@@ -325,7 +325,7 @@ Always use TypeScript strict mode.`;
 		};
 
 		// Should not throw, should return empty array
-		const instructions = await provider.provideContributions({}, {} as any);
+		const instructions = await provider.provideInstructions({}, {} as any);
 		assert.deepEqual(instructions, []);
 	});
 
@@ -342,9 +342,9 @@ Always use TypeScript strict mode.`;
 		};
 
 		// Make multiple concurrent calls
-		const promise1 = provider.provideContributions({}, {} as any);
-		const promise2 = provider.provideContributions({}, {} as any);
-		const promise3 = provider.provideContributions({}, {} as any);
+		const promise1 = provider.provideInstructions({}, {} as any);
+		const promise2 = provider.provideInstructions({}, {} as any);
+		const promise3 = provider.provideInstructions({}, {} as any);
 
 		await Promise.all([promise1, promise2, promise3]);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -360,16 +360,16 @@ Always use TypeScript strict mode.`;
 		const mockInstructions = `# Stable Instructions`;
 		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		let changeEventCount = 0;
-		provider.onDidChangeContributions(() => {
+		provider.onDidChangeInstructions(() => {
 			changeEventCount++;
 		});
 
 		// Fetch again with identical content
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
 
 		// No change event should fire
@@ -383,7 +383,7 @@ Always use TypeScript strict mode.`;
 		// API returns undefined (no instructions)
 		mockOctoKitService.setOrgInstructions('testorg', undefined);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Should not create any cache files
@@ -403,7 +403,7 @@ Always use TypeScript strict mode.`;
 		const mockInstructions = `# Company Instructions`;
 		mockOctoKitService.setOrgInstructions('mycompany', mockInstructions);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check that file was created with correct name
@@ -430,7 +430,7 @@ Always use TypeScript strict mode.`;
 			return 'Org A instructions';
 		};
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		assert.equal(capturedOrgLogin, 'orgA');
@@ -438,7 +438,7 @@ Always use TypeScript strict mode.`;
 		// Change to org B
 		mockGitService.setActiveRepository(new GithubRepoId('orgB', 'repoB'));
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Should fetch from new organization
@@ -455,7 +455,7 @@ Always use TypeScript strict mode.`;
 		// Initially no cache directory
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Cache directory should now exist
@@ -478,7 +478,7 @@ Always use TypeScript strict mode.`;
 		const instructionContent = `# Existing Instructions`;
 		mockFileSystem.mockFile(instructionFile, instructionContent);
 
-		const instructions = await provider.provideContributions({}, {} as any);
+		const instructions = await provider.provideInstructions({}, {} as any);
 
 		// Should successfully read cached instructions
 		assert.equal(instructions.length, 1);
@@ -498,7 +498,7 @@ Always use TypeScript strict mode.`;
 		};
 
 		// Should not throw, should return empty array
-		const instructions = await provider.provideContributions({}, {} as any);
+		const instructions = await provider.provideInstructions({}, {} as any);
 		assert.deepEqual(instructions, []);
 
 		// Restore original method
@@ -512,11 +512,11 @@ Always use TypeScript strict mode.`;
 		// Initial setup with no instructions
 		mockOctoKitService.setOrgInstructions('testorg', undefined);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		let changeEventFired = false;
-		provider.onDidChangeContributions(() => {
+		provider.onDidChangeInstructions(() => {
 			changeEventFired = true;
 		});
 
@@ -526,11 +526,11 @@ Always use TypeScript strict mode.`;
 Follow these rules.`;
 		mockOctoKitService.setOrgInstructions('testorg', newInstructions);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
 
 		assert.equal(changeEventFired, true);
-		const instructions = await provider.provideContributions({}, {} as any);
+		const instructions = await provider.provideInstructions({}, {} as any);
 		assert.equal(instructions.length, 1);
 	});
 
@@ -542,17 +542,17 @@ Follow these rules.`;
 		const initialInstructions = `# Initial Instructions`;
 		mockOctoKitService.setOrgInstructions('testorg', initialInstructions);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		provider.onDidChangeContributions(() => {
+		provider.onDidChangeInstructions(() => {
 			// Event listener registered for potential future use
 		});
 
 		// Remove instructions
 		mockOctoKitService.setOrgInstructions('testorg', undefined);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
 
 		// Note: Currently the implementation doesn't delete cache files when instructions are removed,
@@ -567,7 +567,7 @@ Follow these rules.`;
 		// API returns empty string
 		mockOctoKitService.setOrgInstructions('testorg', '');
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Empty strings are treated as "no instructions" and not cached
@@ -592,7 +592,7 @@ Include special chars: @#$%^&*()
 Unicode: 你好 🚀`;
 		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check that special characters are preserved
@@ -612,7 +612,7 @@ Unicode: 你好 🚀`;
 		const largeContent = '# Large Instructions\n\n' + 'x'.repeat(100000);
 		mockOctoKitService.setOrgInstructions('testorg', largeContent);
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check that large content is handled correctly
@@ -635,7 +635,7 @@ Unicode: 你好 🚀`;
 		const instructionContent = `# Test`;
 		mockFileSystem.mockFile(instructionFile, instructionContent);
 
-		const instructions = await provider.provideContributions({}, {} as any);
+		const instructions = await provider.provideInstructions({}, {} as any);
 
 		assert.equal(instructions.length, 1);
 		assert.ok(instructions[0].uri);
@@ -649,14 +649,14 @@ Unicode: 你好 🚀`;
 		mockGitService.setActiveRepository(new GithubRepoId('org1', 'repo1'));
 		mockOctoKitService.setOrgInstructions('org1', '# Org 1 Instructions');
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Second organization
 		mockGitService.setActiveRepository(new GithubRepoId('org2', 'repo2'));
 		mockOctoKitService.setOrgInstructions('org2', '# Org 2 Instructions');
 
-		await provider.provideContributions({}, {} as any);
+		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Both instruction files should exist in cache
@@ -681,7 +681,7 @@ Unicode: 你好 🚀`;
 
 		// Request instructions for org1
 		mockGitService.setActiveRepository(new GithubRepoId('org1', 'repo1'));
-		const instructions = await provider.provideContributions({}, {} as any);
+		const instructions = await provider.provideInstructions({}, {} as any);
 
 		assert.equal(instructions.length, 1);
 		assert.equal(instructions[0].name, 'org1');
