@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { commands, LanguageModelChatInformation, lm } from 'vscode';
+import { commands, LanguageModelChatInformation, lm, window } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
@@ -43,11 +43,20 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		this._register(commands.registerCommand('github.copilot.chat.manageBYOK', async (vendor: string) => {
 			const provider = this._providers.get(vendor);
 
+			if (!provider) {
+				this._logService.warn(`BYOK: Provider ${vendor} not registered; BYOK may be disabled for this account or environment.`);
+				void window.showInformationMessage(
+					`The "${vendor}" BYOK provider isn't available in this environment. ` +
+					'This can happen if BYOK is not enabled for your account or this GitHub instance.'
+				);
+				return;
+			}
+
 			// Show quick pick for Azure and CustomOAI providers
-			if (provider && (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase())) {
+			if (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase()) {
 				const configurator = new CustomOAIModelConfigurator(this._configurationService, vendor, provider);
 				await configurator.configureModelOrUpdateAPIKey();
-			} else if (provider) {
+			} else {
 				// For all other providers, directly go to API key management
 				await provider.updateAPIKey();
 			}

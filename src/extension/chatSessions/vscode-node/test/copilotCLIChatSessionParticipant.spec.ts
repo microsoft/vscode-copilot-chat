@@ -22,6 +22,8 @@ import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { ISettableObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
+import { sep } from '../../../../util/vs/base/common/path';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseConfirmationPart } from '../../../../vscodeTypes';
 import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common/delegationSummaryService';
@@ -36,7 +38,7 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
-import { IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
+import { IChatSessionWorktreeService, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLISessionIsolationManager } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 
@@ -67,9 +69,11 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 	setSupported(supported: boolean) {
 		this.isWorktreeSupportedObs.set(supported, undefined);
 	}
-	override createWorktree = vi.fn(async () => undefined);
+	override createWorktree = vi.fn(async () => undefined) as unknown as IChatSessionWorktreeService['createWorktree'];
 	override setWorktreeProperties = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
+	override getWorktreeRelativePath = vi.fn((_id: string) => undefined);
+	override handleRequestCompleted = vi.fn(async () => { });
 }
 
 class FakeModels implements ICopilotCLIModels {
@@ -143,9 +147,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		promptResolver = new class extends mock<CopilotCLIPromptResolver>() {
-			override resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined) {
-				return Promise.resolve({ prompt: prompt ?? request.prompt, attachments: [], references: [] });
-			}
+			override resolvePrompt = vi.fn(async (request: vscode.ChatRequest, prompt: string | undefined) => {
+				return { prompt: prompt ?? request.prompt, attachments: [], references: [] };
+			});
 		}();
 		itemProvider = new class extends mock<CopilotCLIChatSessionItemProvider>() {
 			override swap = vi.fn();
@@ -163,15 +167,15 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		models = new FakeModels();
 		telemetry = new NullTelemetryService();
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
-		workspaceService = new NullWorkspaceService();
+		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
 		const logger = accessor.get(ILogService);
 		const vscodeExtensionContext = accessor.get(IVSCodeExtensionContext);
 		const copilotSDK = new CopilotCLISDK(vscodeExtensionContext, accessor.get(IEnvService), logger, accessor.get(IInstantiationService), accessor.get(IAuthenticationService), workspaceService);
 		const logService = accessor.get(ILogService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
-			override async loadMcpConfig(_workingDirectory: Uri | undefined) {
+			override loadMcpConfig = vi.fn(async (_workingDirectory: Uri | undefined) => {
 				return undefined;
-			}
+			});
 		}();
 		const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 			override async summarize(context: vscode.ChatContext, token: vscode.CancellationToken): Promise<string | undefined> {
@@ -245,6 +249,56 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
 		expect(cliSessions[0].requests[0]).toEqual({ prompt: 'Say hi', attachments: [], modelId: 'base', token });
+	});
+
+	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
+		worktree.setSupported(true);
+		(isolationManager.getIsolationPreference as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
+		(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+			autoCommit: false,
+			baseCommit: 'deadbeef',
+			branchName: 'test',
+			repositoryPath: `${sep}repo`,
+			worktreePath: `${sep}worktree`
+		} satisfies ChatSessionWorktreeProperties);
+
+		const request = new TestChatRequest('Say hi');
+		const context = createChatContext('temp-new', true);
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].options.isolationEnabled).toBe(true);
+		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe(`${sep}worktree`);
+		expect(mcpHandler.loadMcpConfig).toHaveBeenCalled();
+		expect((mcpHandler.loadMcpConfig as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]?.fsPath).toBe(`${sep}worktree`);
+		// Prompt resolver should receive the effective workingDirectory.
+		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
+		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe(`${sep}worktree`);
+	});
+
+	it('falls back to workspace workingDirectory when isolation is enabled but worktree creation fails', async () => {
+		worktree.setSupported(true);
+		(isolationManager.getIsolationPreference as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
+		(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+		const request = new TestChatRequest('Say hi');
+		const context = createChatContext('temp-new', true);
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].options.isolationEnabled).toBe(false);
+		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe(`${sep}workspace`);
+		expect(mcpHandler.loadMcpConfig).toHaveBeenCalled();
+		expect((mcpHandler.loadMcpConfig as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]?.fsPath).toBe(`${sep}workspace`);
+		// Prompt resolver should receive the effective workingDirectory.
+		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
+		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe(`${sep}workspace`);
 	});
 
 	it('reuses existing session (non-untitled) and does not create new one', async () => {

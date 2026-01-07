@@ -469,6 +469,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					return undefined;
 				}
 
+				const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pr);
+				const changes = multiDiffPart
+					? multiDiffPart.value.map(change =>
+						new vscode.ChatSessionChangedFile(change.modifiedUri!, change.added!, change.removed!, change.originalUri))
+					: {
+						files: pr.files.totalCount,
+						insertions: pr.additions,
+						deletions: pr.deletions
+					};
+
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
@@ -481,11 +491,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 							endTime: validateISOTimestamp(sessionItem.completed_at),
 						}
 					} : {}),
-					changes: {
-						files: pr.files.totalCount,
-						insertions: pr.additions,
-						deletions: pr.deletions
-					},
+					changes,
 					fullDatabaseId: pr.fullDatabaseId.toString(),
 					pullRequestDetails: pr,
 				} satisfies vscode.ChatSessionItem & {
@@ -592,7 +598,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return (this.sessionReferencesMap.get(resource) ?? []).concat(summaryRef ? [summaryRef] : []);
 		});
 
-		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
+		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService);
 		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId, { createIfNone: true }), storedReferences);
 
 		const selectedAgent =
@@ -609,7 +615,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		};
 	}
 
-	async openSessionsInBrowser(chatSessionItem: vscode.ChatSessionItem): Promise<void> {
+	async openSessionInBrowser(chatSessionItem: vscode.ChatSessionItem): Promise<void> {
 		const session = SessionIdForPr.parse(chatSessionItem.resource);
 		let prNumber = session?.prNumber;
 		if (typeof prNumber === 'undefined' || isNaN(prNumber)) {
@@ -628,8 +634,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return;
 		}
 
-		const url = `https://github.com/copilot/tasks/pull/${pr.id}`;
-		await vscode.env.openExternal(vscode.Uri.parse(url));
+		await vscode.env.openExternal(vscode.Uri.parse(pr.url));
 	}
 
 	async openChanges(chatSessionItemResource: vscode.Uri): Promise<void> {
@@ -1317,12 +1322,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					return;
 				}
 				isCompleted = true;
-
-				this.logService.info(`Session completed, attempting to get file changes for PR #${pullRequest.number}`);
-				const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pullRequest);
-				if (multiDiffPart) {
-					stream.push(multiDiffPart);
-				}
 				resolve();
 			};
 
@@ -1410,7 +1409,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 
 			// Parse the new log content
-			const contentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
+			const contentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService);
 
 			const logChunks = contentBuilder.parseSessionLogs(newLogContent);
 			let hasStreamedContent = false;

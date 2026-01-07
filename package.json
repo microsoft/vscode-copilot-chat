@@ -2426,6 +2426,15 @@
 						"markdownDescription": "%github.copilot.nextEditSuggestions.enabled%",
 						"scope": "language-overridable"
 					},
+					"github.copilot.nextEditSuggestions.extendedRange": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"nextEditSuggestions",
+							"onExp"
+						],
+						"markdownDescription": "%github.copilot.nextEditSuggestions.extendedRange%"
+					},
 					"github.copilot.nextEditSuggestions.fixes": {
 						"type": "boolean",
 						"default": true,
@@ -3246,6 +3255,15 @@
 							"onExp"
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
+					},
+					"github.copilot.chat.anthropic.useMessagesApi": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.useMessagesApi%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
 					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",

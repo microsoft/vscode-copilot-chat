@@ -459,6 +459,14 @@ namespace tss {
 			return (symbol as InternalSymbol).parent;
 		}
 
+		public static isFunctionScopedVariable(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.FunctionScopedVariable) !== 0;
+		}
+
+		public static isBlockScopedVariable(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
+		}
+
 		public static isConstructor(symbol: tt.Symbol | undefined): boolean {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Constructor) !== 0;
 		}

@@ -8,6 +8,7 @@ import type { LanguageModelToolInformation } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { isGpt5PlusFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -417,6 +418,12 @@ export class CodesearchModeInstructions extends PromptElement<DefaultAgentPrompt
 }
 
 export class ApplyPatchFormatInstructions extends PromptElement {
+	constructor(
+		props: BasePromptElementProps,
+		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService
+	) {
+		super(props);
+	}
 	render() {
 		return <>
 			*** Update File: [file_path]<br />
@@ -435,7 +442,7 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 			See below for an example of the patch format. If you propose changes to multiple regions in the same file, you should repeat the *** Update File header for each snippet of code to change:<br />
 			<br />
 			*** Begin Patch<br />
-			*** Update File: /Users/someone/pygorithm/searching/binary_search.py<br />
+			*** Update File: {this._promptPathRepresentationService.getExampleFilePath('/Users/someone/pygorithm/searching/binary_search.py')}<br />
 			@@ class BaseClass<br />
 			@@   def method():<br />
 			[3 lines of pre-context]<br />
