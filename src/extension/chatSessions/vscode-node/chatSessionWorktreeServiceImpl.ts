@@ -186,6 +186,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			worktreeProperties.baseCommit,
 			worktreeProperties.branchName,
 		);
+		if (!patch) {
+			return;
+		}
 
 		// Write the patch to a temporary file
 		const encoder = new TextEncoder();
@@ -308,6 +311,10 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		if (!worktreeProperties.autoCommit) {
 			// Stage all changes in the worktree
 			await this.gitService.add(vscode.Uri.file(worktreePath), []);
+
+			// Delete worktree changes from cache
+			this._sessionWorktreeChanges.delete(sessionId);
+
 			return;
 		}
 
