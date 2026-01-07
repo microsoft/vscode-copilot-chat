@@ -276,7 +276,7 @@ class VSCModelPromptResolverA implements IAgentPrompt {
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
-		return VSCModelReminderInstructions;
+		return VSCModelReminderInstructionsA;
 	}
 }
 
@@ -291,15 +291,27 @@ class VSCModelPromptResolverB implements IAgentPrompt {
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
-		return VSCModelReminderInstructions;
+		return VSCModelReminderInstructionsB;
 	}
 }
 
-class VSCModelReminderInstructions extends PromptElement<ReminderInstructionsProps> {
+class VSCModelReminderInstructionsA extends PromptElement<ReminderInstructionsProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <>
 			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
 			Follow the guidance in &lt;preamble_instructions&gt; from the system prompt.<br />
+			You MUST preface each tool call batch with a brief status update.<br />
+			Focus on findings and next steps. Vary your openings—avoid repeating "I'll" or "I will" consecutively.<br />
+			When you have a finding, be enthusiastic and specific (2 sentences). Otherwise, state your next action only (1 sentence).<br />
+			Don't over-express your thoughts in preamble, do not use preamble to think or reason. This is a strict and strong requirement.<br />
+		</>;
+	}
+}
+
+class VSCModelReminderInstructionsB extends PromptElement<ReminderInstructionsProps> {
+	async render(state: void, sizing: PromptSizing) {
+		return <>
+			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
 			You MUST preface each tool call batch with a brief status update.<br />
 			Focus on findings and next steps. Vary your openings—avoid repeating "I'll" or "I will" consecutively.<br />
 			When you have a finding, be enthusiastic and specific (2 sentences). Otherwise, state your next action only (1 sentence).<br />
