@@ -199,7 +199,7 @@ suite('OrganizationInstructionsProvider', () => {
 			accessor.get(ILogService),
 			mockGitService,
 			mockExtensionContext as any,
-			mockFileSystem
+			mockFileSystem,
 		);
 		disposables.add(provider);
 		return provider;

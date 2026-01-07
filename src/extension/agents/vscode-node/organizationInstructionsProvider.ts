@@ -10,10 +10,11 @@ import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
 
 const InstructionFileExtension = '.instruction.md';
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 export class OrganizationInstructionsProvider extends Disposable implements vscode.InstructionsProvider {
 
@@ -21,6 +22,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 	readonly onDidChangeInstructions = this._onDidChangeInstructions.event;
 
 	private isFetching = false;
+	private pollingInterval: ReturnType<typeof setInterval> | undefined;
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
@@ -30,6 +32,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 	) {
 		super();
+		this.startPolling();
 	}
 
 	private getCacheDir(): vscode.Uri | undefined {
@@ -48,27 +51,105 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		_token: vscode.CancellationToken
 	): Promise<vscode.InstructionsResource[]> {
 		try {
-			// Get repository information from the active git repository
-			const repoId = await getRepoId(this.gitService);
-			if (!repoId) {
-				this.logService.trace('[OrganizationInstructionsProvider] No active repository found');
-				return [];
-			}
-
-			const orgLogin = repoId.org;
-
-			// Read from cache first
-			const cachedInstructions = await this.readFromCache(orgLogin);
-
-			// Trigger async fetch to update cache
-			this.fetchAndUpdateCache(orgLogin, options).catch(error => {
-				this.logService.error(`[OrganizationInstructionsProvider] Error in background fetch: ${error}`);
-			});
-
+			const orgLogin = await this.determineOrganizationToUse();
+			const cachedInstructions = orgLogin ? await this.readFromCache(orgLogin) : [];
 			return cachedInstructions;
 		} catch (error) {
 			this.logService.error(`[OrganizationInstructionsProvider] Error in provideInstructions: ${error}`);
 			return [];
+		}
+	}
+
+	/**
+	 * Tries all user's organizations to find one with custom instructions.
+	 * Returns the first organization login that has instructions, or undefined if none found.
+	 */
+	private async tryAllOrganizations(options: vscode.InstructionsQueryOptions): Promise<string | undefined> {
+		try {
+			this.logService.trace('[OrganizationInstructionsProvider] Fetching list of user organizations');
+			const organizations = await this.octoKitService.getUserOrganizations({ createIfNone: false });
+
+			if (!organizations || organizations.length === 0) {
+				this.logService.trace('[OrganizationInstructionsProvider] No organizations found for user');
+				return undefined;
+			}
+
+			this.logService.trace(`[OrganizationInstructionsProvider] Trying ${organizations.length} organizations`);
+
+			// Try each organization until we find one with instructions
+			for (const org of organizations) {
+				try {
+					this.logService.trace(`[OrganizationInstructionsProvider] Trying organization: ${org}`);
+					const instructions = await this.octoKitService.getOrgCustomInstructions(org, {});
+
+					if (instructions) {
+						this.logService.trace(`[OrganizationInstructionsProvider] Found instructions for organization: ${org}`);
+						// Cache the instructions
+						await this.cacheInstructions(org, instructions);
+						return org;
+					}
+				} catch (error) {
+					this.logService.trace(`[OrganizationInstructionsProvider] Error fetching instructions for ${org}: ${error}`);
+					// Continue to next organization
+				}
+			}
+
+			this.logService.trace('[OrganizationInstructionsProvider] No organization with instructions found');
+			return undefined;
+		} catch (error) {
+			this.logService.error(`[OrganizationInstructionsProvider] Error in tryAllOrganizations: ${error}`);
+			return undefined;
+		}
+	}
+
+	/**
+	 * Determines which organization to use for instructions based on priority.
+	 */
+	private async determineOrganizationToUse(): Promise<string | undefined> {
+		const cacheDir = this.getCacheDir();
+		if (!cacheDir) {
+			this.logService.trace('[OrganizationInstructionsProvider] No workspace open, cannot determine organization');
+			return undefined;
+		}
+
+		// Check if current repository belongs to an organization with instructions
+		const repoId = await getRepoId(this.gitService);
+		if (repoId) {
+			const currentOrgLogin = repoId.org;
+			const hasInstructions = await this.hasInstructionsInCache(currentOrgLogin, cacheDir);
+			if (hasInstructions) {
+				this.logService.trace(`[OrganizationInstructionsProvider] Using current repository's organization: ${currentOrgLogin}`);
+				return currentOrgLogin;
+			}
+		}
+
+		// Find any organization with instructions in cache
+		try {
+			const files = await this.fileSystem.readDirectory(cacheDir);
+			for (const [filename, fileType] of files) {
+				if (fileType === FileType.File && filename.endsWith(InstructionFileExtension)) {
+					const orgLogin = filename.substring(0, filename.length - InstructionFileExtension.length);
+					this.logService.trace(`[OrganizationInstructionsProvider] Using cached organization: ${orgLogin}`);
+					return orgLogin;
+				}
+			}
+		} catch (error) {
+			this.logService.trace(`[OrganizationInstructionsProvider] Error reading cache directory: ${error}`);
+		}
+
+		return undefined;
+	}
+
+	/**
+	 * Checks if instructions exist in cache for a given organization
+	 */
+	private async hasInstructionsInCache(orgLogin: string, cacheDir: vscode.Uri): Promise<boolean> {
+		const fileName = this.getCacheFilename(orgLogin);
+		try {
+			const files = await this.fileSystem.readDirectory(cacheDir);
+			return files.some(([name, type]) => type === FileType.File && name === fileName);
+		} catch {
+			return false;
 		}
 	}
 
@@ -106,7 +187,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 	}
 
 	private async fetchAndUpdateCache(
-		orgLogin: string,
+		orgLogin: string | undefined,
 		options: vscode.InstructionsQueryOptions
 	): Promise<void> {
 		// Prevent concurrent fetches
@@ -117,6 +198,19 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 
 		this.isFetching = true;
 		try {
+			// If no orgLogin provided, try all organizations
+			if (!orgLogin) {
+				this.logService.trace('[OrganizationInstructionsProvider] No orgLogin provided, trying all organizations');
+				orgLogin = await this.tryAllOrganizations(options);
+				if (!orgLogin) {
+					this.logService.trace('[OrganizationInstructionsProvider] No organization with instructions found');
+					return;
+				}
+				// tryAllOrganizations already fetched and cached, just fire the event
+				this._onDidChangeInstructions.fire();
+				return;
+			}
+
 			this.logService.trace(`[OrganizationInstructionsProvider] Fetching custom instructions for org ${orgLogin}`);
 
 			const instructions = await this.octoKitService.getOrgCustomInstructions(orgLogin, {});
@@ -131,14 +225,6 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 				return;
 			}
 
-			// Ensure cache directory exists
-			try {
-				await this.fileSystem.stat(cacheDir);
-			} catch (error) {
-				// Directory doesn't exist, create it
-				await this.fileSystem.createDirectory(cacheDir);
-			}
-
 			const existingInstructions = await this.readCacheContents(orgLogin, cacheDir);
 			const hasChanges = instructions !== existingInstructions;
 
@@ -147,10 +233,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 				return;
 			}
 
-			const fileName = this.getCacheFilename(orgLogin);
-			const fileUri = vscode.Uri.joinPath(cacheDir, fileName);
-			await this.fileSystem.writeFile(fileUri, new TextEncoder().encode(instructions));
-
+			await this.cacheInstructions(orgLogin, instructions);
 			this.logService.trace(`[OrganizationInstructionsProvider] Updated cache with instructions for org ${orgLogin}`);
 
 			// Fire event to notify consumers that instructions have changed
@@ -158,6 +241,29 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		} finally {
 			this.isFetching = false;
 		}
+	}
+
+	/**
+	 * Caches instructions for an organization
+	 */
+	private async cacheInstructions(orgLogin: string, instructions: string): Promise<void> {
+		const cacheDir = this.getCacheDir();
+		if (!cacheDir) {
+			this.logService.trace('[OrganizationInstructionsProvider] No workspace open, cannot use cache');
+			return;
+		}
+
+		// Ensure cache directory exists
+		try {
+			await this.fileSystem.stat(cacheDir);
+		} catch (error) {
+			// Directory doesn't exist, create it
+			await this.fileSystem.createDirectory(cacheDir);
+		}
+
+		const fileName = this.getCacheFilename(orgLogin);
+		const fileUri = vscode.Uri.joinPath(cacheDir, fileName);
+		await this.fileSystem.writeFile(fileUri, new TextEncoder().encode(instructions));
 	}
 
 	private async readCacheContents(orgLogin: string, cacheDir: vscode.Uri): Promise<string | undefined> {
@@ -175,5 +281,37 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 			// Directory might not exist yet or other errors
 		}
 		return undefined;
+	}
+
+	private startPolling(): void {
+		if (this.pollingInterval) {
+			return;
+		}
+
+		this.logService.trace(`[OrganizationInstructionsProvider] Starting polling with interval: ${REFRESH_INTERVAL_MS}ms`);
+
+		this.pollingInterval = setInterval(async () => {
+			await this.refreshCache();
+		}, REFRESH_INTERVAL_MS);
+
+		// Register for disposal
+		this._register(toDisposable(() => this.stopPolling()));
+	}
+
+	private stopPolling(): void {
+		if (this.pollingInterval) {
+			this.logService.trace('[OrganizationInstructionsProvider] Stopping polling');
+			clearInterval(this.pollingInterval);
+			this.pollingInterval = undefined;
+		}
+	}
+
+	private async refreshCache(): Promise<void> {
+		try {
+			const orgLogin = await this.determineOrganizationToUse();
+			await this.fetchAndUpdateCache(orgLogin, {});
+		} catch (error) {
+			this.logService.error(`[OrganizationInstructionsProvider] Error in refreshCache: ${error}`);
+		}
 	}
 }
