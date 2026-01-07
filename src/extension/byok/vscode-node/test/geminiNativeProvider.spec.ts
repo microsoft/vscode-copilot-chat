@@ -242,4 +242,51 @@ describe('GeminiNativeBYOKLMProvider', () => {
 		expect(models).toEqual([]);
 		expect(mockHandleAPIKeyUpdate).toHaveBeenCalled();
 	});
+
+	it('retries listing models after re-prompting with a valid API key', async () => {
+		const { GeminiNativeBYOKLMProvider } = await import('../geminiNativeProvider');
+		const genai = await import('@google/genai');
+		const MockGoogleGenAI = genai.GoogleGenAI as unknown as { listModelsResult: AsyncIterable<any> };
+
+		let iterationCount = 0;
+		let hasThrown = false;
+		const modelId = 'test-model';
+
+		MockGoogleGenAI.listModelsResult = {
+			async *[Symbol.asyncIterator]() {
+				iterationCount++;
+				if (!hasThrown) {
+					hasThrown = true;
+					throw new Error('ApiError: {"error":{"message":"API key not valid. Please pass a valid API key.","details":[{"reason":"API_KEY_INVALID"}]}}');
+				}
+				yield { name: modelId };
+			}
+		};
+
+		const storage = createStorageService({
+			getAPIKey: vi.fn().mockResolvedValue('bad_key'),
+		});
+
+		mockHandleAPIKeyUpdate.mockResolvedValue({ apiKey: 'k_new', deleted: false, cancelled: false });
+
+		const knownModels = {
+			[modelId]: {
+				name: 'Test Model',
+				maxInputTokens: 1000,
+				maxOutputTokens: 1000,
+				toolCalling: false,
+				vision: false
+			}
+		};
+
+		const provider = new GeminiNativeBYOKLMProvider(knownModels, storage, new TestLogService(), createRequestLogger());
+		const tokenSource = new vscode.CancellationTokenSource();
+		const models = await provider.provideLanguageModelChatInformation({ silent: false }, tokenSource.token);
+
+		// First attempt should fail with invalid key, then after re-prompting
+		// we should retry listing models and succeed with the new key.
+		expect(models.map(m => m.id)).toEqual([modelId]);
+		expect(iterationCount).toBe(2);
+		expect(mockHandleAPIKeyUpdate).toHaveBeenCalled();
+	});
 });
