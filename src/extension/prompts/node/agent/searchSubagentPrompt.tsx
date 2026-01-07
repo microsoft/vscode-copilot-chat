@@ -38,7 +38,7 @@ export class SearchSubagentPrompt extends PromptElement<GenericBasePromptElement
 					&lt;final_answer&gt;<br />
 					path/to/file.py:10-20<br />
 					another_file.cc:100-120<br />
-					&lt;final_answer&gt;
+					&lt;/final_answer&gt;
 				</SystemMessage>
 				<UserMessage priority={900}>{searchInstruction}</UserMessage>
 				<ChatToolCalls
