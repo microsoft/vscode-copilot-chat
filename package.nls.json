@@ -298,7 +298,6 @@
 	"github.copilot.config.agent.currentEditorContext.enabled": "When enabled, Copilot will include the name of the current active editor in the context for agent mode.",
 	"github.copilot.config.customInstructionsInSystemMessage": "When enabled, custom instructions and mode instructions will be appended to the system message instead of a user message.",
 	"github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents": "Enable custom agents from GitHub Enterprise and Organizations. When disabled, custom agents from your organization or enterprise will not be available in Copilot.",
-	"github.copilot.config.customInstructions.useOrganizationInstructions": "Enable custom instructions from GitHub Organizations. When disabled, custom instructions from your organization will not be available in Copilot.",
 	"copilot.toolSet.editing.description": "Edit files in your workspace",
 	"copilot.toolSet.read.description": "Read files in your workspace",
 	"copilot.toolSet.search.description": "Search files in your workspace",

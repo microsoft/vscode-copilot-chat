@@ -353,13 +353,6 @@ export interface IOctoKitService {
 	 * @returns An array of repository names
 	 */
 	getOrganizationRepositories(org: string, authOptions: AuthOptions): Promise<string[]>;
-
-	/**
-	 * Gets the custom instructions prompt for an organization.
-	 * @param orgLogin The organization login
-	 * @returns The prompt string or undefined if not available
-	 */
-	getOrgCustomInstructions(orgLogin: string, authOptions: AuthOptions): Promise<string | undefined>;
 }
 
 /**

@@ -346,30 +346,4 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 		return this.getOrganizationRepositoriesWithToken(org, authToken);
 	}
-
-	async getOrgCustomInstructions(orgLogin: string, authOptions: { createIfNone?: boolean }): Promise<string | undefined> {
-		try {
-			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
-			if (!authToken) {
-				throw new Error('No authentication token available');
-			}
-			const response = await this._capiClientService.makeRequest<Response>({
-				method: 'GET',
-				headers: {
-					Authorization: `Bearer ${authToken}`,
-				}
-			}, {
-				type: RequestType.OrgCustomInstructions,
-				orgLogin
-			});
-			if (!response.ok) {
-				throw new Error(`Failed to fetch custom instructions for org ${orgLogin}: ${response.statusText}`);
-			}
-			const data = await response.json() as { prompt: string };
-			return data.prompt;
-		} catch (e) {
-			this._logService.error(e);
-			return undefined;
-		}
-	}
 }
