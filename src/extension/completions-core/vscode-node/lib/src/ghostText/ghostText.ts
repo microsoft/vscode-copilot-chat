@@ -1067,8 +1067,8 @@ async function getGhostTextWithoutAbortHandling(
 export async function getGhostText(
 	accessor: ServicesAccessor,
 	completionState: CompletionState,
-	token?: ICancellationToken,
-	options?: Partial<GetGhostTextOptions>
+	token: ICancellationToken | undefined,
+	options: Partial<GetGhostTextOptions>
 ): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
 	const id = generateUuid();
 	const instantiationService = accessor.get(IInstantiationService);
