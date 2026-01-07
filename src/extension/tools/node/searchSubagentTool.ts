@@ -6,6 +6,7 @@
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -39,6 +40,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 	) { }
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISearchSubagentParams>, token: vscode.CancellationToken) {
 		const searchInstruction = [
@@ -49,11 +51,27 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			'',
 		].join('\n');
 
+		// Get gpt-5-mini endpoint for the search subagent
+		const gpt5MiniEndpoint = await this.endpointProvider.getChatEndpoint('gpt-5-mini');
+
+		// Create a request wrapper that uses gpt-5-mini instead of the base model
+		const originalRequest = this._inputContext!.request!;
+		const requestWithGpt5Mini: vscode.ChatRequest = {
+			...originalRequest,
+			model: {
+				...originalRequest.model,
+				id: gpt5MiniEndpoint.model,
+				vendor: 'copilot',
+				family: gpt5MiniEndpoint.family,
+				version: gpt5MiniEndpoint.version,
+			}
+		};
+
 		const loop = this.instantiationService.createInstance(SubagentToolCallingLoop, {
 			toolCallLimit: 4,
 			conversation: new Conversation('', [new Turn('', { type: 'user', message: searchInstruction })]),
-			request: this._inputContext!.request!,
-			location: this._inputContext!.request!.location,
+			request: requestWithGpt5Mini,
+			location: originalRequest.location,
 			promptText: options.input.query,
 			allowedTools: new Set([ToolName.Codebase, ToolName.FindFiles, ToolName.FindTextInFiles, ToolName.ReadFile]),
 			customPromptClass: SearchSubagentPrompt as typeof SearchSubagentPrompt & PromptElementCtor,
