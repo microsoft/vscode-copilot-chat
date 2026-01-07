@@ -76,7 +76,7 @@ Consider writing a unit test for your tool. One example to copy is [`readFile.sp
 The `search_subagent` tool launches a focused iterative search loop that can internally call other search tools (`semantic_search`, `file_search`, `grep_search`) multiple times to gather and refine relevant workspace context for a natural language query.
 
 Key behaviors:
-- Starts a subagent loop (15–20 tool call rounds default) seeded with your query and a search strategy.
+- Starts a subagent loop (up to 4 tool call rounds by default) seeded with your query and a search strategy.
 - Prioritizes `semantic_search` for broad conceptual discovery, then glob expansion via `file_search`, then confirmation/detail via `grep_search`.
 - De-duplicates and refines queries, avoiding redundant tool calls.
 - Produces a ranked summary of relevant files/snippets plus suggested refined queries when coverage is partial.
