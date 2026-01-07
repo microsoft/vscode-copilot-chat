@@ -894,9 +894,6 @@ export namespace ConfigKey {
 	/** Enable custom agents from GitHub Enterprise/Organizations */
 	export const ShowOrganizationAndEnterpriseAgents = defineSetting<boolean>('chat.customAgents.showOrganizationAndEnterpriseAgents', ConfigType.Simple, false);
 
-	/** Enable custom instructions from GitHub Organizations */
-	export const UseOrganizationInstructions = defineSetting<boolean>('chat.customInstructions.useOrganizationInstructions', ConfigType.Simple, false);
-
 	export const CompletionsFetcher = defineSetting<FetcherId | undefined>('chat.completionsFetcher', ConfigType.ExperimentBased, undefined);
 	export const NextEditSuggestionsFetcher = defineSetting<FetcherId | undefined>('chat.nesFetcher', ConfigType.ExperimentBased, undefined);
 
