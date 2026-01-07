@@ -377,5 +377,5 @@
 	"copilot.tools.runSubagent.name": "Run Subagent",
 	"copilot.tools.runSubagent.description": "Runs a task within an isolated subagent context. Enables efficient organization of tasks and context window management.",
 	"copilot.tools.searchSubagent.name": "Search Subagent",
-	"copilot.tools.searchSubagent.description": "Launch an iterative search-focused subagent to find relevant code in your workspace"
+	"copilot.tools.searchSubagent.description": "Launch an iterative search-focused subagent to find relevant code in your workspace."
 }
