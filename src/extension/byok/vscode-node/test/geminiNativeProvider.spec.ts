@@ -217,4 +217,29 @@ describe('GeminiNativeBYOKLMProvider', () => {
 			tokenSource.token
 		)).rejects.toThrow(/No API key configured/i);
 	});
+
+	it('prompts for a new API key when listing models fails with an invalid key', async () => {
+		const { GeminiNativeBYOKLMProvider } = await import('../geminiNativeProvider');
+		const genai = await import('@google/genai');
+		const MockGoogleGenAI = genai.GoogleGenAI as unknown as { listModelsResult: AsyncIterable<any> };
+		// Simulate the models.list() call throwing an invalid API key error when iterated
+		MockGoogleGenAI.listModelsResult = (async function* () {
+			throw new Error('ApiError: {"error":{"message":"API key not valid. Please pass a valid API key.","details":[{"reason":"API_KEY_INVALID"}]}}');
+		})();
+
+		const storage = createStorageService({
+			getAPIKey: vi.fn().mockResolvedValue('bad_key'),
+		});
+
+		mockHandleAPIKeyUpdate.mockResolvedValue({ apiKey: undefined, deleted: false, cancelled: true });
+
+		const provider = new GeminiNativeBYOKLMProvider(undefined, storage, new TestLogService(), createRequestLogger());
+		const tokenSource = new vscode.CancellationTokenSource();
+		const models = await provider.provideLanguageModelChatInformation({ silent: false }, tokenSource.token);
+
+		// When the key is invalid, we should re-prompt for a new one
+		// and handle the failure gracefully by returning an empty list.
+		expect(models).toEqual([]);
+		expect(mockHandleAPIKeyUpdate).toHaveBeenCalled();
+	});
 });
