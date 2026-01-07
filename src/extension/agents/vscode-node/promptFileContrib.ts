@@ -24,8 +24,8 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 		if ('registerCustomAgentProvider' in vscode.chat) {
 			// Only register the provider if the setting is enabled
 			if (configurationService.getConfig(ConfigKey.ShowOrganizationAndEnterpriseAgents)) {
-				const agentProvider = instantiationService.createInstance(OrganizationAndEnterpriseAgentProvider);
-				this._register(vscode.chat.registerCustomAgentProvider(agentProvider));
+				const orgAndEnterpriseAgentProvider = instantiationService.createInstance(OrganizationAndEnterpriseAgentProvider);
+				this._register(vscode.chat.registerCustomAgentProvider(orgAndEnterpriseAgentProvider));
 			}
 		}
 
@@ -33,8 +33,8 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 		if ('registerInstructionsProvider' in vscode.chat) {
 			// Only register the provider if the setting is enabled
 			if (configurationService.getConfig(ConfigKey.UseOrganizationInstructions)) {
-				const instructionsProvider = instantiationService.createInstance(OrganizationInstructionsProvider);
-				this._register(vscode.chat.registerInstructionsProvider(instructionsProvider));
+				const orgInstructionsProvider = instantiationService.createInstance(OrganizationInstructionsProvider);
+				this._register(vscode.chat.registerInstructionsProvider(orgInstructionsProvider));
 			}
 		}
 	}

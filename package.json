@@ -84,7 +84,8 @@
 		"onUri",
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings",
-		"onChatContributionsProvider"
+		"onCustomAgentProvider",
+		"onInstructionsProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
