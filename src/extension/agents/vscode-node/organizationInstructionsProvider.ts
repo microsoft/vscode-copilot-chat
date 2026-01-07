@@ -124,20 +124,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		}
 
 		// Find any organization with instructions in cache
-		try {
-			const files = await this.fileSystem.readDirectory(cacheDir);
-			for (const [filename, fileType] of files) {
-				if (fileType === FileType.File && filename.endsWith(InstructionFileExtension)) {
-					const orgLogin = filename.substring(0, filename.length - InstructionFileExtension.length);
-					this.logService.trace(`[OrganizationInstructionsProvider] Using cached organization: ${orgLogin}`);
-					return orgLogin;
-				}
-			}
-		} catch (error) {
-			this.logService.trace(`[OrganizationInstructionsProvider] Error reading cache directory: ${error}`);
-		}
-
-		return undefined;
+		return await this.findFirstCachedOrganization(cacheDir);
 	}
 
 	/**
@@ -151,6 +138,22 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		} catch {
 			return false;
 		}
+	}
+
+	private async findFirstCachedOrganization(cacheDir: vscode.Uri): Promise<string | undefined> {
+		try {
+			const files = await this.fileSystem.readDirectory(cacheDir);
+			for (const [filename, fileType] of files) {
+				if (fileType === FileType.File && filename.endsWith(InstructionFileExtension)) {
+					const orgLogin = filename.substring(0, filename.length - InstructionFileExtension.length);
+					this.logService.trace(`[OrganizationInstructionsProvider] Using cached organization: ${orgLogin}`);
+					return orgLogin;
+				}
+			}
+		} catch (error) {
+			this.logService.trace(`[OrganizationInstructionsProvider] Error reading cache directory: ${error}`);
+		}
+		return undefined;
 	}
 
 	private async readFromCache(
