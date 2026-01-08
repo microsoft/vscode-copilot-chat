@@ -33,6 +33,20 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 		@IRequestLogger private readonly _requestLogger: IRequestLogger
 	) { }
 
+	private _isInvalidApiKeyError(error: unknown): boolean {
+		if (!error) {
+			return false;
+		}
+
+		const message = typeof error === 'string' ? error : (error as Error).message;
+		if (typeof message !== 'string') {
+			return false;
+		}
+
+		const lower = message.toLowerCase();
+		return lower.includes('api key not valid') || lower.includes('api_key_invalid') || lower.includes('api key invalid');
+	}
+
 	private async _getOrReadApiKey(): Promise<string | undefined> {
 		if (!this._apiKey) {
 			this._apiKey = await this._byokStorageService.getAPIKey(GeminiNativeBYOKLMProvider.providerName);
@@ -107,7 +121,20 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 					return [];
 				}
 			}
-		} catch {
+		} catch (error) {
+			if (this._isInvalidApiKeyError(error)) {
+				if (options.silent) {
+					return [];
+				}
+				await this.updateAPIKey();
+				if (this._apiKey) {
+					try {
+						return byokKnownModelsToAPIInfo(GeminiNativeBYOKLMProvider.providerName, await this.getAllModels(this._apiKey));
+					} catch (retryError) {
+						this._logService.error(`Error after re-prompting for API key: ${toErrorMessage(retryError, true)}`);
+					}
+				}
+			}
 			return [];
 		}
 	}
