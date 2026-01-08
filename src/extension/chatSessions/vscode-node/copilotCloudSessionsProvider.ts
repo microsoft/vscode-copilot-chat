@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RemoteAgentJobPayload } from '@vscode/copilot-api';
 import MarkdownIt from 'markdown-it';
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
@@ -13,7 +14,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
-import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
+import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
@@ -49,7 +50,9 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 }
 
 const AGENTS_OPTION_GROUP_ID = 'agents';
+const MODELS_OPTION_GROUP_ID = 'models';
 const DEFAULT_AGENT_ID = '___vscode_default___';
+const DEFAULT_MODEL_ID = 'auto';
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
@@ -125,9 +128,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	public readonly onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
 	private readonly _onDidCommitChatSessionItem = this._register(new vscode.EventEmitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
 	public readonly onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
+	private readonly _onDidChangeChatSessionProviderOptions = this._register(new vscode.EventEmitter<void>());
+	public readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
 	private chatSessions: Map<number, PullRequestSearchItem> = new Map();
 	private chatSessionItemsPromise: Promise<vscode.ChatSessionItem[]> | undefined;
 	private readonly sessionAgentMap = new ResourceMap<string>();
+	private readonly sessionModelMap = new ResourceMap<string>();
 	private readonly sessionReferencesMap = new ResourceMap<readonly vscode.ChatPromptReference[]>();
 	public chatParticipant = vscode.chat.createChatParticipant(CopilotCloudSessionsProvider.TYPE, async (request, context, stream, token) => {
 		await this.chatParticipantImpl(request, context, stream, token);
@@ -338,45 +344,61 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
 		this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions Start');
-		const repoId = await getRepoId(this._gitService);
-		if (!repoId) {
-			this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions No Repo Id');
-			return { optionGroups: [] };
-		}
 
-		// TODO: handle no auth token case more gracefully
-		if (!this._authenticationService.permissiveGitHubSession) {
-			this.logService.trace('[copilotCloudSessionsProvider#provideChatSessionProviderOptions] No Auth Token');
-			return { optionGroups: [] };
-		}
+		const optionGroups: vscode.ChatSessionProviderOptionGroup[] = [];
+		const repoId = await getRepoId(this._gitService);
+
 		try {
-			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true }, { createIfNone: true });
-			if (customAgents.length === 0) {
+			// Fetch agents (requires repo) and models (global) in parallel
+			const [customAgents, models] = await Promise.all([
+				repoId ? this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true }, { createIfNone: false }) : Promise.resolve([]),
+				this._octoKitService.getCopilotAgentModels({ createIfNone: false })
+			]);
+
+			// Add agents option group if there are custom agents
+			if (customAgents.length > 0) {
+				this.logService.trace(`[copilotCloudSessionsProvider#provideChatSessionProviderOptions] ${JSON.stringify(customAgents, undefined, 2)}`);
+				const agentItems: vscode.ChatSessionProviderOptionItem[] = [
+					{ id: DEFAULT_AGENT_ID, name: vscode.l10n.t('Agent') },
+					...customAgents.map(agent => ({
+						id: agent.name,
+						name: agent.display_name || agent.name
+					}))
+				];
+				optionGroups.push({
+					id: AGENTS_OPTION_GROUP_ID,
+					name: vscode.l10n.t('Custom Agents'),
+					description: vscode.l10n.t('Select which agent to use'),
+					items: agentItems,
+				});
+			} else {
 				this.logService.trace('[copilotCloudSessionsProvider#provideChatSessionProviderOptions] No Custom Agents');
-				return { optionGroups: [] };
 			}
 
-			this.logService.trace(`[copilotCloudSessionsProvider#provideChatSessionProviderOptions] ${JSON.stringify(customAgents, undefined, 2)}`);
+			// Add models option group if there are models available
+			if (models.length > 0) {
+				this.logService.trace(`[copilotCloudSessionsProvider#provideChatSessionProviderOptions] Models: ${JSON.stringify(models, undefined, 2)}`);
 
-			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
-				{ id: DEFAULT_AGENT_ID, name: vscode.l10n.t('Agent') },
-				...customAgents.map(agent => ({
-					id: agent.name,
-					name: agent.display_name || agent.name
-				}))
-			];
-			return {
-				optionGroups: [
-					{
-						id: AGENTS_OPTION_GROUP_ID,
-						name: vscode.l10n.t('Custom Agents'),
-						description: vscode.l10n.t('Select which agent to use'),
-						items: agentItems,
-					}
-				]
-			};
+				const modelItems: vscode.ChatSessionProviderOptionItem[] = models.map(model => ({
+					id: model.id,
+					name: model.name,
+				}));
+				if (!models.find(m => m.id === DEFAULT_MODEL_ID)) {
+					modelItems.unshift({ id: DEFAULT_MODEL_ID, name: vscode.l10n.t('Auto'), description: vscode.l10n.t('Automatically select the best model') });
+				}
+				optionGroups.push({
+					id: MODELS_OPTION_GROUP_ID,
+					name: vscode.l10n.t('Model'),
+					description: vscode.l10n.t('Select which model to use'),
+					items: modelItems,
+				});
+			} else {
+				this.logService.trace('[copilotCloudSessionsProvider#provideChatSessionProviderOptions] No Models available');
+			}
+
+			return { optionGroups };
 		} catch (error) {
-			this.logService.error(`[copilotCloudSessionsProvider#provideChatSessionProviderOptions] Error fetching custom agents: ${error}`);
+			this.logService.error(`[copilotCloudSessionsProvider#provideChatSessionProviderOptions] Error fetching options: ${error}`);
 			return { optionGroups: [] };
 		}
 	}
@@ -390,6 +412,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				} else {
 					this.sessionAgentMap.delete(resource);
 					this.logService.info(`Agent cleared for session ${resource}`);
+				}
+			} else if (update.optionId === MODELS_OPTION_GROUP_ID) {
+				if (update.value) {
+					this.sessionModelMap.set(resource, update.value);
+					this.logService.info(`Model changed for session ${resource}: ${update.value}`);
+				} else {
+					this.sessionModelMap.delete(resource);
+					this.logService.info(`Model cleared for session ${resource}`);
 				}
 			}
 		}
@@ -607,9 +637,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			// Query for the sub-agent that the remote reports for this session
 			|| undefined; /* TODO: Needs API to support this. */
 
+		const selectedModel =
+			// Local cache of session -> model
+			this.sessionModelMap.get(resource)
+			// Query for the model that the remote reports for this session
+			|| undefined; /* TODO: Needs API to support this. */
+
 		return {
 			history,
-			options: selectedAgent ? { [AGENTS_OPTION_GROUP_ID]: selectedAgent } : undefined,
+			options: selectedAgent || selectedModel ? {
+				...(selectedAgent && { [AGENTS_OPTION_GROUP_ID]: selectedAgent }),
+				[MODELS_OPTION_GROUP_ID]: selectedModel ?? DEFAULT_MODEL_ID
+			} : undefined,
 			activeResponseCallback: this.findActiveResponseCallback(sessions, pr),
 			requestHandler: undefined
 		};
@@ -702,7 +741,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					options: {
 						[AGENTS_OPTION_GROUP_ID]:
 							this.sessionAgentMap.get(resource)
-							?? (this.sessionAgentMap.set(resource, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID)
+							?? (this.sessionAgentMap.set(resource, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID),
+						[MODELS_OPTION_GROUP_ID]:
+							this.sessionModelMap.get(resource)
+							?? (this.sessionModelMap.set(resource, DEFAULT_MODEL_ID), DEFAULT_MODEL_ID),
 					}
 				}
 				: {}),
@@ -848,11 +890,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			history = await this._chatDelegationSummaryService.summarize(context, token);
 		}
 
+		const chatResource = metadata.chatContext.chatSessionContext?.chatSessionItem?.resource;
+
 		let customAgentName: string | undefined;
-		if (metadata.chatContext.chatSessionContext?.chatSessionItem?.resource) {
-			customAgentName = this.sessionAgentMap.get(metadata.chatContext.chatSessionContext.chatSessionItem.resource);
+		let modelName: string | undefined;
+		if (chatResource) {
+			customAgentName = this.sessionAgentMap.get(chatResource);
+			modelName = this.sessionModelMap.get(chatResource);
 			if (customAgentName) {
-				this.logService.debug(`Using custom agent '${customAgentName}' for session ${metadata.chatContext.chatSessionContext.chatSessionItem.resource}`);
+				this.logService.debug(`Using custom agent '${customAgentName}' for session ${chatResource}`);
+			}
+			if (modelName) {
+				this.logService.debug(`Using model '${modelName}' for session ${chatResource}`);
 			}
 		}
 
@@ -873,8 +922,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			token,
 			stream,
 			base_ref,
-			customAgentName,
 			head_ref,
+			customAgentName,
+			modelName,
 		);
 		if (history) {
 			void this._chatDelegationSummaryService.trackSummaryUsage(sessionId, history);
@@ -1635,7 +1685,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return undefined;
 	}
 
-	private async invokeRemoteAgent(prompt: string, problemContext: string, token: vscode.CancellationToken, stream: vscode.ChatResponseStream, base_ref: string, customAgentName?: string, head_ref?: string): Promise<{ number: number; sessionId: string }> {
+	private async invokeRemoteAgent(prompt: string, problemContext: string, token: vscode.CancellationToken, stream: vscode.ChatResponseStream, base_ref: string, head_ref?: string, customAgentName?: string, modelName?: string): Promise<{ number: number; sessionId: string }> {
 		const title = extractTitle(prompt, problemContext);
 		const { problemStatement, isTruncated } = truncatePrompt(this.logService, prompt, problemContext);
 		const repoId = await getRepoId(this._gitService);
@@ -1666,6 +1716,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			problem_statement: problemStatement,
 			event_type: 'visual_studio_code_remote_agent_tool_invoked',
 			...(customAgentName && customAgentName !== DEFAULT_AGENT_ID && { custom_agent: customAgentName }),
+			...(modelName && modelName !== DEFAULT_MODEL_ID && { model_name: modelName }),
 			pull_request: {
 				title,
 				body_placeholder: formatBodyPlaceholder(title),
