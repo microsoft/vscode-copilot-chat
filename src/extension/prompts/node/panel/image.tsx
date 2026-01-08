@@ -8,7 +8,7 @@ import * as l10n from '@vscode/l10n';
 import { Image as BaseImage, BasePromptElementProps, ChatResponseReferencePartStatusKind, PromptElement, PromptReference, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { modelCanUseImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { modelCanUseImageURL, modelSupportsGifImages } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -66,8 +66,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 					if (uri) {
 						imageSource = uri.toString();
 						imageMimeType = mimeType;
-						// TODO: figure out why gifs return 400 invalid request
-						if (imageMimeType === 'image/gif') {
+						if (imageMimeType === 'image/gif' && !modelSupportsGifImages(this.promptEndpoint)) {
 							imageMimeType = 'image/png';
 						}
 					}

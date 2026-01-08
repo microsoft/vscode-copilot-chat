@@ -173,6 +173,13 @@ export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): b
 }
 
 /**
+ * The model supports GIF images.
+ */
+export function modelSupportsGifImages(model: LanguageModelChat | IChatEndpoint): boolean {
+	return !model.family.toLowerCase().includes('gemini');
+}
+
+/**
  * The model is capable of using apply_patch as an edit tool exclusively,
  * without needing insert_edit_into_file.
  */
