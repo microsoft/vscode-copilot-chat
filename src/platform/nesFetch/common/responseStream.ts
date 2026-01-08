@@ -8,6 +8,7 @@ import { Result } from '../../../util/common/result';
 import { AsyncIterableObject, DeferredPromise } from '../../../util/vs/base/common/async';
 import { assertType } from '../../../util/vs/base/common/types';
 import { RequestId } from '../../networking/common/fetch';
+import { IHeaders } from '../../networking/common/fetcherService';
 import { Completion } from './completionsAPI';
 
 export class ResponseStream {
@@ -32,7 +33,7 @@ export class ResponseStream {
 	 */
 	public readonly stream: AsyncIterableObject<Completion>;
 
-	constructor(stream: AsyncIterable<Completion>, public readonly requestId: RequestId) {
+	constructor(stream: AsyncIterable<Completion>, public readonly requestId: RequestId, public readonly headers: IHeaders) {
 		const tokensDeferredPromise = new DeferredPromise<Result<Completion[], Error>>();
 		this.aggregatedStream = tokensDeferredPromise.p;
 		this.response = this.aggregatedStream.then((completions) => {

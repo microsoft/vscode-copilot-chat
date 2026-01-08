@@ -145,8 +145,8 @@ export type PostOptions = Partial<CompletionFetchRequestFields>;
 
 // Request helpers
 
-function getProcessingTime(response: Response): number {
-	const reqIdStr = response.headers.get('openai-processing-ms');
+function getProcessingTime(responseHeaders: IHeaders): number {
+	const reqIdStr = responseHeaders.get('openai-processing-ms');
 	if (reqIdStr) {
 		return parseInt(reqIdStr, 10);
 	}
@@ -499,7 +499,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		return {
 			type: 'success',
 			choices: postProcessChoices(choices),
-			getProcessingTime: () => getProcessingTime(response),
+			getProcessingTime: () => getProcessingTime(response.headers),
 		};
 	}
 
@@ -710,14 +710,13 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 
 			}
 
-			const choices = this.chunkStreamToApiChoices(res.val, finishedCb, baseTelemetryData);
+			const choices = this.chunkStreamToApiChoices(response, finishedCb, baseTelemetryData);
 
 			return {
 				type: 'success',
 				choices,
-				getProcessingTime: () => 0, // FIXME
+				getProcessingTime: () => getProcessingTime(response.headers),
 			};
-
 		}
 
 		// if (cancel?.isCancellationRequested) {

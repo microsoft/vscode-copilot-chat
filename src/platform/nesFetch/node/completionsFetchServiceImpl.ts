@@ -76,7 +76,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				return c.choices.length > 0;
 			}); // we only support `n=1`, so we only get choice.index = 0
 
-			const response = new ResponseStream(completions, fetchResponse.val.requestId);
+			const response = new ResponseStream(completions, fetchResponse.val.requestId, fetchResponse.val.headers);
 
 			return Result.ok(response);
 
