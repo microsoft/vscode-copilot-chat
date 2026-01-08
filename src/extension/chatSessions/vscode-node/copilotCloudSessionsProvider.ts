@@ -50,6 +50,7 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
+const CLAUDE_AGENT_ID = 2246796; // Partner agent ID for Claude
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
@@ -1641,7 +1642,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// Map partner agent selection to numeric agent_id
 		switch (partnerAgent) {
 			case 'Claude':
-				return 2246796;
+				return CLAUDE_AGENT_ID;
 			case '__default_agent_copilot':
 			default:
 				return undefined; // Default agent, no agent_id needed
