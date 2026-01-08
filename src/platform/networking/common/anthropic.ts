@@ -3,11 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+
 /**
  * Types for Anthropic Messages API
  * Based on https://platform.claude.com/docs/en/api/messages
  */
-
 export interface AnthropicMessagesTool {
 	name: string;
 	description?: string;
@@ -22,7 +24,6 @@ export interface AnthropicMessagesTool {
  * Context management types for Anthropic Messages API
  * Based on https://platform.claude.com/docs/en/build-with-claude/context-editing
  */
-
 export type ContextManagementTrigger =
 	| { type: 'input_tokens'; value: number }
 	| { type: 'tool_uses'; value: number };
@@ -118,4 +119,37 @@ export function buildContextManagement(
 	edits.push(toolEdit);
 
 	return edits.length > 0 ? { edits } : undefined;
+}
+
+/**
+ * Reads context editing configuration from settings and builds the context_management object.
+ * This is a convenience function that combines reading configuration with buildContextManagement.
+ * @param configurationService The configuration service to read settings from
+ * @param experimentationService The experimentation service for experiment-based config
+ * @param thinkingBudget The thinking budget value (undefined if thinking is disabled)
+ * @param modelMaxInputTokens The maximum input tokens supported by the model
+ * @returns The context_management object to include in the request, or undefined if disabled
+ */
+export function getContextManagementFromConfig(
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+	thinkingBudget: number | undefined,
+	modelMaxInputTokens: number
+): ContextManagement | undefined {
+	const contextEditingEnabled = configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingEnabled, experimentationService);
+	if (!contextEditingEnabled) {
+		return undefined;
+	}
+
+	const contextEditingConfig: ContextEditingConfig = {
+		triggerType: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultTriggerType, experimentationService) as 'input_tokens' | 'tool_uses',
+		triggerValue: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultTriggerValue, experimentationService),
+		keepCount: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultKeepCount, experimentationService),
+		clearAtLeastTokens: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultClearAtLeastTokens, experimentationService),
+		excludeTools: configurationService.getConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultExcludeTools),
+		clearInputs: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultClearInputs, experimentationService),
+		thinkingKeepTurns: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingThinkingKeepTurns, experimentationService),
+	};
+
+	return buildContextManagement(contextEditingConfig, thinkingBudget, modelMaxInputTokens);
 }
