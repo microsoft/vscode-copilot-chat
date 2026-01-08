@@ -180,7 +180,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			}
 
 			// Add context management beta if enabled
-			const contextEditingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, this._expService);
+			const contextEditingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingEnabled, this._expService);
 			if (contextEditingEnabled) {
 				betaFeatures.push('context-management-2025-06-27');
 			}
