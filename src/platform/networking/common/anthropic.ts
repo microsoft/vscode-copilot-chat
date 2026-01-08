@@ -97,7 +97,7 @@ export function buildContextManagement(
 		const thinkingKeepTurns = config.thinkingKeepTurns;
 		edits.push({
 			type: 'clear_thinking_20251015',
-			keep: thinkingKeepTurns > 0 ? { type: 'thinking_turns', value: thinkingKeepTurns } : { type: 'thinking_turns', value: 1 },
+			keep: { type: 'thinking_turns', value: Math.max(1, thinkingKeepTurns) },
 		});
 	}
 
