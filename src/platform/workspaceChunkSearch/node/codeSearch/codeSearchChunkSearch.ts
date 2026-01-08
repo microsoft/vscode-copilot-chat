@@ -828,6 +828,11 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		await this.initialize();
 
+		// Update external ingest index if enabled
+		if (this.isExternalIngestEnabled()) {
+			await this._externalIngestIndex.value.doIngest(CancellationToken.None);
+		}
+
 		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).Repos: ${JSON.stringify(Array.from(this._codeSearchRepos.values(), entry => ({
 			rootUri: entry.repo.repoInfo.rootUri.toString(),
 			status: entry.repo.status,

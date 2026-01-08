@@ -325,6 +325,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			throw new Error(`Unable to find repository for working directory ${worktreePath}`);
 		}
 
+		if (repository.state.workingTreeChanges.length === 0 && repository.state.indexChanges.length === 0 && repository.state.untrackedChanges.length === 0) {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] No changes to commit in working directory ${worktreePath}`);
+			return;
+		}
+
 		this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);
 		let message = await this.gitCommitMessageService.generateCommitMessage(repository, CancellationToken.None);
 		if (!message) {

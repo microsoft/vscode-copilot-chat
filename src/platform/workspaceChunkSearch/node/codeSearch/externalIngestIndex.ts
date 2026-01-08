@@ -25,6 +25,7 @@ import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
 import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
+import { Result } from '../../../../util/common/result';
 
 const debug = false;
 
@@ -117,7 +118,8 @@ export class ExternalIngestIndex extends Disposable {
 		return this._initializePromise;
 	}
 
-	async doInitialIngest(token: CancellationToken): Promise<void> {
+	async doIngest(token: CancellationToken): Promise<void> {
+
 		await this.initialize();
 
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
@@ -128,7 +130,7 @@ export class ExternalIngestIndex extends Disposable {
 		// Use the first workspace folder as the "root" for the fileset
 		const primaryRoot = workspaceFolders[0];
 
-		await this._client.doInitialIndex(
+		await this._client.updateIndex(
 			this.getFilesetName(primaryRoot),
 			primaryRoot,
 			this.getFilesToIndexFromDb(),
@@ -144,7 +146,7 @@ export class ExternalIngestIndex extends Disposable {
 
 		const resolvedQuery = await query.resolveQuery(token);
 
-		await raceCancellationError(this.doInitialIngest(token), token);
+		await raceCancellationError(this.doIngest(token), token);
 
 		// TODO: search changed files too
 		const primaryRoot = workspaceFolders[0];
@@ -206,7 +208,7 @@ export class ExternalIngestIndex extends Disposable {
 			INSERT INTO Files (path, size, mtime, docSha, shouldIngest)
 			VALUES (?, ?, ?, ?, ?)
 			ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, docSha = excluded.docSha, shouldIngest = excluded.shouldIngest
-		`).run(uri.toString(), stat.size, stat.mtime, null, shouldIngest ? 1 : 0);
+		`).run(uri.toString(), stat.size, stat.mtime, shouldIngest.isOk() ? shouldIngest.val.docSha : null, shouldIngest.isOk() ? 1 : 0);
 	}
 
 	/**
@@ -235,22 +237,23 @@ export class ExternalIngestIndex extends Disposable {
 		return !await this._ignoreService.isCopilotIgnored(uri, token);
 	}
 
-	private async shouldIngestFile(uri: URI, stat: { size: number; mtime: number }): Promise<boolean> {
+	private async shouldIngestFile(uri: URI, stat: { readonly size: number; readonly mtime: number }): Promise<Result<{ readonly docSha: Uint8Array }, false>> {
 		if (!await this.shouldTrackFile(uri, CancellationToken.None)) {
-			return false;
+			return Result.error(false);
 		}
 
+		// Quick check based on path and size
 		if (!this._client.canIngestPathAndSize(uri.fsPath, stat.size)) {
-			return false;
+			return Result.error(false);
 		}
 
+		// Complete check based on document contents
 		const data = await this._fileSystemService.readFile(uri);
 		if (!this._client.canIngestDocument(uri.fsPath, data)) {
-			return false;
+			return Result.error(false);
 		}
 
-		return true;
-
+		return Result.ok({ docSha: getDocSha(uri.fsPath, new DocumentContents(data)) });
 	}
 
 	private delete(uri: URI) {
@@ -296,9 +299,13 @@ export class ExternalIngestIndex extends Disposable {
 
 			if (!docSha) {
 				docSha = await this.computeIngestDocSha(uri);
+
 				if (!docSha) {
 					continue;
 				}
+
+				// Store the computed docSha in the database
+				this._db.prepare('UPDATE Files SET docSha = ? WHERE path = ?').run(docSha, uri.toString());
 			}
 
 			yield {
@@ -415,16 +422,7 @@ export class ExternalIngestIndex extends Disposable {
 		return this._hashLimiter.queue(async () => {
 			try {
 				const data = await this._fileSystemService.readFile(uri);
-				// Use a relative path for the doc sha
-				const workspaceFolders = this._workspaceService.getWorkspaceFolders();
-				let relativePath = uri.fsPath;
-				for (const folder of workspaceFolders) {
-					if (isEqualOrParent(uri, folder)) {
-						relativePath = uri.fsPath.slice(folder.fsPath.length + 1);
-						break;
-					}
-				}
-				return getDocSha(relativePath, new DocumentContents(data));
+				return getDocSha(uri.fsPath, new DocumentContents(data));
 			} catch {
 				return undefined;
 			}

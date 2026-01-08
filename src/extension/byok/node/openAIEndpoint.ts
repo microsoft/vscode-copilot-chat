@@ -52,7 +52,7 @@ export function isBYOKModel(endpoint: IChatEndpoint | undefined): number {
 	if (!endpoint) {
 		return -1;
 	}
-	return endpoint instanceof OpenAIEndpoint ? 1 : (endpoint.customModel ? 2 : -1);
+	return (endpoint instanceof OpenAIEndpoint || endpoint.isExtensionContributed) ? 1 : (endpoint.customModel ? 2 : -1);
 }
 
 export class OpenAIEndpoint extends ChatEndpoint {
