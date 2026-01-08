@@ -44,6 +44,7 @@ import { EmbeddingsChunkSearch } from '../embeddingsChunkSearch';
 import { TfIdfWithSemanticChunkSearch } from '../tfidfWithSemanticChunkSearch';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
 import { AdoCodeSearchRepo, BuildIndexTriggerReason, CodeSearchRepo, CodeSearchRepoStatus, GithubCodeSearchRepo, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
+import { ExternalIngestClient } from './externalIngestClient';
 import { ExternalIngestIndex } from './externalIngestIndex';
 import { CodeSearchRepoTracker, RepoInfo, TrackedRepoStatus } from './repoTracker';
 import { CodeSearchDiff, CodeSearchWorkspaceDiffTracker } from './workspaceDiff';
@@ -162,7 +163,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._tfIdfChunkSearch = tfIdfChunkSearch;
 
 		this._repoTracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
-		this._externalIngestIndex = new Lazy(() => this._register(instantiationService.createInstance(ExternalIngestIndex)));
+		this._externalIngestIndex = new Lazy(() => {
+			const client = instantiationService.createInstance(ExternalIngestClient);
+			return this._register(instantiationService.createInstance(ExternalIngestIndex, client));
+		});
 
 		this._register(this._repoTracker.onDidAddOrUpdateRepo(info => {
 			if (info.status === TrackedRepoStatus.Resolved && info.resolvedRemoteInfo) {
@@ -823,6 +827,11 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).started`);
 
 		await this.initialize();
+
+		// Update external ingest index if enabled
+		if (this.isExternalIngestEnabled()) {
+			await this._externalIngestIndex.value.doIngest(CancellationToken.None);
+		}
 
 		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).Repos: ${JSON.stringify(Array.from(this._codeSearchRepos.values(), entry => ({
 			rootUri: entry.repo.repoInfo.rootUri.toString(),

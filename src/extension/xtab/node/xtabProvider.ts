@@ -50,10 +50,11 @@ import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearb
 import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { LintErrors } from '../common/lintErrors';
-import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
+import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
+import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchResponseHandler';
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
 import { charCount, constructMessages, linesWithBackticksRemoved, toLines } from './xtabUtils';
@@ -271,7 +272,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			promptOptions,
 			XtabProvider.computeTokens,
-			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness } }
+			{
+				includeLineNumbers: {
+					areaAroundCodeToEdit: false,
+					currentFileContent: promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness || promptOptions.promptingStrategy === PromptingStrategy.PatchBased,
+				}
+			}
 		);
 
 		if (taggedCurrentFileContentResult.isError()) {
@@ -320,7 +326,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
-		const prediction = this.getPredictedOutput(editWindowLines, responseFormat);
+		const prediction = this.getPredictedOutput(activeDocument, editWindowLines, responseFormat);
 
 		const messages = constructMessages({
 			systemMsg: this.pickSystemPrompt(promptOptions.promptingStrategy),
@@ -622,6 +628,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			cleanedLinesStream = linesStream;
+		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
+			return XtabCustomDiffPatchResponseHandler.handleResponse(
+				pushEdit,
+				linesStream,
+				request.documentBeforeEdits,
+				editWindow,
+			);
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			const linesIter = linesStream[Symbol.asyncIterator]();
 			const firstLine = await linesIter.next();
@@ -848,8 +861,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 							pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow, nextCursorPosition)));
 							return;
 						}
-						case NextCursorLinePrediction.OnlyWithEdit:
-						case NextCursorLinePrediction.LabelOnlyWithEdit: {
+						case NextCursorLinePrediction.OnlyWithEdit: {
 							this.doGetNextEditWithSelection(
 								request,
 								new Range(nextCursorLineOneBased, nextCursorColumn, nextCursorLineOneBased, nextCursorColumn),
@@ -1049,6 +1061,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.Codexv21NesUnified:
 			case xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt:
 				return simplifiedPrompt;
+			case xtabPromptOptions.PromptingStrategy.PatchBased:
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
 			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
 				return xtab275SystemPrompt;
@@ -1086,22 +1099,26 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return createProxyXtabEndpoint(this.instaService, configuredModelName);
 	}
 
-	private getPredictedOutput(editWindowLines: string[], responseFormat: xtabPromptOptions.ResponseFormat): Prediction | undefined {
+	private getPredictedOutput(doc: StatelessNextEditDocument, editWindowLines: string[], responseFormat: xtabPromptOptions.ResponseFormat): Prediction | undefined {
 		return this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUsePrediction)
 			? {
 				type: 'content',
-				content: XtabProvider.getPredictionContents(editWindowLines, responseFormat)
+				content: this.getPredictionContents(doc, editWindowLines, responseFormat)
 			}
 			: undefined;
 	}
 
-	private static getPredictionContents(editWindowLines: readonly string[], responseFormat: xtabPromptOptions.ResponseFormat): string {
+	private getPredictionContents(doc: StatelessNextEditDocument, editWindowLines: readonly string[], responseFormat: xtabPromptOptions.ResponseFormat): string {
 		if (responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			return editWindowLines.join('\n');
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CodeBlock) {
 			return ['```', ...editWindowLines, '```'].join('\n');
+		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
+			const workspacePath = doc.workspaceRoot?.path;
+			const workspaceRelativeDocPath = toUniquePath(doc.id, workspacePath);
+			return `${workspaceRelativeDocPath}:`;
 		} else {
 			assertNever(responseFormat);
 		}

@@ -14,7 +14,6 @@ import * as types from '../../../util/vs/base/common/types';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { isPreRelease, packageJson } from '../../env/common/packagejson';
 import { JointCompletionsProviderStrategy, JointCompletionsProviderTriggerChangeStrategy } from '../../inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
-import { NextCursorLinePrediction } from '../../inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
 import { LANGUAGE_CONTEXT_ENABLED_LANGUAGES, LanguageContextLanguages } from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ResponseProcessor } from '../../inlineEdits/common/responseProcessor';
@@ -755,7 +754,6 @@ export namespace ConfigKey {
 		export const InlineEditsDebounceOnSelectionChange = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.debounceOnSelectionChange', ConfigType.ExperimentBased, undefined);
 		export const InlineEditsProviderId = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineEdits.providerId', ConfigType.ExperimentBased, undefined);
 		export const InlineEditsUnification = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.unification', ConfigType.ExperimentBased, false);
-		export const InlineEditsNextCursorPredictionEnabled = defineTeamInternalSetting<NextCursorLinePrediction | boolean | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.enabled', ConfigType.ExperimentBased, { defaultValue: undefined, teamDefaultValue: NextCursorLinePrediction.OnlyWithEdit, owner: 'ulugbekna', expirationDate: '2026-01-18' });
 		export const InlineEditsNextCursorPredictionModelName = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.modelName', ConfigType.ExperimentBased, 'copilot-suggestions-himalia-001');
 		export const InlineEditsNextCursorPredictionMaxResponseTokens = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.nextCursorPrediction.maxResponseTokens', ConfigType.ExperimentBased, 4);
 		export const InlineEditsNextCursorPredictionLintOptionsString = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.lintOptionsString', ConfigType.ExperimentBased, undefined);
@@ -798,10 +796,18 @@ export namespace ConfigKey {
 		// TODO: @sandy081 - These should be moved away from this namespace
 		export const EnableReadFileV2 = defineSetting<boolean>('chat.advanced.enableReadFileV2', ConfigType.ExperimentBased, isPreRelease);
 		export const AskAgent = defineSetting<boolean>('chat.advanced.enableAskAgent', ConfigType.ExperimentBased, false);
-		export const RetryNetworkErrors = defineSetting<boolean>('chat.advanced.enableRetryNetworkErrors', ConfigType.ExperimentBased, false);
-		/** Use the Messages API instead of Chat Completions when supported */
-		export const UseMessagesApi = defineTeamInternalSetting<boolean | undefined>('chat.advanced.useMessagesApi', ConfigType.ExperimentBased, false);
+		export const RetryNetworkErrors = defineSetting<boolean>('chat.advanced.enableRetryNetworkErrors', ConfigType.ExperimentBased, true);
 		export const WorkspaceEnableCodeSearchExternalIngest = defineTeamInternalSetting<boolean>('chat.advanced.workspace.codeSearchExternalIngest.enabled', ConfigType.ExperimentBased, false);
+
+		/** Context editing for Anthropic Messages API */
+		export const AnthropicContextEditingEnabled = defineTeamInternalSetting<boolean>('chat.advanced.anthropic.contextEditing.enabled', ConfigType.ExperimentBased, false);
+		export const AnthropicContextEditingToolResultTriggerType = defineTeamInternalSetting<'input_tokens' | 'tool_uses'>('chat.advanced.anthropic.contextEditing.toolResult.triggerType', ConfigType.ExperimentBased, 'input_tokens');
+		export const AnthropicContextEditingToolResultTriggerValue = defineTeamInternalSetting<number>('chat.advanced.anthropic.contextEditing.toolResult.triggerValue', ConfigType.ExperimentBased, 100000);
+		export const AnthropicContextEditingToolResultKeepCount = defineTeamInternalSetting<number>('chat.advanced.anthropic.contextEditing.toolResult.keepCount', ConfigType.ExperimentBased, 3);
+		export const AnthropicContextEditingToolResultClearAtLeastTokens = defineTeamInternalSetting<number | undefined>('chat.advanced.anthropic.contextEditing.toolResult.clearAtLeastTokens', ConfigType.ExperimentBased, 25000);
+		export const AnthropicContextEditingToolResultExcludeTools = defineTeamInternalSetting<string[]>('chat.advanced.anthropic.contextEditing.toolResult.excludeTools', ConfigType.Simple, []);
+		export const AnthropicContextEditingToolResultClearInputs = defineTeamInternalSetting<boolean>('chat.advanced.anthropic.contextEditing.toolResult.clearInputs', ConfigType.ExperimentBased, false);
+		export const AnthropicContextEditingThinkingKeepTurns = defineTeamInternalSetting<number>('chat.advanced.anthropic.contextEditing.thinking.keepTurns', ConfigType.ExperimentBased, 1);
 	}
 
 	export const Enable = defineSetting<{ [key: string]: boolean }>('enable', ConfigType.Simple, {
@@ -812,6 +818,8 @@ export namespace ConfigKey {
 	});
 	export const selectedCompletionsModel = defineSetting<string>('selectedCompletionModel', ConfigType.Simple, '');
 
+	/** Use the Messages API instead of Chat Completions when supported */
+	export const UseAnthropicMessagesApi = defineSetting<boolean | undefined>('chat.anthropic.useMessagesApi', ConfigType.ExperimentBased, false);
 	/** Use the Responses API instead of Chat Completions when supported */
 	export const UseResponsesApi = defineSetting<boolean | undefined>('chat.useResponsesApi', ConfigType.ExperimentBased, true);
 	/** Configure reasoning effort sent to Responses API */
@@ -873,6 +881,8 @@ export namespace ConfigKey {
 	export const InlineEditsEnabled = defineSetting<boolean>('nextEditSuggestions.enabled', ConfigType.ExperimentBased, false);
 	export const InlineEditsEnableDiagnosticsProvider = defineSetting<boolean>('nextEditSuggestions.fixes', ConfigType.ExperimentBased, true);
 	export const InlineEditsAllowWhitespaceOnlyChanges = defineSetting<boolean>('nextEditSuggestions.allowWhitespaceOnlyChanges', ConfigType.ExperimentBased, true);
+	/** Because of migration the value returned may be `boolean | "onlyWithEdit" | "jump" | undefined` */
+	export const InlineEditsNextCursorPredictionEnabled = defineSetting<boolean>('nextEditSuggestions.extendedRange', ConfigType.ExperimentBased, false, undefined, { oldKey: 'chat.advanced.inlineEdits.nextCursorPrediction.enabled' });
 	export const NewWorkspaceCreationAgentEnabled = defineSetting<boolean>('chat.newWorkspaceCreation.enabled', ConfigType.Simple, true);
 	export const NewWorkspaceUseContext7 = defineSetting<boolean>('chat.newWorkspace.useContext7', ConfigType.Simple, false);
 	export const SummarizeAgentConversationHistory = defineSetting<boolean>('chat.summarizeAgentConversationHistory.enabled', ConfigType.Simple, true);

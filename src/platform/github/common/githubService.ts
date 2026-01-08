@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Endpoints } from '@octokit/types';
+import { CCAModel, RemoteAgentJobPayload } from '@vscode/copilot-api';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { decodeBase64 } from '../../../util/vs/base/common/buffer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
@@ -116,20 +117,6 @@ export interface RemoteAgentJobResponse {
 
 export interface ErrorResponseWithStatusCode {
 	status: number;
-}
-
-export interface RemoteAgentJobPayload {
-	problem_statement: string;
-	event_type: string;
-	pull_request?: {
-		title?: string;
-		body_placeholder?: string;
-		body_suffix?: string;
-		base_ref?: string;
-		head_ref?: string;
-	};
-	run_name?: string;
-	custom_agent?: string;
 }
 
 export interface CustomAgentListItem {
@@ -353,6 +340,15 @@ export interface IOctoKitService {
 	 * @returns An array of repository names
 	 */
 	getOrganizationRepositories(org: string, authOptions: AuthOptions): Promise<string[]>;
+
+	/**
+	 * Gets the list of available models for the Copilot coding agent.
+	 * Returns an empty array if the user doesn't have access to the model picker
+	 * (e.g., Copilot Business or Enterprise users before rollout).
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns An array of available models. The first model is always 'Auto' and should be the default.
+	 */
+	getCopilotAgentModels(authOptions: AuthOptions): Promise<CCAModel[]>;
 }
 
 /**

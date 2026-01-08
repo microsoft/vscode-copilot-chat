@@ -33,14 +33,39 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 		@IRequestLogger private readonly _requestLogger: IRequestLogger
 	) { }
 
-	private async getAllModels(apiKey: string): Promise<BYOKKnownModels> {
-		// Recreate the client only if the API key has changed to avoid using stale keys
+	private _isInvalidApiKeyError(error: unknown): boolean {
+		if (!error) {
+			return false;
+		}
+
+		const message = typeof error === 'string' ? error : (error as Error).message;
+		if (typeof message !== 'string') {
+			return false;
+		}
+
+		const lower = message.toLowerCase();
+		return lower.includes('api key not valid') || lower.includes('api_key_invalid') || lower.includes('api key invalid');
+	}
+
+	private async _getOrReadApiKey(): Promise<string | undefined> {
+		if (!this._apiKey) {
+			this._apiKey = await this._byokStorageService.getAPIKey(GeminiNativeBYOKLMProvider.providerName);
+		}
+		return this._apiKey;
+	}
+
+	private _ensureClient(apiKey: string): GoogleGenAI {
 		if (!this._genAIClient || this._genAIClientApiKey !== apiKey) {
 			this._genAIClient = new GoogleGenAI({ apiKey });
 			this._genAIClientApiKey = apiKey;
 		}
+		return this._genAIClient;
+	}
+
+	private async getAllModels(apiKey: string): Promise<BYOKKnownModels> {
+		const client = this._ensureClient(apiKey);
 		try {
-			const models = await this._genAIClient.models.list();
+			const models = await client.models.list();
 			const modelList: Record<string, BYOKModelCapabilities> = {};
 
 			for await (const model of models) {
@@ -63,8 +88,14 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 
 	async updateAPIKey(): Promise<void> {
 		const result = await handleAPIKeyUpdate(GeminiNativeBYOKLMProvider.providerName, this._byokStorageService, promptForAPIKey);
-		if (!result.cancelled) {
-			this._apiKey = result.apiKey;
+		if (result.cancelled) {
+			return;
+		}
+
+		this._apiKey = result.apiKey;
+		if (this._apiKey) {
+			this._ensureClient(this._apiKey);
+		} else {
 			this._genAIClient = undefined;
 			this._genAIClientApiKey = undefined;
 		}
@@ -90,15 +121,31 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 					return [];
 				}
 			}
-		} catch {
+		} catch (error) {
+			if (this._isInvalidApiKeyError(error)) {
+				if (options.silent) {
+					return [];
+				}
+				await this.updateAPIKey();
+				if (this._apiKey) {
+					try {
+						return byokKnownModelsToAPIInfo(GeminiNativeBYOKLMProvider.providerName, await this.getAllModels(this._apiKey));
+					} catch (retryError) {
+						this._logService.error(`Error after re-prompting for API key: ${toErrorMessage(retryError, true)}`);
+					}
+				}
+			}
 			return [];
 		}
 	}
 
-	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<any> {
-		if (!this._genAIClient) {
-			return;
+	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
+		const apiKey = await this._getOrReadApiKey();
+		if (!apiKey) {
+			this._logService.error(`BYOK: No API key configured for provider ${GeminiNativeBYOKLMProvider.providerName}`);
+			throw new Error(`BYOK: No API key configured for provider ${GeminiNativeBYOKLMProvider.providerName}. Use the Copilot "Manage BYOK" command to add one.`);
 		}
+		this._ensureClient(apiKey);
 
 		// Convert the messages from the API format into messages that we can use against Gemini
 		const { contents, systemInstruction } = apiMessageToGeminiMessage(messages as LanguageModelChatMessage[]);
@@ -225,7 +272,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 
 	private async _makeRequest(progress: Progress<LMResponsePart>, params: GenerateContentParameters, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
 		if (!this._genAIClient) {
-			return { ttft: undefined, usage: undefined };
+			throw new Error('Gemini client is not initialized');
 		}
 
 		const start = Date.now();

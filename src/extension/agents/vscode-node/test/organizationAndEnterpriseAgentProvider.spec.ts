@@ -43,6 +43,7 @@ class MockOctoKitService implements IOctoKitService {
 	getFileContent = async () => '';
 	getUserOrganizations = async () => this.userOrganizations;
 	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];
+	getCopilotAgentModels = async () => [];
 
 	async getCustomAgents(owner: string, repo: string, options: CustomAgentListOptions, authOptions: { createIfNone?: boolean }): Promise<CustomAgentListItem[]> {
 		if (!(await this.getCurrentAuthedUser())) {

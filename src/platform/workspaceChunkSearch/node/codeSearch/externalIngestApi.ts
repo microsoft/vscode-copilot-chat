@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { ILogService } from '../../../log/common/logService';
+import { IDisposable } from '../../../../util/vs/base/common/lifecycle';
 
 // Sliding window that holds at least N entries and all entries in the time window.
 // This allows the sliding window to always hold some entries if inserts are infrequent,
@@ -185,11 +187,16 @@ class Throttler {
 	}
 }
 
-// This API client performs requests and will manage back-off when being rate limited
-class ApiClient {
-	private throttler: Throttler | null;
+/**
+ * This API client performs requests and will manage back-off when being rate limited
+ */
+export class ApiClient implements IDisposable {
+	private readonly throttler: Throttler | null;
 
-	constructor(target: number | null = 80) {
+	constructor(
+		target: number | null = 80,
+		@ILogService private readonly logService: ILogService,
+	) {
 		if (target === null) {
 			this.throttler = null;
 		} else {
@@ -222,7 +229,7 @@ class ApiClient {
 				const requestId = res.headers.get('x-github-request-id');
 				const responseBody = await res.text();
 				const message = `${method} to ${url} request failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`;
-				console.error(message);
+				this.logService.error(message);
 				throw new Error(message);
 			}
 			const quotaUsedHeader = res.headers.get('x-github-total-quota-used');
@@ -238,15 +245,11 @@ class ApiClient {
 		}
 	}
 
-	destroy(): void {
-		if (this.throttler) {
-			this.throttler.destroy();
-		}
+	dispose(): void {
+		this.throttler?.destroy();
 	}
 }
 
 async function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-export { ApiClient };
