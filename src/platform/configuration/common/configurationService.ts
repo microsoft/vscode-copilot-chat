@@ -819,7 +819,7 @@ export namespace ConfigKey {
 	export const selectedCompletionsModel = defineSetting<string>('selectedCompletionModel', ConfigType.Simple, '');
 
 	/** Use the Messages API instead of Chat Completions when supported */
-	export const UseAnthropicMessagesApi = defineSetting<boolean | undefined>('chat.anthropic.useMessagesApi', ConfigType.ExperimentBased, false);
+	export const UseAnthropicMessagesApi = defineSetting<boolean | undefined>('chat.anthropic.useMessagesApi', ConfigType.ExperimentBased, true);
 	/** Use the Responses API instead of Chat Completions when supported */
 	export const UseResponsesApi = defineSetting<boolean | undefined>('chat.useResponsesApi', ConfigType.ExperimentBased, true);
 	/** Configure reasoning effort sent to Responses API */
