@@ -9,7 +9,6 @@ import fs from 'fs';
 import { posix } from 'node:path';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { timeout } from '../../../../util/vs/base/common/async';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
@@ -18,6 +17,8 @@ import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ApiClient } from './externalIngestApi';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 
 export interface ExternalIngestFile {
 	readonly uri: URI;
@@ -30,7 +31,7 @@ export interface ExternalIngestFile {
  * Interface for the external ingest client that handles indexing and searching files.
  */
 export interface IExternalIngestClient {
-	doInitialIndex(filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void>;
+	updateIndex(filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void>;
 
 	listFilesets(token: CancellationToken): Promise<string[]>;
 	deleteFileset(filesetName: string, token: CancellationToken): Promise<void>;
@@ -51,18 +52,24 @@ export interface IExternalIngestClient {
 // Create a shared API client with throttling (target quota usage of 80)
 // You can change this to `null` to ignore the throttle
 
-export class ExternalIngestClient implements IExternalIngestClient {
-	private static apiClient = new ApiClient(80);
-
+export class ExternalIngestClient extends Disposable implements IExternalIngestClient {
 	private static readonly PROMISE_POOL_SIZE = 32;
 	private static baseUrl = 'https://api.github.com';
 
 	private readonly _ingestFilter = new IngestFilter();
+	private apiClient: ApiClient;
 
 	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ILogService private readonly logService: ILogService,
-	) { }
+	) {
+		super();
+
+		this.apiClient = this._register(instantiationService.createInstance(ApiClient, 80));
+
+		setupPanicHooks();
+	}
 
 	public async getAuthToken(): Promise<string | undefined> {
 		return (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
@@ -93,26 +100,23 @@ export class ExternalIngestClient implements IExternalIngestClient {
 
 	private post(authToken: string, path: string, body: unknown, token: CancellationToken) {
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
-		return ExternalIngestClient.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
+		return this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
 	}
 
-	async doInitialIndex(filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void> {
+	async updateIndex(filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void> {
 		const authToken = await this.getAuthToken();
 		if (!authToken) {
-			this.logService.warn('ExternalIngestClient::doInitialIndex(): No auth token available');
+			this.logService.warn('ExternalIngestClient::updateIndex(): No auth token available');
 			return;
 		}
-
-		setupPanicHooks();
 
 		// Initial setup
 		const mappings = new Map<string, { full: string; relative: string }>();
 		const geoFilter = new GeoFilter();
 
+		this.logService.info(`ExternalIngestClient::updateIndex(). Creating ingest for fileset: ${filesetName}`);
 
-		this.logService.info(`ExternalIngestClient::doInitialIndex(). Creating ingest for fileset: ${filesetName}`);
-
-		this.logService.trace(`ExternalIngestClient::doInitialIndex(). Checking for ingestable files...`);
+		this.logService.trace(`ExternalIngestClient::updateIndex(). Checking for ingestable files...`);
 		const ingestableCheckStart = performance.now();
 
 		const allDocShas: Uint8Array[] = [];
@@ -127,7 +131,7 @@ export class ExternalIngestClient implements IExternalIngestClient {
 			mappings.set(docShaBase64, { full, relative: relativePath });
 		}
 
-		this.logService.debug(`ExternalIngestClient::doInitialIndex(). Found ${mappings.size} ingestable files in ${Math.round(performance.now() - ingestableCheckStart)}ms`,);
+		this.logService.debug(`ExternalIngestClient::updateIndex(). Found ${mappings.size} ingestable files in ${Math.round(performance.now() - ingestableCheckStart)}ms`,);
 
 		// Coded symbols used during finalization of the fileset.
 		// TODO: this range should be the entire fileset, right?
@@ -171,7 +175,6 @@ export class ExternalIngestClient implements IExternalIngestClient {
 			this.logService.info('Ingest has already run successfully');
 			return;
 		}
-
 		this.logService.debug(`Got ingest ID: ${ingestId}`);
 
 		this.logService.debug('Starting set reconciliation...');
@@ -201,30 +204,32 @@ export class ExternalIngestClient implements IExternalIngestClient {
 				const body = await pushCodedSymbolsResponse.json() as { next_coded_symbol_range?: CodedSymbolRange };
 				codedSymbolRange = body.next_coded_symbol_range;
 			} catch (e) {
-				this.logService.error(`ExternalIngestClient::doInitialIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
+				this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
 				throw new Error('Exception during push coded symbols');
 			}
 		}
 
 		// Document upload
 		this.logService.debug('Starting document upload...');
+
 		let pageToken = undefined;
-		// Set of seen doc shas.
-		const seen = new Set<string>();
-		// Set of currently uploading promises.
+		const seenDocShas = new Set<string>();
+
 		const uploading = new Set<Promise<void>>();
+
 		// Tracking for performance reporting.
 		let uploaded = 0;
 		const uploadStart = performance.now();
+
 		do {
 			try {
 				await Promise.all(uploading);
 			} catch (e) {
-				this.logService.error('ExternalIngestClient::doInitialIndex(): Error uploading document:', e);
+				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 			}
 
-			this.logService.debug(`ExternalIngestClient::doInitialIndex(): calling batch API with pageToken: ${pageToken}`);
-			await timeout(5000); // slight delay to avoid hammering the API
+			this.logService.debug(`ExternalIngestClient::updateIndex(): calling batch API with pageToken: ${pageToken}`);
+
 			const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
 				ingest_id: ingestId,
 				page_token: pageToken,
@@ -238,16 +243,16 @@ export class ExternalIngestClient implements IExternalIngestClient {
 			// no next_page_token.
 			if (docIds) {
 				const newSet = new Set(docIds);
-				const toUpload = new Set([...newSet].filter(x => !seen.has(x)));
+				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
 
 				for (const requestedDocSha of toUpload) {
-					seen.add(requestedDocSha);
+					seenDocShas.add(requestedDocSha);
 					const p = (async () => {
 						const paths = mappings.get(requestedDocSha);
 						if (!paths) {
 							throw new Error(`No mapping for docSha: ${requestedDocSha}`);
 						}
-						this.logService.debug(`ExternalIngestClient::doInitialIndex(): Uploading file: ${paths.relative}`);
+						this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${paths.relative}`);
 						const bytes = await fs.promises.readFile(paths.full);
 						const content = bytes.toString('base64');
 						const res = await this.post(authToken, '/external/code/ingest/document', {
@@ -255,10 +260,10 @@ export class ExternalIngestClient implements IExternalIngestClient {
 							content,
 							file_path: paths.relative,
 						}, token);
-						this.logService.debug(`ExternalIngestClient::doInitialIndex(): Document upload response status: ${res.status}`);
+						this.logService.debug(`ExternalIngestClient::updateIndex(): Document upload response status: ${res.status}`);
 					})();
 					p.catch(e => {
-						this.logService.error('ExternalIngestClient::doInitialIndex(): Error uploading document:', e);
+						this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 						// throw e;
 					});
 					p.finally(() => {
@@ -293,13 +298,13 @@ export class ExternalIngestClient implements IExternalIngestClient {
 		// Print the number of uploaded documents - may not match the number in your directory if some
 		// have been uploaded already!
 		this.logService.info(
-			`ExternalIngestClient::doInitialIndex(): Uploaded ${uploaded} ingestable files in ${Math.round(performance.now() - uploadStart)}ms`,
+			`ExternalIngestClient::updateIndex(): Uploaded ${uploaded} ingestable files in ${Math.round(performance.now() - uploadStart)}ms`,
 		);
 		const resp = await this.post(authToken, '/external/code/ingest/finalize', {
 			ingest_id: ingestId,
 		}, token);
 
-		this.logService.info('ExternalIngestClient::doInitialIndex(): SUCCESS!!');
+		this.logService.info('ExternalIngestClient::updateIndex(): SUCCESS!!');
 		const requestId = resp.headers.get('x-github-request-id');
 		const body = await resp.text();
 		this.logService.debug(`requestId: '${requestId}', body: ${body}`);
@@ -312,7 +317,7 @@ export class ExternalIngestClient implements IExternalIngestClient {
 			return [];
 		}
 
-		const resp = await ExternalIngestClient.apiClient.makeRequest(
+		const resp = await this.apiClient.makeRequest(
 			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
 			this.getHeaders(authToken),
 			'GET',
@@ -335,7 +340,7 @@ export class ExternalIngestClient implements IExternalIngestClient {
 	}
 
 	async deleteFilesetByName(authToken: string, fileSetName: string, token: CancellationToken): Promise<void> {
-		const resp = await ExternalIngestClient.apiClient.makeRequest(
+		const resp = await this.apiClient.makeRequest(
 			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
 			this.getHeaders(authToken),
 			'DELETE',

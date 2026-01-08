@@ -12,12 +12,11 @@ import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
-import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
+import { AnthropicMessagesTool, buildContextManagement, ContextManagementResponse } from '../../networking/common/anthropic';
+import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 
 interface AnthropicStreamEvent {
@@ -54,6 +53,7 @@ interface AnthropicStreamEvent {
 		cache_creation_input_tokens?: number;
 		cache_read_input_tokens?: number;
 	};
+	context_management?: ContextManagementResponse;
 }
 
 export function createMessagesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
@@ -80,6 +80,19 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		? Math.min(32000, maxTokens - 1, normalizedBudget)
 		: undefined;
 
+	// Build context management configuration
+	const contextEditingEnabled = configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingEnabled, experimentationService);
+	const contextEditingConfig = {
+		triggerType: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultTriggerType, experimentationService) as 'input_tokens' | 'tool_uses',
+		triggerValue: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultTriggerValue, experimentationService),
+		keepCount: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultKeepCount, experimentationService),
+		clearAtLeastTokens: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultClearAtLeastTokens, experimentationService),
+		excludeTools: configurationService.getConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultExcludeTools),
+		clearInputs: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultClearInputs, experimentationService),
+		thinkingKeepTurns: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingThinkingKeepTurns, experimentationService),
+	};
+	const contextManagement = contextEditingEnabled ? buildContextManagement(contextEditingConfig, thinkingBudget, endpoint.modelMaxPromptTokens) : undefined;
+
 	return {
 		model,
 		...rawMessagesToMessagesAPI(options.messages),
@@ -91,6 +104,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			type: 'enabled',
 			budget_tokens: thinkingBudget,
 		} : undefined,
+		context_management: contextManagement,
 	};
 }
 
@@ -251,10 +265,7 @@ function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Ex
 
 export async function processResponseFromMessagesEndpoint(
 	instantiationService: IInstantiationService,
-	telemetryService: ITelemetryService,
-	logService: ILogService,
 	response: Response,
-	expectedNumChoices: number,
 	finishCallback: FinishedCallback,
 	telemetryData: TelemetryData
 ): Promise<AsyncIterableObject<ChatCompletion>> {
@@ -270,7 +281,6 @@ export async function processResponseFromMessagesEndpoint(
 					return;
 				}
 
-				logService.trace(`SSE: ${trimmed}`);
 				const parsed = JSON.parse(trimmed) as Partial<AnthropicStreamEvent>;
 				const type = parsed.type ?? ev.type;
 				if (!type) {
@@ -303,6 +313,7 @@ export class AnthropicMessagesProcessor {
 	private inputTokens: number = 0;
 	private outputTokens: number = 0;
 	private cachedTokens: number = 0;
+	private contextManagementResponse?: ContextManagementResponse;
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
@@ -408,8 +419,29 @@ export class AnthropicMessagesProcessor {
 				if (chunk.usage) {
 					this.outputTokens = chunk.usage.output_tokens;
 				}
+				if (chunk.context_management) {
+					this.contextManagementResponse = chunk.context_management;
+					// Report context management via delta so it gets logged to request logger
+					return onProgress({
+						text: '',
+						contextManagement: chunk.context_management
+					});
+				}
 				return;
 			case 'message_stop':
+				// Add context management info to telemetry if available
+				if (this.contextManagementResponse) {
+					const totalClearedTokens = this.contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+						0
+					);
+					this.telemetryData.extendedBy({
+						contextEditingApplied: 'true',
+						contextEditingClearedTokens: totalClearedTokens.toString(),
+						contextEditingEditCount: this.contextManagementResponse.applied_edits.length.toString(),
+					});
+				}
+
 				return {
 					blockFinished: true,
 					choiceIndex: 0,
