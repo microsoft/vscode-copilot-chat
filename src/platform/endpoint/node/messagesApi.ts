@@ -81,15 +81,15 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		: undefined;
 
 	// Build context management configuration
-	const contextEditingEnabled = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, experimentationService);
+	const contextEditingEnabled = configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingEnabled, experimentationService);
 	const contextEditingConfig = {
-		triggerType: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultTriggerType, experimentationService),
-		triggerValue: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultTriggerValue, experimentationService),
-		keepCount: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultKeepCount, experimentationService),
-		clearAtLeastTokens: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultClearAtLeastTokens, experimentationService),
-		excludeTools: configurationService.getConfig(ConfigKey.AnthropicContextEditingToolResultExcludeTools),
-		clearInputs: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingToolResultClearInputs, experimentationService),
-		thinkingKeepTurns: configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingThinkingKeepTurns, experimentationService),
+		triggerType: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultTriggerType, experimentationService) as 'input_tokens' | 'tool_uses',
+		triggerValue: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultTriggerValue, experimentationService),
+		keepCount: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultKeepCount, experimentationService),
+		clearAtLeastTokens: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultClearAtLeastTokens, experimentationService),
+		excludeTools: configurationService.getConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultExcludeTools),
+		clearInputs: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultClearInputs, experimentationService),
+		thinkingKeepTurns: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingThinkingKeepTurns, experimentationService),
 	};
 	const contextManagement = contextEditingEnabled ? buildContextManagement(contextEditingConfig, thinkingBudget, endpoint.modelMaxPromptTokens) : undefined;
 
