@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ClientHttp2Stream } from 'http2';
+import { getRequestId, RequestId } from '../../../../../../platform/networking/common/fetch';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { ICompletionsLogTargetService, Logger } from '../logger';
@@ -17,8 +18,6 @@ import {
 	APILogprobs,
 	convertToAPIChoice,
 	FinishedCallback,
-	getRequestId,
-	RequestId,
 } from './openai';
 
 const streamChoicesLogger = new Logger('streamChoices');
@@ -259,7 +258,7 @@ interface ChoiceJSON {
  * soon as it's finished.
  */
 export class SSEProcessor {
-	private requestId: RequestId = getRequestId(this.response);
+	private requestId: RequestId = getRequestId(this.response.headers);
 	private stats = new ChunkStats();
 	/**
 	 * A key & value being here means at least one chunk with that choice index

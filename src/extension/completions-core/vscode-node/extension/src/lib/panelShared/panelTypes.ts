@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { RequestId } from '../../../../lib/src/openai/openai';
+import { RequestId } from '../../../../../../../platform/networking/common/fetch';
 import { CopilotNamedAnnotationList } from '../../../../lib/src/openai/stream';
 import { TelemetryWithExp } from '../../../../lib/src/telemetry';
 import { IRange } from '../../../../lib/src/textDocument';
