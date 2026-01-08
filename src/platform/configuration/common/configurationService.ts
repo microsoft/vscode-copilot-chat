@@ -800,7 +800,7 @@ export namespace ConfigKey {
 		export const WorkspaceEnableCodeSearchExternalIngest = defineTeamInternalSetting<boolean>('chat.advanced.workspace.codeSearchExternalIngest.enabled', ConfigType.ExperimentBased, false);
 
 		/** Context editing for Anthropic Messages API */
-		export const AnthropicContextEditingEnabled = defineTeamInternalSetting<boolean>('chat.advanced.anthropic.contextEditing.enabled', ConfigType.ExperimentBased, true);
+		export const AnthropicContextEditingEnabled = defineTeamInternalSetting<boolean>('chat.advanced.anthropic.contextEditing.enabled', ConfigType.ExperimentBased, false);
 		/** Trigger type for tool result context editing: 'input_tokens' or 'tool_uses' */
 		export const AnthropicContextEditingToolResultTriggerType = defineTeamInternalSetting<string>('chat.advanced.anthropic.contextEditing.toolResult.triggerType', ConfigType.ExperimentBased, 'input_tokens');
 		/** Trigger value for tool result context editing (tokens or tool uses count depending on triggerType). Anthropic default: 100000 for input_tokens. */
