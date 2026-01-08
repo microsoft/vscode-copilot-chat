@@ -165,11 +165,15 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		);
 
 		this._matchInstructionLocationsFromSkills = observableFromEvent(
-			(handleChange) => this._register(configurationService.onDidChangeConfiguration(e => {
-				if (e.affectsConfiguration(USE_AGENT_SKILLS_SETTING)) {
-					handleChange(e);
-				}
-			})),
+			(handleChange) => {
+				const configDisposable = this._register(configurationService.onDidChangeConfiguration(e => {
+					if (e.affectsConfiguration(USE_AGENT_SKILLS_SETTING)) {
+						handleChange(e);
+					}
+				}));
+				const workspaceFoldersDisposable = this._register(this.workspaceService.onDidChangeWorkspaceFolders(handleChange));
+				return { dispose: () => { configDisposable.dispose(); workspaceFoldersDisposable.dispose(); } };
+			},
 			() => {
 				if (this.configurationService.getNonExtensionConfig<boolean>(USE_AGENT_SKILLS_SETTING)) {
 					const personalSkillFolderUris = PERSONAL_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
