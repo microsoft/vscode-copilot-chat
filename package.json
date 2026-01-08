@@ -2337,6 +2337,19 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.cloudAgent.enabled%"
 					},
+					"github.copilot.chat.cloudAgent.partnerAgent": {
+						"type": "string",
+						"enum": [
+							"__default_agent_copilot",
+							"Claude"
+						],
+						"enumDescriptions": [
+							"Default Copilot agent",
+							"Claude agent"
+						],
+						"default": "__default_agent_copilot",
+						"markdownDescription": "Select the partner agent to use for cloud agent sessions"
+					},
 					"github.copilot.chat.codeGeneration.useInstructionFiles": {
 						"type": "boolean",
 						"default": true,

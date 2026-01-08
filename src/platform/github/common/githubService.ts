@@ -121,6 +121,7 @@ export interface ErrorResponseWithStatusCode {
 export interface RemoteAgentJobPayload {
 	problem_statement: string;
 	event_type: string;
+	agent_id?: number;
 	pull_request?: {
 		title?: string;
 		body_placeholder?: string;

@@ -904,6 +904,7 @@ export namespace ConfigKey {
 
 	export const BackgroundAgentEnabled = defineSetting<boolean>('chat.backgroundAgent.enabled', ConfigType.Simple, true);
 	export const CloudAgentEnabled = defineSetting<boolean>('chat.cloudAgent.enabled', ConfigType.Simple, true);
+	export const CloudAgentPartnerAgent = defineSetting<string>('chat.cloudAgent.partnerAgent', ConfigType.Simple, '__default_agent_copilot');
 }
 
 export function getAllConfigKeys(): string[] {

@@ -1635,6 +1635,19 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return undefined;
 	}
 
+	private getPartnerAgentId(): number | undefined {
+		const partnerAgent = vscode.workspace.getConfiguration('github.copilot.chat.cloudAgent').get<string>('partnerAgent', '__default_agent_copilot');
+		
+		// Map partner agent selection to numeric agent_id
+		switch (partnerAgent) {
+			case 'Claude':
+				return 2246796;
+			case '__default_agent_copilot':
+			default:
+				return undefined; // Default agent, no agent_id needed
+		}
+	}
+
 	private async invokeRemoteAgent(prompt: string, problemContext: string, token: vscode.CancellationToken, stream: vscode.ChatResponseStream, base_ref: string, customAgentName?: string, head_ref?: string): Promise<{ number: number; sessionId: string }> {
 		const title = extractTitle(prompt, problemContext);
 		const { problemStatement, isTruncated } = truncatePrompt(this.logService, prompt, problemContext);
@@ -1662,9 +1675,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
+		const agentId = this.getPartnerAgentId();
+		
 		const payload: RemoteAgentJobPayload = {
 			problem_statement: problemStatement,
 			event_type: 'visual_studio_code_remote_agent_tool_invoked',
+			...(agentId && { agent_id: agentId }),
 			...(customAgentName && customAgentName !== DEFAULT_AGENT_ID && { custom_agent: customAgentName }),
 			pull_request: {
 				title,
