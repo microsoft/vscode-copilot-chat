@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { RemoteAgentJobPayload } from '../../../../platform/github/common/githubService';
+import { CLAUDE_AGENT_ID } from '../copilotCloudSessionsProvider';
 
 describe('Partner Agent Configuration', () => {
 	describe('RemoteAgentJobPayload Interface', () => {
@@ -13,14 +14,14 @@ describe('Partner Agent Configuration', () => {
 			const payload: RemoteAgentJobPayload = {
 				problem_statement: 'Test problem',
 				event_type: 'test_event',
-				agent_id: 2246796, // Claude agent
+				agent_id: CLAUDE_AGENT_ID,
 				pull_request: {
 					title: 'Test PR',
 					base_ref: 'main'
 				}
 			};
 
-			expect(payload.agent_id).toBe(2246796);
+			expect(payload.agent_id).toBe(CLAUDE_AGENT_ID);
 		});
 
 		it('should allow agent_id to be undefined', () => {
@@ -54,19 +55,18 @@ describe('Partner Agent Configuration', () => {
 	});
 
 	describe('Partner Agent Mapping Logic', () => {
-		it('should map Claude to agent_id 2246796', () => {
-			// Verify the Claude agent ID constant
-			const CLAUDE_AGENT_ID = 2246796;
+		it('should map Claude to the correct agent_id', () => {
+			// Verify the Claude agent ID constant value
 			expect(CLAUDE_AGENT_ID).toBe(2246796);
 		});
 
 		it('should use spread operator with !== undefined to include agent_id', () => {
 			// Test the spread operator logic that should be used in the payload
-			const agentId: number | undefined = 2246796;
+			const agentId: number | undefined = CLAUDE_AGENT_ID;
 			const payload = {
 				...(agentId !== undefined && { agent_id: agentId })
 			};
-			expect(payload.agent_id).toBe(2246796);
+			expect(payload.agent_id).toBe(CLAUDE_AGENT_ID);
 		});
 
 		it('should exclude agent_id when undefined', () => {

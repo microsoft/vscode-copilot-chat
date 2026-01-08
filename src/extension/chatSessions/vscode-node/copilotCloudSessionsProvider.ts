@@ -50,7 +50,7 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 
 const AGENTS_OPTION_GROUP_ID = 'agents';
 const DEFAULT_AGENT_ID = '___vscode_default___';
-const CLAUDE_AGENT_ID = 2246796; // Partner agent ID for Claude
+export const CLAUDE_AGENT_ID = 2246796; // Partner agent ID for Claude
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
