@@ -801,7 +801,7 @@ export namespace ConfigKey {
 
 		/** Context editing for Anthropic Messages API */
 		export const AnthropicContextEditingEnabled = defineTeamInternalSetting<boolean>('chat.advanced.anthropic.contextEditing.enabled', ConfigType.ExperimentBased, false);
-		export const AnthropicContextEditingToolResultTriggerType = defineTeamInternalSetting<string>('chat.advanced.anthropic.contextEditing.toolResult.triggerType', ConfigType.ExperimentBased, 'input_tokens');
+		export const AnthropicContextEditingToolResultTriggerType = defineTeamInternalSetting<'input_tokens' | 'tool_uses'>('chat.advanced.anthropic.contextEditing.toolResult.triggerType', ConfigType.ExperimentBased, 'input_tokens');
 		export const AnthropicContextEditingToolResultTriggerValue = defineTeamInternalSetting<number>('chat.advanced.anthropic.contextEditing.toolResult.triggerValue', ConfigType.ExperimentBased, 100000);
 		export const AnthropicContextEditingToolResultKeepCount = defineTeamInternalSetting<number>('chat.advanced.anthropic.contextEditing.toolResult.keepCount', ConfigType.ExperimentBased, 3);
 		export const AnthropicContextEditingToolResultClearAtLeastTokens = defineTeamInternalSetting<number | undefined>('chat.advanced.anthropic.contextEditing.toolResult.clearAtLeastTokens', ConfigType.ExperimentBased, 25000);
