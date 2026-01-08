@@ -801,19 +801,12 @@ export namespace ConfigKey {
 
 		/** Context editing for Anthropic Messages API */
 		export const AnthropicContextEditingEnabled = defineTeamInternalSetting<boolean>('chat.advanced.anthropic.contextEditing.enabled', ConfigType.ExperimentBased, false);
-		/** Trigger type for tool result context editing: 'input_tokens' or 'tool_uses' */
 		export const AnthropicContextEditingToolResultTriggerType = defineTeamInternalSetting<string>('chat.advanced.anthropic.contextEditing.toolResult.triggerType', ConfigType.ExperimentBased, 'input_tokens');
-		/** Trigger value for tool result context editing (tokens or tool uses count depending on triggerType). Anthropic default: 100000 for input_tokens. */
 		export const AnthropicContextEditingToolResultTriggerValue = defineTeamInternalSetting<number>('chat.advanced.anthropic.contextEditing.toolResult.triggerValue', ConfigType.ExperimentBased, 100000);
-		/** Number of recent tool results to keep when editing context. Anthropic default: 3. */
 		export const AnthropicContextEditingToolResultKeepCount = defineTeamInternalSetting<number>('chat.advanced.anthropic.contextEditing.toolResult.keepCount', ConfigType.ExperimentBased, 3);
-		/** Minimum tokens to clear when editing context. Helps make cache invalidation worthwhile. */
 		export const AnthropicContextEditingToolResultClearAtLeastTokens = defineTeamInternalSetting<number | undefined>('chat.advanced.anthropic.contextEditing.toolResult.clearAtLeastTokens', ConfigType.ExperimentBased, 25000);
-		/** Tools to exclude from context editing */
 		export const AnthropicContextEditingToolResultExcludeTools = defineTeamInternalSetting<string[]>('chat.advanced.anthropic.contextEditing.toolResult.excludeTools', ConfigType.Simple, []);
-		/** Whether to clear tool inputs when editing context */
 		export const AnthropicContextEditingToolResultClearInputs = defineTeamInternalSetting<boolean>('chat.advanced.anthropic.contextEditing.toolResult.clearInputs', ConfigType.ExperimentBased, false);
-		/** Number of recent turns to keep thinking content for */
 		export const AnthropicContextEditingThinkingKeepTurns = defineTeamInternalSetting<number>('chat.advanced.anthropic.contextEditing.thinking.keepTurns', ConfigType.ExperimentBased, 1);
 	}
 
