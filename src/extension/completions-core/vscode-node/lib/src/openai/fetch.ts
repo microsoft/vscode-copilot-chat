@@ -13,6 +13,7 @@ import { IHeaders } from '../../../../../../platform/networking/common/fetcherSe
 import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { assertNever } from '../../../../../../util/vs/base/common/assert';
 import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
+import { StopWatch } from '../../../../../../util/vs/base/common/stopwatch';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { CopilotToken, ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
@@ -621,6 +622,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			// 	timeout,
 			// };
 
+			const requestSw = new StopWatch();
 			const res = await this.fetchService.fetch(
 				uri,
 				copilotToken.token,
@@ -630,6 +632,9 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				fullHeaders,
 			);
 
+			// .finally from fetchWithInstrumentation
+			this.instantiationService.invokeFunction(logEnginePrompt, prompt, telemetryData);
+
 			if (res.isError()) {
 
 				const err = res.err;
@@ -637,7 +642,34 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				if (err instanceof Completions.RequestCancelled) {
 					return { type: 'canceled', reason: 'during fetch request' };
 				} else if (err instanceof Completions.Unexpected) {
-					throw err.error;
+					// .catch from fetchWithInstrumentation
+					if (isAbortError(err)) {
+						// If we cancelled a network request, we want to log a `request.cancel` instead of `request.error`
+						this.instantiationService.invokeFunction(telemetry, 'request.cancel', telemetryData);
+						throw err;
+					}
+					this.statusReporter.setWarning(getKey(err, 'message') ?? '');
+					const warningTelemetry = telemetryData.extendedBy({ error: 'Network exception' });
+					this.instantiationService.invokeFunction(telemetry, 'request.shownWarning', warningTelemetry);
+
+					telemetryData.properties.message = String(getKey(err, 'name') ?? '');
+					telemetryData.properties.code = String(getKey(err, 'code') ?? '');
+					telemetryData.properties.errno = String(getKey(err, 'errno') ?? '');
+					telemetryData.properties.type = String(getKey(err, 'type') ?? '');
+
+					const totalTimeMs = requestSw.elapsed();
+					telemetryData.measurements.totalTimeMs = totalTimeMs;
+
+					logger.info(
+						this.logTargetService,
+						`Request ${ourRequestId} at <${uri}> rejected with ${String(err)} after ${totalTimeMs}ms`
+					);
+					logger.debug(this.logTargetService, 'request.error properties', telemetryData.properties);
+					logger.debug(this.logTargetService, 'request.error measurements', telemetryData.measurements);
+
+					this.instantiationService.invokeFunction(telemetry, 'request.error', telemetryData);
+
+					throw err;
 				} else if (err instanceof Completions.UnsuccessfulResponse) {
 					const telemetryData = this.createTelemetryData(endpoint, params); // FIXME
 					return this.handleError(this.statusReporter, telemetryData, {
@@ -650,6 +682,34 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				}
 			}
 
+			const response = res.val;
+
+			// .then from fetchWithInstrumentation
+			{
+				// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
+				// If they are different then we will override the original one we set in telemetryData above.
+				const modelRequestId = response.requestId;
+				telemetryData.extendWithRequestId(modelRequestId);
+
+				// TODO: Add response length (requires parsing)
+				const totalTimeMs = requestSw.elapsed();
+				telemetryData.measurements.totalTimeMs = totalTimeMs;
+
+				const responseStatus = 200; // because otherwise it wouldn't be here
+				logger.info(
+					this.logTargetService,
+					`Request ${ourRequestId} at <${uri}> finished with ${responseStatus} status after ${totalTimeMs}ms`
+				);
+				telemetryData.properties.status = String(responseStatus);
+				logger.debug(this.logTargetService, 'request.response properties', telemetryData.properties);
+				logger.debug(this.logTargetService, 'request.response measurements', telemetryData.measurements);
+
+				logger.debug(this.logTargetService, 'prompt:', prompt);
+
+				this.instantiationService.invokeFunction(telemetry, 'request.response', telemetryData);
+
+			}
+
 			const choices = this.chunkStreamToApiChoices(res.val, finishedCb, baseTelemetryData);
 
 			return {
@@ -658,65 +718,6 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				getProcessingTime: () => 0, // FIXME
 			};
 
-			// FIXME: Re-add telemetry and logging around the fetch call
-
-			// return instantiationService.invokeFunction(postRequest, uri, copilotToken.token, intent, ourRequestId, request, cancel, headers)
-			// 	.then(response => {
-			// 		// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
-			// 		// If they are different then we will override the original one we set in telemetryData above.
-			// 		const modelRequestId = getRequestId(response);
-			// 		telemetryData.extendWithRequestId(modelRequestId);
-
-			// 		// TODO: Add response length (requires parsing)
-			// 		const totalTimeMs = now() - requestStart;
-			// 		telemetryData.measurements.totalTimeMs = totalTimeMs;
-
-			// 		logger.info(
-			// 			logTarget,
-			// 			`Request ${ourRequestId} at <${uri}> finished with ${response.status} status after ${totalTimeMs}ms`
-			// 		);
-			// 		telemetryData.properties.status = String(response.status);
-			// 		logger.debug(logTarget, 'request.response properties', telemetryData.properties);
-			// 		logger.debug(logTarget, 'request.response measurements', telemetryData.measurements);
-
-			// 		logger.debug(logTarget, 'prompt:', prompt);
-
-			// 		instantiationService.invokeFunction(telemetry, 'request.response', telemetryData);
-
-			// 		return response;
-			// 	})
-			// 	.catch((error: unknown) => {
-			// 		if (isAbortError(error)) {
-			// 			// If we cancelled a network request, we want to log a `request.cancel` instead of `request.error`
-			// 			instantiationService.invokeFunction(telemetry, 'request.cancel', telemetryData);
-			// 			throw error;
-			// 		}
-			// 		statusReporter.setWarning(getKey(error, 'message') ?? '');
-			// 		const warningTelemetry = telemetryData.extendedBy({ error: 'Network exception' });
-			// 		instantiationService.invokeFunction(telemetry, 'request.shownWarning', warningTelemetry);
-
-			// 		telemetryData.properties.message = String(getKey(error, 'name') ?? '');
-			// 		telemetryData.properties.code = String(getKey(error, 'code') ?? '');
-			// 		telemetryData.properties.errno = String(getKey(error, 'errno') ?? '');
-			// 		telemetryData.properties.type = String(getKey(error, 'type') ?? '');
-
-			// 		const totalTimeMs = now() - requestStart;
-			// 		telemetryData.measurements.totalTimeMs = totalTimeMs;
-
-			// 		logger.info(
-			// 			logTarget,
-			// 			`Request ${ourRequestId} at <${uri}> rejected with ${String(error)} after ${totalTimeMs}ms`
-			// 		);
-			// 		logger.debug(logTarget, 'request.error properties', telemetryData.properties);
-			// 		logger.debug(logTarget, 'request.error measurements', telemetryData.measurements);
-
-			// 		instantiationService.invokeFunction(telemetry, 'request.error', telemetryData);
-
-			// 		throw error;
-			// 	})
-			// 	.finally(() => {
-			// 		instantiationService.invokeFunction(logEnginePrompt, prompt, telemetryData);
-			// 	});
 		}
 
 		// if (cancel?.isCancellationRequested) {
