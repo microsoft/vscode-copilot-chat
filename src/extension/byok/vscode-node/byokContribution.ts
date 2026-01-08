@@ -99,9 +99,8 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		}
 
 		const byokEnabled = isBYOKEnabled(authService.copilotToken, this._capiClientService);
-		this._logService.info(`BYOK: isBYOKEnabled check result: ${byokEnabled}`);
 
-		if (authService.copilotToken && isBYOKEnabled(authService.copilotToken, this._capiClientService) && !this._byokProvidersRegistered) {
+		if (authService.copilotToken && byokEnabled && !this._byokProvidersRegistered) {
 			this._byokProvidersRegistered = true;
 			this._logService.info('BYOK: Registering providers...');
 			// Update known models list from CDN so all providers have the same list
