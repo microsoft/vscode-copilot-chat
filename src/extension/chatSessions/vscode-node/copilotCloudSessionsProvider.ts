@@ -383,15 +383,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					id: model.id,
 					name: model.name,
 				}));
+				if (!models.find(m => m.id === DEFAULT_MODEL_ID)) {
+					modelItems.unshift({ id: DEFAULT_MODEL_ID, name: vscode.l10n.t('Auto'), description: vscode.l10n.t('Automatically select the best model') });
+				}
 				optionGroups.push({
 					id: MODELS_OPTION_GROUP_ID,
 					name: vscode.l10n.t('Model'),
 					description: vscode.l10n.t('Select which model to use'),
 					items: modelItems,
 				});
-				if (!models.find(m => m.id === DEFAULT_MODEL_ID)) {
-					modelItems.unshift({ id: DEFAULT_MODEL_ID, name: vscode.l10n.t('Auto'), description: vscode.l10n.t('Automatically select the best model') });
-				}
 			} else {
 				this.logService.trace('[copilotCloudSessionsProvider#provideChatSessionProviderOptions] No Models available');
 			}
