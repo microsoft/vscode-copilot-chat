@@ -5,11 +5,20 @@
 
 import { ClientHttp2Stream } from 'http2';
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
+import { IEnvService } from '../../../../../../platform/env/common/envService';
+import { Completions, ICompletionsFetchService } from '../../../../../../platform/nesFetch/common/completionsFetchService';
+import { ResponseStream } from '../../../../../../platform/nesFetch/common/responseStream';
+import { RequestId, getRequestId } from '../../../../../../platform/networking/common/fetch';
+import { IHeaders } from '../../../../../../platform/networking/common/fetcherService';
 import { createServiceIdentifier } from '../../../../../../util/common/services';
+import { assertNever } from '../../../../../../util/vs/base/common/assert';
+import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
+import { StopWatch } from '../../../../../../util/vs/base/common/stopwatch';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { CopilotToken, ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
+import { apiVersion, editorVersionHeaders } from '../config';
 import { asyncIterableFilter, asyncIterableMap } from '../helpers/iterableHelpers';
 import { ICompletionsLogTargetService, Logger } from '../logger';
 import { getEndpointUrl } from '../networkConfiguration';
@@ -31,7 +40,6 @@ import { getKey } from '../util/unknown';
 import {
 	APIChoice,
 	APIJsonData,
-	RequestId,
 	getMaxSolutionTokens,
 	getStops,
 	getTemperatureForSamples,
@@ -137,16 +145,8 @@ export type PostOptions = Partial<CompletionFetchRequestFields>;
 
 // Request helpers
 
-export function getRequestId(response: Response): RequestId {
-	return {
-		headerRequestId: response.headers.get('x-request-id') || '',
-		serverExperiments: response.headers.get('X-Copilot-Experiment') || '',
-		deploymentId: response.headers.get('azureml-model-deployment') || '',
-	};
-}
-
-function getProcessingTime(response: Response): number {
-	const reqIdStr = response.headers.get('openai-processing-ms');
+function getProcessingTime(responseHeaders: IHeaders): number {
+	const reqIdStr = responseHeaders.get('openai-processing-ms');
 	if (reqIdStr) {
 		return parseInt(reqIdStr, 10);
 	}
@@ -256,6 +256,12 @@ export interface ICompletionsOpenAIFetcherService {
 		finishedCb: FinishedCallback,
 		cancellationToken?: ICancellationToken
 	): Promise<CompletionResults | CompletionError>;
+	fetchAndStreamCompletions2(
+		params: CompletionParams,
+		baseTelemetryData: TelemetryWithExp,
+		finishedCb: FinishedCallback,
+		cancellationToken?: ICancellationToken
+	): Promise<CompletionResults | CompletionError>;
 }
 
 /** An interface to abstract away the network request to OpenAI, allowing for
@@ -269,6 +275,12 @@ export abstract class OpenAIFetcher implements ICompletionsOpenAIFetcherService 
 	 * Sends a request to the code completion endpoint.
 	 */
 	abstract fetchAndStreamCompletions(
+		params: CompletionParams,
+		baseTelemetryData: TelemetryWithExp,
+		finishedCb: FinishedCallback,
+		cancellationToken?: ICancellationToken
+	): Promise<CompletionResults | CompletionError>;
+	abstract fetchAndStreamCompletions2(
 		params: CompletionParams,
 		baseTelemetryData: TelemetryWithExp,
 		finishedCb: FinishedCallback,
@@ -366,7 +378,7 @@ async function fetchWithInstrumentation(
 		.then(response => {
 			// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
 			// If they are different then we will override the original one we set in telemetryData above.
-			const modelRequestId = getRequestId(response);
+			const modelRequestId = getRequestId(response.headers);
 			telemetryData.extendWithRequestId(modelRequestId);
 
 			// TODO: Add response length (requires parsing)
@@ -437,6 +449,9 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		@ICompletionsCopilotTokenManager private readonly copilotTokenManager: ICompletionsCopilotTokenManager,
 		@ICompletionsStatusReporter private readonly statusReporter: ICompletionsStatusReporter,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@ICompletionsFetchService private readonly fetchService: ICompletionsFetchService,
+		// @ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
+		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
 	}
@@ -484,8 +499,256 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		return {
 			type: 'success',
 			choices: postProcessChoices(choices),
-			getProcessingTime: () => getProcessingTime(response),
+			getProcessingTime: () => getProcessingTime(response.headers),
 		};
+	}
+
+	async fetchAndStreamCompletions2(
+		params: CompletionParams,
+		baseTelemetryData: TelemetryWithExp,
+		finishedCb: FinishedCallback,
+		cancel: CancellationToken
+	): Promise<CompletionResults | CompletionError> {
+		if (this.#disabledReason) {
+			return { type: 'canceled', reason: this.#disabledReason };
+		}
+		const endpoint = 'completions';
+		const copilotToken = this.copilotTokenManager.token ?? await this.copilotTokenManager.getToken();
+
+		const request = {
+			prompt: params.prompt.prefix,
+			suffix: params.prompt.suffix,
+			max_tokens: getMaxSolutionTokens(),
+			temperature: getTemperatureForSamples(this.runtimeModeService, params.count),
+			top_p: getTopP(),
+			n: params.count,
+			stop: getStops(params.languageId),
+			stream: true, // Always true: non streaming requests are not supported by this proxy
+			extra: params.extra,
+		} satisfies CompletionRequest;
+
+		// fetchWithParameters
+		{
+
+			// FIXME
+			// if (params.requestLogProbs) {
+			// 	request.logprobs = 2; // Request that logprobs of 2 tokens (i.e. including the best alternative) be returned
+			// }
+
+			// const githubNWO = tryGetGitHubNWO(params.repoInfo);
+			// if (githubNWO !== undefined) {
+			// 	request.nwo = githubNWO;
+			// }
+
+			if (params.postOptions) {
+				Object.assign(request, params.postOptions);
+			}
+
+			if (params.prompt.context && params.prompt.context.length > 0) {
+				request.extra.context = params.prompt.context;
+			}
+
+			// Give a final opportunity to cancel the request before we send the request
+			// This await line is necessary to allow the tests in extension/src/openai.test.ts to pass
+			await delay(0);
+			if (cancel?.isCancellationRequested) {
+				// return 'not-sent';
+				return { type: 'canceled', reason: 'before fetch request' };
+			}
+		}
+
+		// fetchWithInstrumentation
+		{
+			// const instantiationService = accessor.get(IInstantiationService);
+			// const logTarget = accessor.get(ICompletionsLogTargetService);
+			// const statusReporter = accessor.get(ICompletionsStatusReporter);
+			const engineModelId = params.engineModelId;
+			const uri = this.instantiationService.invokeFunction(getProxyEngineUrl, copilotToken, engineModelId, endpoint);
+			const telemetryExp = baseTelemetryData;
+			const uiKind = params.uiKind;
+			const prompt = params.prompt;
+			const ourRequestId = params.ourRequestId;
+			const headers = params.headers;
+			// const logTarget = this.logTarget;
+
+			const telemetryData = telemetryExp.extendedBy(
+				{
+					endpoint: endpoint,
+					engineName: engineModelId,
+					uiKind: uiKind,
+				},
+				telemetrizePromptLength(prompt)
+			);
+
+			// Skip prompt info (PII)
+			sanitizeRequestOptionTelemetry(request, telemetryData, ['prompt', 'suffix'], ['context']);
+
+			// The request ID we are passed in is sent in the request to the proxy, and included in our pre-request telemetry.
+			// We hope (but do not rely on) that the model will use the same ID in the response, allowing us to correlate
+			// the request and response.
+			telemetryData.properties['headerRequestId'] = ourRequestId;
+
+			this.instantiationService.invokeFunction(telemetry, 'request.sent', telemetryData);
+
+			// const requestStart = now();
+			const intent = uiKindToIntent(uiKind);
+
+			// Wrap the Promise with success/error callbacks so we can log/measure it
+			// return this.instantiationService.invokeFunction(postRequest, uri, copilotToken.token, intent, ourRequestId, request, cancel, headers)
+
+			// postRequest
+			const fullHeaders: Record<string, string> = {
+				...headers,
+				...this.instantiationService.invokeFunction(editorVersionHeaders),
+			};
+
+			// If we call byok endpoint, no need to add these headers
+			// if (modelProviderName === undefined) {
+			fullHeaders['Openai-Organization'] = 'github-copilot';
+			fullHeaders['X-Request-Id'] = ourRequestId;
+			fullHeaders['VScode-SessionId'] = this.envService.sessionId;
+			fullHeaders['VScode-MachineId'] = this.envService.machineId;
+			fullHeaders['X-GitHub-Api-Version'] = apiVersion;
+			// }
+
+			if (intent) {
+				fullHeaders['OpenAI-Intent'] = intent;
+			}
+
+			// const request: FetchOptions = {
+			// 	method: 'POST',
+			// 	headers: fullHeaders,
+			// 	json: body,
+			// 	timeout,
+			// };
+
+			const requestSw = new StopWatch();
+			const res = await this.fetchService.fetch(
+				uri,
+				copilotToken.token,
+				request,
+				ourRequestId,
+				cancel,
+				fullHeaders,
+			);
+
+			// .finally from fetchWithInstrumentation
+			this.instantiationService.invokeFunction(logEnginePrompt, prompt, telemetryData);
+
+			if (res.isError()) {
+
+				const err = res.err;
+
+				if (err instanceof Completions.RequestCancelled) {
+					return { type: 'canceled', reason: 'during fetch request' };
+				} else if (err instanceof Completions.Unexpected) {
+					// .catch from fetchWithInstrumentation
+					if (isAbortError(err)) {
+						// If we cancelled a network request, we want to log a `request.cancel` instead of `request.error`
+						this.instantiationService.invokeFunction(telemetry, 'request.cancel', telemetryData);
+						throw err;
+					}
+					this.statusReporter.setWarning(getKey(err, 'message') ?? '');
+					const warningTelemetry = telemetryData.extendedBy({ error: 'Network exception' });
+					this.instantiationService.invokeFunction(telemetry, 'request.shownWarning', warningTelemetry);
+
+					telemetryData.properties.message = String(getKey(err, 'name') ?? '');
+					telemetryData.properties.code = String(getKey(err, 'code') ?? '');
+					telemetryData.properties.errno = String(getKey(err, 'errno') ?? '');
+					telemetryData.properties.type = String(getKey(err, 'type') ?? '');
+
+					const totalTimeMs = requestSw.elapsed();
+					telemetryData.measurements.totalTimeMs = totalTimeMs;
+
+					logger.info(
+						this.logTargetService,
+						`Request ${ourRequestId} at <${uri}> rejected with ${String(err)} after ${totalTimeMs}ms`
+					);
+					logger.debug(this.logTargetService, 'request.error properties', telemetryData.properties);
+					logger.debug(this.logTargetService, 'request.error measurements', telemetryData.measurements);
+
+					this.instantiationService.invokeFunction(telemetry, 'request.error', telemetryData);
+
+					throw err;
+				} else if (err instanceof Completions.UnsuccessfulResponse) {
+					const telemetryData = this.createTelemetryData(endpoint, params); // FIXME
+					return this.handleError(this.statusReporter, telemetryData, {
+						status: err.status,
+						text: err.text,
+						headers: err.headers,
+					}, copilotToken);
+				} else {
+					assertNever(err);
+				}
+			}
+
+			const response = res.val;
+
+			// .then from fetchWithInstrumentation
+			{
+				// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
+				// If they are different then we will override the original one we set in telemetryData above.
+				const modelRequestId = response.requestId;
+				telemetryData.extendWithRequestId(modelRequestId);
+
+				// TODO: Add response length (requires parsing)
+				const totalTimeMs = requestSw.elapsed();
+				telemetryData.measurements.totalTimeMs = totalTimeMs;
+
+				const responseStatus = 200; // because otherwise it wouldn't be here
+				logger.info(
+					this.logTargetService,
+					`Request ${ourRequestId} at <${uri}> finished with ${responseStatus} status after ${totalTimeMs}ms`
+				);
+				telemetryData.properties.status = String(responseStatus);
+				logger.debug(this.logTargetService, 'request.response properties', telemetryData.properties);
+				logger.debug(this.logTargetService, 'request.response measurements', telemetryData.measurements);
+
+				logger.debug(this.logTargetService, 'prompt:', prompt);
+
+				this.instantiationService.invokeFunction(telemetry, 'request.response', telemetryData);
+
+			}
+
+			const choices = this.chunkStreamToApiChoices(response, finishedCb, baseTelemetryData);
+
+			return {
+				type: 'success',
+				choices,
+				getProcessingTime: () => getProcessingTime(response.headers),
+			};
+		}
+
+		// if (cancel?.isCancellationRequested) {
+		// 	const body = response.body();
+		// 	try {
+		// 		// Destroy the stream so that the server is hopefully notified we don't want any more data
+		// 		// and can cancel/forget about the request itself.
+		// 		if (body && 'destroy' in body && typeof body.destroy === 'function') {
+		// 			(body as unknown as ClientHttp2Stream).destroy();
+		// 		} else if (body instanceof ReadableStream) {
+		// 			void body.cancel();
+		// 		}
+		// 	} catch (e) {
+		// 		this.instantiationService.invokeFunction(acc => logger.exception(acc, e, `Error destroying stream`));
+		// 	}
+		// 	return { type: 'canceled', reason: 'after fetch request' };
+		// }
+
+		// if (response.status !== 200) {
+		// 	const telemetryData = this.createTelemetryData(endpoint, params);
+		// 	return this.handleError(this.statusReporter, telemetryData, response, copilotToken);
+		// }
+		// const processor = await this.instantiationService.invokeFunction(SSEProcessor.create, params.count, response, baseTelemetryData, [], cancel);
+		// const finishedCompletions = processor.processSSE(finishedCb);
+		// const choices = asyncIterableMap(finishedCompletions, solution =>
+		// 	this.instantiationService.invokeFunction(prepareSolutionForReturn, solution, baseTelemetryData)
+		// );
+		// return {
+		// 	type: 'success',
+		// 	choices: postProcessChoices(choices),
+		// 	getProcessingTime: () => getProcessingTime(response),
+		// };
 	}
 
 	private createTelemetryData(endpoint: string, params: CompletionParams | SpeculationFetchParams) {
@@ -497,7 +760,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		});
 	}
 
-	async fetchWithParameters(
+	protected async fetchWithParameters(
 		endpoint: string,
 		params: CompletionParams,
 		copilotToken: CopilotToken,
@@ -557,10 +820,67 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		return response;
 	}
 
+	private async *chunkStreamToApiChoices(resp: ResponseStream, finishedCb: FinishedCallback, baseTelemetryData: TelemetryWithExp): AsyncIterable<APIChoice> {
+		const completions: { responseSoFar: string; isFinished: boolean }[] = [];
+
+		for await (const chunk of resp.stream) {
+			const chunkIdx = chunk.choices[0].index;
+			if (completions[chunkIdx] === undefined) {
+				completions[chunkIdx] = { responseSoFar: '', isFinished: false };
+			}
+			const chunkText = chunk.choices[0].text;
+			if (chunkText) {
+				completions[chunkIdx].responseSoFar += chunkText;
+			}
+			const isFinished = !!(chunk.choices[0].finish_reason);
+			finishedCb(completions[chunkIdx].responseSoFar, {
+				index: chunkIdx,
+				text: chunkText ?? '',
+				finished: isFinished,
+			} satisfies RequestDelta);
+
+			if (isFinished) {
+				completions[chunkIdx].isFinished = true;
+				yield {
+					choiceIndex: chunkIdx,
+					completionText: completions[chunkIdx].responseSoFar,
+					requestId: resp.requestId,
+					finishReason: chunk.choices[0].finish_reason ?? '',
+					tokens: [], // FIXME
+					numTokens: 0, // FIXME
+					blockFinished: false, // FIXME
+					telemetryData: baseTelemetryData, // FIXME
+					clientCompletionId: '', // FIXME
+					meanLogProb: undefined,
+					meanAlternativeLogProb: undefined,
+				} satisfies APIChoice;
+			}
+		}
+
+		// in case stream ends but some completions are not finished yet
+		for (const [chunkIdx, completion] of completions.entries()) {
+			if (!completion.isFinished) {
+				yield {
+					choiceIndex: chunkIdx,
+					completionText: completion.responseSoFar,
+					requestId: resp.requestId,
+					finishReason: 'no-finish-reason',
+					tokens: [], // FIXME
+					numTokens: 0, // FIXME
+					blockFinished: false, // FIXME
+					telemetryData: baseTelemetryData, // FIXME
+					clientCompletionId: '', // FIXME
+					meanLogProb: undefined,
+					meanAlternativeLogProb: undefined,
+				} satisfies APIChoice;
+			}
+		}
+	}
+
 	async handleError(
 		statusReporter: ICompletionsStatusReporter,
 		telemetryData: TelemetryData,
-		response: Response,
+		response: { status: number; text(): Promise<string>; headers: IHeaders },
 		copilotToken: CopilotToken
 	): Promise<CompletionError> {
 		const text = await response.text();
@@ -625,6 +945,6 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	}
 }
 
-function isClientError(response: Response): boolean {
+function isClientError(response: { status: number }): boolean {
 	return response.status >= 400 && response.status < 500;
 }

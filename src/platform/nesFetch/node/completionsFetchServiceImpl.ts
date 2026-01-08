@@ -9,7 +9,8 @@ import { Result } from '../../../util/common/result';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IFetcherService, IHeaders } from '../../networking/common/fetcherService';
+import { getRequestId, RequestId } from '../../networking/common/fetch';
+import { FetchOptions, IFetcherService, IHeaders } from '../../networking/common/fetcherService';
 import { Completions, ICompletionsFetchService } from '../common/completionsFetchService';
 import { ResponseStream } from '../common/responseStream';
 import { jsonlStreamToCompletions, streamToLines } from './streamTransformer';
@@ -17,8 +18,9 @@ import { jsonlStreamToCompletions, streamToLines } from './streamTransformer';
 export type FetchResponse = {
 	status: number;
 	statusText: string;
-	headers: { [name: string]: string };
+	headers: IHeaders;
 	body: AsyncIterableObject<string>;
+	requestId: RequestId;
 };
 
 export interface IFetchRequestParams extends Completions.ModelParams { }
@@ -74,7 +76,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				return c.choices.length > 0;
 			}); // we only support `n=1`, so we only get choice.index = 0
 
-			const response = new ResponseStream(completions);
+			const response = new ResponseStream(completions, fetchResponse.val.requestId, fetchResponse.val.headers);
 
 			return Result.ok(response);
 
@@ -82,6 +84,8 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			const error: Completions.CompletionsFetchFailure = new Completions.UnsuccessfulResponse(
 				fetchResponse.val.status,
 				fetchResponse.val.statusText,
+				fetchResponse.val.headers,
+				() => fetchResponse.val.body.toPromise().then(arr => arr.join('')).catch(() => ''),
 			);
 
 			return Result.error(error);
@@ -98,12 +102,14 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 		try {
 
-			const response = await this.fetcherService.fetch(url, {
+			const request: FetchOptions = {
 				headers: options.headers,
 				body: options.body,
 				signal: fetchAbortCtl.signal,
 				method: 'POST',
-			});
+			};
+
+			const response = await this.fetcherService.fetch(url, request);
 
 			if (response.status === 200 && this.authService.copilotToken?.isFreeUser && this.authService.copilotToken?.isChatQuotaExceeded) {
 				this.authService.resetCopilotToken();
@@ -114,10 +120,9 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 					// When we receive a 402, we have exceed the free tier quota
 					// This is stored on the token so let's refresh it
 					this.authService.resetCopilotToken(response.status);
-					return Result.error(new Completions.QuotaExceeded());
 				}
 
-				return Result.error(new Completions.UnsuccessfulResponse(response.status, response.statusText));
+				return Result.error(new Completions.UnsuccessfulResponse(response.status, response.statusText, response.headers, () => response.text().catch(() => '')));
 			}
 
 			const responseBody = await response.body();
@@ -150,8 +155,9 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			return Result.ok({
 				status: response.status,
 				statusText: response.statusText,
-				headers: headersObjectToKv(response.headers),
+				headers: response.headers,
 				body: responseStream,
+				requestId: getRequestId(response.headers),
 			});
 
 		} catch (reason: unknown) {
@@ -183,12 +189,4 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 		return headers;
 	}
-}
-
-function headersObjectToKv(headers: IHeaders): { [name: string]: string } {
-	const result: { [name: string]: string } = {};
-	for (const [name, value] of headers) {
-		result[name] = value;
-	}
-	return result;
 }
