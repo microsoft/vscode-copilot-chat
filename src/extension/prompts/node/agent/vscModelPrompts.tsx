@@ -295,7 +295,6 @@ class VSCModelPromptResolverB implements IAgentPrompt {
 	}
 }
 
-
 class VSCModelReminderInstructions extends PromptElement<ReminderInstructionsProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <>
