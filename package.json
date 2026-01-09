@@ -2115,6 +2115,12 @@
 				"enablement": "github.copilot-chat.activated"
 			},
 			{
+				"command": "github.copilot.deleteExternalIngestWorkspaceIndex",
+				"title": "%github.copilot.command.deleteExternalIngestWorkspaceIndex%",
+				"category": "Developer",
+				"enablement": "github.copilot-chat.activated"
+			},
+			{
 				"command": "github.copilot.report",
 				"title": "Report Issue",
 				"category": "Chat"

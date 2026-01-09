@@ -6,6 +6,7 @@
 import assert from 'assert';
 import { afterEach, beforeEach, suite, test, vi } from 'vitest';
 import type { FileSystemWatcher } from 'vscode';
+import { Result } from '../../../../util/common/result';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
@@ -24,6 +25,7 @@ import {
 import { ExternalIngestClient, ExternalIngestFile, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
 import { ExternalIngestIndex } from '../../node/codeSearch/externalIngestIndex';
 
+
 function createMockExternalIngestClient(options?: {
 	canIngestPathAndSize?: (filePath: string, size: number) => boolean;
 	canIngestDocument?: (filePath: string, data: Uint8Array) => boolean;
@@ -39,10 +41,11 @@ function createMockExternalIngestClient(options?: {
 			return Array.from(ingestedFiles.values());
 		},
 		searchCalls,
-		async updateIndex(_filesetName: string, _root: URI, allFiles: AsyncIterable<ExternalIngestFile>, _token: CancellationToken): Promise<void> {
+		async updateIndex(_filesetName: string, _root: URI, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _token: CancellationToken): Promise<Result<{ checkpoint: string }, Error>> {
 			for await (const file of allFiles) {
 				ingestedFiles.set(file.uri, file);
 			}
+			return Result.ok({ checkpoint: 'mock-checkpoint' });
 		},
 		async listFilesets(_token: CancellationToken): Promise<string[]> {
 			return [];

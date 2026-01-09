@@ -6,22 +6,23 @@
 import { canIngestDocument, canIngestPathAndSize, createCodedSymbols, DocumentContents, GeoFilter, IngestFilter, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
 import crypto from 'crypto';
 import fs from 'fs';
-import { posix } from 'node:path';
 import { CancellationToken } from 'vscode-languageserver-protocol';
+import { Result } from '../../../../util/common/result';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../../chunking/common/chunk';
 import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ApiClient } from './externalIngestApi';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 
 export interface ExternalIngestFile {
 	readonly uri: URI;
+	readonly relativePath: string;
 	readonly docSha: Uint8Array;
 
 	read(): Promise<Uint8Array>;
@@ -31,7 +32,13 @@ export interface ExternalIngestFile {
  * Interface for the external ingest client that handles indexing and searching files.
  */
 export interface IExternalIngestClient {
-	updateIndex(filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void>;
+	updateIndex(
+		filesetName: string,
+		root: URI,
+		currentCheckpoint: string | undefined,
+		allFiles: AsyncIterable<ExternalIngestFile>,
+		token: CancellationToken
+	): Promise<Result<{ checkpoint: string }, Error>>;
 
 	listFilesets(token: CancellationToken): Promise<string[]>;
 	deleteFileset(filesetName: string, token: CancellationToken): Promise<void>;
@@ -103,11 +110,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		return this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
 	}
 
-	async updateIndex(filesetName: string, root: URI, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<void> {
+	async updateIndex(filesetName: string, root: URI, currentCheckpoint: string, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<Result<{ checkpoint: string }, Error>> {
 		const authToken = await this.getAuthToken();
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::updateIndex(): No auth token available');
-			return;
+			return Result.error(new Error('No auth token available'));
 		}
 
 		// Initial setup
@@ -121,13 +128,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		const allDocShas: Uint8Array[] = [];
 		for await (const file of allFiles) {
-			const relativePath = posix.relative(root.path, file.uri.path);
+			const relativePath = file.relativePath;
 			const full = file.uri.fsPath;
 
 			geoFilter.push(file.docSha);
 			allDocShas.push(file.docSha);
 
 			const docShaBase64 = Buffer.from(file.docSha).toString('base64');
+
+
+
 			mappings.set(docShaBase64, { full, relative: relativePath });
 		}
 
@@ -144,6 +154,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		}
 		const newCheckpoint = checkpointHash.digest().toString('base64');
+
+		if (newCheckpoint === currentCheckpoint) {
+			this.logService.info('ExternalIngestClient::updateIndex(): Checkpoint matches current checkpoint, skipping ingest.');
+			return Result.ok({ checkpoint: newCheckpoint });
+		}
 
 		// Create snapshot - this endpoint could return 429 if you already have too many filesets
 		let createIngestResponse: Response;
@@ -173,7 +188,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			codedSymbolRange.end === 0
 		) {
 			this.logService.info('Ingest has already run successfully');
-			return;
+			return Result.ok({ checkpoint: newCheckpoint });
 		}
 		this.logService.debug(`Got ingest ID: ${ingestId}`);
 
@@ -244,6 +259,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			if (docIds) {
 				const newSet = new Set(docIds);
 				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
+				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds.length} doc IDs for upload, seeing ${toUpload.size} new documents.`);
 
 				for (const requestedDocSha of toUpload) {
 					seenDocShas.add(requestedDocSha);
@@ -295,6 +311,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		} while (pageToken);
 
 		await Promise.all(uploading);
+
 		// Print the number of uploaded documents - may not match the number in your directory if some
 		// have been uploaded already!
 		this.logService.info(
@@ -308,6 +325,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const requestId = resp.headers.get('x-github-request-id');
 		const body = await resp.text();
 		this.logService.debug(`requestId: '${requestId}', body: ${body}`);
+
+		return Result.ok({ checkpoint: newCheckpoint });
 	}
 
 	async listFilesets(token: CancellationToken): Promise<string[]> {

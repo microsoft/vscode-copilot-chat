@@ -5,12 +5,13 @@
 
 import { DocumentContents, getDocSha } from '@github/blackbird-external-ingest-utils';
 import sql from 'node:sqlite';
+import { Result } from '../../../../util/common/result';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { Schemas } from '../../../../util/vs/base/common/network';
-import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
+import { isEqualOrParent, relativePath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunkAndScore } from '../../../chunking/common/chunk';
@@ -25,16 +26,24 @@ import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
 import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
-import { Result } from '../../../../util/common/result';
 
 const debug = false;
+
+const enum ShouldIngestState {
+	/** File is tracked but we haven't yet determined if it should be ingested */
+	Undetermined = 0,
+	/** File should not be ingested */
+	No = 1,
+	/** File should be ingested */
+	Yes = 2,
+}
 
 interface DbFileEntry {
 	path: string;
 	size: number;
 	mtime: number;
 	docSha: Uint8Array | null;
-	shouldIngest: boolean;
+	shouldIngest: ShouldIngestState;
 }
 
 /**
@@ -44,8 +53,10 @@ export class ExternalIngestIndex extends Disposable {
 
 	private readonly _db: sql.DatabaseSync;
 
-	private readonly _hashLimiter = this._register(new Limiter<Uint8Array>(5));
+	private readonly _readLimiter = this._register(new Limiter<Uint8Array>(5));
 	private readonly _watcher = this._register(new MutableDisposable<DisposableStore>());
+
+	private static readonly _checkpointStorageKey = 'externalIngest.checkpoint';
 
 	private _isDisposed = false;
 
@@ -72,7 +83,20 @@ export class ExternalIngestIndex extends Disposable {
 		super();
 
 		this._client = client;
-		this._db = this.createDatabase();
+
+		let dbPath: string;
+		if (debug || !this._vsExtensionContext.storageUri || this._vsExtensionContext.storageUri.scheme !== Schemas.file) {
+			dbPath = ':memory:';
+		} else {
+			dbPath = URI.joinPath(this._vsExtensionContext.storageUri, 'codebase-external.sqlite').fsPath;
+		}
+
+		try {
+			this._db = this.createDatabase(dbPath);
+		} catch (error) {
+			this._logService.error('Failed to create database. Falling back to in-memory db', error);
+			this._db = this.createDatabase(':memory:');
+		}
 	}
 
 	override dispose(): void {
@@ -81,8 +105,42 @@ export class ExternalIngestIndex extends Disposable {
 		super.dispose();
 
 		this._watcher?.dispose();
-		this._hashLimiter.dispose();
+		this._readLimiter.dispose();
 		this._db.close();
+	}
+
+	private getCurrentIndexCheckpoint(): string | undefined {
+		return this._vsExtensionContext.workspaceState.get<string>(ExternalIngestIndex._checkpointStorageKey);
+	}
+
+	private setCurrentIndexCheckpoint(checkpoint: string): void {
+		this._vsExtensionContext.workspaceState.update(ExternalIngestIndex._checkpointStorageKey, checkpoint);
+	}
+
+	private clearCurrentIndexCheckpoint(): void {
+		this._vsExtensionContext.workspaceState.update(ExternalIngestIndex._checkpointStorageKey, undefined);
+	}
+
+	/**
+	 * Deletes the external ingest index for the current workspace.
+	 *
+	 * This deletes the remote file set and the checkpoint. We keep around the local database because it
+	 * has a cache of file shas.
+	 */
+	public async deleteIndex(token: CancellationToken): Promise<void> {
+		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
+		if (!workspaceFolders.length) {
+			return;
+		}
+
+		const primaryRoot = workspaceFolders[0];
+		const filesetName = this.getFilesetName(primaryRoot);
+		this._logService.info(`ExternalIngestIndex: Deleting index for fileset ${filesetName}`);
+
+		await this._client.deleteFileset(filesetName, token);
+		this.clearCurrentIndexCheckpoint();
+
+		this._logService.info(`ExternalIngestIndex: Deleted index for fileset ${filesetName}`);
 	}
 
 	/**
@@ -130,12 +188,19 @@ export class ExternalIngestIndex extends Disposable {
 		// Use the first workspace folder as the "root" for the fileset
 		const primaryRoot = workspaceFolders[0];
 
-		await this._client.updateIndex(
+		const currentCheckpoint = this.getCurrentIndexCheckpoint();
+
+		const result = await this._client.updateIndex(
 			this.getFilesetName(primaryRoot),
 			primaryRoot,
+			currentCheckpoint,
 			this.getFilesToIndexFromDb(),
 			token
 		);
+
+		if (result.isOk()) {
+			this.setCurrentIndexCheckpoint(result.val.checkpoint);
+		}
 	}
 
 	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
@@ -160,13 +225,8 @@ export class ExternalIngestIndex extends Disposable {
 		return result.chunks;
 	}
 
-	private createDatabase(): sql.DatabaseSync {
-		let dbPath: string;
-		if (debug || !this._vsExtensionContext.storageUri || this._vsExtensionContext.storageUri.scheme !== Schemas.file) {
-			dbPath = ':memory:';
-		} else {
-			dbPath = URI.joinPath(this._vsExtensionContext.storageUri, 'codebase-external.sqlite').fsPath;
-		}
+	private createDatabase(dbPath: string | ':memory:'): sql.DatabaseSync {
+		this._logService.trace(`ExternalIngestIndex: Creating database at path: ${dbPath}`);
 
 		const db = new sql.DatabaseSync(dbPath, {
 			open: true,
@@ -202,13 +262,19 @@ export class ExternalIngestIndex extends Disposable {
 			return;
 		}
 
-		const shouldIngest = await this.shouldIngestFile(uri, stat);
+		// Check if file already exists and hasn't changed
+		const existing = this.get(uri);
+		if (existing && existing.size === stat.size && existing.mtime === stat.mtime) {
+			// File unchanged, keep existing state
+			return;
+		}
 
+		// New or changed file - set to Undetermined so it will be evaluated later
 		this._db.prepare(`
 			INSERT INTO Files (path, size, mtime, docSha, shouldIngest)
 			VALUES (?, ?, ?, ?, ?)
-			ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, docSha = excluded.docSha, shouldIngest = excluded.shouldIngest
-		`).run(uri.toString(), stat.size, stat.mtime, shouldIngest.isOk() ? shouldIngest.val.docSha : null, shouldIngest.isOk() ? 1 : 0);
+			ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, docSha = NULL, shouldIngest = excluded.shouldIngest
+		`).run(uri.toString(), stat.size, stat.mtime, null, ShouldIngestState.Undetermined);
 	}
 
 	/**
@@ -248,12 +314,14 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		// Complete check based on document contents
-		const data = await this._fileSystemService.readFile(uri);
+		const data = await this._readLimiter.queue(() => this._fileSystemService.readFile(uri));
 		if (!this._client.canIngestDocument(uri.fsPath, data)) {
 			return Result.error(false);
 		}
 
-		return Result.ok({ docSha: getDocSha(uri.fsPath, new DocumentContents(data)) });
+		return Result.ok({
+			docSha: this.computeIngestDocShaFromContents(uri, data)
+		});
 	}
 
 	private delete(uri: URI) {
@@ -271,15 +339,30 @@ export class ExternalIngestIndex extends Disposable {
 			size: row.size as number,
 			mtime: row.mtime as number,
 			docSha: row.docSha as Uint8Array | null,
-			shouldIngest: (row.shouldIngest as number) > 0
+			shouldIngest: row.shouldIngest as ShouldIngestState
 		};
 	}
 
+	private computeRelativePath(uri: URI): string {
+		const folder = this._workspaceService.getWorkspaceFolder(uri);
+		if (folder) {
+			const rel = relativePath(folder, uri);
+			if (rel) {
+				return rel;
+			}
+		}
+
+		// Fall back to full path if not under any workspace folder
+		return uri.fsPath;
+	}
+
 	private async *getFilesToIndexFromDb(): AsyncIterable<ExternalIngestFile> {
-		const rows = this._db.prepare('SELECT path, size, mtime, docSha, shouldIngest FROM Files WHERE shouldIngest = 1').all() as unknown as Array<DbFileEntry>;
+		// Get files that are either already marked Yes or need to be evaluated (Undetermined)
+		const rows = this._db.prepare('SELECT path, size, mtime, docSha, shouldIngest FROM Files WHERE shouldIngest IN (?, ?)').all(ShouldIngestState.Yes, ShouldIngestState.Undetermined) as unknown as Array<DbFileEntry>;
 
 		for (const row of rows) {
 			const uri = URI.parse(row.path);
+
 			// Skip files that are now under code search repos
 			if (!await this.shouldTrackFile(uri, CancellationToken.None)) {
 				this.delete(uri);
@@ -294,12 +377,33 @@ export class ExternalIngestIndex extends Disposable {
 
 			const storedSize = row.size;
 			const storedMtime = row.mtime;
-			const matches = storedSize === stat.size && storedMtime === stat.mtime;
-			let docSha: Uint8Array | undefined = matches ? row.docSha ?? undefined : undefined;
+			const fileUnchanged = storedSize === stat.size && storedMtime === stat.mtime;
+
+			// If file state is undetermined, we need to evaluate it
+			if (row.shouldIngest === ShouldIngestState.Undetermined) {
+				const result = await this.shouldIngestFile(uri, stat);
+				if (result.isOk()) {
+					this._db.prepare('UPDATE Files SET shouldIngest = ?, docSha = ?, size = ?, mtime = ? WHERE path = ?')
+						.run(ShouldIngestState.Yes, result.val.docSha, stat.size, stat.mtime, uri.toString());
+
+					yield {
+						uri,
+						relativePath: this.computeRelativePath(uri),
+						docSha: result.val.docSha,
+						read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
+					};
+				} else {
+					this._db.prepare('UPDATE Files SET shouldIngest = ?, size = ?, mtime = ? WHERE path = ?')
+						.run(ShouldIngestState.No, stat.size, stat.mtime, uri.toString());
+				}
+				continue;
+			}
+
+			// File is already marked Yes - use cached docSha if file unchanged
+			let docSha: Uint8Array | undefined = fileUnchanged ? row.docSha ?? undefined : undefined;
 
 			if (!docSha) {
 				docSha = await this.computeIngestDocSha(uri);
-
 				if (!docSha) {
 					continue;
 				}
@@ -310,10 +414,9 @@ export class ExternalIngestIndex extends Disposable {
 
 			yield {
 				uri,
+				relativePath: this.computeRelativePath(uri),
 				docSha,
-				read: () => {
-					return this._fileSystemService.readFile(uri);
-				}
+				read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
 			};
 		}
 	}
@@ -418,15 +521,17 @@ export class ExternalIngestIndex extends Disposable {
 		}
 	}
 
+	private computeIngestDocShaFromContents(uri: URI, data: Uint8Array): Uint8Array {
+		return getDocSha(this.computeRelativePath(uri), new DocumentContents(data));
+	}
+
 	private async computeIngestDocSha(uri: URI): Promise<Uint8Array | undefined> {
-		return this._hashLimiter.queue(async () => {
-			try {
-				const data = await this._fileSystemService.readFile(uri);
-				return getDocSha(uri.fsPath, new DocumentContents(data));
-			} catch {
-				return undefined;
-			}
-		});
+		try {
+			const data = await this._readLimiter.queue(() => this._fileSystemService.readFile(uri));
+			return this.computeIngestDocShaFromContents(uri, data);
+		} catch {
+			return undefined;
+		}
 	}
 
 	private getFilesetName(workspaceRoot: URI): string {
