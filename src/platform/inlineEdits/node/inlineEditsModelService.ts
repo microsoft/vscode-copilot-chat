@@ -21,7 +21,7 @@ import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WireTypes } from '../common/dataTypes/inlineEditsModelsTypes';
-import { isPromptingStrategy, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
+import { isPromptingStrategy, LintOptions, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../common/inlineEditsModelService';
 
 const enum ModelSource {
@@ -36,6 +36,7 @@ type Model = {
 	modelName: string;
 	promptingStrategy: PromptingStrategy | undefined;
 	includeTagsInCurrentFile: boolean;
+	lintOptions: LintOptions | undefined;
 	source: ModelSource;
 }
 
@@ -53,6 +54,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		promptingStrategy: PromptingStrategy.CopilotNesXtab,
 		includeTagsInCurrentFile: true,
 		source: ModelSource.HardCodedDefault,
+		lintOptions: undefined,
 	};
 
 	private static readonly COPILOT_NES_OCT: Model = {
@@ -60,6 +62,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		promptingStrategy: PromptingStrategy.Xtab275,
 		includeTagsInCurrentFile: false,
 		source: ModelSource.HardCodedDefault,
+		lintOptions: undefined,
 	};
 
 	private static readonly COPILOT_NES_CALLISTO: Model = {
@@ -67,6 +70,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		promptingStrategy: PromptingStrategy.Xtab275,
 		includeTagsInCurrentFile: false,
 		source: ModelSource.HardCodedDefault,
+		lintOptions: undefined,
 	};
 
 	private _copilotTokenObs = observableFromEvent(this, this._tokenStore.onDidStoreUpdate, () => this._tokenStore.copilotToken);
@@ -248,6 +252,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 					promptingStrategy: m.capabilities.promptStrategy,
 					includeTagsInCurrentFile: false, // FIXME@ulugbekna: determine this based on model capabilities and config
 					source: ModelSource.Fetched,
+					lintOptions: undefined,
 				} satisfies Model;
 			});
 			tracer.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
@@ -279,6 +284,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				modelName: model.modelName,
 				promptingStrategy: model.promptingStrategy,
 				includeTagsInCurrentFile: model.includeTagsInCurrentFile,
+				lintOptions: model.lintOptions,
 			};
 		}
 		tracer.trace('No selected model found, using default model.');

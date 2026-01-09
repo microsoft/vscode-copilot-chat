@@ -33,17 +33,17 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return await this.getCurrentAuthedUserWithToken(authToken);
 	}
 
-	async getCopilotPullRequestsForUser(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestSearchItem[]> {
+	async getOpenPullRequestsForUser(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestSearchItem[]> {
 		const auth = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }));
 		if (!auth?.accessToken) {
-			this._logService.trace('No authentication token available for getCopilotPullRequestsForUser');
+			this._logService.trace('No authentication token available for getOpenPullRequestsForUser');
 			return [];
 		}
-		const response = await this.getCopilotPullRequestForUserWithToken(
+		const response = await this.getOpenPullRequestForUserWithToken(
 			owner,
 			repo,
 			auth.account.label,
-			auth.accessToken,
+			auth.accessToken
 		);
 		return response;
 	}
