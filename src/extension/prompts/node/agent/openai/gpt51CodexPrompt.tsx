@@ -14,6 +14,7 @@ import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { DefaultAgentPromptProps, detectToolCapabilities } from '../defaultAgentInstructions';
 import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
 import { CopilotIdentityRulesConstructor, IAgentPrompt, PromptRegistry, SafetyRulesConstructor, SystemPrompt } from '../promptRegistry';
+import { isHiddenModelC } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 
 /**
  * This is inspired by the Codex CLI prompt, with some custom tweaks for VS Code.
@@ -123,7 +124,7 @@ class Gpt51CodexResolver implements IAgentPrompt {
 	static readonly familyPrefixes = [];
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return (endpoint.family.startsWith('gpt-5.1') && endpoint.family.includes('-codex')) || (endpoint.family === 'arctic-fox');
+		return (endpoint.family.startsWith('gpt-5.1') && endpoint.family.includes('-codex')) || isHiddenModelC(endpoint.family);
 	}
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
