@@ -3976,6 +3976,8 @@
 							"advanced",
 							"experimental",
 							"onExp"
+						]
+					},
 					"github.copilot.chat.CCAPartnerAgents.enabled": {
 						"type": "boolean",
 						"default": false,
