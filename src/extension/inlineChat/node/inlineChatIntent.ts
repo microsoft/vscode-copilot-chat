@@ -150,7 +150,7 @@ export class InlineChatIntent implements IIntent {
 		const handler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, conversation, request, stream, token, documentContext, ChatLocation.Editor, chatTelemetry, undefined, onPaused);
 		const result = await handler.getResult();
 
-		if (!didEmitEdits) {
+		if (!didEmitEdits && !result.errorDetails) {
 			// BAILOUT: when no edits were emitted, invoke the exit tool manually
 			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
 		}
@@ -233,6 +233,7 @@ export class InlineChatIntent implements IIntent {
 		}
 
 		if (result.needsExitTool) {
+			this._logService.warn('[InlineChat], BAIL_OUT because of needsExitTool');
 			// BAILOUT: when no edits were emitted, invoke the exit tool manually
 			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
 		}
@@ -349,7 +350,9 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 		telemetry.sendToolCallingTelemetry(toolCallRounds, availableTools, token.isCancellationRequested ? 'cancelled' : lastResponse.type);
 
-		const needsExitTool = toolCallRounds.length === 0 || (toolCallRounds.length > 0 && toolCallRounds[toolCallRounds.length - 1].toolCalls.length === 0);
+		const needsExitTool = lastResponse.type === ChatFetchResponseType.Success
+			&& (toolCallRounds.length === 0 || (toolCallRounds.length > 0 && toolCallRounds[toolCallRounds.length - 1].toolCalls.length === 0));
+
 		return { lastResponse, telemetry, needsExitTool };
 	}
 
@@ -576,6 +579,10 @@ class InlineChatEditHeuristicStrategy implements IInlineChatEditStrategy {
 			[]
 		);
 
-		return { lastResponse: fetchResult, telemetry, needsExitTool: telemetry.editCount === 0 };
+		return {
+			needsExitTool: telemetry.editCount === 0 && fetchResult.type === ChatFetchResponseType.Success,
+			lastResponse: fetchResult,
+			telemetry,
+		};
 	}
 }
