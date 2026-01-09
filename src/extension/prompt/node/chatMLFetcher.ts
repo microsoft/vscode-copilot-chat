@@ -265,7 +265,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							model: chatEndpoint.model,
 							apiType: chatEndpoint.apiType,
 							associatedRequestId: telemetryProperties.associatedRequestId,
-							retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory,
 							retryAfterError: telemetryProperties.retryAfterError,
 							retryAfterErrorGitHubRequestId: telemetryProperties.retryAfterErrorGitHubRequestId,
 							connectivityTestError: telemetryProperties.connectivityTestError,
@@ -327,7 +326,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							userInitiatedRequest: false, // do not mark the retry as user initiated
 							telemetryProperties: {
 								...telemetryProperties,
-								retryAfterErrorCategory: processed.reasonDetail || processed.reason,
 								retryAfterError: processed.reasonDetail || processed.reason,
 								retryAfterErrorGitHubRequestId: processed.serverRequestId,
 								connectivityTestError,
@@ -354,7 +352,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						model: chatEndpoint.model,
 						apiType: chatEndpoint.apiType,
 						associatedRequestId: telemetryProperties.associatedRequestId,
-						retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory,
 						retryAfterError: telemetryProperties.retryAfterError,
 						retryAfterErrorGitHubRequestId: telemetryProperties.retryAfterErrorGitHubRequestId,
 						connectivityTestError,
