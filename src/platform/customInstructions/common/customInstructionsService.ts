@@ -173,11 +173,11 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 						handleChange(e);
 					}
 				});
-				const workspaceDispoable = workspaceService.onDidChangeWorkspaceFolders(handleChange);
+				const workspaceDisposable = workspaceService.onDidChangeWorkspaceFolders(handleChange);
 				return {
 					dispose: () => {
 						configurationDisposable.dispose();
-						workspaceDispoable.dispose();
+						workspaceDisposable.dispose();
 					}
 				};
 			},
@@ -325,20 +325,20 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		return this.isSkillFile(uri) && extUriBiasedIgnorePathCase.basename(uri).toLowerCase() === 'skill.md';
 	}
 
-	public getSkillDirectory(skillFileUri: URI): URI | undefined {
-		const skillInfo = this._matchInstructionLocationsFromSkills.get()(skillFileUri);
+	public getSkillDirectory(uri: URI): URI | undefined {
+		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri);
 		if (!skillInfo) {
 			return undefined;
 		}
-		return extUriBiasedIgnorePathCase.dirname(skillInfo.skillFolderUri);
+		return skillInfo.skillFolderUri;
 	}
 
 	public getSkillName(uri: URI): string | undefined {
-		const skillDirectory = this.getSkillDirectory(uri);
-		if (!skillDirectory) {
+		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri);
+		if (!skillInfo) {
 			return undefined;
 		}
-		return extUriBiasedIgnorePathCase.basename(skillDirectory);
+		return skillInfo.skillName;
 	}
 
 	public getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {

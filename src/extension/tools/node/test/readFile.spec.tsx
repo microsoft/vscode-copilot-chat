@@ -356,5 +356,43 @@ suite('ReadFile', () => {
 
 			testAccessor.dispose();
 		});
+
+		test('should return "Reading/Read" message for non-skill files with line range', async () => {
+			const testDoc = createTextDocumentData(URI.file('/workspace/test.ts'), 'line 1\nline 2\nline 3\nline 4\nline 5', 'typescript').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[
+					[URI.file('/workspace')],
+					[testDoc],
+				]
+			));
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			// Don't mark this file as a skill file
+			services.define(ICustomInstructionsService, mockCustomInstructions);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/test.ts',
+				offset: 2,
+				limit: 2
+			};
+
+			const result = await readFileTool.prepareInvocation(
+				{ input },
+				CancellationToken.None
+			);
+
+			expect(result).toBeDefined();
+			// When reading a partial range of a non-skill file, it should say "Reading"
+			expect((result!.invocationMessage as MarkdownString).value).toBe('Reading [](file:///workspace/test.ts#2-2), lines 2 to 4');
+			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Read [](file:///workspace/test.ts#2-2), lines 2 to 4');
+
+			testAccessor.dispose();
+		});
 	});
 });

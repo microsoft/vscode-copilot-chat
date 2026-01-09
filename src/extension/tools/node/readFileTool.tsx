@@ -211,11 +211,11 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 					};
 				}
 			}
-			return {
-				invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
-				pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
-			};
 		}
+		return {
+			invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+			pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+		};
 	}
 
 	public alternativeDefinition(originTool: vscode.LanguageModelToolInformation): vscode.LanguageModelToolInformation {
