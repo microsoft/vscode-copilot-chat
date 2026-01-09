@@ -70,15 +70,15 @@ export class SubagentToolCallingLoop extends ToolCallingLoop<ISubagentToolCallin
 
 	private async getEndpoint(request: ChatRequest) {
 		try {
-			let endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
+			let endpoint = await this.endpointProvider.getChatEndpoint(request);
 			if (!endpoint.supportsToolCalls) {
-				endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+				endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
 			}
 			return endpoint;
 		} catch (error) {
-			// If the requested model is not available, fall back to gpt-4.1
-			this._logService.warn(`[SubagentToolCallingLoop] Failed to get endpoint for request, falling back to gpt-4.1: ${error}`);
-			return await this.endpointProvider.getChatEndpoint('gpt-4.1');
+			// If the requested model is not available, fall back to the main agent model
+			this._logService.warn(`[SubagentToolCallingLoop] Failed to get endpoint for request, falling back to main agent model: ${error}`);
+			return await this.endpointProvider.getChatEndpoint(this.options.request);
 		}
 	}
 
