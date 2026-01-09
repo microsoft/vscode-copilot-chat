@@ -155,7 +155,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 	describe('getConfirmationToolParams', () => {
 		it('maps shell requests to terminal confirmation tool', async () => {
-			const result = await getConfirmationToolParams(instaService, { kind: 'shell', fullCommandText: 'rm -rf /tmp/test', canOfferSessionApproval: true, commands: [], hasWriteFileRedirection: true, intention: '', possiblePaths: [] });
+			const result = await getConfirmationToolParams(instaService, { kind: 'shell', fullCommandText: 'rm -rf /tmp/test', canOfferSessionApproval: true, commands: [], hasWriteFileRedirection: true, intention: '', possiblePaths: [], possibleUrls: [] });
 			assert(!!result);
 			expect(result.tool).toBe(ToolName.CoreTerminalConfirmationTool);
 		});

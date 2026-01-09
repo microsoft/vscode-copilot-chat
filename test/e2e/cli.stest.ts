@@ -6,6 +6,7 @@
 import { SessionOptions } from '@github/copilot/sdk';
 import assert from 'assert';
 import * as fs from 'fs/promises';
+import * as http from 'http';
 import { platform, tmpdir } from 'os';
 import * as path from 'path';
 import type { ChatPromptReference } from 'vscode';
@@ -102,7 +103,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 			mutableOptions.copilotUrl = this.testOptions.copilotUrl ?? options.copilotUrl;
 			mutableOptions.enableStreaming = true;
 			mutableOptions.skipCustomInstructions = true;
-			mutableOptions.disableHttpLogging = true;
+			// mutableOptions.disableHttpLogging = true;
 			return options;
 		}
 	}
@@ -130,6 +131,41 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 			this.adapterFactories.set('/chat/completions', oaiAdapterFactory);
 			requestHooks.forEach(requestHook => oaiAdapterFactory.addHooks(requestHook));
 			responseHooks.forEach(responseHook => oaiAdapterFactory.addHooks(undefined, responseHook));
+			this.requestHandlers.set('/graphql', { method: 'POST', handler: this.graphqlHandler.bind(this) });
+			this.requestHandlers.set('/models', { method: 'GET', handler: this.modelsHandler.bind(this) });
+		}
+
+		private async graphqlHandler(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			const data = {
+				viewer: {
+					login: '',
+					copilotEndpoints: {
+						api: `http://localhost:${this.config.port}`
+					}
+				}
+			};
+			res.end(JSON.stringify({ data }));
+		}
+		private async modelsHandler(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+			res.writeHead(200, { 'Content-Type': 'application/json', 'x-github-request-id': 'TESTREQUESTID1234' });
+			const endpoints = await this.endpointProvider.getAllChatEndpoints();
+			const data = endpoints.map(e => {
+				return {
+					id: e.model,
+					name: e.model,
+					capabilities: {
+						supports: {
+							vision: e.supportsVision,
+						},
+						limits: {
+							max_prompt_tokens: e.modelMaxPromptTokens,
+							max_context_window_tokens: e.maxOutputTokens,
+						}
+					}
+				};
+			});
+			res.end(JSON.stringify({ data }));
 		}
 	}
 
