@@ -38,7 +38,7 @@ import { SelectionSplitKind, SummarizedDocumentData, SummarizedDocumentSplitMeta
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IToolCall } from '../../prompt/common/intents';
-import { ToolCallRound } from '../../prompt/common/toolCallRound';
+import { detectToolCallLoop, ToolCallRound } from '../../prompt/common/toolCallRound';
 import { ChatTelemetryBuilder, InlineChatTelemetry } from '../../prompt/node/chatParticipantTelemetry';
 import { DefaultIntentRequestHandler } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
@@ -284,6 +284,8 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 		const editAttempts: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
 		const toolCallRounds: ToolCallRound[] = [];
+		const isGeminiFamily = endpoint.family.toLowerCase().includes('gemini');
+		let didDetectLoop = false;
 		let telemetry: InlineChatTelemetry;
 		let lastResponse: ChatResponse;
 		let lastInteractionOutcome: InteractionOutcome;
@@ -330,6 +332,16 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 				}));
 			}
 
+			if (isGeminiFamily) {
+				const loopDetection = detectToolCallLoop(toolCallRounds);
+				if (loopDetection) {
+					this._logService.error(`Inline chat tool calling loop detected (model: ${endpoint.model})`);
+					this._logService.error(`Inline chat tool calling loop window: ${JSON.stringify(loopDetection.toolCountsWindow)}`);
+					didDetectLoop = true;
+					break;
+				}
+			}
+
 			if (result.toolCalls.length === 0) {
 				// BAILOUT: when no tools have been used
 				break;
@@ -347,7 +359,8 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 			}
 		}
 
-		telemetry.sendToolCallingTelemetry(toolCallRounds, availableTools, token.isCancellationRequested ? 'cancelled' : lastResponse.type);
+		const responseType = token.isCancellationRequested ? 'cancelled' : didDetectLoop ? 'toolLoop' : lastResponse.type;
+		telemetry.sendToolCallingTelemetry(toolCallRounds, availableTools, responseType);
 
 		const needsExitTool = toolCallRounds.length === 0 || (toolCallRounds.length > 0 && toolCallRounds[toolCallRounds.length - 1].toolCalls.length === 0);
 		return { lastResponse, telemetry, needsExitTool };

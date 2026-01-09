@@ -54,6 +54,136 @@ export class ToolCallRound implements IToolCallRound {
 	}
 }
 
+export interface ToolCallLoopDetectionResult {
+	readonly toolCountsWindow: Record<string, number>;
+	readonly windowSize: number;
+	readonly uniqueToolKeyCount: number;
+	readonly maxKeyCount: number;
+	readonly totalToolCallRounds: number;
+	readonly totalToolCalls: number;
+}
+
+export function detectToolCallLoop(toolCallRounds: readonly IToolCallRound[]): ToolCallLoopDetectionResult | undefined {
+	const allCalls: IToolCall[] = [];
+	for (const round of toolCallRounds) {
+		if (!round.toolCalls.length) {
+			continue;
+		}
+		for (const call of round.toolCalls) {
+			allCalls.push(call);
+		}
+	}
+
+	// Require a minimum number of calls overall before we even consider this a loop.
+	const minTotalCalls = 12;
+	if (allCalls.length < minTotalCalls) {
+		return undefined;
+	}
+
+	// Look at a sliding window of the most recent calls to see if
+	// the model is bouncing between the same one or two tool invocations.
+	const windowSize = 20;
+	const recent = allCalls.slice(-Math.min(windowSize, allCalls.length));
+	if (recent.length < minTotalCalls) {
+		return undefined;
+	}
+
+	const toolCountsWindow: Record<string, number> = Object.create(null);
+	for (const call of recent) {
+		const key = `${call.name}:${call.arguments}`;
+		toolCountsWindow[key] = (toolCountsWindow[key] || 0) + 1;
+	}
+
+	const keys = Object.keys(toolCountsWindow);
+	const uniqueToolKeyCount = keys.length;
+	if (uniqueToolKeyCount === 0) {
+		return undefined;
+	}
+
+	// We only consider it a loop if the recent window is dominated by
+	// one or two repeating tool+argument combinations.
+	const maxKeyCount = keys.reduce((max, key) => Math.max(max, toolCountsWindow[key]), 0);
+	const maxDistinctKeys = 2;
+	const minRepeatsForLoop = 6;
+	if (uniqueToolKeyCount <= maxDistinctKeys && maxKeyCount >= minRepeatsForLoop) {
+		return {
+			toolCountsWindow,
+			windowSize: recent.length,
+			uniqueToolKeyCount,
+			maxKeyCount,
+			totalToolCallRounds: toolCallRounds.length,
+			totalToolCalls: allCalls.length,
+		};
+	}
+
+	return undefined;
+}
+
+export interface ITextLoopDetectionResult {
+	readonly repeatCount: number;
+	readonly totalSentences: number;
+	readonly totalRounds: number;
+	readonly responseLength: number;
+}
+
+function splitSentences(text: string): string[] {
+	return text
+		.split(/[\.\!\?\n\r]+/g)
+		.map(s => s.trim())
+		.filter(s => s.length > 0);
+}
+
+function normalizeSentence(sentence: string): string {
+	return sentence
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, ' ')
+		.trim();
+}
+
+export function detectTextLoop(toolCallRounds: readonly IToolCallRound[]): ITextLoopDetectionResult | undefined {
+	const lastRound = toolCallRounds.at(-1);
+	if (!lastRound) {
+		return undefined;
+	}
+
+	const response = lastRound.response;
+	const minResponseLength = 200;
+	if (!response || response.length < minResponseLength) {
+		return undefined;
+	}
+
+	const sentences = splitSentences(response);
+	if (sentences.length < 3) {
+		return undefined;
+	}
+
+	const sentenceCounts: Record<string, number> = Object.create(null);
+	let maxCount = 0;
+	for (const sentence of sentences) {
+		const normalized = normalizeSentence(sentence);
+		if (normalized.length < 30) {
+			continue;
+		}
+		const count = (sentenceCounts[normalized] || 0) + 1;
+		sentenceCounts[normalized] = count;
+		if (count > maxCount) {
+			maxCount = count;
+		}
+	}
+
+	const minRepeatsForTextLoop = 3;
+	if (maxCount >= minRepeatsForTextLoop) {
+		return {
+			repeatCount: maxCount,
+			totalSentences: sentences.length,
+			totalRounds: toolCallRounds.length,
+			responseLength: response.length,
+		};
+	}
+
+	return undefined;
+}
+
 export class ThinkingDataItem implements ThinkingData {
 	public text: string | string[] = '';
 	public metadata?: { [key: string]: any };
