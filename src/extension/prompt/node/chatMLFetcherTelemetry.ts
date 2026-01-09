@@ -238,6 +238,7 @@ export class ChatMLFetcherTelemetrySender {
 		timeToFirstToken: number,
 		isVisionRequest: boolean,
 		fetcher: FetcherId | undefined,
+		wasRetried: boolean = false,
 	) {
 		/* __GDPR__
 			"response.error" : {
@@ -262,6 +263,7 @@ export class ChatMLFetcherTelemetrySender {
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
+				"wasRetried": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the error will be retried", "isMeasurement": true },
 				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
@@ -293,77 +295,8 @@ export class ChatMLFetcherTelemetrySender {
 			timeToFirstToken,
 			isVisionRequest: isVisionRequest ? 1 : -1,
 			isBYOK: isBYOKModel(chatEndpointInfo),
-			isAuto: isAutoModel(chatEndpointInfo)
-		});
-	}
-
-	public static sendRetryableErrorTelemetry(
-		telemetryService: ITelemetryService,
-		processed: ChatFetchError,
-		telemetryProperties: IChatRequestTelemetryProperties | undefined,
-		chatEndpointInfo: IChatEndpoint,
-		requestBody: IEndpointBody,
-		tokenCount: number,
-		maxResponseTokens: number,
-		timeToFirstToken: number,
-		isVisionRequest: boolean,
-		fetcher: FetcherId | undefined,
-	) {
-		/* __GDPR__
-			"response.retryableError" : {
-				"owner": "digitarald",
-				"comment": "Report quality issue for when a service response failed but will be retried.",
-				"type": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Type of issue" },
-				"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason of issue" },
-				"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
-				"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
-				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
-				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
-				"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
-				"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
-				"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
-				"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
-				"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
-				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
-				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
-				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
-				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
-				"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
-				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
-				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
-				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
-				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
-				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
-				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
-				"connectivityTestErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the connectivity test request if available" },
-				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
-			}
-		*/
-		telemetryService.sendTelemetryEvent('response.retryableError', { github: true, microsoft: true }, {
-			type: processed.type,
-			reason: processed.reasonDetail || processed.reason,
-			source: telemetryProperties?.messageSource ?? 'unknown',
-			requestId: processed.requestId,
-			gitHubRequestId: processed.serverRequestId,
-			model: chatEndpointInfo.model,
-			apiType: chatEndpointInfo.apiType,
-			reasoningEffort: requestBody.reasoning?.effort,
-			reasoningSummary: requestBody.reasoning?.summary,
-			...(fetcher ? { fetcher } : {}),
-			associatedRequestId: telemetryProperties?.associatedRequestId,
-			...(telemetryProperties?.retryAfterError ? { retryAfterError: telemetryProperties.retryAfterError } : {}),
-			...(telemetryProperties?.retryAfterErrorGitHubRequestId ? { retryAfterErrorGitHubRequestId: telemetryProperties.retryAfterErrorGitHubRequestId } : {}),
-			...(telemetryProperties?.connectivityTestError ? { connectivityTestError: telemetryProperties.connectivityTestError } : {}),
-			...(telemetryProperties?.connectivityTestErrorGitHubRequestId ? { connectivityTestErrorGitHubRequestId: telemetryProperties.connectivityTestErrorGitHubRequestId } : {}),
-			...(telemetryProperties?.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {})
-		}, {
-			totalTokenMax: chatEndpointInfo.modelMaxPromptTokens ?? -1,
-			promptTokenCount: tokenCount,
-			tokenCountMax: maxResponseTokens,
-			timeToFirstToken,
-			isVisionRequest: isVisionRequest ? 1 : -1,
-			isBYOK: isBYOKModel(chatEndpointInfo),
-			isAuto: isAutoModel(chatEndpointInfo)
+			isAuto: isAutoModel(chatEndpointInfo),
+			wasRetried: wasRetried ? 1 : 0
 		});
 	}
 }

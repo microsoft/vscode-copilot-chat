@@ -312,7 +312,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError, usernameToScrub) : undefined;
 					connectivityTestErrorGitHubRequestId = connectivity.connectivityTestErrorGitHubRequestId;
 					if (connectivity.retryRequest) {
-						Telemetry.sendRetryableErrorTelemetry(this._telemetryService, processed, { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId }, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher);
+						Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId }, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher, true);
 						streamRecorder.callback('', 0, { text: '', retryReason: 'network_error' });
 						const retryResult = await this.fetchMany({
 							...opts,
