@@ -18,7 +18,6 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { clamp } from '../../../util/vs/base/common/numbers';
-import { basename, dirname } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
@@ -172,14 +171,22 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		}
 
 		const { start, end } = getParamRanges(input, documentSnapshot);
+		const skillInfo = this.customInstructionsService.getSkillInfo(uri);
 
 		if (start === 1 && end === documentSnapshot.lineCount) {
-			if (this.customInstructionsService.isSkillFile(uri)) {
-				const skillName = basename(dirname(uri));
-				return {
-					invocationMessage: new MarkdownString(l10n.t`Loading skill ${formatUriForFileWidget(uri, { fileName: skillName })}`),
-					pastTenseMessage: new MarkdownString(l10n.t`Loaded skill ${formatUriForFileWidget(uri, { fileName: skillName })}`),
-				};
+			if (skillInfo) {
+				const { skillName } = skillInfo;
+				if (this.customInstructionsService.isSkillMdFile(uri)) {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(uri, { fileName: skillName })}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(uri, { fileName: skillName })}`),
+					};
+				} else {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading skill \`${skillName}\`: ${formatUriForFileWidget(uri)}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill \`${skillName}\`: ${formatUriForFileWidget(uri)}`),
+					};
+				}
 			}
 			return {
 				invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(uri)}`),
@@ -190,16 +197,25 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		// Jump to the start of the range, don't select the whole range
 		const readLocation = new Location(uri, new Range(start - 1, 0, start - 1, 0));
 		if (this.customInstructionsService.isSkillFile(uri)) {
-			const skillName = basename(dirname(uri));
+			if (skillInfo) {
+				const { skillName } = skillInfo;
+				if (this.customInstructionsService.isSkillMdFile(uri)) {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(readLocation, { fileName: skillName })}, lines ${start} to ${end}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(readLocation, { fileName: skillName })}, lines ${start} to ${end}`),
+					};
+				} else {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading skill \`${skillName}\`: ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill \`${skillName}\`: ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+					};
+				}
+			}
 			return {
-				invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(readLocation, { fileName: skillName })}, lines ${start} to ${end}`),
-				pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(readLocation, { fileName: skillName })}, lines ${start} to ${end}`),
+				invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+				pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
 			};
 		}
-		return {
-			invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
-			pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
-		};
 	}
 
 	public alternativeDefinition(originTool: vscode.LanguageModelToolInformation): vscode.LanguageModelToolInformation {

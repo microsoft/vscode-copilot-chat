@@ -5,6 +5,7 @@
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
+import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -248,41 +249,7 @@ suite('ReadFile', () => {
 	});
 
 	suite('prepareInvocation', () => {
-		class MockCustomInstructionsService implements ICustomInstructionsService {
-			declare readonly _serviceBrand: undefined;
-			private skillFiles = new Set<string>();
-
-			setSkillFiles(uris: URI[]) {
-				this.skillFiles.clear();
-				uris.forEach(uri => this.skillFiles.add(uri.toString()));
-			}
-
-			isSkillFile(uri: URI): boolean {
-				return this.skillFiles.has(uri.toString());
-			}
-
-			isExternalInstructionsFile(): boolean {
-				return false;
-			}
-
-			isExternalInstructionsFolder(): boolean {
-				return false;
-			}
-
-			fetchInstructionsFromSetting(): Promise<any[]> {
-				return Promise.resolve([]);
-			}
-
-			fetchInstructionsFromFile(): Promise<any> {
-				return Promise.resolve(undefined);
-			}
-
-			getAgentInstructions(): Promise<URI[]> {
-				return Promise.resolve([]);
-			}
-		}
-
-		test('should return "Loading/Loaded skill" message for skill files', async () => {
+		test('should return "Reading/Read skill" message for skill files', async () => {
 			const testDoc = createTextDocumentData(URI.file('/workspace/test.skill.md'), 'skill content', 'markdown').document;
 
 			const services = createExtensionUnitTestingServices();
@@ -311,8 +278,8 @@ suite('ReadFile', () => {
 			);
 
 			expect(result).toBeDefined();
-			expect((result!.invocationMessage as MarkdownString).value).toBe('Loading skill [{"vscodeLinkType":"file","fileName":"workspace"}](file:///workspace/test.skill.md)');
-			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Loaded skill [{"vscodeLinkType":"file","fileName":"workspace"}](file:///workspace/test.skill.md)');
+			expect((result!.invocationMessage as MarkdownString).value).toBe('Reading skill [{"vscodeLinkType":"file","fileName":"workspace"}](file:///workspace/test.skill.md)');
+			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Read skill [{"vscodeLinkType":"file","fileName":"workspace"}](file:///workspace/test.skill.md)');
 
 			testAccessor.dispose();
 		});
@@ -352,7 +319,7 @@ suite('ReadFile', () => {
 			testAccessor.dispose();
 		});
 
-		test('should return "Loading skill/Loaded skill" message for skill files with line range', async () => {
+		test('should return "Reading skill/Read skill" message for skill files with line range', async () => {
 			const testDoc = createTextDocumentData(URI.file('/workspace/test.skill.md'), 'line 1\nline 2\nline 3\nline 4\nline 5', 'markdown').document;
 
 			const services = createExtensionUnitTestingServices();
