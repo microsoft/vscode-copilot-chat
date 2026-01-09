@@ -17,7 +17,7 @@ import { ILogService } from '../../log/common/logService';
 import { FetchOptions, IFetcherService, Response, jsonVerboseError } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { CopilotToken, CopilotUserInfo, ErrorEnvelope, ExtendedTokenInfo, StandardErrorEnvelope, TokenEnvelope, TokenInfoOrError, containsInternalOrg, createTestExtendedTokenInfo, isErrorEnvelope, isStandardErrorEnvelope, isTokenEnvelope } from '../common/copilotToken';
+import { CopilotToken, CopilotUserInfo, ErrorEnvelope, ExtendedTokenInfo, StandardErrorEnvelope, TokenEnvelope, TokenInfoOrError, TokenValidationResult, containsInternalOrg, createTestExtendedTokenInfo, isErrorEnvelope, isStandardErrorEnvelope, validateTokenEnvelope } from '../common/copilotToken';
 import { CheckCopilotToken, ICopilotTokenManager, NotGitHubLoginFailed, nowSeconds } from '../common/copilotTokenManager';
 
 /**
@@ -300,8 +300,10 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			return { ...httpInfo, body: undefined, kind: 'parse-failed', parseError: err.message || String(err) };
 		}
 
-		if (isTokenEnvelope(parsed)) {
-			return { ...httpInfo, body: parsed, kind: 'token' };
+		const validationResult = validateTokenEnvelope(parsed);
+		if (validationResult.valid) {
+			this.sendTokenValidationTelemetry(validationResult);
+			return { ...httpInfo, body: validationResult.envelope, kind: 'token' };
 		}
 		if (isErrorEnvelope(parsed)) {
 			return { ...httpInfo, body: parsed, kind: 'error-envelope' };
@@ -310,7 +312,35 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			return { ...httpInfo, body: parsed, kind: 'error' };
 		}
 
+		// Token validation failed entirely - send telemetry for the failed case
+		this.sendTokenValidationTelemetry(validationResult);
 		return { ...httpInfo, body: undefined, kind: 'parse-failed', parseError: 'Response is not valid: ' + JSON.stringify(parsed) };
+	}
+
+	/**
+	 * Sends telemetry when token validation uses fallback strategy or fails entirely.
+	 * This helps track server schema drift over time.
+	 */
+	private sendTokenValidationTelemetry(validationResult: TokenValidationResult): void {
+		if (validationResult.strategy === 'strict') {
+			// We were able to validate strictly as expected - no telemetry needed
+			return;
+		}
+
+		/* __GDPR__
+			"copilotTokenFetching.validation" : {
+				"owner": "TylerLeonhardt",
+				"comment": "Track token envelope validation strategy to detect server schema drift.",
+				"strategy": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The validation strategy used: 'fallback' or 'failed'" },
+				"strictError": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The error from strict validation, if any" },
+				"fallbackError": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The error from fallback validation, if failed" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('copilotTokenFetching.validation', {
+			strategy: validationResult.strategy,
+			strictError: validationResult.strictError,
+			fallbackError: validationResult.fallbackError,
+		});
 	}
 
 	private async fetchCopilotUserInfo(githubToken: string): Promise<CopilotUserInfo> {

@@ -231,7 +231,7 @@ export type UserTelemetryChoice = 'enabled' | 'disabled';
  */
 export interface NotificationEnvelope {
 	message: string;
-	notification_id: TokenErrorNotificationId;
+	notification_id: TokenErrorNotificationId | string;
 	title: string;
 	url: string;
 }
@@ -333,6 +333,9 @@ export interface ErrorEnvelope {
 	reason?: string;
 }
 
+/**
+ * The shape of a standard error response from the server. Used for generic errors like rate limiting.
+ */
 export interface StandardErrorEnvelope {
 	message: string; // e.g., "API rate limit exceeded for user ID 12345. ..."
 	documentation_url: string; // "https://developer.github.com/rest/overview/rate-limits-for-the-rest-api"
@@ -392,12 +395,67 @@ const standardErrorEnvelopeValidator = vObj({
 	status: vRequired(vString()),
 });
 
-export function isErrorEnvelope(obj: unknown): obj is ErrorEnvelope {
-	return errorEnvelopeValidator.validate(obj).error === undefined;
+/**
+ * Fallback validator that only checks the critical fields required for token functionality.
+ * Used when the strict validator fails, allowing the client to continue working even if
+ * the server adds/changes non-critical fields.
+ */
+const tokenEnvelopeCriticalValidator = vObj({
+	token: vRequired(vString()),
+	expires_at: vRequired(vNumber()),
+	refresh_in: vRequired(vNumber()),
+});
+
+/**
+ * Result of validating a token envelope with the two-tier validation strategy.
+ */
+export type TokenValidationResult =
+	| { valid: true; strategy: 'strict'; envelope: TokenEnvelope }
+	| { valid: true; strategy: 'fallback'; strictError: string; envelope: TokenEnvelope; fallbackError?: string }
+	| { valid: false; strategy: 'failed'; strictError: string; fallbackError: string };
+
+/**
+ * Validates a token envelope using a two-tier strategy:
+ * 1. First tries strict validation against the full schema.
+ * 2. If that fails, falls back to validating only critical fields (token, expires_at, refresh_in).
+ *
+ * This allows the client to continue working even if the server changes non-critical fields,
+ * while providing telemetry data to track schema drift.
+ */
+export function validateTokenEnvelope(obj: unknown): TokenValidationResult {
+	const strictResult = tokenEnvelopeValidator.validate(obj);
+	if (strictResult.error === undefined) {
+		return { valid: true, strategy: 'strict', envelope: strictResult.content };
+	}
+
+	const strictError = strictResult.error.message;
+
+	const fallbackResult = tokenEnvelopeCriticalValidator.validate(obj);
+	if (fallbackResult.error === undefined) {
+		return {
+			valid: true,
+			strategy: 'fallback',
+			strictError,
+			// Technically not a safe cast if the backend changed non-critical fields.
+			// Telemetry should be used to track how often this happens.
+			envelope: fallbackResult.content as TokenEnvelope
+		};
+	}
+
+	return {
+		valid: false,
+		strategy: 'failed',
+		strictError,
+		fallbackError: fallbackResult.error.message,
+	};
 }
 
 export function isTokenEnvelope(obj: unknown): obj is TokenEnvelope {
-	return tokenEnvelopeValidator.validate(obj).error === undefined;
+	return validateTokenEnvelope(obj).valid;
+}
+
+export function isErrorEnvelope(obj: unknown): obj is ErrorEnvelope {
+	return errorEnvelopeValidator.validate(obj).error === undefined;
 }
 
 export function isStandardErrorEnvelope(obj: unknown): obj is StandardErrorEnvelope {
@@ -490,7 +548,7 @@ export type TokenErrorReason =
 	/** GitHub API rate limit exceeded (403 status with rate limit message). */
 	'RateLimited';
 
-export enum TokenErrorNotificationId {
+export const enum TokenErrorNotificationId {
 	NoCopilotAccess = 'no_copilot_access',
 	NotSignedUp = 'not_signed_up',
 	SubscriptionEnded = 'subscription_ended',
@@ -523,7 +581,7 @@ export type SuccessNotificationId =
 
 export type TokenError = {
 	reason: TokenErrorReason;
-	notification_id?: TokenErrorNotificationId;
+	notification_id?: TokenErrorNotificationId | string;
 	message?: string;
 	/** URL for action button to help user resolve the error. */
 	url?: string;

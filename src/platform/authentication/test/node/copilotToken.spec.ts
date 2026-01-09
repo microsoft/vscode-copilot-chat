@@ -17,7 +17,7 @@ import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Res
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeResponse } from '../../../test/node/fetcher';
 import { createPlatformServices, ITestingServicesAccessor } from '../../../test/node/services';
-import { CopilotToken, createTestExtendedTokenInfo, isErrorEnvelope, isStandardErrorEnvelope, isTokenEnvelope } from '../../common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo, isErrorEnvelope, isStandardErrorEnvelope, isTokenEnvelope, validateTokenEnvelope } from '../../common/copilotToken';
 import { BaseCopilotTokenManager, CopilotTokenManagerFromGitHubToken } from '../../node/copilotTokenManager';
 
 // This is a fake version of CopilotTokenManagerFromGitHubToken.
@@ -334,6 +334,163 @@ describe('Token envelope validators', function () {
 		expect(isStandardErrorEnvelope({})).toBe(false);
 		expect(isStandardErrorEnvelope({ message: 'error' })).toBe(false);
 		expect(isStandardErrorEnvelope(null)).toBe(false);
+	});
+
+	describe('validateTokenEnvelope', function () {
+		it('returns strict strategy for fully valid token envelope', function () {
+			const validToken = {
+				token: 'test-token',
+				expires_at: 1234567890,
+				refresh_in: 300,
+				sku: 'free_limited_copilot',
+				individual: true,
+				blackbird_clientside_indexing: false,
+				chat_enabled: true,
+				code_quote_enabled: false,
+				code_review_enabled: false,
+				codesearch: false,
+				copilotignore_enabled: false,
+				vsc_electron_fetcher_v2: false,
+				public_suggestions: 'enabled',
+				telemetry: 'enabled',
+			};
+			const result = validateTokenEnvelope(validToken);
+			expect(result.valid).toBe(true);
+			expect(result.strategy).toBe('strict');
+			if (result.strategy === 'strict') {
+				expect(result.envelope).toBeDefined();
+				expect(result.envelope.token).toBe('test-token');
+				expect(result.envelope.expires_at).toBe(1234567890);
+				expect(result.envelope.refresh_in).toBe(300);
+				expect(result.envelope.sku).toBe('free_limited_copilot');
+				expect(result.envelope.chat_enabled).toBe(true);
+			}
+		});
+
+		it('returns strict strategy for minimal token with only required fields', function () {
+			// The strict validator only requires token, expires_at, refresh_in
+			// Other fields are optional, so a minimal token passes strict validation
+			const minimalToken = {
+				token: 'test-token',
+				expires_at: 1234567890,
+				refresh_in: 300,
+			};
+			const result = validateTokenEnvelope(minimalToken);
+			expect(result.valid).toBe(true);
+			expect(result.strategy).toBe('strict');
+			if (result.strategy === 'strict') {
+				expect(result.envelope).toBeDefined();
+				expect(result.envelope.token).toBe('test-token');
+				expect(result.envelope.expires_at).toBe(1234567890);
+				expect(result.envelope.refresh_in).toBe(300);
+			}
+		});
+
+		it('returns fallback strategy when optional field has wrong type', function () {
+			// Server changes sku from string to number - strict fails, fallback succeeds
+			const tokenWithWrongOptionalType = {
+				token: 'test-token',
+				expires_at: 1234567890,
+				refresh_in: 300,
+				sku: 12345, // wrong type - should be string
+			};
+			const result = validateTokenEnvelope(tokenWithWrongOptionalType);
+			expect(result.valid).toBe(true);
+			expect(result.strategy).toBe('fallback');
+			if (result.strategy === 'fallback') {
+				expect(result.strictError).toContain('sku');
+				expect(result.fallbackError).toBeUndefined();
+				// Envelope is returned with critical fields even when fallback is used
+				expect(result.envelope).toBeDefined();
+				expect(result.envelope.token).toBe('test-token');
+				expect(result.envelope.expires_at).toBe(1234567890);
+				expect(result.envelope.refresh_in).toBe(300);
+			}
+		});
+
+		it('returns fallback strategy when server changes enum values', function () {
+			const tokenWithNewEnumValue = {
+				token: 'test-token',
+				expires_at: 1234567890,
+				refresh_in: 300,
+				public_suggestions: 'new_unknown_value', // not in enum
+			};
+			const result = validateTokenEnvelope(tokenWithNewEnumValue);
+			expect(result.valid).toBe(true);
+			expect(result.strategy).toBe('fallback');
+			if (result.strategy === 'fallback') {
+				expect(result.strictError).toContain('public_suggestions');
+				// Envelope is returned with critical fields
+				expect(result.envelope).toBeDefined();
+				expect(result.envelope.token).toBe('test-token');
+			}
+		});
+
+		it('returns failed strategy when missing critical token field', function () {
+			const missingToken = {
+				expires_at: 1234567890,
+				refresh_in: 300,
+			};
+			const result = validateTokenEnvelope(missingToken);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+			if (result.strategy === 'failed') {
+				expect(result.strictError).toBeDefined();
+				expect(result.fallbackError).toContain('token');
+			}
+		});
+
+		it('returns failed strategy when missing critical expires_at field', function () {
+			const missingExpiresAt = {
+				token: 'test-token',
+				refresh_in: 300,
+			};
+			const result = validateTokenEnvelope(missingExpiresAt);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+			if (result.strategy === 'failed') {
+				expect(result.fallbackError).toContain('expires_at');
+			}
+		});
+
+		it('returns failed strategy when missing critical refresh_in field', function () {
+			const missingRefreshIn = {
+				token: 'test-token',
+				expires_at: 1234567890,
+			};
+			const result = validateTokenEnvelope(missingRefreshIn);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+			if (result.strategy === 'failed') {
+				expect(result.fallbackError).toContain('refresh_in');
+			}
+		});
+
+		it('returns failed strategy for null input', function () {
+			const result = validateTokenEnvelope(null);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+		});
+
+		it('returns failed strategy for undefined input', function () {
+			const result = validateTokenEnvelope(undefined);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+		});
+
+		it('returns failed strategy when critical field has wrong type', function () {
+			const wrongTypeToken = {
+				token: 12345, // should be string
+				expires_at: 1234567890,
+				refresh_in: 300,
+			};
+			const result = validateTokenEnvelope(wrongTypeToken);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+			if (result.strategy === 'failed') {
+				expect(result.fallbackError).toContain('token');
+			}
+		});
 	});
 });
 
