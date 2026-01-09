@@ -8,7 +8,7 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { AssignableActor, getAssignableActorsWithAssignableUsers, getAssignableActorsWithSuggestedActors, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PermissiveAuthRequiredError, PullRequestFile, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
@@ -33,17 +33,17 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return await this.getCurrentAuthedUserWithToken(authToken);
 	}
 
-	async getCopilotPullRequestsForUser(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestSearchItem[]> {
+	async getOpenPullRequestsForUser(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestSearchItem[]> {
 		const auth = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }));
 		if (!auth?.accessToken) {
-			this._logService.trace('No authentication token available for getCopilotPullRequestsForUser');
+			this._logService.trace('No authentication token available for getOpenPullRequestsForUser');
 			return [];
 		}
-		const response = await this.getCopilotPullRequestForUserWithToken(
+		const response = await this.getOpenPullRequestForUserWithToken(
 			owner,
 			repo,
 			auth.account.label,
-			auth.accessToken,
+			auth.accessToken
 		);
 		return response;
 	}
@@ -371,6 +371,46 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			return [];
 		} catch (e) {
 			this._logService.error(e);
+			return [];
+		}
+	}
+
+	async getAssignableActors(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<AssignableActor[]> {
+		const auth = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }));
+		if (!auth?.accessToken) {
+			this._logService.trace('No authentication token available for getAssignableActors');
+			throw new PermissiveAuthRequiredError();
+		}
+
+		try {
+			// Try suggestedActors first (preferred API)
+			const actors = await getAssignableActorsWithSuggestedActors(
+				this._fetcherService,
+				this._logService,
+				this._telemetryService,
+				this._capiClientService.dotcomAPIURL,
+				auth.accessToken,
+				owner,
+				repo
+			);
+
+			if (actors.length > 0) {
+				return actors;
+			}
+
+			// Fall back to assignableUsers for older GitHub Enterprise Server instances
+			this._logService.trace('Falling back to assignableUsers API');
+			return await getAssignableActorsWithAssignableUsers(
+				this._fetcherService,
+				this._logService,
+				this._telemetryService,
+				this._capiClientService.dotcomAPIURL,
+				auth.accessToken,
+				owner,
+				repo
+			);
+		} catch (e) {
+			this._logService.error(`Error fetching assignable actors: ${e}`);
 			return [];
 		}
 	}
