@@ -313,6 +313,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError, usernameToScrub) : undefined;
 					connectivityTestErrorGitHubRequestId = connectivity.connectivityTestErrorGitHubRequestId;
 					if (connectivity.retryRequest) {
+						Telemetry.sendRetryableErrorTelemetry(this._telemetryService, processed, { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId }, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher);
 						streamRecorder.callback('', 0, { text: '', retryReason: 'network_error' });
 						const retryResult = await this.fetchMany({
 							...opts,
@@ -749,7 +750,11 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			if (response.status === 402) {
 				// When we receive a 402, we have exceed a quota
 				// This is stored on the token so let's refresh it
-				this._authenticationService.resetCopilotToken(response.status);
+				if (!this._authenticationService.copilotToken?.isChatQuotaExceeded) {
+					this._authenticationService.resetCopilotToken(response.status);
+					await this._authenticationService.getCopilotToken();
+				}
+
 
 				const retryAfter = response.headers.get('retry-after');
 

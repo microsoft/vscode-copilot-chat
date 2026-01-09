@@ -14,6 +14,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
+import { ContextManagementResponse } from '../../networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
@@ -222,6 +223,9 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					if (chunk.mimeType === CustomDataPartMimeTypes.StatefulMarker) {
 						const decoded = decodeStatefulMarker(chunk.data);
 						await streamRecorder.callback?.(text, 0, { text: '', statefulMarker: decoded.marker });
+					} else if (chunk.mimeType === CustomDataPartMimeTypes.ContextManagement) {
+						const contextManagement = JSON.parse(new TextDecoder().decode(chunk.data)) as ContextManagementResponse;
+						await streamRecorder.callback?.(text, 0, { text: '', contextManagement });
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
 					// Call finishedCb with the current chunk of thinking text with a specific thinking field

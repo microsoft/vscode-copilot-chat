@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { EncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
+import { AnthropicMessagesTool, ContextManagementResponse } from './anthropic';
 import { Response } from './fetcherService';
 import { ChoiceLogProbs, FilterReason } from './openai';
 
@@ -135,6 +136,8 @@ export interface IResponseDelta {
 	retryReason?: FilterReason | 'network_error';
 	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
 	statefulMarker?: string;
+	/** Context management information from Anthropic Messages API */
+	contextManagement?: ContextManagementResponse;
 }
 
 export const enum ResponsePartKind {
@@ -266,16 +269,6 @@ export interface OpenAiResponsesFunctionTool extends OpenAiFunctionDef {
 
 export function isOpenAiFunctionTool(tool: OpenAiResponsesFunctionTool | OpenAiFunctionTool | AnthropicMessagesTool): tool is OpenAiFunctionTool {
 	return (tool as OpenAiFunctionTool).function !== undefined;
-}
-
-export interface AnthropicMessagesTool {
-	name: string;
-	description?: string;
-	input_schema: {
-		type: 'object';
-		properties?: Record<string, any>;
-		required?: string[];
-	};
 }
 
 /**

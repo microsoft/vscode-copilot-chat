@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Range } from '../../../../util/vs/editor/common/core/range';
 import { Diagnostic, Uri } from '../../../../vscodeTypes';
 import { ContextItem, ContextKind, SnippetContext, TraitContext } from '../../../languageServer/common/languageContextService';
 
@@ -86,17 +87,21 @@ function serializeTraitContext(context: TraitContext): SerializedTraitContext {
 
 export type SerializedDiagnostic = {
 	uri: string;
-	severity: number;
+	severity: 'Error' | 'Warning' | 'Information' | 'Hint';
 	message: string;
 	source: string;
+	code: string | number | undefined;
+	range: string;
 }
 
 function serializeDiagnostic(diagnostic: Diagnostic, resource: Uri): SerializedDiagnostic {
 	return {
 		uri: resource.toString(),
-		severity: diagnostic.severity,
+		severity: diagnostic.severity === 0 ? 'Error' : diagnostic.severity === 1 ? 'Warning' : diagnostic.severity === 2 ? 'Information' : 'Hint',
 		message: diagnostic.message,
-		source: diagnostic.source || ''
+		source: diagnostic.source || '',
+		code: diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
+		range: new Range(diagnostic.range.start.line + 1, diagnostic.range.start.character + 1, diagnostic.range.end.line + 1, diagnostic.range.end.character + 1).toString(),
 	};
 }
 

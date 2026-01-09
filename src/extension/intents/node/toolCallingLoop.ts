@@ -13,6 +13,7 @@ import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCa
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
+import { ContextManagementResponse } from '../../../platform/networking/common/anthropic';
 import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -28,7 +29,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
+import { ContextEditingMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext, InternalToolReference, IToolCall, IToolCallRound } from '../../prompt/common/intents';
 import { cancelText, IToolCallIterationIncrease } from '../../prompt/common/specialRequestTypes';
 import { ThinkingDataItem, ToolCallRound } from '../../prompt/common/toolCallRound';
@@ -436,6 +437,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
+		let contextManagementResponse: ContextManagementResponse | undefined;
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		const fetchResult = await this.fetch({
@@ -454,6 +456,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.thinking) {
 					thinkingItem = ThinkingDataItem.createOrUpdate(thinkingItem, delta.thinking);
+				}
+				if (delta.contextManagement) {
+					contextManagementResponse = delta.contextManagement;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -489,6 +494,20 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		this._onDidReceiveResponse.fire({ interactionOutcome: interactionOutcomeComputer, response: fetchResult, toolCalls });
 
 		this.turn.setMetadata(interactionOutcomeComputer.interactionOutcome);
+
+		// Store context editing metadata if context management cleared tokens
+		if (contextManagementResponse && contextManagementResponse.applied_edits.length > 0) {
+			const totalClearedTokens = contextManagementResponse.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+				0
+			);
+			if (totalClearedTokens > 0) {
+				this.turn.setMetadata(new ContextEditingMetadata(
+					totalClearedTokens,
+					contextManagementResponse.applied_edits.length
+				));
+			}
+		}
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
 			thinkingItem?.updateWithFetchResult(fetchResult);

@@ -387,6 +387,22 @@ export class GlobalContextMessageMetadata {
 	) { }
 }
 
+/**
+ * Metadata capturing context editing information from Anthropic Messages API.
+ * When context editing clears tokens on a turn, this metadata is stored so that
+ * subsequent turns can use the cleared token count to adjust their budget calculation.
+ */
+export class ContextEditingMetadata extends PromptMetadata {
+	constructor(
+		/** Total number of tokens cleared by context editing */
+		readonly clearedTokens: number,
+		/** Number of context edits applied */
+		readonly editCount: number,
+	) {
+		super();
+	}
+}
+
 export function getGlobalContextCacheKey(accessor: ServicesAccessor): string {
 	const workspaceService = accessor.get(IWorkspaceService);
 	return workspaceService.getWorkspaceFolders().map(folder => folder.toString()).join(',');
