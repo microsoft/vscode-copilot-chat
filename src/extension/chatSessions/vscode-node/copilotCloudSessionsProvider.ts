@@ -68,13 +68,6 @@ const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string }[] = [
 	{ id: '2248422', name: 'Codex', at: 'codex[agent]' }
 ];
 
-// Mapping of known Copilot agent logins to their metadata
-const COPILOT_AGENT_METADATA: { [login: string]: { name: string; at?: string } } = {
-	'copilot-pull-request-reviewer': { name: 'Copilot PR Reviewer' },
-	'copilot-swe-agent': { name: 'Copilot SWE Agent' },
-	'Copilot': { name: 'Copilot' }
-};
-
 /**
  * Custom renderer for markdown-it that converts markdown to plain text
  */
@@ -384,31 +377,20 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			// Fetch assignable actors for the repository
 			const assignableActors = await this._octoKitService.getAssignableActors(owner, repo, { createIfNone: false });
 
-			// Check which known Copilot logins are present in assignable actors
+			// Check which agents from HARDCODED_PARTNER_AGENTS are assignable
 			const availableAgents: { id: string; name: string; at?: string }[] = [];
 
-			// Always include the default Copilot option
-			availableAgents.push({ id: DEFAULT_PARTNER_AGENT_ID, name: 'Copilot' });
-
-			// Check for each known Copilot agent login
-			for (const [login, metadata] of Object.entries(COPILOT_AGENT_METADATA)) {
-				const actor = assignableActors.find(a => a.login === login);
-				if (actor) {
-					// Add to available agents if not already present
-					if (!availableAgents.find(a => a.name === metadata.name)) {
-						// Check if this agent has an `at` value in HARDCODED_PARTNER_AGENTS
-						const hardcodedAgent = HARDCODED_PARTNER_AGENTS.find(a => a.name === metadata.name);
-						availableAgents.push({
-							id: actor.login,
-							name: metadata.name,
-							at: hardcodedAgent?.at
-						});
-					}
+			for (const agent of HARDCODED_PARTNER_AGENTS) {
+				// Check if this agent ID is in the assignable actors list
+				const isAssignable = assignableActors.some(actor => actor.login === agent.id || actor.login === agent.name);
+				if (isAssignable || agent.id === DEFAULT_PARTNER_AGENT_ID) {
+					// Always include default Copilot, or include if assignable
+					availableAgents.push(agent);
 				}
 			}
 
-			// If we didn't find any Copilot agents, fall back to hardcoded list
-			const result = availableAgents.length > 1 ? availableAgents : HARDCODED_PARTNER_AGENTS;
+			// If we didn't find any agents beyond the default, fall back to full hardcoded list
+			const result = availableAgents.length > 0 ? availableAgents : HARDCODED_PARTNER_AGENTS;
 
 			// Cache the result
 			if (!this._partnerAgentsCache) {
