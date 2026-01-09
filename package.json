@@ -2457,7 +2457,7 @@
 					},
 					"github.copilot.chat.agent.autoFix": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"description": "%github.copilot.config.autoFix%",
 						"tags": [
 							"onExp"
