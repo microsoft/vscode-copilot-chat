@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, expect, Mock, suite, test, vi } from 'vitest';
 import type { TelemetryLogger } from 'vscode';
-import { CopilotToken } from '../../../authentication/common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IDomainService } from '../../../endpoint/common/domainService';
@@ -37,9 +37,9 @@ suite('Microsoft Telemetry Sender', function () {
 			dispose: vi.fn(),
 		};
 
-		mockToken = new CopilotToken({
+		mockToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'tid=testTid',
-			sku: 'testSku',
+			sku: 'free_limited_copilot',
 			expires_at: 9999999999,
 			refresh_in: 180000,
 			chat_enabled: true,
@@ -48,7 +48,7 @@ suite('Microsoft Telemetry Sender', function () {
 			isVscodeTeamMember: true,
 			username: 'testUser',
 			copilot_plan: 'unknown',
-		});
+		}));
 
 		mockTokenStore = {
 			_serviceBrand: undefined,
@@ -141,9 +141,9 @@ suite('GitHub Telemetry Sender', function () {
 	beforeEach(() => {
 		accessor = createPlatformServices().createTestingAccessor();
 
-		mockToken = new CopilotToken({
+		mockToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'rt=1;tid=test',
-			sku: 'testSku',
+			sku: 'free_limited_copilot',
 			expires_at: 9999999999,
 			refresh_in: 180000,
 			chat_enabled: true,
@@ -152,7 +152,7 @@ suite('GitHub Telemetry Sender', function () {
 			isVscodeTeamMember: true,
 			username: 'testUser',
 			copilot_plan: 'unknown',
-		});
+		}));
 
 		mockTokenStore = {
 			_serviceBrand: undefined,

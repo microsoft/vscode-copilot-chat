@@ -6,7 +6,7 @@
 import assert from 'assert';
 import { beforeEach, suite, test, vi } from 'vitest';
 import type { FileSystemWatcher, Uri } from 'vscode';
-import { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../../platform/authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../../../platform/authentication/common/copilotTokenStore';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../../platform/git/common/gitDiffService';
@@ -125,9 +125,9 @@ suite('RepoInfoTelemetry', () => {
 
 	test('should only send telemetry for internal users', async () => {
 		// Setup: non-internal user
-		const nonInternalToken = new CopilotToken({
+		const nonInternalToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'test-token',
-			sku: 'testSku',
+			sku: 'free_limited_copilot',
 			expires_at: 9999999999,
 			refresh_in: 180000,
 			chat_enabled: true,
@@ -135,7 +135,7 @@ suite('RepoInfoTelemetry', () => {
 			isVscodeTeamMember: false,
 			username: 'testUser',
 			copilot_plan: 'unknown',
-		});
+		}));
 		copilotTokenStore.copilotToken = nonInternalToken;
 
 		// Setup: mock git service to have a repository
@@ -1518,9 +1518,9 @@ suite('RepoInfoTelemetry', () => {
 	// ========================================
 
 	function setupInternalUser() {
-		const internalToken = new CopilotToken({
+		const internalToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'tid=test;rt=1',
-			sku: 'testSku',
+			sku: 'free_limited_copilot',
 			expires_at: 9999999999,
 			refresh_in: 180000,
 			chat_enabled: true,
@@ -1528,7 +1528,7 @@ suite('RepoInfoTelemetry', () => {
 			isVscodeTeamMember: true,
 			username: 'testUser',
 			copilot_plan: 'unknown',
-		});
+		}));
 		copilotTokenStore.copilotToken = internalToken;
 	}
 

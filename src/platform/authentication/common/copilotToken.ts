@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CopilotUserQuotaInfo } from '../../chat/common/chatQuotaService';
+import { vArray, vBoolean, vEnum, vNullable, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
 
 /**
  * A function used to determine if the org list contains an internal organization
@@ -68,7 +69,7 @@ export class CopilotToken {
 		return this._info.token;
 	}
 
-	get sku(): string | undefined {
+	get sku(): CopilotSku | undefined {
 		return this._info.sku;
 	}
 
@@ -89,7 +90,7 @@ export class CopilotToken {
 		return this._info.enterprise_list || [];
 	}
 
-	get endpoints(): { api: string; telemetry: string; proxy: string; 'origin-tracker'?: string } | undefined {
+	get endpoints(): Endpoints | undefined {
 		return this._info.endpoints;
 	}
 
@@ -183,7 +184,7 @@ export class CopilotToken {
 	}
 
 	get isCopilotCodeReviewEnabled(): boolean {
-		return (this.getTokenValue('ccr') === '1');
+		return this._info.code_review_enabled ?? (this.getTokenValue('ccr') === '1');
 	}
 
 	isEditorPreviewFeaturesEnabled(): boolean {
@@ -226,65 +227,191 @@ export type UserTelemetryChoice = 'enabled' | 'disabled';
 
 /**
  * A notification we get from the server during token retrieval. Needs to be presented to the user.
+ * Used for both success notifications (user_notification) and error notifications (error_details).
  */
-interface ServerSideNotification {
+export interface NotificationEnvelope {
 	message: string;
-	url: string;
-	title: string;
 	notification_id: TokenErrorNotificationId;
+	title: string;
+	url: string;
 }
+
+//#region CopilotSku Types
+
+/**
+ * Well-known SKU values that are checked in source code.
+ * The actual SKU can be any string - these are just the ones we explicitly handle.
+ */
+export type WellKnownSku =
+	| 'free_limited_copilot'
+	| 'no_auth_limited_copilot';
+
+/**
+ * User's access type/SKU from the Copilot token endpoint.
+ * This is a string that can be any SKU value - use WellKnownSku for type-safe comparisons.
+ */
+export type CopilotSku = WellKnownSku | string;
+
+//#endregion
+
+//#region Endpoints
+
+export interface Endpoints {
+	api?: string;
+	'origin-tracker'?: string;
+	proxy?: string;
+	telemetry?: string;
+}
+
+//#endregion
 
 /**
  * A server response containing a Copilot token and metadata associated with it.
+ * This is the success response (HTTP 200) from the /copilot_internal/v2/token endpoint.
  */
-export interface TokenInfo {
-	// v2 format: fields:mac
-	//   fields are ';' separated key=value pairs, including tid (tracking_id), dom (domain), and exp (unix_time).
+export interface TokenEnvelope {
+	// Required fields
+	/** HMAC-signed token for Copilot proxy authentication. v2 format: fields:mac where fields are ';' separated key=value pairs. */
 	token: string;
-	expires_at: number; // unix time UTC in seconds
-	refresh_in: number; // seconds to refresh token
-	user_notification?: ServerSideNotification;
-	error_details?: ServerSideNotification;
-	organization_list?: string[];
-	code_quote_enabled?: boolean;
-	public_suggestions?: string;
-	telemetry?: string;
-	copilotignore_enabled?: boolean;
-	endpoints?: { api: string; telemetry: string; proxy: string; 'origin-tracker'?: string };
-	chat_enabled?: boolean;
-	limited_user_quotas?: { chat: number; completions: number };
+	/** Unix timestamp (seconds) when token expires. */
+	expires_at: number;
+	/** Seconds until client should request a new token. */
+	refresh_in: number;
+	/** User's access type/SKU. */
+	sku: CopilotSku;
+	/** Whether user has Copilot Individual access. */
+	individual: boolean;
+
+	// Feature flags
+	/** Whether client-side indexing for Blackbird is enabled. */
+	blackbird_clientside_indexing: boolean;
+	/** Whether chat features are enabled. */
+	chat_enabled: boolean;
+	/** Whether code quote/citation is enabled. */
+	code_quote_enabled: boolean;
+	/** Whether Copilot code review is enabled. */
+	code_review_enabled: boolean;
+	/** Whether code search is enabled. */
+	codesearch: boolean;
+	/** Whether content exclusion (.copilotignore) is enabled. */
+	copilotignore_enabled: boolean;
+	/** Whether VS Code electron fetcher v2 is enabled. */
+	vsc_electron_fetcher_v2: boolean;
+
+	// Consent settings
+	/** 'enabled', 'disabled', or 'unconfigured' for public code suggestions. */
+	public_suggestions: 'enabled' | 'disabled' | 'unconfigured';
+	/** 'enabled' or 'disabled' for telemetry. */
+	telemetry: 'enabled' | 'disabled';
+
+	// Optional fields
+	/** SKU-isolated endpoints. */
+	endpoints?: Endpoints;
+	/** Enterprise IDs if user has enterprise access. */
 	enterprise_list?: number[];
-	individual?: boolean;
-	sku?: string; // e.g. 'copilot_enterprise_seat'
-	message?: string; // error message
+	/** Quota remaining for free/limited users. Null for non-free users. */
+	limited_user_quotas?: { chat: number; completions: number } | null;
+	/** Unix timestamp when quotas reset for free/limited users. Null for non-free users. */
+	limited_user_reset_date?: number | null;
+	/** Organization tracking IDs if user has org access. */
+	organization_list?: string[];
+	/** Notification to show in editor on successful token retrieval. */
+	user_notification?: NotificationEnvelope;
 }
 
 /**
- * The shape of an error response from the server when token retrieval fails.
- * TODO: Verify that this is the correct shape. I'm only going off of the copilotToken.spec.ts test file
+ * The shape of an error response (HTTP 403) from the server when token retrieval fails.
  */
-export interface TokenErrorShape {
-	error_details: ServerSideNotification;
+export interface ErrorEnvelope {
+	/** Whether user can sign up for Copilot Free. Null when not applicable. */
+	can_signup_for_limited?: boolean | null;
+	/** Detailed error information including notification_id. */
+	error_details: NotificationEnvelope;
+	/** Generic error message with TOS text. */
+	message: string;
+	/** Optional reason string. */
+	reason?: string;
 }
 
-export function isTokenErrorShape(obj: unknown): obj is TokenErrorShape {
-	if (typeof obj !== 'object' || obj === null) {
-		return false;
-	}
-	const errorShape = obj as TokenErrorShape;
-	return typeof errorShape.error_details === 'object' && errorShape.error_details !== null &&
-		typeof errorShape.error_details.message === 'string' &&
-		typeof errorShape.error_details.url === 'string' &&
-		typeof errorShape.error_details.notification_id === 'string';
+export interface StandardErrorEnvelope {
+	message: string; // e.g., "API rate limit exceeded for user ID 12345. ..."
+	documentation_url: string; // "https://developer.github.com/rest/overview/rate-limits-for-the-rest-api"
+	status: string; // "403"
 }
 
-export function isTokenInfo(obj: unknown): obj is TokenInfo {
-	if (typeof obj !== 'object' || obj === null) {
-		return false;
-	}
-	const tokenInfo = obj as TokenInfo;
-	return typeof tokenInfo.token === 'string' && typeof tokenInfo.expires_at === 'number' && typeof tokenInfo.refresh_in === 'number';
+//#region Validators
+
+const notificationEnvelopeValidator = vObj({
+	message: vRequired(vString()),
+	notification_id: vRequired(vString()),
+	title: vRequired(vString()),
+	url: vRequired(vString()),
+});
+
+const errorEnvelopeValidator = vObj({
+	can_signup_for_limited: vNullable(vBoolean()),
+	error_details: vRequired(notificationEnvelopeValidator),
+	message: vRequired(vString()),
+	reason: vString(),
+});
+
+const tokenEnvelopeValidator = vObj({
+	token: vRequired(vString()),
+	expires_at: vRequired(vNumber()),
+	refresh_in: vRequired(vNumber()),
+	sku: vString(),
+	individual: vBoolean(),
+	blackbird_clientside_indexing: vBoolean(),
+	chat_enabled: vBoolean(),
+	code_quote_enabled: vBoolean(),
+	code_review_enabled: vBoolean(),
+	codesearch: vBoolean(),
+	copilotignore_enabled: vBoolean(),
+	vsc_electron_fetcher_v2: vBoolean(),
+	public_suggestions: vEnum('enabled', 'disabled', 'unconfigured'),
+	telemetry: vEnum('enabled', 'disabled'),
+	endpoints: vObj({
+		api: vString(),
+		'origin-tracker': vString(),
+		proxy: vString(),
+		telemetry: vString(),
+	}),
+	enterprise_list: vArray(vNumber()),
+	limited_user_quotas: vNullable(vObj({
+		chat: vRequired(vNumber()),
+		completions: vRequired(vNumber()),
+	})),
+	limited_user_reset_date: vNullable(vNumber()),
+	organization_list: vArray(vString()),
+	user_notification: notificationEnvelopeValidator,
+});
+
+const standardErrorEnvelopeValidator = vObj({
+	message: vRequired(vString()),
+	documentation_url: vRequired(vString()),
+	status: vRequired(vString()),
+});
+
+export function isErrorEnvelope(obj: unknown): obj is ErrorEnvelope {
+	return errorEnvelopeValidator.validate(obj).error === undefined;
 }
+
+export function isTokenEnvelope(obj: unknown): obj is TokenEnvelope {
+	return tokenEnvelopeValidator.validate(obj).error === undefined;
+}
+
+export function isStandardErrorEnvelope(obj: unknown): obj is StandardErrorEnvelope {
+	return standardErrorEnvelopeValidator.validate(obj).error === undefined;
+}
+
+//#endregion
+
+
+/**
+ * Combined response type from the /copilot_internal/v2/token endpoint.
+ * Can be either a success (TokenEnvelope) or error (ErrorEnvelope) response.
+ */
+export type CopilotTokenResponse = TokenEnvelope | ErrorEnvelope | StandardErrorEnvelope;
 
 /**
  * A server response containing the user info for the copilot user from the /copilot_internal/user endpoint
@@ -304,10 +431,47 @@ export interface CopilotUserInfo extends CopilotUserQuotaInfo {
 	codex_agent_enabled?: boolean;
 }
 
-// The token info extended with additional metadata that is helpful to have
-export type ExtendedTokenInfo = TokenInfo & { username: string; isVscodeTeamMember: boolean; blackbird_clientside_indexing?: boolean } & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date' | 'codex_agent_enabled'>;
+/**
+ * The token envelope extended with additional metadata that is helpful to have.
+ * This includes information from both the token endpoint and the user info endpoint.
+ */
+export type ExtendedTokenInfo = TokenEnvelope & {
+	// Extended fields added by client
+	username: string;
+	isVscodeTeamMember: boolean;
+} & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date' | 'codex_agent_enabled'>;
 
-export type TokenEnvelope = Omit<TokenInfo, 'token' | 'organization_list'>;
+/**
+ * Creates a minimal ExtendedTokenInfo for testing purposes.
+ * All required TokenEnvelope fields are populated with sensible defaults.
+ */
+export function createTestExtendedTokenInfo(overrides?: Partial<ExtendedTokenInfo>): ExtendedTokenInfo {
+	return {
+		// Required token envelope fields
+		token: 'test-token',
+		expires_at: 0,
+		refresh_in: 0,
+		sku: 'free_limited_copilot',
+		individual: true,
+		// Feature flags
+		blackbird_clientside_indexing: false,
+		chat_enabled: true,
+		code_quote_enabled: false,
+		code_review_enabled: false,
+		codesearch: false,
+		copilotignore_enabled: false,
+		vsc_electron_fetcher_v2: false,
+		// Consent settings
+		public_suggestions: 'enabled',
+		telemetry: 'enabled',
+		// Extended fields
+		username: 'testuser',
+		isVscodeTeamMember: false,
+		copilot_plan: 'free',
+		// Apply overrides
+		...overrides,
+	};
+}
 
 /**
  * Reasons for token retrieval failures.
@@ -327,21 +491,44 @@ export type TokenErrorReason =
 	'RateLimited';
 
 export enum TokenErrorNotificationId {
-	EnterPriseManagedUserAccount = 'enterprise_managed_user_account',
-	NotSignedUp = 'not_signed_up',
 	NoCopilotAccess = 'no_copilot_access',
+	NotSignedUp = 'not_signed_up',
 	SubscriptionEnded = 'subscription_ended',
-	ServerError = 'server_error',
+	EnterPriseManagedUserAccount = 'enterprise_managed_user_account',
 	FeatureFlagBlocked = 'feature_flag_blocked',
 	SpammyUser = 'spammy_user',
-	CodespacesDemoInactive = 'codespaces_demo_inactive', //TODO: Handle this if this is still applicable
-	SnippyNotConfigured = 'snippy_not_configured'
+	BillingLocked = 'billing_locked',
+	TradeRestricted = 'trade_restricted',
+	TradeRestrictedCountry = 'trade_restricted_country',
+	CodespacesDemoInactive = 'codespaces_demo_inactive',
+	SnippyNotConfigured = 'snippy_not_configured',
+	ExpiredCoupon = 'expired_coupon',
+	RevokedCoupon = 'revoked_coupon',
+	GoHttpClient = 'go_http_client',
+	ProgrammaticTokenGeneration = 'programmatic_token_generation',
+	AccessRevoked = 'access_revoked',
+	ServerError = 'server_error'
 }
+
+/**
+ * Notification IDs that appear in user_notification on success responses.
+ */
+export type SuccessNotificationId =
+	| 'subscription_trial_ending'
+	| 'subscription_trial_ended'
+	| 'subscription_ending'
+	| 'free_over_limits'
+	| 'codespaces_demo_welcome'
+	| `copilot_seat_added_${number}`;
 
 export type TokenError = {
 	reason: TokenErrorReason;
 	notification_id?: TokenErrorNotificationId;
 	message?: string;
+	/** URL for action button to help user resolve the error. */
+	url?: string;
+	/** Title for the action button. */
+	title?: string;
 };
 
 export type TokenInfoOrError = ({ kind: 'success' } & ExtendedTokenInfo) | ({ kind: 'failure' } & TokenError);
