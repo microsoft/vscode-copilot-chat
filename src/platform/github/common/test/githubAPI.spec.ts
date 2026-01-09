@@ -157,8 +157,8 @@ describe('GitHub API - getAssignableActorsWithSuggestedActors', () => {
 	it('should throw error when fetcher fails', async () => {
 		const fetcher = new FailingFetcherService();
 		
-		await expect(async () => {
-			await getAssignableActorsWithSuggestedActors(
+		await expect(
+			getAssignableActorsWithSuggestedActors(
 				fetcher,
 				logService,
 				telemetryService,
@@ -166,8 +166,8 @@ describe('GitHub API - getAssignableActorsWithSuggestedActors', () => {
 				'test-token',
 				'owner',
 				'repo'
-			);
-		}).rejects.toThrow('Network error');
+			)
+		).rejects.toThrow('Network error');
 	});
 });
 
@@ -314,8 +314,8 @@ describe('GitHub API - getAssignableActorsWithAssignableUsers', () => {
 	it('should throw error when fetcher fails', async () => {
 		const fetcher = new FailingFetcherService();
 		
-		await expect(async () => {
-			await getAssignableActorsWithAssignableUsers(
+		await expect(
+			getAssignableActorsWithAssignableUsers(
 				fetcher,
 				logService,
 				telemetryService,
@@ -323,8 +323,8 @@ describe('GitHub API - getAssignableActorsWithAssignableUsers', () => {
 				'test-token',
 				'owner',
 				'repo'
-			);
-		}).rejects.toThrow('Network error');
+			)
+		).rejects.toThrow('Network error');
 	});
 });
 
