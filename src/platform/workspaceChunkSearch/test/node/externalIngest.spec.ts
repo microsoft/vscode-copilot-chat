@@ -41,7 +41,7 @@ function createMockExternalIngestClient(options?: {
 			return Array.from(ingestedFiles.values());
 		},
 		searchCalls,
-		async updateIndex(_filesetName: string, _root: URI, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _token: CancellationToken): Promise<Result<{ checkpoint: string }, Error>> {
+		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _token: CancellationToken): Promise<Result<{ checkpoint: string }, Error>> {
 			for await (const file of allFiles) {
 				ingestedFiles.set(file.uri, file);
 			}

@@ -34,7 +34,6 @@ export interface ExternalIngestFile {
 export interface IExternalIngestClient {
 	updateIndex(
 		filesetName: string,
-		root: URI,
 		currentCheckpoint: string | undefined,
 		allFiles: AsyncIterable<ExternalIngestFile>,
 		token: CancellationToken
@@ -110,7 +109,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		return this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
 	}
 
-	async updateIndex(filesetName: string, root: URI, currentCheckpoint: string, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<Result<{ checkpoint: string }, Error>> {
+	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<Result<{ checkpoint: string }, Error>> {
 		const authToken = await this.getAuthToken();
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::updateIndex(): No auth token available');
@@ -135,9 +134,6 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			allDocShas.push(file.docSha);
 
 			const docShaBase64 = Buffer.from(file.docSha).toString('base64');
-
-
-
 			mappings.set(docShaBase64, { full, relative: relativePath });
 		}
 

@@ -192,7 +192,6 @@ export class ExternalIngestIndex extends Disposable {
 
 		const result = await this._client.updateIndex(
 			this.getFilesetName(primaryRoot),
-			primaryRoot,
 			currentCheckpoint,
 			this.getFilesToIndexFromDb(),
 			token
