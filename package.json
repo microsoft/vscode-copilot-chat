@@ -3253,7 +3253,7 @@
 					},
 					"github.copilot.chat.anthropic.useMessagesApi": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.useMessagesApi%",
 						"tags": [
 							"experimental",
