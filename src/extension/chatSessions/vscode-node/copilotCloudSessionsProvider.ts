@@ -61,19 +61,19 @@ const DEFAULT_PARTNER_AGENT_ID = '___vscode_partner_agent_default___';
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
-// Known Copilot agent logins to check for in assignable users
-const COPILOT_AGENT_LOGINS = [
-	'copilot-pull-request-reviewer',
-	'copilot-swe-agent',
-	'Copilot'
-];
-
 // Fallback list for testing/development - only used if GitHub API doesn't return partner agents
 const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string }[] = [
 	{ id: DEFAULT_PARTNER_AGENT_ID, name: 'Copilot' },
 	{ id: '2246796', name: 'Claude', at: 'claude[agent]' },
 	{ id: '2248422', name: 'Codex', at: 'codex[agent]' }
 ];
+
+// Mapping of known Copilot agent logins to their metadata
+const COPILOT_AGENT_METADATA: { [login: string]: { name: string; at?: string } } = {
+	'copilot-pull-request-reviewer': { name: 'Copilot PR Reviewer' },
+	'copilot-swe-agent': { name: 'Copilot SWE Agent' },
+	'Copilot': { name: 'Copilot' }
+};
 
 /**
  * Custom renderer for markdown-it that converts markdown to plain text
@@ -391,20 +391,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			availableAgents.push({ id: DEFAULT_PARTNER_AGENT_ID, name: 'Copilot' });
 
 			// Check for each known Copilot agent login
-			for (const login of COPILOT_AGENT_LOGINS) {
+			for (const [login, metadata] of Object.entries(COPILOT_AGENT_METADATA)) {
 				const actor = assignableActors.find(a => a.login === login);
 				if (actor) {
-					// Map the login to a user-friendly name
-					const name = login === 'copilot-pull-request-reviewer' ? 'Copilot PR Reviewer'
-						: login === 'copilot-swe-agent' ? 'Copilot SWE Agent'
-							: login;
-
 					// Add to available agents if not already present
-					if (!availableAgents.find(a => a.name === name)) {
+					if (!availableAgents.find(a => a.name === metadata.name)) {
+						// Check if this agent has an `at` value in HARDCODED_PARTNER_AGENTS
+						const hardcodedAgent = HARDCODED_PARTNER_AGENTS.find(a => a.name === metadata.name);
 						availableAgents.push({
 							id: actor.login,
-							name: name,
-							at: `@${actor.login}`
+							name: metadata.name,
+							at: hardcodedAgent?.at
 						});
 					}
 				}
