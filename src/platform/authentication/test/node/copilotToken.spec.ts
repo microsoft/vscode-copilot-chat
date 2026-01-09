@@ -125,6 +125,7 @@ describe('Copilot token unit tests', function () {
 		const result = await tokenManager.checkCopilotToken();
 		expect(result).toEqual({
 			kind: 'failure',
+			message: 'Network request failed',
 			reason: 'RequestFailed',
 		});
 	});
@@ -140,6 +141,7 @@ describe('Copilot token unit tests', function () {
 		const result = await tokenManager.checkCopilotToken();
 		expect(result).toEqual({
 			kind: 'failure',
+			message: 'Response is not a valid TokenInfo: null',
 			reason: 'ParseFailed',
 		});
 	});
@@ -223,19 +225,19 @@ class StaticFetcherService implements IFetcherService {
 	getUserAgentLibrary(): string {
 		return 'test';
 	}
-	fetch(url: string, options: FetchOptions): Promise<Response> {
+	async fetch(url: string, options: FetchOptions): Promise<Response> {
 		this.requests.set(url, options);
 		if (url.endsWith('copilot_internal/v2/token')) {
 			if (this.tokenResponse === 'NETWORK_FAILURE') {
-				// Simulate network failure - return null response
-				return Promise.resolve(null as any);
+				// Simulate network failure - fetch throws
+				throw new Error('Network request failed');
 			}
 			// null will parse successfully as JSON (returns null) but fails tokenInfo check
-			return Promise.resolve(createFakeResponse(200, this.tokenResponse));
+			return createFakeResponse(200, this.tokenResponse);
 		} else if (url.endsWith('copilot_internal/notification')) {
-			return Promise.resolve(createFakeResponse(200, ''));
+			return createFakeResponse(200, '');
 		}
-		return Promise.resolve(createFakeResponse(404, ''));
+		return createFakeResponse(404, '');
 	}
 	disconnectAll(): Promise<unknown> {
 		throw new Error('Method not implemented.');
