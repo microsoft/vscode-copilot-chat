@@ -355,7 +355,7 @@ export interface IOctoKitService {
 	 * This is used to check if partner agents like Copilot are available for assignment.
 	 * @param owner The repository owner
 	 * @param repo The repository name
-	 * @param authOptions - Authentication options. By default, uses silent auth and returns empty array if not authenticated.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
 	 * @returns An array of assignable actors with their login names
 	 */
 	getAssignableActors(owner: string, repo: string, authOptions: AuthOptions): Promise<AssignableActor[]>;

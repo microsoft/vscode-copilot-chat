@@ -376,10 +376,10 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	}
 
 	async getAssignableActors(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<AssignableActor[]> {
-		const auth = (await this._authService.getGitHubSession('any', authOptions.createIfNone ? { createIfNone: true } : { silent: true }));
+		const auth = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }));
 		if (!auth?.accessToken) {
 			this._logService.trace('No authentication token available for getAssignableActors');
-			return [];
+			throw new PermissiveAuthRequiredError();
 		}
 
 		try {
