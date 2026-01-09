@@ -2,14 +2,14 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { RequestType } from '@vscode/copilot-api';
+import { CCAModel, RemoteAgentJobPayload, RequestType } from '@vscode/copilot-api';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PermissiveAuthRequiredError, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PermissiveAuthRequiredError, PullRequestFile, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -33,17 +33,17 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return await this.getCurrentAuthedUserWithToken(authToken);
 	}
 
-	async getCopilotPullRequestsForUser(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestSearchItem[]> {
+	async getOpenPullRequestsForUser(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestSearchItem[]> {
 		const auth = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }));
 		if (!auth?.accessToken) {
-			this._logService.trace('No authentication token available for getCopilotPullRequestsForUser');
+			this._logService.trace('No authentication token available for getOpenPullRequestsForUser');
 			return [];
 		}
-		const response = await this.getCopilotPullRequestForUserWithToken(
+		const response = await this.getOpenPullRequestForUserWithToken(
 			owner,
 			repo,
 			auth.account.label,
-			auth.accessToken,
+			auth.accessToken
 		);
 		return response;
 	}
@@ -345,5 +345,33 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			throw new PermissiveAuthRequiredError();
 		}
 		return this.getOrganizationRepositoriesWithToken(org, authToken);
+	}
+
+	async getCopilotAgentModels(authOptions: { createIfNone?: boolean }): Promise<CCAModel[]> {
+		try {
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+			if (!authToken) {
+				this._logService.trace('No authentication token available for getCopilotAgentModels');
+				throw new PermissiveAuthRequiredError();
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CCAModelsList });
+			if (!response.ok) {
+				this._logService.trace(`Failed to fetch Copilot agent models: ${response.statusText}`);
+				return [];
+			}
+			const data = await response.json() as { data?: CCAModel[] };
+			if (data && Array.isArray(data.data)) {
+				return data.data;
+			}
+			return [];
+		} catch (e) {
+			this._logService.error(e);
+			return [];
+		}
 	}
 }

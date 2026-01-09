@@ -223,24 +223,17 @@ export class CopilotToken {
  *
  */
 export type UserTelemetryChoice = 'enabled' | 'disabled';
+
 /**
  * A notification we get from the server during token retrieval. Needs to be presented to the user.
  */
-type ServerSideNotification = {
+interface ServerSideNotification {
 	message: string;
 	url: string;
 	title: string;
-};
-/**
- * A notification that warns the user about upcoming problems.
- */
-type WarningNotification = ServerSideNotification & {
-	notification_id: string;
-};
-/**
- * A notification in case of an error.
- */
-type ErrorNotification = ServerSideNotification;
+	notification_id: TokenErrorNotificationId;
+}
+
 /**
  * A server response containing a Copilot token and metadata associated with it.
  */
@@ -250,8 +243,8 @@ export interface TokenInfo {
 	token: string;
 	expires_at: number; // unix time UTC in seconds
 	refresh_in: number; // seconds to refresh token
-	user_notification?: WarningNotification;
-	error_details?: ErrorNotification;
+	user_notification?: ServerSideNotification;
+	error_details?: ServerSideNotification;
 	organization_list?: string[];
 	code_quote_enabled?: boolean;
 	public_suggestions?: string;
@@ -264,6 +257,33 @@ export interface TokenInfo {
 	individual?: boolean;
 	sku?: string; // e.g. 'copilot_enterprise_seat'
 	message?: string; // error message
+}
+
+/**
+ * The shape of an error response from the server when token retrieval fails.
+ * TODO: Verify that this is the correct shape. I'm only going off of the copilotToken.spec.ts test file
+ */
+export interface TokenErrorShape {
+	error_details: ServerSideNotification;
+}
+
+export function isTokenErrorShape(obj: unknown): obj is TokenErrorShape {
+	if (typeof obj !== 'object' || obj === null) {
+		return false;
+	}
+	const errorShape = obj as TokenErrorShape;
+	return typeof errorShape.error_details === 'object' && errorShape.error_details !== null &&
+		typeof errorShape.error_details.message === 'string' &&
+		typeof errorShape.error_details.url === 'string' &&
+		typeof errorShape.error_details.notification_id === 'string';
+}
+
+export function isTokenInfo(obj: unknown): obj is TokenInfo {
+	if (typeof obj !== 'object' || obj === null) {
+		return false;
+	}
+	const tokenInfo = obj as TokenInfo;
+	return typeof tokenInfo.token === 'string' && typeof tokenInfo.expires_at === 'number' && typeof tokenInfo.refresh_in === 'number';
 }
 
 /**
@@ -321,7 +341,7 @@ export enum TokenErrorNotificationId {
 export type TokenError = {
 	reason: TokenErrorReason;
 	notification_id?: TokenErrorNotificationId;
-	message?: string; // TODO: not used yet, but will be for 466 errors
+	message?: string;
 };
 
 export type TokenInfoOrError = ({ kind: 'success' } & ExtendedTokenInfo) | ({ kind: 'failure' } & TokenError);
