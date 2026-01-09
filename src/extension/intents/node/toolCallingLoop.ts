@@ -193,7 +193,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				};
 
 				this.toolCallRounds.push(result.round);
-
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 					lastResult = lastResult;
 					break;
