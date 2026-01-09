@@ -28,7 +28,7 @@ class MockOctoKitService implements IOctoKitService {
 	private userOrganizations: string[] = ['testorg'];
 
 	getCurrentAuthedUser = async () => ({ login: 'testuser', name: 'Test User', avatar_url: '' });
-	getCopilotPullRequestsForUser = async () => [];
+	getOpenPullRequestsForUser = async () => [];
 	getCopilotSessionsForPR = async () => [];
 	getSessionLogs = async () => '';
 	getSessionInfo = async () => undefined;

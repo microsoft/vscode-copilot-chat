@@ -207,7 +207,7 @@ export interface IOctoKitService {
 	 * Returns the list of Copilot pull requests for a given user on a specific repo.
 	 * @param authOptions - Authentication options. By default, uses silent auth and returns empty array if not authenticated.
 	 */
-	getCopilotPullRequestsForUser(owner: string, repo: string, authOptions: AuthOptions): Promise<PullRequestSearchItem[]>;
+	getOpenPullRequestsForUser(owner: string, repo: string, authOptions: AuthOptions): Promise<PullRequestSearchItem[]>;
 
 	/**
 	 * Returns the list of Copilot sessions for a given pull request.
@@ -377,8 +377,8 @@ export class BaseOctoKitService {
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28');
 	}
 
-	protected async getCopilotPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
-		const query = `repo:${owner}/${repo} is:open author:copilot-swe-agent[bot] involves:${user}`;
+	protected async getOpenPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
+		const query = `repo:${owner}/${repo} is:open involves:${user}`;
 		return makeSearchGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, query);
 	}
 
