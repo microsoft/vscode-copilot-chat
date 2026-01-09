@@ -13,6 +13,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { MarkdownString } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
@@ -310,10 +311,8 @@ suite('ReadFile', () => {
 			);
 
 			expect(result).toBeDefined();
-			expect((result!.invocationMessage as any).value).toContain('Loading skill');
-			expect((result!.invocationMessage as any).value).toContain('/workspace/test.skill.md');
-			expect((result!.pastTenseMessage as any).value).toContain('Loaded skill');
-			expect((result!.pastTenseMessage as any).value).toContain('/workspace/test.skill.md');
+			expect((result!.invocationMessage as MarkdownString).value).toBe('Loading skill [](file:///workspace/test.skill.md)');
+			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Loaded skill [](file:///workspace/test.skill.md)');
 
 			testAccessor.dispose();
 		});
@@ -347,15 +346,13 @@ suite('ReadFile', () => {
 			);
 
 			expect(result).toBeDefined();
-			expect((result!.invocationMessage as any).value).toContain('Reading');
-			expect((result!.invocationMessage as any).value).toContain('/workspace/test.ts');
-			expect((result!.pastTenseMessage as any).value).toContain('Read');
-			expect((result!.pastTenseMessage as any).value).toContain('/workspace/test.ts');
+			expect((result!.invocationMessage as MarkdownString).value).toBe('Reading [](file:///workspace/test.ts)');
+			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Read [](file:///workspace/test.ts)');
 
 			testAccessor.dispose();
 		});
 
-		test('should return "Reading/Read" message for skill files with line range', async () => {
+		test('should return "Reading skill/Read skill" message for skill files with line range', async () => {
 			const testDoc = createTextDocumentData(URI.file('/workspace/test.skill.md'), 'line 1\nline 2\nline 3\nline 4\nline 5', 'markdown').document;
 
 			const services = createExtensionUnitTestingServices();
@@ -386,11 +383,9 @@ suite('ReadFile', () => {
 			);
 
 			expect(result).toBeDefined();
-			// When reading a partial range, it should say "Reading" not "Loading skill"
-			expect((result!.invocationMessage as any).value).toContain('Reading');
-			expect((result!.invocationMessage as any).value).toContain('lines 2 to 4');
-			expect((result!.pastTenseMessage as any).value).toContain('Read');
-			expect((result!.pastTenseMessage as any).value).toContain('lines 2 to 4');
+			// When reading a partial range of a skill file, it should say "Reading skill"
+			expect((result!.invocationMessage as MarkdownString).value).toBe('Reading skill [](file:///workspace/test.skill.md#2-2), lines 2 to 4');
+			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Read skill [](file:///workspace/test.skill.md#2-2), lines 2 to 4');
 
 			testAccessor.dispose();
 		});

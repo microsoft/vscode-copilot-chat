@@ -175,8 +175,8 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		if (start === 1 && end === documentSnapshot.lineCount) {
 			if (this.customInstructionsService.isSkillFile(uri)) {
 				return {
-					invocationMessage: new MarkdownString(l10n.t`Loading skill ${formatUriForFileWidget(uri, { fileType: 'skill' })}`),
-					pastTenseMessage: new MarkdownString(l10n.t`Loaded skill ${formatUriForFileWidget(uri, { fileType: 'skill' })}`),
+					invocationMessage: new MarkdownString(l10n.t`Loading skill ${formatUriForFileWidget(uri)}`),
+					pastTenseMessage: new MarkdownString(l10n.t`Loaded skill ${formatUriForFileWidget(uri)}`),
 				};
 			}
 			return {
@@ -187,6 +187,12 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 		// Jump to the start of the range, don't select the whole range
 		const readLocation = new Location(uri, new Range(start - 1, 0, start - 1, 0));
+		if (this.customInstructionsService.isSkillFile(uri)) {
+			return {
+				invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+				pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+			};
+		}
 		return {
 			invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
