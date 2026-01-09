@@ -61,11 +61,11 @@ const DEFAULT_PARTNER_AGENT_ID = '___vscode_partner_agent_default___';
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 
-// Fallback list for testing/development - only used if GitHub API doesn't return partner agents
-const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string }[] = [
-	{ id: DEFAULT_PARTNER_AGENT_ID, name: 'Copilot' },
-	{ id: '2246796', name: 'Claude', at: 'claude[agent]' },
-	{ id: '2248422', name: 'Codex', at: 'codex[agent]' }
+// TODO: No API from GH yet.
+const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string; assignableActorLogin?: string }[] = [
+	{ id: DEFAULT_PARTNER_AGENT_ID, name: 'Copilot', assignableActorLogin: 'copilot-swe-agent' },
+	{ id: '2246796', name: 'Claude', at: 'claude[agent]', assignableActorLogin: 'anthropic-code-agent' },
+	{ id: '2248422', name: 'Codex', at: 'codex[agent]', assignableActorLogin: 'openai-code-agent' }
 ];
 
 /**
@@ -162,8 +162,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly plainTextRenderer = new PlainTextRenderer();
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService);
 
-	// Cache for partner agents availability check
-	private _partnerAgentsCache: Map<string, { id: string; name: string; at?: string }[]> | undefined;
+	private _partnerAgentsAvailableCache: Map<string, { id: string; name: string; at?: string }[]> | undefined;
 
 	// Title
 	private TITLE = vscode.l10n.t('Delegate to cloud agent');
@@ -280,8 +279,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.cachedSessionItems = undefined;
 		this.activeSessionIds.clear();
 		this.stopActiveSessionPolling();
-		// Invalidate partner agents cache to ensure we fetch fresh data
-		this._partnerAgentsCache = undefined;
+		this._partnerAgentsAvailableCache = undefined;
 		this._onDidChangeChatSessionItems.fire();
 	}
 
@@ -362,15 +360,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	/**
-	 * Fetches available partner agents by checking if known Copilot logins are assignable in the repository.
-	 * Uses caching to avoid repeated API calls for the same repository.
+	 * Queries for available partner agents by checking if known CCA logins are assignable in the repository.
+	 * TODO: Remove once given a proper API
 	 */
 	private async getAvailablePartnerAgents(owner: string, repo: string): Promise<{ id: string; name: string; at?: string }[]> {
 		const cacheKey = `${owner}/${repo}`;
 
 		// Return cached result if available
-		if (this._partnerAgentsCache?.has(cacheKey)) {
-			return this._partnerAgentsCache.get(cacheKey)!;
+		if (this._partnerAgentsAvailableCache?.has(cacheKey)) {
+			return this._partnerAgentsAvailableCache.get(cacheKey)!;
 		}
 
 		try {
@@ -381,28 +379,21 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const availableAgents: { id: string; name: string; at?: string }[] = [];
 
 			for (const agent of HARDCODED_PARTNER_AGENTS) {
-				// Check if this agent ID is in the assignable actors list
-				const isAssignable = assignableActors.some(actor => actor.login === agent.id || actor.login === agent.name);
-				if (isAssignable || agent.id === DEFAULT_PARTNER_AGENT_ID) {
-					// Always include default Copilot, or include if assignable
+				const isAssignable = agent.assignableActorLogin && assignableActors.some(actor => actor.login === agent.assignableActorLogin);
+				if (isAssignable) {
 					availableAgents.push(agent);
 				}
 			}
 
-			// If we didn't find any agents beyond the default, fall back to full hardcoded list
-			const result = availableAgents.length > 0 ? availableAgents : HARDCODED_PARTNER_AGENTS;
-
-			// Cache the result
-			if (!this._partnerAgentsCache) {
-				this._partnerAgentsCache = new Map();
+			if (!this._partnerAgentsAvailableCache) {
+				this._partnerAgentsAvailableCache = new Map();
 			}
-			this._partnerAgentsCache.set(cacheKey, result);
+			this._partnerAgentsAvailableCache.set(cacheKey, availableAgents);
 
-			return result;
+			return availableAgents;
 		} catch (error) {
 			this.logService.error(`Error fetching partner agents: ${error}`);
-			// Fall back to hardcoded list on error
-			return HARDCODED_PARTNER_AGENTS;
+			return [];
 		}
 	}
 
@@ -417,13 +408,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const [customAgents, models, partnerAgents] = await Promise.all([
 				repoId ? this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true }, { createIfNone: false }) : Promise.resolve([]),
 				this._octoKitService.getCopilotAgentModels({ createIfNone: false }),
-				repoId ? this.getAvailablePartnerAgents(repoId.org, repoId.repo) : Promise.resolve(HARDCODED_PARTNER_AGENTS)
+				repoId ? this.getAvailablePartnerAgents(repoId.org, repoId.repo) : Promise.resolve([])
 			]);
 
 
 			// Partner agents
 			const partnerAgentsEnabled = this._configurationService.getConfig(ConfigKey.Advanced.CCAPartnerAgents);
-			if (partnerAgentsEnabled) {
+			if (partnerAgentsEnabled && partnerAgents.length > 0) {
 				const partnerAgentItems: vscode.ChatSessionProviderOptionItem[] = partnerAgents.map(agent => ({
 					id: agent.id,
 					name: agent.name,
