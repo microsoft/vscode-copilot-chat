@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { AsyncIterableObject, DeferredPromise } from '../../../util/vs/base/common/async';
-import { safeStringify } from '../../../util/vs/base/common/objects';
 import { assertType } from '../../../util/vs/base/common/types';
 import { Completion } from './completionsAPI';
 
@@ -53,13 +53,9 @@ export class ResponseStream {
 					completions.push(completion);
 					emitter.emitOne(completion);
 				}
-			} catch (e) {
-				if (e instanceof Error) {
-					error = e;
-				} else {
-					error = new Error(safeStringify(e));
-				}
-				emitter.reject(e);
+			} catch (e: unknown) {
+				error = errors.fromUnknown(e);
+				emitter.reject(error);
 			} finally {
 				tokensDeferredPromise.complete(
 					error ? Result.error(error) : Result.ok(completions)

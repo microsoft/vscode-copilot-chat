@@ -76,5 +76,7 @@ export async function promptForAPIKey(contextName: string, reconfigure: boolean 
 		return undefined;
 	}
 
-	return result;
+	// Trim the input to normalize whitespace-only input to empty string.
+	// Prevents whitespace-only strings from being stored as API keys
+	return result?.trim();
 }

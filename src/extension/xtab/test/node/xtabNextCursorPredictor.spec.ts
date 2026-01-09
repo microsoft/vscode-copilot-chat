@@ -100,7 +100,7 @@ describe('XtabNextCursorPredictor', () => {
 
 		// Enable the next cursor prediction feature
 		const configService = accessor.get(IConfigurationService);
-		configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionEnabled, NextCursorLinePrediction.OnlyWithEdit);
+		configService.setConfig(ConfigKey.InlineEditsNextCursorPredictionEnabled, true);
 		configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionModelName, 'test-model');
 	});
 

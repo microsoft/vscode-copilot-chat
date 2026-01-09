@@ -36,6 +36,8 @@ export namespace PromptTags {
 }
 
 export namespace ResponseTags {
+	export const NO_EDIT = '<NO_EDIT>';
+
 	export const NO_CHANGE = {
 		start: '<NO_CHANGE>'
 	};

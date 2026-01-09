@@ -14,7 +14,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
-import { PythonTerminalService } from './pythonTerminalService';
+import { PythonTerminalService } from './copilotCLIPythonTerminalService';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';

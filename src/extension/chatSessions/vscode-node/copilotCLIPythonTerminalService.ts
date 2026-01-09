@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
-import { PythonEnvironmentApi } from './pythonEnvironmentApi';
+import { PythonEnvironmentApi } from './copilotCLIPythonEnvironmentApi';
 
 export class PythonTerminalService {
 	constructor(@ILogService private readonly logService: ILogService,

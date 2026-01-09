@@ -53,6 +53,39 @@ function processDeltasToMessage(deltas: IResponseDelta[]): string {
 			}).join('\n');
 		}
 
+		// Handle context management
+		if (d.contextManagement) {
+			if (i > 0 || text.length > 0) {
+				text += '\n';
+			}
+
+			const totalClearedTokens = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+				0
+			);
+			const totalClearedToolUses = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_tool_uses || 0),
+				0
+			);
+			const totalClearedThinkingTurns = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_thinking_turns || 0),
+				0
+			);
+
+			const details: string[] = [];
+			if (totalClearedTokens > 0) {
+				details.push(`${totalClearedTokens} tokens`);
+			}
+			if (totalClearedToolUses > 0) {
+				details.push(`${totalClearedToolUses} tool uses`);
+			}
+			if (totalClearedThinkingTurns > 0) {
+				details.push(`${totalClearedThinkingTurns} thinking turns`);
+			}
+
+			text += `🧹 Context cleared: ${details.join(', ')}`;
+		}
+
 		return text;
 	}).join('');
 }

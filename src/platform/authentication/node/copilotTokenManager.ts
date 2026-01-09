@@ -17,7 +17,7 @@ import { ILogService } from '../../log/common/logService';
 import { FetchOptions, IFetcherService, Response, jsonVerboseError } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { CopilotToken, CopilotUserInfo, ExtendedTokenInfo, TokenInfo, TokenInfoOrError, containsInternalOrg } from '../common/copilotToken';
+import { CopilotToken, CopilotUserInfo, ExtendedTokenInfo, TokenInfo, TokenInfoOrError, containsInternalOrg, isTokenErrorShape, isTokenInfo } from '../common/copilotToken';
 import { CheckCopilotToken, ICopilotTokenManager, NotGitHubLoginFailed, nowSeconds } from '../common/copilotTokenManager';
 
 export const tokenErrorString = `Tests: either GITHUB_PAT, GITHUB_OAUTH_TOKEN, or GITHUB_OAUTH_TOKEN+VSCODE_COPILOT_CHAT_TOKEN must be set unless running from an IS_SCENARIO_AUTOMATION environment. Run "npm run get_token" to get credentials.`;
@@ -141,51 +141,71 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		this._telemetryService.sendGHTelemetryEvent('auth.new_login');
 
 		let response, userInfo, ghUsername;
-		if ('githubToken' in context) {
-			ghUsername = context.ghUsername;
-			[response, userInfo] = (await Promise.all([
-				this.fetchCopilotTokenFromGitHubToken(context.githubToken),
-				this.fetchCopilotUserInfo(context.githubToken)
-			]));
-		} else {
-			response = await this.fetchCopilotTokenFromDevDeviceId(context.devDeviceId);
+		try {
+			if ('githubToken' in context) {
+				ghUsername = context.ghUsername;
+				[response, userInfo] = (await Promise.all([
+					this.fetchCopilotTokenFromGitHubToken(context.githubToken),
+					this.fetchCopilotUserInfo(context.githubToken)
+				]));
+			} else {
+				response = await this.fetchCopilotTokenFromDevDeviceId(context.devDeviceId);
+			}
+		} catch (e) {
+			this._logService.warn('Failed to get copilot token due to fetch throwing: ' + (e.message || String(e)));
+			return { kind: 'failure', reason: 'RequestFailed', message: e.message || String(e) };
 		}
 
-		if (!response) {
-			this._logService.warn('Failed to get copilot token');
-			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_failed');
-			return { kind: 'failure', reason: 'RequestFailed' };
+		let partialTokenInfo: Partial<TokenInfo> | undefined;
+		let errorMessage: string | undefined;
+		try {
+			// TODO: Validate shape... but the shape in code is questionable. We should chat with the API owner to clarify shape.
+			partialTokenInfo = await jsonVerboseError(response);
+		} catch (err) {
+			errorMessage = err.message || String(err);
 		}
 
-		// FIXME: Unverified type after inputting response
-		const tokenInfo: undefined | TokenInfo = await jsonVerboseError(response);
-		if (!tokenInfo) {
-			this._logService.warn('Failed to get copilot token');
-			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_read_failed');
-			return { kind: 'failure', reason: 'ParseFailed' };
-		}
+		// First handle HTTP errors
+		if (!response.ok) {
+			if (response.status === 401) {
+				this._logService.warn('Failed to get copilot token due to 401 status');
+				this._telemetryService.sendGHTelemetryErrorEvent('auth.unknown_401');
+				return { kind: 'failure', reason: 'HTTP401' };
+			}
 
-		if (response.status === 401) {
-			this._logService.warn('Failed to get copilot token due to 401 status');
-			this._telemetryService.sendGHTelemetryErrorEvent('auth.unknown_401');
-			return { kind: 'failure', reason: 'HTTP401' };
-		}
+			if (response.status === 403 && partialTokenInfo?.message?.startsWith('API rate limit exceeded')) {
+				this._logService.warn('Failed to get copilot token due to exceeding API rate limit');
+				this._telemetryService.sendGHTelemetryErrorEvent('auth.rate_limited');
+				return { kind: 'failure', reason: 'RateLimited' };
+			}
 
-		if (response.status === 403 && tokenInfo.message?.startsWith('API rate limit exceeded')) {
-			this._logService.warn('Failed to get copilot token due to exceeding API rate limit');
-			this._telemetryService.sendGHTelemetryErrorEvent('auth.rate_limited');
-			return { kind: 'failure', reason: 'RateLimited' };
-		}
-
-		if (!response.ok || !tokenInfo.token) {
-			this._logService.warn(`Invalid copilot token: missing token: ${response.status} ${response.statusText}`);
+			const message = partialTokenInfo?.error_details?.message || errorMessage;
+			this._logService.warn(`Failed to get copilot token due to status ${response.status} ${response.statusText}: ${message}`);
 			const data = TelemetryData.createAndMarkAsIssued({
 				status: response.status.toString(),
 				status_text: response.statusText,
 			});
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.invalid_token', data.properties, data.measurements);
-			const error_details = tokenInfo.error_details;
-			return { kind: 'failure', reason: 'NotAuthorized', ...error_details };
+			return {
+				kind: 'failure',
+				reason: 'RequestFailed',
+				message,
+				notification_id: partialTokenInfo?.error_details?.notification_id
+			};
+		}
+
+		const tokenInfo = isTokenInfo(partialTokenInfo) ? partialTokenInfo : undefined;
+		if (!tokenInfo) {
+			if (isTokenErrorShape(partialTokenInfo)) {
+				this._logService.warn(`Failed to get copilot token due to: ${partialTokenInfo.error_details.message}`);
+				this._telemetryService.sendGHTelemetryErrorEvent('auth.request_read_failed');
+				return { kind: 'failure', reason: 'NotAuthorized', ...partialTokenInfo.error_details };
+			} else {
+				const message = 'Response is not a valid TokenInfo: ' + JSON.stringify(partialTokenInfo);
+				this._logService.warn(`Failed to get copilot token due to: ${message}`);
+				this._telemetryService.sendGHTelemetryErrorEvent('auth.request_read_failed');
+				return { kind: 'failure', reason: 'ParseFailed', message };
+			}
 		}
 
 		const expires_at = tokenInfo.expires_at;
