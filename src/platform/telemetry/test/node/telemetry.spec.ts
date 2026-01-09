@@ -39,7 +39,7 @@ suite('Microsoft Telemetry Sender', function () {
 
 		mockToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'tid=testTid',
-			sku: 'free_limited_copilot',
+			sku: 'testSku',
 			expires_at: 9999999999,
 			refresh_in: 180000,
 			chat_enabled: true,
@@ -143,7 +143,7 @@ suite('GitHub Telemetry Sender', function () {
 
 		mockToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'rt=1;tid=test',
-			sku: 'free_limited_copilot',
+			sku: 'testSku',
 			expires_at: 9999999999,
 			refresh_in: 180000,
 			chat_enabled: true,
