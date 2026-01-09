@@ -379,7 +379,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const availableAgents: { id: string; name: string; at?: string }[] = [];
 
 			for (const agent of HARDCODED_PARTNER_AGENTS) {
-				const isAssignable = agent.assignableActorLogin && assignableActors.some(actor => actor.login === agent.assignableActorLogin);
+				const { assignableActorLogin } = agent;
+				let isAssignable = false;
+
+				if (assignableActorLogin !== undefined) {
+					isAssignable = assignableActors.some(actor => actor.login === assignableActorLogin);
+				}
 				if (isAssignable) {
 					availableAgents.push(agent);
 				}
