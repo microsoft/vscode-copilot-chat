@@ -171,7 +171,14 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		}
 
 		const { start, end } = getParamRanges(input, documentSnapshot);
+
 		if (start === 1 && end === documentSnapshot.lineCount) {
+			if (this.customInstructionsService.isSkillFile(uri)) {
+				return {
+					invocationMessage: new MarkdownString(l10n.t`Loading skill ${formatUriForFileWidget(uri, { fileType: 'skill' })}`),
+					pastTenseMessage: new MarkdownString(l10n.t`Loaded skill ${formatUriForFileWidget(uri, { fileType: 'skill' })}`),
+				};
+			}
 			return {
 				invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(uri)}`),
 				pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(uri)}`),

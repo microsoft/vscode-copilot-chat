@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
+import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -11,10 +12,11 @@ import { createTextDocumentData } from '../../../../util/common/test/shims/textD
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
-import { IReadFileParamsV1, IReadFileParamsV2 } from '../readFileTool';
+import { IReadFileParamsV1, IReadFileParamsV2, ReadFileTool } from '../readFileTool';
 import { toolResultToString } from './toolTestUtils';
 
 suite('ReadFile', () => {
@@ -241,6 +243,156 @@ suite('ReadFile', () => {
 			// Should start from line 1 (offset clamped to 1)
 			expect(resultString).toContain('line 1');
 			expect(resultString).toContain('line 2');
+		});
+	});
+
+	suite('prepareInvocation', () => {
+		class MockCustomInstructionsService implements ICustomInstructionsService {
+			declare readonly _serviceBrand: undefined;
+			private skillFiles = new Set<string>();
+
+			setSkillFiles(uris: URI[]) {
+				this.skillFiles.clear();
+				uris.forEach(uri => this.skillFiles.add(uri.toString()));
+			}
+
+			isSkillFile(uri: URI): boolean {
+				return this.skillFiles.has(uri.toString());
+			}
+
+			isExternalInstructionsFile(): boolean {
+				return false;
+			}
+
+			isExternalInstructionsFolder(): boolean {
+				return false;
+			}
+
+			fetchInstructionsFromSetting(): Promise<any[]> {
+				return Promise.resolve([]);
+			}
+
+			fetchInstructionsFromFile(): Promise<any> {
+				return Promise.resolve(undefined);
+			}
+
+			getAgentInstructions(): Promise<URI[]> {
+				return Promise.resolve([]);
+			}
+		}
+
+		test('should return "Loading/Loaded skill" message for skill files', async () => {
+			const testDoc = createTextDocumentData(URI.file('/workspace/test.skill.md'), 'skill content', 'markdown').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[
+					[URI.file('/workspace')],
+					[testDoc],
+				]
+			));
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([URI.file('/workspace/test.skill.md')]);
+			services.define(ICustomInstructionsService, mockCustomInstructions);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/test.skill.md'
+			};
+
+			const result = await readFileTool.prepareInvocation(
+				{ input },
+				CancellationToken.None
+			);
+
+			expect(result).toBeDefined();
+			expect((result!.invocationMessage as any).value).toContain('Loading skill');
+			expect((result!.invocationMessage as any).value).toContain('/workspace/test.skill.md');
+			expect((result!.pastTenseMessage as any).value).toContain('Loaded skill');
+			expect((result!.pastTenseMessage as any).value).toContain('/workspace/test.skill.md');
+
+			testAccessor.dispose();
+		});
+
+		test('should return "Reading/Read" message for non-skill files', async () => {
+			const testDoc = createTextDocumentData(URI.file('/workspace/test.ts'), 'code content', 'typescript').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[
+					[URI.file('/workspace')],
+					[testDoc],
+				]
+			));
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			// Don't mark this file as a skill file
+			services.define(ICustomInstructionsService, mockCustomInstructions);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/test.ts'
+			};
+
+			const result = await readFileTool.prepareInvocation(
+				{ input },
+				CancellationToken.None
+			);
+
+			expect(result).toBeDefined();
+			expect((result!.invocationMessage as any).value).toContain('Reading');
+			expect((result!.invocationMessage as any).value).toContain('/workspace/test.ts');
+			expect((result!.pastTenseMessage as any).value).toContain('Read');
+			expect((result!.pastTenseMessage as any).value).toContain('/workspace/test.ts');
+
+			testAccessor.dispose();
+		});
+
+		test('should return "Reading/Read" message for skill files with line range', async () => {
+			const testDoc = createTextDocumentData(URI.file('/workspace/test.skill.md'), 'line 1\nline 2\nline 3\nline 4\nline 5', 'markdown').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[
+					[URI.file('/workspace')],
+					[testDoc],
+				]
+			));
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([URI.file('/workspace/test.skill.md')]);
+			services.define(ICustomInstructionsService, mockCustomInstructions);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = {
+				filePath: '/workspace/test.skill.md',
+				offset: 2,
+				limit: 2
+			};
+
+			const result = await readFileTool.prepareInvocation(
+				{ input },
+				CancellationToken.None
+			);
+
+			expect(result).toBeDefined();
+			// When reading a partial range, it should say "Reading" not "Loading skill"
+			expect((result!.invocationMessage as any).value).toContain('Reading');
+			expect((result!.invocationMessage as any).value).toContain('lines 2 to 4');
+			expect((result!.pastTenseMessage as any).value).toContain('Read');
+			expect((result!.pastTenseMessage as any).value).toContain('lines 2 to 4');
+
+			testAccessor.dispose();
 		});
 	});
 });
