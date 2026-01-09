@@ -188,7 +188,7 @@
 						},
 						"details": {
 							"type": "string",
-							"description": "A more detailed description of the objective for the search subagent. This helps the sub-agent remain on task and understand its purpose. "
+							"description": "A more detailed description of the objective for the search subagent. This helps the sub-agent remain on task and understand its purpose."
 						}
 					},
 					"required": [
