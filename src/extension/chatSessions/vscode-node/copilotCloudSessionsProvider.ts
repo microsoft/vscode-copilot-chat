@@ -398,6 +398,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					name: vscode.l10n.t('Custom Agents'),
 					description: vscode.l10n.t('Select which custom agent to use'),
 					items: agentItems,
+					when: `chatSessionOption.partnerAgents == ${DEFAULT_PARTNER_AGENT_ID}`
 				});
 			}
 
@@ -414,6 +415,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					name: vscode.l10n.t('Model'),
 					description: vscode.l10n.t('Select which model to use'),
 					items: modelItems,
+					when: `chatSessionOption.partnerAgents == ${DEFAULT_PARTNER_AGENT_ID}`
 				});
 			}
 
