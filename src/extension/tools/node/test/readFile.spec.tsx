@@ -311,8 +311,8 @@ suite('ReadFile', () => {
 			);
 
 			expect(result).toBeDefined();
-			expect((result!.invocationMessage as MarkdownString).value).toBe('Loading skill [](file:///workspace/test.skill.md)');
-			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Loaded skill [](file:///workspace/test.skill.md)');
+			expect((result!.invocationMessage as MarkdownString).value).toBe('Loading skill [{"vscodeLinkType":"file","fileName":"workspace"}](file:///workspace/test.skill.md)');
+			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Loaded skill [{"vscodeLinkType":"file","fileName":"workspace"}](file:///workspace/test.skill.md)');
 
 			testAccessor.dispose();
 		});
@@ -352,7 +352,7 @@ suite('ReadFile', () => {
 			testAccessor.dispose();
 		});
 
-		test('should return "Reading skill/Read skill" message for skill files with line range', async () => {
+		test('should return "Loading skill/Loaded skill" message for skill files with line range', async () => {
 			const testDoc = createTextDocumentData(URI.file('/workspace/test.skill.md'), 'line 1\nline 2\nline 3\nline 4\nline 5', 'markdown').document;
 
 			const services = createExtensionUnitTestingServices();
@@ -384,8 +384,8 @@ suite('ReadFile', () => {
 
 			expect(result).toBeDefined();
 			// When reading a partial range of a skill file, it should say "Reading skill"
-			expect((result!.invocationMessage as MarkdownString).value).toBe('Reading skill [](file:///workspace/test.skill.md#2-2), lines 2 to 4');
-			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Read skill [](file:///workspace/test.skill.md#2-2), lines 2 to 4');
+			expect((result!.invocationMessage as MarkdownString).value).toBe('Reading skill [{"vscodeLinkType":"file","fileName":"workspace"}](file:///workspace/test.skill.md#2-2), lines 2 to 4');
+			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Read skill [{"vscodeLinkType":"file","fileName":"workspace"}](file:///workspace/test.skill.md#2-2), lines 2 to 4');
 
 			testAccessor.dispose();
 		});

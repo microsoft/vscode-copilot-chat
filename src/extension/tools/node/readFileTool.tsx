@@ -18,6 +18,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { clamp } from '../../../util/vs/base/common/numbers';
+import { basename, dirname } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
@@ -174,9 +175,10 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 		if (start === 1 && end === documentSnapshot.lineCount) {
 			if (this.customInstructionsService.isSkillFile(uri)) {
+				const skillName = basename(dirname(uri));
 				return {
-					invocationMessage: new MarkdownString(l10n.t`Loading skill ${formatUriForFileWidget(uri)}`),
-					pastTenseMessage: new MarkdownString(l10n.t`Loaded skill ${formatUriForFileWidget(uri)}`),
+					invocationMessage: new MarkdownString(l10n.t`Loading skill ${formatUriForFileWidget(uri, { fileName: skillName })}`),
+					pastTenseMessage: new MarkdownString(l10n.t`Loaded skill ${formatUriForFileWidget(uri, { fileName: skillName })}`),
 				};
 			}
 			return {
@@ -188,9 +190,10 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		// Jump to the start of the range, don't select the whole range
 		const readLocation = new Location(uri, new Range(start - 1, 0, start - 1, 0));
 		if (this.customInstructionsService.isSkillFile(uri)) {
+			const skillName = basename(dirname(uri));
 			return {
-				invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
-				pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+				invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(readLocation, { fileName: skillName })}, lines ${start} to ${end}`),
+				pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(readLocation, { fileName: skillName })}, lines ${start} to ${end}`),
 			};
 		}
 		return {
