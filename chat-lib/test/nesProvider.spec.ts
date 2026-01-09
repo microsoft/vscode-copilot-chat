@@ -12,7 +12,7 @@ import { outdent } from 'outdent';
 import * as path from 'path';
 import * as stream from 'stream';
 import { assert, describe, expect, it } from 'vitest';
-import { CopilotToken } from '../src/_internal/platform/authentication/common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../src/_internal/platform/authentication/common/copilotToken';
 import { ICopilotTokenManager } from '../src/_internal/platform/authentication/common/copilotTokenManager';
 import { DocumentId } from '../src/_internal/platform/inlineEdits/common/dataTypes/documentId';
 import { MutableObservableWorkspace } from '../src/_internal/platform/inlineEdits/common/observableWorkspace';
@@ -97,7 +97,7 @@ class TestCopilotTokenManager implements ICopilotTokenManager {
 	onDidCopilotTokenRefresh = new Emitter<void>().event;
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
-		return new CopilotToken({ token: 'fixedToken', expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown' });
+		return new CopilotToken(createTestExtendedTokenInfo({ token: 'fixedToken' }));
 	}
 
 	resetCopilotToken(httpError?: number): void {
