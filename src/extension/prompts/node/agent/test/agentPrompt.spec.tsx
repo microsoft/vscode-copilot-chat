@@ -43,8 +43,7 @@ const testFamilies = [
 	'claude-sonnet-4.5',
 	'claude-opus-4.5',
 	'gemini-2.0-flash',
-	'grok-code-fast-1',
-	'arctic-fox'
+	'grok-code-fast-1'
 ];
 
 testFamilies.forEach(family => {
