@@ -517,7 +517,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolCalls,
 					toolInputRetry,
 					statefulMarker,
-					thinking: thinkingItem
+					thinking: thinkingItem,
+					usage: fetchResult.usage
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
