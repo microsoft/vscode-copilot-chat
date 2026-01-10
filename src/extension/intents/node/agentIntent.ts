@@ -15,6 +15,7 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
+import { isAnthropicContextEditingEnabled } from '../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -180,6 +181,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService,
+		@IExperimentationService private readonly expService: IExperimentationService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
 	}
@@ -228,7 +230,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		let shouldTriggerSummarize = false;
 		const budgetThreshold = Math.floor((baseBudget - toolTokens) * 0.85);
 
-		if (summarizationEnabled && isAnthropicFamily(this.endpoint)) {
+		const anthropicContextEditingEnabled = isAnthropicContextEditingEnabled(this.configurationService, this.expService);
+		if (summarizationEnabled && isAnthropicFamily(this.endpoint) && anthropicContextEditingEnabled) {
 			// First check current turn for token usage (from tool calling loop), then fall back to previous turn's result metadata
 			const currentTurn = promptContext.conversation?.getLatestTurn();
 			const currentTurnTokenUsage = currentTurn?.getMetadata(TokenUsageMetadata);
