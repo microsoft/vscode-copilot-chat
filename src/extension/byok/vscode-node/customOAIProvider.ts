@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IExperimentationService } from '../../../lib/node/chatLibMain';
-import { AzureAuthMode, Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EndpointEditToolName, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -169,9 +169,6 @@ export class CustomOAIBYOKModelProvider extends AbstractCustomOAIBYOKModelProvid
 	// TODO: Remove this after 6 months
 	private async migrateExistingConfigs(): Promise<void> {
 		await this.migrateConfig(ConfigKey.CustomOAIModels, this.providerName, this.providerName);
-		if (this._configurationService.getConfig(ConfigKey.AzureAuthType) !== AzureAuthMode.EntraId) {
-			await this.migrateConfig(ConfigKey.AzureModels, 'Azure', 'Azure');
-		}
 	}
 
 	protected resolveUrl(modelId: string, url: string): string {

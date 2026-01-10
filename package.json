@@ -1882,8 +1882,7 @@
 								]
 							}
 						}
-					},
-					"markdownDescription": "Configure custom OpenAI-compatible models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+					}
 				}
 			},
 			{
@@ -1892,6 +1891,11 @@
 				"configuration": {
 					"type": "object",
 					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for the models"
+						},
 						"models": {
 							"type": "array",
 							"items": {
@@ -1966,8 +1970,7 @@
 								]
 							}
 						}
-					},
-					"markdownDescription": "Configure custom OpenAI-compatible models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+					}
 				}
 			}
 		],

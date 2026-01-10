@@ -71,10 +71,7 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 
 	// TODO: Remove this after 6 months
 	private async migrateExistingConfigs(): Promise<void> {
-		if (this._configurationService.getConfig(ConfigKey.AzureAuthType) === AzureAuthMode.EntraId) {
-			await this.migrateConfig(ConfigKey.AzureModels, AzureBYOKModelProvider.providerName, AzureBYOKModelProvider.providerName);
-			await this._configurationService.setConfig(ConfigKey.AzureAuthType, undefined);
-		}
+		await this.migrateConfig(ConfigKey.AzureModels, AzureBYOKModelProvider.providerName, AzureBYOKModelProvider.providerName);
 	}
 
 	protected override resolveUrl(modelId: string, url: string): string {
@@ -88,15 +85,23 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 		progress: Progress<LanguageModelResponsePart2>,
 		token: CancellationToken
 	): Promise<void> {
-		// Session is guaranteed to be defined when createIfNone: true
-		const session: vscode.AuthenticationSession = await vscode.authentication.getSession(
-			AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
-			[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-			{
-				createIfNone: true,
-				silent: false
-			}
-		);
+		let apiKey: string | undefined = model.configuration?.apiKey;
+		if (this._configurationService.getConfig(ConfigKey.AzureAuthType) === AzureAuthMode.EntraId) {
+			// Session is guaranteed to be defined when createIfNone: true
+			const session: vscode.AuthenticationSession = await vscode.authentication.getSession(
+				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
+				[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
+				{
+					createIfNone: true,
+					silent: false
+				}
+			);
+			apiKey = session.accessToken;
+		}
+
+		if (!apiKey) {
+			throw new Error('API key is required for Azure OpenAI models.');
+		}
 
 		const url = this.resolveUrl(model.id, model.url);
 		const modelConfiguration = model.configuration?.models?.find(m => m.id === model.id);
@@ -117,7 +122,7 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 		const openAIChatEndpoint = this._instantiationService.createInstance(
 			AzureOpenAIEndpoint,
 			modelInfo,
-			session.accessToken,  // Pass Entra ID token
+			apiKey,  // Pass Entra ID token
 			url
 		);
 
