@@ -241,7 +241,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			const outputTokens = currentTurnTokenUsage?.outputTokens ?? previousTurn?.resultMetadata?.outputTokens;
 
 			if (promptTokens !== undefined && outputTokens !== undefined) {
-				// Estimate current turn's token contribution with 15% buffer for current round of tool call
+				// Estimate total tokens from the last completed turn (prompt + output) and add a 15% buffer to anticipate growth in the upcoming turn/tool call
 				const totalEstimatedTokens = (promptTokens + outputTokens) * 1.15;
 
 				if (totalEstimatedTokens > this.endpoint.modelMaxPromptTokens) {
