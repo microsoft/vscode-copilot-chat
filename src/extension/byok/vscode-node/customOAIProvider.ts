@@ -168,7 +168,7 @@ export class CustomOAIBYOKModelProvider extends AbstractCustomOAIBYOKModelProvid
 
 	// TODO: Remove this after 6 months
 	private async migrateExistingConfigs(): Promise<void> {
-		await this.migrateConfig(ConfigKey.CustomOAIModels, this.providerName, this.providerName);
+		await this.migrateConfig(ConfigKey.Deprecated.CustomOAIModels, this.providerName, this.providerName);
 	}
 
 	protected resolveUrl(modelId: string, url: string): string {

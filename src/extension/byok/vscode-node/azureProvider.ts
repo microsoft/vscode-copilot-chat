@@ -71,7 +71,7 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 
 	// TODO: Remove this after 6 months
 	private async migrateExistingConfigs(): Promise<void> {
-		await this.migrateConfig(ConfigKey.AzureModels, AzureBYOKModelProvider.providerName, AzureBYOKModelProvider.providerName);
+		await this.migrateConfig(ConfigKey.Deprecated.AzureModels, AzureBYOKModelProvider.providerName, AzureBYOKModelProvider.providerName);
 	}
 
 	protected override resolveUrl(modelId: string, url: string): string {

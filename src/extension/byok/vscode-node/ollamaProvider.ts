@@ -68,12 +68,12 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 			return;
 		}
 		await this.configureDefaultGroupIfExists(this._name, { url: baseUrl });
-		await this._configurationService.setConfig(ConfigKey.OllamaEndpoint, undefined);
+		await this._configurationService.setConfig(ConfigKey.Deprecated.OllamaEndpoint, undefined);
 	}
 
 	private getBaseUrlFromSettings(): string | undefined {
-		if (this._configurationService.isConfigured(ConfigKey.OllamaEndpoint)) {
-			return this._configurationService.getConfig(ConfigKey.OllamaEndpoint);
+		if (this._configurationService.isConfigured(ConfigKey.Deprecated.OllamaEndpoint)) {
+			return this._configurationService.getConfig(ConfigKey.Deprecated.OllamaEndpoint);
 		}
 		return undefined;
 	}
