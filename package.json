@@ -1682,7 +1682,8 @@
 		"languageModelChatProviders": [
 			{
 				"vendor": "copilot",
-				"displayName": "Copilot"
+				"displayName": "Copilot",
+				"managementCommand": "github.copilot.chat.manageModels"
 			},
 			{
 				"vendor": "azure",
@@ -2259,6 +2260,11 @@
 			{
 				"command": "github.copilot.chat.manageBYOKAPIKey",
 				"title": "Manage Bring Your Own Key API Key",
+				"enablement": "false"
+			},
+			{
+				"command": "github.copilot.chat.manageModels",
+				"title": "Manage Copilot Models",
 				"enablement": "false"
 			},
 			{
