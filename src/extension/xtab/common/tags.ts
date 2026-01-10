@@ -11,7 +11,7 @@ export namespace PromptTags {
 		end: string;
 	};
 
-	function createTag(key: string): Tag {
+	export function createTag(key: string): Tag {
 		return {
 			start: `<|${key}|>`,
 			end: `<|/${key}|>`

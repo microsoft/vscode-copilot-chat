@@ -14,6 +14,7 @@ import { CompletionsUnificationContribution } from '../../completions/vscode-nod
 import { ConfigurationMigrationContribution } from '../../configuration/vscode-node/configurationMigration';
 import { ContextKeysContribution } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { AiMappedEditsContrib } from '../../conversation/vscode-node/aiMappedEditsContrib';
+import { ChatInlineCompletionsContribution } from '../../conversation/vscode-node/chatInlineCompletionsContrib';
 import { ConversationFeature } from '../../conversation/vscode-node/conversationFeature';
 import { FeedbackCommandContribution } from '../../conversation/vscode-node/feedbackContribution';
 import { LanguageModelAccess } from '../../conversation/vscode-node/languageModelAccess';
@@ -107,6 +108,7 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ToolsContribution),
 	asContributionFactory(RemoteAgentContribution),
 	asContributionFactory(AiMappedEditsContrib),
+	asContributionFactory(ChatInlineCompletionsContribution),
 	asContributionFactory(RenameSuggestionsContrib),
 	asContributionFactory(LogWorkspaceStateContribution),
 	asContributionFactory(SetupTestsContribution),
