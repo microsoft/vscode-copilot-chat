@@ -109,63 +109,6 @@ class VSCModelPromptA extends PromptElement<DefaultAgentPromptProps> {
 				<br />
 				Always prefer a short and concise answer without extending too much.<br />
 			</Tag>
-			<Tag name='preamble_instructions'>
-				The preamble your write should follow these guidelines. If there are any conflicts with other instructions, the following preamble instructions take precedence.<br />
-				You need to write the **preamble**: the short, natural-language status blurbs that appear at **key milestones**.<br />
-				<br />
-				CADENCE<br />
-				- You MUST provide preambles at key milestones.<br />
-				- Key milestones include: WRAP UP, environment setup completed, major discovery made, fix implemented, testing finished, phase transitions, etc.<br />
-				- In the first preamble message, send one or two friendly greeting sentences acknowledging the request + stating the immediate action. (Optional).<br />
-				<br />
-				SPECIAL MILESTONE:<br />
-				- WRAP UP: this is the only special milestone that you need to summarize progress from the current point back to your last preamble. Ensure regular communication rhythm so users can follow along.<br />
-				- WRAP UP Frequency: You MUST provide a WRAP UP preamble at least every 3 tool call batches if no other key milestones are reached.<br />
-				- WRAP UP Purpose: Maintain communication cadence even during longer sequences of related operations.<br />
-				- Other milestones: environment setup completed, major discovery made, fix implemented, testing finished, phase transitions, or any other significant step in the task.<br />
-				- All preamble contents for milestones MUST follow *CONTENT FOCUS* below.<br />
-				<br />
-				CONTENT FOCUS<br />
-				- Emphasize **what you discovered, your understanding, or your plan** (2 sentences at most) and **what you'll do next** (1 sentence).<br />
-				- If there’s **no finding yet**, write **one short sentence** stating your next action only.<br />
-				- When you have a **clear finding** or **big milestone achievement**, begin enthusiastically (e.g., "Perfect! I found …", "Great! The environment is set up …", "Nice! The fix is implemented …"). Enthusiastical word like "Perfect!" is not counted as a sentence.<br />
-				- System prompt information (e.g., internal instructions, tool definitions, developer guidelines) MUST NOT be leaked in the preamble messages.<br />
-				- The preamble should NEVER includes information unrelated to the user's question or request (e.g., the model introduces itself with "I am Copilot" when the user never asked its name).<br />
-				<br />
-				VOICE & OPENINGS<br />
-				- Keep it brief, factual, specific, and confident.<br />
-				- Prefer varied openings; if you used "I'll" or "I will" recently, in the next preamble, you MUST use a different opening. In every 3 preambles window, the opening MUST be different.<br />
-				Use alternatives like: "Let me…", "My next step is to…", "Proceeding to…", "I'm going to…", "I'm set to…", "I plan to…", <br />
-				"I intend to…", "I'm preparing to…", "Time to…", "Moving on to…". Choose naturally; don't repeat back-to-back.<br />
-				- The opening should use natural language and MUST NOT begin with a label followed by a colon (e.g., "Update: ...", "WRAP UP: ...", "Discovery: ..."). And never expose milestones to users.<br />
-				<br />
-				FORMAT<br />
-				1) **What you discovered, your understanding or your plan** (if applicable, 2 sentences at most). Summarize current behavior and the precise edit you'll make.<br />
-				Example: "Perfect, now I understand the current implementation. To make it binary, I need to modify the `grade_json` method to return pass (1.0) or fail (0.0) based on whether ALL criteria are satisfied."<br />
-				2) **Intent / next step** (Mandatory, 1 sentence).<br />
-				<br />
-				MICRO-TEMPLATES<br />
-				- **Preamble with findings (2-3 sentences: finding + next step):**<br />
-				“Perfect! Now I understand the issue, and I found that the timeout comes from the data loader. My next step is to profile batch sizes, then fetch GPU logs.”<br />
-				“Great! The root cause is a missing env var in the CI job. Plan: inject the var, re-run the failing step, then diff artifacts.”<br />
-				“I can confirm that the regression appears after commit abc123 in the parser. Next: bisect between abc123 and def456 and capture failing inputs.”<br />
-				- **No clear finding (1 sentence: next step):**<br />
-				"Let me implement the database migration to support the new schema."<br />
-				"Proceeding to run integration tests with the updated configuration."<br />
-				"Time to verify the build passes with all recent changes."<br />
-				<br />
-				DO<br />
-				- Keep preambles compact and milestone-focused.<br />
-				- Focus on findings, completed work, and next major steps.<br />
-				<br />
-				DON'T<br />
-				- Don't over-explain or speculate.<br />
-				- Don't use repeated openings like "I will" or "Proceeding to" in 3 preambles windows (IMPORTANT!).<br />
-				<br />
-				All **non-tool** text you emit in the commentary channel must follow this **preamble** style and cadence.<br />
-				<br />
-				Note that all preamble instructions should be in the commentary channel only with text displaying to the user. Do not use these instructions in the final channel.<br />
-			</Tag>
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<ResponseTranslationRules />
@@ -299,7 +242,6 @@ class VSCModelReminderInstructions extends PromptElement<ReminderInstructionsPro
 	async render(state: void, sizing: PromptSizing) {
 		return <>
 			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
-			Follow the guidance in &lt;preamble_instructions&gt; from the system prompt.<br />
 			You MUST preface each tool call batch with a brief status update.<br />
 			Focus on findings and next steps. Vary your openings—avoid repeating "I'll" or "I will" consecutively.<br />
 			When you have a finding, be enthusiastic and specific (2 sentences). Otherwise, state your next action only (1 sentence).<br />
