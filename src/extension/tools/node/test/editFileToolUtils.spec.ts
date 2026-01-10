@@ -8,10 +8,10 @@ import { homedir } from 'os';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
-import type { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
 import { MockAlternativeNotebookContentService } from '../../../../platform/notebook/common/mockAlternativeContentService';
 import { INotebookService } from '../../../../platform/notebook/common/notebookService';
+import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { WorkspaceEdit as WorkspaceEditShim } from '../../../../util/common/test/shims/editing';
 import { createTextDocumentData, IExtHostDocumentData, setDocText } from '../../../../util/common/test/shims/textDocument';
@@ -654,41 +654,6 @@ describe('assertPathIsSafe (Windows scenarios)', () => {
 });
 
 describe('makeUriConfirmationChecker', async () => {
-	// Mock custom instructions service
-	class MockCustomInstructionsService implements ICustomInstructionsService {
-		declare readonly _serviceBrand: undefined;
-		private externalFiles = new Set<string>();
-
-		setExternalFiles(uris: URI[]) {
-			this.externalFiles.clear();
-			uris.forEach(uri => this.externalFiles.add(uri.toString()));
-		}
-
-		isExternalInstructionsFile(uri: URI): boolean {
-			return this.externalFiles.has(uri.toString());
-		}
-
-		isExternalInstructionsFolder(uri: URI): boolean {
-			return false;
-		}
-
-		isSkillFile(uri: URI): boolean {
-			return false;
-		}
-
-		fetchInstructionsFromSetting(): Promise<any[]> {
-			return Promise.resolve([]);
-		}
-
-		fetchInstructionsFromFile(): Promise<any> {
-			return Promise.resolve(undefined);
-		}
-
-		getAgentInstructions(): Promise<URI[]> {
-			return Promise.resolve([]);
-		}
-	}
-
 	let configService: InMemoryConfigurationService;
 	let workspaceService: TestWorkspaceService;
 	let customInstructionsService: MockCustomInstructionsService;
