@@ -2115,6 +2115,12 @@
 				"enablement": "github.copilot-chat.activated"
 			},
 			{
+				"command": "github.copilot.deleteExternalIngestWorkspaceIndex",
+				"title": "%github.copilot.command.deleteExternalIngestWorkspaceIndex%",
+				"category": "Developer",
+				"enablement": "github.copilot-chat.activated"
+			},
+			{
 				"command": "github.copilot.report",
 				"title": "Report Issue",
 				"category": "Chat"
@@ -2457,7 +2463,7 @@
 					},
 					"github.copilot.chat.agent.autoFix": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"description": "%github.copilot.config.autoFix%",
 						"tags": [
 							"onExp"
@@ -3910,7 +3916,7 @@
 					"github.copilot.chat.CCAPartnerAgents.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "Enable partner agents for Copilot Coding Agent (CCA) sessions.",
+						"markdownDescription": "Enable partner agents for Copilot Coding Agent (CCA) sessions. Reload VS Code to apply.",
 						"tags": [
 							"advanced",
 							"experimental"
@@ -5193,7 +5199,7 @@
 		"@vscode/copilot-api": "^0.2.8",
 		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
-		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
+		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
 		"@vscode/webview-ui-toolkit": "^1.3.1",
 		"@xterm/headless": "^5.5.0",

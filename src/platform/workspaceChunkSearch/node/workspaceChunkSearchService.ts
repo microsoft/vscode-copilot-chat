@@ -94,6 +94,8 @@ export interface IWorkspaceChunkSearchService extends IDisposable {
 	triggerLocalIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
 
 	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
+
+	deleteExternalIngestWorkspaceIndex(): Promise<void>;
 }
 
 
@@ -209,6 +211,14 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 			throw new Error('Workspace chunk search service not available');
 		}
 		return impl.triggerRemoteIndexing(trigger, telemetryInfo);
+	}
+
+	async deleteExternalIngestWorkspaceIndex(): Promise<void> {
+		const impl = await this.tryInit(false);
+		if (!impl) {
+			throw new Error('Workspace chunk search service not available');
+		}
+		return impl.deleteExternalIngestWorkspaceIndex();
 	}
 }
 
@@ -336,6 +346,10 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
 		return this._codeSearchChunkSearch.triggerRemoteIndexing(trigger, telemetryInfo);
+	}
+
+	deleteExternalIngestWorkspaceIndex(): Promise<void> {
+		return this._codeSearchChunkSearch.deleteExternalIngestWorkspaceIndex(CancellationToken.None);
 	}
 
 	async searchFileChunks(
@@ -859,6 +873,9 @@ export class NullWorkspaceChunkSearchService implements IWorkspaceChunkSearchSer
 	}
 	triggerRemoteIndexing(): Promise<Result<true, TriggerIndexingError>> {
 		return Promise.resolve(Result.ok(true));
+	}
+	deleteExternalIngestWorkspaceIndex(): Promise<void> {
+		return Promise.resolve();
 	}
 	dispose(): void {
 		// noop

@@ -302,7 +302,8 @@ export class AnthropicMessagesProcessor {
 	private model: string = '';
 	private inputTokens: number = 0;
 	private outputTokens: number = 0;
-	private cachedTokens: number = 0;
+	private cacheCreationTokens: number = 0;
+	private cacheReadTokens: number = 0;
 	private contextManagementResponse?: ContextManagementResponse;
 
 	constructor(
@@ -324,9 +325,8 @@ export class AnthropicMessagesProcessor {
 					this.model = chunk.message.model;
 					this.inputTokens = chunk.message.usage.input_tokens;
 					this.outputTokens = chunk.message.usage.output_tokens;
-					if (chunk.message.usage.cache_read_input_tokens) {
-						this.cachedTokens = chunk.message.usage.cache_read_input_tokens;
-					}
+					this.cacheCreationTokens = chunk.message.usage.cache_creation_input_tokens ?? 0;
+					this.cacheReadTokens = chunk.message.usage.cache_read_input_tokens ?? 0;
 				}
 				return;
 			case 'content_block_start':
@@ -407,7 +407,11 @@ export class AnthropicMessagesProcessor {
 				return;
 			case 'message_delta':
 				if (chunk.usage) {
+					// message_delta provides the most accurate token counts
 					this.outputTokens = chunk.usage.output_tokens;
+					this.inputTokens = chunk.usage.input_tokens ?? this.inputTokens;
+					this.cacheCreationTokens = chunk.usage.cache_creation_input_tokens ?? this.cacheCreationTokens;
+					this.cacheReadTokens = chunk.usage.cache_read_input_tokens ?? this.cacheReadTokens;
 				}
 				if (chunk.context_management) {
 					this.contextManagementResponse = chunk.context_management;
@@ -447,11 +451,11 @@ export class AnthropicMessagesProcessor {
 						serverExperiments: ''
 					},
 					usage: {
-						prompt_tokens: this.inputTokens,
+						prompt_tokens: this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens,
 						completion_tokens: this.outputTokens,
-						total_tokens: this.inputTokens + this.outputTokens,
+						total_tokens: this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens + this.outputTokens,
 						prompt_tokens_details: {
-							cached_tokens: this.cachedTokens,
+							cached_tokens: this.cacheReadTokens,
 						},
 						completion_tokens_details: {
 							reasoning_tokens: 0,
