@@ -12,7 +12,7 @@ import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/com
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FilterReason } from '../../../platform/networking/common/openai';
+import { APIUsage, FilterReason } from '../../../platform/networking/common/openai';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -36,7 +36,7 @@ import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ContributedToolName } from '../../tools/common/toolNames';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { Conversation, getGlobalContextCacheKey, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
-import { InternalToolReference } from '../common/intents';
+import { InternalToolReference, IToolCallRound } from '../common/intents';
 import { ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { DefaultIntentRequestHandler } from './defaultIntentRequestHandler';
 import { IDocumentContext } from './documentContext';
@@ -254,9 +254,14 @@ export class ChatParticipantRequestHandler {
 
 				result = await chatResult;
 				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
+				const resultMetadata = (result as ICopilotChatResultIn).metadata;
+				const totalUsage = getTotalUsage(resultMetadata?.toolCallRounds);
+				const usageStr = totalUsage
+					? ` • ↑${totalUsage.prompt_tokens} ↓${totalUsage.completion_tokens} tokens`
+					: '';
 				result.details = this._authService.copilotToken?.isNoAuthUser ?
-					`${endpoint.name}` :
-					`${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
+					`${endpoint.name}${usageStr}` :
+					`${endpoint.name} • ${endpoint.multiplier ?? 0}x${usageStr}`;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);
@@ -462,4 +467,37 @@ function anchorPartToMarkdown(workspaceService: IWorkspaceService, anchor: ChatR
 	}
 
 	return `[${text}](${path} ${anchor.title ? `"${anchor.title}"` : ''})`;
+}
+
+/**
+ * Calculates the total API usage by summing usage from all tool call rounds.
+ */
+function getTotalUsage(toolCallRounds: readonly IToolCallRound[] | undefined): APIUsage | undefined {
+	if (!toolCallRounds?.length) {
+		return undefined;
+	}
+
+	const initial: APIUsage = {
+		completion_tokens: 0,
+		prompt_tokens: 0,
+		total_tokens: 0,
+		prompt_tokens_details: { cached_tokens: 0 }
+	};
+
+	const hasAnyUsage = toolCallRounds.some(round => round.usage);
+	if (!hasAnyUsage) {
+		return undefined;
+	}
+
+	return toolCallRounds.reduce((acc, round): APIUsage => {
+		const usage = round.usage || initial;
+		return {
+			completion_tokens: acc.completion_tokens + usage.completion_tokens,
+			prompt_tokens: acc.prompt_tokens + usage.prompt_tokens,
+			total_tokens: acc.total_tokens + usage.total_tokens,
+			prompt_tokens_details: {
+				cached_tokens: (acc.prompt_tokens_details?.cached_tokens ?? 0) + (usage.prompt_tokens_details?.cached_tokens ?? 0),
+			}
+		};
+	}, initial);
 }

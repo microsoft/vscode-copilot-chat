@@ -6,6 +6,7 @@
 import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { APIUsage } from '../../../platform/networking/common/openai';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -30,6 +31,7 @@ export interface IToolCallRound {
 	toolCalls: IToolCall[];
 	thinking?: ThinkingData;
 	statefulMarker?: string;
+	usage?: APIUsage;
 }
 
 export interface InternalToolReference extends vscode.ChatLanguageModelToolReference {
