@@ -397,6 +397,12 @@ export class GlobalContextMessageMetadata {
  * This metadata is used to trigger summarization when token usage exceeds thresholds.
  */
 export class TokenUsageMetadata {
+	/**
+	 * Maximum allowed token count for validation.
+	 * Set to 10 million to catch unrealistic values from API responses while allowing
+	 * for large context windows (e.g., Claude 3.5 Sonnet supports 200k tokens).
+	 * This serves as a sanity check rather than a strict model limitation.
+	 */
 	private static readonly MAX_TOKEN_COUNT = 10_000_000;
 
 	constructor(

@@ -252,7 +252,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				} else {
 					// Under budget - no summarization needed, use unlimited budget
 					safeBudget = Number.MAX_SAFE_INTEGER;
-					this.logService.debug(`AgentIntent: token usage under threshold, skipping summarization(promptTokens = ${promptTokens}, outputTokens = ${outputTokens}, total = ${totalEstimatedTokens}, threshold = ${budgetThreshold})`);
+					this.logService.debug(`AgentIntent: token usage under threshold, skipping summarization(promptTokens=${promptTokens}, outputTokens=${outputTokens}, total=${totalEstimatedTokens}, threshold=${budgetThreshold})`);
 				}
 			}
 		}
