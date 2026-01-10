@@ -2839,14 +2839,6 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
-					},
-					"github.copilot.chat.byok.ollamaEndpoint": {
-						"type": "string",
-						"default": "http://localhost:11434",
-						"tags": [
-							"preview"
-						],
-						"markdownDescription": "%github.copilot.config.byok.ollamaEndpoint%"
 					}
 				}
 			},
