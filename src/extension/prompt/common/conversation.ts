@@ -397,12 +397,27 @@ export class GlobalContextMessageMetadata {
  * This metadata is used to trigger summarization when token usage exceeds thresholds.
  */
 export class TokenUsageMetadata {
+	private static readonly MAX_TOKEN_COUNT = 10_000_000;
+
 	constructor(
 		/** Total number of prompt input tokens */
 		readonly promptTokens: number,
 		/** Number of output/completion tokens */
 		readonly outputTokens: number,
-	) { }
+	) {
+		if (!Number.isFinite(promptTokens) || !Number.isFinite(outputTokens)) {
+			throw new Error('Token counts must be finite numbers.');
+		}
+
+		if (promptTokens < 0 || outputTokens < 0) {
+			throw new Error('Token counts cannot be negative.');
+		}
+
+		const max = TokenUsageMetadata.MAX_TOKEN_COUNT;
+		if (promptTokens > max || outputTokens > max) {
+			throw new Error('Token counts exceed maximum allowed value.');
+		}
+	}
 }
 
 export function getGlobalContextCacheKey(accessor: ServicesAccessor): string {
