@@ -9,7 +9,7 @@ import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/commo
 import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
-import { ITestingServicesAccessor, TestingServiceCollection } from '../../../test/node/services';
+import { createPlatformServices, ITestingServicesAccessor } from '../../../test/node/services';
 import { TestWorkspaceService } from '../../../test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { ICustomInstructionsService } from '../../common/customInstructionsService';
@@ -20,7 +20,7 @@ suite('CustomInstructionsService - Skills', () => {
 	let configService: InMemoryConfigurationService;
 
 	beforeEach(async () => {
-		const services = new TestingServiceCollection();
+		const services = createPlatformServices();
 
 		// Setup workspace with a workspace folder
 		const workspaceFolders = [URI.file('/workspace')];
