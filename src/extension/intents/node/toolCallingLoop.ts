@@ -9,13 +9,16 @@ import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResp
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
+import { isAnthropicContextEditingEnabled } from '../../../platform/networking/common/anthropic';
 import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
@@ -108,6 +111,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		return this.options.conversation.getLatestTurn();
 	}
 
+	/**
+	 * Cached check for whether Anthropic token usage tracking is enabled.
+	 * This is only true when using Anthropic models with Messages API and context editing enabled.
+	 */
+	private _anthropicContextEditingEnabled: boolean | undefined;
+	protected get anthropicContextEditingEnabled(): boolean {
+		if (this._anthropicContextEditingEnabled === undefined) {
+			this._anthropicContextEditingEnabled = isAnthropicContextEditingEnabled(this._configurationService, this._experimentationService);
+		}
+		return this._anthropicContextEditingEnabled;
+	}
+
 	constructor(
 		protected readonly options: TOptions,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
@@ -116,6 +131,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationChatUpgradeService private readonly _authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
 	) {
 		super();
 	}
@@ -490,8 +507,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
-			// Store token usage metadata for Anthropic models using Messages API usage calculations
-			if (fetchResult.usage && isAnthropicFamily(endpoint)) {
+			// Store token usage metadata for Anthropic models using Messages API with context editing
+			if (fetchResult.usage && isAnthropicFamily(endpoint) && this.anthropicContextEditingEnabled) {
 				this.turn.setMetadata(new TokenUsageMetadata(
 					fetchResult.usage.prompt_tokens,
 					fetchResult.usage.completion_tokens

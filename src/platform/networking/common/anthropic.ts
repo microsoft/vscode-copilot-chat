@@ -69,6 +69,22 @@ export interface ContextManagementResponse {
 	applied_edits: AppliedContextEdit[];
 }
 
+/**
+ * Checks if Anthropic context editing is enabled.
+ * This requires both the Messages API to be enabled and context editing to be enabled.
+ * @param configurationService The configuration service
+ * @param experimentationService The experimentation service
+ * @returns true if Anthropic context editing is enabled
+ */
+export function isAnthropicContextEditingEnabled(
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService
+): boolean {
+	const useMessagesApi = configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, experimentationService);
+	const contextEditingEnabled = configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
+	return !!(useMessagesApi && contextEditingEnabled);
+}
+
 export interface ContextEditingConfig {
 	triggerType: 'input_tokens' | 'tool_uses';
 	triggerValue: number;
