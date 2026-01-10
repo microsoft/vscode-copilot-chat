@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatResult } from 'vscode';
 import { ChatVariablesCollection } from '../../common/chatVariablesCollection';
-import { IResultMetadata, normalizeSummariesOnRounds, Turn, TurnMessage, TurnStatus } from '../../common/conversation';
+import { IResultMetadata, normalizeSummariesOnRounds, TokenUsageMetadata, Turn, TurnMessage, TurnStatus } from '../../common/conversation';
 import { ToolCallRound } from '../../common/toolCallRound';
 
 describe('Turn', () => {
@@ -85,6 +85,60 @@ describe('Turn', () => {
 			normalizeSummariesOnRounds([turn1, turn2]);
 			expect(turn1.rounds[0].summary).to.equal('summary');
 			expect(turn2.rounds[0].summary).to.equal(undefined);
+		});
+	});
+});
+
+describe('TokenUsageMetadata', () => {
+	describe('constructor', () => {
+		it('should accept valid token counts', () => {
+			const metadata = new TokenUsageMetadata(100, 50);
+			expect(metadata.promptTokens).to.equal(100);
+			expect(metadata.outputTokens).to.equal(50);
+		});
+
+		it('should accept zero token counts', () => {
+			const metadata = new TokenUsageMetadata(0, 0);
+			expect(metadata.promptTokens).to.equal(0);
+			expect(metadata.outputTokens).to.equal(0);
+		});
+
+		it('should accept maximum valid token counts', () => {
+			const metadata = new TokenUsageMetadata(10_000_000, 10_000_000);
+			expect(metadata.promptTokens).to.equal(10_000_000);
+			expect(metadata.outputTokens).to.equal(10_000_000);
+		});
+
+		it('should throw error for negative prompt tokens', () => {
+			expect(() => new TokenUsageMetadata(-1, 50)).to.throw('Token counts cannot be negative.');
+		});
+
+		it('should throw error for negative output tokens', () => {
+			expect(() => new TokenUsageMetadata(100, -1)).to.throw('Token counts cannot be negative.');
+		});
+
+		it('should throw error for non-finite prompt tokens (NaN)', () => {
+			expect(() => new TokenUsageMetadata(NaN, 50)).to.throw('Token counts must be finite numbers.');
+		});
+
+		it('should throw error for non-finite output tokens (NaN)', () => {
+			expect(() => new TokenUsageMetadata(100, NaN)).to.throw('Token counts must be finite numbers.');
+		});
+
+		it('should throw error for non-finite prompt tokens (Infinity)', () => {
+			expect(() => new TokenUsageMetadata(Infinity, 50)).to.throw('Token counts must be finite numbers.');
+		});
+
+		it('should throw error for non-finite output tokens (Infinity)', () => {
+			expect(() => new TokenUsageMetadata(100, Infinity)).to.throw('Token counts must be finite numbers.');
+		});
+
+		it('should throw error for prompt tokens exceeding maximum', () => {
+			expect(() => new TokenUsageMetadata(10_000_001, 50)).to.throw('Token counts exceed maximum allowed value.');
+		});
+
+		it('should throw error for output tokens exceeding maximum', () => {
+			expect(() => new TokenUsageMetadata(100, 10_000_001)).to.throw('Token counts exceed maximum allowed value.');
 		});
 	});
 });

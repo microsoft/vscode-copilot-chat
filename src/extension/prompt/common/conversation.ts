@@ -397,12 +397,33 @@ export class GlobalContextMessageMetadata {
  * This metadata is used to trigger summarization when token usage exceeds thresholds.
  */
 export class TokenUsageMetadata {
+	/**
+	 * Maximum allowed token count for validation.
+	 * Set to 10 million to catch unrealistic values from API responses while allowing
+	 * for large context windows (e.g., Claude 3.5 Sonnet supports 200k tokens).
+	 * This serves as a sanity check rather than a strict model limitation.
+	 */
+	private static readonly MAX_TOKEN_COUNT = 10_000_000;
+
 	constructor(
 		/** Total number of prompt input tokens */
 		readonly promptTokens: number,
 		/** Number of output/completion tokens */
 		readonly outputTokens: number,
-	) { }
+	) {
+		if (!Number.isFinite(promptTokens) || !Number.isFinite(outputTokens)) {
+			throw new Error('Token counts must be finite numbers.');
+		}
+
+		if (promptTokens < 0 || outputTokens < 0) {
+			throw new Error('Token counts cannot be negative.');
+		}
+
+		const max = TokenUsageMetadata.MAX_TOKEN_COUNT;
+		if (promptTokens > max || outputTokens > max) {
+			throw new Error('Token counts exceed maximum allowed value.');
+		}
+	}
 }
 
 export function getGlobalContextCacheKey(accessor: ServicesAccessor): string {
