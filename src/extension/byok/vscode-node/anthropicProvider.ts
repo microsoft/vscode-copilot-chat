@@ -299,7 +299,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				type: 'enabled',
 				budget_tokens: thinkingBudget
 			} : undefined,
-			context_management: contextManagement as any,
+			context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
 		};
 
 		const wrappedProgress = new RecordedProgress(progress);
@@ -380,8 +380,35 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 	}
 
 	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
-		// Simple estimation - actual token count would require Claude's tokenizer
-		return Math.ceil(text.toString().length / 4);
+		if (!this._anthropicAPIClient) {
+			// Fallback to estimation if client is not initialized
+			return Math.ceil(text.toString().length / 4);
+		}
+
+		try {
+			if (typeof text === 'string') {
+				const response = await this._anthropicAPIClient.messages.countTokens({
+					model: model.id,
+					messages: [],
+					system: text,
+				});
+				this._logService.debug(`BYOK Anthropic provideTokenCount: ${response.input_tokens} tokens`);
+				return response.input_tokens;
+			}
+
+			const { messages, system } = apiMessageToAnthropicMessage([text as LanguageModelChatMessage]);
+
+			const response = await this._anthropicAPIClient.messages.countTokens({
+				model: model.id,
+				messages,
+				...(system.text && { system: system.text }),
+			});
+			this._logService.debug(`BYOK Anthropic provideTokenCount: ${response.input_tokens} tokens`);
+			return response.input_tokens;
+		} catch (error) {
+			this._logService.warn(`Failed to count tokens via Anthropic API, falling back to estimation: ${toErrorMessage(error)}`);
+			return Math.ceil(text.toString().length / 4);
+		}
 	}
 
 	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined; contextManagement: ContextManagementResponse | undefined }> {
