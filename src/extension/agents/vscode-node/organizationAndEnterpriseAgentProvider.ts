@@ -14,7 +14,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 const AgentFileExtension = '.agent.md';
 
-export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentsProvider {
+export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentProvider {
 
 	private readonly _onDidChangeCustomAgents = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
@@ -95,6 +95,9 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 							name: metadata.name,
 							description: metadata.description,
 							uri: fileUri,
+							metadata: {
+								customSource: vscode.l10n.t('Organization'),
+							}
 						});
 					}
 				}
