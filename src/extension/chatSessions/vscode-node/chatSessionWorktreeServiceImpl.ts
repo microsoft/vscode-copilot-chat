@@ -84,6 +84,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const repository = this.gitService.activeRepository.get();
 			if (!repository) {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+				this.logService.error('[ChatSessionWorktreeService][_createWorktree] No active repository found to create worktree for isolation.');
 				return undefined;
 			}
 
@@ -103,6 +104,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				} satisfies ChatSessionWorktreeProperties;
 			}
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+			this.logService.error('[ChatSessionWorktreeService][_createWorktree] Failed to create worktree for isolation.');
 			return undefined;
 		} catch (error) {
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
