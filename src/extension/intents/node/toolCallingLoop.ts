@@ -111,18 +111,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		return this.options.conversation.getLatestTurn();
 	}
 
-	/**
-	 * Cached check for whether Anthropic token usage tracking is enabled.
-	 * This is only true when using Anthropic models with Messages API and context editing enabled.
-	 */
-	private _anthropicContextEditingEnabled: boolean | undefined;
-	protected get anthropicContextEditingEnabled(): boolean {
-		if (this._anthropicContextEditingEnabled === undefined) {
-			this._anthropicContextEditingEnabled = isAnthropicContextEditingEnabled(this._configurationService, this._experimentationService);
-		}
-		return this._anthropicContextEditingEnabled;
-	}
-
 	constructor(
 		protected readonly options: TOptions,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
@@ -508,7 +496,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
 			// Store token usage metadata for Anthropic models using Messages API with context editing
-			if (fetchResult.usage && isAnthropicFamily(endpoint) && this.anthropicContextEditingEnabled) {
+			if (fetchResult.usage && isAnthropicFamily(endpoint) && isAnthropicContextEditingEnabled(this._configurationService, this._experimentationService)) {
 				this.turn.setMetadata(new TokenUsageMetadata(
 					fetchResult.usage.prompt_tokens,
 					fetchResult.usage.completion_tokens
