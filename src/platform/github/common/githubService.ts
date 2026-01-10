@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Endpoints } from '@octokit/types';
+import { CCAModel, RemoteAgentJobPayload } from '@vscode/copilot-api';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { decodeBase64 } from '../../../util/vs/base/common/buffer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { addPullRequestCommentGraphQLRequest, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { addPullRequestCommentGraphQLRequest, AssignableActor, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 
 /**
  * Options for controlling authentication behavior in OctoKit service methods.
@@ -118,20 +119,6 @@ export interface ErrorResponseWithStatusCode {
 	status: number;
 }
 
-export interface RemoteAgentJobPayload {
-	problem_statement: string;
-	event_type: string;
-	pull_request?: {
-		title?: string;
-		body_placeholder?: string;
-		body_suffix?: string;
-		base_ref?: string;
-		head_ref?: string;
-	};
-	run_name?: string;
-	custom_agent?: string;
-}
-
 export interface CustomAgentListItem {
 	name: string;
 	repo_owner_id: number;
@@ -220,7 +207,7 @@ export interface IOctoKitService {
 	 * Returns the list of Copilot pull requests for a given user on a specific repo.
 	 * @param authOptions - Authentication options. By default, uses silent auth and returns empty array if not authenticated.
 	 */
-	getCopilotPullRequestsForUser(owner: string, repo: string, authOptions: AuthOptions): Promise<PullRequestSearchItem[]>;
+	getOpenPullRequestsForUser(owner: string, repo: string, authOptions: AuthOptions): Promise<PullRequestSearchItem[]>;
 
 	/**
 	 * Returns the list of Copilot sessions for a given pull request.
@@ -353,6 +340,25 @@ export interface IOctoKitService {
 	 * @returns An array of repository names
 	 */
 	getOrganizationRepositories(org: string, authOptions: AuthOptions): Promise<string[]>;
+
+	/**
+	 * Gets the list of available models for the Copilot coding agent.
+	 * Returns an empty array if the user doesn't have access to the model picker
+	 * (e.g., Copilot Business or Enterprise users before rollout).
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns An array of available models. The first model is always 'Auto' and should be the default.
+	 */
+	getCopilotAgentModels(authOptions: AuthOptions): Promise<CCAModel[]>;
+
+	/**
+	 * Gets the list of assignable actors (users/bots) for a repository.
+	 * This is used to check if partner agents like Copilot are available for assignment.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns An array of assignable actors with their login names
+	 */
+	getAssignableActors(owner: string, repo: string, authOptions: AuthOptions): Promise<AssignableActor[]>;
 }
 
 /**
@@ -364,9 +370,9 @@ export interface IOctoKitService {
 export class BaseOctoKitService {
 	constructor(
 		protected readonly _capiClientService: ICAPIClientService,
-		private readonly _fetcherService: IFetcherService,
+		protected readonly _fetcherService: IFetcherService,
 		protected readonly _logService: ILogService,
-		private readonly _telemetryService: ITelemetryService
+		protected readonly _telemetryService: ITelemetryService
 	) { }
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
@@ -381,8 +387,8 @@ export class BaseOctoKitService {
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28');
 	}
 
-	protected async getCopilotPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
-		const query = `repo:${owner}/${repo} is:open author:copilot-swe-agent[bot] involves:${user}`;
+	protected async getOpenPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
+		const query = `repo:${owner}/${repo} is:open involves:${user}`;
 		return makeSearchGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, query);
 	}
 

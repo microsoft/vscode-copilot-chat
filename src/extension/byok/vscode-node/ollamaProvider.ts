@@ -16,7 +16,8 @@ interface OllamaModelInfoAPIResponse {
 	template: string;
 	capabilities: string[];
 	details: { family: string };
-	model_info: {
+	remote_model?: string;
+	model_info?: {
 		'general.basename': string;
 		'general.architecture': string;
 		[other: string]: any;
@@ -126,10 +127,10 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 
 	private async _getOllamaModelInfo(ollamaBaseUrl: string, modelId: string): Promise<IChatModelInformation> {
 		const modelInfo = await this._fetchOllamaModelInformation(ollamaBaseUrl, modelId);
-		const contextWindow = modelInfo.model_info[`${modelInfo.model_info['general.architecture']}.context_length`] ?? 4096;
+		const contextWindow = modelInfo?.model_info?.[`${modelInfo.model_info['general.architecture']}.context_length`] ?? 32768;
 		const outputTokens = contextWindow < 4096 ? Math.floor(contextWindow / 2) : 4096;
 		const modelCapabilities = {
-			name: modelInfo.model_info['general.basename'],
+			name: modelInfo?.model_info?.['general.basename'] ?? modelInfo.remote_model ?? modelId,
 			maxOutputTokens: outputTokens,
 			maxInputTokens: contextWindow - outputTokens,
 			vision: modelInfo.capabilities.includes('vision'),
@@ -174,7 +175,6 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 		});
 		return response.json() as unknown as OllamaModelInfoAPIResponse;
 	}
-
 	/**
 	 * Check if the connected Ollama server version meets the minimum requirements
 	 * @throws Error if version is below minimum or version check fails

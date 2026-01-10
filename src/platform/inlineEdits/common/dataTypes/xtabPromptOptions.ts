@@ -84,6 +84,7 @@ export enum PromptingStrategy {
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
 	XtabAggressiveness = 'xtabAggressiveness',
+	PatchBased = 'patchBased',
 }
 
 export function isPromptingStrategy(value: string): value is PromptingStrategy {
@@ -94,6 +95,7 @@ export enum ResponseFormat {
 	CodeBlock = 'codeBlock',
 	UnifiedWithXml = 'unifiedWithXml',
 	EditWindowOnly = 'editWindowOnly',
+	CustomDiffPatch = 'customDiffPatch',
 }
 
 export namespace ResponseFormat {
@@ -106,6 +108,8 @@ export namespace ResponseFormat {
 			case PromptingStrategy.Xtab275:
 			case PromptingStrategy.XtabAggressiveness:
 				return ResponseFormat.EditWindowOnly;
+			case PromptingStrategy.PatchBased:
+				return ResponseFormat.CustomDiffPatch;
 			case PromptingStrategy.SimplifiedSystemPrompt:
 			case PromptingStrategy.CopilotNesXtab:
 			case undefined:
@@ -157,7 +161,7 @@ export interface ModelConfiguration {
 	modelName: string;
 	promptingStrategy: PromptingStrategy | undefined /* default */;
 	includeTagsInCurrentFile: boolean;
-	lintOptions?: LintOptions;
+	lintOptions: LintOptions | undefined;
 }
 
 export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({

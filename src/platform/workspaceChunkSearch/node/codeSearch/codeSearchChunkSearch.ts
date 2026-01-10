@@ -44,6 +44,7 @@ import { EmbeddingsChunkSearch } from '../embeddingsChunkSearch';
 import { TfIdfWithSemanticChunkSearch } from '../tfidfWithSemanticChunkSearch';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
 import { AdoCodeSearchRepo, BuildIndexTriggerReason, CodeSearchRepo, CodeSearchRepoStatus, GithubCodeSearchRepo, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
+import { ExternalIngestClient } from './externalIngestClient';
 import { ExternalIngestIndex } from './externalIngestIndex';
 import { CodeSearchRepoTracker, RepoInfo, TrackedRepoStatus } from './repoTracker';
 import { CodeSearchDiff, CodeSearchWorkspaceDiffTracker } from './workspaceDiff';
@@ -162,7 +163,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._tfIdfChunkSearch = tfIdfChunkSearch;
 
 		this._repoTracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
-		this._externalIngestIndex = new Lazy(() => this._register(instantiationService.createInstance(ExternalIngestIndex)));
+		this._externalIngestIndex = new Lazy(() => {
+			const client = instantiationService.createInstance(ExternalIngestClient);
+			return this._register(instantiationService.createInstance(ExternalIngestIndex, client));
+		});
 
 		this._register(this._repoTracker.onDidAddOrUpdateRepo(info => {
 			if (info.status === TrackedRepoStatus.Resolved && info.resolvedRemoteInfo) {
@@ -430,7 +434,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.WorkspaceEnableCodeSearch, this._experimentationService);
 	}
 
-	public isExternalIngestEnabled() {
+	public isExternalIngestEnabled(): boolean | 'force' {
 		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.TeamInternal.WorkspaceEnableCodeSearchExternalIngest, this._experimentationService);
 	}
 
@@ -761,14 +765,14 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		if (remoteInfo.repoId.type === 'github') {
 			this.updateRepoEntry(repo, this._instantiationService.createInstance(GithubCodeSearchRepo, repo, remoteInfo.repoId, remoteInfo));
 			// Update external ingest roots since this repo is now covered by code search
-			if (this.isExternalIngestEnabled()) {
+			if (this.isExternalIngestEnabled() === true) {
 				this.updateExternalIngestRoots();
 			}
 			return;
 		} else if (remoteInfo.repoId.type === 'ado') {
 			this.updateRepoEntry(repo, this._instantiationService.createInstance(AdoCodeSearchRepo, repo, remoteInfo.repoId, remoteInfo));
 			// Update external ingest roots since this repo is now covered by code search
-			if (this.isExternalIngestEnabled()) {
+			if (this.isExternalIngestEnabled() === true) {
 				this.updateExternalIngestRoots();
 			}
 			return;
@@ -823,6 +827,17 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).started`);
 
 		await this.initialize();
+
+		// Update external ingest index if enabled
+		const externalIndexEnabled = this.isExternalIngestEnabled();
+		if (externalIndexEnabled) {
+			await this._externalIngestIndex.value.doIngest(CancellationToken.None);
+
+			// If we are forcing external ingest only, we don't want to update the code search repos
+			if (externalIndexEnabled === 'force') {
+				return Result.ok(true);
+			}
+		}
 
 		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).Repos: ${JSON.stringify(Array.from(this._codeSearchRepos.values(), entry => ({
 			rootUri: entry.repo.repoInfo.rootUri.toString(),
@@ -960,6 +975,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				entry.repo.refreshStatusFromEndpoint(true, CancellationToken.None);
 			}
 		}
+	}
+
+	public deleteExternalIngestWorkspaceIndex(token: CancellationToken): Promise<void> {
+		return this._externalIngestIndex.value.deleteIndex(token);
 	}
 }
 
