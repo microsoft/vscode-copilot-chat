@@ -299,7 +299,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				type: 'enabled',
 				budget_tokens: thinkingBudget
 			} : undefined,
-			context_management: contextManagement as any,
+			context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
 		};
 
 		const wrappedProgress = new RecordedProgress(progress);
@@ -592,6 +592,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					completion_tokens: -1,
 					prompt_tokens: chunk.message.usage.input_tokens + (chunk.message.usage.cache_creation_input_tokens ?? 0) + (chunk.message.usage.cache_read_input_tokens ?? 0),
 					total_tokens: -1,
+					// Cast needed: Anthropic returns cache_creation_input_tokens which APIUsage.prompt_tokens_details doesn't define
 					prompt_tokens_details: {
 						cached_tokens: chunk.message.usage.cache_read_input_tokens ?? 0,
 						cache_creation_input_tokens: chunk.message.usage.cache_creation_input_tokens
