@@ -31,7 +31,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { Conversation, IResultMetadata, ResponseStreamParticipant, TokenUsageMetadata, TurnStatus } from '../../prompt/common/conversation';
+import { AnthropicTokenUsageMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext, InternalToolReference, IToolCall, IToolCallRound } from '../../prompt/common/intents';
 import { cancelText, IToolCallIterationIncrease } from '../../prompt/common/specialRequestTypes';
 import { ThinkingDataItem, ToolCallRound } from '../../prompt/common/toolCallRound';
@@ -497,7 +497,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (fetchResult.type === ChatFetchResponseType.Success) {
 			// Store token usage metadata for Anthropic models using Messages API with context editing
 			if (fetchResult.usage && isAnthropicFamily(endpoint) && isAnthropicContextEditingEnabled(this._configurationService, this._experimentationService)) {
-				this.turn.setMetadata(new TokenUsageMetadata(
+				this.turn.setMetadata(new AnthropicTokenUsageMetadata(
 					fetchResult.usage.prompt_tokens,
 					fetchResult.usage.completion_tokens
 				));

@@ -396,7 +396,7 @@ export class GlobalContextMessageMetadata {
  * Stores prompt tokens and output tokens for each turn.
  * This metadata is used to trigger summarization when token usage exceeds thresholds.
  */
-export class TokenUsageMetadata {
+export class AnthropicTokenUsageMetadata {
 	constructor(
 		/** Total number of prompt input tokens */
 		readonly promptTokens: number,

@@ -29,7 +29,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { RenderedUserMessageMetadata, TokenUsageMetadata } from '../../prompt/common/conversation';
+import { AnthropicTokenUsageMetadata, RenderedUserMessageMetadata } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from '../../prompt/common/specialRequestTypes';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
@@ -234,7 +234,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		if (summarizationEnabled && isAnthropicFamily(this.endpoint) && anthropicContextEditingEnabled) {
 			// First check current turn for token usage (from tool calling loop), then fall back to previous turn's result metadata
 			const currentTurn = promptContext.conversation?.getLatestTurn();
-			const currentTurnTokenUsage = currentTurn?.getMetadata(TokenUsageMetadata);
+			const currentTurnTokenUsage = currentTurn?.getMetadata(AnthropicTokenUsageMetadata);
 			const previousTurn = promptContext.history?.at(-1);
 
 			const promptTokens = currentTurnTokenUsage?.promptTokens ?? previousTurn?.resultMetadata?.promptTokens;
@@ -337,18 +337,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					e.metadata.getAll(ToolResultMetadata).forEach((metadata) => {
 						promptContext.toolCallResults![metadata.toolCallId] = metadata.result;
 					});
-					// Update props with new promptContext containing tool results
-					const updatedProps: AgentPromptProps = {
-						...props,
-						promptContext: {
-							...promptContext,
-							tools: promptContext.tools && {
-								...promptContext.tools,
-								toolReferences: this.stableToolReferences.filter((r) => r.name !== ToolName.Codebase),
-							}
-						}
-					};
-					result = await renderWithSummarization(`budget exceeded(${e.message})`, updatedProps);
+					result = await renderWithSummarization(`budget exceeded(${e.message})`);
 				} else {
 					throw e;
 				}
