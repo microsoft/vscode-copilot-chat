@@ -316,6 +316,20 @@ export class ChatEndpoint implements IChatEndpoint {
 				body.thinking_budget = thinkingBudget;
 			}
 		}
+
+		// Apply Gemini function calling mode if configured
+		const hasTools = !!options.requestOptions?.tools?.length;
+		if (hasTools && this.family.toLowerCase().includes('gemini-3')) {
+			const geminiFunctionCallingMode = this._configurationService.getExperimentBasedConfig(
+				ConfigKey.TeamInternal.GeminiFunctionCallingMode,
+				this._expService
+			);
+			// Only override tool_choice if experiment provides a value and user hasn't specified a function call
+			if (geminiFunctionCallingMode && typeof body.tool_choice !== 'object') {
+				body.tool_choice = geminiFunctionCallingMode;
+			}
+		}
+
 		return body;
 	}
 
