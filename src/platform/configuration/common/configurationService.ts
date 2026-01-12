@@ -733,9 +733,8 @@ export namespace ConfigKey {
 		export const InternalWelcomeHintEnabled = defineTeamInternalSetting<boolean>('chat.advanced.welcomePageHint.enabled', ConfigType.Simple, { defaultValue: false, internalDefaultValue: true, teamDefaultValue: true, owner: 'lramos15', expirationDate: '2025-01-01' /* exempted */ });
 		export const InlineChatUseCodeMapper = defineTeamInternalSetting<boolean>('chat.advanced.inlineChat.useCodeMapper', ConfigType.Simple, false);
 		export const EnablePromptRendererTracing = defineTeamInternalSetting<boolean>('chat.advanced.promptRenderer.trace', ConfigType.Simple, false);
-
 		// Backed by Experiments
-		export const DebugCollectFetcherTelemetry = defineTeamInternalSetting<boolean>('chat.advanced.debug.collectFetcherTelemetry', ConfigType.ExperimentBased, true);
+		export const GeminiFunctionCallingMode = defineTeamInternalSetting<'auto' | 'none' | 'required' | 'validated' | undefined>('chat.advanced.gemini.functionCallingMode', ConfigType.ExperimentBased, undefined);
 		export const DebugExpUseNodeFetchFetcher = defineTeamInternalSetting<boolean | undefined>('chat.advanced.debug.useNodeFetchFetcher', ConfigType.ExperimentBased, undefined);
 		export const DebugExpUseNodeFetcher = defineTeamInternalSetting<boolean | undefined>('chat.advanced.debug.useNodeFetcher', ConfigType.ExperimentBased, undefined);
 		export const DebugExpUseElectronFetcher = defineTeamInternalSetting<boolean | undefined>('chat.advanced.debug.useElectronFetcher', ConfigType.ExperimentBased, undefined);
@@ -900,9 +899,6 @@ export namespace ConfigKey {
 
 	export const EnableAlternateGptPrompt = defineSetting<boolean>('chat.alternateGptPrompt.enabled', ConfigType.ExperimentBased, false);
 	export const EnableAlternateGeminiModelFPrompt = defineSetting<boolean>('chat.alternateGeminiModelFPrompt.enabled', ConfigType.ExperimentBased, false);
-
-	/** Function calling mode for Gemini tool calls. Supports: 'auto', 'none', 'required', 'validated'. */
-	export const GeminiFunctionCallingMode = defineSetting<'auto' | 'none' | 'required' | 'validated' | undefined>('chat.gemini.functionCallingMode', ConfigType.ExperimentBased, undefined);
 
 	/** Enable custom agents from GitHub Enterprise/Organizations */
 	export const ShowOrganizationAndEnterpriseAgents = defineSetting<boolean>('chat.customAgents.showOrganizationAndEnterpriseAgents', ConfigType.Simple, false);

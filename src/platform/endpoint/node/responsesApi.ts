@@ -34,7 +34,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 
 	const hasTools = !!options.requestOptions?.tools?.length;
 	const geminiFunctionCallingMode = hasTools && endpoint.family.toLowerCase().includes('gemini-3')
-		? configService.getExperimentBasedConfig(ConfigKey.GeminiFunctionCallingMode, expService)
+		? configService.getExperimentBasedConfig(ConfigKey.TeamInternal.GeminiFunctionCallingMode, expService)
 		: undefined;
 
 	const body: IEndpointBody = {

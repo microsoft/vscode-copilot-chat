@@ -2650,20 +2650,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.gemini.functionCallingMode": {
-						"type": "string",
-						"enum": [
-							"auto",
-							"none",
-							"required",
-							"validated"
-						],
-						"markdownDescription": "Function calling mode for Gemini tool calls. Options: auto (let model decide), none (disable tool calls), required (force at least one tool call), validated (use validated mode for better accuracy).",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.imageUpload.enabled": {
 						"type": "boolean",
 						"default": true,
