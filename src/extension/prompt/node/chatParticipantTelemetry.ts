@@ -6,7 +6,7 @@
 import { PromptReference, Raw } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { roleToString } from '../../../platform/chat/common/globalStringUtils';
+import { getTextPart, roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -654,7 +654,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
 			command: this._intent.id,
 			contextTypes: 'none', // TODO this is defunct
-			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${msg.content?.length}`).join(','),
+			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${getTextPart(msg.content).length}`).join(','),
 			conversationId: this._sessionId,
 			requestId: turn.id,
 			responseId: turn.id, // SAME as fetchResult.requestId ,
@@ -878,7 +878,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		this._telemetryService.sendMSFTTelemetryEvent('inline.request', {
 			command: this._intent.id,
 			contextTypes: 'none',// TODO@jrieken intentResult.contexts.map(part => part.kind).join(',') ?? 'none',
-			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${msg.content.length}`).join(','),
+			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${getTextPart(msg.content).length}`).join(','),
 			conversationId: this._sessionId,
 			requestId: this.telemetryMessageId,
 			languageId: this._documentContext.document.languageId,
