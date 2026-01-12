@@ -41,7 +41,7 @@ jobs:
         run: pip install setuptools
 
       - name: Restore build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         id: build-cache
         with:
           key: build_cache-${{ hashFiles('build/.cachesalt', 'package-lock.json') }}
