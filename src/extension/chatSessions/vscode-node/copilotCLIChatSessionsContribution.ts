@@ -179,15 +179,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(_untitledSessionIdMap.get(session.id) ?? session.id);
-		const worktreeRelativePath = this.worktreeManager.getWorktreeRelativePath(session.id);
 		const worktreeProperties = this.worktreeManager.getWorktreeProperties(session.id);
 
 		const label = session.label;
 
 		// Badge
 		let badge: vscode.MarkdownString | undefined;
-		if (worktreeProperties?.branchName || worktreeRelativePath) {
-			badge = new vscode.MarkdownString(`$(worktree) ${worktreeProperties?.branchName ?? worktreeRelativePath}`);
+		if (worktreeProperties?.branchName) {
+			badge = new vscode.MarkdownString(`$(worktree) ${worktreeProperties.branchName}`);
 			badge.supportThemeIcons = true;
 		}
 
@@ -278,9 +277,9 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			options[ISOLATION_OPTION_ID] = this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get() && isolationEnabled ? 'enabled' : 'disabled';
 		} else if (existingSession && workingDirectory) {
 			// For existing sessions with a worktree, show the worktree branch name as a locked option
-			const worktreeRelativePath = this.copilotCLIWorktreeManagerService.getWorktreeRelativePath(copilotcliSessionId);
-			if (worktreeRelativePath) {
-				options[ISOLATION_OPTION_ID] = getLockedIsolationOption(worktreeRelativePath);
+			const worktreeProperties = this.copilotCLIWorktreeManagerService.getWorktreeProperties(copilotcliSessionId);
+			if (worktreeProperties?.branchName) {
+				options[ISOLATION_OPTION_ID] = getLockedIsolationOption(worktreeProperties.branchName);
 			} else {
 				options[ISOLATION_OPTION_ID] = disabledIsolationLocked;
 			}
@@ -469,9 +468,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (isUntitled && session.object.options.isolationEnabled && session.object.options.workingDirectory && this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get()) {
 				const changes: { optionId: string; value: vscode.ChatSessionProviderOptionItem }[] = [];
 				// For existing sessions with a worktree, show the worktree branch name as a locked option
-				const worktreeRelativePath = this.copilotCLIWorktreeManagerService.getWorktreeRelativePath(session.object.sessionId);
-				if (worktreeRelativePath) {
-					changes.push({ optionId: ISOLATION_OPTION_ID, value: getLockedIsolationOption(worktreeRelativePath) });
+				const worktreeProperties = this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.object.sessionId);
+				if (worktreeProperties?.branchName) {
+					changes.push({ optionId: ISOLATION_OPTION_ID, value: getLockedIsolationOption(worktreeProperties.branchName) });
 					this.contentProvider.notifySessionOptionsChange(resource, changes);
 				}
 			} else if (isUntitled && (!session.object.options.isolationEnabled || !this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get())) {
@@ -1044,9 +1043,9 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		const sessionId = SessionIdForCLI.parse(sessionItemResource);
 		const sessionWorktree = copilotCLIWorktreeManagerService.getWorktreePath(sessionId);
-		const sessionWorktreeName = copilotCLIWorktreeManagerService.getWorktreeRelativePath(sessionId);
+		const sessionWorktreeProperties = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 
-		if (!sessionWorktree || !sessionWorktreeName) {
+		if (!sessionWorktree || !sessionWorktreeProperties) {
 			return;
 		}
 
@@ -1055,7 +1054,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
-		const title = l10n.t('Background Agent ({0})', sessionWorktreeName);
+		const title = l10n.t('Background Agent ({0})', sessionWorktreeProperties.branchName);
 		const multiDiffSourceUri = Uri.parse(`copilotcli-worktree-changes:/${sessionId}`);
 		const resources = repository.changes.indexChanges.map(change => {
 			switch (change.status) {

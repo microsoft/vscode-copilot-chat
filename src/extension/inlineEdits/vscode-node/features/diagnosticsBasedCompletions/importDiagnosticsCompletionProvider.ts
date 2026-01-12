@@ -374,7 +374,7 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 
 	private static CodeActionTitlePrefixes = ['Add import from', 'Update import from'];
 	private static ImportsToIgnore = new Set<string>(['type', 'namespace', 'module', 'declare', 'abstract', 'from', 'of', 'require', 'async']);
-	private static ModulesToIgnore = new Set<string>(['node']);
+	private static ModulesToIgnore = new Set<string>([]);
 
 	isImportDiagnostic(diagnostic: Diagnostic): boolean {
 		return diagnostic.message.includes('Cannot find name');
@@ -391,6 +391,10 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 
 		if (importCodeAction.importSource === ImportSource.external && importCodeAction.importPath.includes('/')) {
 			return true; // Ignore imports that are from node_modules and point to a subpath
+		}
+
+		if (importCodeAction.importSource === ImportSource.external && importCodeAction.importName === importCodeAction.importName.toLowerCase()) {
+			return true; // Ignore imports which consits of a single word as they are likely variable names. All lowercase is an over approximation for this
 		}
 
 		if (JavascriptImportHandler.ImportsToIgnore.has(importCodeAction.importName)) {
@@ -440,7 +444,11 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 			}
 		}
 
-		const potentialNodeModules = [importPath, importPath.split('/')[0], importPath.split(':')[0]];
+		if (importPath.includes(':')) {
+			return ImportSource.external;
+		}
+
+		const potentialNodeModules = [importPath, importPath.split('/')[0]];
 		if (potentialNodeModules.some(importPath => workspaceInfo.nodeModules.has(importPath))) {
 			return ImportSource.external;
 		}

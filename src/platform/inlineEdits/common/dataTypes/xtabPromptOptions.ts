@@ -161,7 +161,7 @@ export interface ModelConfiguration {
 	modelName: string;
 	promptingStrategy: PromptingStrategy | undefined /* default */;
 	includeTagsInCurrentFile: boolean;
-	lintOptions?: LintOptions;
+	lintOptions: LintOptions | undefined;
 }
 
 export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({

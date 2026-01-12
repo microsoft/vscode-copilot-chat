@@ -14,7 +14,8 @@ interface OllamaModelInfoAPIResponse {
 	template: string;
 	capabilities: string[];
 	details: { family: string };
-	model_info: {
+	remote_model?: string;
+	model_info?: {
 		'general.basename': string;
 		'general.architecture': string;
 		[other: string]: any;
@@ -123,10 +124,10 @@ export class OllamaLMProvider extends BaseOpenAICompatibleLMProvider {
 		}
 		if (!modelCapabilities) {
 			const modelInfo = await this._getOllamaModelInformation(modelId);
-			const contextWindow = modelInfo.model_info[`${modelInfo.model_info['general.architecture']}.context_length`] ?? 4096;
+			const contextWindow = modelInfo?.model_info?.[`${modelInfo.model_info['general.architecture']}.context_length`] ?? 32768;
 			const outputTokens = contextWindow < 4096 ? Math.floor(contextWindow / 2) : 4096;
 			modelCapabilities = {
-				name: modelInfo.model_info['general.basename'],
+				name: modelInfo?.model_info?.['general.basename'] ?? modelInfo.remote_model ?? modelId,
 				maxOutputTokens: outputTokens,
 				maxInputTokens: contextWindow - outputTokens,
 				vision: modelInfo.capabilities.includes('vision'),

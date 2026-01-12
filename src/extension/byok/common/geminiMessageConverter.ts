@@ -77,7 +77,7 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 				// Handle case with text content (may also have images)
 				try {
 					responsePayload = JSON.parse(textContent);
-					if (typeof responsePayload !== 'object' || responsePayload === null) {
+					if (typeof responsePayload !== 'object' || responsePayload === null || Array.isArray(responsePayload)) {
 						responsePayload = { result: responsePayload };
 					}
 				} catch {

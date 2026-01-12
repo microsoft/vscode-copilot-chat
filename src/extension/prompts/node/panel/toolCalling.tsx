@@ -382,7 +382,7 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 			}
 		}
 
-		return <Image src={imageSource} />;
+		return <Image src={imageSource} mimeType={part.mimeType} />;
 	}
 }
 

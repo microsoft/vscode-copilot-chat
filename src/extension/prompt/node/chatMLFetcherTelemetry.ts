@@ -32,7 +32,6 @@ export interface IChatMLFetcherCancellationProperties {
 	model: string;
 	apiType: string | undefined;
 	associatedRequestId?: string;
-	retryAfterErrorCategory?: string;
 	retryAfterError?: string;
 	retryAfterErrorGitHubRequestId?: string;
 	connectivityTestError?: string;
@@ -104,7 +103,6 @@ export class ChatMLFetcherTelemetrySender {
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
-				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
 				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
@@ -126,7 +124,6 @@ export class ChatMLFetcherTelemetrySender {
 			reasoningEffort: requestBody.reasoning?.effort,
 			reasoningSummary: requestBody.reasoning?.summary,
 			...(fetcher ? { fetcher } : {}),
-			...(baseTelemetry?.properties.retryAfterErrorCategory ? { retryAfterErrorCategory: baseTelemetry.properties.retryAfterErrorCategory } : {}),
 			...(baseTelemetry?.properties.retryAfterError ? { retryAfterError: baseTelemetry.properties.retryAfterError } : {}),
 			...(baseTelemetry?.properties.retryAfterErrorGitHubRequestId ? { retryAfterErrorGitHubRequestId: baseTelemetry.properties.retryAfterErrorGitHubRequestId } : {}),
 			...(baseTelemetry?.properties.connectivityTestError ? { connectivityTestError: baseTelemetry.properties.connectivityTestError } : {}),
@@ -160,7 +157,6 @@ export class ChatMLFetcherTelemetrySender {
 			model,
 			apiType,
 			associatedRequestId,
-			retryAfterErrorCategory,
 			retryAfterError,
 			retryAfterErrorGitHubRequestId,
 			connectivityTestError,
@@ -199,7 +195,6 @@ export class ChatMLFetcherTelemetrySender {
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
-				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
 				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
@@ -214,7 +209,6 @@ export class ChatMLFetcherTelemetrySender {
 			model,
 			associatedRequestId,
 			...(fetcher ? { fetcher } : {}),
-			...(retryAfterErrorCategory ? { retryAfterErrorCategory } : {}),
 			...(retryAfterError ? { retryAfterError } : {}),
 			...(retryAfterErrorGitHubRequestId ? { retryAfterErrorGitHubRequestId } : {}),
 			...(connectivityTestError ? { connectivityTestError } : {}),
@@ -244,6 +238,7 @@ export class ChatMLFetcherTelemetrySender {
 		timeToFirstToken: number,
 		isVisionRequest: boolean,
 		fetcher: FetcherId | undefined,
+		wasRetried: boolean = false,
 	) {
 		/* __GDPR__
 			"response.error" : {
@@ -268,7 +263,7 @@ export class ChatMLFetcherTelemetrySender {
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
-				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
+				"wasRetried": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the error will be retried", "isMeasurement": true },
 				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
@@ -288,7 +283,6 @@ export class ChatMLFetcherTelemetrySender {
 			reasoningSummary: requestBody.reasoning?.summary,
 			...(fetcher ? { fetcher } : {}),
 			associatedRequestId: telemetryProperties?.associatedRequestId,
-			...(telemetryProperties?.retryAfterErrorCategory ? { retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory } : {}),
 			...(telemetryProperties?.retryAfterError ? { retryAfterError: telemetryProperties.retryAfterError } : {}),
 			...(telemetryProperties?.retryAfterErrorGitHubRequestId ? { retryAfterErrorGitHubRequestId: telemetryProperties.retryAfterErrorGitHubRequestId } : {}),
 			...(telemetryProperties?.connectivityTestError ? { connectivityTestError: telemetryProperties.connectivityTestError } : {}),
@@ -301,7 +295,8 @@ export class ChatMLFetcherTelemetrySender {
 			timeToFirstToken,
 			isVisionRequest: isVisionRequest ? 1 : -1,
 			isBYOK: isBYOKModel(chatEndpointInfo),
-			isAuto: isAutoModel(chatEndpointInfo)
+			isAuto: isAutoModel(chatEndpointInfo),
+			wasRetried: wasRetried ? 1 : 0
 		});
 	}
 }

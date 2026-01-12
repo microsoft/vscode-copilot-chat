@@ -84,6 +84,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const repository = this.gitService.activeRepository.get();
 			if (!repository) {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+				this.logService.error('[ChatSessionWorktreeService][_createWorktree] No active repository found to create worktree for isolation.');
 				return undefined;
 			}
 
@@ -103,6 +104,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				} satisfies ChatSessionWorktreeProperties;
 			}
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+			this.logService.error('[ChatSessionWorktreeService][_createWorktree] Failed to create worktree for isolation.');
 			return undefined;
 		} catch (error) {
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
@@ -135,17 +137,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			// Worktree properties v1
 			return vscode.Uri.file(worktreeProperties.worktreePath);
 		}
-	}
-
-	getWorktreeRelativePath(sessionId: string): string | undefined {
-		const worktreePath = this.getWorktreePath(sessionId);
-		if (!worktreePath) {
-			return undefined;
-		}
-
-		// TODO@rebornix, @osortega: read the workingtree name from git extension
-		const lastIndex = worktreePath.fsPath.lastIndexOf('/');
-		return worktreePath.fsPath.substring(lastIndex + 1);
 	}
 
 	async applyWorktreeChanges(sessionId: string): Promise<void> {
@@ -323,6 +314,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		if (!repository) {
 			this.logService.error(`[ChatSessionWorktreeService][handleRequestCompleted] Unable to find repository for working directory ${worktreePath}`);
 			throw new Error(`Unable to find repository for working directory ${worktreePath}`);
+		}
+
+		if (repository.state.workingTreeChanges.length === 0 && repository.state.indexChanges.length === 0 && repository.state.untrackedChanges.length === 0) {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] No changes to commit in working directory ${worktreePath}`);
+			return;
 		}
 
 		this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);

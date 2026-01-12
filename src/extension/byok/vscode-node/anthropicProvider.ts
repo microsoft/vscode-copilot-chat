@@ -5,10 +5,12 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
-import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
+import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelDataPart, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
+import { ContextManagementResponse, getContextManagementFromConfig } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -269,12 +271,20 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 		const thinkingBudget = this._getThinkingBudget(model.id, model.maxOutputTokens);
 
+		// Build context management configuration
+		const contextManagement = getContextManagementFromConfig(
+			this._configurationService,
+			this._experimentationService,
+			thinkingBudget,
+			model.maxInputTokens
+		);
+
 		// Build betas array for beta API features
 		const betas: string[] = [];
 		if (thinkingBudget) {
 			betas.push('interleaved-thinking-2025-05-14');
 		}
-		if (hasMemoryTool) {
+		if (hasMemoryTool || contextManagement) {
 			betas.push('context-management-2025-06-27');
 		}
 
@@ -288,7 +298,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			thinking: thinkingBudget ? {
 				type: 'enabled',
 				budget_tokens: thinkingBudget
-			} : undefined
+			} : undefined,
+			context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
 		};
 
 		const wrappedProgress = new RecordedProgress(progress);
@@ -298,14 +309,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
-			pendingLoggedChatRequest.resolve({
-				type: ChatFetchResponseType.Success,
-				requestId,
-				serverRequestId: requestId,
-				usage: result.usage,
-				value: ['value'],
-				resolvedModel: model.id
-			}, wrappedProgress.items.map((i): IResponseDelta => {
+			const responseDeltas: IResponseDelta[] = wrappedProgress.items.map((i): IResponseDelta => {
 				if (i instanceof LanguageModelTextPart) {
 					return { text: i.value };
 				} else if (i instanceof LanguageModelToolCallPart) {
@@ -326,7 +330,22 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				} else {
 					return { text: '' };
 				}
-			}));
+			});
+			// TODO: @bhavyaus - Add telemetry tracking for context editing (contextEditingApplied, contextEditingClearedTokens, contextEditingEditCount) like messagesApi.ts does
+			if (result.contextManagement) {
+				responseDeltas.push({
+					text: '',
+					contextManagement: result.contextManagement
+				});
+			}
+			pendingLoggedChatRequest.resolve({
+				type: ChatFetchResponseType.Success,
+				requestId,
+				serverRequestId: requestId,
+				usage: result.usage,
+				value: ['value'],
+				resolvedModel: model.id
+			}, responseDeltas);
 		} catch (err) {
 			this._logService.error(`BYOK Anthropic error: ${toErrorMessage(err, true)}`);
 			pendingLoggedChatRequest.resolve({
@@ -365,9 +384,9 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined; contextManagement: ContextManagementResponse | undefined }> {
 		if (!this._anthropicAPIClient) {
-			return { ttft: undefined, usage: undefined };
+			return { ttft: undefined, usage: undefined, contextManagement: undefined };
 		}
 		const start = Date.now();
 		let ttft: number | undefined;
@@ -396,6 +415,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			type?: string;
 		} | undefined;
 		let usage: APIUsage | undefined;
+		let contextManagementResponse: ContextManagementResponse | undefined;
 
 		let hasText = false;
 		for await (const chunk of stream) {
@@ -572,6 +592,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					completion_tokens: -1,
 					prompt_tokens: chunk.message.usage.input_tokens + (chunk.message.usage.cache_creation_input_tokens ?? 0) + (chunk.message.usage.cache_read_input_tokens ?? 0),
 					total_tokens: -1,
+					// Cast needed: Anthropic returns cache_creation_input_tokens which APIUsage.prompt_tokens_details doesn't define
 					prompt_tokens_details: {
 						cached_tokens: chunk.message.usage.cache_read_input_tokens ?? 0,
 						cache_creation_input_tokens: chunk.message.usage.cache_creation_input_tokens
@@ -582,9 +603,23 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					usage.completion_tokens = chunk.usage.output_tokens;
 					usage.total_tokens = usage.prompt_tokens + chunk.usage.output_tokens;
 				}
+				// Handle context management response
+				if ('context_management' in chunk && chunk.context_management) {
+					contextManagementResponse = chunk.context_management as ContextManagementResponse;
+					const totalClearedTokens = contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+						0
+					);
+					this._logService.info(`BYOK Anthropic context editing applied: cleared ${totalClearedTokens} tokens across ${contextManagementResponse.applied_edits.length} edits`);
+					// Emit context management via LanguageModelDataPart so it flows through to toolCallingLoop
+					progress.report(new LanguageModelDataPart(
+						new TextEncoder().encode(JSON.stringify(contextManagementResponse)),
+						CustomDataPartMimeTypes.ContextManagement
+					));
+				}
 			}
 		}
 
-		return { ttft, usage };
+		return { ttft, usage, contextManagement: contextManagementResponse };
 	}
 }
