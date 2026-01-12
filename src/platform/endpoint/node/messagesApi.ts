@@ -71,14 +71,19 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const configurationService = accessor.get(IConfigurationService);
 	const experimentationService = accessor.get(IExperimentationService);
-	const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
-	const maxTokens = options.postOptions.max_tokens ?? 1024;
-	const normalizedBudget = (configuredBudget && configuredBudget > 0)
-		? (configuredBudget < 1024 ? 1024 : configuredBudget)
-		: undefined;
-	const thinkingBudget = normalizedBudget
-		? Math.min(32000, maxTokens - 1, normalizedBudget)
-		: undefined;
+
+	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
+	let thinkingBudget: number | undefined;
+	if (!options.disableThinking) {
+		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+		const maxTokens = options.postOptions.max_tokens ?? 1024;
+		const normalizedBudget = (configuredBudget && configuredBudget > 0)
+			? (configuredBudget < 1024 ? 1024 : configuredBudget)
+			: undefined;
+		thinkingBudget = normalizedBudget
+			? Math.min(32000, maxTokens - 1, normalizedBudget)
+			: undefined;
+	}
 
 	// Build context management configuration
 	const contextManagement = getContextManagementFromConfig(configurationService, experimentationService, thinkingBudget, endpoint.modelMaxPromptTokens);
@@ -225,18 +230,23 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 			}
 			case Raw.ChatCompletionContentPartKind.Opaque: {
 				if (part.value && typeof part.value === 'object' && 'type' in part.value) {
-					const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string; encrypted?: string } };
+					const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string | string[]; encrypted?: string } };
 					if (opaqueValue.type === 'thinking' && opaqueValue.thinking) {
-						if (opaqueValue.thinking.encrypted) {
+						const thinkingText = Array.isArray(opaqueValue.thinking.text)
+							? opaqueValue.thinking.text.join('')
+							: opaqueValue.thinking.text;
+						if (thinkingText && opaqueValue.thinking.encrypted) {
+							// Regular thinking block: text is present, encrypted field contains the signature
+							convertedContent.push({
+								type: 'thinking',
+								thinking: thinkingText,
+								signature: opaqueValue.thinking.encrypted,
+							});
+						} else if (opaqueValue.thinking.encrypted && !thinkingText) {
+							// Redacted thinking block: no text, only encrypted data from Claude
 							convertedContent.push({
 								type: 'redacted_thinking',
 								data: opaqueValue.thinking.encrypted,
-							});
-						} else if (opaqueValue.thinking.text) {
-							convertedContent.push({
-								type: 'thinking',
-								thinking: opaqueValue.thinking.text,
-								signature: '',
 							});
 						}
 					}
@@ -344,6 +354,15 @@ export class AnthropicMessagesProcessor {
 					this.thinkingAccumulator.set(chunk.index, {
 						thinking: '',
 						signature: '',
+					});
+				} else if (chunk.content_block?.type === 'redacted_thinking' && chunk.index !== undefined) {
+					const data = (chunk.content_block as { type: 'redacted_thinking'; data: string }).data;
+					onProgress({
+						text: '',
+						thinking: {
+							id: `thinking_${chunk.index}`,
+							encrypted: data,
+						}
 					});
 				}
 				return;

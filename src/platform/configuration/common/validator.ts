@@ -64,6 +64,26 @@ export function vObjAny(): IValidator<object> { return vObjAnyValidator; }
 const vUndefinedValidator = new TypeofValidator('undefined');
 export function vUndefined(): IValidator<undefined> { return vUndefinedValidator; }
 
+class NullValidator implements IValidator<null> {
+	validate(content: unknown): { content: null; error: undefined } | { content: undefined; error: ValidationError } {
+		if (content !== null) {
+			return { content: undefined, error: { message: `Expected null, but got ${typeof content}` } };
+		}
+		return { content: null, error: undefined };
+	}
+
+	toSchema(): JsonSchema {
+		return { type: 'null' };
+	}
+}
+
+const vNullValidator = new NullValidator();
+export function vNull(): IValidator<null> { return vNullValidator; }
+
+export function vNullable<T>(validator: IValidator<T>): IValidator<T | null> {
+	return vUnion(validator, vNullValidator);
+}
+
 export function vUnchecked<T>(): IValidator<T> {
 	return {
 		validate(content: unknown): { content: T; error: undefined } {
