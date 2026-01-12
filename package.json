@@ -1692,7 +1692,8 @@
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "API key for Anthropic"
+							"description": "API key for Anthropic",
+							"title": "API Key"
 						}
 					},
 					"required": [
@@ -1708,7 +1709,8 @@
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "API key for xAI"
+							"description": "API key for xAI",
+							"title": "API Key"
 						}
 					},
 					"required": [
@@ -1724,7 +1726,8 @@
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "API key for Google Gemini"
+							"description": "API key for Google Gemini",
+							"title": "API Key"
 						}
 					},
 					"required": [
@@ -1740,7 +1743,8 @@
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "API key for Groq"
+							"description": "API key for Groq",
+							"title": "API Key"
 						}
 					},
 					"required": [
@@ -1756,7 +1760,8 @@
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "API key for OpenRouter"
+							"description": "API key for OpenRouter",
+							"title": "API Key"
 						}
 					},
 					"required": [
@@ -1772,7 +1777,8 @@
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "API key for OpenAI"
+							"description": "API key for OpenAI",
+							"title": "API Key"
 						}
 					},
 					"required": [
@@ -1789,7 +1795,8 @@
 						"url": {
 							"type": "string",
 							"description": "The endpoint URL for the Ollama server",
-							"default": "http://localhost:11434"
+							"default": "http://localhost:11434",
+							"title": "URL"
 						}
 					},
 					"required": [
@@ -1806,7 +1813,8 @@
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "API key for the models"
+							"description": "API key for the models",
+							"title": "API Key"
 						},
 						"models": {
 							"type": "array",
@@ -1898,7 +1906,8 @@
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "API key for the models"
+							"description": "API key for the models. If not set then Entra ID (Azure AD) authentication with your Microsoft account credentials will be used.",
+							"title": "API Key"
 						},
 						"models": {
 							"type": "array",
