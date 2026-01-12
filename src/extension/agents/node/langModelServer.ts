@@ -306,7 +306,7 @@ export class LanguageModelServer implements ILanguageModelServer {
 
 			// If not found, try to find by partial match for Anthropic models
 			if (!selectedEndpoint && requestedModel.startsWith('claude-haiku-4')) {
-				selectedEndpoint = endpoints.find(e => e.model.includes('gpt-4o-mini')) ?? endpoints.find(e => e.model.includes('mini'));
+				selectedEndpoint = endpoints.find(e => e.model.includes('claude-haiku-4-5')) ?? endpoints.find(e => e.model.includes('claude'));
 			} else if (!selectedEndpoint && requestedModel.startsWith('claude-sonnet-4')) {
 				selectedEndpoint = endpoints.find(e => e.model.includes('claude-sonnet-4-5')) ?? endpoints.find(e => e.model.includes('claude'));
 			} else if (!selectedEndpoint && requestedModel.startsWith('claude-opus-4')) {
