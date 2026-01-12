@@ -85,7 +85,6 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 		progress: Progress<LanguageModelResponsePart2>,
 		token: CancellationToken
 	): Promise<void> {
-		let apiKey: string | undefined = model.configuration?.apiKey;
 		if (this._configurationService.getConfig(ConfigKey.AzureAuthType) === AzureAuthMode.EntraId) {
 			// Session is guaranteed to be defined when createIfNone: true
 			const session: vscode.AuthenticationSession = await vscode.authentication.getSession(
@@ -96,43 +95,43 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 					silent: false
 				}
 			);
-			apiKey = session.accessToken;
+
+			const url = this.resolveUrl(model.id, model.url);
+			const modelConfiguration = model.configuration?.models?.find(m => m.id === model.id);
+			const modelCapabilities = {
+				maxInputTokens: model.maxInputTokens,
+				maxOutputTokens: model.maxOutputTokens,
+				toolCalling: !!model.capabilities?.toolCalling || false,
+				vision: !!model.capabilities?.imageInput || false,
+				name: model.name,
+				url,
+				thinking: modelConfiguration?.thinking,
+				requestHeaders: modelConfiguration?.requestHeaders,
+				editTools: model.capabilities?.editTools?.filter(isEndpointEditToolName),
+				zeroDataRetentionEnabled: modelConfiguration?.zeroDataRetentionEnabled
+			};
+			const modelInfo = resolveModelInfo(model.id, this._name, undefined, modelCapabilities);
+
+			const openAIChatEndpoint = this._instantiationService.createInstance(
+				AzureOpenAIEndpoint,
+				modelInfo,
+				session.accessToken,  // Pass Entra ID token
+				url
+			);
+
+			return this._lmWrapper.provideLanguageModelResponse(
+				openAIChatEndpoint,
+				messages,
+				options,
+				options.requestInitiator,
+				progress,
+				token
+			);
+		} else {
+			if (!model.configuration?.apiKey) {
+				throw new Error(`API key is required for Azure BYOK model ${model.name}`);
+			}
+			return super.provideLanguageModelChatResponse(model, messages, options, progress, token);
 		}
-
-		if (!apiKey) {
-			throw new Error('API key is required for Azure OpenAI models.');
-		}
-
-		const url = this.resolveUrl(model.id, model.url);
-		const modelConfiguration = model.configuration?.models?.find(m => m.id === model.id);
-		const modelCapabilities = {
-			maxInputTokens: model.maxInputTokens,
-			maxOutputTokens: model.maxOutputTokens,
-			toolCalling: !!model.capabilities?.toolCalling || false,
-			vision: !!model.capabilities?.imageInput || false,
-			name: model.name,
-			url,
-			thinking: modelConfiguration?.thinking,
-			requestHeaders: modelConfiguration?.requestHeaders,
-			editTools: model.capabilities?.editTools?.filter(isEndpointEditToolName),
-			zeroDataRetentionEnabled: modelConfiguration?.zeroDataRetentionEnabled
-		};
-		const modelInfo = resolveModelInfo(model.id, this._name, undefined, modelCapabilities);
-
-		const openAIChatEndpoint = this._instantiationService.createInstance(
-			AzureOpenAIEndpoint,
-			modelInfo,
-			apiKey,  // Pass Entra ID token
-			url
-		);
-
-		return this._lmWrapper.provideLanguageModelResponse(
-			openAIChatEndpoint,
-			messages,
-			options,
-			options.requestInitiator,
-			progress,
-			token
-		);
 	}
 }
