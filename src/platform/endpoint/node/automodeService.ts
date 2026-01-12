@@ -106,7 +106,7 @@ export interface IAutomodeService {
 
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
-	private readonly _autoModelCache: Map<string, { endpoint: IChatEndpoint; tokenBank: AutoModeTokenBank }> = new Map();
+	private readonly _autoModelCache: Map<string, { endpoints: IChatEndpoint[]; tokenBank: AutoModeTokenBank }> = new Map();
 	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
 	private readonly _routerDecisionFetcher: RouterDecisionFetcher;
 
@@ -164,15 +164,20 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 
 		let selectedModel: IChatEndpoint | undefined = undefined;
 		const availableModels = reserveToken.available_models;
+		const cachedModels = this._autoModelCache.get(conversationId)?.endpoints.map(e => e.model) || [];
+		const preferredModels = [...new Set([reserveToken.selected_model, ...cachedModels])];
+
 		if (chatRequest?.prompt.trim().length) {
-			const routedModel = await this._routerDecisionFetcher.getRoutedModel(chatRequest.prompt.trim(), availableModels);
+			const routedModel = await this._routerDecisionFetcher.getRoutedModel(chatRequest.prompt.trim(), availableModels, preferredModels);
 			selectedModel = knownEndpoints.find(e => e.model === routedModel);
 		}
 		if (!selectedModel) {
 			selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model) || knownEndpoints[0];
 		}
 		const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
-		this._autoModelCache.set(conversationId, { endpoint: autoEndpoint, tokenBank: reserveTokenBank });
+		const existingEndpoints = this._autoModelCache.get(conversationId)?.endpoints || [];
+		const newEndpoints = existingEndpoints.includes(autoEndpoint) ? existingEndpoints : [...existingEndpoints, autoEndpoint];
+		this._autoModelCache.set(conversationId, { endpoints: newEndpoints, tokenBank: reserveTokenBank });
 		return autoEndpoint;
 	}
 

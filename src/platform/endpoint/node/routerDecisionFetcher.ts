@@ -36,14 +36,14 @@ export class RouterDecisionFetcher extends Disposable {
 		super();
 	}
 
-	async getRoutedModel(query: string, availableModels: string[]): Promise<string> {
+	async getRoutedModel(query: string, availableModels: string[], preferredModels: string[]): Promise<string> {
 		try {
 			const response = await this._fetcherService.fetch(ROUTER_API_URL, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
 				},
-				body: JSON.stringify({ prompt: query, available_models: availableModels })
+				body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels })
 			});
 
 			if (!response.ok) {
@@ -52,7 +52,7 @@ export class RouterDecisionFetcher extends Disposable {
 
 			const result: RouterDecisionResponse = await response.json();
 
-			this._logService.trace(`Reasoning classifier prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')})`);
+			this._logService.trace(`Reasoning classifier prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')}, preferred models: ${preferredModels.join(', ')})`);
 
 			return result.chosen_model;
 		} catch (error) {
