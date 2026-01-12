@@ -1813,6 +1813,10 @@
 							"items": {
 								"type": "object",
 								"properties": {
+									"id": {
+										"type": "string",
+										"description": "Unique identifier for the model"
+									},
 									"name": {
 										"type": "string",
 										"description": "Display name of the custom OpenAI model"
@@ -1901,6 +1905,10 @@
 							"items": {
 								"type": "object",
 								"properties": {
+									"id": {
+										"type": "string",
+										"description": "Unique identifier for the model"
+									},
 									"name": {
 										"type": "string",
 										"description": "Display name of the custom OpenAI model"
