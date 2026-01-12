@@ -2326,6 +2326,12 @@
 				"title": "%github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply%",
 				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.checkoutPullRequestReroute",
+				"title": "%github.copilot.command.checkoutPullRequestReroute.title%",
+				"icon": "$(git-pull-request)",
+				"category": "GitHub Pull Request"
 			}
 		],
 		"configuration": [
@@ -4022,6 +4028,11 @@
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 					"when": "chatSessionType == copilotcli",
 					"group": "navigation@0"
+				},
+				{
+					"command": "github.copilot.chat.checkoutPullRequestReroute",
+					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated",
+					"group": "navigation@0"
 				}
 			],
 			"testing/item/result": [
@@ -4261,6 +4272,10 @@
 				},
 				{
 					"command": "github.copilot.chat.showAsChatSession",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "false"
 				}
 			],
