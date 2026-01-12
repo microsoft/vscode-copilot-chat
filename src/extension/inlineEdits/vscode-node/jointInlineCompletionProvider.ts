@@ -33,8 +33,8 @@ import { StringText } from '../../../util/vs/editor/common/core/text/abstractTex
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { registerUnificationCommands } from '../../completions-core/vscode-node/completionsServiceBridges';
-import { GhostTextCompletionItem, GhostTextCompletionList } from '../../completions-core/vscode-node/extension/src/ghostText/ghostText';
-import { CopilotInlineCompletionItemProvider } from '../../completions-core/vscode-node/extension/src/inlineCompletion';
+import { GhostTextCompletionItem, GhostTextCompletionList } from '../../completions-core/vscode-node/extension/src/ghostText/ghostTextProvider';
+import { CopilotInlineCompletionItemProvider } from '../../completions-core/vscode-node/extension/src/vscodeInlineCompletionItemProvider';
 import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
