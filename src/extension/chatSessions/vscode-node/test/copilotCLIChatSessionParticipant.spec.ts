@@ -70,6 +70,7 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 		this.isWorktreeSupportedObs.set(supported, undefined);
 	}
 	override createWorktree = vi.fn(async () => undefined) as unknown as IChatSessionWorktreeService['createWorktree'];
+	override getWorktreeProperties = vi.fn((_id: string) => undefined);
 	override setWorktreeProperties = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
 	override handleRequestCompleted = vi.fn(async () => { });
