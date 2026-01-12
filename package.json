@@ -3322,6 +3322,22 @@
 						],
 						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
+					"github.copilot.chat.azureAuthType": {
+						"type": "string",
+						"enum": [
+							"entraId",
+							"apiKey"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.azureAuthType.entraId%",
+							"%github.copilot.config.azureAuthType.apiKey%"
+						],
+						"default": "entraId",
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.azureAuthType%"
+					},
 					"github.copilot.chat.alternateGptPrompt.enabled": {
 						"type": "boolean",
 						"default": false,
