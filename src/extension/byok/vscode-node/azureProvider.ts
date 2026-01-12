@@ -72,7 +72,6 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 	// TODO: Remove this after 6 months
 	private async migrateExistingConfigs(): Promise<void> {
 		await this.migrateConfig(ConfigKey.Deprecated.AzureModels, AzureBYOKModelProvider.providerName, AzureBYOKModelProvider.providerName);
-		await this._configurationService.setConfig(ConfigKey.Deprecated.AzureAuthType, undefined);
 	}
 
 	protected override resolveUrl(modelId: string, url: string): string {
@@ -87,7 +86,7 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 		token: CancellationToken
 	): Promise<void> {
 		let apiKey: string | undefined = model.configuration?.apiKey;
-		if (!apiKey) {
+		if (this._configurationService.getConfig(ConfigKey.AzureAuthType) === AzureAuthMode.EntraId) {
 			// Session is guaranteed to be defined when createIfNone: true
 			const session: vscode.AuthenticationSession = await vscode.authentication.getSession(
 				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
