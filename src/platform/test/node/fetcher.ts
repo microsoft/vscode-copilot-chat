@@ -15,7 +15,8 @@ export function createFakeResponse(statusCode: number, response: any = 'body') {
 		new FakeHeaders(),
 		() => Promise.resolve(JSON.stringify(response)),
 		() => Promise.resolve(response),
-		async () => null
+		async () => null,
+		'test-stub'
 	);
 }
 
@@ -27,7 +28,8 @@ export function createFakeStreamResponse(body: string | string[] | { chunk: stri
 		new FakeHeaders(),
 		async () => chunks.join(''),
 		async () => null,
-		async () => toStream(chunks, cts)
+		async () => toStream(chunks, cts),
+		'test-stub'
 	);
 }
 

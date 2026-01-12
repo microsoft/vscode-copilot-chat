@@ -79,14 +79,19 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 		try {
 			const toolName = getToolName(name) as ToolName;
 			const tool = this._overrides.get(toolName)?.tool;
-			if (tool) {
+			const invoke = tool?.invoke;
+			if (invoke) {
 				this._onWillInvokeTool.fire({ toolName });
-				const result = await tool.invoke(options, token);
+				const result = await invoke.call(tool, options, token);
 				if (!result) {
 					throw new CancellationError();
 				}
 
 				return result;
+			}
+
+			if (tool) {
+				throw new Error(`tool ${toolName} does not implement invoke`);
 			}
 
 			const r = await raceTimeout(Promise.resolve(this._inner.invokeTool(name, options, token)), 60_000);

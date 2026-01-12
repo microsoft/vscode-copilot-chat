@@ -102,6 +102,24 @@ describe('GeminiMessageConverter', () => {
 		expect(fr.functionResponse.response).toEqual({ foo: 'bar' });
 	});
 
+	it('should wrap array responses in an object', () => {
+		const toolResult = new LanguageModelToolResultPart('listRepos_12345', [new LanguageModelTextPart('["repo1", "repo2"]')]);
+		const messages: LanguageModelChatMessage[] = [
+			{
+				role: LanguageModelChatMessageRole.Assistant,
+				content: [toolResult],
+				name: undefined
+			}
+		];
+
+		const result = apiMessageToGeminiMessage(messages);
+
+		expect(result.contents).toHaveLength(1);
+		expect(result.contents[0].role).toBe('user');
+		const fr: any = result.contents[0].parts![0];
+		expect(fr.functionResponse.response).toEqual({ result: ['repo1', 'repo2'] });
+	});
+
 	it('should be idempotent when called multiple times (no duplication)', () => {
 		const toolResult = new LanguageModelToolResultPart('doThing_12345', [new LMText('{"value":42}')]);
 		const messages: LanguageModelChatMessage[] = [

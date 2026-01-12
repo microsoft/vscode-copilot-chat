@@ -14,10 +14,11 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
-import type { ChatRequest, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import type { LanguageModelToolResult2 } from '../../../vscodeTypes';
 import type { IModelAPIResponse } from '../../endpoint/common/endpointProvider';
 import { APIUsage } from '../../networking/common/openai';
 import { ThinkingData } from '../../thinking/common/thinking';
+import { CapturingToken } from '../common/capturingToken';
 
 export type UriData = { kind: 'request'; id: string } | { kind: 'latest' };
 
@@ -102,7 +103,7 @@ export interface ILoggedElementInfo {
 	tokens: number;
 	maxTokens: number;
 	trace: HTMLTracer;
-	chatRequest: ChatRequest | undefined;
+	token: CapturingToken | undefined;
 	toJSON(): object;
 }
 
@@ -110,7 +111,7 @@ export interface ILoggedRequestInfo {
 	kind: LoggedInfoKind.Request;
 	id: string;
 	entry: LoggedRequest;
-	chatRequest: ChatRequest | undefined;
+	token: CapturingToken | undefined;
 	toJSON(): object;
 }
 
@@ -120,7 +121,7 @@ export interface ILoggedToolCall {
 	name: string;
 	args: unknown;
 	response: LanguageModelToolResult2;
-	chatRequest: ChatRequest | undefined;
+	token: CapturingToken | undefined;
 	time: number;
 	thinking?: ThinkingData;
 	toJSON(): Promise<object>;
@@ -135,6 +136,7 @@ export interface ILoggedPendingRequest {
 	postOptions?: OptionalChatRequestParams;
 	body?: IEndpointBody;
 	ignoreStatefulMarker?: boolean;
+	isConversationRequest?: boolean;
 }
 
 export type LoggedInfo = ILoggedElementInfo | ILoggedRequestInfo | ILoggedToolCall;
@@ -146,7 +148,7 @@ export interface IRequestLogger {
 
 	promptRendererTracing: boolean;
 
-	captureInvocation<T>(request: ChatRequest, fn: () => Promise<T>): Promise<T>;
+	captureInvocation<T>(request: CapturingToken, fn: () => Promise<T>): Promise<T>;
 
 	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void;
 
@@ -179,6 +181,7 @@ export interface ILoggedChatMLRequest {
 	chatParams: ILoggedPendingRequest;
 	startTime: Date;
 	endTime: Date;
+	isConversationRequest?: boolean;
 }
 
 export interface ILoggedChatMLSuccessRequest extends ILoggedChatMLRequest {
@@ -205,6 +208,7 @@ export interface IMarkdownContentRequest {
 	icon: ThemeIcon | undefined;
 	debugName: string;
 	markdownContent: string;
+	isConversationRequest?: boolean;
 }
 
 export type LoggedRequest = (
@@ -214,7 +218,7 @@ export type LoggedRequest = (
 	| IMarkdownContentRequest
 );
 
-const requestLogStorage = new AsyncLocalStorage<ChatRequest>();
+const requestLogStorage = new AsyncLocalStorage<CapturingToken>();
 
 export abstract class AbstractRequestLogger extends Disposable implements IRequestLogger {
 	declare _serviceBrand: undefined;
@@ -223,7 +227,7 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 		return false;
 	}
 
-	public captureInvocation<T>(request: ChatRequest, fn: () => Promise<T>): Promise<T> {
+	public captureInvocation<T>(request: CapturingToken, fn: () => Promise<T>): Promise<T> {
 		return requestLogStorage.run(request, () => fn());
 	}
 
@@ -277,7 +281,8 @@ class AbstractPendingLoggedRequest {
 			chatEndpoint: this._chatEndpoint,
 			chatParams: this._chatParams,
 			startTime: this._time,
-			endTime: new Date()
+			endTime: new Date(),
+			isConversationRequest: this._chatParams.isConversationRequest
 		});
 	}
 }
@@ -303,6 +308,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				startTime: this._time,
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
+				isConversationRequest: this._chatParams.isConversationRequest,
 				result,
 				deltas
 			});
@@ -315,6 +321,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				startTime: this._time,
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
+				isConversationRequest: this._chatParams.isConversationRequest,
 				result,
 			});
 		}

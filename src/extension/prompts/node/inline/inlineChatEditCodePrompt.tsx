@@ -11,9 +11,10 @@ import { IParserService } from '../../../../platform/parser/node/parserService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { isNotebookCellOrNotebookChatInput } from '../../../../util/common/notebooks';
 import { illegalArgument } from '../../../../util/vs/base/common/errors';
+import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { GenericInlinePromptProps } from '../../../context/node/resolvers/genericInlineIntentInvocation';
 import { SelectionSplitKind, SummarizedDocumentData, SummarizedDocumentWithSelection } from '../../../intents/node/testIntent/summarizedDocumentWithSelection';
-import { EarlyStopping, LeadingMarkdownStreaming } from '../../../prompt/node/intents';
+import { EarlyStopping, LeadingMarkdownStreaming, TelemetryData } from '../../../prompt/node/intents';
 import { TextPieceClassifiers } from '../../../prompt/node/streamingEdits';
 import { InstructionMessage } from '../base/instructionMessage';
 import { LegacySafetyRules } from '../base/safetyRules';
@@ -25,7 +26,18 @@ import { ProjectLabels } from '../panel/projectLabels';
 import { LanguageServerContextPrompt } from './languageServerContextPrompt';
 import { SummarizedDocumentSplit } from './promptingSummarizedDocument';
 
+export class DocumentToAstSelectionData extends TelemetryData {
+
+	constructor(
+		readonly original: OffsetRange,
+		readonly adjusted: OffsetRange,
+	) {
+		super();
+	}
+}
+
 export interface InlineChatEditCodePromptProps extends GenericInlinePromptProps {
+	readonly ignoreCustomInstructions?: boolean;
 }
 
 export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePromptProps> {
@@ -88,7 +100,7 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 				</HistoryWithInstructions>
 				{useProjectLabels && <ProjectLabels priority={600} embeddedInsideUserMessage={false} />}
 				<UserMessage>
-					<CustomInstructions priority={725} chatVariables={chatVariables} languageId={languageId} />
+					{!this.props.ignoreCustomInstructions && <CustomInstructions priority={725} chatVariables={chatVariables} languageId={languageId} />}
 					<LanguageServerContextPrompt priority={700} document={document} position={context.selection.start} requestId={this.props.promptContext.requestId} source={KnownSources.chat} />
 				</UserMessage>
 				<ChatToolReferences priority={750} promptContext={this.props.promptContext} flexGrow={1} embeddedInsideUserMessage={false} />
@@ -105,6 +117,10 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 					</Tag>
 					{data.hasCodeWithoutSelection && <>The modified {data.placeholderText} code with ``` is:</>}
 				</UserMessage>
+				<meta value={new DocumentToAstSelectionData(
+					data.offsetSelections.original,
+					data.offsetSelections.adjusted,
+				)} />
 			</>
 		);
 	}

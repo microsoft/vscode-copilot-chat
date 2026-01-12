@@ -151,7 +151,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 				type: 'content_block_delta',
 				index: this.currentBlockIndex,
 				delta: {
-					type: "input_json_delta",
+					type: 'input_json_delta',
 					partial_json: JSON.stringify(streamData.input || {})
 				}
 			};

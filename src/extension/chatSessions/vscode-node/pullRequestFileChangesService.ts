@@ -4,12 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem } from '../../../platform/github/common/githubAPI';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { getRepoId } from '../vscode/copilotCodingAgentUtils';
 import { toPRContentUri } from './prContentProvider';
 
 export const IPullRequestFileChangesService = createServiceIdentifier<IPullRequestFileChangesService>('IPullRequestFileChangesService');
@@ -23,7 +21,6 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 	declare readonly _serviceBrand: undefined;
 
 	constructor(
-		@IGitService private readonly _gitService: IGitService,
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 		@ILogService private readonly logService: ILogService,
 	) { }
@@ -31,14 +28,16 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 	async getFileChangesMultiDiffPart(pullRequest: PullRequestSearchItem): Promise<vscode.ChatResponseMultiDiffPart | undefined> {
 		try {
 			this.logService.trace(`Getting file changes for PR #${pullRequest.number}`);
-			const repoId = await getRepoId(this._gitService);
-			if (!repoId) {
+			const repoOwner = pullRequest.repository.owner.login;
+			const repoName = pullRequest.repository.name;
+
+			if (!repoOwner || !repoName) {
 				this.logService.warn('No repo ID available for fetching PR file changes');
 				return undefined;
 			}
 
-			this.logService.trace(`Fetching PR files from ${repoId.org}/${repoId.repo} for PR #${pullRequest.number}`);
-			const files = await this._octoKitService.getPullRequestFiles(repoId.org, repoId.repo, pullRequest.number);
+			this.logService.trace(`Fetching PR files from ${repoOwner}/${repoName} for PR #${pullRequest.number}`);
+			const files = await this._octoKitService.getPullRequestFiles(repoOwner, repoName, pullRequest.number, { createIfNone: true });
 			this.logService.trace(`Got ${files?.length || 0} files from API`);
 
 			if (!files || files.length === 0) {
@@ -62,8 +61,8 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 				const originalUri = toPRContentUri(
 					file.previous_filename || file.filename,
 					{
-						owner: repoId.org,
-						repo: repoId.repo,
+						owner: repoOwner,
+						repo: repoName,
 						prNumber: pullRequest.number,
 						commitSha: pullRequest.baseRefOid,
 						isBase: true,
@@ -75,8 +74,8 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 				const modifiedUri = toPRContentUri(
 					file.filename,
 					{
-						owner: repoId.org,
-						repo: repoId.repo,
+						owner: repoOwner,
+						repo: repoName,
 						prNumber: pullRequest.number,
 						commitSha: pullRequest.headRefOid,
 						isBase: false,

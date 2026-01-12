@@ -72,7 +72,7 @@ export async function parseSettingsAndCommands(workbenchService: IWorkbenchServi
 			const item = parsed[0];
 			if (item.details?.key === 'workbench.extensions.search' || item.details?.key === 'workbench.extensions.installExtension') {
 				const args = (Array.isArray(item.details.value) ? item.details.value : [item.details.value]).filter(
-					(arg: any) => typeof arg === 'string'
+					(arg): arg is string => typeof arg === 'string'
 				);
 
 				// We only know how to handle 1 arguments
@@ -140,7 +140,7 @@ export async function parseSettingsAndCommands(workbenchService: IWorkbenchServi
 }
 
 type ParsedItem = {
-	type: "command" | "setting";
+	type: 'command' | 'setting';
 	details: {
 		key: string;
 		value?: string;

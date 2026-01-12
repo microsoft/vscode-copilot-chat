@@ -12,7 +12,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { getContributedToolName } from '../common/toolNames';
 import { IToolsService } from '../common/toolsService';
 import { IToolGroupingCache, IToolGroupingService } from '../common/virtualTools/virtualToolTypes';
-
+import { isVscodeLanguageModelTool } from '../common/toolsRegistry';
 import '../node/allTools';
 import './allTools';
 
@@ -26,7 +26,9 @@ export class ToolsContribution extends Disposable {
 		super();
 
 		for (const [name, tool] of toolsService.copilotTools) {
-			this._register(vscode.lm.registerTool(getContributedToolName(name), tool));
+			if (isVscodeLanguageModelTool(tool)) {
+				this._register(vscode.lm.registerTool(getContributedToolName(name), tool));
+			}
 		}
 
 		this._register(vscode.commands.registerCommand('github.copilot.debug.resetVirtualToolGroups', async () => {

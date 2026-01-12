@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
+import * as l10n from '@vscode/l10n';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -12,21 +13,31 @@ import { EditSurvivalReporter } from '../../../platform/editSurvivalTracking/com
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
+import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { getNotebookId } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { findCell, findNotebook, isNotebookCell } from '../../../util/common/notebooks';
-import { ITracer, createTracer } from '../../../util/common/tracing';
+import { createTracer, ITracer } from '../../../util/common/tracing';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { clamp } from '../../../util/vs/base/common/numbers';
+import { autorun, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
+import { basename } from '../../../util/vs/base/common/path';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
+import { createCorrelationId } from '../common/correlationId';
+import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
@@ -38,7 +49,6 @@ import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { toExternalRange } from './utils/translations';
-import { IObservable } from '../../../util/vs/base/common/observable';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -46,14 +56,14 @@ const learnMoreAction: Command = {
 	tooltip: learnMoreLink
 };
 
-interface NesCompletionItem extends InlineCompletionItem {
+export interface NesCompletionItem extends InlineCompletionItem {
 	readonly telemetryBuilder: NextEditProviderTelemetryBuilder;
 	readonly info: NesCompletionInfo;
 	wasShown: boolean;
 	isEditInAnotherDocument?: boolean;
 }
 
-class NesCompletionList extends InlineCompletionList {
+export class NesCompletionList extends InlineCompletionList {
 
 	public override enableForwardStability = true;
 
@@ -96,12 +106,26 @@ function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo
 const GoToNextEdit = l10n.t('Go To Inline Suggestion');
 
 
-export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
+export class InlineCompletionProviderImpl extends Disposable implements InlineCompletionItemProvider {
 	public readonly displayName = 'Inline Suggestion';
 
 	private readonly _tracer: ITracer;
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
+	public readonly handleDidPartiallyAcceptCompletionItem = undefined;
+	public readonly handleDidRejectCompletionItem = undefined;
+
+	//#region Model picker
+	private _isModelPickerEnabled: IObservable<boolean> = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsModelPickerEnabled, this._expService);
+
+	public modelInfo: InlineCompletionModelInfo | undefined;
+
+	private readonly _onDidChangeModelInfo = this._register(new Emitter<void>());
+	public onDidChangeModelInfo = this._onDidChangeModelInfo.event;
+
+	public setCurrentModelId: ((modelId: string) => Thenable<void>) | undefined;
+	//#endregion
+
 	private readonly _displayNextEditorNES: boolean;
 	private readonly _renameSymbolSuggestions: IObservable<boolean>;
 
@@ -120,10 +144,23 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@INotebookService private readonly _notebookService: INotebookService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@IInlineEditsModelService private readonly _modelService: IInlineEditsModelService,
 	) {
+		super();
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 		this._renameSymbolSuggestions = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsRenameSymbolSuggestions, this._expService);
+
+		this.setCurrentModelId = (modelId: string) => this._modelService.setCurrentModelId(modelId);
+
+		const modelListUpdatedObs = observableFromEvent(this, this._modelService.onModelListUpdated, () => this._modelService.modelInfo);
+
+		this._register(autorun(reader => {
+			this.modelInfo = this._isModelPickerEnabled.read(reader) ? modelListUpdatedObs.read(reader) : undefined;
+			this._onDidChangeModelInfo.fire();
+		}));
+
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -139,10 +176,22 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	public async provideInlineCompletionItems(
 		document: TextDocument,
 		position: Position,
-		context: InlineCompletionContext,
+		context: InlineCompletionContext | NESInlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
-		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortOpportunityId(context.requestUuid)]);
+		const label = `NES | ${basename(document.uri.fsPath)} (v${document.version})`;
+		const capturingToken = new CapturingToken(label, undefined, true, true);
+		const nesContext: NESInlineCompletionContext = { enforceCacheDelay: true, ...context };
+		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, nesContext, token));
+	}
+
+	private async _provideInlineCompletionItems(
+		document: TextDocument,
+		position: Position,
+		context: NESInlineCompletionContext,
+		token: CancellationToken
+	): Promise<NesCompletionList | undefined> {
+		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
@@ -154,6 +203,13 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		if (!isInlineEditsEnabled && !serveAsCompletionsProvider) {
 			tracer.returns('inline edits disabled');
+			return undefined;
+		}
+
+		const ignoreWhenSuggestVisible = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsIgnoreWhenSuggestVisible, this._expService);
+
+		if (ignoreWhenSuggestVisible && context.selectedCompletionInfo && !unification) {
+			tracer.returns('suggest widget is showing, not providing NES');
 			return undefined;
 		}
 
@@ -173,7 +229,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		telemetryBuilder.setIsNaturalLanguageDominated(LineCheck.isNaturalLanguageDominated(document, position));
 
 		const requestCancellationTokenSource = new CancellationTokenSource(token);
-		const completionsCts = new CancellationTokenSource(token);
 		let suggestionInfo: NesCompletionInfo | undefined;
 		try {
 			tracer.trace('invoking next edit provider');
@@ -181,22 +236,17 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			const { first, all } = raceAndAll([
 				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder),
 				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token),
-				this.model.completionsProvider?.getCompletions(doc.id, context, logContext, token) ?? raceCancellation(new Promise<undefined>(() => { }), completionsCts.token),
 			]);
 
-			let [providerSuggestion, diagnosticsSuggestion, completionAtCursor] = await first;
+			let [providerSuggestion, diagnosticsSuggestion] = await first;
 
-			// ensure completions promise resolves
-			completionsCts.cancel();
+			const hasNonEmptyLlmNes = !!providerSuggestion && providerSuggestion.result !== undefined;
 
-			const hasCompletionAtCursor = completionAtCursor && completionAtCursor.result !== undefined;
-			const hasNonEmptyLlmNes = providerSuggestion && providerSuggestion.result !== undefined;
-
-			const shouldGiveMoreTimeToDiagnostics = !hasCompletionAtCursor && !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider;
-
+			const shouldGiveMoreTimeToDiagnostics = !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider && !diagnosticsSuggestion;
 			if (shouldGiveMoreTimeToDiagnostics) {
 				tracer.trace('giving some more time to diagnostics provider');
-				timeout(1000).then(() => requestCancellationTokenSource.cancel());
+				const remainingTime = clamp(0, 1250 - (Date.now() - context.requestIssuedDateTime), 1250);
+				timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
 				[, diagnosticsSuggestion] = await all;
 			}
 
@@ -204,6 +254,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			requestCancellationTokenSource.cancel();
 
 			const emptyList = new NesCompletionList(context.requestUuid, undefined, [], telemetryBuilder);
+			const correlationId = createCorrelationId('nes');
 
 			if (token.isCancellationRequested) {
 				tracer.returns('lost race to cancellation');
@@ -212,9 +263,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 
 			// Determine which suggestion to use
-			if (completionAtCursor?.result) {
-				suggestionInfo = new LlmCompletionInfo(completionAtCursor, doc.id, document, context.requestUuid);
-			} else if (diagnosticsSuggestion?.result) {
+			if (diagnosticsSuggestion?.result) {
 				suggestionInfo = new DiagnosticsCompletionInfo(diagnosticsSuggestion, doc.id, document, context.requestUuid);
 			} else if (providerSuggestion) {
 				suggestionInfo = new LlmCompletionInfo(providerSuggestion, doc.id, document, context.requestUuid);
@@ -223,9 +272,25 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				return emptyList;
 			}
 
+			if (suggestionInfo.source === 'provider' && suggestionInfo.suggestion.result?.jumpToPosition !== undefined) {
+				tracer.trace('next edit suggestion only has jumpToPosition');
+				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
+				const positionToJumpOneBased = suggestionInfo.suggestion.result.jumpToPosition;
+				const jumpToPosition = new Position(positionToJumpOneBased.lineNumber - 1, positionToJumpOneBased.column - 1);
+				const jumpToPositionCompletionItem: NesCompletionItem = {
+					insertText: undefined as unknown as string,
+					info: suggestionInfo,
+					wasShown: false,
+					telemetryBuilder,
+					jumpToPosition,
+					correlationId
+				};
+				return new NesCompletionList(context.requestUuid, jumpToPositionCompletionItem, [], telemetryBuilder);
+			}
+
 			// Return and send telemetry if there is no result
 			const result = suggestionInfo.suggestion.result;
-			if (!result) {
+			if (!result || !result.edit) {
 				tracer.trace('no next edit suggestion');
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				return emptyList;
@@ -287,6 +352,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 
+			const supportsRename = (document.languageId === 'typescript' || document.languageId === 'typescriptreact') && this._renameSymbolSuggestions.get();
+
 			const nesCompletionItem: NesCompletionItem = {
 				...completionItem,
 				info: suggestionInfo,
@@ -295,7 +362,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				isInlineEdit: !isInlineCompletion,
 				showInlineEditMenu: !serveAsCompletionsProvider,
 				wasShown: false,
-				supportsRename: this._renameSymbolSuggestions.get()
+				supportsRename,
+				correlationId,
 			};
 
 			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
@@ -312,7 +380,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			throw e;
 		} finally {
 			requestCancellationTokenSource.dispose();
-			completionsCts.dispose();
 			this.logger.add(logContext);
 		}
 	}
@@ -356,6 +423,10 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
+		if (!result.edit) {
+			return undefined;
+		}
+
 		// Only show edit when the cursor is max 4 lines away from the edit
 		const showRange = result.showRangePreference === ShowNextEditPreference.AroundEdit
 			? new Range(
@@ -382,7 +453,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		};
 	}
 
-	public handleDidShowCompletionItem(completionItem: NesCompletionItem, updatedInsertText: string): void {
+	public handleDidShowCompletionItem(completionItem: NesCompletionItem, _updatedInsertText: string): void {
 		completionItem.wasShown = true;
 		completionItem.telemetryBuilder.setAsShown();
 
@@ -397,7 +468,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	}
 
 	public handleListEndOfLifetime(list: NesCompletionList, reason: InlineCompletionsDisposeReason): void {
-		const tracer = this._tracer.sub(['handleListEndOfLifetime', shortOpportunityId(list.requestUuid)]);
+		const tracer = this._tracer.sub(['handleListEndOfLifetime', shortenOpportunityId(list.requestUuid)]);
 		tracer.trace(`List ${list.requestUuid} disposed, reason: ${InlineCompletionsDisposeReasonKind[reason.kind]}`);
 
 		const telemetryBuilder = list.telemetryBuilder;
@@ -410,7 +481,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	}
 
 	public handleEndOfLifetime(item: NesCompletionItem, reason: InlineCompletionEndOfLifeReason): void {
-		const tracer = this._tracer.sub(['handleEndOfLifetime', shortOpportunityId(item.info.requestUuid)]);
+		const tracer = this._tracer.sub(['handleEndOfLifetime', shortenOpportunityId(item.info.requestUuid)]);
 		tracer.trace(`reason: ${InlineCompletionEndOfLifeReasonKind[reason.kind]}`);
 
 		switch (reason.kind) {
@@ -462,7 +533,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	// TODO: Support tracking Diagnostics NES
 	private async _trackSurvivalRate(item: LlmCompletionInfo) {
 		const result = item.suggestion.result;
-		if (!result) {
+		if (!result || !result.edit) {
 			return;
 		}
 
@@ -593,10 +664,6 @@ export function raceAndAll<T extends readonly unknown[]>(
 	const all = Promise.all(promises) as Promise<T>;
 
 	return { first, all };
-}
-
-function shortOpportunityId(oppId: string): string {
-	return oppId.substring(4, 8);
 }
 
 function hasNotebookCellMarker(document: TextDocument, newText: string) {

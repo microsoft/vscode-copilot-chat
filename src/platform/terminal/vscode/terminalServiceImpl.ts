@@ -16,7 +16,11 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 
 	declare readonly _serviceBrand: undefined;
 
-	private readonly pathContributions = new Map<string, { path: string; description?: string | { command: string }; prepend: boolean }>();
+	// Ensure the order is preserved, as that matters for PATH contributions.
+	// VS Code will apply them in order from its own cache.
+	// So when re-loading VS Code vscode first applies it from its cache, then we apply our contributions.
+	// If they are different, then user will be prompted to restart terminal to apply changes.
+	private readonly pathContributions: { contributor: string; path: string; description?: string | { command: string }; prepend: boolean }[] = [];
 
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
@@ -100,12 +104,22 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 	}
 
 	contributePath(contributor: string, pathLocation: string, description?: string | { command: string }, prepend: boolean = false): void {
-		this.pathContributions.set(contributor, { path: pathLocation, description, prepend });
+		const entry = this.pathContributions.find(c => c.contributor === contributor);
+		if (entry) {
+			entry.path = pathLocation;
+			entry.description = description;
+			entry.prepend = prepend;
+		} else {
+			this.pathContributions.push({ contributor, path: pathLocation, description, prepend });
+		}
 		this.updateEnvironmentPath();
 	}
 
 	removePathContribution(contributor: string): void {
-		this.pathContributions.delete(contributor);
+		const index = this.pathContributions.findIndex(c => c.contributor === contributor);
+		if (index !== -1) {
+			this.pathContributions.splice(index, 1);
+		}
 		this.updateEnvironmentPath();
 	}
 
@@ -115,13 +129,13 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		// Clear existing PATH modification
 		this.context.environmentVariableCollection.delete(pathVariable);
 
-		if (this.pathContributions.size === 0) {
+		if (this.pathContributions.length === 0) {
 			return;
 		}
 
 
 		// Build combined description
-		const allDescriptions = coalesce(Array.from(this.pathContributions.values())
+		const allDescriptions = coalesce(this.pathContributions
 			.map(c => c.description && typeof c.description === 'string' ? c.description : undefined)
 			.filter(d => d));
 		let descriptions = '';
@@ -131,7 +145,7 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 			descriptions = `${allDescriptions.slice(0, -1).join(', ')} ${l10n.t('and')} ${allDescriptions[allDescriptions.length - 1]}`;
 		}
 
-		const allCommands = coalesce(Array.from(this.pathContributions.values())
+		const allCommands = coalesce(this.pathContributions
 			.map(c => (c.description && typeof c.description !== 'string') ? `\`${c.description.command}\`` : undefined)
 			.filter(d => d));
 
@@ -148,8 +162,8 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 
 		// Build combined path from all contributions
 		// Since we cannot mix and match append/prepend, if there are any prepend paths, then prepend everything.
-		const allPaths = Array.from(this.pathContributions.values()).map(c => c.path);
-		if (Array.from(this.pathContributions.values()).some(c => c.prepend)) {
+		const allPaths = this.pathContributions.map(c => c.path);
+		if (this.pathContributions.some(c => c.prepend)) {
 			const pathVariableChange = allPaths.join(path.delimiter) + path.delimiter;
 			this.context.environmentVariableCollection.prepend(pathVariable, pathVariableChange);
 		} else {

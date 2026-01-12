@@ -115,6 +115,19 @@ module.exports = Sharp;
 
 }
 
+/**
+ * @github/copilot/sdk/index.js depends on @github/copilot/worker/*.js files.
+ * We need to copy these files into the sdk directory to ensure they are available at runtime.
+ */
+async function copyCopilotCliWorkerFiles() {
+	const sourceDir = path.join(REPO_ROOT, 'node_modules', '@github', 'copilot', 'worker');
+	const targetDir = path.join(REPO_ROOT, 'node_modules', '@github', 'copilot', 'sdk', 'worker');
+
+	await fs.promises.rm(targetDir, { recursive: true, force: true });
+	await fs.promises.mkdir(targetDir, { recursive: true });
+	await fs.promises.cp(sourceDir, targetDir, { recursive: true, force: true });
+}
+
 async function main() {
 	await fs.promises.mkdir(path.join(REPO_ROOT, '.build'), { recursive: true });
 
@@ -128,9 +141,11 @@ async function main() {
 	await copyStaticAssets([
 		...treeSitterGrammars.map(grammar => `node_modules/@vscode/tree-sitter-wasm/wasm/${grammar.name}.wasm`),
 		'node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter.wasm',
+		'node_modules/@github/blackbird-external-ingest-utils/pkg/nodejs/external_ingest_utils_bg.wasm',
 	], 'dist');
 
 	await createCopilotCliSharpShim();
+	await copyCopilotCliWorkerFiles();
 
 	// Check if the base cache file exists
 	const baseCachePath = path.join('test', 'simulation', 'cache', 'base.sqlite');
@@ -139,9 +154,7 @@ async function main() {
 	}
 
 	await copyStaticAssets([
-		`node_modules/@anthropic-ai/claude-code/cli.js`,
-		`node_modules/@anthropic-ai/claude-code/yoga.wasm`,
-		// `node_modules/@anthropic-ai/claude-code/vendor/ripgrep/${process.arch}-${process.platform}/ripgrep`,
+		`node_modules/@anthropic-ai/claude-agent-sdk/cli.js`,
 	], 'dist');
 }
 

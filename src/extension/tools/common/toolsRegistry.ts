@@ -64,7 +64,13 @@ export interface ICopilotToolExtension<T> {
 	alternativeDefinition?(tool: vscode.LanguageModelToolInformation, endpoint?: IChatEndpoint): vscode.LanguageModelToolInformation;
 }
 
-export interface ICopilotTool<T> extends vscode.LanguageModelTool<T>, ICopilotToolExtension<T> {
+export interface ICopilotTool<T> extends ICopilotToolExtension<T> {
+	invoke?: vscode.LanguageModelTool<T>['invoke'];
+	prepareInvocation?: vscode.LanguageModelTool<T>['prepareInvocation'];
+}
+
+export function isVscodeLanguageModelTool(tool: ICopilotTool<unknown>): tool is vscode.LanguageModelTool<unknown> {
+	return typeof tool.invoke === 'function';
 }
 
 export interface ICopilotToolCtor {

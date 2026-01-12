@@ -25,7 +25,7 @@ import { isObject, isUndefinedOrNull } from '../../../../util/vs/base/common/typ
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatLocation, ChatResponseConfirmationPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../../vscodeTypes';
+import { ChatLocation, ChatResponseConfirmationPart, ChatResponseMarkdownPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../../vscodeTypes';
 import { ToolCallingLoop } from '../../../intents/node/toolCallingLoop';
 import { ToolResultMetadata } from '../../../prompts/node/panel/toolCalling';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
@@ -329,16 +329,14 @@ suite('defaultIntentRequestHandler', () => {
 		expect(last).toBeInstanceOf(ChatResponseConfirmationPart);
 
 		const request = new TestChatRequest();
-		request.acceptedConfirmationData = [(last as ChatResponseConfirmationPart).data];
+		request.rejectedConfirmationData = [(last as ChatResponseConfirmationPart).data];
 		request.prompt = (last as ChatResponseConfirmationPart).buttons![1];
 		const handler2 = makeHandler({ request });
 		await handler2.getResult();
 
-		expect(response.at(-1)).toMatchInlineSnapshot(`
-			ChatResponseMarkdownPart {
-			  "value": MarkdownString {},
-			}
-		`);
+		const last2 = response.at(-1);
+		expect(last2).toBeInstanceOf(ChatResponseMarkdownPart);
+		expect((last2 as ChatResponseMarkdownPart).value.value).toMatchInlineSnapshot(`"Let me know if there's anything else I can help with!"`);
 	});
 });
 

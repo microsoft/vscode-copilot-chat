@@ -14,7 +14,7 @@ import { IDisposable } from '../../../util/vs/base/common/lifecycle';
  * externalEdit API to ensure proper tracking and attribution of file changes.
  */
 export class ExternalEditTracker {
-	private _ongoingEdits = new Map<string, { complete: () => void; onDidComplete: Thenable<void> }>();
+	private _ongoingEdits = new Map<string, { complete: () => void; onDidComplete: Thenable<string> }>();
 
 	/**
 	 * Starts tracking an external edit operation.
@@ -65,12 +65,12 @@ export class ExternalEditTracker {
 	 * @param editKey Unique identifier for the edit operation to complete
 	 * @returns Promise that resolves when VS Code has finished tracking the edit
 	 */
-	public async completeEdit(editKey: string): Promise<void> {
+	public async completeEdit(editKey: string): Promise<string | undefined> {
 		const ongoingEdit = this._ongoingEdits.get(editKey);
 		if (ongoingEdit) {
 			this._ongoingEdits.delete(editKey);
 			ongoingEdit.complete();
-			await ongoingEdit.onDidComplete;
+			return await ongoingEdit.onDidComplete;
 		}
 	}
 }

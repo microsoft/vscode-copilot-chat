@@ -8,7 +8,8 @@ import { IChatEndpoint } from '../../../../../platform/networking/common/network
 import { ToolName } from '../../../../tools/common/toolNames';
 import { InstructionMessage } from '../../base/instructionMessage';
 import { DefaultAgentPromptProps, detectToolCapabilities } from '../defaultAgentInstructions';
-import { IAgentPrompt, PromptConstructor, PromptRegistry } from '../promptRegistry';
+import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
+import { IAgentPrompt, PromptRegistry, SystemPrompt } from '../promptRegistry';
 
 class CodexStyleGpt5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -69,18 +70,13 @@ class CodexStyleGpt5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 			- Markdown text. Use structure only when it helps scanability.<br />
 			- Headers: optional; short Title Case (1-3 words) wrapped in **…**; no blank line before the first bullet; add only if they truly help.<br />
 			- Bullets: use - ; merge related points; keep to one line when possible; 4-6 per list ordered by importance; keep phrasing consistent.<br />
-			- Monospace: backticks for commands/paths/env vars/code ids and inline examples; use for literal keyword bullets; never combine with **.<br />
+			- Monospace: backticks for commands, env vars, and code identifiers; never combine with **.<br />
 			- Code samples or multi-line snippets should be wrapped in fenced code blocks; add a language hint whenever obvious.<br />
 			- Structure: group related bullets; order sections general → specific → supporting; for subsections, start with a bolded keyword bullet, then items; match complexity to the task.<br />
 			- Tone: collaborative, concise, factual; present tense, active voice; self-contained; no "above/below"; parallel wording.<br />
 			- Don'ts: no nested bullets/hierarchies; no ANSI codes; don't cram unrelated keywords; keep keyword lists short—wrap/reformat if long; avoid naming formatting styles in answers.<br />
 			- Adaptation: code explanations → precise, structured with code refs; simple tasks → lead with outcome; big changes → logical walkthrough + rationale + next actions; casual one-offs → plain sentences, no headers/bullets.<br />
-			- File References: When referencing files in your response, always follow the below rules:<br />
-			* Use inline code to make file paths clickable.<br />
-			* Each reference should have a stand alone path. Even if it's the same file.<br />
-			* Accepted: absolute, workspace-relative, a/ or b/ diff prefixes, or bare filename/suffix.<br />
-			* Do not use URIs like file://, vscode://, or https://.<br />
-			* Examples: src/app.ts, C:\repo\project\main.rs<br />
+			<FileLinkificationInstructions />
 		</InstructionMessage>;
 	}
 }
@@ -93,7 +89,7 @@ class Gpt5CodexResolver implements IAgentPrompt {
 		return endpoint.family === 'gpt-5-codex';
 	}
 
-	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
+	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		return CodexStyleGpt5CodexPrompt;
 	}
 }

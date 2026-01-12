@@ -9,7 +9,6 @@ import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatRespon
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { getAuthorDisplayName, toOpenPullRequestWebviewUri } from '../vscode/copilotCodingAgentUtils';
-import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 
 export interface SessionResponseLogChunk {
 	choices: Array<{
@@ -99,8 +98,7 @@ export interface ParsedToolCallDetails {
 export class ChatSessionContentBuilder {
 	constructor(
 		private type: string,
-		@IGitService private readonly _gitService: IGitService,
-		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
+		@IGitService private readonly _gitService: IGitService
 	) {
 	}
 
@@ -109,7 +107,7 @@ export class ChatSessionContentBuilder {
 		sessions: SessionInfo[],
 		pullRequest: PullRequestSearchItem,
 		getLogsForSession: (id: string) => Promise<string>,
-		initialReferences?: readonly vscode.ChatPromptReference[],
+		initialReferences: Promise<vscode.ChatPromptReference[]>,
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
 		const history: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
@@ -121,18 +119,19 @@ export class ChatSessionContentBuilder {
 				const turns: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
 				// Create request turn with references for the first session
-				const references = sessionIndex === 0 && initialReferences ? Array.from(initialReferences) : [];
+				const references = sessionIndex === 0 ? Array.from(await initialReferences) : [];
 				turns.push(new ChatRequestTurn2(
 					problemStatement || session.name,
 					undefined, // command
 					references, // references
 					this.type,
 					[], // toolReferences
-					[]
+					[],
+					undefined
 				));
 
 				// Create the PR card right after problem statement for first session
-				if (sessionIndex === 0 && pullRequest.author) {
+				if (sessionIndex === 0 && pullRequest.author && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 					const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
 					const plaintextBody = pullRequest.body;
 
@@ -190,13 +189,6 @@ export class ChatSessionContentBuilder {
 						this.processAssistantDelta(delta, choice, pullRequest, responseParts);
 					}
 
-				}
-			}
-
-			if (session.state === 'completed' || session.state === 'failed' /** session can fail with proposed changes */) {
-				const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pullRequest);
-				if (multiDiffPart) {
-					responseParts.push(multiDiffPart);
 				}
 			}
 
@@ -285,6 +277,17 @@ export class ChatSessionContentBuilder {
 						toolPart.invocationMessage = cleaned;
 						toolPart.isError = true;
 						responseParts.push(toolPart);
+					}
+				} else {
+					const trimmedContent = currentResponseContent.trim();
+					if (trimmedContent) {
+						// TODO@rebornix @osortega validate if this is the only finish_reason for session end.
+						if (choice.finish_reason === 'stop') {
+							responseParts.push(new ChatResponseMarkdownPart(trimmedContent));
+						} else {
+							responseParts.push(new ChatResponseThinkingProgressPart(trimmedContent, '', { vscodeReasoningDone: true }));
+						}
+						currentResponseContent = '';
 					}
 				}
 			}

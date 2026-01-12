@@ -345,8 +345,8 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 	}
 
 	private async getGithubAccessToken(silent: boolean) {
-		return (await this._authenticationService.getPermissiveGitHubSession({ silent }))?.accessToken
-			?? (await this._authenticationService.getAnyGitHubSession({ silent }))?.accessToken;
+		return (await this._authenticationService.getGitHubSession('permissive', { silent }))?.accessToken
+			?? (await this._authenticationService.getGitHubSession('any', { silent }))?.accessToken;
 	}
 
 

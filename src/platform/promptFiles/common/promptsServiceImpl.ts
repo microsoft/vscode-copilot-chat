@@ -3,25 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { CancellationError } from '../../../util/vs/base/common/errors';
 import { URI } from '../../../util/vs/base/common/uri';
 import { PromptFileParser } from '../../../util/vs/workbench/contrib/chat/common/promptSyntax/promptFileParser';
-import { IFileSystemService } from '../../filesystem/common/fileSystemService';
+import { IWorkspaceService } from '../../workspace/common/workspaceService';
 import { IPromptsService, ParsedPromptFile } from './promptsService';
 
 export class PromptsServiceImpl implements IPromptsService {
-
+	declare _serviceBrand: undefined;
 	constructor(
-		@IFileSystemService private readonly fileService: IFileSystemService
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService
 	) { }
 
 	public async parseFile(uri: URI, token: CancellationToken): Promise<ParsedPromptFile> {
-		const fileContent = await this.fileService.readFile(uri);
-		if (token.isCancellationRequested) {
-			throw new CancellationError();
-		}
-		const text = new TextDecoder().decode(fileContent);
-		return new PromptFileParser().parse(uri, text);
+		const doc = await raceCancellationError(this.workspaceService.openTextDocument(uri), token);
+		return new PromptFileParser().parse(uri, doc.getText());
 	}
 }

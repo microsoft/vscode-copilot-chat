@@ -160,7 +160,7 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 
 			rpc.registerMethod('start', async function start(opts: IStartOptions): Promise<void> {
 				if (!authService.copilotToken) {
-					await authService.getAnyGitHubSession({ createIfNone: true });
+					await authService.getGitHubSession('any', { createIfNone: true });
 				}
 				const result = await factory.start(opts, cts.token);
 
@@ -253,12 +253,12 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 			}
 		} else if (!previouslyStoredAt) {
 			// 2. enabling a disabled state
-			await this.fillStoragePath(storageLocation);
 			this.terminalService.contributePath('copilot-debug', storageLocation, { command: COPILOT_DEBUG_COMMAND });
+			await this.fillStoragePath(storageLocation);
 		} else if (previouslyStoredAt.version !== versionNonce) {
 			// 3. upgrading the worker
-			await this.fillStoragePath(storageLocation);
 			this.terminalService.contributePath('copilot-debug', storageLocation, { command: COPILOT_DEBUG_COMMAND });
+			await this.fillStoragePath(storageLocation);
 		} else if (enabled) {
 			// 4. already enabled and up to date, just ensure PATH contribution
 			this.terminalService.contributePath('copilot-debug', storageLocation, { command: COPILOT_DEBUG_COMMAND });

@@ -372,13 +372,13 @@ suite('Virtual prompt reconciler', function () {
 				return (
 					<>
 						<Text>This is the parent count: {parentState}</Text>
-						<ChildComponent key="child" parentState={parentState} />
+						<ChildComponent key='child' parentState={parentState} />
 					</>
 				);
 			}
 			return (
 				<>
-					<ChildComponent key="child" parentState={parentState} />
+					<ChildComponent key='child' parentState={parentState} />
 					<Text>This is the parent count: {parentState}</Text>
 				</>
 			);

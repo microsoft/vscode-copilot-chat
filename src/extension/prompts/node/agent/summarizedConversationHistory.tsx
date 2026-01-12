@@ -17,6 +17,7 @@ import { APIUsage } from '../../../../platform/networking/common/openai';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { ThinkingData } from '../../../../platform/thinking/common/thinking';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
@@ -35,8 +36,10 @@ import { NotebookSummary } from '../../../tools/node/notebookSummaryTool';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { AgentPrompt, AgentPromptProps, AgentUserMessage, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn, KeepGoingReminder } from './agentPrompt';
+import { AgentPrompt, AgentPromptProps, AgentUserMessage, AgentUserMessageCustomizations, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { DefaultOpenAIKeepGoingReminder } from './openai/defaultOpenAIPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
+import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
 	readonly simpleMode?: boolean;
@@ -153,6 +156,7 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 		const history = this.props.simpleMode ?
 			<SimpleSummarizedHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} /> :
 			<ConversationHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
+		const isOpus = this.props.endpoint.model.startsWith('claude-opus');
 		return (
 			<>
 				<SystemMessage priority={this.props.priority}>
@@ -162,7 +166,10 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
 				<UserMessage>
 					Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
-
+					{isOpus && <>
+						<br />
+						IMPORTANT: Do NOT call any tools. Your only task is to generate a text summary of the conversation. Do not attempt to execute any actions or make any tool calls.<br />
+					</>}
 					Focus particularly on:<br />
 					- The specific agent commands/tools that were just executed<br />
 					- The results returned from these recent tool calls (truncate if very long but preserve key information)<br />
@@ -201,6 +208,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 
 		// Handle the possibility that we summarized partway through the current turn (e.g. if we accumulated many tool call rounds)
 		let summaryForCurrentTurn: string | undefined = undefined;
+		let thinkingForFirstRoundAfterSummarization: ThinkingData | undefined = undefined;
 		if (this.props.promptContext.toolCallRounds?.length) {
 			const toolCallRounds: IToolCallRound[] = [];
 			for (let i = this.props.promptContext.toolCallRounds.length - 1; i >= 0; i--) {
@@ -208,6 +216,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 				if (toolCallRound.summary) {
 					// This tool call round was summarized
 					summaryForCurrentTurn = toolCallRound.summary;
+					thinkingForFirstRoundAfterSummarization = toolCallRound.thinking;
 					break;
 				}
 				toolCallRounds.push(toolCallRound);
@@ -215,6 +224,13 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 
 			// Reverse the tool call rounds so they are in chronological order
 			toolCallRounds.reverse();
+
+			// For Anthropic models with thinking enabled, set the thinking on the first round
+			// so it gets rendered as the first thinking block after summarization
+			if (isAnthropicFamily(this.props.endpoint) && thinkingForFirstRoundAfterSummarization && toolCallRounds.length > 0 && !toolCallRounds[0].thinking) {
+				toolCallRounds[0].thinking = thinkingForFirstRoundAfterSummarization;
+			}
+
 			history.push(<ChatToolCalls priority={899} flexGrow={2} promptContext={this.props.promptContext} toolCallRounds={toolCallRounds} toolCallResults={this.props.promptContext.toolCallResults} enableCacheBreakpoints={this.props.enableCacheBreakpoints} truncateAt={this.props.maxToolResultLength} />);
 		}
 
@@ -227,7 +243,12 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 		}
 
 		if (!this.props.promptContext.isContinuation) {
-			history.push(<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props)} />);
+			history.push(<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props, {
+				userQueryTagName: this.props.userQueryTagName,
+				attachmentHint: this.props.attachmentHint,
+				ReminderInstructionsClass: this.props.ReminderInstructionsClass,
+				ToolReferencesHintClass: this.props.ToolReferencesHintClass,
+			})} />);
 		}
 
 		// We may have a summary from earlier in the conversation, but skip history if we have a new summary
@@ -274,7 +295,12 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 				// We have a summary for a tool call round that was part of this turn
 				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} />);
 			} else if (!turn.isContinuation) {
-				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint)} />);
+				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint, {
+					userQueryTagName: this.props.userQueryTagName,
+					attachmentHint: this.props.attachmentHint,
+					ReminderInstructionsClass: this.props.ReminderInstructionsClass,
+					ToolReferencesHintClass: this.props.ToolReferencesHintClass,
+				})} />);
 			}
 
 			// Reverse the tool call rounds so they are in chronological order
@@ -304,13 +330,14 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 export class SummarizedConversationHistoryMetadata extends PromptMetadata {
 	constructor(
 		public readonly toolCallRoundId: string,
-		public readonly text: string
+		public readonly text: string,
+		public readonly thinking?: ThinkingData
 	) {
 		super();
 	}
 }
 
-export interface SummarizedAgentHistoryProps extends BasePromptElementProps {
+export interface SummarizedAgentHistoryProps extends BasePromptElementProps, AgentUserMessageCustomizations {
 	readonly priority: number;
 	readonly endpoint: IChatEndpoint;
 	readonly location: ChatLocation;
@@ -342,8 +369,8 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			const summarizer = this.instantiationService.createInstance(ConversationHistorySummarizer, this.props, sizing, progress, token);
 			const summResult = await summarizer.summarizeHistory();
 			if (summResult) {
-				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary);
-				this.addSummaryToHistory(summResult.summary, summResult.toolCallRoundId);
+				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary, summResult.thinking);
+				this.addSummaryToHistory(summResult.summary, summResult.toolCallRoundId, summResult.thinking);
 			}
 		}
 
@@ -356,10 +383,11 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 		</>;
 	}
 
-	private addSummaryToHistory(summary: string, toolCallRoundId: string): void {
+	private addSummaryToHistory(summary: string, toolCallRoundId: string, thinking?: ThinkingData): void {
 		const round = this.props.promptContext.toolCallRounds?.find(round => round.id === toolCallRoundId);
 		if (round) {
 			round.summary = summary;
+			round.thinking = thinking;
 			return;
 		}
 
@@ -369,6 +397,7 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			const round = turn.rounds.find(round => round.id === toolCallRoundId);
 			if (round) {
 				round.summary = summary;
+				round.thinking = thinking;
 				break;
 			}
 		}
@@ -396,7 +425,7 @@ class ConversationHistorySummarizer {
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 	) { }
 
-	async summarizeHistory(): Promise<{ summary: string; toolCallRoundId: string }> {
+	async summarizeHistory(): Promise<{ summary: string; toolCallRoundId: string; thinking?: ThinkingData }> {
 		// Just a function for test to create props and call this
 		const propsInfo = this.instantiationService.createInstance(SummarizedConversationHistoryPropsBuilder).getProps(this.props);
 
@@ -411,7 +440,8 @@ class ConversationHistorySummarizer {
 		const summary = await summaryPromise;
 		return {
 			summary: summary.value,
-			toolCallRoundId: propsInfo.summarizedToolCallRoundId
+			toolCallRoundId: propsInfo.summarizedToolCallRoundId,
+			thinking: propsInfo.summarizedThinking
 		};
 	}
 
@@ -652,6 +682,7 @@ function stripCacheBreakpoints(messages: ChatMessage[]): void {
 export interface ISummarizedConversationHistoryInfo {
 	readonly props: SummarizedAgentHistoryProps;
 	readonly summarizedToolCallRoundId: string;
+	readonly summarizedThinking?: ThinkingData;
 }
 
 /**
@@ -685,6 +716,10 @@ export class SummarizedConversationHistoryPropsBuilder {
 			throw new Error('Nothing to summarize');
 		}
 
+		// For Anthropic models with thinking enabled, find the last assistant message with thinking
+		// from all rounds being summarized (both current toolCallRounds and history).
+		// This thinking will be used as the first thinking block after summarization.
+		const summarizedThinking = isAnthropicFamily(props.endpoint) ? this.findLastThinking(props) : undefined;
 		const promptContext = {
 			...props.promptContext,
 			toolCallRounds,
@@ -696,8 +731,21 @@ export class SummarizedConversationHistoryPropsBuilder {
 				workingNotebook: this.getWorkingNotebook(props),
 				promptContext
 			},
-			summarizedToolCallRoundId
+			summarizedToolCallRoundId,
+			summarizedThinking
 		};
+	}
+
+	private findLastThinking(props: SummarizedAgentHistoryProps): ThinkingData | undefined {
+		if (props.promptContext.toolCallRounds) {
+			for (let i = props.promptContext.toolCallRounds.length - 1; i >= 0; i--) {
+				const round = props.promptContext.toolCallRounds[i];
+				if (round.thinking) {
+					return round.thinking;
+				}
+			}
+		}
+		return undefined;
 	}
 
 	private getWorkingNotebook(props: SummarizedAgentHistoryProps): NotebookDocument | undefined {
@@ -734,7 +782,7 @@ class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 				{this.props.summaryText}
 			</Tag>
 			{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
-				<KeepGoingReminder modelFamily={this.props.endpoint.family} />
+				<DefaultOpenAIKeepGoingReminder />
 			</Tag>}
 		</UserMessage>;
 	}

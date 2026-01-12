@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { PromptFileLangageId, PromptHeaderAttributes } from '../../../platform/promptFiles/common/promptsService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -89,7 +89,7 @@ export class PromptFileContextContribution extends Disposable {
 			if (copilotAPI) {
 				disposables.add(copilotAPI.registerContextProvider(provider));
 			}
-			disposables.add(this.languageContextProviderService.registerContextProvider(provider));
+			disposables.add(this.languageContextProviderService.registerContextProvider(provider, [ProviderTarget.NES, ProviderTarget.Completions]));
 		} catch (error) {
 			this.logService.error('Error regsistering prompt file context provider:', error);
 		}
@@ -104,7 +104,7 @@ export class PromptFileContextContribution extends Disposable {
 				const toolNamesList = this.getToolNames().join(', ');
 				return [
 					{
-						name: 'This is a prompt file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other properties',
+						name: 'This is a prompt file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other attributes',
 						value: [PromptHeaderAttributes.name, PromptHeaderAttributes.description, PromptHeaderAttributes.argumentHint, PromptHeaderAttributes.agent, PromptHeaderAttributes.model, PromptHeaderAttributes.tools].join(', '),
 					},
 					{
@@ -116,7 +116,7 @@ export class PromptFileContextContribution extends Disposable {
 						value: this.models.join(', '),
 					},
 					{
-						name: '`tools` is optional and is an array that can consist of any number of the following values',
+						name: '`tools` is optional and must be an array of one or more of the following values. Do not make up any other tool names.',
 						value: toolNamesList
 					},
 					{
@@ -165,7 +165,7 @@ export class PromptFileContextContribution extends Disposable {
 				const toolNamesList = this.getToolNames().join(', ');
 				return [
 					{
-						name: 'This is a custom agent file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other properties',
+						name: 'This is a custom agent file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other attributes',
 						value: [PromptHeaderAttributes.name, PromptHeaderAttributes.description, PromptHeaderAttributes.argumentHint, PromptHeaderAttributes.target, PromptHeaderAttributes.model, PromptHeaderAttributes.tools, PromptHeaderAttributes.handOffs].join(', '),
 					},
 					{
@@ -173,7 +173,7 @@ export class PromptFileContextContribution extends Disposable {
 						value: this.models.join(', '),
 					},
 					{
-						name: '`tools` is optional and is an array that can consist of any number of the following values',
+						name: '`tools` is optional and must be an array of one or more of the following values. Do not make up any other tool names.',
 						value: `[${toolNamesList}]`,
 					},
 					{
@@ -217,7 +217,7 @@ export class PromptFileContextContribution extends Disposable {
 	}
 
 	private getToolNames(): string[] {
-		return ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'runSubagent', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo', 'extensions', 'todos'];
+		return ['execute', 'read', 'edit', 'search', 'web', 'agent', 'todo'];
 	}
 
 

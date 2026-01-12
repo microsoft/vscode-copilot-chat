@@ -27,7 +27,7 @@ interface MCPServerConfigBase {
 }
 
 interface MCPLocalServerConfig extends MCPServerConfigBase {
-	type?: "local" | "stdio";
+	type?: 'local' | 'stdio';
 	command: string;
 	args: string[];
 	env?: Record<string, string>;
@@ -35,7 +35,7 @@ interface MCPLocalServerConfig extends MCPServerConfigBase {
 }
 
 interface MCPRemoteServerConfig extends MCPServerConfigBase {
-	type: "http" | "sse";
+	type: 'http' | 'sse';
 	url: string;
 	headers?: Record<string, string>;
 }
@@ -44,7 +44,7 @@ export type MCPServerConfig = MCPLocalServerConfig | MCPRemoteServerConfig;
 
 export interface ICopilotCLIMCPHandler {
 	readonly _serviceBrand: undefined;
-	loadMcpConfig(workingDirectory: string | undefined): Promise<Record<string, MCPServerConfig> | undefined>;
+	loadMcpConfig(workingDirectory: URI | undefined): Promise<Record<string, MCPServerConfig> | undefined>;
 }
 
 export const ICopilotCLIMCPHandler = createServiceIdentifier<ICopilotCLIMCPHandler>('ICopilotCLIMCPHandler');
@@ -90,7 +90,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
 
-	public async loadMcpConfig(workingDirectory: string | undefined): Promise<Record<string, MCPServerConfig> | undefined> {
+	public async loadMcpConfig(workingDirectory: URI | undefined): Promise<Record<string, MCPServerConfig> | undefined> {
 		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLIMCPServerEnabled)) {
 			return undefined;
 		}
@@ -107,16 +107,16 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		return Object.keys(processedConfig).length > 0 ? processedConfig : undefined;
 	}
 
-	private getWorkspaceFolder(workingDirectory: string | undefined): URI | undefined {
+	private getWorkspaceFolder(workingDirectory: URI | undefined): URI | undefined {
 		// If a working directory is provided, try to find the matching workspace folder
 		if (workingDirectory) {
 			const workspaceFolders = this.workspaceService.getWorkspaceFolders();
-			const matchingFolder = workspaceFolders.find(folder => workingDirectory.startsWith(folder.fsPath));
+			const matchingFolder = this.workspaceService.getWorkspaceFolder(workingDirectory) ?? workspaceFolders.find(folder => workingDirectory.fsPath.startsWith(folder.fsPath));
 			if (matchingFolder) {
 				return matchingFolder;
 			}
 			// If no matching workspace folder, use the working directory as a URI
-			return URI.file(workingDirectory);
+			return workingDirectory;
 		}
 
 		// Fall back to the first workspace folder

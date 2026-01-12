@@ -61,7 +61,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 			}
 			let traitValue = compilerOptions[traitKind as keyof tt.CompilerOptions];
 			if (traitValue) {
-				if (typeof traitValue === "number") {
+				if (typeof traitValue === 'number') {
 					const enumName = CompilerOptionsRunnable.getEnumName(enumType as Record<string, unknown>, traitValue);
 					if (enumName) {
 						traitValue = enumName;

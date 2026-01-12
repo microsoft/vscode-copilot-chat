@@ -99,10 +99,10 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		this._push(new ChatResponseFileTreePart(value, baseUri));
 	}
 
-	externalEdit<T>(target: Uri | Uri[], callback: () => Thenable<T>): Thenable<T> {
+	async externalEdit(target: Uri | Uri[], callback: () => Thenable<unknown>): Promise<string> {
 		const part = new ChatResponseExternalEditPart(target instanceof Array ? target : [target], callback);
 		this._push(part);
-		return part.applied as Thenable<T>;
+		return part.applied;
 	}
 
 	progress(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>): void {

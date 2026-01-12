@@ -43,7 +43,6 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		})),
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
-		top_p: options.postOptions.top_p,
 		max_output_tokens: options.postOptions.max_tokens,
 		tool_choice: typeof options.postOptions.tool_choice === 'object'
 			? { type: 'function', name: options.postOptions.tool_choice.function.name }
@@ -58,7 +57,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		'disabled';
 	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
 	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
-	const effort = effortConfig === 'default' ? undefined : effortConfig;
+	const effort = effortConfig === 'default' ? 'medium' : effortConfig;
 	const summary = summaryConfig === 'off' ? undefined : summaryConfig;
 	if (effort || summary) {
 		body.reasoning = {

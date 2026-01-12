@@ -5,7 +5,7 @@
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -44,10 +44,10 @@ export class DiagnosticsContextContribution extends Disposable {
 			const resolver = new ContextResolver(this.diagnosticsService, this.configurationService, this.experimentationService);
 			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'diagnostics-context-provider',
-				selector: "*",
+				selector: '*',
 				resolver: resolver
 			};
-			disposables.add(this.languageContextProviderService.registerContextProvider(provider));
+			disposables.add(this.languageContextProviderService.registerContextProvider(provider, [ProviderTarget.NES]));
 		} catch (error) {
 			this.logService.error('Error registering diagnostics context provider:', error);
 		}
@@ -75,6 +75,12 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 
 	resolveOnTimeout(request: Copilot.ResolveRequest): Copilot.SupportedContextItem[] {
 		if (!request.documentContext.position) {
+			return [];
+		}
+
+		const languageId = request.documentContext.languageId;
+		const languageEnablement = this.experimentationService.getTreatmentVariable<boolean>(`config.github.copilot.chat.inlineEdits.diagnosticsContextProvider.${languageId}`);
+		if (!languageEnablement) {
 			return [];
 		}
 
@@ -113,21 +119,12 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 }
 
 function diagnosticsToTraits(diagnostics: Diagnostic[]): Copilot.Trait[] {
-	const errorDiagnostics = diagnostics.filter(d => d.severity === DiagnosticSeverity.Error);
-	const warningsDiagnostics = diagnostics.filter(d => d.severity === DiagnosticSeverity.Warning);
 
 	const traits: Copilot.Trait[] = [];
-	if (errorDiagnostics.length > 0) {
+	if (diagnostics.length > 0) {
 		traits.push({
-			name: "Errors near the user's cursor",
-			value: errorDiagnostics.map(d => `- ${d.message}`).join('\n'),
-		});
-	}
-
-	if (warningsDiagnostics.length > 0) {
-		traits.push({
-			name: "Warnings near the user's cursor",
-			value: warningsDiagnostics.map(d => `- ${d.message}`).join('\n'),
+			name: `Problems near the user's cursor`,
+			value: diagnostics.map(d => `\n\t${diagnosticsToString(d)}`).join(''),
 		});
 	}
 
@@ -136,4 +133,16 @@ function diagnosticsToTraits(diagnostics: Diagnostic[]): Copilot.Trait[] {
 
 function toInternalRange(range: ExternalRange): Range {
 	return new Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
+}
+
+function diagnosticsToString(diagnostics: Diagnostic): string {
+	const errorstartPosition = `${diagnostics.range.start.line + 1}:${diagnostics.range.start.character + 1}`;
+	const severity = diagnostics.severity === DiagnosticSeverity.Error ? 'error' : 'warning';
+
+	let messageCode = '';
+	if (diagnostics.code) {
+		messageCode = ` ${diagnostics.source?.toUpperCase() ?? ''}${diagnostics.code}`;
+	}
+
+	return `${errorstartPosition} - ${severity}${messageCode}: ${diagnostics.message}`;
 }

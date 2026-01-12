@@ -294,7 +294,7 @@ export const languageMarkers: { [language: string]: ILanguageInfo } = {
 		markdownLanguageIds: ['tsx'],
 	},
 	vb: {
-		lineComment: { start: "'", end: '' },
+		lineComment: { start: `'`, end: '' },
 		markdownLanguageIds: ['vb', 'vbscript'],
 	},
 	verilog: {
@@ -342,11 +342,11 @@ const dontAddLanguageMarker: string[] = [
 
 // prettier-ignore
 const shebangLines: { [language: string]: string } = {
-	"html": "<!DOCTYPE html>",
-	"python": "#!/usr/bin/env python3",
-	"ruby": "#!/usr/bin/env ruby",
-	"shellscript": "#!/bin/sh",
-	"yaml": "# YAML data"
+	'html': '<!DOCTYPE html>',
+	'python': '#!/usr/bin/env python3',
+	'ruby': '#!/usr/bin/env ruby',
+	'shellscript': '#!/bin/sh',
+	'yaml': '# YAML data'
 };
 
 /**
@@ -366,7 +366,7 @@ export function isShebangLine(line: string): boolean {
  */
 // prettier-ignore
 export function hasLanguageMarker({ source }: DocumentInfo): boolean {
-	return source.startsWith("#!") || source.startsWith("<!DOCTYPE");
+	return source.startsWith('#!') || source.startsWith('<!DOCTYPE');
 }
 
 /**

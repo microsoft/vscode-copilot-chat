@@ -27,7 +27,7 @@ extends:
   template: azure-pipelines/extension/pre-release.yml@templates
   parameters:
     l10nSourcePaths: ./src
-    nodeVersion: 22.14.x
+    nodeVersion: 22.21.x
     standardizedVersioning: true
 
     cgIgnoreDirectories: $(Build.SourcesDirectory)/script
@@ -39,7 +39,7 @@ extends:
     buildSteps:
       - task: NodeTool@0
         inputs:
-          versionSpec: '22.14.x'
+          versionSpec: '22.21.x'
 
       - task: AzureKeyVault@2
         displayName: "Azure Key Vault: Get Secrets"

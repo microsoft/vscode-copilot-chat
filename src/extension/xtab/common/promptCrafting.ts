@@ -6,16 +6,20 @@
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
-import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import { Result } from '../../../util/common/result';
 import { pushMany, range } from '../../../util/vs/base/common/arrays';
+import { assertNever } from '../../../util/vs/base/common/assert';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
+import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
+import { LintErrors } from './lintErrors';
 import { PromptTags } from './tags';
 import { CurrentDocument } from './xtabCurrentDocument';
 
@@ -29,6 +33,8 @@ export class PromptPieces {
 		public readonly taggedCurrentDocLines: readonly string[],
 		public readonly areaAroundCodeToEdit: string,
 		public readonly langCtx: LanguageContextResponse | undefined,
+		public readonly aggressivenessLevel: AggressivenessLevel,
+		public readonly lintErrors: LintErrors | undefined,
 		public readonly computeTokens: (s: string) => number,
 		public readonly opts: PromptOptions,
 	) {
@@ -37,7 +43,7 @@ export class PromptPieces {
 
 export function getUserPrompt(promptPieces: PromptPieces): string {
 
-	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, computeTokens, opts } = promptPieces;
+	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, lintErrors, computeTokens, opts } = promptPieces;
 	const currentFileContent = taggedCurrentDocLines.join('\n');
 
 	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
@@ -50,7 +56,9 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const currentFilePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
 
-	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath) : '';
+	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath, aggressivenessLevel) : '';
+
+	const lintsWithNewLinePadding = lintErrors ? `\n${lintErrors.getFormattedLintErrors()}\n` : '';
 
 	const mainPrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}
@@ -60,7 +68,7 @@ ${PromptTags.CURRENT_FILE.start}
 current_file_path: ${currentFilePath}
 ${currentFileContent}
 ${PromptTags.CURRENT_FILE.end}
-
+${lintsWithNewLinePadding}
 ${PromptTags.EDIT_HISTORY.start}
 ${editDiffHistory}
 ${PromptTags.EDIT_HISTORY.end}
@@ -69,7 +77,9 @@ ${areaAroundCodeToEdit}`;
 
 	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 && opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified;
 
-	const prompt = relatedInformation + (includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt) + postScript;
+	const packagedPrompt = includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt;
+	const packagedPromptWithRelatedInfo = addRelatedInformation(relatedInformation, packagedPrompt, opts.languageContext.traitPosition);
+	const prompt = packagedPromptWithRelatedInfo + postScript;
 
 	const trimmedPrompt = prompt.trim();
 
@@ -80,7 +90,29 @@ function wrapInBackticks(content: string) {
 	return `\`\`\`\n${content}\n\`\`\``;
 }
 
-function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
+function addRelatedInformation(relatedInformation: string, prompt: string, position: 'before' | 'after'): string {
+	if (position === 'before') {
+		return appendWithNewLineIfNeeded(relatedInformation, prompt, 2);
+	}
+	return appendWithNewLineIfNeeded(prompt, relatedInformation, 2);
+}
+
+function appendWithNewLineIfNeeded(base: string, toAppend: string, minNewLines: number): string {
+	// Count existing newlines at the end of base and start of toAppend
+	let existingNewLines = 0;
+	for (let i = base.length - 1; i >= 0 && base[i] === '\n'; i--) {
+		existingNewLines++;
+	}
+	for (let i = 0; i < toAppend.length && toAppend[i] === '\n'; i++) {
+		existingNewLines++;
+	}
+
+	// Add newlines to reach the minimum required
+	const newLinesToAdd = Math.max(0, minNewLines - existingNewLines);
+	return (base + '\n'.repeat(newLinesToAdd) + toAppend).trim();
+}
+
+function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string, aggressivenessLevel: AggressivenessLevel) {
 	let postScript: string | undefined;
 	switch (strategy) {
 		case PromptingStrategy.Codexv21NesUnified:
@@ -94,8 +126,15 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 		case PromptingStrategy.Xtab275:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Provide the revised code that was between the \`${PromptTags.EDIT_WINDOW.start}\` and \`${PromptTags.EDIT_WINDOW.end}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.`;
 			break;
+		case PromptingStrategy.XtabAggressiveness:
+			postScript = `<|aggressive|>${aggressivenessLevel}<|/aggressive|>`;
+			break;
+		case PromptingStrategy.PatchBased:
+			postScript = `Output a modified diff style format with the changes you want. Each change patch must start with \`<filename>:<line number>\` and then include some non empty "anchor lines" preceded by \`-\` and the new lines meant to replace them preceded by \`+\`. Put your changes in the order that makes the most sense, for example edits inside the code_to_edit region and near the user's <|cursor|> should always be prioritized. Output "<NO_EDIT>" if you don't have a good edit candidate.`;
+			break;
 		case PromptingStrategy.SimplifiedSystemPrompt:
-		default:
+		case PromptingStrategy.CopilotNesXtab:
+		case undefined:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
 Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
 position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
@@ -104,6 +143,8 @@ they would have made next. Provide the revised code that was between the \`${Pro
 // Your revised code goes here
 \`\`\``;
 			break;
+		default:
+			assertNever(strategy);
 	}
 
 	const formattedPostScript = postScript === undefined ? '' : `\n\n${postScript}`;
@@ -117,7 +158,6 @@ function getRelatedInformation(langCtx: LanguageContextResponse | undefined): st
 
 	const traits = langCtx.items
 		.filter(ctx => ctx.context.kind === ContextKind.Trait)
-		.filter(t => !t.onTimeout)
 		.map(t => t.context) as TraitContext[];
 
 	if (traits.length === 0) {
@@ -129,7 +169,7 @@ function getRelatedInformation(langCtx: LanguageContextResponse | undefined): st
 		relatedInformation.push(`${trait.name}: ${trait.value}`);
 	}
 
-	return `Consider this related information:\n${relatedInformation.join('\n')}\n\n`;
+	return `Consider this related information:\n${relatedInformation.join('\n')}`;
 }
 
 function getEditDiffHistory(
@@ -179,7 +219,7 @@ function getEditDiffHistory(
 
 	const diffsFromOldestToNewest = allDiffs.reverse();
 
-	let promptPiece = diffsFromOldestToNewest.join("\n\n");
+	let promptPiece = diffsFromOldestToNewest.join('\n\n');
 
 	// to preserve old behavior where we always had trailing whitespace
 	if (diffsFromOldestToNewest.length > 0) {
@@ -386,7 +426,7 @@ export function buildCodeSnippetsUsingPagedClipping(
 			const startPos = contentTransform.getPosition(startOffset);
 			const endPos = contentTransform.getPosition(endOffset);
 
-			const { firstPageIdx, lastPageIdx, budgetLeft } = expandRangeToPageRange(
+			const { firstPageIdx, lastPageIdxIncl, budgetLeft } = expandRangeToPageRange(
 				file.content.getLines(),
 				new OffsetRange(startPos.lineNumber - 1 /* convert from 1-based to 0-based */, endPos.lineNumber),
 				pageSize,
@@ -398,7 +438,7 @@ export function buildCodeSnippetsUsingPagedClipping(
 			if (budgetLeft === maxTokenBudget) {
 				break;
 			} else {
-				const linesToKeep = file.content.getLines().slice(firstPageIdx * pageSize, (lastPageIdx + 1) * pageSize);
+				const linesToKeep = file.content.getLines().slice(firstPageIdx * pageSize, (lastPageIdxIncl + 1) * pageSize);
 				docsInPrompt.add(file.id);
 				snippets.push(formatCodeSnippet(file.id, linesToKeep.join('\n'), linesToKeep.length < lines.length));
 				maxTokenBudget = budgetLeft;
@@ -462,14 +502,14 @@ export const N_LINES_BELOW = 5;
 
 export const N_LINES_AS_CONTEXT = 15;
 
-function expandRangeToPageRange(
+export function expandRangeToPageRange(
 	currentDocLines: string[],
 	areaAroundEditWindowLinesRange: OffsetRange,
 	pageSize: number,
 	maxTokens: number,
 	computeTokens: (s: string) => number,
 	prioritizeAboveCursor: boolean,
-): { firstPageIdx: number; lastPageIdx: number; budgetLeft: number } {
+): { firstPageIdx: number; lastPageIdxIncl: number; budgetLeft: number } {
 
 	const totalNOfPages = Math.ceil(currentDocLines.length / pageSize);
 
@@ -479,12 +519,15 @@ function expandRangeToPageRange(
 		const page = currentDocLines.slice(start, end);
 		return countTokensForLines(page, computeTokens);
 	}
-	let firstPageIdx = Math.floor(areaAroundEditWindowLinesRange.start / pageSize);
-	let lastPageIdx = Math.floor((areaAroundEditWindowLinesRange.endExclusive - 1) / pageSize);
 
-	const availableTokenBudget = maxTokens - range(firstPageIdx, lastPageIdx + 1).reduce((sum, idx) => sum + computeTokensForPage(idx), 0);
+	// [0, pageSize) -> 0, [pageSize, 2*pageSize) -> 1, ...
+	// eg 5 -> 0, 63 -> 6
+	let firstPageIdx = Math.floor(areaAroundEditWindowLinesRange.start / pageSize);
+	let lastPageIdxIncl = Math.floor((areaAroundEditWindowLinesRange.endExclusive - 1) / pageSize);
+
+	const availableTokenBudget = maxTokens - range(firstPageIdx, lastPageIdxIncl + 1).reduce((sum, idx) => sum + computeTokensForPage(idx), 0);
 	if (availableTokenBudget < 0) {
-		return { firstPageIdx, lastPageIdx, budgetLeft: availableTokenBudget };
+		return { firstPageIdx, lastPageIdxIncl, budgetLeft: availableTokenBudget };
 	}
 
 	let tokenBudget = availableTokenBudget;
@@ -507,13 +550,13 @@ function expandRangeToPageRange(
 
 		tokenBudget = halfOfAvailableTokenBudget;
 
-		for (let i = lastPageIdx + 1; i <= totalNOfPages && tokenBudget > 0; ++i) {
+		for (let i = lastPageIdxIncl + 1; i < totalNOfPages && tokenBudget > 0; ++i) {
 			const tokenCountForPage = computeTokensForPage(i);
 			const newTokenBudget = tokenBudget - tokenCountForPage;
 			if (newTokenBudget < 0) {
 				break;
 			}
-			lastPageIdx = i;
+			lastPageIdxIncl = i;
 			tokenBudget = newTokenBudget;
 		}
 	} else { // code above consumes as much as it can and the leftover budget is given to code below
@@ -529,18 +572,18 @@ function expandRangeToPageRange(
 			tokenBudget = newTokenBudget;
 		}
 
-		for (let i = lastPageIdx + 1; i <= totalNOfPages && tokenBudget > 0; ++i) {
+		for (let i = lastPageIdxIncl + 1; i < totalNOfPages && tokenBudget > 0; ++i) {
 			const tokenCountForPage = computeTokensForPage(i);
 			const newTokenBudget = tokenBudget - tokenCountForPage;
 			if (newTokenBudget < 0) {
 				break;
 			}
-			lastPageIdx = i;
+			lastPageIdxIncl = i;
 			tokenBudget = newTokenBudget;
 		}
 	}
 
-	return { firstPageIdx, lastPageIdx, budgetLeft: tokenBudget };
+	return { firstPageIdx, lastPageIdxIncl, budgetLeft: tokenBudget };
 }
 
 export function clipPreservingRange(
@@ -552,12 +595,13 @@ export function clipPreservingRange(
 ): Result<OffsetRange, 'outOfBudget'> {
 
 	// subtract budget consumed by rangeToPreserve
-	const availableTokenBudget = opts.maxTokens - countTokensForLines(docLines.slice(rangeToPreserve.start, rangeToPreserve.endExclusive), computeTokens);
+	const linesToPreserve = docLines.slice(rangeToPreserve.start, rangeToPreserve.endExclusive);
+	const availableTokenBudget = opts.maxTokens - countTokensForLines(linesToPreserve, computeTokens);
 	if (availableTokenBudget < 0) {
 		return Result.error('outOfBudget');
 	}
 
-	const { firstPageIdx, lastPageIdx } = expandRangeToPageRange(
+	const { firstPageIdx, lastPageIdxIncl } = expandRangeToPageRange(
 		docLines,
 		rangeToPreserve,
 		pageSize,
@@ -567,19 +611,27 @@ export function clipPreservingRange(
 	);
 
 	const linesOffsetStart = firstPageIdx * pageSize;
-	const linesOffsetEndExcl = lastPageIdx * pageSize + pageSize;
-
+	const linesOffsetEndExcl = (lastPageIdxIncl + 1) * pageSize;
 	return Result.ok(new OffsetRange(linesOffsetStart, linesOffsetEndExcl));
+}
+
+class ClippedDocument {
+	constructor(
+		/** The lines of the document that were kept after clipping. */
+		public readonly lines: string[],
+		/** The range in the original document that corresponds to the kept lines. */
+		public readonly keptRange: OffsetRange,
+	) { }
 }
 
 export function createTaggedCurrentFileContentUsingPagedClipping(
 	currentDocLines: string[],
-	areaAroundCodeToEdit: string,
+	areaAroundCodeToEdit: string[],
 	areaAroundEditWindowLinesRange: OffsetRange,
 	computeTokens: (s: string) => number,
 	pageSize: number,
 	opts: CurrentFileOptions
-): Result<readonly string[], 'outOfBudget'> {
+): Result<ClippedDocument, 'outOfBudget'> {
 
 	const r = clipPreservingRange(
 		currentDocLines,
@@ -590,16 +642,89 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	);
 
 	if (r.isError()) {
-		return Result.error('outOfBudget');
+		return r;
 	}
 
-	const clippedRange = r.val;
+	const rangeToKeep = r.val;
 
 	const taggedCurrentFileContent = [
-		...currentDocLines.slice(clippedRange.start, areaAroundEditWindowLinesRange.start),
-		areaAroundCodeToEdit,
-		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, clippedRange.endExclusive),
+		...currentDocLines.slice(rangeToKeep.start, areaAroundEditWindowLinesRange.start),
+		...areaAroundCodeToEdit,
+		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, rangeToKeep.endExclusive),
 	];
 
-	return Result.ok(taggedCurrentFileContent);
+	const keptRange = new OffsetRange(
+		rangeToKeep.start,
+		rangeToKeep.start + taggedCurrentFileContent.length
+	);
+
+	return Result.ok(new ClippedDocument(taggedCurrentFileContent, keptRange));
+}
+
+export function constructTaggedFile(
+	currentDocument: CurrentDocument,
+	editWindowLinesRange: OffsetRange,
+	areaAroundEditWindowLinesRange: OffsetRange,
+	promptOptions: xtabPromptOptions.PromptOptions,
+	computeTokens: (s: string) => number,
+	opts: {
+		includeLineNumbers: { areaAroundCodeToEdit: boolean; currentFileContent: boolean };
+	}
+) {
+	const contentWithCursorAsLinesOriginal = (() => {
+		const addCursorTagEdit = StringEdit.single(StringReplacement.insert(currentDocument.cursorOffset, PromptTags.CURSOR));
+		const contentWithCursor = addCursorTagEdit.applyOnText(currentDocument.content);
+		return contentWithCursor.getLines();
+	})();
+
+	const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx}| ${line}`);
+
+	const contentWithCursorAsLines = opts.includeLineNumbers.areaAroundCodeToEdit
+		? addLineNumbers(contentWithCursorAsLinesOriginal)
+		: contentWithCursorAsLinesOriginal;
+
+	const editWindowWithCursorAsLines = contentWithCursorAsLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+
+	const areaAroundCodeToEdit = [
+		PromptTags.AREA_AROUND.start,
+		...contentWithCursorAsLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
+		PromptTags.EDIT_WINDOW.start,
+		...editWindowWithCursorAsLines,
+		PromptTags.EDIT_WINDOW.end,
+		...contentWithCursorAsLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
+		PromptTags.AREA_AROUND.end
+	];
+
+	const currentFileContentWithCursorLines = opts.includeLineNumbers.currentFileContent
+		? addLineNumbers(contentWithCursorAsLinesOriginal)
+		: contentWithCursorAsLinesOriginal;
+	const currentFileContentLines = opts.includeLineNumbers.currentFileContent
+		? addLineNumbers(currentDocument.lines)
+		: currentDocument.lines;
+
+	let areaAroundCodeToEditForCurrentFile: string[];
+	if (promptOptions.currentFile.includeTags && opts.includeLineNumbers.currentFileContent === opts.includeLineNumbers.areaAroundCodeToEdit) {
+		areaAroundCodeToEditForCurrentFile = areaAroundCodeToEdit;
+	} else {
+		const editWindowLines = currentFileContentLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+		areaAroundCodeToEditForCurrentFile = [
+			...currentFileContentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
+			...editWindowLines,
+			...currentFileContentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
+		];
+	}
+
+	const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
+		currentFileContentLines,
+		areaAroundCodeToEditForCurrentFile,
+		areaAroundEditWindowLinesRange,
+		computeTokens,
+		promptOptions.pagedClipping.pageSize,
+		promptOptions.currentFile,
+	);
+
+	return taggedCurrentFileContentResult.map(clippedTaggedCurrentDoc => ({
+		clippedTaggedCurrentDoc,
+		areaAroundCodeToEdit: areaAroundCodeToEdit.join('\n'),
+	}));
 }

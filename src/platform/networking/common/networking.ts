@@ -17,7 +17,8 @@ import { CustomModel, EndpointEditToolName } from '../../endpoint/common/endpoin
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { AnthropicMessagesTool, FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
+import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
+import { AnthropicMessagesTool, ContextManagement } from './anthropic';
 import { FetcherId, FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from './fetcherService';
 import { ChatCompletion, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
 
@@ -111,6 +112,10 @@ export interface IEndpointBody {
 		type: 'enabled' | 'disabled';
 		budget_tokens?: number;
 	};
+	context_management?: ContextManagement;
+
+	/** ChatCompletions API for Anthropic models */
+	thinking_budget?: number;
 }
 
 export interface IEndpointFetchOptions {
@@ -157,14 +162,31 @@ export interface IMakeChatRequestOptions {
 	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
 	/** Indicates if the request was user-initiated */
 	userInitiatedRequest?: boolean;
+	/** Indicate whether this is a conversation request or a non-conversation utility request (like model list fetch or title generation) */
+	isConversationRequest?: boolean;
 	/** (CAPI-only) Optional telemetry properties for analytics */
-	telemetryProperties?: TelemetryProperties;
+	telemetryProperties?: IChatRequestTelemetryProperties;
 	/** Enable retrying the request when it was filtered due to snippy. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
 	enableRetryOnFilter?: boolean;
 	/** Enable retrying the request when it failed. Defaults to enableRetryOnFilter. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
 	enableRetryOnError?: boolean;
 	/** Which fetcher to use, overrides the default. */
 	useFetcher?: FetcherId;
+	/** Disable extended thinking for this request. Used when resuming from tool call errors where the original thinking blocks are not available. */
+	disableThinking?: boolean;
+}
+
+export type IChatRequestTelemetryProperties = {
+	requestId?: string;
+	messageId?: string;
+	conversationId?: string;
+	messageSource?: string;
+	associatedRequestId?: string;
+	retryAfterError?: string;
+	retryAfterErrorGitHubRequestId?: string;
+	connectivityTestError?: string;
+	connectivityTestErrorGitHubRequestId?: string;
+	retryAfterFilterCategory?: string;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {

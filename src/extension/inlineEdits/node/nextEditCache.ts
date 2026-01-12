@@ -39,7 +39,7 @@ export interface CachedEdit {
 	cacheTime: number;
 }
 
-export type CachedOrRebasedEdit = CachedEdit & { rebasedEdit?: StringReplacement; rebasedEditIndex?: number; showLabel?: boolean };
+export type CachedOrRebasedEdit = CachedEdit & { rebasedEdit?: StringReplacement; rebasedEditIndex?: number };
 
 export class NextEditCache extends Disposable {
 	private readonly _documentCaches = new Map<DocumentId, DocumentEditCache>();

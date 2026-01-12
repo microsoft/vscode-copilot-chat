@@ -5,6 +5,7 @@
 
 import { IDisposable } from 'monaco-editor';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
+import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { BaseGHTelemetrySender } from './ghTelemetrySender';
 import { BaseMsftTelemetrySender } from './msftTelemetrySender';
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from './telemetry';
@@ -19,6 +20,7 @@ export class BaseTelemetryService implements ITelemetryService {
 	private _disposables: IDisposable[] = [];
 	constructor(
 		protected readonly _tokenStore: ICopilotTokenStore,
+		private readonly _capiClientService: ICAPIClientService,
 		protected readonly _microsoftTelemetrySender: BaseMsftTelemetrySender,
 		protected readonly _ghTelemetrySender: BaseGHTelemetrySender,
 	) {
@@ -142,6 +144,7 @@ export class BaseTelemetryService implements ITelemetryService {
 				value += `;${assignment}`;
 			}
 		}
+		this._capiClientService.abExpContext = value;
 		this._sharedProperties['abexp.assignmentcontext'] = value;
 	}
 

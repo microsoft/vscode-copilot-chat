@@ -465,3 +465,79 @@ export namespace PingResponse {
 		stack?: string;
 	};
 }
+
+export enum RenameKind {
+	no = 'no',
+	yes = 'yes',
+	maybe = 'maybe'
+}
+
+export namespace RenameKind {
+	export function fromString(value: string): RenameKind {
+		switch (value) {
+			case 'no':
+				return RenameKind.no;
+			case 'yes':
+				return RenameKind.yes;
+			case 'maybe':
+				return RenameKind.maybe;
+			default:
+				return RenameKind.no;
+		}
+	}
+}
+
+export namespace PrepareNesRenameResult {
+	export type Yes = {
+		canRename: RenameKind.yes;
+		oldName: string;
+	}
+	export type Maybe = {
+		canRename: RenameKind.maybe;
+		oldName: string;
+	}
+	export type No = {
+		canRename: RenameKind.no;
+		timedOut: boolean;
+		reason?: string;
+	}
+}
+
+export type PrepareNesRenameResult = PrepareNesRenameResult.Yes | PrepareNesRenameResult.Maybe | PrepareNesRenameResult.No;
+
+export interface PrepareNesRenameRequest extends tt.server.protocol.Request {
+	arguments?: PrepareNesRenameRequestArgs;
+}
+
+export interface PrepareNesRenameRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
+	oldName: string;
+	newName: string;
+	startTime: number;
+	timeBudget: number;
+}
+
+export namespace PrepareNesRenameResponse {
+
+	export type OK = PrepareNesRenameResult;
+
+	export type Failed = {
+		error: ErrorCode;
+		message: string;
+		stack?: string;
+	};
+
+	export function isCancelled(response: PrepareNesRenameResponse): boolean {
+		return (response.type === 'cancelled');
+	}
+
+	export function isOk(response: PrepareNesRenameResponse): response is Omit<tt.server.protocol.Response, 'body'> & { body: OK } {
+		return response.type === 'response' && (response.body as OK).canRename !== undefined;
+	}
+	export function isError(response: PrepareNesRenameResponse): response is Omit<tt.server.protocol.Response, 'body'> & { body: Failed } {
+		return response.type === 'response' && (response.body as Failed).error !== undefined;
+	}
+}
+
+export type PrepareNesRenameResponse = (tt.server.protocol.Response & {
+	body: PrepareNesRenameResponse.OK | PrepareNesRenameResponse.Failed;
+}) | { type: 'cancelled' };

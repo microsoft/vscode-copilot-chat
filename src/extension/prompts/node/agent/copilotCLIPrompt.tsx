@@ -11,10 +11,11 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { isLocation } from '../../../../util/common/types';
+import { Schemas } from '../../../../util/vs/base/common/network';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequest, FileType } from '../../../../vscodeTypes';
-import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
+import { ChatReferenceBinaryData, ChatRequest, FileType } from '../../../../vscodeTypes';
+import { ChatVariablesCollection, isPromptFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
@@ -52,17 +53,32 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		// We merely add a <attachments> tag to signal that there are file/folder attachments.
 		// This is because we want to avoid adding all fo the content of the file into the prompt.
 		// We leave that for Copilot CLI SDK to handle.
-		const nonResourceVariables = this.props.chatVariables.filter(variable => !URI.isUri(variable.value) && !isLocation(variable.value));
-		const resourceVariables = this.props.chatVariables.filter(variable => URI.isUri(variable.value) || isLocation(variable.value));
+		const isResourceVariable = (variable: PromptVariable) =>
+			!isScmEntry(variable.value) && (URI.isUri(variable.value) || isLocation(variable.value));
+		const isImageReference = (variable: PromptVariable) => variable.value && variable.value instanceof ChatReferenceBinaryData;
+
+		const resourceVariables = this.props.chatVariables.filter(variable => isResourceVariable(variable) && !isImageReference(variable));
+		const nonResourceVariables = this.props.chatVariables.filter(variable => !isResourceVariable(variable) && !isImageReference(variable));
 		const [nonResourceAttachments, resourceAttachments] = await Promise.all([
 			renderChatVariables(nonResourceVariables, this.fileSystemService, true, false, false, true, false),
 			renderResourceVariables(resourceVariables, this.fileSystemService, this.promptPathRepresentationService)
 		]);
-		const attachmentHint = this.props.chatVariables.hasVariables() ?
+
+		const hasVariables = resourceVariables.hasVariables() || nonResourceVariables.hasVariables();
+		const attachmentHint = hasVariables ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
-
-		const hasCustomContext = this.props.chatVariables.hasVariables() || (this.props.editedFileEvents?.length ?? 0) > 0;
+		const hasEditedFileEvents = (this.props.editedFileEvents?.length ?? 0) > 0;
+		const hasCustomContext = hasVariables || hasEditedFileEvents;
+		const promptVariable = resourceVariables.find(v => isPromptFile(v));
+		// If we have a prompt file, we want to direct the model to follow instructions in that file.
+		// Otherwise we add a generic reminder to only use the context if its relevant.
+		// Also today we have a generic prompt that reads `Implement this.` and we have attachments.
+		// Thats not sufficient to direct the model to use prompt instructions.
+		// In regular chat we have `Follow instructions in #<file>` & thats very effective as the prompt is very sepcfici about what to do. `Implement this.` is not.
+		const instructions = promptVariable ?
+			`Follow instructions in #${promptVariable.reference.name}` :
+			'IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task';
 		return (
 			<UserMessage>
 				{/**
@@ -77,20 +93,20 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<>
 							<br /> {/** Add an empty line after user prompt to ensure `<reminder>` tag is on a new line */}
 							<Tag name='reminder'>
-								IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+								{instructions}
 							</Tag>
 						</>
 					)
 				}
 				{
-					this.props.chatVariables.hasVariables() &&
+					hasVariables &&
 					<Tag name='attachments' priority={this.props.priority}>
 						{...nonResourceAttachments}
 						{...resourceAttachments}
 					</Tag>
 				}
 				{
-					(this.props.editedFileEvents?.length ?? 0) > 0 &&
+					hasEditedFileEvents &&
 					<Tag name='context'>
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 					</Tag>
@@ -101,12 +117,12 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 }
 
-export async function generateUserPrompt(request: ChatRequest, chatVariables: ChatVariablesCollection, instantiationService: IInstantiationService): Promise<string> {
+export async function generateUserPrompt(request: ChatRequest, prompt: string | undefined, chatVariables: ChatVariablesCollection, instantiationService: IInstantiationService): Promise<string> {
 	const endpoint = await instantiationService.invokeFunction((accessor) => accessor.get(IEndpointProvider).getChatEndpoint(request));
 	const { messages } = await renderPromptElement(instantiationService, endpoint, CopilotCLIAgentUserMessage, {
 		chatVariables,
 		endpoint,
-		request: request.prompt,
+		request: prompt ?? request.prompt,
 		editedFileEvents: request.editedFileEvents,
 	});
 	if (messages.length === 1 && messages[0].role === ChatRole.User && messages[0].content.length === 1 && messages[0].content[0].type === ChatCompletionContentPartKind.Text) {
@@ -121,8 +137,10 @@ async function renderResourceVariables(chatVariables: ChatVariablesCollection, f
 	await Promise.all(Array.from(chatVariables).map(async variable => {
 		const location = variable.value;
 		if (isLocation(location)) {
+			// If its an untitled document, we always include a summary, as CLI cannot read untitled documents.
+			const alwaysIncludeSummary = location.uri.scheme === Schemas.untitled;
 			elements.push(<FileVariable
-				alwaysIncludeSummary={false}
+				alwaysIncludeSummary={alwaysIncludeSummary}
 				filePathMode={FilePathMode.AsComment}
 				variableName={variable.uniqueName}
 				variableValue={location}
@@ -133,6 +151,20 @@ async function renderResourceVariables(chatVariables: ChatVariablesCollection, f
 		}
 		const uri = variable.value;
 		if (!URI.isUri(uri)) {
+			return;
+		}
+		if (uri.scheme === Schemas.untitled || isPromptFile(variable) || isScmEntry(uri)) {
+			// If its an untitled document, we always include a summary, as CLI cannot read untitled documents.
+			// Similarly prompt file contents need to be included in the prompt.
+			// Except when its attached as a regular file (but in that case `isPromptFile` would return false).
+			elements.push(<FileVariable
+				alwaysIncludeSummary={true}
+				filePathMode={FilePathMode.AsComment}
+				variableName={variable.uniqueName}
+				variableValue={uri}
+				description={variable.reference.modelDescription}
+				lineNumberStyle={SummarizedDocumentLineNumberStyle.OmittedRanges}
+			/>);
 			return;
 		}
 		// Check if the variable is a directory
@@ -156,3 +188,9 @@ async function renderResourceVariables(chatVariables: ChatVariablesCollection, f
 	return elements;
 }
 
+function isScmEntry(item: unknown): item is URI {
+	if (URI.isUri(item) && item.scheme === 'scm-history-item') {
+		return true;
+	}
+	return false;
+}

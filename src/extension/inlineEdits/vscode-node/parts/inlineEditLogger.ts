@@ -17,7 +17,9 @@ export class InlineEditLogger extends Disposable {
 	}
 
 	add(request: InlineEditRequestLogContext): void {
-		if (!request.includeInLogTree) { return; }
+		if (!request.includeInLogTree) {
+			return;
+		}
 
 		this._requestLogger.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,

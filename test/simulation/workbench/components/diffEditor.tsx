@@ -142,9 +142,9 @@ export const DiffEditor = (({ original, modified, languageId, diagnostics, selec
 
 	return (
 		<div>
-			<div className="file-editor-container" style={{ height: `${height}px`, position: 'relative' }} ref={containerRef}>
+			<div className='file-editor-container' style={{ height: `${height}px`, position: 'relative' }} ref={containerRef}>
 				<div
-					className="overlay"
+					className='overlay'
 					style={{
 						position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
 						pointerEvents: altPressed ? 'auto' : 'none',

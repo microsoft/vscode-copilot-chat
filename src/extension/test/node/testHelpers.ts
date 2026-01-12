@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ChatPromptReference, ChatRequest, Uri } from 'vscode';
+import type { ChatPromptReference, ChatRequest, ExtendedChatResponsePart, Uri } from 'vscode';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { MarkdownString } from '../../../util/vs/base/common/htmlContent';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -26,9 +26,10 @@ export class TestChatRequest implements ChatRequest {
 	public sessionId = generateUuid();
 
 	constructor(
-		public prompt: string
+		public prompt: string,
+		references?: ChatPromptReference[]
 	) {
-		this.references = [];
+		this.references = references ?? [];
 		this.location = vscodeTypes.ChatLocation.Panel;
 		this.attempt = 0;
 		this.enableCommandDetection = false;
@@ -41,8 +42,8 @@ export class MockChatResponseStream extends ChatResponseStreamImpl {
 	public output: string[] = [];
 	public uris: string[] = [];
 	public externalEditUris: Uri[] = [];
-	constructor() {
-		super(() => { }, () => { });
+	constructor(push: ((part: ExtendedChatResponsePart) => void) = () => { }) {
+		super(push, () => { });
 	}
 	override markdown(content: string | MarkdownString): void {
 		this.output.push(typeof content === 'string' ? content : content.value);
@@ -51,12 +52,13 @@ export class MockChatResponseStream extends ChatResponseStreamImpl {
 		this.uris.push(uri.toString());
 	}
 
-	override externalEdit<T>(target: Uri | Uri[], callback: () => Thenable<T>): Thenable<T> {
+	override async externalEdit(target: Uri | Uri[], callback: () => Thenable<void>): Promise<string> {
 		if (Array.isArray(target)) {
 			this.externalEditUris.push(...target);
 		} else {
 			this.externalEditUris.push(target);
 		}
-		return callback();
+		await callback();
+		return '';
 	}
 }

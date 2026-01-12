@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SDKAssistantMessage, SDKMessage } from '@anthropic-ai/claude-code';
+import { SDKAssistantMessage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
 import { coalesce } from '../../../util/vs/base/common/arrays';
@@ -46,7 +46,7 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 			return;
 		}
 
-		return new ChatRequestTurn2(textContent, undefined, [], '', [], undefined);
+		return new ChatRequestTurn2(textContent, undefined, [], '', [], undefined, undefined);
 	}
 
 	private _assistantMessageToResponse(message: SDKAssistantMessage['message'], toolContext: ToolContext): vscode.ChatResponseTurn2 {

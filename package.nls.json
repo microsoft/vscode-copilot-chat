@@ -32,6 +32,7 @@
 	"github.copilot.command.sendChatFeedback": "Send Chat Feedback",
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
+	"github.copilot.command.deleteExternalIngestWorkspaceIndex": "Delete External Ingest Workspace Index",
 	"github.copilot.viewsWelcome.individual.expired": "Your Copilot subscription has expired.\n\n[Review Copilot Settings](https://github.com/settings/copilot?editor=vscode)",
 	"github.copilot.viewsWelcome.enterprise": "Contact your GitHub organization administrator to enable Copilot.",
 	"github.copilot.viewsWelcome.offline": {
@@ -71,62 +72,11 @@
 			"{Locked='](command:workbench.action.chat.open?%7B%22query%22%3A%22%40vscode%20%2FstartDebugging%20%22%2C%22isPartialQuery%22%3Atrue%7D)'}"
 		]
 	},
-	"github.copilot.viewsWelcome.codexPlaceholder": {
-		"message": "[Start OpenAI Codex Session](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)\n\nThis will install [the OpenAI Codex extension](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D).",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:github.copilot.chat.installAgent?%7B%22agent%22%3A%22codex%22%7D)'}",
-			"{Locked='](command:workbench.extensions.action.showExtensionsWithIds?%5B%5B%22openai.chatgpt%22%5D%5D)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.codexWelcomeView": {
-		"message": "[Start OpenAI Codex Session](command:chatgpt.newCodexPanel)",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:chatgpt.newCodexPanel)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.agentsPlaceholder": {
-		"message": "Sign in to access GitHub Copilot CLI and Cloud Agents.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.noPermissiveToken.contents": {
-		"message": "Additional GitHub permissions required to use GitHub Copilot Cloud Agent.\n\n[Sign in](command:github.copilot.chat.triggerPermissiveSignIn)",
-		"comment": [
-			"{Locked='['}",
-			"{Locked='](command:github.copilot.chat.triggerPermissiveSignIn)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.noFolder.contents": {
-		"message": "You have not yet opened a folder.\n[Open Folder](command:workbench.action.files.openFolder)",
-		"comment": [
-			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.files.openFolder)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.cliSessionsEmpty.contents": {
-		"message": "[Start CLI Agent Session](command:workbench.action.chat.openNewSessionEditor.copilotcli)",
-		"comment": [
-			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilotcli)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.cloudSessionsEmpty.contents": {
-		"message": "[Start Cloud Agent Session](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)",
-		"comment": [
-			"Do not translate what's inside of (...). It is link syntax.",
-			"{Locked='](command:workbench.action.chat.openNewSessionEditor.copilot-cloud-agent)'}"
-		]
-	},
-	"github.copilot.viewsWelcome.noGitHub.contents": "Clone or open a GitHub repository to get started",
-	"github.copilot.viewsWelcome.noRepo.contents": "No git repositories found",
 	"github.copilot.command.logWorkbenchState": "Log Workbench State",
 	"github.copilot.command.showChatLogView": "Show Chat Debug View",
 	"github.copilot.command.showOutputChannel": "Show Output Channel",
 	"github.copilot.command.showContextInspectorView": "Inspect Language Context",
+	"github.copilot.command.validateNesRename": "Validate NES Rename",
 	"github.copilot.command.resetVirtualToolGroups": "Reset Virtual Tool Groups",
 	"github.copilot.command.applySuggestionWithCopilot": "Apply Suggestion",
 	"github.copilot.command.explainTerminalLastCommand": "Explain Last Terminal Command",
@@ -142,6 +92,7 @@
 	"github.copilot.config.edits.enabled": "Whether to enable the Copilot Edits feature.",
 	"github.copilot.config.codesearch.enabled": "Whether to enable agentic codesearch when using `#codebase`.",
 	"github.copilot.nextEditSuggestions.enabled": "Whether to enable next edit suggestions (NES).\n\nNES can propose a next edit based on your recent changes. [Learn more](https://aka.ms/vscode-nes) about next edit suggestions.",
+	"github.copilot.nextEditSuggestions.extendedRange": "Whether to allow next edit suggestions (NES) to modify code farther away from the cursor position.",
 	"github.copilot.nextEditSuggestions.fixes": "Whether to offer fixes for diagnostics via next edit suggestions (NES).",
 	"github.copilot.nextEditSuggestions.allowWhitespaceOnlyChanges": "Whether to allow whitespace-only changes be proposed by next edit suggestions (NES).",
 	"github.copilot.chat.copilotDebugCommand.enabled": "Whether the `copilot-debug` command is enabled in the terminal.",
@@ -186,9 +137,11 @@
 	"github.copilot.config.byok.ollamaEndpoint": "The endpoint to use for the Ollama when accessed via bring your own key. Defaults to localhost.",
 	"github.copilot.config.virtualTools.threshold": "This setting defines the tool count over which virtual tools should be used. Virtual tools group similar sets of tools together and they allow the model to activate them on-demand. Certain tool groups will optimistically be pre-activated. We are actively developing this feature and you experience degraded tool calling once the threshold is hit.\n\nMay be set to `0` to disable virtual tools.",
 	"github.copilot.config.alternateGptPrompt.enabled": "Enables an experimental alternate prompt for GPT models instead of the default prompt.",
+	"github.copilot.config.alternateGeminiModelFPrompt.enabled": "Enables an experimental alternate prompt for Gemini Model F instead of the default prompt.",
 	"github.copilot.config.gpt5CodexAlternatePrompt": "Specifies an experimental alternate prompt to use for the GPT-5-Codex model.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
 	"copilot.description": "Ask or edit in context",
+	"copilot.title": "Build with Agent",
 	"copilot.edits.description": "Edit files in your workspace",
 	"copilot.agent.description": "Edit files in your workspace in agent mode",
 	"copilot.workspace.description": "Ask about your workspace",
@@ -231,7 +184,6 @@
 	"github.copilot.submenu.reviewComment.discardAndNext.label": "Discard and Go to Next",
 	"github.copilot.submenu.reviewComment.discard.label": "Discard",
 	"github.copilot.config.useProjectTemplates": "Use relevant GitHub projects as starter projects when using `/new`",
-	"github.copilot.config.agent.delegate.autoCommitAndPush": "When enabled, Copilot will automatically commit and push your pending changes before delegating work to the cloud agent.",
 	"github.copilot.chat.attachFile": "Add File to Chat",
 	"github.copilot.chat.attachSelection": "Add Selection to Chat",
 	"github.copilot.command.collectDiagnostics": "Chat Diagnostics",
@@ -244,7 +196,6 @@
 	"github.copilot.command.openWalkthrough": "Open Walkthrough",
 	"github.copilot.walkthrough.title": "GitHub Copilot",
 	"github.copilot.walkthrough.description": "Your AI pair programmer to write code faster and smarter",
-	"github.copilot.command.refreshClaudeCodeSessions": "Refresh Claude Code CLI Agent Sessions",
 	"github.copilot.walkthrough.signIn.title": "Sign in with GitHub",
 	"github.copilot.walkthrough.signIn.description": "To get started with Copilot, sign in with your GitHub account.\nMake sure you're using the correct GitHub account. You can also sign in later using the account menu.\n\n[Sign In](command:github.copilot.signIn)",
 	"github.copilot.walkthrough.signIn.media.altText": "Sign in to GitHub via this walkthrough or VS Code's account menu",
@@ -314,11 +265,14 @@
 	"copilot.tools.getVSCodeAPI.name": "Get VS Code API References",
 
 	"copilot.tools.findFiles.name": "Find Files",
+	"copilot.tools.findFiles.userDescription": "Find files by name using a glob pattern",
 	"copilot.tools.findTextInFiles.name": "Find Text In Files",
+	"copilot.tools.findTextInFiles.userDescription": "Search for text in files by regular expression",
 	"copilot.tools.applyPatch.name": "Apply Patch",
 	"copilot.tools.readFile.name": "Read File",
 	"copilot.tools.readFile.userDescription": "Read the contents of a file",
 	"copilot.tools.listDirectory.name": "List Dir",
+	"copilot.tools.listDirectory.userDescription": "List the contents of a directory",
 	"copilot.tools.getTaskOutput.name": "Get Task Output",
 	"copilot.tools.getErrors.name": "Get Problems",
 	"copilot.tools.readProjectStructure.name": "Project Structure",
@@ -344,16 +298,16 @@
 	"copilot.tools.createDirectory.description": "Create new directories in your workspace",
 	"github.copilot.config.agent.currentEditorContext.enabled": "When enabled, Copilot will include the name of the current active editor in the context for agent mode.",
 	"github.copilot.config.customInstructionsInSystemMessage": "When enabled, custom instructions and mode instructions will be appended to the system message instead of a user message.",
+	"github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents": "Enable custom agents from GitHub Enterprise and Organizations. When disabled, custom agents from your organization or enterprise will not be available in Copilot.",
 	"copilot.toolSet.editing.description": "Edit files in your workspace",
 	"copilot.toolSet.read.description": "Read files in your workspace",
 	"copilot.toolSet.search.description": "Search files in your workspace",
 	"copilot.toolSet.web.description": "Fetch information from the web",
+	"github.copilot.config.useMessagesApi": "Use the Messages API instead of the Chat Completions API when supported.\n\n**Note**: This is an experimental feature that is not yet activated for all users.",
 	"github.copilot.config.useResponsesApi": "Use the Responses API instead of the Chat Completions API when supported. Enables reasoning and reasoning summaries.\n\n**Note**: This is an experimental feature that is not yet activated for all users.\n\n**Important**: URL API path resolution for custom OpenAI-compatible and Azure models is independent of this setting and fully determined by `url` property of `#github.copilot.chat.customOAIModels#` or `#github.copilot.chat.azureModels#` respectively.",
-	"github.copilot.config.useMessagesApi": "Use the Messages API instead of the Chat Completions API when supported. Enables thinking blocks and native Anthropic message format.\n\n**Note**: This is an experimental feature that is not yet activated for all users.",
 	"github.copilot.config.responsesApiReasoningEffort": "Sets the reasoning effort used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
 	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
-	"github.copilot.config.anthropic.thinking.enabled": "Enable extended thinking for Anthropic models that support it. \n\n **Note**: This is an experimental feature only supported in BYOK Anthropic models.",
-	"github.copilot.config.anthropic.thinking.maxTokens": "Maximum number of tokens to allocate for extended thinking in Anthropic models. Valid range is 1,024 to 32,000 tokens. Always capped at (max output tokens - 1).\n\n**Note**: This is an experimental feature only supported in BYOK Anthropic models.",
+	"github.copilot.config.anthropic.thinking.budgetTokens": "Maximum number of tokens to allocate for extended thinking in Anthropic models. Setting this value enables extended thinking. Valid range is 1,024 to 32,000 tokens. Always capped at (max output tokens - 1).\n\n**Note**: This is an experimental feature not yet activated for all users.",
 	"github.copilot.config.anthropic.tools.websearch.enabled": "Enable Anthropic's native web search tool for BYOK Claude models. When enabled, allows Claude to search the web for current information. \n\n**Note**: This is an experimental feature only available for BYOK Anthropic Claude models.",
 	"github.copilot.config.anthropic.tools.websearch.maxUses": "Maximum number of web searches allowed per request. Valid range is 1 to 20. Prevents excessive API calls within a single interaction. If Claude exceeds this limit, the response returns an error.",
 	"github.copilot.config.anthropic.tools.websearch.allowedDomains": "List of domains to restrict web search results to (e.g., `[\"example.com\", \"docs.example.com\"]`). Domains should not include the HTTP/HTTPS scheme. Subdomains are automatically included. Cannot be used together with blocked domains.",
@@ -380,8 +334,7 @@
 	"github.copilot.config.notebook.alternativeNESFormat.enabled": "Enable alternative format for Next Edit Suggestions in notebooks.",
 	"github.copilot.config.localWorkspaceRecording.enabled": "Enable local workspace recording for analysis.",
 	"github.copilot.config.editRecording.enabled": "Enable edit recording for analysis.",
-	"github.copilot.config.temporalContext.maxAge": "Maximum age (in editor changes) for temporal context.",
-	"github.copilot.config.temporalContext.preferSameLang": "Prefer same language files in temporal context.",
+	"github.copilot.config.inlineChat.selectionRatioThreshold": "Threshold at which to switch editing strategies for inline chat. When a selection porition of code matches a parse tree node, only that is presented to the language model. This speeds up response times but might have lower quality results. Requires having a parse tree for the document and the `inlineChat.enableV2` setting. Values must be between 0 and 1, where 0 means off and 1 means the selection perfectly matches a parse tree node.",
 	"github.copilot.config.debug.requestLogger.maxEntries": "Maximum number of entries to keep in the request logger for debugging purposes.",
 	"github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled": "Enable diagnostics context provider for next edit suggestions.",
 	"github.copilot.config.codesearch.agent.enabled": "Enable code search capabilities in agent mode.",
@@ -400,24 +353,26 @@
 	"github.copilot.config.tools.defaultToolsGrouped": "Group default tools in prompts.",
 	"github.copilot.config.claudeCode.enabled": "Enable Claude Code agent.",
 	"github.copilot.config.claudeCode.debug": "Enable debug mode for Claude Code agent.",
-	"github.copilot.config.copilotCLI.enabled": "Enable Copilot CLI integration.",
-	"github.copilot.config.cli.isolation.enabled": "Enable CLI isolation for agent sessions.",
-	"github.copilot.config.cli.mcp.enabled": "Enable Model Context Protocol (MCP) server for CLI.",
-	"github.copilot.config.copilotCodingAgent.enabled": "Enable Copilot Coding Agent (cloud).",
+	"github.copilot.config.cli.customAgents.enabled": "Enable Custom Agents for Background Agents.",
+	"github.copilot.config.cli.mcp.enabled": "Enable Model Context Protocol (MCP) server for Background Agents.",
+	"github.copilot.config.cli.autoCommit.enabled": "Enable automatic commit for Background Agents.",
+	"github.copilot.config.backgroundAgent.enabled": "Enable the Background Agent. When disabled, the Background Agent will not be available in 'Continue In' context menus.",
+	"github.copilot.config.cloudAgent.enabled": "Enable the Cloud Agent. When disabled, the Cloud Agent will not be available in 'Continue In' context menus.",
 	"github.copilot.config.gpt5AlternativePatch": "Enable GPT-5 alternative patch format.",
 	"github.copilot.config.inlineEdits.triggerOnEditorChangeAfterSeconds": "Trigger inline edits after editor has been idle for this many seconds.",
 	"github.copilot.config.inlineEdits.nextCursorPrediction.displayLine": "Display predicted cursor line for next edit suggestions.",
 	"github.copilot.config.inlineEdits.nextCursorPrediction.currentFileMaxTokens": "Maximum tokens for current file in next cursor prediction.",
 	"github.copilot.config.inlineEdits.renameSymbolSuggestions": "Enable rename symbol suggestions in inline edits.",
-	"github.copilot.command.refreshAgentSessions": "Refresh Agent Sessions",
-	"github.copilot.command.deleteAgentSession": "Delete Agent Session",
-	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume Agent Session in Terminal",
-	"github.copilot.cli.sessions.newTerminalSession": "New Agent Session in Terminal",
+	"github.copilot.config.nextEditSuggestions.preferredModel": "Preferred model for next edit suggestions.",
+	"github.copilot.command.deleteAgentSession": "Delete",
+	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume in Terminal",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
-	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes",
+	"github.copilot.command.installPRExtension.title": "Install GitHub Pull Request Extension",
+	"github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply": "Apply",
+	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes to Workspace",
 	"github.copilot.config.githubMcpServer.enabled": "Enable built-in support for the GitHub MCP Server.",
-	"github.copilot.config.githubMcpServer.toolsets": "Specify toolsets to use from the GitHub MCP Server.",
-	"github.copilot.config.githubMcpServer.readonly": "Enable read-only mode for the GitHub MCP Server. When enabled, only read tools are available.",
-	"github.copilot.config.githubMcpServer.lockdown": "Enable lockdown mode for the GitHub MCP Server. When enabled, hides public issue details created by users without push access."
+	"github.copilot.config.githubMcpServer.toolsets": "Specify toolsets to use from the GitHub MCP Server. [Learn more](https://aka.ms/vscode-gh-mcp-toolsets).",
+	"github.copilot.config.githubMcpServer.readonly": "Enable read-only mode for the GitHub MCP Server. When enabled, only read tools are available. [Learn more](https://aka.ms/vscode-gh-mcp-readonly).",
+	"github.copilot.config.githubMcpServer.lockdown": "Enable lockdown mode for the GitHub MCP Server. When enabled, hides public issue details created by users without push access. [Learn more](https://aka.ms/vscode-gh-mcp-lockdown)."
 }

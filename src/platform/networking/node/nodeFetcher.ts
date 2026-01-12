@@ -12,6 +12,8 @@ import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export class NodeFetcher implements IFetcher {
 
+	static readonly ID = 'node-http' as const;
+
 	constructor(
 		private readonly _envService: IEnvService,
 
@@ -20,10 +22,10 @@ export class NodeFetcher implements IFetcher {
 	}
 
 	getUserAgentLibrary(): string {
-		return 'node-http';
+		return NodeFetcher.ID;
 	}
 
-	fetch(url: string, options: FetchOptions): Promise<Response> {
+	async fetch(url: string, options: FetchOptions): Promise<Response> {
 		const headers = { ...options.headers };
 		if (!headers['User-Agent']) {
 			headers['User-Agent'] = `GitHubCopilotChat/${this._envService.getVersion()}`;
@@ -49,7 +51,12 @@ export class NodeFetcher implements IFetcher {
 			throw new Error(`Illegal arguments! 'signal' must be an instance of AbortSignal!`);
 		}
 
-		return this._fetch(url, method, headers, body, signal);
+		try {
+			return await this._fetch(url, method, headers, body, signal);
+		} catch (e) {
+			e.fetcherId = NodeFetcher.ID;
+			throw e;
+		}
 	}
 
 	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
@@ -97,6 +104,7 @@ export class NodeFetcher implements IFetcher {
 					async () => nodeFetcherResponse.text(),
 					async () => nodeFetcherResponse.json(),
 					async () => nodeFetcherResponse.body(),
+					NodeFetcher.ID
 				));
 			});
 			req.setTimeout(60 * 1000); // time out after 60s of receiving no data
@@ -134,7 +142,7 @@ function makeAbortError(signal: AbortSignal): Error {
 }
 function isAbortError(e: any): boolean {
 	// see https://github.com/nodejs/node/issues/38361#issuecomment-1683839467
-	return e && e.name === "AbortError";
+	return e && e.name === 'AbortError';
 }
 
 class NodeFetcherResponse {

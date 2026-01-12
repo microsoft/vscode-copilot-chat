@@ -9,7 +9,9 @@ import * as fs from 'fs/promises';
 import { platform, tmpdir } from 'os';
 import * as path from 'path';
 import type { ChatPromptReference } from 'vscode';
-import { CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/agents/copilotcli/node/copilotCli';
+import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/agents/copilotcli/common/delegationSummaryService';
+import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/agents/copilotcli/node/copilotCli';
+import { CopilotCLIImageSupport } from '../../src/extension/agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/agents/copilotcli/node/copilotcliSessionService';
@@ -17,6 +19,7 @@ import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension
 import { PermissionRequest } from '../../src/extension/agents/copilotcli/node/permissionHelpers';
 import { OpenAIAdapterFactoryForSTests } from '../../src/extension/agents/node/adapters/openaiAdapterForSTests';
 import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer } from '../../src/extension/agents/node/langModelServer';
+import { ChatSummarizerProvider } from '../../src/extension/prompt/node/summarizer';
 import { MockChatResponseStream, TestChatRequest } from '../../src/extension/test/node/testHelpers';
 import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../src/platform/filesystem/common/fileSystemService';
@@ -25,16 +28,17 @@ import { ILogService } from '../../src/platform/log/common/logService';
 import { TestingServiceCollection } from '../../src/platform/test/node/services';
 import { IQualifiedFile, SimulationWorkspace } from '../../src/platform/test/node/simulationWorkspace';
 import { createServiceIdentifier } from '../../src/util/common/services';
+import { ChatReferenceDiagnostic } from '../../src/util/common/test/shims/chatTypes';
 import { disposableTimeout, IntervalTimer } from '../../src/util/vs/base/common/async';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { Lazy } from '../../src/util/vs/base/common/lazy';
 import { DisposableStore, IReference } from '../../src/util/vs/base/common/lifecycle';
 import { Mutable } from '../../src/util/vs/base/common/types';
+import { URI } from '../../src/util/vs/base/common/uri';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest, ChatSessionStatus, Diagnostic, DiagnosticSeverity, Location, Range, Uri } from '../../src/vscodeTypes';
 import { ssuite, stest } from '../base/stest';
-import { ChatReferenceDiagnostic } from '../../src/util/common/test/shims/chatTypes';
 
 const keys = ['COPILOT_ENABLE_ALT_PROVIDERS', 'COPILOT_AGENT_MODEL', 'GH_TOKEN', 'COPILOT_API_URL', 'GITHUB_COPILOT_API_TOKEN'];
 const originalValues: Record<string, string | undefined> = {};
@@ -69,8 +73,8 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 
 			const url = `http://localhost:${serverConfig.port}`;
 			const ghToken = serverConfig.nonce;
-			process.env.COPILOT_ENABLE_ALT_PROVIDERS = "true";
-			process.env.COPILOT_AGENT_MODEL = "sweagent-capi:gpt-5";
+			process.env.COPILOT_ENABLE_ALT_PROVIDERS = 'true';
+			process.env.COPILOT_AGENT_MODEL = 'sweagent-capi:gpt-5';
 			process.env.GH_TOKEN = ghToken;
 			process.env.COPILOT_API_URL = url;
 			process.env.GITHUB_COPILOT_API_TOKEN = ghToken;
@@ -88,7 +92,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	}
 
 	class TestCopilotCLISessionOptions extends CopilotCLISessionOptions {
-		constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl'>) {
+		constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl'>) {
 			super(options, logger);
 		}
 		override toSessionOptions() {
@@ -133,7 +137,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 		override async monitorSessionFiles() {
 			// Override to do nothing in tests
 		}
-		protected override async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: string; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
+		protected override async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
 			const testOptionsProvider = this.instantiationService.invokeFunction((accessor) => accessor.get(ITestSessionOptionsProvider));
 			const overrideOptions = await testOptionsProvider.getOptions();
 			const sessionOptions = new TestCopilotCLISessionOptions(options, this.logService, overrideOptions);
@@ -142,21 +146,28 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 		}
 	}
 
+	let accessor = testingServiceCollection.clone().createTestingAccessor();
+	let instaService = accessor.get(IInstantiationService);
+	const summarizer = instaService.createInstance(ChatSummarizerProvider);
+	const delegatingSummarizerProvider = instaService.createInstance(ChatDelegationSummaryService, summarizer);
 	testingServiceCollection.define(ICopilotCLISessionService, new SyncDescriptor(TestCopilotCLISessionService));
 	testingServiceCollection.define(ITestSessionOptionsProvider, new SyncDescriptor(TestSessionOptionsProvider));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(TestLanguageModelServer));
 	testingServiceCollection.define(ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels));
 	testingServiceCollection.define(ICopilotCLISDK, new SyncDescriptor(TestCopilotCLISDK));
+	testingServiceCollection.define(ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents));
 	testingServiceCollection.define(ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
+	testingServiceCollection.define(IChatDelegationSummaryService, delegatingSummarizerProvider);
 	const simulationWorkspace = new SimulationWorkspace();
 	simulationWorkspace.setupServices(testingServiceCollection);
 
-	const accessor = testingServiceCollection.createTestingAccessor();
+	accessor = testingServiceCollection.createTestingAccessor();
 	const copilotCLISessionService = accessor.get(ICopilotCLISessionService);
 	const sdk = accessor.get(ICopilotCLISDK);
-	const instaService = accessor.get(IInstantiationService);
-	const promptResolver = instaService.createInstance(CopilotCLIPromptResolver);
+	instaService = accessor.get(IInstantiationService);
+	const imageSupport = instaService.createInstance(CopilotCLIImageSupport);
+	const promptResolver = instaService.createInstance(CopilotCLIPromptResolver, imageSupport);
 
 	async function populateWorkspaceFiles(workingDirectory: string) {
 		const fileLanguages = new Map<string, string>([
@@ -249,14 +260,14 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	}
 
 	return {
-		sessionService: copilotCLISessionService, promptResolver, init: async (workingDirectory: string) => {
+		sessionService: copilotCLISessionService, promptResolver, init: async (workingDirectory: URI) => {
 			if (platform() !== 'win32') {
 				// Paths conversions are only done for non-Windows platforms.
 				// Hooks are used to ensure we have stable paths on linux/macOS, so that request/responses can be cached.
-				registerHooks(workingDirectory);
+				registerHooks(workingDirectory.fsPath);
 			}
 
-			await populateWorkspaceFiles(workingDirectory);
+			await populateWorkspaceFiles(workingDirectory.fsPath);
 			await sdk.getPackage();
 		}
 	};
@@ -265,16 +276,16 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 const vscCopilotRoot = path.join(__dirname, '..');
 // NOTE: Ensure all files/folders/workingDirectories are under test/scenarios/test-cli for path replacements to work correctly.
 const sourcePath = path.join(__dirname, '..', 'test', 'scenarios', 'test-cli');
-
-function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; promptResolver: CopilotCLIPromptResolver; init: (workingDirectory: string) => Promise<void> }, scenariosPath: string, stream: MockChatResponseStream, disposables: DisposableStore) => Promise<void>) {
+let tmpDirCounter = 0;
+function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; promptResolver: CopilotCLIPromptResolver; init: (workingDirectory: URI) => Promise<void> }, scenariosPath: string, stream: MockChatResponseStream, disposables: DisposableStore) => Promise<void>) {
 	return async (testingServiceCollection: TestingServiceCollection) => {
 		const disposables = new DisposableStore();
 		// Temp folder can be `/var/folders/....` in our code we use `realpath` to resolve any symlinks.
 		// That results in these temp folders being resolved as `/private/var/folders/...` on macOS.
-		const scenariosPath = path.join(tmpdir(), 'vscode-copilot-chat', 'test-cli');
+		const scenariosPath = path.join(tmpdir() + tmpDirCounter++, 'vscode-copilot-chat', 'test-cli');
 		await fs.rm(scenariosPath, { recursive: true, force: true }).catch(() => { /* Ignore */ });
 		await fs.mkdir(scenariosPath, { recursive: true });
-		await fs.cp(sourcePath, scenariosPath, { recursive: true });
+		await fs.cp(sourcePath, scenariosPath, { recursive: true, force: true, errorOnExist: false });
 		try {
 			const services = registerChatServices(testingServiceCollection);
 			const stream = new MockChatResponseStream();
@@ -316,13 +327,13 @@ async function assertFileNotContains(filePath: string, expectedContent: string) 
 ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	stest({ description: 'can start a session' },
 		testRunner(async ({ sessionService, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
-			const session = await sessionService.createSession('What is 1+8?', { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
-			await session.object.handleRequest('What is 1+8?', [], undefined, CancellationToken.None);
+			await session.object.handleRequest('', 'What is 1+8?', [], undefined, CancellationToken.None);
 
 			// Verify we have a response of 9.
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
@@ -330,7 +341,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			assertStreamContains(stream, '9');
 
 			// Can send a subsequent request.
-			await session.object.handleRequest('What is 11+25?', [], undefined, CancellationToken.None);
+			await session.object.handleRequest('', 'What is 11+25?', [], undefined, CancellationToken.None);
 			// Verify we have a response of 36.
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
@@ -340,16 +351,16 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 
 	stest({ description: 'can resume a session' },
 		testRunner(async ({ sessionService, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
 
 			let sessionId = '';
 			// Start session.
 			{
-				const session = await sessionService.createSession('What is 1+8?', { workingDirectory }, CancellationToken.None);
+				const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 				sessionId = session.object.sessionId;
 
-				await session.object.handleRequest('What is 1+8?', [], undefined, CancellationToken.None);
+				await session.object.handleRequest('', 'What is 1+8?', [], undefined, CancellationToken.None);
 				session.dispose();
 			}
 
@@ -369,7 +380,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				disposables.add(session);
 				disposables.add(session.object.attachStream(stream));
 
-				await session.object.handleRequest('What was my previous question?', [], undefined, CancellationToken.None);
+				await session.object.handleRequest('', 'What was my previous question?', [], undefined, CancellationToken.None);
 
 				// Verify we have a response of 9.
 				assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
@@ -380,15 +391,15 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	);
 	stest({ description: 'can read file without permission' },
 		testRunner(async ({ sessionService, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
-			const file = path.join(workingDirectory, 'sample.js');
-			const prompt = `Explain the contents of the file '${path.basename(file)}'. There is no need to check for contents in the directory. This file exists on disc.`;
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const file = URI.joinPath(workingDirectory, 'sample.js');
+			const prompt = `Explain the contents of the file '${path.basename(file.fsPath)}'. There is no need to check for contents in the directory. This file exists on disc.`;
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
-			await session.object.handleRequest(prompt, [], undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, [], undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
@@ -397,12 +408,12 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	);
 	stest({ description: 'request permission when reading file outside workspace' },
 		testRunner(async ({ sessionService, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
 
 			const externalFile = path.join(scenariosPath, 'wkspc2', 'foobar.js');
 			const prompt = `Explain the contents of the file '${externalFile}'. This file exists on disc but not in the current working directory. There's no need to search the directory, just read this file and explain its contents.`;
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 			let permissionRequested = false;
@@ -419,7 +430,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				}
 			}));
 
-			await session.object.handleRequest(prompt, [], undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, [], undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
@@ -429,20 +440,20 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	);
 	stest({ description: 'can read attachment without permission' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
-			const file = path.join(workingDirectory, 'sample.js');
+			const file = URI.joinPath(workingDirectory, 'sample.js').fsPath;
 			const { prompt, attachments } = await resolvePromptWithFileReferences(
 				`Explain the contents of the attached file. There is no need to check for contents in the directory. This file exists on disc.`,
 				[file],
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
-			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
@@ -451,20 +462,20 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	);
 	stest({ description: 'can edit file' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
-			const file = path.join(workingDirectory, 'sample.js');
+			const file = URI.joinPath(workingDirectory, 'sample.js').fsPath;
 			let { prompt, attachments } = await resolvePromptWithFileReferences(
 				`Remove comments form add function and add a subtract function to #file:sample.js.`,
 				[file],
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
-			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
@@ -478,7 +489,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				[],
 				promptResolver
 			));
-			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
@@ -490,9 +501,9 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	);
 	stest({ description: 'explain selection' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
-			const file = path.join(workingDirectory, 'utils.js');
+			const file = URI.joinPath(workingDirectory, 'utils.js').fsPath;
 
 			const { prompt, attachments } = await resolvePromptWithFileReferences(
 				`explain what the selected statement does`,
@@ -500,11 +511,11 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
-			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertStreamContains(stream, 'throw');
@@ -512,7 +523,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	);
 	stest({ description: 'can create a file' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
 			const { prompt, attachments } = await resolvePromptWithFileReferences(
 				`Create a file named math.js that contains a function to compute square of a number.`,
@@ -520,20 +531,20 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
-			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
-			await assertFileContains(path.join(workingDirectory, 'math.js'), 'function', 1);
+			await assertFileContains(URI.joinPath(workingDirectory, 'math.js').fsPath, 'function', 1);
 		})
 	);
 	stest({ description: 'can list files in directory' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
 			const { prompt, attachments } = await resolvePromptWithFileReferences(
 				`What files are in the current directory.`,
@@ -541,11 +552,11 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
-			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
@@ -557,9 +568,9 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 	);
 	stest({ description: 'can fix problems' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
-			const file = path.join(workingDirectory, 'stringUtils.js');
+			const file = URI.joinPath(workingDirectory, 'stringUtils.js').fsPath;
 			const diag = new Diagnostic(new Range(7, 0, 7, 1), '} expected', DiagnosticSeverity.Error);
 			const { prompt, attachments } = await resolvePromptWithFileReferences(
 				`Fix the problem`,
@@ -568,11 +579,11 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			);
 			let contents = await fs.readFile(file, 'utf-8');
 			assert.ok(!contents.trim().endsWith('}'), '} is missing');
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
-			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
@@ -583,11 +594,11 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 
 	stest({ description: 'can fix multiple problems in multiple files' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
-			const tsFile = path.join(workingDirectory, 'stringUtils.js');
+			const tsFile = URI.joinPath(workingDirectory, 'stringUtils.js').fsPath;
 			const tsDiag = new Diagnostic(new Range(7, 0, 7, 1), '} expected', DiagnosticSeverity.Error);
-			const pyFile = path.join(workingDirectory, 'demo.py');
+			const pyFile = URI.joinPath(workingDirectory, 'demo.py').fsPath;
 			const pyDiag1 = new Diagnostic(new Range(3, 21, 3, 21), 'Expected \':\', found new line', DiagnosticSeverity.Error);
 			const pyDiag2 = new Diagnostic(new Range(19, 13, 19, 13), 'Statement ends with an unnecessary semicolon', DiagnosticSeverity.Warning);
 
@@ -596,11 +607,11 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				[createDiagnosticReference(tsFile, [tsDiag]), createDiagnosticReference(pyFile, [pyDiag1, pyDiag2])],
 				promptResolver
 			);
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
-			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			const tsContents = await fs.readFile(tsFile, 'utf-8');
@@ -610,32 +621,33 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 		})
 	);
 
-	(platform() === 'win32' ? stest.skip : stest)({ description: 'can run terminal commands' },
+	stest({ description: 'can run terminal commands' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
-			const workingDirectory = path.join(scenariosPath, 'wkspc1');
+			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
 
+			const command = platform() === 'win32' ? 'Get-Location' : 'pwd';
 			const { prompt, attachments } = await resolvePromptWithFileReferences(
-				`Use terminal commands to determine my current directory`,
+				`Use terminal command '${command}' to determine my current directory`,
 				[],
 				promptResolver
 			);
-			const session = await sessionService.createSession(prompt, { workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
-
 			disposables.add(session.object.attachPermissionHandler(async (permission: PermissionRequest) => {
 				if (permission.kind === 'read') {
 					return true;
-				} else if (permission.kind === 'shell' && permission.fullCommandText === 'pwd') {
+				} else if (permission.kind === 'shell' && permission.fullCommandText.toLowerCase().includes(command.toLowerCase())) {
 					return true;
 				} else {
 					return false;
 				}
 			}));
 
-			await session.object.handleRequest(prompt, attachments, undefined, CancellationToken.None);
+			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
+			assertNoErrorsInStream(stream);
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertStreamContains(stream, 'wkspc1');
 		})
@@ -681,8 +693,5 @@ function createDiagnosticReference(file: string, diag: Diagnostic[]): ChatPrompt
 
 
 function resolvePromptWithFileReferences(prompt: string, filesOrReferences: (string | ChatPromptReference)[], promptResolver: CopilotCLIPromptResolver): Promise<{ prompt: string; attachments: any[] }> {
-	return promptResolver.resolvePrompt(
-		createWithRequestWithFileReference(prompt, filesOrReferences),
-		CancellationToken.None
-	);
+	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], false, undefined, CancellationToken.None);
 }

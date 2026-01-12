@@ -9,10 +9,10 @@
  */
 
 
-import { ConfigurationTarget, Uri, window, workspace, WorkspaceFolder } from 'vscode';
+import { ConfigurationTarget, l10n, Uri, window, workspace, WorkspaceFolder } from 'vscode';
 import { ConfigurationKeyValuePairs, ConfigurationMigration, ConfigurationMigrationRegistry, ConfigurationValue } from '../../../platform/configuration/common/configurationService';
+import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
-import { localize } from '../../../util/vs/nls';
 import { IExtensionContribution } from '../../common/contributions';
 
 
@@ -27,7 +27,7 @@ interface IConfigurationNode {
 export const applicationConfigurationNodeBase = Object.freeze<IConfigurationNode>({
 	'id': 'application',
 	'order': 100,
-	'title': localize('applicationConfigurationTitle', "Application"),
+	'title': l10n.t("Application"),
 	'type': 'object'
 });
 
@@ -158,6 +158,23 @@ ConfigurationMigrationRegistry.registerConfigurationMigrations([{
 		return [
 			['github.copilot.chat.generateTests.codeLens', { value }],
 			['github.copilot.chat.experimental.generateTests.codeLens', { value: undefined }]
+		];
+	}
+}]);
+
+const oldCursorJumpKey = 'github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.enabled';
+const newCursorJumpKey = 'github.copilot.nextEditSuggestions.extendedRange';
+ConfigurationMigrationRegistry.registerConfigurationMigrations([{
+	key: oldCursorJumpKey,
+	migrateFn: async (value: boolean |  /* the rest is for backward compat: */ NextCursorLinePrediction | 'labelOnlyWithEdit' | boolean | undefined) => {
+		if (typeof value === 'string') { // for backward compatibility -- one of 'onlyWithEdit' | 'jump' | 'labelOnlyWithEdit'
+			value = true;
+		} else if (value === undefined) {
+			value = false;
+		}
+		return [
+			[newCursorJumpKey, { value }],
+			[oldCursorJumpKey, { value: undefined }]
 		];
 	}
 }]);

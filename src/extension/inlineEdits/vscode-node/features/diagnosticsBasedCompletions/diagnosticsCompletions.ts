@@ -105,6 +105,10 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 	protected _getDisplayLocation(): INextEditDisplayLocation | undefined {
 		return undefined;
 	}
+
+	toString(): string {
+		return `DiagnosticCompletionItem(type=${this.type}, diagnostic=${this.diagnostic.toString()}, edit=${this._edit.toString()})`;
+	}
 }
 
 function displayLocationEquals(a: INextEditDisplayLocation | undefined, b: INextEditDisplayLocation | undefined): boolean {
@@ -131,9 +135,9 @@ export class DiagnosticInlineEditRequestLogContext {
 
 		if (this._error) {
 			lines.push(`## Diagnostics Error`);
-			lines.push("```");
+			lines.push('```');
 			lines.push(errors.toString(errors.fromUnknown(this._error)));
-			lines.push("```");
+			lines.push('```');
 		}
 
 		if (this._logs.length > 0) {

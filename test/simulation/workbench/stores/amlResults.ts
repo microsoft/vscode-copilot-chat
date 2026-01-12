@@ -118,7 +118,7 @@ function _parseScoredPredictionsCsv(kind: AMLRunKind, fileContents: string[]): T
 
 			if (statusCodes) {
 				for (const statusCode of statusCodes) {
-					if (statusCode !== "SUCCESS") {
+					if (statusCode !== 'SUCCESS') {
 						annotations.push({ message: `AML eval error: ${statusCode}`, label: statusCode, severity: 'error' } satisfies OutputAnnotation);
 					}
 				}

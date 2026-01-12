@@ -3,20 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
-import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig } from '../../networking/common/anthropic';
+import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
-import { ITelemetryService } from '../../telemetry/common/telemetry';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 
 interface AnthropicStreamEvent {
@@ -53,10 +53,10 @@ interface AnthropicStreamEvent {
 		cache_creation_input_tokens?: number;
 		cache_read_input_tokens?: number;
 	};
+	context_management?: ContextManagementResponse;
 }
 
 export function createMessagesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
-
 	const anthropicTools = options.requestOptions?.tools
 		?.filter(tool => tool.function.name && tool.function.name.length > 0)
 		.map((tool): AnthropicMessagesTool => ({
@@ -69,6 +69,25 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			},
 		}));
 
+	const configurationService = accessor.get(IConfigurationService);
+	const experimentationService = accessor.get(IExperimentationService);
+
+	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
+	let thinkingBudget: number | undefined;
+	if (!options.disableThinking) {
+		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+		const maxTokens = options.postOptions.max_tokens ?? 1024;
+		const normalizedBudget = (configuredBudget && configuredBudget > 0)
+			? (configuredBudget < 1024 ? 1024 : configuredBudget)
+			: undefined;
+		thinkingBudget = normalizedBudget
+			? Math.min(32000, maxTokens - 1, normalizedBudget)
+			: undefined;
+	}
+
+	// Build context management configuration
+	const contextManagement = getContextManagementFromConfig(configurationService, experimentationService, thinkingBudget, endpoint.modelMaxPromptTokens);
+
 	return {
 		model,
 		...rawMessagesToMessagesAPI(options.messages),
@@ -76,34 +95,26 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		tools: anthropicTools,
 		top_p: options.postOptions.top_p,
 		max_tokens: options.postOptions.max_tokens,
-		// TODO: Make thinking configuration controllable via settings (enable/disable and budget_tokens)
-		thinking: {
+		thinking: thinkingBudget ? {
 			type: 'enabled',
-			budget_tokens: 1024,
-		},
+			budget_tokens: thinkingBudget,
+		} : undefined,
+		context_management: contextManagement,
 	};
 }
 
 function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
-	const systemParts: string[] = [];
+	const systemBlocks: TextBlockParam[] = [];
 
 	for (const message of messages) {
 		switch (message.role) {
 			case Raw.ChatRole.System: {
-				const systemText = message.content
-					.filter(c => c.type === Raw.ChatCompletionContentPartKind.Text)
-					.map(c => c.text)
-					.join('\n');
-				if (systemText) {
-					systemParts.push(systemText);
-				}
+				systemBlocks.push(...rawContentToAnthropicContent(message.content).filter((c): c is TextBlockParam => c.type === 'text'));
 				break;
 			}
 			case Raw.ChatRole.User: {
-				const content = message.content
-					.map(rawContentToAnthropicContent)
-					.filter(isDefined);
+				const content = rawContentToAnthropicContent(message.content);
 				if (content.length > 0) {
 					unmergedMessages.push({
 						role: 'user',
@@ -113,13 +124,7 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 				break;
 			}
 			case Raw.ChatRole.Assistant: {
-				const content: ContentBlockParam[] = [];
-				for (const part of message.content) {
-					const anthropicPart = rawContentToAnthropicContent(part);
-					if (anthropicPart) {
-						content.push(anthropicPart);
-					}
-				}
+				const content = rawContentToAnthropicContent(message.content);
 				if (message.toolCalls) {
 					for (const toolCall of message.toolCalls) {
 						let parsedInput: Record<string, unknown> = {};
@@ -147,26 +152,16 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 			}
 			case Raw.ChatRole.Tool: {
 				if (message.toolCallId) {
-					const toolContent: (TextBlockParam | ContentBlockParam)[] = message.content
-						.map(c => {
-							if (c.type === Raw.ChatCompletionContentPartKind.Text) {
-								return { type: 'text' as const, text: c.text };
-							} else if (c.type === Raw.ChatCompletionContentPartKind.Image) {
-								return rawContentToAnthropicContent(c);
-							}
-							return undefined;
-						})
-						.filter(isDefined);
-					const validToolContent = toolContent.filter(
-						(c): c is TextBlockParam | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string } } =>
-							c.type === 'text' || c.type === 'image'
+					const toolContent = rawContentToAnthropicContent(message.content);
+					const validContent = toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
+						c.type === 'text' || c.type === 'image'
 					);
 					unmergedMessages.push({
 						role: 'user',
 						content: [{
 							type: 'tool_result',
 							tool_use_id: message.toolCallId,
-							content: validToolContent,
+							content: validContent.length > 0 ? validContent : undefined,
 						}],
 					});
 				}
@@ -187,54 +182,90 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 		}
 	}
 
-	const systemText = systemParts.join('\n');
 	return {
 		messages: mergedMessages,
-		...(systemText ? { system: [{ type: 'text', text: systemText }] } : {}),
+		...(systemBlocks.length ? { system: systemBlocks } : {}),
 	};
 }
 
-function rawContentToAnthropicContent(part: Raw.ChatCompletionContentPart): ContentBlockParam | ThinkingBlockParam | RedactedThinkingBlockParam | undefined {
-	switch (part.type) {
-		case Raw.ChatCompletionContentPartKind.Text:
-			if (part.text.trim()) {
-				return { type: 'text', text: part.text };
+function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[]): ContentBlockParam[] {
+	const convertedContent: ContentBlockParam[] = [];
+
+	for (const part of content) {
+		switch (part.type) {
+			case Raw.ChatCompletionContentPartKind.Text:
+				if (part.text.trim()) {
+					convertedContent.push({ type: 'text', text: part.text });
+				}
+				break;
+			case Raw.ChatCompletionContentPartKind.Image: {
+				const url = part.imageUrl.url;
+				// Parse data URL: data:image/png;base64,<data>
+				const match = url.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/);
+				if (match) {
+					convertedContent.push({
+						type: 'image',
+						source: {
+							type: 'base64',
+							media_type: match[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+							data: match[2],
+						}
+					});
+				}
+				break;
 			}
-			return undefined;
-		case Raw.ChatCompletionContentPartKind.Image:
-			// TODO: Add support for image content blocks in Messages API
-			return undefined;
-		case Raw.ChatCompletionContentPartKind.Opaque: {
-			if (part.value && typeof part.value === 'object' && 'type' in part.value) {
-				const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string; encrypted?: string } };
-				if (opaqueValue.type === 'thinking' && opaqueValue.thinking) {
-					if (opaqueValue.thinking.encrypted) {
-						return {
-							type: 'redacted_thinking',
-							data: opaqueValue.thinking.encrypted,
-						};
-					} else if (opaqueValue.thinking.text) {
-						return {
-							type: 'thinking',
-							thinking: opaqueValue.thinking.text,
-							signature: '',
-						};
+			case Raw.ChatCompletionContentPartKind.CacheBreakpoint: {
+				const previousBlock = convertedContent.at(-1);
+				if (previousBlock && contentBlockSupportsCacheControl(previousBlock)) {
+					previousBlock.cache_control = { type: 'ephemeral' };
+				} else {
+					// Empty string is invalid
+					convertedContent.push({
+						type: 'text',
+						text: ' ',
+						cache_control: { type: 'ephemeral' }
+					});
+				}
+				break;
+			}
+			case Raw.ChatCompletionContentPartKind.Opaque: {
+				if (part.value && typeof part.value === 'object' && 'type' in part.value) {
+					const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string | string[]; encrypted?: string } };
+					if (opaqueValue.type === 'thinking' && opaqueValue.thinking) {
+						const thinkingText = Array.isArray(opaqueValue.thinking.text)
+							? opaqueValue.thinking.text.join('')
+							: opaqueValue.thinking.text;
+						if (thinkingText && opaqueValue.thinking.encrypted) {
+							// Regular thinking block: text is present, encrypted field contains the signature
+							convertedContent.push({
+								type: 'thinking',
+								thinking: thinkingText,
+								signature: opaqueValue.thinking.encrypted,
+							});
+						} else if (opaqueValue.thinking.encrypted && !thinkingText) {
+							// Redacted thinking block: no text, only encrypted data from Claude
+							convertedContent.push({
+								type: 'redacted_thinking',
+								data: opaqueValue.thinking.encrypted,
+							});
+						}
 					}
 				}
+				break;
 			}
-			return undefined;
 		}
-		default:
-			return undefined;
 	}
+
+	return convertedContent;
+}
+
+function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Exclude<ContentBlockParam, ThinkingBlockParam | RedactedThinkingBlockParam> {
+	return block.type !== 'thinking' && block.type !== 'redacted_thinking';
 }
 
 export async function processResponseFromMessagesEndpoint(
 	instantiationService: IInstantiationService,
-	telemetryService: ITelemetryService,
-	logService: ILogService,
 	response: Response,
-	expectedNumChoices: number,
 	finishCallback: FinishedCallback,
 	telemetryData: TelemetryData
 ): Promise<AsyncIterableObject<ChatCompletion>> {
@@ -250,7 +281,6 @@ export async function processResponseFromMessagesEndpoint(
 					return;
 				}
 
-				logService.trace(`SSE: ${trimmed}`);
 				const parsed = JSON.parse(trimmed) as Partial<AnthropicStreamEvent>;
 				const type = parsed.type ?? ev.type;
 				if (!type) {
@@ -282,7 +312,9 @@ export class AnthropicMessagesProcessor {
 	private model: string = '';
 	private inputTokens: number = 0;
 	private outputTokens: number = 0;
-	private cachedTokens: number = 0;
+	private cacheCreationTokens: number = 0;
+	private cacheReadTokens: number = 0;
+	private contextManagementResponse?: ContextManagementResponse;
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
@@ -303,9 +335,8 @@ export class AnthropicMessagesProcessor {
 					this.model = chunk.message.model;
 					this.inputTokens = chunk.message.usage.input_tokens;
 					this.outputTokens = chunk.message.usage.output_tokens;
-					if (chunk.message.usage.cache_read_input_tokens) {
-						this.cachedTokens = chunk.message.usage.cache_read_input_tokens;
-					}
+					this.cacheCreationTokens = chunk.message.usage.cache_creation_input_tokens ?? 0;
+					this.cacheReadTokens = chunk.message.usage.cache_read_input_tokens ?? 0;
 				}
 				return;
 			case 'content_block_start':
@@ -324,6 +355,15 @@ export class AnthropicMessagesProcessor {
 					this.thinkingAccumulator.set(chunk.index, {
 						thinking: '',
 						signature: '',
+					});
+				} else if (chunk.content_block?.type === 'redacted_thinking' && chunk.index !== undefined) {
+					const data = (chunk.content_block as { type: 'redacted_thinking'; data: string }).data;
+					onProgress({
+						text: '',
+						thinking: {
+							id: `thinking_${chunk.index}`,
+							encrypted: data,
+						}
 					});
 				}
 				return;
@@ -387,10 +427,35 @@ export class AnthropicMessagesProcessor {
 				return;
 			case 'message_delta':
 				if (chunk.usage) {
+					// message_delta provides the most accurate token counts
 					this.outputTokens = chunk.usage.output_tokens;
+					this.inputTokens = chunk.usage.input_tokens ?? this.inputTokens;
+					this.cacheCreationTokens = chunk.usage.cache_creation_input_tokens ?? this.cacheCreationTokens;
+					this.cacheReadTokens = chunk.usage.cache_read_input_tokens ?? this.cacheReadTokens;
+				}
+				if (chunk.context_management) {
+					this.contextManagementResponse = chunk.context_management;
+					// Report context management via delta so it gets logged to request logger
+					return onProgress({
+						text: '',
+						contextManagement: chunk.context_management
+					});
 				}
 				return;
 			case 'message_stop':
+				// Add context management info to telemetry if available
+				if (this.contextManagementResponse) {
+					const totalClearedTokens = this.contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+						0
+					);
+					this.telemetryData.extendedBy({
+						contextEditingApplied: 'true',
+						contextEditingClearedTokens: totalClearedTokens.toString(),
+						contextEditingEditCount: this.contextManagementResponse.applied_edits.length.toString(),
+					});
+				}
+
 				return {
 					blockFinished: true,
 					choiceIndex: 0,
@@ -406,11 +471,11 @@ export class AnthropicMessagesProcessor {
 						serverExperiments: ''
 					},
 					usage: {
-						prompt_tokens: this.inputTokens,
+						prompt_tokens: this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens,
 						completion_tokens: this.outputTokens,
-						total_tokens: this.inputTokens + this.outputTokens,
+						total_tokens: this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens + this.outputTokens,
 						prompt_tokens_details: {
-							cached_tokens: this.cachedTokens,
+							cached_tokens: this.cacheReadTokens,
 						},
 						completion_tokens_details: {
 							reasoning_tokens: 0,

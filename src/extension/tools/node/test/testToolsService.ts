@@ -58,6 +58,9 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 			.map(t => [t.toolName, new Lazy(() => instantiationService.createInstance(t))] as const));
 
 		for (const tool of filteredTools) {
+			if (!tool.prototype.invoke) {
+				continue;
+			}
 			if (TestToolsService.ExcludedTools.includes(tool.toolName)) {
 				continue;
 			}
@@ -102,14 +105,19 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 	async invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: CancellationToken): Promise<LanguageModelToolResult2> {
 		name = getToolName(name);
 		const tool = this._copilotTools.get(name as ToolName)?.value;
-		if (tool) {
+		const invoke = tool?.invoke;
+		if (invoke) {
 			this._onWillInvokeTool.fire({ toolName: name });
-			const result = await tool.invoke(options, token);
+			const result = await invoke.call(tool, options, token);
 			if (!result) {
 				throw new CancellationError();
 			}
 
 			return result;
+		}
+
+		if (tool) {
+			throw new Error(`tool ${name} does not implement invoke`);
 		}
 
 		throw new Error('unknown tool: ' + name);

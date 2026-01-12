@@ -89,8 +89,18 @@ export interface QueryProps extends BasePromptElementProps {
 
 export class UserQuery extends PromptElement<QueryProps, void> {
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		const rewrittenMessage = this.props.chatVariables.substituteVariablesWithReferences(this.props.query);
-		return (<>{rewrittenMessage}</>);
+		const promptFiles = [];
+		for (const v of this.props.chatVariables) {
+			if (isPromptFile(v)) {
+				promptFiles.push(<PromptFile variable={v} omitReferences={false} />);
+			}
+		}
+		return (
+			<>
+				{...promptFiles}
+				{this.props.query}
+			</>
+		);
 	}
 }
 
@@ -156,11 +166,7 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 			: FilePathMode.None;
 	for (const variable of chatVariables) {
 		const { uniqueName: variableName, value: variableValue, reference } = variable;
-		if (isPromptInstruction(variable)) { // prompt instructions are handled in the `CustomInstructions` element
-			continue;
-		}
-		if (isPromptFile(variable)) {
-			elements.push(<PromptFile variable={variable} omitReferences={omitReferences} filePathMode={filePathMode} />);
+		if (isPromptInstruction(variable) || isPromptFile(variable)) { // prompt instructions are handled in the `CustomInstructions` element, prompt file as part of the UserQuery
 			continue;
 		}
 
@@ -255,7 +261,7 @@ class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
 					}
 
 					return <>
-						<Tag name="error" attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diagnosticSeverityMap[d.severity] }}>
+						<Tag name='error' attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diagnosticSeverityMap[d.severity] }}>
 							{d.message}
 						</Tag>
 						{cookbook && <DiagnosticSuggestedFix cookbook={cookbook} />}

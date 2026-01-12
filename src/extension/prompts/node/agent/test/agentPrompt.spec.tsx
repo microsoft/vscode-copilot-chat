@@ -29,15 +29,19 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../tools/common/toolsService';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
+import { PromptRegistry } from '../promptRegistry';
 
 const testFamilies = [
 	'default',
 	'gpt-4.1',
 	'gpt-5',
+	'gpt-5-mini',
+	'gpt-5-codex',
 	'gpt-5.1',
 	'gpt-5.1-codex',
 	'gpt-5.1-codex-mini',
 	'claude-sonnet-4.5',
+	'claude-opus-4.5',
 	'gemini-2.0-flash',
 	'grok-code-fast-1'
 ];
@@ -49,7 +53,7 @@ testFamilies.forEach(family => {
 		const fileTsUri = URI.file('/workspace/file.ts');
 
 		function getSnapshotFile(name: string): string {
-			return `./__snapshots__/agentPrompts-${name}-${family}.spec.snap`;
+			return `./__snapshots__/agentPrompts-${family}/${name}.spec.snap`;
 		}
 
 		let conversation: Conversation;
@@ -84,19 +88,21 @@ testFamilies.forEach(family => {
 
 		async function agentPromptToString(accessor: ITestingServicesAccessor, promptContext: IBuildPromptContext, otherProps?: Partial<AgentPromptProps>): Promise<string> {
 			const instaService = accessor.get(IInstantiationService);
-			const endpoint = family === "default"
+			const endpoint = family === 'default'
 				? instaService.createInstance(MockEndpoint, undefined)
 				: instaService.createInstance(MockEndpoint, family);
 			if (!promptContext.conversation) {
 				promptContext = { ...promptContext, conversation };
 			}
 
+			const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
 			const baseProps = {
 				priority: 1,
 				endpoint,
 				location: ChatLocation.Panel,
 				promptContext,
-				...otherProps
+				...otherProps,
+				customizations
 			};
 
 			const props: AgentPromptProps = baseProps;
@@ -130,7 +136,7 @@ testFamilies.forEach(family => {
 		}
 
 		test('simple case', async () => {
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
@@ -139,7 +145,7 @@ testFamilies.forEach(family => {
 
 		test('all tools', async () => {
 			const toolsService = accessor.get(IToolsService);
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
@@ -154,7 +160,7 @@ testFamilies.forEach(family => {
 		test('all non-edit tools', async () => {
 			const toolsService = accessor.get(IToolsService);
 			const editTools: Set<string> = new Set([ToolName.ApplyPatch, ToolName.EditFile, ToolName.ReplaceString, ToolName.MultiReplaceString]);
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
@@ -167,7 +173,7 @@ testFamilies.forEach(family => {
 		});
 
 		test('one attachment', async () => {
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
 				history: [],
 				query: 'hello',
@@ -181,7 +187,7 @@ testFamilies.forEach(family => {
 		};
 
 		test('tool use', async () => {
-			expect(await agentPromptToString(
+			await expect(await agentPromptToString(
 				accessor,
 				{
 					chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
@@ -196,7 +202,7 @@ testFamilies.forEach(family => {
 		});
 
 		test('cache BPs', async () => {
-			expect(await agentPromptToString(
+			await expect(await agentPromptToString(
 				accessor,
 				{
 					chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
@@ -228,7 +234,7 @@ testFamilies.forEach(family => {
 			};
 			previousTurn.setResponse(TurnStatus.Success, { type: 'user', message: 'response' }, 'responseId', previousTurnResult);
 
-			expect(await agentPromptToString(
+			await expect(await agentPromptToString(
 				accessor,
 				{
 					chatVariables: new ChatVariablesCollection([]),
@@ -254,7 +260,7 @@ testFamilies.forEach(family => {
 
 		test('custom instructions not in system message', async () => {
 			accessor.get(IConfigurationService).setConfig(ConfigKey.CustomInstructionsInSystemMessage, false);
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
@@ -264,7 +270,7 @@ testFamilies.forEach(family => {
 
 		test('omit base agent instructions', async () => {
 			accessor.get(IConfigurationService).setConfig(ConfigKey.Advanced.OmitBaseAgentInstructions, true);
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
@@ -274,7 +280,7 @@ testFamilies.forEach(family => {
 		test('edited file events are grouped by kind', async () => {
 			const otherUri = URI.file('/workspace/other.ts');
 
-			expect((await agentPromptToString(accessor, {
+			await expect((await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',

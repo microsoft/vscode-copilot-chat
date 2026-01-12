@@ -6,7 +6,6 @@
 import { promises as fs } from 'fs';
 import { Terminal, TerminalOptions, ThemeIcon, ViewColumn, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -15,7 +14,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
-import { PythonTerminalService } from './pythonTerminalService';
+import { PythonTerminalService } from './copilotCLIPythonTerminalService';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';
@@ -48,7 +47,6 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService logService: ILogService
@@ -59,10 +57,6 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	}
 
 	private async initialize(): Promise<void> {
-		const enabled = this.configurationService.getConfig(ConfigKey.Advanced.CopilotCLIEnabled);
-		if (!enabled) {
-			return;
-		}
 		const globalStorageUri = this.context.globalStorageUri;
 		if (!globalStorageUri) {
 			// globalStorageUri is not available in extension tests
@@ -305,7 +299,7 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 		location: { viewColumn: ViewColumn.Active },
 		hideFromUser: false
 	};
-	const session = await authenticationService.getAnyGitHubSession();
+	const session = await authenticationService.getGitHubSession('any', { silent: true });
 	if (session) {
 		options.env = {
 			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)

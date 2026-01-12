@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { commands, LanguageModelChatInformation, lm } from 'vscode';
+import { commands, LanguageModelChatInformation, lm, window } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
@@ -19,7 +19,6 @@ import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
 import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 import { CustomOAIBYOKModelProvider } from './customOAIProvider';
 import { GeminiNativeBYOKLMProvider } from './geminiNativeProvider';
-import { GroqBYOKLMProvider } from './groqProvider';
 import { OllamaLMProvider } from './ollamaProvider';
 import { OAIBYOKLMProvider } from './openAIProvider';
 import { OpenRouterLMProvider } from './openRouterProvider';
@@ -44,11 +43,20 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		this._register(commands.registerCommand('github.copilot.chat.manageBYOK', async (vendor: string) => {
 			const provider = this._providers.get(vendor);
 
+			if (!provider) {
+				this._logService.warn(`BYOK: Provider ${vendor} not registered; BYOK may be disabled for this account or environment.`);
+				void window.showInformationMessage(
+					`The "${vendor}" BYOK provider isn't available in this environment. ` +
+					'This can happen if BYOK is not enabled for your account or this GitHub instance.'
+				);
+				return;
+			}
+
 			// Show quick pick for Azure and CustomOAI providers
-			if (provider && (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase())) {
+			if (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase()) {
 				const configurator = new CustomOAIModelConfigurator(this._configurationService, vendor, provider);
 				await configurator.configureModelOrUpdateAPIKey();
-			} else if (provider) {
+			} else {
 				// For all other providers, directly go to API key management
 				await provider.updateAPIKey();
 			}
@@ -88,7 +96,6 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			const knownModels = await this.fetchKnownModelList(this._fetcherService);
 			this._providers.set(OllamaLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OllamaLMProvider, this._configurationService.getConfig(ConfigKey.OllamaEndpoint), this._byokStorageService));
 			this._providers.set(AnthropicLMProvider.providerName.toLowerCase(), instantiationService.createInstance(AnthropicLMProvider, knownModels[AnthropicLMProvider.providerName], this._byokStorageService));
-			this._providers.set(GroqBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(GroqBYOKLMProvider, knownModels[GroqBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(GeminiNativeBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(GeminiNativeBYOKLMProvider, knownModels[GeminiNativeBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(XAIBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(XAIBYOKLMProvider, knownModels[XAIBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(OAIBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OAIBYOKLMProvider, knownModels[OAIBYOKLMProvider.providerName], this._byokStorageService));
@@ -102,7 +109,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		}
 	}
 	private async fetchKnownModelList(fetcherService: IFetcherService): Promise<Record<string, BYOKKnownModels>> {
-		const data = await (await fetcherService.fetch('https://main.vscode-cdn.net/extensions/copilotChat.json', { method: "GET" })).json();
+		const data = await (await fetcherService.fetch('https://main.vscode-cdn.net/extensions/copilotChat.json', { method: 'GET' })).json();
 		// Use this for testing with changes from a local file. Don't check in
 		// const data = JSON.parse((await this._fileSystemService.readFile(URI.file('/Users/roblou/code/vscode-engineering/chat/copilotChat.json'))).toString());
 		let knownModels: Record<string, BYOKKnownModels>;

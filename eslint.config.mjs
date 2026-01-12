@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url';
 import headerEslint from 'eslint-plugin-header';
 headerEslint.rules.header.meta.schema = false;
 
-import localEslint from './.eslintplugin/index.js';
+import * as localEslint from './.eslintplugin/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ignores = fs.readFileSync(path.join(__dirname, '.eslint-ignore'), 'utf8')
@@ -277,6 +277,8 @@ export default tseslint.config(
 					string: 'Generate with Copilot'
 				}
 			],
+			'local/no-nls-localize': ['error'],
+			'local/no-unexternalized-strings': ['error'],
 		}
 	},
 	{
@@ -340,7 +342,6 @@ export default tseslint.config(
 			'./src/extension/context/node/resolvers/genericPanelIntentInvocation.ts',
 			'./src/extension/context/node/resolvers/inlineFixIntentInvocation.ts',
 			'./src/extension/context/node/resolvers/promptWorkspaceLabels.ts',
-			'./src/extension/context/node/resolvers/vscodeContext.ts',
 			'./src/extension/contextKeys/vscode-node/contextKeys.contribution.ts',
 			'./src/extension/conversation/vscode-node/userActions.ts',
 			'./src/extension/extension/vscode/services.ts',
@@ -386,11 +387,7 @@ export default tseslint.config(
 			'./src/extension/test/vscode-node/sanity.sanity-test.ts',
 			'./src/extension/test/vscode-node/session.test.ts',
 			'./src/extension/tools/common/toolSchemaNormalizer.ts',
-			'./src/extension/tools/common/toolsRegistry.ts',
 			'./src/extension/tools/common/toolsService.ts',
-			'./src/extension/tools/node/test/searchToolTestUtils.ts',
-			'./src/extension/tools/node/test/testToolsService.ts',
-			'./src/extension/tools/vscode-node/toolsService.ts',
 			'./src/extension/typescriptContext/common/serverProtocol.ts',
 			'./src/extension/typescriptContext/serverPlugin/src/common/baseContextProviders.ts',
 			'./src/extension/typescriptContext/serverPlugin/src/common/contextProvider.ts',

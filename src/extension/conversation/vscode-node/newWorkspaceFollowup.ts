@@ -2,7 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ChatResponseFileTreePart, Disposable, MarkdownString, ProgressLocation, SaveDialogOptions, Tab, TabInputText, Uri, commands, env, interactive, l10n, window, workspace } from 'vscode';
+import { ChatResponseFileTreePart, Disposable, MarkdownString, ProgressLocation, SaveDialogOptions, Tab, TabInputText, Uri, commands, env, interactive, window, workspace } from 'vscode';
+import * as l10n from '@vscode/l10n';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { ILogService } from '../../../platform/log/common/logService';
 import * as path from '../../../util/vs/base/common/path';
@@ -109,7 +110,7 @@ async function createWorkspace(logService: ILogService, workspaceRoot: Uri | und
 		const result = await window.showInformationMessage(message, { modal: true }, ...choices);
 		if (result === open) {
 
-			interactive.transferActiveChat(workspaceUri);
+			await interactive.transferActiveChat(workspaceUri);
 			logService.info(
 				'[newIntent] Opening folder: ' + workspaceUri.fsPath,
 			);

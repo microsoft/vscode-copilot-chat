@@ -93,7 +93,7 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
-	externalEdit<T>(target: Uri | Uri[], callback: () => Thenable<T>): Thenable<T> {
+	externalEdit(target: Uri | Uri[], callback: () => Thenable<void>): Thenable<string> {
 		return this.enqueue(() => this._progress.externalEdit(target, callback), true);
 	}
 

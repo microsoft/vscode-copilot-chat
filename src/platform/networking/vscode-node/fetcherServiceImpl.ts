@@ -7,6 +7,7 @@ import { Config, ConfigKey, ExperimentBasedConfig, ExperimentBasedConfigType, IC
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
 import { fetchWithFallbacks } from '../node/fetcherFallback';
@@ -20,6 +21,7 @@ export class FetcherService implements IFetcherService {
 	private _availableFetchers: readonly IFetcher[] | undefined;
 	private _knownBadFetchers = new Set<string>();
 	private _experimentationService: IExperimentationService | undefined;
+	private _telemetryService: ITelemetryService | undefined;
 
 	constructor(
 		fetcher: IFetcher | undefined,
@@ -58,6 +60,10 @@ export class FetcherService implements IFetcherService {
 
 	setExperimentationService(experimentationService: IExperimentationService) {
 		this._experimentationService = experimentationService;
+	}
+
+	setTelemetryService(telemetryService: ITelemetryService) {
+		this._telemetryService = telemetryService;
 	}
 
 	private _getAvailableFetchers(): readonly IFetcher[] {
@@ -115,7 +121,7 @@ export class FetcherService implements IFetcherService {
 	}
 
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
-		const { response: res, updatedFetchers, updatedKnownBadFetchers } = await fetchWithFallbacks(this._getAvailableFetchers(), url, options, this._knownBadFetchers, this._configurationService, this._logService);
+		const { response: res, updatedFetchers, updatedKnownBadFetchers } = await fetchWithFallbacks(this._getAvailableFetchers(), url, options, this._knownBadFetchers, this._configurationService, this._logService, this._telemetryService);
 		if (updatedFetchers) {
 			this._availableFetchers = updatedFetchers;
 		}

@@ -105,7 +105,7 @@ export class AzureTestEndpoint extends ChatEndpoint {
 			'Authorization': this.getAuthHeader(),
 			'ocp-apim-subscription-key': this.getSecretKey(),
 			'api-key': this.getSecretKey(),
-			'x-policy-id': "nil"
+			'x-policy-id': 'nil'
 		};
 	}
 

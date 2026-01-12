@@ -75,9 +75,15 @@ describe('CopilotCLI SDK Upgrade', function () {
 			'tree-sitter.wasm',
 		].map(p => path.join(copilotSDKPath, p)));
 
+		// Exclude ripgrep files that we copy over in src/extension/agents/copilotcli/node/ripgrepShim.ts (until we get better API/solution from SDK)
+		const ripgrepFilesWeCopy = path.join(copilotSDKPath, 'sdk', 'ripgrep', 'bin');
+
 		const errors: string[] = [];
 		// Look for new binaries
 		for (const binary of existingBinaries) {
+			if (binary.startsWith(ripgrepFilesWeCopy)) {
+				continue;
+			}
 			const binaryName = path.basename(binary);
 			if (binaryName.startsWith('keytar') || binaryName.startsWith('clipboard')) {
 				continue;

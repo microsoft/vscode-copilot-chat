@@ -14,6 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { IEndpointBody } from '../../../platform/networking/common/networking';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
@@ -23,7 +24,6 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequest } from '../../../vscodeTypes';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from './requestLoggerToolResult';
 import { WorkspaceEditRecorder } from './workspaceEditRecorder';
 
@@ -53,6 +53,39 @@ function processDeltasToMessage(deltas: IResponseDelta[]): string {
 			}).join('\n');
 		}
 
+		// Handle context management
+		if (d.contextManagement) {
+			if (i > 0 || text.length > 0) {
+				text += '\n';
+			}
+
+			const totalClearedTokens = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+				0
+			);
+			const totalClearedToolUses = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_tool_uses || 0),
+				0
+			);
+			const totalClearedThinkingTurns = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_thinking_turns || 0),
+				0
+			);
+
+			const details: string[] = [];
+			if (totalClearedTokens > 0) {
+				details.push(`${totalClearedTokens} tokens`);
+			}
+			if (totalClearedToolUses > 0) {
+				details.push(`${totalClearedToolUses} tool uses`);
+			}
+			if (totalClearedThinkingTurns > 0) {
+				details.push(`${totalClearedThinkingTurns} thinking turns`);
+			}
+
+			text += `🧹 Context cleared: ${details.join(', ')}`;
+		}
+
 		return text;
 	}).join('');
 }
@@ -67,7 +100,7 @@ class LoggedElementInfo implements ILoggedElementInfo {
 		public readonly tokens: number,
 		public readonly maxTokens: number,
 		public readonly trace: HTMLTracer,
-		public readonly chatRequest: ChatRequest | undefined
+		public readonly token: CapturingToken | undefined
 	) { }
 
 	toJSON(): object {
@@ -87,7 +120,7 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 	constructor(
 		public readonly id: string,
 		public readonly entry: LoggedRequest,
-		public readonly chatRequest: any | undefined
+		public readonly token: CapturingToken | undefined
 	) { }
 
 	toJSON(): object {
@@ -196,7 +229,7 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly name: string,
 		public readonly args: unknown,
 		public readonly response: LanguageModelToolResult2,
-		public readonly chatRequest: any | undefined,
+		public readonly token: any | undefined,
 		public readonly time: number,
 		public readonly thinking?: ThinkingData,
 		public readonly edits?: { path: string; edits: string }[],
@@ -292,7 +325,8 @@ export class RequestLogger extends AbstractRequestLogger {
 			debugName: 'modelList',
 			startTimeMs: Date.now(),
 			icon: Codicon.fileCode,
-			markdownContent: this._renderModelListToMarkdown(id, requestMetadata, models)
+			markdownContent: this._renderModelListToMarkdown(id, requestMetadata, models),
+			isConversationRequest: false
 		});
 	}
 

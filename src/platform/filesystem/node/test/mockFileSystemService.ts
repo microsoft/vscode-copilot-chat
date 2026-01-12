@@ -90,6 +90,16 @@ export class MockFileSystemService implements IFileSystemService {
 		if (!this.mockDirs.has(uriString)) {
 			this.mockDirs.set(uriString, []);
 		}
+
+		// Add this directory to its parent's listing
+		const parentUri = uriString.substring(0, uriString.lastIndexOf('/'));
+		if (parentUri && this.mockDirs.has(parentUri)) {
+			const entries = this.mockDirs.get(parentUri)!;
+			const dirName = uriString.substring(uriString.lastIndexOf('/') + 1);
+			if (!entries.find(e => e[0] === dirName)) {
+				entries.push([dirName, FileType.Directory]);
+			}
+		}
 	}
 
 	async writeFile(uri: URI, content: Uint8Array): Promise<void> {

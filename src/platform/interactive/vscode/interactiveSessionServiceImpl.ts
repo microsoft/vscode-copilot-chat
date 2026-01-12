@@ -8,7 +8,7 @@ import { IInteractiveSessionService } from '../common/interactiveSessionService'
 
 export class InteractiveSessionServiceImpl implements IInteractiveSessionService {
 	declare readonly _serviceBrand: undefined;
-	transferActiveChat(workspaceUri: Uri): void {
-		interactive.transferActiveChat(workspaceUri);
+	transferActiveChat(workspaceUri: Uri): Thenable<void> {
+		return interactive.transferActiveChat(workspaceUri);
 	}
 }

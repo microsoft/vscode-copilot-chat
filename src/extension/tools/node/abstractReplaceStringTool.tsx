@@ -316,6 +316,19 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+						res.telemetryService.sendInternalMSFTTelemetryEvent('codeMapper.trackEditSurvival', {
+							requestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'stringReplaceTool',
+							textBeforeAiEdits: res.textBeforeAiEdits ? JSON.stringify(res.textBeforeAiEdits) : undefined,
+							textAfterAiEdits: res.textAfterAiEdits ? JSON.stringify(res.textAfterAiEdits) : undefined,
+							textAfterUserEdits: res.textAfterUserEdits ? JSON.stringify(res.textAfterUserEdits) : undefined,
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
 						res.telemetryService.sendGHTelemetryEvent('replaceString/trackEditSurvival', {
 							headerRequestId: this._promptContext?.requestId,
 							requestSource: 'agent',

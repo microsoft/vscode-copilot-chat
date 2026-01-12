@@ -333,6 +333,12 @@ describe('replace_string_in_file - applyEdit', () => {
 		expect(result.updatedFile).toBe('function() {\n    proper indentation\n}');
 	});
 
+	test('writes an empty file with LF', async () => {
+		setText('');
+		const result = await doApplyEdit('\n', 'hello world!');
+		expect(result.updatedFile).toBe('hello world!');
+	});
+
 	test('return value structure', async () => {
 		setText('old content');
 		const result = await doApplyEdit('old', 'new');
@@ -662,6 +668,14 @@ describe('makeUriConfirmationChecker', async () => {
 			return this.externalFiles.has(uri.toString());
 		}
 
+		isExternalInstructionsFolder(uri: URI): boolean {
+			return false;
+		}
+
+		isSkillFile(uri: URI): boolean {
+			return false;
+		}
+
 		fetchInstructionsFromSetting(): Promise<any[]> {
 			return Promise.resolve([]);
 		}
@@ -723,7 +737,7 @@ describe('makeUriConfirmationChecker', async () => {
 
 		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
 		const result = await checker(externalInstruction);
-		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+		expect(result).toBe(ConfirmationCheckResult.OutsideWorkspace); // do not edits to external instructions files
 	});
 
 	test('respects autoApprove patterns - allows matching files', async () => {

@@ -21,7 +21,8 @@ export function createFakeResponse(statusCode: number, response?: string, header
 		fakeHeaders,
 		() => Promise.resolve(response ?? ''),
 		() => Promise.resolve(response ? JSON.parse(response) : {}),
-		() => Promise.resolve(null)
+		() => Promise.resolve(null),
+		'test-stub'
 	);
 }
 
@@ -42,7 +43,8 @@ export function createFakeStreamResponse(body: string): Response {
 		new FakeHeaders(),
 		() => Promise.resolve(body),
 		() => Promise.resolve(JSON.parse(body.replace(/^data: /gm, '').replace(/\n\[DONE\]\n$/, ''))),
-		() => Promise.resolve(toStream(body))
+		() => Promise.resolve(toStream(body)),
+		'test-stub'
 	);
 }
 
