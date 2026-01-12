@@ -72,7 +72,7 @@ export interface IEndpointBody {
 	messages?: any[];
 	n?: number;
 	reasoning?: { effort?: string; summary?: string };
-	tool_choice?: OptionalChatRequestParams['tool_choice'] | { type: 'function'; name: string };
+	tool_choice?: OptionalChatRequestParams['tool_choice'] | { type: 'function'; name: string } | string;
 	top_logprobs?: number;
 	intent?: boolean;
 	intent_threshold?: number;
