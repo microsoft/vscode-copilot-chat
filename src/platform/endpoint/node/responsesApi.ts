@@ -31,6 +31,12 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const configService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
 	const verbosity = getVerbosityForModelSync(endpoint);
+
+	const hasTools = !!options.requestOptions?.tools?.length;
+	const geminiFunctionCallingMode = hasTools && endpoint.family.toLowerCase().includes('gemini-3')
+		? configService.getExperimentBasedConfig(ConfigKey.GeminiFunctionCallingMode, expService)
+		: undefined;
+
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
@@ -44,9 +50,11 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
 		max_output_tokens: options.postOptions.max_tokens,
-		tool_choice: typeof options.postOptions.tool_choice === 'object'
-			? { type: 'function', name: options.postOptions.tool_choice.function.name }
-			: options.postOptions.tool_choice,
+		tool_choice: geminiFunctionCallingMode && typeof options.postOptions.tool_choice !== 'object'
+			? geminiFunctionCallingMode
+			: (typeof options.postOptions.tool_choice === 'object'
+				? { type: 'function', name: options.postOptions.tool_choice.function.name }
+				: options.postOptions.tool_choice),
 		top_logprobs: options.postOptions.logprobs ? 3 : undefined,
 		store: false,
 		text: verbosity ? { verbosity } : undefined,

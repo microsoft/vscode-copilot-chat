@@ -901,6 +901,9 @@ export namespace ConfigKey {
 	export const EnableAlternateGptPrompt = defineSetting<boolean>('chat.alternateGptPrompt.enabled', ConfigType.ExperimentBased, false);
 	export const EnableAlternateGeminiModelFPrompt = defineSetting<boolean>('chat.alternateGeminiModelFPrompt.enabled', ConfigType.ExperimentBased, false);
 
+	/** Function calling mode for Gemini tool calls. Supports: 'auto', 'none', 'required', 'validated'. */
+	export const GeminiFunctionCallingMode = defineSetting<'auto' | 'none' | 'required' | 'validated' | undefined>('chat.gemini.functionCallingMode', ConfigType.ExperimentBased, undefined);
+
 	/** Enable custom agents from GitHub Enterprise/Organizations */
 	export const ShowOrganizationAndEnterpriseAgents = defineSetting<boolean>('chat.customAgents.showOrganizationAndEnterpriseAgents', ConfigType.Simple, false);
 
