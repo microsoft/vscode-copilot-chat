@@ -86,18 +86,23 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 		progress: Progress<LanguageModelResponsePart2>,
 		token: CancellationToken
 	): Promise<void> {
-		if (model.configuration?.apiKey) {
-			return super.provideLanguageModelChatResponse(model, messages, options, progress, token);
+		let apiKey: string | undefined = model.configuration?.apiKey;
+		if (!apiKey) {
+			// Session is guaranteed to be defined when createIfNone: true
+			const session: vscode.AuthenticationSession = await vscode.authentication.getSession(
+				AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
+				[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
+				{
+					createIfNone: true,
+					silent: false
+				}
+			);
+			apiKey = session.accessToken;
 		}
 
-		const session: vscode.AuthenticationSession = await vscode.authentication.getSession(
-			AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
-			[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
-			{
-				createIfNone: true,
-				silent: false
-			}
-		);
+		if (!apiKey) {
+			throw new Error('API key is required for Azure OpenAI models.');
+		}
 
 		const url = this.resolveUrl(model.id, model.url);
 		const modelConfiguration = model.configuration?.models?.find(m => m.id === model.id);
@@ -118,7 +123,7 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 		const openAIChatEndpoint = this._instantiationService.createInstance(
 			AzureOpenAIEndpoint,
 			modelInfo,
-			session.accessToken,  // Pass Entra ID token
+			apiKey,  // Pass Entra ID token
 			url
 		);
 
